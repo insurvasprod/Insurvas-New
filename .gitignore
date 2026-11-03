@@ -8,3 +8,12 @@ next-env.d.ts
 .env.local
 .env*.local
 npm-debug.log*
+supabase/backups/
+
+# Scratch scripts from QA and fix sessions
+scripts/*.tmp.*
+
+# Local paste files for the SQL editor, and test-run scratch at the root (2026-10-16)
+/Claude outputs/
+/results.jsonl
+/lead-import-ready.csv

@@ -10,6 +10,7 @@
  *   42P01 undefined_table         wrong order, or a typo  <- a real failure
  *   42704 undefined_object        missing type or role    <- a real failure
  *   42501 insufficient_privilege  parsed fine, no rights  <- expected, and what we want
+ *   25006 read_only_sql_transaction  parsed fine, database read-only  <- also expected
  *
  * Every statement runs inside a savepoint that is rolled back immediately, and the whole run is
  * wrapped in one transaction that is rolled back at the end. Nothing is committed, ever.
@@ -32,6 +33,12 @@ const DIR = "supabase/migrations";
 const EXPECTED = new Set([
   "42501", // insufficient_privilege
   "0LP01", // invalid_grant_operation
+  // read_only_sql_transaction. Added because the project now flips into read-only when it is over
+  // its storage quota (backlog 201), and that blocks DDL before privileges are even consulted. It
+  // proves the same thing 42501 does and for the same reason: the statement PARSED. A syntax error
+  // would have been raised first. Without this the checker reports every migration as broken the
+  // moment the database fills up, which is exactly when you least want a false alarm.
+  "25006",
 ]);
 
 /**
@@ -159,6 +166,13 @@ if (process.argv.includes("--fast")) {
 
 await client.query("begin");
 
+// Some tenant-scoped policies cast app.tenant_id to uuid. A connection without a
+// value can expose an empty-string cast error before the migration statement gets
+// to its intended privilege/semantic check. Use a valid, non-existent sentinel so
+// the verifier remains isolated and can distinguish migration errors from context
+// setup errors.
+await client.query("select set_config('app.tenant_id', $1, true)", ["00000000-0000-0000-0000-000000000000"]);
+
 /* The deep check runs each statement inside a temporary PL/pgSQL function. This keeps the
  * per-statement exception boundary but avoids one remote network round trip per statement. */
 const payload = [];
@@ -217,7 +231,7 @@ let blockedDependencies = 0;
  * independently tested with this connection and are not migration defects. Keep real DML and
  * function-body errors visible so a typo is never hidden behind the permission check.
  */
-const DEPENDENT_DDL = /^(?:alter\s+table|comment\s+on|create\s+(?:index|trigger)|drop\s+(?:index|trigger)|grant\s+|revoke\s+)/i;
+const DEPENDENT_DDL = /^(?:alter\s+table|comment\s+on|create\s+(?:index|trigger|policy)|drop\s+(?:index|trigger|policy)|grant\s+|revoke\s+)/i;
 const EXPECTED_DEPENDENT_CODES = new Set(["42P01", "42704", "42883"]);
 
 function stripLeadingComments(statement) {

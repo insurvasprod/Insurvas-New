@@ -1,0 +1,82 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { DataInPage } from "@/components/app/data-in/data-in-page";
+import { ItemDecide } from "@/components/app/book/needs-you/item-decide";
+import { ItemTabs } from "@/components/app/book/needs-you/item-tabs";
+import { RowAsSentTable } from "@/components/app/book/needs-you/row-as-sent";
+import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/page-states";
+import { StatusChip } from "@/components/ui/status-chip";
+import { scopeFor } from "@/lib/agency/visibility";
+import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
+import { ageLong, isItemId, isNeedsYouKind, isNeedsYouView, KIND_META, neighbours, viewItems, type NeedsYouView } from "@/lib/needsYou/kinds";
+import { needsYouScope } from "@/lib/needsYou/scope";
+import { loadItemPage, loadNeedsYou } from "@/lib/needsYou/store";
+
+/**
+ * Book of business › Needs you › one item (owner 2026-11-02, round 2; it was a side sheet): the same page for
+ * every kind. The kind's chip and where it came from, how long it has waited and whose it is, then Decide —
+ * the evidence, the choices its own API accepts, and what saving does — and the carrier's row as sent. Saving
+ * opens the next item of the list it was opened from. Opening it writes nothing.
+ */
+export default async function NeedsYouItemPage({ params, searchParams }: { params: Promise<{ kind: string; id: string }>; searchParams: Promise<{ from?: string }> }) {
+  const guard = await guardPage("statement_ingestion");
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Needs you" description="Every decision your carrier files leave for a person." />;
+  if (!actAsPagePermission(guard, "policies.view")) return <RoleGateNotice featureLabel="Needs you" detail="Decisions on your book are made by producers, bookkeepers and the account owner." />;
+  // AG-0.5: as the list.
+  if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Needs you" detail="In an agency, the owner, admins and the bookkeeper make these decisions." />;
+
+  const { kind, id: rawId } = await params;
+  let id = rawId;
+  try { id = decodeURIComponent(rawId); } catch { notFound(); }
+  if (!isNeedsYouKind(kind) || !isItemId(kind, id)) notFound();
+
+  const scope = await needsYouScope(guard);
+  const [list, page] = await Promise.all([loadNeedsYou(scope), loadItemPage(scope, kind, id)]);
+  const me = { userId: scope.userId, keeper: scope.keeper };
+  const item = list.open.find((entry) => entry.kind === kind && entry.id === id) ?? null;
+  const { from: asked } = await searchParams;
+  // The list it was opened from; a status word cycles through the other status words.
+  const fallback: Exclude<NeedsYouView, "closed"> = kind === "status-word" ? "insurvas" : scope.keeper ? "agency" : "mine";
+  const chosen: Exclude<NeedsYouView, "closed"> = isNeedsYouView(asked) && asked !== "closed" && (scope.keeper || asked === "mine") ? asked : fallback;
+  // An item that isn't in the list it names (opened from a link, or that list moved on) cycles through its own.
+  const from = item && !viewItems(list.open, chosen, me).some((entry) => entry.kind === kind && entry.id === id) ? fallback : chosen;
+  const listHref = `/app/needs-you?view=${from}`;
+
+  if (!page || !item) {
+    return (
+      <DataInPage step="needs-you" title="This item is closed">
+        <EmptyState title="Nothing to decide here any more" hint="Someone decided it, a newer file answered it, or it isn't yours to see. Your list has what still waits." action={<Button asChild><Link href={listHref}>Back to Needs you</Link></Button>} />
+      </DataInPage>
+    );
+  }
+
+  const items = viewItems(list.open, from, me);
+  const place = neighbours(items, kind, id);
+  const nextHref = place.next ? `${place.next.href}?from=${from}` : null;
+  const meta = KIND_META[kind];
+  const source = page.row ? `row ${page.row.rowNumber} of ${page.row.fileName}` : meta.source;
+
+  return (
+    <DataInPage
+      step="needs-you"
+      title={item.about}
+      lead={<><StatusChip tone={item.tone}>{meta.label}</StatusChip><span className="text-sm text-muted-foreground">{source}</span></>}
+      actions={nextHref ? <Button asChild variant="outline"><Link href={nextHref}>Skip</Link></Button> : undefined}
+    >
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
+        <span>Waiting <strong className="font-semibold text-foreground">{ageLong(item.ageDays)}</strong></span>
+        <span>Owner <strong className="font-semibold text-foreground">{item.who}</strong></span>
+        {place.index >= 0 && <span>Item <strong className="font-semibold tabular-nums text-foreground">{place.index + 1} of {place.total}</strong></span>}
+        <span>{item.why}</span>
+      </div>
+      <ItemTabs
+        decide={<ItemDecide detail={page.detail} nextHref={nextHref} listHref={listHref} readOnly={guard.entitlement.access === "read_only"} />}
+        row={page.row ? <RowAsSentTable row={page.row} /> : null}
+      />
+    </DataInPage>
+  );
+}

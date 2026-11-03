@@ -1,4 +1,6 @@
-import { Badge } from "@/components/ui/badge";
+import { PagedBody, PagedPager, PagedProvider } from "@/components/ui/paged";
+import { TableCard } from "@/components/ui/table-card";
+import { StatusChip } from "@/components/ui/status-chip";
 import {
   Table,
   TableBody,
@@ -7,21 +9,58 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { pillTone } from "@/lib/ui/pillTone";
 import { loginFailureLabel, type LoginEventRow } from "@/lib/loginEvents/constants";
+import { loginEventTime, loginOutcomeLabel, summariseUserAgent } from "@/lib/loginEvents/present";
+import { cn } from "@/lib/utils";
 import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
 import { EmptyState } from "@/components/admin/empty-state";
+import { DashboardUtcTime } from "./dashboard-utc-time";
 
+/**
+ * Login attempts as a table. Two layouts:
+ *
+ *  - "default" (users/[id] and anything else that passes nothing): unchanged — shadcn table,
+ *    When / Account / Result / IP / Device.
+ *  - "board": the p-adm-activity board — When / Actor / Outcome / IP / User agent, fixed column
+ *    widths, UTC times with local time on hover, a parsed user agent (raw on hover), "Success ·
+ *    admin" in the pill, and a 3px error edge on failed rows. The caller supplies the empty state,
+ *    because only it knows whether "nothing" means no data, no matches, or a failed load.
+ */
 export function LoginActivityTable({
   events,
   showActor = false,
   footer,
+  layout = "default",
+  empty,
+  busy = false,
+  hideActor = false,
+  minWidth = 980,
+  framed = true,
 }: {
   events: LoginEventRow[];
   showActor?: boolean;
   /** Rendered inside the bordered shell, so a pagination bar sits flush with the table. */
   footer?: React.ReactNode;
+  layout?: "default" | "board";
+  /** Board layout only: what to show when `events` is empty. */
+  empty?: React.ReactNode;
+  /** Board layout only: a request for new rows is in flight; the old rows stay, dimmed. */
+  busy?: boolean;
+  /** Board layout only: drop the Actor column, for a page that is already about one person. */
+  hideActor?: boolean;
+  /** Board layout only: the width below which the table scrolls inside its card. */
+  minWidth?: number;
+  /** Board layout only: false when a TableCard already draws the card around the table. */
+  framed?: boolean;
 }) {
+  // Ten rows a page (owner rule, 2026-10-13). A caller that pages on the server passes ten at most,
+  // so its own footer stays; a longer list gets the shared Pager in the footer instead.
+  const pagedFooter = events.length > PAGE_SIZE ? <PagedFooter total={events.length} /> : footer;
+  if (layout === "board") return <PagedProvider><BoardLoginTable events={events} footer={pagedFooter} empty={empty} busy={busy} hideActor={hideActor} minWidth={minWidth} framed={framed} /></PagedProvider>;
+
   return (
+    <PagedProvider>
     <div className={tableShell}>
       <Table>
         <TableHeader>
@@ -44,6 +83,8 @@ export function LoginActivityTable({
               </TableCell>
             </TableRow>
           )}
+        </TableBody>
+        <PagedBody className="m-seq [&_tr:last-child]:border-0">
           {events.map((event) => (
             <TableRow key={event.id}>
               <TableCell className="text-muted-foreground">{new Date(event.ts).toLocaleString()}</TableCell>
@@ -52,24 +93,15 @@ export function LoginActivityTable({
                   <span className="flex items-center gap-2">
                     <span className="font-medium">{event.email}</span>
                     {event.actor_type === "admin" && (
-                      <Badge variant="outline" className="text-[10px]">
-                        Admin
-                      </Badge>
+                      <StatusChip>Admin</StatusChip>
                     )}
                   </span>
                 </TableCell>
               )}
               <TableCell>
-                <Badge
-                  variant="outline"
-                  className={
-                    event.success
-                      ? "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]"
-                      : "border-transparent bg-[var(--color-danger)]/10 text-[var(--color-danger)]"
-                  }
-                >
+                <StatusChip tone={event.success ? "good" : "danger"}>
                   {event.success ? "Success" : loginFailureLabel(event.failure_reason)}
-                </Badge>
+                </StatusChip>
               </TableCell>
               <TableCell className="text-muted-foreground">{event.ip ?? "—"}</TableCell>
               <TableCell
@@ -80,9 +112,105 @@ export function LoginActivityTable({
               </TableCell>
             </TableRow>
           ))}
-        </TableBody>
+        </PagedBody>
       </Table>
-      {footer}
+      {pagedFooter}
+    </div>
+    </PagedProvider>
+  );
+}
+
+const PAGE_SIZE = 10;
+
+function PagedFooter({ total }: { total: number }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border px-4 py-3 text-xs text-muted-foreground">
+      <PagedPager total={total} noun="attempts" suffix="newest first" />
     </div>
   );
+}
+
+const TH = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold whitespace-nowrap text-[var(--muted)]";
+const TD = "border-t border-[var(--border)] px-3 py-2 text-left align-middle text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+
+function BoardLoginTable({
+  events,
+  footer,
+  empty,
+  busy,
+  hideActor,
+  minWidth,
+  framed,
+}: {
+  events: LoginEventRow[];
+  footer?: React.ReactNode;
+  empty?: React.ReactNode;
+  busy: boolean;
+  hideActor: boolean;
+  minWidth: number;
+  framed: boolean;
+}) {
+  return (
+    <Shell framed={framed}>
+      <div className="min-w-0 overflow-x-auto">
+        <table className={cn("w-full table-fixed border-collapse transition-opacity", busy && "opacity-60")} style={{ minWidth }} aria-busy={busy || undefined}>
+          <thead>
+            <tr className="bg-[var(--surface-alt)]">
+              <th scope="col" className={cn(TH, "w-[210px]")}>When</th>
+              {!hideActor && <th scope="col" className={TH}>Actor</th>}
+              <th scope="col" className={cn(TH, "w-[210px]")}>Outcome</th>
+              <th scope="col" className={cn(TH, "w-[170px]")}>IP</th>
+              <th scope="col" className={cn(TH, !hideActor && "w-[240px]")}>User agent</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.length === 0 && (
+              <tr>
+                <td colSpan={hideActor ? 4 : 5} className="border-t border-[var(--border)] p-0">
+                  {empty}
+                </td>
+              </tr>
+            )}
+          </tbody>
+          <PagedBody className="m-seq">
+            {events.map((event) => {
+              const agent = summariseUserAgent(event.user_agent);
+              return (
+                <tr key={event.id} className="m-row hover:bg-[var(--brand-50)]">
+                  {/* Failed rows are marked at the edge, not filled: a wall of red is unreadable
+                      during exactly the incident this page is opened for. */}
+                  <td className={cn(TD, "whitespace-nowrap tabular-nums", !event.success && "shadow-[inset_3px_0_0_var(--error)]")}>
+                    <DashboardUtcTime iso={event.ts} text={loginEventTime(event.ts)} />
+                  </td>
+                  {!hideActor && (
+                    <td className={cn(TD, "truncate")} title={event.email}>
+                      {event.email}
+                    </td>
+                  )}
+                  <td className={cn(TD, "overflow-hidden")} title={event.success ? undefined : loginFailureLabel(event.failure_reason)}>
+                    <StatusChip tone={pillTone(event.success ? "success" : "error")} dot>
+                      {loginOutcomeLabel(event)}
+                    </StatusChip>
+                  </td>
+                  <td className={cn(TD, "tabular-nums")}>{event.ip ?? "—"}</td>
+                  <td className={cn(TD, "truncate")} title={event.user_agent ?? undefined}>
+                    {agent ?? "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </PagedBody>
+        </table>
+      </div>
+      <div className="flex-1" />
+      {footer}
+    </Shell>
+  );
+}
+
+/** The board table's card: the shared TableCard, or nothing when the caller's card already is one. */
+function Shell({ framed, children }: { framed: boolean; children: React.ReactNode }) {
+  return framed
+    ? <TableCard className="flex min-w-0 flex-1 flex-col">{children}</TableCard>
+    : <div className="flex min-w-0 flex-1 flex-col">{children}</div>;
 }

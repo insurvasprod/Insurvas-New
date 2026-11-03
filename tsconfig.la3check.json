@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false, "types": ["next", "next/image-types/global", "node", "react", "react-dom"] },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["node_modules", "insurvas-demo-video", ".next", "next-env.d.ts"]
+}

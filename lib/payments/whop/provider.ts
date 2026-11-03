@@ -4,8 +4,9 @@
 // Whop hosts checkout and raises charges itself, so we never originate one. That absence is the
 // honest shape of a hosted-checkout provider, not a gap.
 
-import { WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey, whopAmountToCents } from "./client.ts";
+import { WhopApiError, WhopClient, centsToWhopAmount, extractCheckoutUrl, idempotencyKey, whopAmountToCents } from "./client.ts";
 import { ProviderUnsupportedError } from "../types.ts";
+import { invoiceMarker } from "../../invoices/providerMatch.ts";
 import type {
   CheckoutSession,
   ChargeLookup,
@@ -21,6 +22,9 @@ export const BILLING_PERIOD_DAYS: Record<string, number> = {
   quarterly: 90,
   yearly: 365,
 };
+
+/** A staff action waits this long for Whop before failing closed. */
+const PROMO_TIMEOUT_MS = 10_000;
 
 type WhopPlanResponse = Record<string, unknown> & { id?: string; product_id?: string };
 type WhopPaymentResponse = { status?: string };
@@ -103,6 +107,18 @@ export class WhopProvider implements PaymentProvider {
         return { status: "failed" };
       default:
         return { status: "unknown" };
+    }
+  }
+
+  /** A deliberately missing payment proves reachability and authentication without moving money. */
+  async testConnection(): Promise<void> {
+    try {
+      await this.client.request("GET", "/payments/pmt_connection_test_does_not_exist", undefined, undefined, {
+        okStatuses: [404],
+      });
+    } catch (error) {
+      if (error instanceof WhopApiError && error.status === 404) return;
+      throw error;
     }
   }
 
@@ -305,6 +321,40 @@ export class WhopProvider implements PaymentProvider {
   }
 
   /**
+   * Switches a promo code off so it can no longer be redeemed at checkout (coupon deactivation).
+   *
+   * `POST /promo_codes/{id}/deactivate`, from Whop's Current API reference (the same /api/v1 base
+   * this client uses), which documents an Idempotency-Key header and a 200 carrying the promo code
+   * with its `status`. Existing memberships keep a discount they already have. NOT yet exercised
+   * against the sandbox — the first real call's response is in provider_calls.
+   *
+   * The key is derived from the promo id alone: deactivating is the same request however often it is
+   * retried, so a retry after a timeout must reuse the key rather than look like a new operation.
+   */
+  async deactivatePromoCode(promoCodeId: string): Promise<{ status: string | null }> {
+    const response = await this.client.request<Record<string, unknown> | null>(
+      "POST",
+      `/promo_codes/${encodeURIComponent(promoCodeId)}/deactivate`,
+      undefined,
+      idempotencyKey(`promo_deactivate_${promoCodeId}`, {}),
+      { timeoutMs: PROMO_TIMEOUT_MS },
+    );
+    return { status: typeof response?.status === "string" ? response.status : null };
+  }
+
+  /** `GET /promo_codes/{id}` — where a promo code stands: `active`, `inactive` or `archived`. */
+  async getPromoCodeStatus(promoCodeId: string): Promise<string | null> {
+    const response = await this.client.request<Record<string, unknown> | null>(
+      "GET",
+      `/promo_codes/${encodeURIComponent(promoCodeId)}`,
+      undefined,
+      undefined,
+      { timeoutMs: PROMO_TIMEOUT_MS },
+    );
+    return typeof response?.status === "string" ? response.status : null;
+  }
+
+  /**
    * Raises an invoice at Whop and has them send it (SA-3.7).
    *
    * `send_invoice` rather than `charge_automatically`: a custom invoice is usually a negotiated
@@ -324,6 +374,13 @@ export class WhopProvider implements PaymentProvider {
      * asking them to re-enter a card they already gave us would be absurd.
      */
     collectionMethod?: "send_invoice" | "charge_automatically";
+    /**
+     * Our platform_invoices.id. Written into the plan's internal_notes, which Whop echoes on the
+     * payment, so payment.succeeded can be matched back to this invoice; and part of the
+     * idempotency key, so two invoices with the same amount and reason are two Whop invoices rather
+     * than a replay of the first (billing audit, 2026-10-15).
+     */
+    localInvoiceId?: string | null;
   }): Promise<{ invoiceId: string; payOnlineUrl: string | null }> {
     const body: Record<string, unknown> = {
       company_id: input.companyId,
@@ -334,6 +391,7 @@ export class WhopProvider implements PaymentProvider {
         initial_price: centsToWhopAmount(input.amountCents),
         currency: "usd",
         description: input.description,
+        ...(input.localInvoiceId ? { internal_notes: invoiceMarker(input.localInvoiceId) } : {}),
       },
       ...(input.dueAt ? { due_date: input.dueAt } : {}),
     };
@@ -342,7 +400,7 @@ export class WhopProvider implements PaymentProvider {
       "POST",
       "/invoices",
       body,
-      idempotencyKey(`invoice_${input.memberId}`, body),
+      idempotencyKey(input.localInvoiceId ? `invoice_${input.localInvoiceId}` : `invoice_${input.memberId}`, body),
     );
 
     let payOnlineUrl: string | null = null;
@@ -375,6 +433,15 @@ export class WhopProvider implements PaymentProvider {
 
   async resumeMembership(membershipId: string): Promise<void> {
     await this.client.request("POST", `/memberships/${encodeURIComponent(membershipId)}/resume`, {});
+  }
+
+  /**
+   * Where the customer updates the card on a membership (LA-8.5): the membership's `manage_url`,
+   * Whop's own signed-in billing page. Card details never pass through us. Null when Whop has none.
+   */
+  async membershipManageUrl(membershipId: string): Promise<string | null> {
+    const membership = await this.client.request<{ manage_url?: string | null }>("GET", `/memberships/${encodeURIComponent(membershipId)}`);
+    return typeof membership.manage_url === "string" && /^https:\/\//.test(membership.manage_url) ? membership.manage_url : null;
   }
 
   /**
@@ -432,13 +499,32 @@ export class WhopProvider implements PaymentProvider {
    * we cannot reduce. Whop bills the plan price regardless; days they are not billed for are worth
    * the same to them.
    */
-  async addFreeDays(membershipId: string, days: number): Promise<void> {
+  async addFreeDays(membershipId: string, days: number, operationKey?: string): Promise<void> {
     if (!Number.isInteger(days) || days <= 0) throw new Error(`days must be a positive integer, got ${days}`);
+    // `operationKey` names THIS redemption. Without it the key was membership + days, so a second
+    // genuine redemption of the same number of days months later replayed the first and added
+    // nothing — while the caller debited the credit anyway.
     await this.client.request(
       "POST",
       `/memberships/${encodeURIComponent(membershipId)}/add_free_days`,
       { days },
-      idempotencyKey(`freedays_${membershipId}`, { days }),
+      idempotencyKey(operationKey ? `freedays_${operationKey}` : `freedays_${membershipId}`, { days }),
     );
+  }
+
+  /**
+   * `POST /invoices/{id}/void` — the provider invoice can no longer be paid (billing audit,
+   * 2026-10-15). Voiding only locally left the hosted pay page live: a customer could pay an invoice
+   * we had written off. Permanent at Whop, like ours.
+   */
+  async voidInvoice(providerInvoiceId: string): Promise<{ status: string | null }> {
+    const response = await this.client.request<Record<string, unknown> | null>(
+      "POST",
+      `/invoices/${encodeURIComponent(providerInvoiceId)}/void`,
+      undefined,
+      idempotencyKey(`invoice_void_${providerInvoiceId}`, {}),
+      { timeoutMs: PROMO_TIMEOUT_MS },
+    );
+    return { status: typeof response?.status === "string" ? response.status : null };
   }
 }

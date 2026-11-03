@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-4.3 route and permission verification.
 //
 // This script creates short-lived active fixtures for roles that may not exist in a local/live

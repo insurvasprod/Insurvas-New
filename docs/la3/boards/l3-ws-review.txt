@@ -1,0 +1,194 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <div> {gap:8px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+            "Blocked by QA"
+          <button type="button"> {gap:7px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+            "Attempt 2 · Mutual of Omaha"
+            <svg/>
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Final Expense · $15,000"
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "Household · 2 applications"
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open portal"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {gap:20px}
+      <div> {width:186px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Verify"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Interview"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Quote"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Application"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Beneficiaries"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Payment"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Disclosures"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#ff5900;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                "8"
+              "Review"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "9"
+              "Submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "10"
+              "After submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-top:1px solid #d5dbe3;bd-radius:0;color:#33383f;fsize:14px;fweight:400;height:auto}
+              "Case timeline"
+      <div> {flex-direction:column;gap:20px}
+        <div> {bd:1px solid #d5dbe3;bd-left:3px solid #c92a2a;bd-radius:12px;bg:#fdeaea;padding:20px}
+          <div> {gap:18px}
+            <span> {width:52px;height:52px;justify-content:center;bd-radius:9999px;bg:#fdeaea;color:#c92a2a}
+              <svg/>
+              <div> {fsize:24px;fweight:600;color:#b02020}
+                "Two things must be fixed"
+              <p> {fsize:14px;fweight:400;color:#33383f}
+                "Submit and the carrier-site fill stay closed until both are cleared. Warnings do not block; they are here so you are not surprised later."
+            <span> {gap:10px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Re-run checks"
+              <button type="button" disabled> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#e4e8ee;color:#60646c;bd:1px solid #d5dbe3;fsize:14px;fweight:600}
+                "Submit"
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Must fix"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                "2"
+          <a href="#" .m-row> {gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <span> {width:8px;height:8px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+                "Replacement notice not acknowledged"
+              <span> {fsize:14px;fweight:400;color:#33383f}
+                "Q4 said coverage is in force, so Arizona requires the notice before this can be submitted."
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "disclosures.replacement"
+              <a href="#" .m-arrow> {gap:6px;color:#15191e;fsize:14px;fweight:600}
+                "Go to the field"
+                <svg/>
+          <a href="#" .m-row> {gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <span> {width:8px;height:8px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+                "No appointment with Mutual of Omaha in Arizona"
+              <span> {fsize:14px;fweight:400;color:#33383f}
+                "You cannot write this carrier in this state today. Gerber and Americo are both appointed."
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "appointment.mutual.az"
+              <a href="#" .m-arrow> {gap:6px;color:#15191e;fsize:14px;fweight:600}
+                "Go to the field"
+                <svg/>
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Worth a look"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                "2"
+          <a href="#" .m-row> {gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <span> {width:8px;height:8px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#9a4f00}
+                "Rate per $1,000 is above the usual band"
+              <span> {fsize:14px;fweight:400;color:#33383f}
+                "$4.75 against a $3.10–$4.40 band at this age. Allowed — check the carrier’s tool."
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "quote.premium_cents"
+              <a href="#" .m-arrow> {gap:6px;color:#15191e;fsize:14px;fweight:600}
+                "Go to the field"
+                <svg/>
+          <a href="#" .m-row> {gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <span> {width:8px;height:8px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#9a4f00}
+                "“Estate” named as contingent beneficiary"
+              <span> {fsize:14px;fweight:400;color:#33383f}
+                "That sends the money through probate. Most people do not mean it."
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "beneficiaries.3.relationship"
+              <a href="#" .m-arrow> {gap:6px;color:#15191e;fsize:14px;fweight:600}
+                "Go to the field"
+                <svg/>
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Passed"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "14"
+          <div> {padding:14px 22px;fsize:14px;fweight:400;color:#60646c}
+            "Routing checksum, SSN format, issue age, face limits, draft day, primary share total, contingent has a primary, medication rows, five survival questions, owner set, effective date, height and weight present, tobacco recorded, payment method complete."
+          <div> {justify-content:space-between;gap:16px;padding:14px 20px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Back to Disclosures"
+              <button type="button" disabled> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#e4e8ee;color:#60646c;bd:1px solid #d5dbe3;fsize:14px;fweight:600}
+                "Submit"
+      <div> {width:268px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:14px;bg:#fdeaea;bd-bottom:1px solid #d5dbe3}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Pre-submission QA"
+            <div> {fsize:18px;fweight:600;color:#b02020}
+              "2 must be fixed"
+            <div> {fsize:12px;fweight:400;color:#33383f}
+              "Runs as you type. Every line goes to the field it is about."
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Replacement notice not acknowledged"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "disclosures.replacement"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Mutual of Omaha: no appointment in Arizona"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "appointment.mutual.az"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Rate per $1,000 is outside the usual band"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "quote.premium_cents"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "“Estate” named as contingent"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "beneficiaries.3.relationship"
+          <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "The verdict freezes at the moment of submission, so what was checked is what was true then."

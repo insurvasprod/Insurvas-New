@@ -1,54 +1,51 @@
-import { guardPage } from "@/lib/entitlements/guardPage";
-import { Card, CardContent } from "@/components/ui/card";
+import Link from "next/link";
+
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { PolicyBook } from "@/components/app/policy-book";
+import { PolicyEntryActions } from "@/components/app/policy-entry-actions";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
+import { Button } from "@/components/ui/button";
+import { NextStepLine } from "@/components/app/next-step-line";
+import { scopeFor } from "@/lib/agency/visibility";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
+import { loadBook, loadHandPolicies, loadIssuedAwaiting, POLICY_BOOK_PENDING_MESSAGE } from "@/lib/ingestion/policyBookStore";
 
 /**
- * Scaffolding for LA-0.1 to replace — it exists so SA-2.8's three enforcement points are real
- * rather than theoretical.
- *
- * Deliberately gated on `book_of_business`, which every plan grants: a suspended tenant must
- * still be able to open this page. Suspend the doing, preserve the seeing.
+ * Book of Business › Policies: one list (2026-10-08 overlap merge) of every policy the carriers'
+ * files hold (LA-4.11, read from LA-4.7's current-state table, read-only) and every policy the
+ * agency entered or imported by hand (LA-0.7, for carriers that send no file), and every sale recorded
+ * as issued whose carrier file hasn't listed it yet (Module 4, Door 1), with a source filter.
+ * Owner, producer and bookkeeper; a producer sees the policies credited to them or that they recorded.
+ * Adding by hand is owner and producer, as the API.
  */
-export default async function PoliciesPage() {
+export default async function PoliciesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("book_of_business");
-
-  if (!guard.entitled) {
-    return (
-      <FeatureGateNotice
-        guard={guard}
-        featureLabel="Book of business"
-        description="Your policies, premiums and carriers in one place."
-      />
-    );
-  }
-
-  if (!["owner", "producer", "bookkeeper"].includes(guard.role)) {
-    return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
-  }
-
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Book of business" description="Your policies, premiums and carriers in one place." />;
+  if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
   const readOnly = guard.entitlement.access === "read_only";
+  const params = await searchParams;
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
+  const [book, hand, issued] = await Promise.all([loadBook(viewer), loadHandPolicies(viewer), loadIssuedAwaiting(viewer).catch(() => [])]);
+  // The old "Entered by hand" tab address lands on the same list, filtered to that source.
+  const query = new URLSearchParams([...Object.entries(params).flatMap(([key, value]) => (typeof value === "string" && key !== "view" ? [[key, value]] : [])), ...(params.view === "entered" && !params.source ? [["source", "hand"]] : [])]).toString();
+  const canAdd = !readOnly && guard.role !== "bookkeeper";
+  const rows = [...(book.available ? book.rows : []), ...hand, ...issued];
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4">
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Policies</h1>
-        <p className="mt-1 text-sm font-medium text-muted-foreground">Your book of business.</p>
-      </div>
-
-      <Card>
-        <CardContent className="space-y-2 py-8 text-center">
-          {/* An empty state that states a fact and stops is a dead end. This one says what will
-              fill the screen and where it comes from — and it no longer quotes a ticket number at
-              a paying customer, which is our vocabulary, not theirs. */}
-          <p className="text-sm font-medium">No policies yet</p>
-          <p className="mx-auto max-w-[46ch] text-sm text-muted-foreground">
-            {readOnly
-              ? "Your book of business will appear here. Adding a policy is disabled while the account is suspended."
-              : "Your book of business will appear here once policies are imported or added."}
-          </p>
-        </CardContent>
-      </Card>
-    </div>
+    <DataInPage step="policies" actions={<PolicyEntryActions canAdd={canAdd} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />}>
+      {/* LA-4.13: the share of the book no rate can check, and the one place to fix it. */}
+      {book.available && book.unpriced && (
+        <NextStepLine action={guard.role !== "producer" ? <Button asChild size="sm"><Link href="/app/rate-card">Add rates</Link></Button> : undefined}>
+          <strong className="font-semibold text-[var(--ink)]">{book.unpriced.top.policies.toLocaleString("en-US")} {book.unpriced.top.carrierName} {book.unpriced.top.policies === 1 ? "policy" : "policies"}, ${Math.round(book.unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate</strong>, so their commission can&apos;t be checked{book.unpriced.carriers > 1 ? ` (${book.unpriced.policies.toLocaleString("en-US")} policies across ${book.unpriced.carriers} carriers in all)` : ""}.
+        </NextStepLine>
+      )}
+      {!book.available && (
+        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{POLICY_BOOK_PENDING_MESSAGE}</div>
+      )}
+      {(book.available || hand.length > 0 || issued.length > 0) && (
+        <PolicyBook rows={rows} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={guard.role === "producer"} readOnly={readOnly} />
+      )}
+    </DataInPage>
   );
 }

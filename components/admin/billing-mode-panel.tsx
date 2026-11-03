@@ -2,9 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -23,12 +23,12 @@ export function BillingModePanel({ tenantId, mode }: { tenantId: string; mode: "
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not change billing mode");
+      notify.block(body?.error ?? "Could not change billing mode");
       return;
     }
 
-    if (body.warning) toast.warning(body.warning);
-    else toast.success(next === "manual" ? "Switched to manual billing" : "Automatic billing resumed");
+    if (body.warning) notify.warn(body.warning);
+    else notify.done(next === "manual" ? "Switched to manual billing" : "Automatic billing resumed");
     router.refresh();
   }
 
@@ -36,17 +36,10 @@ export function BillingModePanel({ tenantId, mode }: { tenantId: string; mode: "
     <Card>
       <CardContent className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Billing mode</h2>
-          <Badge
-            variant="outline"
-            className={
-              mode === "manual"
-                ? "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
-                : "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]"
-            }
-          >
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Billing mode</h2>
+          <StatusChip tone={mode === "manual" ? "warning" : "good"}>
             {mode === "manual" ? "Manual" : "Automatic"}
-          </Badge>
+          </StatusChip>
         </div>
 
         <p className="text-sm text-muted-foreground">
@@ -57,7 +50,6 @@ export function BillingModePanel({ tenantId, mode }: { tenantId: string; mode: "
 
         <Button
           variant="outline"
-          size="sm"
           disabled={busy}
           onClick={() => switchTo(mode === "manual" ? "automatic" : "manual")}
         >

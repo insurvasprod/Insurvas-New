@@ -18,6 +18,13 @@ export type PlanMeterRow = {
 export type PlanLimits = {
   max_seats: number | null;
   max_carriers: number | null;
+  max_publishers: number | null;
+  max_marketing_partners: number | null;
+  max_affiliates: number | null;
+  max_buffer_seats: number | null;
+  max_partner_users: number | null;
+  max_setter_seats: number | null;
+  max_active_campaigns: number | null;
 };
 
 export type TenantUsageRow = {

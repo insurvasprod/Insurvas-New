@@ -9,14 +9,17 @@ import { createClient } from "@supabase/supabase-js";
 import * as OTPAuth from "otpauth";
 import QRCode from "qrcode";
 
+import { openAdminTotpSecret, sealAdminTotpSecret } from "../lib/adminAuth/totpSecret.ts";
+
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const args = process.argv.slice(2);
 const showOnly = args.includes("--show");
 const email = (args.find((a) => !a.startsWith("--")) ?? process.env.SEED_SUPER_ADMIN_EMAIL)?.toLowerCase();
 
-if (!url || !serviceKey) {
-  console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env.local");
+// The secret is stored sealed with the application data key (lib/adminAuth/totpSecret.ts).
+if (!url || !serviceKey || !process.env.APPLICATION_DATA_ENCRYPTION_KEY) {
+  console.error("Missing NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY or APPLICATION_DATA_ENCRYPTION_KEY in .env.local");
   process.exit(1);
 }
 if (!email) {
@@ -31,7 +34,7 @@ let totpSecret;
 if (showOnly) {
   const { data: existing, error } = await supabase
     .from("admin_users")
-    .select("email, totp_secret")
+    .select("id, email, totp_secret")
     .eq("email", email)
     .maybeSingle();
 
@@ -43,14 +46,23 @@ if (showOnly) {
     console.error(`No admin_users row found for ${email}`);
     process.exit(1);
   }
-  totpSecret = existing.totp_secret;
+  totpSecret = openAdminTotpSecret(existing.id, existing.totp_secret)?.secret;
+  if (!totpSecret) {
+    console.error(`No readable TOTP secret for ${email} (not enrolled, or sealed under another key)`);
+    process.exit(1);
+  }
 } else {
   totpSecret = new OTPAuth.Secret({ size: 20 }).base32;
 
+  const { data: target, error: findError } = await supabase.from("admin_users").select("id").eq("email", email).maybeSingle();
+  if (findError || !target) {
+    console.error(findError ? `Could not read admin_users: ${findError.message}` : `No admin_users row found for ${email}`);
+    process.exit(1);
+  }
   const { data: updated, error } = await supabase
     .from("admin_users")
-    .update({ totp_secret: totpSecret })
-    .eq("email", email)
+    .update({ totp_secret: sealAdminTotpSecret(target.id, totpSecret) })
+    .eq("id", target.id)
     .select("email")
     .maybeSingle();
 

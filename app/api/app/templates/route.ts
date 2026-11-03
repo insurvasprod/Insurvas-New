@@ -1,13 +1,39 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { applyTemplate, listAvailableTemplates, previewTemplateApplication } from "@/lib/agentTemplates/service";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { applyTemplate, listAvailableTemplates, previewTemplateApplication, TemplateProductError } from "@/lib/agentTemplates/service";
+import { livePublication } from "@/lib/agentTemplates/publishedBy";
 
-export async function GET() {
+const PRODUCT_CODE = /^[a-z][a-z0-9_]{0,79}$/;
+
+/** `?product=<code>` picks which product's form is `current`; without it, the term-life form as before. */
+export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("book_of_business", ["owner"]);
   if (auth instanceof NextResponse) return auth;
-  try { return NextResponse.json(await listAvailableTemplates(auth.context.tenantId, auth.context.userId), { headers: { "Cache-Control": "no-store" } }); }
-  catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load templates" }, { status: 500 }); }
+  const product = request.nextUrl.searchParams.get("product");
+  if (product !== null && !PRODUCT_CODE.test(product)) return NextResponse.json({ error: "Choose a valid product" }, { status: 400 });
+  try {
+    // agencyName: the partner form names the agency (the submit page reads tenants.name); the
+    // settings preview shows the same name so it matches the partner view (LA-1.4-5).
+    const [templates, tenant] = await Promise.all([
+      listAvailableTemplates(auth.context.tenantId, auth.context.userId, product),
+      getSupabaseServiceClient().from("tenants").select("name").eq("id", auth.context.tenantId).maybeSingle<{ name: string }>(),
+    ]);
+    // published: who put the live version out, and when (Form templates layout A). A failed read
+    // only drops the line; the form still loads.
+    // liveVersions: each product's live form version, for its chip. One row per product's copy.
+    const [published, copies] = await Promise.all([
+      livePublication(templates.current.tenant_template_id, templates.current.assignment.definition_version).catch(() => null),
+      getSupabaseServiceClient().from("tenant_templates").select("product_code, definition_version").eq("tenant_id", auth.context.tenantId),
+    ]);
+    const liveVersions = Object.fromEntries((copies.data ?? []).map((row) => [row.product_code, row.definition_version]));
+    return NextResponse.json({ ...templates, agencyName: tenant.data?.name ?? null, published, liveVersions }, { headers: { "Cache-Control": "no-store" } });
+  }
+  catch (error) {
+    if (error instanceof TemplateProductError) return NextResponse.json({ error: error.message }, { status: 403 });
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load templates" }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {

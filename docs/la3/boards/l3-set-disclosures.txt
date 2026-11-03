@@ -1,0 +1,239 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Owner only"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "Effective-dated and audited"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Settings · Sales"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Disclosures"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "The documents that go with an application, and the conditions that decide which ones."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add a document"
+    <div> {gap:24px}
+      <div> {width:236px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carriers and products"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Appointments"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Underwriting templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quotation templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Application field sets"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carrier field maps"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              "Disclosures"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quote and QA preferences"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Welcome pack"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "AI assistant"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Extension"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Pipeline sync"
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Disclosures"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Owner only"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "The library"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "One row per document. A version is superseded, never overwritten."
+              <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+                <table> {width:100%}
+                  <thead>
+                    <tr> {bg:#e4e8ee}
+                      <th> {padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Document"
+                      <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "States"
+                      <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Products"
+                      <th> {width:80px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Version"
+                      <th> {width:172px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Status"
+                  <tbody .m-seq>
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "Replacement of life insurance notice"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "Signed by the client and the agent before submission"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "AZ, TX, NV, NM"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Final Expense, Term life"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+                          "v3"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "In use"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "1035 exchange notice"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "Only when an existing policy funds the new one"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "All states"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Term life"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+                          "v2"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "In use"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "Accelerated death benefit disclosure"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "Carrier form, attached unchanged"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "All states"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Final Expense"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+                          "v1"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "In use"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {fsize:14px;fweight:400;color:#33383f}
+                          "Arizona buyer’s guide"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "Shipped by Insurvas, tracks the state text"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "AZ"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Final Expense, Term life"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                          "v6"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:8px}
+                          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                            "Platform default"
+                          <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                            "Copy to my tenant"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "What triggers them"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "Read top to bottom against the case. A document named twice is attached once."
+              <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px;padding:11px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Rules, in the order they are read"
+                  <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                    "5 rules"
+                <div> {padding:13px 16px;bd-top:1px solid #d5dbe3}
+                  <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;color:#33383f}
+                        "existing coverage = yes"
+                      <span> {color:#60646c;fweight:600}
+                        "AND"
+                        "state = AZ"
+                      <span> {color:#60646c}
+                        "→"
+                      <strong> {color:#15191e}
+                        "Replacement of life insurance notice"
+                      <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                        "Required"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Grace Oyelaran has $5,000 in force with Gerber since 2021, so this one is already on her case."
+                <div> {padding:13px 16px;bd-top:1px solid #d5dbe3}
+                  <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;color:#33383f}
+                        "existing coverage = yes"
+                      <span> {color:#60646c;fweight:600}
+                        "AND"
+                        "state is not AZ"
+                      <span> {color:#60646c}
+                        "→"
+                      <strong> {color:#15191e}
+                        "Replacement of life insurance notice"
+                      <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                        "Required"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Every state we are licensed in requires it. Arizona is listed apart only because its form text differs."
+                <div> {padding:13px 16px;bd-top:1px solid #d5dbe3}
+                  <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;color:#33383f}
+                        "funding source = existing policy"
+                      <span> {color:#60646c}
+                        "→"
+                      <strong> {color:#15191e}
+                        "1035 exchange notice"
+                      <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                        "Required"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Reads the Payment step, not the interview. A client who says “cash it in” is not a 1035."
+                <div> {padding:13px 16px;bd-top:1px solid #d5dbe3}
+                  <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;color:#33383f}
+                        "product = Final Expense"
+                      <span> {color:#60646c;fweight:600}
+                        "AND"
+                        "carrier = Gerber Life"
+                      <span> {color:#60646c}
+                        "→"
+                      <strong> {color:#15191e}
+                        "Accelerated death benefit disclosure"
+                      <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                        "Required"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "The carrier attaches it to every application on this product, so we do too."
+                <div> {padding:13px 16px;bd-top:1px solid #d5dbe3}
+                  <div> {justify-content:space-between;gap:16px}
+                    <span> {fsize:14px;fweight:400;color:#33383f}
+                        "state = AZ"
+                      <span> {color:#60646c;fweight:600}
+                        "AND"
+                        "attempt = first"
+                      <span> {color:#60646c}
+                        "→"
+                      <strong> {color:#15191e}
+                        "Arizona buyer’s guide"
+                      <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                        "Offered"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Offered, not required — a resubmission to a second carrier does not send it twice."
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #b35c00;bd-radius:12px;bg:#fcefdf}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#9a4f00}
+                    "State disclosures are a different thing"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "The call scripts under Compliance are what an agent reads aloud before dialling. These are documents attached to an application. Both are managed from the same admin area; neither replaces the other."
+          <div> {justify-content:space-between;gap:16px;padding:14px 24px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Changes are audited — who, when, and what the value was before. Publishing a new version leaves the old one readable, because an application submitted under it still points at it."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Discard"
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Save changes"

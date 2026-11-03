@@ -1,0 +1,654 @@
+<title>LA-4 Demo Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a sticky step index on the left, one section per LA-4 task on the right; one column on phones. */
+:root {
+  --canvas: #f1f3f7; --surface: #ffffff; --surface-alt: #e4e8ee; --border: #d5dbe3;
+  --ink: #0d4037; --body: #2f343c; --muted: #59606b;
+  --brand: #07d6a0; --brand-soft: #dff8f0; --brand-ink: #075e48;
+  --warn-ink: #8a4600; --warn-surface: #fcefdf;
+  --sans: "Montserrat", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas: #08110f; --surface: #0f1a17; --surface-alt: #16241f; --border: #22342e;
+  --ink: #f2f7f5; --body: #c9d6d1; --muted: #93a69f;
+  --brand: #07d6a0; --brand-soft: #0d2a22; --brand-ink: #4fe3bb;
+  --warn-ink: #e2973a; --warn-surface: #2b1e0d; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --canvas: #08110f; --surface: #0f1a17; --surface-alt: #16241f; --border: #22342e;
+  --ink: #f2f7f5; --body: #c9d6d1; --muted: #93a69f;
+  --brand: #07d6a0; --brand-soft: #0d2a22; --brand-ink: #4fe3bb;
+  --warn-ink: #e2973a; --warn-surface: #2b1e0d; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--canvas); color: var(--body); font: 400 15px/1.6 var(--sans); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 40px 80px; padding-inline: 24px; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 24px; padding-inline: 16px; padding-block: 24px 56px; } nav.index { position: static !important; } }
+
+h1, h2, h3 { color: var(--ink); font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(28px, 4vw, 38px); line-height: 1.1; }
+h2 { font-size: 24px; line-height: 1.2; }
+h3 { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+p { margin: 0; max-width: 68ch; }
+code, .url { font: 500 13px/1.4 var(--mono); }
+.url { color: var(--brand-ink); background: var(--brand-soft); padding: 2px 8px; border-radius: 6px; white-space: nowrap; }
+
+nav.index { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; display: grid; gap: 4px; }
+nav.index .label { font: 700 11px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+nav.index a { display: grid; grid-template-columns: 52px 1fr; gap: 8px; align-items: baseline; padding: 6px 10px; border-radius: 8px; color: var(--body); text-decoration: none; font-size: 13px; line-height: 1.35; }
+nav.index a:hover, nav.index a:focus-visible { background: var(--surface); color: var(--ink); outline: none; }
+nav.index a span:first-child { font: 600 12px/1.35 var(--mono); color: var(--brand-ink); }
+nav.index a.muted span:first-child { color: var(--muted); }
+
+main { display: grid; gap: 56px; min-width: 0; }
+header.top { display: grid; gap: 16px; }
+.lede { font-size: 17px; color: var(--body); }
+.facts { display: flex; flex-wrap: wrap; gap: 8px 24px; font-size: 13px; color: var(--muted); }
+.facts b { color: var(--ink); font-weight: 600; }
+
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 24px; display: grid; gap: 14px; min-width: 0; }
+.panel ol, .panel ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.panel li::marker { color: var(--muted); }
+.order { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; counter-reset: step; list-style: none; padding: 0 !important; }
+.order li { counter-increment: step; background: var(--surface-alt); border-radius: 8px; padding: 10px 12px 10px 44px; position: relative; font-size: 13px; line-height: 1.4; }
+.order li::before { content: counter(step); position: absolute; left: 12px; top: 10px; font: 600 12px/1.4 var(--mono); color: var(--brand-ink); }
+.order li b { color: var(--ink); font-weight: 600; display: block; font-size: 12px; font-family: var(--mono); }
+
+section.step { display: grid; gap: 20px; scroll-margin-top: 24px; }
+.step-head { display: grid; gap: 8px; }
+.chip { justify-self: start; font: 600 12px/1 var(--mono); letter-spacing: .02em; color: var(--brand-ink); background: var(--brand-soft); border: 1px solid color-mix(in srgb, var(--brand) 35%, transparent); padding: 6px 10px; border-radius: 999px; }
+.chip.off { color: var(--warn-ink); background: var(--warn-surface); border-color: transparent; }
+.where { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); }
+.cols { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 1000px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.say li { color: var(--body); }
+.say li q { quotes: "“" "”"; color: var(--ink); }
+.note { background: var(--warn-surface); color: var(--warn-ink); border-radius: 10px; padding: 12px 16px; font-size: 13.5px; line-height: 1.5; }
+.note b { font-weight: 700; }
+
+.shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+figure { margin: 0; display: grid; gap: 8px; min-width: 0; }
+figure img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border); display: block; background: var(--surface-alt); }
+figcaption { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+figcaption code { font-size: 11.5px; color: var(--ink); }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-size: 13px; }
+th, td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font: 700 11px/1.3 var(--sans); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--surface-alt); }
+tr:last-child td { border-bottom: 0; }
+td.n { font-family: var(--mono); color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+td .tag { font: 600 11px/1 var(--mono); padding: 3px 7px; border-radius: 999px; background: var(--warn-surface); color: var(--warn-ink); white-space: nowrap; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+
+<div class="wrap">
+  <nav class="index" aria-label="Steps">
+    <div class="label">LA-4 demo</div>
+    <a href="#setup"><span>Prep</span><span>Before you start</span></a>
+    <a href="#s41"><span>4.1</span><span>Files and the three doors</span></a>
+    <a href="#s42"><span>4.2</span><span>Raw rows, reprocessing</span></a>
+    <a href="#s43"><span>4.3</span><span>Layout maps</span></a>
+    <a href="#s44" class="muted"><span>4.4</span><span>AI layout proposals</span></a>
+    <a href="#s45"><span>4.5</span><span>Status map</span></a>
+    <a href="#s46"><span>4.6</span><span>Snapshots, changes</span></a>
+    <a href="#s47"><span>4.7</span><span>Current state</span></a>
+    <a href="#s417"><span>4.17</span><span>Carrier rules</span></a>
+    <a href="#s48"><span>4.8</span><span>Policy matching</span></a>
+    <a href="#s49"><span>4.9</span><span>Exception queues</span></a>
+    <a href="#s410"><span>4.10</span><span>Book import</span></a>
+    <a href="#live"><span>Live</span><span>The live upload</span></a>
+    <a href="#s411"><span>4.11</span><span>Policies and the policy page</span></a>
+    <a href="#s420"><span>4.20</span><span>Follow a number down</span></a>
+    <a href="#s412"><span>4.12</span><span>Commission ledger</span></a>
+    <a href="#s414"><span>4.14</span><span>Carrier accounts, orphans</span></a>
+    <a href="#s413"><span>4.13</span><span>Rate card</span></a>
+    <a href="#s415"><span>4.15</span><span>Discrepancies, letters</span></a>
+    <a href="#s416"><span>4.16</span><span>Lapse risk call list</span></a>
+    <a href="#s418"><span>4.18</span><span>Book scorecards</span></a>
+    <a href="#s419"><span>4.19</span><span>Runs and agent findings</span></a>
+    <a href="#close"><span>End</span><span>Closing and reset</span></a>
+    <a href="#shots"><span>Index</span><span>All 37 screenshots</span></a>
+  </nav>
+
+  <main>
+    <header class="top">
+      <h1>LA-4 Demo Guide</h1>
+      <p class="lede">A presenter's script for the Book of Business module, task by task from 4.1 to 4.20: what to open, what to say, what to click, and what each screen should show. Screenshots 01–25 are from the run of 4.1–4.10 on 7 October 2026; 26–37 are from the end-to-end run of the whole module on 8 October, with made-up commission data.</p>
+      <div class="facts"><span><b>Run time</b> about 30 minutes</span><span><b>Agency</b> Advance Team (QA demo)</span><span><b>Data</b> 8 made-up clients on the test carrier LA14 Market</span><span><b>App</b> <code>http://localhost:3000</code></span></div>
+    </header>
+
+    <section class="step" id="setup">
+      <div class="step-head"><span class="chip">Prep</span><h2>Before you start</h2></div>
+      <div class="cols">
+        <div class="panel">
+          <h3>Set up</h3>
+          <ol>
+            <li>Sign in to the app as the <b>demo agency owner</b> (Book of Business pages) and, in the same browser, as <b>staff</b> (the <code>/admin</code> pages for 4.3 and 4.5).</li>
+            <li>Turn on the test carrier <b>LA14 Market</b>. It is kept deactivated so no real agency sees it; it must be active for the upload and for its rows to show.</li>
+            <li>The demo agency already has a layout map for LA14 Market, and the carrier already has three approved status words: <i>Active</i>, <i>Lapsed</i>, <i>Pending UW</i>. The sample files use only those.</li>
+            <li>Have the three sample files ready (in <code>docs/la4/demo/sample-files/</code>): September, the first October file, and the corrected October file.</li>
+          </ol>
+        </div>
+        <div class="panel">
+          <h3>Know this before a second run</h3>
+          <ul>
+            <li>The demo agency <b>already holds the data</b> from the 7 and 8 October runs: three policy files, an Oct 8 file with the product, and an Oct 6 commission statement with its totals. Walk the screens; only the live upload is new.</li>
+            <li>LA14 Market and the Lapse risk switch were left <b>on</b> after the 8 October run.</li>
+            <li>Keep Carrier files <b>filtered to LA14 Market</b>: two test leftovers sit under Americo, one of them a spreadsheet with real client details.</li>
+            <li>Policies, Commission ledger and Discrepancies each show <b>one list with a Source filter</b>: from carrier files, or entered (imported) by hand. The demo agency also holds older test data entered by hand, so set <b>Source: From carrier files</b> on those three, or open them with <code>?source=carrier</code> (the links below do). Otherwise the figures include it: 128 policies, 152 ledger lines, $6,330 owed.</li>
+            <li>Links, rules, ledger lines and logged calls are permanent by design. Run the demo on the demo agency only.</li>
+          </ul>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Running order</h3>
+        <p>Present the tasks in number order below, but run them in this order, because each step needs the data the one before it made.</p>
+        <ol class="order">
+          <li><b>4.1</b>Carrier files, then Email and bucket</li>
+          <li><b>4.3 · 4.4</b>Staff: Layout maps</li>
+          <li><b>4.5</b>Staff: Status maps</li>
+          <li><b>4.10</b>Import the September file</li>
+          <li><b>4.2</b>The file in the registry</li>
+          <li><b>4.6</b>Upload October, open Policy changes</li>
+          <li><b>4.17</b>Add the carrier rule</li>
+          <li><b>4.1</b>Upload the corrected October file</li>
+          <li><b>4.7</b>Back to Import: who is at risk</li>
+          <li><b>4.8</b>Links, then map an agent code</li>
+          <li><b>4.9</b>Exceptions, then the contact directory</li>
+          <li><b>Live</b>Upload the live-update file</li>
+          <li><b>4.11 · 4.20</b>DEMO-1002, then follow its advance down</li>
+          <li><b>4.12 · 4.14</b>Ledger, then Carrier accounts</li>
+          <li><b>4.13</b>Rate card</li>
+          <li><b>4.15</b>Discrepancies and a letter preview</li>
+          <li><b>4.16</b>The call list and the save rate</li>
+          <li><b>4.18</b>Book scorecards</li>
+          <li><b>4.19</b>Runs and agent findings</li>
+        </ol>
+        <p>On 8 October the first part was already loaded, so steps 1 to 11 are a walk through the screens rather than uploads.</p>
+      </div>
+    </section>
+
+    <section class="step" id="s41">
+      <div class="step-head"><span class="chip">LA-4.1</span><h2>Storage, file registry and the three doors</h2>
+        <div class="where">Open <span class="url">/app/carrier-files</span> then the <b>Email and bucket</b> tab</div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every file a carrier sends comes in through one of three doors: you upload it here, you email it to the agency's own address, or a script drops it into the agency's storage bucket.</q></li>
+          <li><q>Whatever the door, it lands in one registry. A file we can't read is still registered, as failed, with the reason, so nothing quietly disappears.</q></li>
+          <li><q>Email only works from senders you've approved, and each sender is tied to a carrier. The bucket uses a fixed folder layout, one code per carrier, and it's checked every five minutes.</q></li>
+          <li><q>Send the exact same file twice and the second one is skipped as a duplicate. Send a corrected file for the same day and it replaces the earlier one. The earlier one stays listed, marked Replaced.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Open Carrier files. At the start it is empty: <i>No carrier file received yet</i>.</li>
+          <li>Open <b>Email and bucket</b>: the agency address, the approved-senders list, and the bucket folder with its carrier codes.</li>
+          <li>Later in the run (step 8), upload the corrected October file and come back: three files, one marked <b>Replaced</b>, and the <i>Replaced</i> tile reads 1.</li>
+        </ol></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/01-4.1-carrier-files-empty.jpg" alt="Carrier files page, empty, with the 4.1 caption" loading="lazy"><figcaption><code>01</code> The registry before any file arrives.</figcaption></figure>
+        <figure><img src="shots/02-4.1-email-and-bucket.jpg" alt="Email and bucket tab with the inbound address and bucket folder" loading="lazy"><figcaption><code>02</code> The email door and the bucket door.</figcaption></figure>
+        <figure><img src="shots/16-4.1-corrected-file-replaces.jpg" alt="Three files, the first October file marked Replaced" loading="lazy"><figcaption><code>16</code> The corrected October file replaces the first one, which stays listed.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s42">
+      <div class="step-head"><span class="chip">LA-4.2</span><h2>The raw layer and reprocessing</h2>
+        <div class="where">Open <span class="url">/app/carrier-files</span> after the import</div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every row of every file is kept exactly as the carrier sent it, and those rows are never edited.</q></li>
+          <li><q>That's what lets us fix things later. If a column map or a status word was wrong, we correct it and reprocess the file from its own rows. Nobody has to find the file and upload it again.</q></li>
+          <li><q>Each reprocess is recorded: what ran, on which files, and how many rows changed.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Point at the imported file: <b>Sep 5, 2026 · 8 rows · Read · v1</b>.</li>
+          <li>Explain <i>v1</i>: the file was read with version 1 of its layout map, and it keeps that version even if the map changes later.</li>
+        </ol>
+        <div class="note">Reprocessing was not triggered in this run. It runs for one file, or for a carrier over a date range.</div></div>
+      </div>
+      <div class="shots"><figure><img src="shots/10-4.2-file-registered.jpg" alt="Carrier files with the imported September file, 8 rows, Read v1" loading="lazy"><figcaption><code>10</code> The imported file in the registry, read with map version 1.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s43">
+      <div class="step-head"><span class="chip">LA-4.3</span><h2>Spreadsheet parser and versioned layout maps</h2>
+        <div class="where">Staff: open <span class="url">/admin/layout-maps</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every carrier lays out its spreadsheet differently. A layout map says which column is the policy number, which is the status, the paid-to date, the premium, and so on.</q></li>
+          <li><q>Maps are versioned. A draft is reviewed, then published, and a file is always read with the version it was parsed under.</q></li>
+          <li><q>A platform map is shared by every agency that writes that carrier. An agency can also have its own. The demo uses an agency-level map for the test carrier.</q></li>
+          <li><q>This list is empty on purpose. Platform maps are written only from real carrier sample files, never guessed, and we're waiting on those files.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Show <b>Layouts</b> (empty) and <b>Carrier assignments</b>, where a published map is assigned to a carrier and file type.</li>
+          <li>A file whose carrier has no published map waits; it is read automatically once one is published.</li>
+        </ol></div>
+      </div>
+      <div class="shots"><figure><img src="shots/03-4.3-layout-maps.jpg" alt="Staff Layout maps page, empty library" loading="lazy"><figcaption><code>03</code> The platform library, empty until real carrier samples arrive.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s44">
+      <div class="step-head"><span class="chip off">LA-4.4 · not built</span><h2>AI layout proposals</h2>
+        <div class="where">Stay on <span class="url">/admin/layout-maps</span></div></div>
+      <div class="panel say"><h3>Say</h3><ul>
+        <li><q>When a carrier sends a layout we've never seen, an AI agent will propose a map, and a person approves it.</q></li>
+        <li><q>That step waits for an AI provider to be chosen. The decision was to build everything that doesn't need AI first. Until then, staff write the maps from real sample files.</q></li>
+      </ul>
+      <div class="note">There is no separate screenshot: this caption was shown over the Layout maps page (shot 03).</div></div>
+    </section>
+
+    <section class="step" id="s45">
+      <div class="step-head"><span class="chip">LA-4.5</span><h2>Normalized status map and the unknown-status gate</h2>
+        <div class="where">Staff: open <span class="url">/admin/status-maps</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Carriers word their statuses their own way: IssNotPaid, Act-Ret Item, Pending UW. Each word is mapped, exactly as the carrier writes it, spaces and capitals included, to one of nine statuses we use.</q></li>
+          <li><q>A word nobody has mapped doesn't get guessed. Its rows are held back. Staff map it here, and the held rows are read automatically.</q></li>
+          <li><q>An approval is permanent and holds for that carrier word for every agency, so it's done once and done carefully.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Show <b>Waiting to be mapped</b>: each word, its carrier, how many rows it holds, how many agencies sent it.</li>
+          <li>Show <b>Status map</b>: the test carrier's three approved words.</li>
+        </ol>
+        <div class="note">Shot 04 shows <i>"ACTIVE"</i> from Mutual of Omaha waiting with 1,201 rows. The owner approved that mapping on 8 October, with the two LA14 variants, so the waiting list is now empty. Don't map anything else live: a real carrier's word needs the owner's approval.</div></div>
+      </div>
+      <div class="shots"><figure><img src="shots/04-4.5-status-maps.jpg" alt="Status maps page with waiting words and the approved map" loading="lazy"><figcaption><code>04</code> Words waiting to be mapped, and the approved map.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s46">
+      <div class="step-head"><span class="chip">LA-4.6</span><h2>Policy snapshots and the change-detection engine</h2>
+        <div class="where">Upload the first October file, then open <span class="url">/app/carrier-files?view=changes</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Each file becomes a snapshot of every policy on that date. Snapshots are never edited.</q></li>
+          <li><q>Comparing one snapshot with the next gives the policy's history, dated as precisely as the files allow: between the files of September 5 and October 5. We never pretend to know the exact day.</q></li>
+          <li><q>Importing a book makes no fake changes. A policy's first snapshot only records that we saw it.</q></li>
+          <li><q>If a late or corrected file arrives, only the policies it touches are recomputed.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Upload the October file for LA14 Market, dated 5 October, through the normal upload door.</li>
+          <li>Show two files in the registry.</li>
+          <li>Open <b>Policy changes</b> and read three rows aloud: the paid-to dates that moved, <b>DEMO-1003 Active → Lapsed</b>, and <b>DEMO-1008 Submitted → Active</b> (issued).</li>
+        </ol></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/11-4.6-two-files.jpg" alt="Carrier files with the September and October files" loading="lazy"><figcaption><code>11</code> Two files, a month apart.</figcaption></figure>
+        <figure><img src="shots/12-4.6-policy-changes.jpg" alt="Policy changes tab listing changes between Sep 5 and Oct 5" loading="lazy"><figcaption><code>12</code> Each change dated between the two files.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s47">
+      <div class="step-head"><span class="chip">LA-4.7</span><h2>The current-state table and derived fields</h2>
+        <div class="where">After the carrier rule (4.17) and the corrected file, open <span class="url">/app/book-import</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Behind every board is one row per policy with its latest state, recomputed every day even when no file arrives.</q></li>
+          <li><q>Days past due count from the paid-to date, never from the file's date. That keeps the countdown right on a monthly feed.</q></li>
+          <li><q>Days until the carrier closes the policy come from the carrier rule. With no rule there is no countdown. A wrong countdown is worse than none.</q></li>
+          <li><q>If the carrier still says Active but the client is past the grace period, we mark it at risk. It reads exactly the same as when the carrier says it.</q></li>
+          <li><q>The risk level comes only from what we've observed. It's not a prediction.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Point at the premium tile: <b>$377 · 2 policies at risk</b>.</li>
+          <li>Name them: <b>DEMO-1005</b> and <b>DEMO-1006</b> missed October. They are 6 days past due, past the 3-day grace, with <b>24 days</b> left to save them.</li>
+          <li>Add that DEMO-1003 shows <i>lapsed on 5 October</i>, read from the change log.</li>
+        </ol>
+        <div class="note">There is no policy list yet (that's 4.11), so 4.7 is shown through these totals. <b>Paid-to dates:</b> a client who is up to date has a paid-to date in the future (their next due date). The first October sample used 1 October, so on 7 October six clients correctly read as past due. The corrected file fixes that, and shows 4.1's replace feature too.</div></div>
+      </div>
+      <div class="shots"><figure><img src="shots/17-4.7-two-at-risk.jpg" alt="Import page tiles showing 2 policies at risk" loading="lazy"><figcaption><code>17</code> Two policies at risk, derived from the paid-to date and the carrier rule.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s417">
+      <div class="step-head"><span class="chip">LA-4.17</span><h2>Carrier rules and save windows</h2>
+        <div class="where">Open <span class="url">/app/carrier-rules</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>This is where each carrier's numbers live: how long it gives to save a policy after a missed first payment, a missed later payment, a reinstatement, and so on.</q></li>
+          <li><q>Nothing is hard-coded. A carrier with no rule shows Not set, and its policies get no countdown at all rather than a guessed one.</q></li>
+          <li><q>A rule applies from a date and is never edited; a change is a new rule. So a past countdown keeps the rule it used.</q></li>
+          <li><q>Every rule says where it came from, and an unverified one is shown as unverified. An agency's own rule overrides the platform's.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Find <b>LA14 Market</b>: every window Not set, 7 in force.</li>
+          <li><b>Edit</b> → Ongoing payment: window <b>30</b>, grace <b>3</b>, source <b>Observed</b>, note "Demo rule" → <b>Save rule</b>.</li>
+          <li>The row now reads <b>30 days · yours · unverified</b>, and Missing drops from 5 to 4.</li>
+        </ol></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/13-4.17-rules-not-set.jpg" alt="Carrier rules page, LA14 Market with every window Not set" loading="lazy"><figcaption><code>13</code> No rule yet, so no countdown.</figcaption></figure>
+        <figure><img src="shots/14-4.17-adding-a-rule.jpg" alt="Rules editor with the ongoing payment rule filled in" loading="lazy"><figcaption><code>14</code> Adding the rule: 30 days after a 3-day grace.</figcaption></figure>
+        <figure><img src="shots/15-4.17-rule-saved.jpg" alt="Carrier rules with LA14 Market now showing 30 days, yours, unverified" loading="lazy"><figcaption><code>15</code> Saved as the agency's own rule, unverified.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s48">
+      <div class="step-head"><span class="chip">LA-4.8</span><h2>Policy ↔ client matching</h2>
+        <div class="where">Open <span class="url">/app/policy-matching</span> · Links, then Agent codes</div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every carrier policy is linked to a client, cheapest step first. If we already hold its policy number, from a submission or an issued policy, it links straight away. Otherwise the closest clients are scored and a person picks one.</q></li>
+          <li><q>No single field decides. A matching name alone is never enough.</q></li>
+          <li><q>Every link records how it was made, and a wrong link is corrected by a new one. The old one stays readable, so a mistake can always be traced.</q></li>
+          <li><q>Agent codes are mapped exactly as the carrier writes them, once. We never match a similar-looking name, because that can assign a policy and its commission to the wrong producer.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li><b>Links</b>: 8 links, each made by the import with a provisional client.</li>
+          <li><b>Agent codes</b>: "DEMO/ AGENT ONE" and "DEMO/ AGENT TWO" are unmapped. Map <b>DEMO/ AGENT ONE → Devin Okafor</b> → <b>Map</b>.</li>
+          <li>It moves to the mapped list; Agent codes unmapped drops from 2 to 1.</li>
+        </ol>
+        <div class="note">The AI reviewer for uncertain matches waits for an AI provider; a person decides those today. The <i>Linked to</i> column in shot 18 says "No client found". That wording was fixed after the run and now reads "A provisional client".</div></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/18-4.8-links.jpg" alt="Policy matching Links tab with 8 provisional links" loading="lazy"><figcaption><code>18</code> Every link says how it was made.</figcaption></figure>
+        <figure><img src="shots/19-4.8-agent-codes.jpg" alt="Agent codes tab with a person chosen for DEMO/ AGENT ONE" loading="lazy"><figcaption><code>19</code> Choosing who "DEMO/ AGENT ONE" is.</figcaption></figure>
+        <figure><img src="shots/20-4.8-agent-mapped.jpg" alt="Agent code mapped confirmation" loading="lazy"><figcaption><code>20</code> Mapped.</figcaption></figure>
+        <figure><img src="shots/21-4.8-agent-moved-to-mapped.jpg" alt="Agent codes list with one mapped and one unmapped" loading="lazy"><figcaption><code>21</code> One left unmapped; nothing guesses it.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s49">
+      <div class="step-head"><span class="chip">LA-4.9</span><h2>The three exception queues and role-based ownership</h2>
+        <div class="where">Open <span class="url">/app/exceptions</span> then <span class="url">/app/duplicates</span> (Contacts)</div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Three things go wrong between carrier files and sales: a policy with no sale on record, a sale no carrier has heard of, and two clients who might be one person.</q></li>
+          <li><q>The valuable one is the sale no carrier has heard of. It means the application may never have been submitted. It's raised five days after the sale, once we have that carrier's later file, and it escalates at ten.</q></li>
+          <li><q>Every item has an owner and an age, and the age is the first thing you see. If a role has nobody in it, the item goes to the owner. Nothing is ever unowned.</q></li>
+          <li><q>A client built from a carrier's file is marked Provisional everywhere until the agent confirms it. Two people at one address are two clients in one household, never merged.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Exceptions: <b>one</b> item, owned by the agency owner, aged <i>today</i>: "8 policies imported, 8 provisional clients created — review when you have time."</li>
+          <li>Contact directory: every demo client has a <b>Provisional</b> badge. Casey and Drew Example share the household <b>Example, FL</b>.</li>
+        </ol>
+        <div class="note">Not shown live: the sale-with-no-policy queue (it needs a sale at least 5 days old and a later carrier file) and the same-client queue. Both were checked on the live database with throwaway test data.</div></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/22-4.9-exceptions-summary.jpg" alt="Exceptions page with one imported-book summary item" loading="lazy"><figcaption><code>22</code> One summary item for the whole import.</figcaption></figure>
+        <figure><img src="shots/24-4.9-provisional-clients.jpg" alt="Contact directory with Provisional badges" loading="lazy"><figcaption><code>24</code> Provisional clients, and two people in one household.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s410">
+      <div class="step-head"><span class="chip">LA-4.10</span><h2>Existing-book import</h2>
+        <div class="where">Open <span class="url">/app/book-import</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>A new agency uploads its latest policy file from each carrier portal, and its book is there on day one. It goes through the same pipeline as every other file. There's no separate importer.</q></li>
+          <li><q>One row per carrier: where that portal keeps the file, the result the moment it's read, and Skip for now, which can be undone.</q></li>
+          <li><q>An imported book doesn't flood the queues. Every client is created as provisional, and the file gets one summary item instead of one per client.</q></li>
+          <li><q>We're honest about the limits. Persistency says Building until there are three months of files. Advances at risk said Unknown until the first commission statement arrived; now it's the unearned advance from the ledger, $1,281.78. Showing zero before would have wrongly said nothing was at risk.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li><b>Add another carrier…</b> → LA14 Market. It gets its own row.</li>
+          <li>Set its file date to <b>5 September</b>, then drop the September file on the row (or press Upload).</li>
+          <li>Watch the Result column: <b>"8 policies, $377/mo. 0 at risk."</b></li>
+          <li>Scroll up to the tiles: <b>1 of 9 carriers · 8 policies · $377 · Persistency Building · Advances at risk $1,281.78</b> (Unknown in shot 09, before the statement arrived).</li>
+        </ol>
+        <div class="note">Shot 07 shows a bug the run found: the row could say "no policies yet" for a few seconds while matching was still running. It was fixed the same day, and the row now keeps reading until everything is written.</div></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/05-4.10-import-carrier-added.jpg" alt="Import your book with LA14 Market added" loading="lazy"><figcaption><code>05</code> The carriers the agency writes, plus the test carrier.</figcaption></figure>
+        <figure><img src="shots/06-4.10-import-uploading.jpg" alt="The LA14 row uploading" loading="lazy"><figcaption><code>06</code> Dropped on its row, dated 5 September.</figcaption></figure>
+        <figure><img src="shots/08-4.10-import-result.jpg" alt="The LA14 row showing 8 policies, $377 a month" loading="lazy"><figcaption><code>08</code> The result, right on the row.</figcaption></figure>
+        <figure><img src="shots/09-4.10-import-totals.jpg" alt="Import tiles with the running total and honest limits" loading="lazy"><figcaption><code>09</code> The running total; persistency Building, advances Unknown.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="live">
+      <div class="step-head"><span class="chip">Live</span><h2>The live upload: one file, every stage</h2>
+        <div class="where">Open <span class="url">/app/carrier-files</span> · upload <code>demo-la14-live-update.csv</code></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>This is next month's policy file. In it, Emery Sample on DEMO-1005 has paid.</q></li>
+          <li><q>The moment it lands, one run takes it through every stage: collect, ingest, parse, store, match, reconcile, then the day is analysed. Each stage is recorded, with its timing.</q></li>
+          <li><q>Watch three things change on their own: at risk drops from two to one, the payment shows in the policy's history, and the voicemail we logged on that policy is marked saved, because the file says so.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li><b>Upload a file</b> → LA14 Market · Policy file · dated <b>today</b> → <code>demo-la14-live-update.csv</code>.</li>
+          <li><b>Runs</b> tab: the new run, every stage green, a few seconds.</li>
+          <li><b>Import your book</b>: at risk reads <b>1</b>.</li>
+          <li><b>Lapse risk</b>: DEMO-1005 has left the call list. The save rate reads <b>100%</b> (1 of 1).</li>
+        </ol>
+        <div class="note">Date the file the day of the presentation, which must be after 8 October. A second file for the same carrier, type and day replaces the first and isn't judged as a newer file.</div></div>
+      </div>
+      <div class="shots"><figure><img src="shots/26-4.19-run-stages.jpg" alt="Runs tab with a run and each stage succeeded" loading="lazy"><figcaption><code>26</code> A run, stage by stage (the 8 October commission file).</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s411">
+      <div class="step-head"><span class="chip">LA-4.11</span><h2>The policy list and the policy page</h2>
+        <div class="where">Open <span class="url">/app/policies?source=carrier</span> then <b>DEMO-1002</b></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every policy in the carriers' files, as of the latest file: product, premium, status, how late, risk and agent.</q></li>
+          <li><q>Open one and it's all in one place: the timeline from the sale through every file, the money, what the commission should be, and where each value came from.</q></li>
+          <li><q>Blake Demo's advance came in at $400 on the October statement. $177.78 of it is still unearned, so it's what the carrier would take back if the policy lapsed today.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Source: <b>From carrier files</b>. Policies: 8 policies, $4,520 a year, at risk (2 before the live upload, 1 after), product <b>FE Level</b>.</li>
+          <li>Open <b>DEMO-1002</b>. Timeline: the advance (row 3), the payments, the product change.</li>
+          <li>Money: advance <b>$400.00</b>, still at risk <b>$177.78</b>.</li>
+          <li>Expected first-year commission: <b>$621.00 · $465.75 as an advance</b>.</li>
+          <li>Open <b>Source</b>: each field names the file and row it's read from.</li>
+        </ol></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/29-4.12-policy-money.jpg" alt="DEMO-1002 timeline, Source and Money panel" loading="lazy"><figcaption><code>29</code> The timeline, the Source block and the money.</figcaption></figure>
+        <figure><img src="shots/30-4.13-expected-on-policy.jpg" alt="Still at risk and expected first-year commission on DEMO-1002" loading="lazy"><figcaption><code>30</code> Still at risk, and what the carrier should pay.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s420">
+      <div class="step-head"><span class="chip">LA-4.20</span><h2>Traceability: follow a number down to the file</h2>
+        <div class="where">From DEMO-1002's advance, open <b>row 3</b></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every number opens what's behind it, all the way down to the exact line of the exact file the carrier sent.</q></li>
+          <li><q>This row is every column as the carrier sent it, what our layout made of each one, and the value we stored. 400.00 became 40,000 cents. Read with version 1 of the commission layout.</q></li>
+          <li><q>And the original file is one click away: a sixty-second link, owner and bookkeeper only, and every download is logged.</q></li>
+          <li><q>A discrepancy we can't trace both ways is never shown. A daily check counts any figure that doesn't trace, and the build fails if a new screen adds one.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>From the advance's <b>row 3</b> link → the raw row.</li>
+          <li><b>The whole file</b> → every row and what it became.</li>
+          <li><b>Download the original</b>.</li>
+        </ol></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/28-4.20-raw-row.jpg" alt="Raw row page: every column as sent and what it became" loading="lazy"><figcaption><code>28</code> One row: every column, what it became.</figcaption></figure>
+        <figure><img src="shots/27-4.20-file-rows.jpg" alt="Commission file page listing its ten rows" loading="lazy"><figcaption><code>27</code> The whole file, row by row.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s412">
+      <div class="step-head"><span class="chip">LA-4.12</span><h2>The commission ledger</h2>
+        <div class="where">Open <span class="url">/app/ledger?source=carrier</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every line of every commission file: advances, earnings, chargebacks, fees and what's held. Each one keeps the file and row it came from.</q></li>
+          <li><q>A line is never edited. If the carrier corrects one, we record a reversal and the new line, so the history adds up.</q></li>
+          <li><q>Amounts are whole cents throughout. No rounding drift, ever.</q></li>
+          <li><q>A carrier that sends no file? Import its statement by hand, from the button at the top. Those lines join this same list, and the Source filter tells them apart.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Source: <b>From carrier files</b>. Tiles: advanced <b>$3,302</b>, charged back <b>−$266</b>, net received <b>$3,032</b> after the $5 fee. The tiles follow the filter.</li>
+          <li>The 10 lines, each with its file and row. DEMO-1099 is marked <i>Policy not seen yet</i>.</li>
+        </ol></div>
+      </div>
+      <div class="shots"><figure><img src="shots/31-4.12-ledger-totals.jpg" alt="Commission ledger totals" loading="lazy"><figcaption><code>31</code> Net received after fees and chargebacks.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s414">
+      <div class="step-head"><span class="chip">LA-4.14</span><h2>Carrier accounts and orphan commission</h2>
+        <div class="where">Open <span class="url">/app/ledger?view=accounts</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Each statement's opening balance, activity and closing balance, checked: does it add up, does it match its lines, and is a statement missing?</q></li>
+          <li><q>A statement that doesn't add up is flagged, and its lines are held out of every total until it's corrected.</q></li>
+          <li><q>Commission for a policy no file has shown yet is normal while the files catch up. It joins its policy the moment the policy arrives, and only goes to Exceptions after sixty days.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>The Oct 6 statement: $0.00 → <b>$3,031.85</b>, <b>Adds up</b>.</li>
+          <li>Unattributed commission: <b>$300.00</b> on 1 policy (DEMO-1099).</li>
+        </ol></div>
+      </div>
+      <div class="shots"><figure><img src="shots/32-4.14-carrier-accounts.jpg" alt="Carrier accounts with the October statement" loading="lazy"><figcaption><code>32</code> A statement that adds up, and one orphan line.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s413">
+      <div class="step-head"><span class="chip">LA-4.13</span><h2>Expected commission and the rate card</h2>
+        <div class="where">Open <span class="url">/app/rate-card</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Your contract level and your rates per carrier and product, so every payment can be checked against what it should have been.</q></li>
+          <li><q>Once a policy reaches the carrier's pay trigger, on issue or on the first draft, its expected figure is written. That figure never changes later; rates only go forward.</q></li>
+          <li><q>The carrier's own product code, FE Level here, is mapped to our product family once.</q></li>
+          <li><q>Rates and advance rules live here, in one place, beside the policies they price.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Tiles: <b>1 of 1</b> carrier covered, <b>100%</b> of premium, <b>$4,520</b> expected over 8 priced policies.</li>
+          <li>LA14 Market: pays on the first draft, usually within 21 days, at 100% of premium. The other carriers you are contracted with are listed too, as <i>No policies yet</i>.</li>
+          <li><b>Edit</b> on LA14: the product mapping (FE Level → Final Expense), the rate, and the <b>advance rule</b>: 9 months at 75%, 12-month prorated clawback. Close <b>without saving</b>.</li>
+        </ol>
+        <div class="note">The 8 demo figures were priced before a fix to the first-draft date on 8 October. They read "first draft Oct 5 · due by Oct 26", and a priced figure is never rewritten. So DEMO-1008, never paid, shows as due rather than missing.</div></div>
+      </div>
+      <div class="shots"><figure><img src="shots/33-4.13-rate-card.jpg" alt="Rate card with full coverage" loading="lazy"><figcaption><code>33</code> The whole book can be checked.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s415">
+      <div class="step-head"><span class="chip">LA-4.15</span><h2>Discrepancies and dispute letters</h2>
+        <div class="where">Open <span class="url">/app/discrepancies?source=carrier</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Expected against paid, policy by policy. Blake Demo's advance should have been $465.75; $400 came in. That's $65.75 short, beyond the one-dollar tolerance.</q></li>
+          <li><q>And money that's coming back: DEMO-1003 lapsed three months into a nine-month clawback, so $233.40 of its advance is expected back. Don't spend it.</q></li>
+          <li><q>Every item shows the figures and the ledger line behind them, so you can check it before you claim it.</q></li>
+          <li><q>The letter is drafted from the records, figure for figure. We never send it. You send it, then record what happened.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Source: <b>From carrier files</b>. 2 open. "You appear to be owed" <b>$65.75</b> (DEMO-1002, paid short); <b>Coming back $233.40</b> (DEMO-1003, chargeback coming).</li>
+          <li><b>Why</b>: the explanation, and the line's file and row.</li>
+          <li>Tick it → <b>Draft letter</b>: the preview. Close it <b>without saving</b>.</li>
+        </ol></div>
+      </div>
+      <div class="shots">
+        <figure><img src="shots/34-4.15-discrepancy-why.jpg" alt="Paid short with its explanation and ledger line" loading="lazy"><figcaption><code>34</code> Paid short, with the line behind it.</figcaption></figure>
+        <figure><img src="shots/35-4.15-letter-preview.jpg" alt="Dispute letter preview" loading="lazy"><figcaption><code>35</code> The dispute letter preview.</figcaption></figure>
+      </div>
+    </section>
+
+    <section class="step" id="s416">
+      <div class="step-head"><span class="chip">LA-4.16</span><h2>The retention call list</h2>
+        <div class="where">Open <span class="url">/app/lapse-risk</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Who to call today to keep a policy alive: the soonest deadline first, then the most money.</q></li>
+          <li><q>Every reason and every countdown comes from the carrier's files and rules. Nothing here is a prediction.</q></li>
+          <li><q>A logged call is checked against the next file: saved if the paid-to date moved, lost if the policy lapsed. That gives a save rate by reason, carrier and agent, from the files, not from opinion.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Before the live upload: DEMO-1005, advance at risk <b>$305.00</b>, last contact "Left voicemail · still at risk"; DEMO-1006, <b>$0.00</b> (already charged back). On <b>Policies</b>, both read <b>Critical</b>: at risk inside the clawback window.</li>
+          <li>After it: DEMO-1005 has gone, and the save rate reads 100%.</li>
+        </ol></div>
+      </div>
+      <div class="shots"><figure><img src="shots/36-4.16-call-list.jpg" alt="Call list with two policies and the save-rate card" loading="lazy"><figcaption><code>36</code> The call list, and the save rate under it.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s418">
+      <div class="step-head"><span class="chip">LA-4.18</span><h2>Book scorecards</h2>
+        <div class="where">Open <span class="url">/app/book-scorecards</span></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Persistency, placement, chargebacks and net commission, all computed live from the files. Click any number and you get the rows behind it.</q></li>
+          <li><q>Persistency says Building, on purpose. It only counts policies issued since your first file. Older ones were only seen if they survived, which would flatter the number.</q></li>
+          <li><q>Today's summary states only figures it was given, and it says so when nothing happened.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Today: "1 chargeback was recorded, $265.50 in all".</li>
+          <li>Net commission, week of Oct 5: <b>$3,031.85</b>, matching the statement.</li>
+          <li>Click a figure to open its rows. <b>Scorecards</b> tab: by lead source, carrier, product, agent.</li>
+        </ol></div>
+      </div>
+      <div class="shots"><figure><img src="shots/37-4.18-today-summary.jpg" alt="Book scorecards: today's summary" loading="lazy"><figcaption><code>37</code> Today's summary, from the day's own figures.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="s419">
+      <div class="step-head"><span class="chip">LA-4.19</span><h2>Runs and agent findings</h2>
+        <div class="where">Open <span class="url">/app/carrier-files?view=runs</span> then <b>Agent findings</b></div></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Every run is recorded, stage by stage. If one stops, everything before it stays, and the next run picks up from the last completed stage. Running twice never doubles anything.</q></li>
+          <li><q>Agents note what they see: a missing or late file, an unknown column, a status nobody has mapped. A person marks each finding right or wrong, and that's each agent's accuracy, week by week.</q></li>
+          <li><q>The AI agents propose, people approve, and nothing private reaches a model. They switch on once an AI provider is chosen.</q></li>
+        </ul></div>
+        <div class="panel"><h3>Do</h3><ol>
+          <li>Runs: the 8 October runs and the live one.</li>
+          <li>Agent findings: switch the filter to <b>Any status</b> (nothing is open on the demo agency).</li>
+        </ol></div>
+      </div>
+    </section>
+    <section class="step" id="close">
+      <div class="step-head"><span class="chip">End</span><h2>Closing and reset</h2></div>
+      <div class="cols">
+        <div class="panel say"><h3>Say</h3><ul>
+          <li><q>Done and live: every task from 4.1 to 4.20 except 4.4.</q></li>
+          <li><q>Waiting on an AI provider: 4.4's PDF extraction, the AI matching review, the written daily summary, and the AI agents. The real carrier files will fill the layout and status maps.</q></li>
+        </ul></div>
+        <div class="panel"><h3>After the demo</h3><ol>
+          <li>Turn LA14 Market off again, and the Lapse risk switch if it shouldn't stay on for every agency.</li>
+          <li>The run left on the demo agency: three test files and their snapshots, 8 provisional clients and their links, the demo layout map, one carrier rule, one agent mapping, and the open import summary.</li>
+        </ol></div>
+      </div>
+      <div class="shots"><figure><img src="shots/25-closing-summary.jpg" alt="Closing caption summarising what is done and what is waiting" loading="lazy"><figcaption><code>25</code> The closing caption.</figcaption></figure></div>
+    </section>
+
+    <section class="step" id="shots">
+      <div class="step-head"><span class="chip">Index</span><h2>All 37 screenshots</h2>
+        <p>In the order they were taken. The files are also in <code>docs/la4/demo/shots/</code> in the repository.</p></div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>#</th><th>Task</th><th>File</th><th>What it shows</th></tr></thead>
+        <tbody>
+          <tr><td class="n">01</td><td>4.1</td><td><code>01-4.1-carrier-files-empty.jpg</code></td><td>The registry before any file</td></tr>
+          <tr><td class="n">02</td><td>4.1</td><td><code>02-4.1-email-and-bucket.jpg</code></td><td>Email and bucket doors</td></tr>
+          <tr><td class="n">03</td><td>4.3 · 4.4</td><td><code>03-4.3-layout-maps.jpg</code></td><td>Layout maps library, empty</td></tr>
+          <tr><td class="n">04</td><td>4.5</td><td><code>04-4.5-status-maps.jpg</code></td><td>Words waiting, and the approved map</td></tr>
+          <tr><td class="n">05</td><td>4.10</td><td><code>05-4.10-import-carrier-added.jpg</code></td><td>Import screen, test carrier added</td></tr>
+          <tr><td class="n">06</td><td>4.10</td><td><code>06-4.10-import-uploading.jpg</code></td><td>September file uploading</td></tr>
+          <tr><td class="n">07</td><td>4.10</td><td><code>07-outtake-stale-result-bug.jpg</code></td><td>"No policies yet" while matching ran <span class="tag">outtake · fixed</span></td></tr>
+          <tr><td class="n">08</td><td>4.10</td><td><code>08-4.10-import-result.jpg</code></td><td>8 policies, $377/mo</td></tr>
+          <tr><td class="n">09</td><td>4.10</td><td><code>09-4.10-import-totals.jpg</code></td><td>Running total and honest limits</td></tr>
+          <tr><td class="n">10</td><td>4.2</td><td><code>10-4.2-file-registered.jpg</code></td><td>The file in the registry, map v1</td></tr>
+          <tr><td class="n">11</td><td>4.6</td><td><code>11-4.6-two-files.jpg</code></td><td>September and October files</td></tr>
+          <tr><td class="n">12</td><td>4.6</td><td><code>12-4.6-policy-changes.jpg</code></td><td>Changes between Sep 5 and Oct 5</td></tr>
+          <tr><td class="n">13</td><td>4.17</td><td><code>13-4.17-rules-not-set.jpg</code></td><td>Test carrier, every window Not set</td></tr>
+          <tr><td class="n">14</td><td>4.17</td><td><code>14-4.17-adding-a-rule.jpg</code></td><td>Adding the 30-day rule</td></tr>
+          <tr><td class="n">15</td><td>4.17</td><td><code>15-4.17-rule-saved.jpg</code></td><td>30 days · yours · unverified</td></tr>
+          <tr><td class="n">16</td><td>4.1</td><td><code>16-4.1-corrected-file-replaces.jpg</code></td><td>Corrected October file replaces the first</td></tr>
+          <tr><td class="n">17</td><td>4.7</td><td><code>17-4.7-two-at-risk.jpg</code></td><td>2 policies at risk</td></tr>
+          <tr><td class="n">18</td><td>4.8</td><td><code>18-4.8-links.jpg</code></td><td>8 links and how each was made</td></tr>
+          <tr><td class="n">19</td><td>4.8</td><td><code>19-4.8-agent-codes.jpg</code></td><td>Choosing who an agent code is</td></tr>
+          <tr><td class="n">20</td><td>4.8</td><td><code>20-4.8-agent-mapped.jpg</code></td><td>Agent code mapped</td></tr>
+          <tr><td class="n">21</td><td>4.8</td><td><code>21-4.8-agent-moved-to-mapped.jpg</code></td><td>One mapped, one left unmapped</td></tr>
+          <tr><td class="n">22</td><td>4.9</td><td><code>22-4.9-exceptions-summary.jpg</code></td><td>One summary item for the import</td></tr>
+          <tr><td class="n">23</td><td>4.9</td><td><code>23-outtake-search-dropdown.jpg</code></td><td>Search typed into the wrong box <span class="tag">outtake</span></td></tr>
+          <tr><td class="n">24</td><td>4.9</td><td><code>24-4.9-provisional-clients.jpg</code></td><td>Provisional badges; one household</td></tr>
+          <tr><td class="n">25</td><td>End</td><td><code>25-closing-summary.jpg</code></td><td>The closing caption</td></tr>
+          <tr><td class="n">26</td><td>4.19</td><td><code>26-4.19-run-stages.jpg</code></td><td>A run, stage by stage</td></tr>
+          <tr><td class="n">27</td><td>4.20</td><td><code>27-4.20-file-rows.jpg</code></td><td>A commission file, row by row</td></tr>
+          <tr><td class="n">28</td><td>4.20</td><td><code>28-4.20-raw-row.jpg</code></td><td>One raw row and what it became</td></tr>
+          <tr><td class="n">29</td><td>4.11 · 4.12</td><td><code>29-4.12-policy-money.jpg</code></td><td>DEMO-1002: timeline, Source, money</td></tr>
+          <tr><td class="n">30</td><td>4.13</td><td><code>30-4.13-expected-on-policy.jpg</code></td><td>Still at risk; expected commission</td></tr>
+          <tr><td class="n">31</td><td>4.12</td><td><code>31-4.12-ledger-totals.jpg</code></td><td>Ledger totals</td></tr>
+          <tr><td class="n">32</td><td>4.14</td><td><code>32-4.14-carrier-accounts.jpg</code></td><td>A statement that adds up; one orphan</td></tr>
+          <tr><td class="n">33</td><td>4.13</td><td><code>33-4.13-rate-card.jpg</code></td><td>Rate card coverage</td></tr>
+          <tr><td class="n">34</td><td>4.15</td><td><code>34-4.15-discrepancy-why.jpg</code></td><td>Paid short, with its ledger line</td></tr>
+          <tr><td class="n">35</td><td>4.15</td><td><code>35-4.15-letter-preview.jpg</code></td><td>Dispute letter preview</td></tr>
+          <tr><td class="n">36</td><td>4.16</td><td><code>36-4.16-call-list.jpg</code></td><td>The call list and save rate</td></tr>
+          <tr><td class="n">37</td><td>4.18</td><td><code>37-4.18-today-summary.jpg</code></td><td>Today's summary</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+  </main>
+</div>

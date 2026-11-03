@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-2.8 acceptance: for each seeded plan, assert the EXACT feature list an agent on it gets,
 // and that a suspended subscription yields a read-only entitlement rather than an empty one.
 //
@@ -16,6 +17,22 @@ if (!url || !serviceKey) {
 }
 
 const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
+
+// These are the reviewed v1 entitlements. The verifier must fail if the catalog drifts, rather
+// than reading the current catalog back and congratulating itself for matching its own mistake.
+//
+// LA-3 (20260926100000_la_3_7_application_record.sql) added three Sell flags — ai_assistant,
+// carrier_extension, sales_report — "granted to exactly the plans that already hold
+// `applications`": pro and advance. Recorded here 2026-10-06 (LA-4.10), when the verifier was next
+// run and caught that this list had not followed that decision.
+//
+// cohort_persistency on basic and pro: owner decision 2026-10-06 (backlog #210), migration
+// 20261007100000, granted to every plan holding statement_ingestion.
+const EXPECTED_FEATURES = {
+  basic: ["appointment_vault", "book_of_business", "cohort_persistency", "commission_ledger", "discrepancy_report", "statement_ingestion"],
+  pro: ["ai_assistant", "applications", "appointment_vault", "book_of_business", "callback_calendar", "carrier_extension", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "outbound_dialing", "partner_quality", "publisher_records", "quoting", "sales_report", "statement_ingestion", "tcpa_checker"],
+  advance: ["ai_assistant", "applications", "appointment_vault", "book_of_business", "callback_calendar", "carrier_extension", "chargeback_radar", "cohort_persistency", "commission_ledger", "consent_locker", "daily_deal_flow", "discrepancy_report", "draft_date_optimizer", "duplicate_detection", "inbound_transfers", "lead_import", "litigation_packet", "outbound_dialing", "partner_quality", "payment_repair", "payout_runs", "profit_and_loss", "publisher_records", "quoting", "sales_report", "statement_ingestion", "tax_summaries", "tcpa_checker", "true_cpa", "winback"],
+};
 
 let failures = 0;
 function check(label, condition, detail = "") {
@@ -52,13 +69,10 @@ try {
 
   console.log("Exact feature list per seeded plan\n");
 
+  check("all reviewed v1 plans exist", (plans ?? []).length === Object.keys(EXPECTED_FEATURES).length);
+
   for (const plan of plans ?? []) {
-    // What the plan grants, straight from plan_features — the independent expectation.
-    const { data: planFeatures } = await supabase
-      .from("plan_features")
-      .select("feature_key")
-      .eq("plan_id", plan.id);
-    const expected = (planFeatures ?? []).map((f) => f.feature_key).sort();
+    const expected = [...(EXPECTED_FEATURES[plan.code] ?? [])].sort();
 
     await supabase.from("subscriptions").delete().eq("tenant_id", tenantId);
     const { error: assignError } = await supabase.rpc("admin_assign_subscription", {

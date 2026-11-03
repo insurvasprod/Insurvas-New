@@ -40,9 +40,22 @@ export function buildInviteUrl(token: string, origin: string): string {
   return `${origin}/app/set-password?token=${encodeURIComponent(token)}`;
 }
 
+export function buildPartnerInviteUrl(token: string, origin: string): string {
+  return `${origin}/partner/set-password?token=${encodeURIComponent(token)}`;
+}
+
+export function buildExistingPartnerInviteUrl(token: string, origin: string): string {
+  return `${origin}/partner/accept-invite?token=${encodeURIComponent(token)}`;
+}
+
 /** Password resets land on the same screen as invites — both end in "choose a password". */
 export function buildPasswordResetUrl(token: string, origin: string): string {
   return buildInviteUrl(token, origin);
+}
+
+/** A partner's password reset lands on the partner door's "choose a password" (2026-10-24). */
+export function buildPartnerPasswordResetUrl(token: string, origin: string): string {
+  return buildPartnerInviteUrl(token, origin);
 }
 
 export function buildEmailChangeUrl(token: string, origin: string): string {

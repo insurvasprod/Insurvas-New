@@ -58,7 +58,11 @@ for (const root of SEARCH_ROOTS) {
   }
 }
 
-const supabase = createClient(url, serviceKey, { auth: { persistSession: false } });
+// autoRefreshToken must be off in a one-shot script. Left on, GoTrue keeps a refresh timer alive,
+// and any termination while that handle is open aborts the process on Windows/Node 24 with
+// `Assertion failed: !(handle->flags & UV_HANDLE_CLOSING)` (exit -1073740791) instead of exiting
+// with a readable message and a real exit code.
+const supabase = createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 const { data: features, error } = await supabase
   .from("features")
   .select("feature_key, label, module, is_archived")
@@ -66,8 +70,16 @@ const { data: features, error } = await supabase
   .order("module");
 
 if (error) {
-  console.error("Could not read the feature catalog:", error.message);
-  process.exit(1);
+  // Throw rather than process.exit(1). On Windows/Node 24 calling process.exit() here races the
+  // Supabase client's open handle and aborts with `Assertion failed: !(handle->flags &
+  // UV_HANDLE_CLOSING), file src\win\async.c` — exit code -1073740791 — which destroyed the
+  // message below and made a plain missing-table error look like a crashed checker. The success
+  // path at the end of this file already documents the same hazard.
+  throw new Error(
+    `Could not read the feature catalog: ${error.message}\n` +
+      "public.features is declared in supabase/migrations/0000_baseline.sql but is absent from " +
+      "this project, so no feature key can be checked against the catalog. Apply the baseline.",
+  );
 }
 
 // --- Menu coverage (SA-2.3) -------------------------------------------------

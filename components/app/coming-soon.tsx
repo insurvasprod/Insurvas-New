@@ -1,7 +1,6 @@
-import Link from "next/link";
-import { Hammer, ArrowRight } from "lucide-react";
-
-import { Card, CardContent } from "@/components/ui/card";
+import { LinkArrow } from "@/components/ui/link-arrow";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import type { MenuItem } from "@/lib/menu/definition";
 
 /**
@@ -17,9 +16,7 @@ import type { MenuItem } from "@/lib/menu/definition";
  * A 404 is the worst of the three because it is indistinguishable from a broken product. The
  * customer is paying for this feature, the sidebar promises it, and the link goes nowhere.
  *
- * Two rules for what this says. It never gives a date — we do not have one, and a missed date is
- * worse than no date. And it always offers somewhere to go, because a dead end that apologises is
- * still a dead end.
+ * It never gives a date, and it always offers somewhere to go.
  */
 export function ComingSoon({
   item,
@@ -29,56 +26,56 @@ export function ComingSoon({
   /** Screens this agent can actually open right now, for the "meanwhile" links. */
   available: (MenuItem & { sectionLabel: string })[];
 }) {
-  // Prefer somewhere in the same section — closest to what they were trying to do.
-  const nearby = available.filter((i) => i.key !== item.key).slice(0, 3);
+  // An item may name its own "in the meantime" pages (the board's Statements card does); each is
+  // still filtered through `available`, so a page this person cannot open is never offered.
+  // Otherwise prefer the same menu section so the links stay relevant to the requested workspace.
+  const named = (item.meanwhile ?? [])
+    .map((key) => available.find((i) => i.key === key))
+    .filter((i): i is MenuItem & { sectionLabel: string } => Boolean(i));
+  const nearby = available.filter((i) => i.key !== item.key && i.sectionLabel === item.sectionLabel).slice(0, 3);
+  const fallbackNearby = named.length > 0
+    ? named.slice(0, 3)
+    : nearby.length > 0 ? nearby : available.filter((i) => i.key !== item.key).slice(0, 3);
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Card>
-        <CardContent className="space-y-5 py-8">
-          <div className="flex size-11 items-center justify-center rounded-full bg-[var(--color-blue-faint)] text-[var(--color-blue)]">
-            <Hammer className="size-5" aria-hidden="true" />
-          </div>
+    <div className="m-stagger portal-section-page flex flex-col gap-6">
+      <PageHeader
+        title={item.label}
+        description={item.blurb ?? "This is part of your plan and we are still building it."}
+      />
 
-          <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {item.sectionLabel}
-            </p>
-            <h1 className="text-2xl font-extrabold tracking-tight">{item.label} is on the way</h1>
-            <p className="max-w-[52ch] text-sm text-muted-foreground">
-              {item.blurb ?? "This is part of your plan and we are still building it."}
-            </p>
-          </div>
-
-          {/* The reassurance that matters: this is not something they have lost or must buy. */}
-          <p className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">Your plan includes this.</span> Nothing to
-            buy and nothing to switch on &mdash; it will appear here as soon as it is ready.
+      <TableCard>
+        <div className="flex items-center gap-3 px-4 py-4">
+          <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-muted-foreground">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
+          </span>
+          <p className="text-sm leading-[1.5] tracking-[-0.02em] text-muted-foreground">
+            <span className="font-semibold text-foreground">{item.label} is on the way.</span>{" "}
+            Your plan includes this. Nothing to buy and nothing to switch on.
           </p>
+        </div>
 
-          {nearby.length > 0 && (
-            <div className="space-y-2 border-t border-border pt-5">
-              <p className="text-sm font-medium">In the meantime</p>
-              <ul className="space-y-1">
-                {nearby.map((other) => (
-                  <li key={other.key}>
-                    <Link
-                      href={other.path}
-                      className="group inline-flex items-center gap-1.5 text-sm text-[var(--color-blue)] transition-colors hover:text-[var(--color-blue-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-blue)]"
-                    >
-                      {other.label}
-                      <ArrowRight
-                        className="size-3.5 transition-transform group-hover:translate-x-0.5"
-                        aria-hidden="true"
-                      />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        {fallbackNearby.length > 0 && (
+          <div className="border-t border-border">
+            <h2 className="px-4 pt-3 text-xs font-semibold leading-[1.33] text-muted-foreground">In the meantime</h2>
+            <ul>
+              {fallbackNearby.map((other) => (
+                <li key={other.key} className="flex items-center gap-3 border-t border-border px-4 py-3 first:border-t-0">
+                  <span className="min-w-0 flex-grow">
+                    <span className="block text-sm font-semibold leading-[1.5] tracking-[-0.02em] text-foreground">{other.label}</span>
+                    <span className="block text-xs leading-[1.5] tracking-[-0.01em] text-muted-foreground">
+                      {other.blurb ?? (other.sectionLabel === item.sectionLabel ? `Also under ${item.sectionLabel}` : other.sectionLabel)}
+                    </span>
+                  </span>
+                  <LinkArrow href={other.path} className="shrink-0">
+                    Open
+                  </LinkArrow>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </TableCard>
     </div>
   );
 }

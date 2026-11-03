@@ -9,7 +9,7 @@ import {
   canAccessConfigurationSection,
   type ConfigurationSectionSlug,
 } from "../configuration/sections.ts";
-import { group, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
+import { group, isLinkActive, link, type SidebarIconKey, type SidebarNode } from "./types.ts";
 
 /**
  * The admin sidebar, grouped.
@@ -60,6 +60,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
     ]),
 
     ...group("billing", "Billing", "billing", [
+      invoices ? link("/admin/billing", "Billing workspace", "billing-workspace") : null,
       subscriptions ? link("/admin/subscriptions", "Subscriptions", "subscriptions") : null,
       subscriptions ? link("/admin/trials", "Trials", "trials") : null,
       // SA-3.3: a support_agent cannot open invoice screens at all, so no link is rendered for
@@ -79,7 +80,7 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // configuration behind them. It keeps the section registry's permission, which is stricter
       // than the rest of Billing: live provider credentials stay super_admin only, so a billing
       // admin sees Invoices and Coupons here but not this.
-      section("payments", "/admin/payments", "Setup", "payments"),
+      section("payments", "/admin/payments", "Setup", "payments-setup"),
     ]),
 
     ...group("catalog", "Catalog", "catalog", [
@@ -93,6 +94,23 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       // with. Catalog already means "the things we offer", so they belong here rather than with
       // the platform plumbing.
       section("products", "/admin/products", "Products", "products"),
+      section("carriers", "/admin/carriers", "Carriers", "carriers"),
+      // LA-3.13 · the platform's carrier field maps. Same permission as the carrier library it
+      // belongs to: whoever may change a carrier may review where its application fields go.
+      section("carriers", "/admin/field-maps", "Field maps", "field-maps"),
+      // LA-4.3 · how each carrier's spreadsheets are read. Same rule: it belongs to the carrier library.
+      section("carriers", "/admin/layout-maps", "Layout maps", "layout-maps"),
+      // LA-4.5 · carrier status words waiting to be mapped, and the status map.
+      section("carriers", "/admin/status-maps", "Status maps", "status-maps"),
+      // LA-4.17 · the platform's default carrier rules and settings.
+      section("carriers", "/admin/carrier-rules", "Carrier rules", "carrier-rules"),
+      // Carrier fact reports (20261027200000): wrong carrier facts agencies reported from Settings ›
+      // Carriers. Fixing one changes the carrier for everyone, so it keeps the carrier library's permission.
+      section("carriers", "/admin/carrier-reports", "Fact reports", "fact-reports"),
+      // LA-4.10 · where each carrier's policy file lives in its portal, for the book import.
+      section("carriers", "/admin/carrier-guidance", "Portal guidance", "portal-guidance"),
+      // LA-5.4 · how each carrier takes a servicing change (part of the carrier record, as its rules).
+      section("carriers", "/admin/servicing-guides", "Servicing instructions", "carrier-rules"),
       section("templates", "/admin/templates", "Templates", "templates"),
     ]),
 
@@ -103,6 +121,8 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
 
     ...group("platform", "Platform", "platform", [
       section("compliance-sources", "/admin/compliance-sources", "Compliance", "compliance"),
+      section("state-disclosures", "/admin/state-disclosures", "Disclosures", "disclosures"),
+      isSuperAdmin ? link("/admin/calling-rules", "Calling rules", "calling-rules") : null,
       section("email", "/admin/email", "Mail Setup", "email"),
       section("system", "/admin/system", "Maintenance", "system"),
       section("advanced", "/admin/advanced", "Advanced", "advanced"),
@@ -111,4 +131,27 @@ export function buildAdminNav(role: AdminRole): SidebarNode[] {
       link("/admin/legal", "Legal", "legal"),
     ]),
   ];
+}
+
+/**
+ * The eyebrow an admin page shows above its title.
+ *
+ * Derived from the nav rather than typed on each page, for the reason `sectionForPath` gives on the
+ * tenant side: this file already assigns every destination a section, so it is the answer, and two
+ * dozen hand-written taxonomies would disagree with it within a month.
+ *
+ * The role is the SUPER ADMIN's deliberately — this asks "what section is this screen in", which is
+ * a fact about the product, not about the reader. Passing the caller's role would make a page's own
+ * eyebrow disappear for the roles that reach it through a shorter menu.
+ */
+export function adminSectionForPath(pathname: string): string | null {
+  let best: { href: string; label: string } | null = null;
+  for (const node of buildAdminNav("super_admin")) {
+    if (node.kind !== "group") continue;
+    for (const item of node.links) {
+      if (!isLinkActive(item.href, pathname)) continue;
+      if (!best || item.href.length > best.href.length) best = { href: item.href, label: node.label };
+    }
+  }
+  return best?.label ?? null;
 }

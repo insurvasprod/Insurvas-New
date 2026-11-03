@@ -1,0 +1,213 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "All systems normal"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Read-write"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Settings"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Field maps"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "One published map per carrier and product. A draft never fills anything."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Propose a map"
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <table> {width:100%}
+        <thead>
+          <tr> {bg:#e4e8ee}
+            <th> {padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Carrier"
+            <th> {width:190px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Product"
+            <th> {width:120px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Published"
+            <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Draft"
+            <th> {width:130px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Last filled"
+        <tbody .m-seq>
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "v3"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                "v4 proposed"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "28 Sep 2:38pm"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "Living Promise"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "v6"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "26 Sep 11:04am"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "Eagle Premier"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "v2"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "24 Sep 4:12pm"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "Foresters"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "PlanRight"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "None"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "v1 proposed"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "—"
+--- beside main (overlay) ---
+<div> {bg:rgba(10,12,16,.55);justify-content:center;padding:76px 0 0 0}
+  <div .m-swap> {width:920px;flex-direction:column;bd:1px solid #7a828e;bd-radius:12px;bg:#ffffff}
+    <div> {justify-content:space-between;gap:16px;padding:18px 22px;bd-bottom:1px solid #d5dbe3}
+        <h2> {fsize:18px;fweight:600;color:#15191e}
+          "Gerber Life · Final Expense application"
+        <p> {fsize:14px;fweight:400;color:#60646c}
+          "Draft map v4 · proposed 28 Sep · not published"
+      <div> {gap:14px}
+        <span> {fsize:12px;fweight:400;fweight:600;color:#a63800}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+            "6 unverified"
+        <button type="button" aria-label="Close"> {width:30px;height:30px;justify-content:center;bd:1px solid #d5dbe3;bd-radius:8px;bg:#ffffff;color:#60646c;padding:0}
+          <svg/>
+    <div> {padding:22px;flex-direction:column;gap:18px}
+      <div> {justify-content:space-between;gap:16px}
+        <span> {fsize:14px;fweight:400;color:#33383f}
+          "34 fields in the draft. These six are the ones a wrong selector would cost most."
+        <span> {gap:8px}
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Open the carrier form"
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+            "Show all 34"
+      <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+        <table> {width:100%}
+          <thead>
+            <tr> {bg:#e4e8ee}
+              <th> {width:210px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Our field"
+              <th> {padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Proposed selector"
+              <th> {width:120px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Confidence"
+              <th> {width:90px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Verified"
+          <tbody .m-seq>
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;color:#15191e}
+                  "insured.first_name"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <code>
+                  "#applicant_fname"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                  "High"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span role="img" aria-label="Verified"> {width:20px;height:20px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                  <svg/>
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;color:#15191e}
+                  "insured.dob"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <code>
+                  "input[name="dob_mmddyyyy"]"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                  "High"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span role="img" aria-label="Verified"> {width:20px;height:20px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                  <svg/>
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;color:#15191e}
+                  "insured.ssn"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <code>
+                  "#ssn_full"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                  "Low"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span role="img" aria-label="Not verified"> {width:20px;height:20px;bd:1.5px solid #7a828e;bd-radius:9999px}
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;color:#15191e}
+                  "bank.routing_number"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <code>
+                  "form.pay input:nth-of-type(2)"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                  "Low"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span role="img" aria-label="Not verified"> {width:20px;height:20px;bd:1.5px solid #7a828e;bd-radius:9999px}
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;color:#15191e}
+                  "beneficiary.1.share"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <code>
+                  "#ben_pct_1"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                  "Low"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span role="img" aria-label="Not verified"> {width:20px;height:20px;bd:1.5px solid #7a828e;bd-radius:9999px}
+            <tr .m-row>
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {fsize:12px;color:#15191e}
+                  "coverage.face_amount"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <code>
+                  "select[name="face_amt"]"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                  "High"
+              <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                <span role="img" aria-label="Verified"> {width:20px;height:20px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                  <svg/>
+      <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #c92a2a;bd-radius:12px;bg:#fdeaea}
+        <div> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+          "Publishing is blocked until every sensitive entry is verified"
+        <p> {fsize:14px;fweight:400;color:#33383f}
+          <code>
+            "insured.ssn"
+          "and"
+          <code>
+            "bank.routing_number"
+          "are unverified. A wrong selector on those does not mis-fill a form — it puts a Social Security number in someone else’s field."
+    <div> {justify-content:space-between;gap:16px;padding:14px 22px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+      <span> {fsize:12px;fweight:400;color:#60646c}
+        "The proposal reads the form’s structure only. No values and no screenshots are ever sent."
+      <span> {gap:10px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Reject the draft"
+        <button type="button" disabled> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#e4e8ee;color:#60646c;bd:1px solid #d5dbe3;fsize:14px;fweight:600}
+          "Publish the map"

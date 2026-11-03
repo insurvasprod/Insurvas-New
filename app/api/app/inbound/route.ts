@@ -1,0 +1,64 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { getQueueSlaSettings } from "@/lib/queueSla/service";
+import { scopeFor } from "@/lib/agency/visibility";
+import { inboxRowFacts, type RowFact } from "@/lib/transferInbox/inboxExtras";
+import { getInboxSummaryFallback, getTransferInbox } from "@/lib/transferInbox/service";
+
+const safeFilter = (label: string, max: number) => z.string().trim().min(1).max(max).regex(/^[^\u0000-\u001f\u007f<>]+$/, `${label} contains unsupported characters`);
+
+const filtersSchema = z.object({
+  status: z.enum(["unclaimed", "claimed", "all"]).default("unclaimed"),
+  partner_id: z.string().uuid().optional(),
+  product_line: safeFilter("Product", 100).optional(),
+  state: safeFilter("State", 20).optional(),
+  screening_outcome: safeFilter("Screening result", 80).optional(),
+  claimed_by: z.union([z.literal("me"), z.string().uuid()]).optional(),
+});
+
+/**
+ * The inbox re-reads on every realtime change; the SLA ladder changes when an owner edits it. Held for 30 seconds
+ * per tenant in this server instance, so an edit shows up within half a minute without a query on
+ * every tick.
+ */
+const SLA_CACHE_MS = 30_000;
+const slaCache = new Map<string, { at: number; value: { warnSeconds: number; escalateSeconds: number } | null }>();
+async function queueSla(tenantId: string) {
+  const cached = slaCache.get(tenantId);
+  if (cached && Date.now() - cached.at < SLA_CACHE_MS) return cached.value;
+  const value = await getQueueSlaSettings(tenantId).then((settings) => ({ warnSeconds: settings.warn_after_seconds, escalateSeconds: settings.escalate_after_seconds })).catch(() => null);
+  slaCache.set(tenantId, { at: Date.now(), value });
+  return value;
+}
+
+export async function GET(request: Request) {
+  const auth = await requireFeatureRole("inbound_transfers", ["owner", "producer", "assistant"], { prefetchScope: true });
+  if (auth instanceof NextResponse) return auth;
+  const parsed = filtersSchema.safeParse(Object.fromEntries(new URL(request.url).searchParams));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Choose valid inbox filters" }, { status: 400 });
+  try {
+    // AG-0.5: in an agency a producer, manager or assistant sees the waiting live transfers (any of
+    // them may claim one) and the transfers with a producer in his scope; never another producer's
+    // claim, its row facts, or a tile that counts it. From the session, never the request: a
+    // claimed_by=<B> filter only narrows what the scope already allows. Null = everything, as before.
+    const scope = await scopeFor(auth.context);
+    // The queue SLA is the tenant's own ladder (Settings › Queue & SLA), read alongside the inbox.
+    // A failure there never blocks the inbox: the tiles then say the target is unavailable.
+    // Row facts (open call, logged outcome, escalation) are extra: a failure leaves the rows plain.
+    const [data, sla, allRowFacts] = await Promise.all([
+      getTransferInbox(auth.context.tenantId, { status: parsed.data.status, partnerId: parsed.data.partner_id, productLine: parsed.data.product_line, state: parsed.data.state, screeningOutcome: parsed.data.screening_outcome, claimedBy: parsed.data.claimed_by }, auth.context.userId, auth.context.role, scope),
+      queueSla(auth.context.tenantId),
+      inboxRowFacts(auth.context.tenantId).catch(() => ({} as Record<string, RowFact>)),
+    ]);
+    const shown = new Set(data.items.map((item) => item.id));
+    const rowFacts = scope === null ? allRowFacts : Object.fromEntries(Object.entries(allRowFacts).filter(([id]) => shown.has(id)));
+    // Before 20260924335200 the bundle has no summary; compute the same numbers the slower way. A
+    // scoped session always takes this path: the bundle's summary counts the whole agency.
+    const summary = data.summary ?? await getInboxSummaryFallback(auth.context.tenantId, scope, auth.context.userId).catch(() => null);
+    return NextResponse.json({ ...data, rowFacts, summary, sla, realtimeTopic: `agent-floor:${auth.context.tenantId}`, currentUserId: auth.context.userId, readOnly: auth.entitlement.status === "suspended" || auth.entitlement.status === "paused", fetchedAt: new Date().toISOString() });
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load transfer inbox" }, { status: 500 });
+  }
+}

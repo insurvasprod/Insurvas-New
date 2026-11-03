@@ -1,183 +1,190 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { AlertTriangle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatCentsAsCurrency } from "@/lib/money";
-import { INVOICE_STATUSES, INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/lib/invoices/constants";
-import type { InvoiceListRow } from "@/lib/invoices/queries";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { EmptyState, NoMatches } from "@/components/admin/empty-state";
 import { StatusChip, invoiceTone } from "@/components/admin/status-chip";
+import { fullDate } from "@/components/admin/tenant-record/billing-format";
+import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { StatTile } from "@/components/ui/stat";
+import { TableCard } from "@/components/ui/table-card";
+import { formatCentsAsCurrency } from "@/lib/money";
+import { INVOICE_STATUSES, INVOICE_STATUS_LABELS, type InvoiceStatus } from "@/lib/invoices/constants";
+import type { InvoiceListRow, InvoiceTotals } from "@/lib/invoices/queries";
+import { cn } from "@/lib/utils";
 
+type Lens = "all" | "overdue" | "mismatched";
 
-function daysOverdue(dueAt: string | null, status: InvoiceStatus): number | null {
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+
+/** Whole days past due, measured against the moment the page was rendered (passed in, so the server and the browser agree). */
+function daysOverdue(dueAt: string | null, status: InvoiceStatus, now: number): number | null {
   if (!dueAt || status === "paid" || status === "void") return null;
-  const days = Math.floor((Date.now() - new Date(dueAt).getTime()) / 86_400_000);
+  const days = Math.floor((now - new Date(dueAt).getTime()) / 86_400_000);
   return days > 0 ? days : null;
 }
 
-export function InvoicesTable({ initialInvoices }: { initialInvoices: InvoiceListRow[] }) {
-  const [invoices, setInvoices] = useState(initialInvoices);
+/**
+ * The invoices board (p-adm-invoices): the figure strip, then one TableCard with its toolbar inside.
+ *
+ * Mismatched leads the strip: "we billed a different amount to the one the customer was charged"
+ * is the one figure that carries information, so it is coloured while it is above zero and offers
+ * a way straight to those rows.
+ *
+ * Filtering happens here, over the rows the page read once (the same rows the figures come from),
+ * so a filter and the figure it corresponds to cannot disagree.
+ */
+export function InvoicesTable({
+  initialInvoices,
+  totals,
+  invoicedThisMonthCount,
+  tenants,
+  now,
+}: {
+  initialInvoices: InvoiceListRow[];
+  totals: InvoiceTotals;
+  invoicedThisMonthCount: number;
+  tenants: { id: string; name: string }[];
+  now: number;
+}) {
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
+  const [tenant, setTenant] = useState("");
+  const [query, setQuery] = useState("");
   const [status, setStatus] = useState<"all" | InvoiceStatus>("all");
-  const [lens, setLens] = useState<"all" | "overdue" | "mismatched">("all");
-  const isFirstRun = useRef(true);
+  const [lens, setLens] = useState<Lens>("all");
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
-      return;
-    }
+  const needle = query.trim().toLowerCase();
+  const rows = useMemo(
+    () =>
+      initialInvoices.filter((invoice) =>
+        (!tenant || invoice.tenant_id === tenant)
+        && (status === "all" || invoice.status === status)
+        && (lens !== "overdue" || invoice.status === "overdue")
+        && (lens !== "mismatched" || invoice.reconciliation === "mismatched")
+        && (!needle || invoice.number.toLowerCase().includes(needle) || invoice.tenant_name.toLowerCase().includes(needle))),
+    [initialInvoices, tenant, status, lens, needle],
+  );
+  const anyFilter = Boolean(tenant || needle || status !== "all" || lens !== "all");
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(rows, page, pageSize);
 
-    const params = new URLSearchParams();
-    if (status !== "all") params.set("status", status);
-    if (lens === "overdue") params.set("overdue", "true");
-    if (lens === "mismatched") params.set("mismatched", "true");
+  const collectedShare = totals.invoicedThisMonthCents > 0
+    ? `${((totals.collectedThisMonthCents / totals.invoicedThisMonthCents) * 100).toFixed(1)}%`
+    : "nothing invoiced yet";
 
-    let cancelled = false;
-    fetch(`/api/admin/invoices?${params.toString()}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((body) => {
-        if (!cancelled && body) setInvoices(body.invoices);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [status, lens]);
+  function reset() { setTenant(""); setQuery(""); setStatus("all"); setLens("all"); setPage(1); }
+  function showMismatched() { setTenant(""); setQuery(""); setStatus("all"); setLens("mismatched"); setPage(1); }
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select value={status} onValueChange={(v) => setStatus(v as "all" | InvoiceStatus)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {INVOICE_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {INVOICE_STATUS_LABELS[s]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="flex min-w-0 flex-col gap-6">
+      <BoardStatGrid>
+        <StatTile
+          label="Mismatched"
+          value={totals.mismatchedCount.toLocaleString()}
+          valueTone={totals.mismatchedCount > 0 ? "danger" : undefined}
+          labelTitle="We billed a different amount to the one the customer was charged — often a coupon or offer applied here but not to the membership in Whop."
+          footnote={totals.mismatchedCount > 0 ? "billed ≠ charged" : "every invoice matches"}
+          action={totals.mismatchedCount > 0 ? (
+            <button type="button" onClick={showMismatched} className="inline-flex items-center gap-1 font-semibold text-[var(--ink)] hover:underline">
+              Show<ArrowRight className="size-3" aria-hidden />
+            </button>
+          ) : undefined}
+        />
+        <BoardStatTile label="Invoiced this month" value={formatCentsAsCurrency(totals.invoicedThisMonthCents)} footnote={`${invoicedThisMonthCount.toLocaleString()} ${invoicedThisMonthCount === 1 ? "invoice" : "invoices"}`} />
+        <BoardStatTile label="Collected this month" value={formatCentsAsCurrency(totals.collectedThisMonthCents)} footnote={collectedShare} />
+        <BoardStatTile label="Overdue" value={totals.overdueCount.toLocaleString()} footnote="structurally rare" tone={totals.overdueCount > 0 ? "warning" : "default"} />
+      </BoardStatGrid>
 
-        <Select value={lens} onValueChange={(v) => setLens(v as "all" | "overdue" | "mismatched")}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Everything</SelectItem>
-            <SelectItem value="overdue">Overdue only</SelectItem>
-            <SelectItem value="mismatched">Mismatched only</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <span className="text-sm text-muted-foreground">
-          {invoices.length} invoice{invoices.length === 1 ? "" : "s"}
-        </span>
-      </div>
-
-      <div className={tableShell}>
-        <Table>
-          <TableHeader>
-            <TableRow className={tableHeaderRow}>
-              <TableHead className={tableHeadCell}>Number</TableHead>
-              <TableHead className={tableHeadCell}>Tenant</TableHead>
-              <TableHead className={tableHeadCell}>Amount</TableHead>
-              <TableHead className={tableHeadCell}>Status</TableHead>
-              <TableHead className={tableHeadCell}>Issued</TableHead>
-              <TableHead className={tableHeadCell}>Due</TableHead>
-              <TableHead className={tableHeadCell}>Overdue</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {invoices.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={7} className="p-0">
-                  {/* An empty list and a filtered-out list look identical and mean the opposite.
-                      Telling someone to raise their first invoice when they have two hundred and a
-                      status filter set is worse than saying nothing. */}
-                  {status === "all" && lens === "all" ? (
-                    <EmptyState
-                      title="No invoices yet"
-                      hint="An invoice is created automatically when a payment is collected, and by hand for anything else. Nothing has been billed on this platform so far."
-                    />
-                  ) : (
-                    <NoMatches
-                      noun="invoices"
-                      onClear={() => { setStatus("all"); setLens("all"); }}
-                    />
+      <TableCard
+        className="min-w-0"
+        footer={rows.length ? <Pager page={current} pageSize={pageSize} total={rows.length} noun={rows.length === 1 ? "invoice" : "invoices"} suffix="by number, newest first" onPage={setPage} /> : undefined}
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search invoice, tenant" />
+            <select aria-label="Tenant" value={tenant} onChange={(event) => { setTenant(event.target.value); setPage(1); }} className={cn(toolbarControl, "max-w-56")}>
+              <option value="">All tenants</option>
+              {tenants.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </select>
+            <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | InvoiceStatus); setPage(1); }} className={toolbarControl}>
+              <option value="all">All statuses</option>
+              {INVOICE_STATUSES.map((value) => <option key={value} value={value}>{INVOICE_STATUS_LABELS[value]}</option>)}
+            </select>
+            <select aria-label="Show" value={lens} onChange={(event) => { setLens(event.target.value as Lens); setPage(1); }} className={toolbarControl}>
+              <option value="all">Everything</option>
+              <option value="overdue">Overdue only</option>
+              <option value="mismatched">Mismatched only</option>
+            </select>
+            {anyFilter && <Button type="button" variant="ghost" onClick={reset}>Clear</Button>}
+          </DataToolbar>
+        }
+      >
+        <table className="w-full min-w-[860px] border-collapse">
+          <thead>
+            <tr className="bg-[var(--surface-alt)]">
+              <th scope="col" className={cn(th, "w-[210px]")}>Invoice</th>
+              <th scope="col" className={th}>Tenant</th>
+              <th scope="col" className={cn(th, "w-[130px]")}>Issued</th>
+              <th scope="col" className={cn(th, "w-[130px]")}>Due</th>
+              <th scope="col" className={cn(th, "w-[150px] text-right")}>Total</th>
+              <th scope="col" className={cn(th, "w-[190px]")}>Status</th>
+              <th scope="col" className={cn(th, "w-[90px] text-right")}><span className="sr-only">Open</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="p-0">
+                  {/* An empty list and a filtered-out list look identical and mean the opposite. */}
+                  {anyFilter ? <NoMatches noun="invoices" onClear={reset} /> : (
+                    <EmptyState title="No invoices yet" hint="Invoices appear here when a payment is collected or one is raised by hand." />
                   )}
-                </TableCell>
-              </TableRow>
-            ) : (
-              invoices.map((invoice) => {
-                const late = daysOverdue(invoice.due_at, invoice.status);
-                return (
-                  <TableRow key={invoice.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/admin/invoices/${invoice.id}`} className="hover:underline">
-                        {invoice.number}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{invoice.tenant_name}</TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      <span className="font-medium">{formatCentsAsCurrency(invoice.total_cents)}</span>
-                      {invoice.reconciliation === "mismatched" && (
-                        <span
-                          className="ml-2 inline-flex items-center gap-1 text-xs text-[var(--color-warning)]"
-                          title={`We billed ${formatCentsAsCurrency(invoice.total_cents)} but the provider charged ${
-                            invoice.provider_total_cents === null
-                              ? "an unknown amount"
-                              : formatCentsAsCurrency(invoice.provider_total_cents)
-                          }`}
-                        >
-                          <AlertTriangle className="size-3.5" />
-                          {invoice.provider_total_cents !== null &&
-                            formatCentsAsCurrency(invoice.provider_total_cents)}
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {/* A voided invoice keeps its strike-through: it is closed correctly rather
-                          than unpaid, and the line says so faster than the word does. */}
+                </td>
+              </tr>
+            ) : shown.map((invoice) => {
+              const late = daysOverdue(invoice.due_at, invoice.status, now);
+              const mismatched = invoice.reconciliation === "mismatched";
+              return (
+                <tr key={invoice.id} className={cn("hover:bg-[color-mix(in_srgb,var(--primary),transparent_95%)]", mismatched && "bg-[var(--brand-50)]")}>
+                  <td className={cn(td, "font-semibold text-[var(--ink)] tabular-nums")}><Link href={`/admin/invoices/${invoice.id}`} className="hover:underline">{invoice.number}</Link></td>
+                  <td className={td}>{invoice.tenant_name}</td>
+                  <td className={cn(td, "whitespace-nowrap tabular-nums")}>{fullDate(invoice.issued_at)}</td>
+                  <td className={cn(td, "whitespace-nowrap tabular-nums")}>{fullDate(invoice.due_at)}</td>
+                  <td className={cn(td, "whitespace-nowrap text-right tabular-nums")}>
+                    <span className="font-semibold text-[var(--ink)]">{formatCentsAsCurrency(invoice.total_cents)}</span>
+                    {mismatched && <span className="block text-xs text-[var(--error-ink)]">charged {invoice.provider_total_cents === null ? "unknown" : formatCentsAsCurrency(invoice.provider_total_cents)}</span>}
+                  </td>
+                  <td className={td}>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      {/* A voided invoice keeps its strike-through: closed correctly rather than unpaid. */}
                       <StatusChip tone={invoiceTone(invoice.status)} dot>
                         <span className={invoice.status === "void" ? "line-through" : undefined}>
-                          {INVOICE_STATUS_LABELS[invoice.status]}
+                          {invoice.status === "overdue" && late ? `Overdue ${late} ${late === 1 ? "day" : "days"}` : INVOICE_STATUS_LABELS[invoice.status]}
                         </span>
                       </StatusChip>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {invoice.issued_at ? new Date(invoice.issued_at).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                      {invoice.due_at ? new Date(invoice.due_at).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell className="text-sm">
-                      {late === null ? (
-                        <span className="text-muted-foreground">—</span>
-                      ) : (
-                        <span className="font-medium text-[var(--color-warning)]">{late}d</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                      {mismatched && <StatusChip tone="danger" dot>Mismatched</StatusChip>}
+                    </span>
+                  </td>
+                  <td className={cn(td, "text-right")}>
+                    <Button asChild variant="outline" size="sm">
+                      <Link href={`/admin/invoices/${invoice.id}`} aria-label={`View ${invoice.number}`}>View</Link>
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </TableCard>
     </div>
   );
 }

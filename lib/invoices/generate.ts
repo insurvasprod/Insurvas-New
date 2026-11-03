@@ -157,7 +157,7 @@ export async function createInvoiceFromPayment(
   const providerTotalCents =
     typeof rawTotal === "number" || typeof rawTotal === "string" ? whopAmountToCents(rawTotal) : null;
 
-  const { data: result, error } = await supabase.rpc("create_invoice_for_payment", {
+  const { data: result, error } = await supabase.rpc("create_invoice_for_payment_with_coupon", {
     p_tenant_id: tenantId,
     p_subscription_id: subscription?.id ?? null,
     p_provider: "whop",
@@ -167,6 +167,7 @@ export async function createInvoiceFromPayment(
     p_period_end: subscription?.current_period_end ?? null,
     p_paid_at: readString(data, "paid_at"),
     p_lines: lines,
+    p_consume_coupon: Boolean(coupon && subscription),
   });
 
   if (error) throw new Error(`Could not create invoice for ${paymentId}: ${error.message}`);
@@ -184,17 +185,6 @@ export async function createInvoiceFromPayment(
       `[invoice] ${row.number} MISMATCH for tenant ${tenantId}: provider charged ${providerTotalCents} cents, ` +
         `our lines total ${lines.reduce((s, l) => s + l.amount_cents, 0)} cents (payment ${paymentId})`,
     );
-  }
-
-  // Consume a period only when an invoice was actually created. Doing it per delivery would burn
-  // a 3-period coupon on the first invoice's three webhook retries.
-  if (row.created && coupon && subscription) {
-    const { error: consumeError } = await supabase.rpc("consume_coupon_period", {
-      p_subscription_id: subscription.id,
-    });
-    if (consumeError) {
-      console.error(`[invoice] could not consume a coupon period for ${subscription.id}: ${consumeError.message}`);
-    }
   }
 
   return {

@@ -26,7 +26,8 @@ export const SUBSCRIPTION_STATUS_LABELS: Record<SubscriptionStatus, string> = {
 /**
  * `full`      — everything the plan grants.
  * `read_only` — can SEE their book of business, cannot DO anything that creates or dials.
- * `none`      — no access (only after the retention window, which SA-6.3 owns).
+ * `none`      — no access: a cancelled agency once its retention window has ended (LA-8.5). No status
+ *               maps here by itself; `retention_until` on the entitlement decides it.
  */
 export type AccessLevel = "full" | "read_only" | "none";
 
@@ -46,9 +47,10 @@ export function accessLevelForStatus(status: SubscriptionStatus): AccessLevel {
       return "full";
     case "suspended":
     case "paused":
-      return "read_only";
+    // LA-8.5 (owner decision 2026-10-15): read-only like paused, for the retention window — the
+    // agency can still read its book, statements and commission history, and export them.
     case "cancelled":
-      return "none";
+      return "read_only";
   }
 }
 
@@ -57,15 +59,8 @@ export function needsPaymentBanner(status: SubscriptionStatus): boolean {
   return status === "past_due" || status === "suspended";
 }
 
-export const SUBSCRIPTION_STATUS_BADGE_CLASS: Record<SubscriptionStatus, string> = {
-  trialing: "border-transparent bg-[var(--color-blue)]/10 text-[var(--color-blue)]",
-  active: "border-transparent bg-[var(--color-success)]/10 text-[var(--color-success)]",
-  past_due: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
-  suspended: "border-transparent bg-[var(--color-danger)]/10 text-[var(--color-danger)]",
-  paused: "border-transparent bg-muted text-muted-foreground",
-  cancelling: "border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]",
-  cancelled: "border-transparent bg-muted text-muted-foreground",
-};
+// The status chip's colour comes from `subscriptionTone()` in components/admin/status-chip.tsx
+// (UX-5, 2026-10-03); the hand-mixed class map that used to live here was the third chip system.
 
 /** Which admin actions make sense from a given state — keeps the UI from offering no-ops. */
 export function availableActions(status: SubscriptionStatus): {

@@ -1,16 +1,37 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { requireFeature } from "@/lib/entitlements/requireFeature";
-import { csvForLeads, getAgentTemplate, listAgentLeads } from "@/lib/agentTemplates/service";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { consentForLeads, csvForLeads, exportAgentLeads, getAgentTemplate } from "@/lib/agentTemplates/service";
+import { listPipelines } from "@/lib/pipelines/service";
+import { scopeFor } from "@/lib/agency/visibility";
+
+// LA-2.12. The book of business is the licensed agent's — it carries premiums, quotes and
+// applications, which is the exact list a setter may not see. The setter is excluded by naming the
+// four roles that already had this route rather than by narrowing it to ["owner"], so this change
+// adds one refusal and takes nobody's access away.
+const NOT_SETTER = ["owner", "producer", "assistant", "bookkeeper"] as const;
+
+// A whole book is many pages of leads and certificates (LA-2.6-6); give the export room to finish.
+export const maxDuration = 300;
 
 export async function GET(request: NextRequest) {
-  const auth = await requireFeature("book_of_business");
+  const auth = await requireFeatureRole("book_of_business", NOT_SETTER, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
     const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
     const params = request.nextUrl.searchParams;
-    const leads = await listAgentLeads(auth.context.tenantId, template, params.get("q")?.trim() ?? "", params.get("filter_field") ?? "", params.get("filter_value") ?? "", params.get("sort") ?? "", params.get("direction") === "desc" ? "desc" : "asc");
-    const csv = csvForLeads(template.template.fields, template.template.stages, leads);
+    // AG-0.5: a narrowed agency session exports its producers' leads only (scope from the session).
+    const scope = await scopeFor(auth.context);
+    // Every lead of this product, posted ones included, paged past the row cap (LA-2.6-6).
+    const leads = await exportAgentLeads(auth.context.tenantId, template, params.get("q")?.trim() ?? "", params.get("filter_field") ?? "", params.get("filter_value") ?? "", params.get("sort") ?? "", params.get("direction") === "desc" ? "desc" : "asc", scope);
+    const pipelines = await listPipelines(auth.context.tenantId);
+
+    // LA-2.6 criterion 6. The certificate is the thing a regulator or a plaintiff's lawyer asks
+    // for, and until now it was the one field the export left out. Fetched for the exported leads
+    // only, keyed by lead, so the join happens once rather than per row.
+    const consentByLead = await consentForLeads(auth.context.tenantId, leads.map((lead) => lead.id));
+
+    const csv = csvForLeads(template.template.fields, pipelines.flatMap((pipeline) => pipeline.stages), leads, consentByLead);
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv; charset=utf-8",

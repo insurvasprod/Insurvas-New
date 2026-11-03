@@ -1,0 +1,599 @@
+# UI consistency standard (2026-09-28)
+
+Written after a manager review of the app: screens were built differently from one another —
+filters in one place here and another there, tables drawn three ways, titles repeated, explanatory
+cards everywhere, buttons of different heights. This is the one way a page is built from now on.
+Every rule points at a shared component; if a page needs something the components cannot do, extend
+the component, do not hand-roll a local copy.
+
+**This file is the single authority (UX-1, 2026-10-03).** Where `00-FOUNDATION.md`, a page prompt in
+`01`–`04`, a mockup or `06-MOCKUP-INDEX.md` says otherwise, this file wins; those files carry a note
+pointing here. Three questions they used to answer differently are settled:
+
+| Question | Decision | What it replaces |
+|---|---|---|
+| Eyebrow above the title | **None.** `PageHeader` ignores the prop. Auth and onboarding cards (`AuthCard`) may show a step label ("Step 1 of 3"). | FOUNDATION's "eyebrow is the menu section" rule |
+| Figures | **`StatStrip` + `StatTile` only**, at most one strip, under the header (§4) | the 3–5 metric-card grid in FOUNDATION and the page prompts |
+| Colour identity | **The 2026 brand: green, by plane** ([BRAND.md](BRAND.md)). Bright green `#07d6a0` for action and deep olive `#0d4037` for ink, the rail and the top bar, in `app/globals.css`, for the agent and partner apps and the public site. The admin console uses the same colours, rail, top bar and page spacing, with a blue accent: `app/admin/admin-plane.css` re-points the accent tokens only (owner decisions 2026-10-13). Components never name a colour. The bright green is never text on a light ground; use `--accent-ink`. `lib/design/brandContrast.test.mjs` enforces it. | FOUNDATION §1's split, and the orange identity of 2026-09 |
+
+## 0. Foundation v3 (2026-10-27)
+
+A second manager review produced the v3 foundation: Inter, a glossy stat card, 8px controls, an
+inline filter panel, no avatars for clients or carriers, overlays chosen by task, fixed status
+colours, one auth layout and number rules. The visual reference is
+[foundation-v3/mockup.html](foundation-v3/mockup.html); the plan is
+[foundation-v3/CAPABILITY-MAP.md](foundation-v3/CAPABILITY-MAP.md).
+
+Every v3 rule has a heading marked **(v3)** and a status line:
+
+- **Live:** follow it now.
+- **Decided, lands in `<module>`:** the decision is final but the token or component does not exist
+  yet. Until that module ships, keep following the current rule it replaces. The status changes to
+  Live in the same commit that ships the code.
+
+| v3 rule | Section | Status |
+|---|---|---|
+| Stat figures: the mockups' strip; `StatRow` / `StatCard` draw it too (owner 2026-10-30) | §4a, §16 | Live |
+| The owner's look: one card, one filter chip, the sidebar, title on every page | §16 | Live (`lib/design/sidebarLook.test.mjs`) |
+| Home dashboard layout | §4b | Live (`/app/dashboard`, preview on `/design/home`) |
+| 8px corners on buttons and inputs | §5a | Live |
+| Inline filter panel under the toolbar | §6a | Live for new and reworked lists |
+| No avatars for clients, leads or carriers | §10 | Live |
+| Overlays chosen by task | §11 | Live |
+| Status colours | §12 | Live |
+| One auth layout | §13 | Live (`lib/design/authShell.test.mjs`) |
+| Sign-up copy, Back on sign-up steps, trial wording from data | §13 | Live (`lib/design/signupCopy.test.mjs`) |
+| Numbers and money | §14 | Live |
+| Inter in the apps and auth pages | [BRAND.md](BRAND.md) | Live (`lib/design/typeface.test.mjs`) |
+| Gloss surface tokens (`--gloss-*`, `--stat-icon-*`) | `app/globals.css` | Live as tokens; used from `foundation-components` |
+| One look on every page: the ribbon stage and the glass surface | §5b | Live (consistency pass 2026-10-27) |
+| One kit for cards, chips, dialogs, menus, popovers, fields and the leave guard | §5b | Live; ratchets count the old copies down |
+| Trail and title on every page, actions on the title's line, no title in the top bar | §2 | Live (owner 2026-10-30; replaces the hidden title of 2026-10-28) |
+| Tables: 40px sentence-case head, 44px rows | §6 | Live |
+
+**The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
+rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx]`, eyebrows,
+"Loading…" text, hand-rolled pagers, `btn()`, and from the 2026-10-27 consistency pass: local card
+surfaces, `window.confirm`, hand-made tablists, local chips, raw `<h1>`, click-outside popovers,
+drafts without a leave guard, the console's radix select), against today's counts in
+`lib/design/uiOffenders.json`. A new offender fails the build; a fix must lower the baseline (see the
+top of the test). The numbers only go down.
+
+## 1. Chrome (done centrally — do not re-add)
+- No workspace/context strip under the top bar. The top bar and the sidebar brand block are one band
+  (same 56px height, same `--nav-*` colours).
+- Do not add page-level strips, ribbons or context bars of any kind.
+
+## 2. One header per page — `components/ui/page-header.tsx`
+```tsx
+<PageHeader title="Partners" actions={<>…buttons…</>} />
+<ViewTabs …/>
+```
+- **Trail and title on every page (owner 2026-10-30, the Partner Chat header everywhere).** This
+  replaces the hidden title of 2026-10-28. Every page a person lands on (agent app, admin console,
+  partner portal) opens with exactly one `PageHeader` (or `AdminPageHeader`), drawn as:
+
+  ```
+  Group › Page          the trail
+  Title  (i)   actions  the page's one <h1>, its description behind an (i), the actions on the right
+  ```
+
+  The trail comes from the menu (`components/ui/page-trail.tsx`) when the page passes no
+  `breadcrumbs`. The title is the page's one `<h1>` (`data-page-title`), drawn only by `PageHeader`;
+  a page never writes its own `<h1>` (the `raw-h1` ratchet) and never adds a second header (the
+  `extra-page-header` ratchet). No eyebrow (the prop is ignored), no second heading repeating the
+  title, no hand-made title row in a workspace.
+- **The top bar does not name the page.** Where you are is the trail, on the page.
+- **Actions** sit on the title's line, on the right, `<Button>` at the default size only (see §5),
+  primary action last. Tabs and step bars come under the header, on their own row.
+- **Detail pages** (a record under a list, an `[id]` route) draw no back link. They pass the way back
+  as the trail, the last crumb the page itself:
+  `breadcrumbs={[{ label: "Partners" }, { label: "Lead sources", href: "/app/publishers" }, { label: name }]}`
+  (the group is the menu group in `lib/menu/definition.ts`). `AdminPageHeader` turns `backHref` into
+  that trail.
+- **Description:** one sentence, optional, behind the (i) beside the title.
+- **Fitting the window.** The header is part of the page: a page that fills the window (Dialer,
+  Inbound call, Partner chat, Lead sources, Settings) is one column of the window's height with the
+  header at its top and the content under it as `flex-1 min-h-0`, never a height that assumes the
+  header takes no space. `useFittingPageSize` already subtracts the header. Long content scrolls.
+- The loading skeleton (`components/ui/page-loading.tsx`) draws the trail and title lines, so the
+  page does not jump when the header arrives.
+
+## 3. No explanatory, design-note or insight cards
+Remove every card/callout whose job is to explain the design or editorialise, e.g.
+"An automatic update is a record of fact…", "Why this tab still exists", "How this works",
+"Front-loaded on purpose…", insight banners like "X drops 25% of what it transfers… Pause them".
+Keep only messages a user must act on right now: errors, a blocked state ("Scrubbing failed —
+dialing is blocked"), a read-only notice. Those use the existing alert styling, one line, no essay.
+Helper text belongs in a field's `hint`, a tooltip, or nowhere.
+
+## 4. Figures: one compact strip — `StatStrip` + `StatTile` from `components/ui/stat.tsx`
+```tsx
+<StatStrip label="Partner totals">
+  <StatTile label="Publishers" value={10} footnote="10 of 20 active" />
+  <StatTile label="Marketing" value={2} />
+</StatStrip>
+```
+- Never a grid of separate stat boxes; never custom KPI cards. Replace any `grid … gap-3` of
+  `StatTile`s (or hand-made figure cards) with `<StatStrip>`.
+- At most one strip per page, directly under the header. 3–6 tiles. Footnotes short.
+- **v3:** `StatStrip` stays valid on pages nobody has reworked yet. A page someone reworks moves to
+  the stat cards in §4a, and does not keep a strip beside them.
+
+### 4a. Stat cards (v3)
+**Status:** Live. Redrawn 2026-10-30 (owner: "don't use the foundation cards, use the same cards that
+we have on the mockups"): `StatRow` and `StatCard` keep their names and props, but draw the mockups' strip:
+`StatRow` is a `StatStrip` and `StatCard` a `StatTile` (`icon` is not drawn, `period`/`fact` are the
+line under the figure, `tone="warn"` colours the figure amber). See §16. The text below describes the
+glossy card as it was.
+
+Before that (2026-10-27): live for new and reworked pages. Pages are moved one at a time, only when someone works
+on them; untouched pages keep `StatStrip` (decision 2026-10-27). The `mixed-stat` ratchet keeps a
+page from using both. Moved so far: the partner home, the partner Pipeline
+(2026-10-30, preview on `/design/pipeline`), and on the same day the rest of the partner portal —
+Team review, Team access and Statements (previews on `/design/overview` and `/design/organization`).
+**No `StatStrip` is left in `components/partner/**`.**
+
+The figures under a page header are a row of glossy stat cards: `StatRow` and `StatCard` from
+`components/ui/stat-card.tsx`. Reference: the "Footer fact, glossy" row in the mockup, and every
+state on `/design` (development only).
+
+```tsx
+import { CalendarDays, DollarSign, Users } from "lucide-react";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
+
+<StatRow label="Today">
+  <StatCard icon={Users} label="New leads" period="today" value={86}
+            delta={{ value: 11.7, goodWhen: "up" }} fact={{ label: "Top source", value: "Facebook · 38" }} />
+  <StatCard icon={CalendarDays} label="Appointments" period="7 days" value={214}
+            delta={{ value: -3.6, goodWhen: "up" }} fact={{ label: "Today", value: "38 booked · 4 no-shows" }} />
+  <StatCard icon={DollarSign} label="Commission" period="pending" value="$41,920" tone="warn"
+            delta={{ value: 9.2, goodWhen: "neither" }} fact={{ label: "18 statements late" }}
+            action={<LinkArrow href="/app/accounting">Review</LinkArrow>} />
+</StatRow>
+```
+
+- `delta.goodWhen` says what a rise means: `"up"`, `"down"`, or `"neither"` (always grey).
+- `meter` draws progress toward a goal between the value and the footer. There is no trend chart.
+
+- Anatomy, fixed: header (icon tile, label, period) → value with a change pill → footer with one
+  supporting fact as label and value, or the action the card needs.
+- The change pill always names its comparison in the period or footer ("vs. last Monday").
+- Amber footer only when the card needs action; one per row at most.
+- 2–4 cards per row, one row per page, directly under the header. Never mix stat cards and
+  `StatTile`s on one page.
+- The only larger variant is the dashboard pair: one lead metric with its chart and target, and one
+  composition card (for example Active policies). Both use the same glossy surface.
+- Surface: soft top-lit gradient, brand sheen in the top-left, bright top rim, layered shadow, 2px
+  hover lift (none under reduced motion). Text always sits on opaque colour.
+
+### 4b. Home dashboard (v3)
+**Status:** Live.
+
+The agent home (`app/app/(shell)/dashboard/page.tsx`, redesign 2026-10-28) replaces the launchpad's
+grid of look-alike tiles. Every role sees the same order, narrowed by `resolveRoleHome`:
+
+1. `PageHeader`: greeting, date, the next-callback chip, at most three actions (one primary).
+2. Setup, while unfinished: one slim row (`HomeSetup`), never a tile.
+3. **Needs you** (`HomeAttention`): one row of small links, counts above zero only, red before amber.
+   Nothing waiting is one line ("All caught up"), not an empty card.
+4. Four stat cards (`HomeKpis`, picked per role in `lib/dashboard/homeView.ts`). On the money
+   profile the money figures take this row (`HomeMoneyCards`).
+5. A 12-column row: the 14-day calls chart (8) beside today's appointments and callbacks (4); 7 + 5
+   when the content area is under 1152px. Container queries, not viewport breakpoints, because
+   the sidebar takes its share.
+6. A 12-column row: money and retention as one ledger (8) beside top dialers (4).
+7. **Jump to**: every module as a one-line link with its figure (`HomeShortcuts`).
+
+- Panels use `HomePanel`: the stat card's glossy surface, a 15px title with its period, one
+  "View ›" link, an optional footer of facts. Panels do not lift on hover.
+- No tile numbers, no "Open →" on every block, no tabs, no green button inside a panel.
+- Every number comes from a read the page already makes; nothing new is queried for the layout.
+  A figure that was not read is left out, never drawn as 0.
+- Check a change on `/design/home` (every role, busy, quiet and new) at 1536×826, 1366×657 and
+  375 wide before calling it done.
+
+## 5. Buttons and controls — one height
+- `<Button>` default size (h-9 / 36px) for every page and toolbar action. Do not pass `h-10`, `h-11`,
+  `size="lg"`, `px-…` overrides. `size="sm"` only inside table rows; `size="icon"` for icon-only.
+- Native selects, date inputs and number inputs in a toolbar use `toolbarControl` from
+  `components/ui/data-toolbar.tsx` so they are exactly as tall as the buttons.
+- Form fields are 36px too: the shared `Input`, and `control` / `btn("primary" | "ghost")` in
+  `components/app/settings/primitives.tsx` (brought down from 44px/40px on 2026-09-28). Prefer
+  `<Button>` over `btn()` in new code.
+
+### 5a. Control shape (v3)
+**Status:** Live. `Button` is 8px at every size; the `pill-button` ratchet keeps it that way.
+
+- Buttons and inputs: 8px corners. Cards, dialogs and sheets: 12px. Menus and popovers: 10px
+  (`rounded-menu`). Badges and chips: 6px (`rounded-badge`).
+- Heights do not change: 36px for buttons, inputs and toolbar controls (`toolbarControl`), and
+  `size="sm"` (32px) in rows. (An earlier draft said 32px inside toolbars; the code and §5 are 36px.)
+- Button labels are 14/500.
+
+### 5b. One kit, one look (v3)
+**Status:** Live. Set by the owner on 2026-10-27: "the same pagination and every other thing,
+pop-ups, edits, drop-down menus" on every page. The ratchets in
+`lib/design/uiConsistency.test.mjs` count the old copies down.
+
+- **The ground.** Every page of the agent app, the console and the partner portal sits on the one
+  stage: the moving ribbon and two soft glows (`DashboardStage`), drawn once by the shell layout.
+  A page never adds its own.
+- **The surface.** Every card is the mockups' card (§16; until 2026-10-30 the glass: 55% of the
+  card colour, blurred 20px, a hairline border and 12px corners) (`.m-glass`). Use `Card`, `TableCard`, `SettingsCard` or
+  `SettingsTableCard`; for a section that lays out its own inside, `cardSurface`, `cardHead`
+  (a header band) and `cardInset` (a tile inside a card) from `components/ui/card.tsx`. Never a
+  local `GLASS`/`CARD` constant or a hand-mixed `color-mix(…)`/`backdrop-blur` string
+  (`local-surface`).
+- **Type.** Page title hidden (§2; `text-page` 24/600 is kept for the day it returns), card title 15/600 (`text-card-title`), labels and column heads
+  13/500 (`text-label`), body 14, meta 12.
+- **Chips.** A state is `StatusChip`; a choice someone presses or removes is `ToggleChip`
+  (`components/ui/toggle-chip.tsx`, 36px since 2026-10-30, §16). No local `Chip`/`Pill` (`local-chip`).
+- **Charts.** `BarSeries`, `ShareBar` and `Sparkline` from `components/ui/chart.tsx`, drawn in the
+  ramp that file sets (`CHART_TONES`). Tokens only, both themes, and every shape carries its
+  figures in text behind the picture. There is no charting dependency: the kit is one file with a
+  narrow surface so one could be swapped in later without touching a page. A chart's own series
+  belongs in a tested pure helper, as `lib/partnerLeads/trend.ts` is for submissions over time —
+  two pages drawing the same figures must not each work them out.
+- **Chat.** A message bar is `ChatComposer` (`components/ui/chat-composer.tsx`): one bar, Enter
+  sends, and typing anywhere on the page starts a message in it.
+- **Pop-ups.** By task (§11): `Dialog` at a size, `ConfirmDialog`/`confirmAction()` for a loss,
+  `Sheet` for a record, `Popover` for a picker, `DropdownMenu` for actions. Never
+  `window.confirm` (`window-confirm`) or a page's own click-outside listener (`hand-popover`).
+- **Edits.** Fields are `Field` + `control` (or `Input`), `textareaControl`, `checkboxControl` and
+  `Switch` from `components/ui/field.tsx`; dates are `DateTimePicker`
+  (`components/ui/date-time-picker.tsx`). A form that holds a draft has Discard and Save
+  (`DraftActions` or `SettingsSaveBar`) and a `LeaveGuard` (`components/ui/leave-guard.tsx`), so a
+  click away asks Save changes / Discard changes / Stay (`unguarded-dirty`).
+- **Tabs.** `ViewTabs` or `Segmented`; never a hand-made `role="tablist"` (`hand-tablist`).
+- **Dropdowns.** `SelectMenu` (`components/ui/select-menu.tsx`): a 36px trigger that takes the
+  brand tint while it holds anything but its default, and a panel with a search box at the top,
+  titled groups, optional dots and counts, and a tick on the chosen option. Set by the owner on
+  2026-10-29 — the native dropdowns were "so plain", and the operating system draws their menu in
+  its own colours, which is why a filter on a dark page opened bright blue. A native `<select>` is
+  no longer the rule; the console's radix `Select` moves to `SelectMenu` too (`radix-select`).
+  - **Two to five options that are not a list to search through is a `Segmented`** (§15), not a
+    dropdown; **several answers from a short list is the checkbox dropdown**
+    (`components/app/multi-picker.tsx`, §13), never a native multiple `<select>`.
+  - Native date inputs with `toolbarControl` stay for now: `DateTimePicker` picks a date *and* a
+    time, so a date-only filter has nowhere to go until it gains a date-only mode.
+- Pill shapes remain only for toggle tracks, the count badge on the Filters button, and the
+  marketing and pricing CTAs, which keep the brand's pill ([BRAND.md](BRAND.md)).
+
+## 6. Lists: `TableCard` + `DataToolbar` — the Partner quality table is the model
+```tsx
+<TableCard
+  toolbar={
+    <DataToolbar actions={<><Button variant="outline">Export</Button><RefreshButton onClick={reload} refreshing={loading} /></>}>
+      <ToolbarSearch value={q} onChange={setQ} placeholder="Search partners" />
+      <select className={toolbarControl} …>…</select>
+      <FilterButton open={open} onClick={() => setOpen(!open)} count={activeCount} />
+    </DataToolbar>
+  }
+  footer={<>Showing 1–10 of 27 · <Pager … /></>}
+>
+  <table className="portal-lead-table w-full …">…</table>
+</TableCard>
+```
+- Order is fixed: search → filters → (spacer) → actions → Refresh last. Every list with data that can
+  change gets a `RefreshButton`.
+- The toolbar lives **inside** the TableCard (its `toolbar` slot). Never a separate filter card above
+  the table, never filter chips floating between cards.
+- Active filters may show as removable chips inside the same toolbar row (after the controls).
+- Row actions ("View", "Open") are the last column, right-aligned, `size="sm"` outline buttons or links.
+- Pagination in the `footer` slot with `Pager` (and `paginate()` for client-side slicing) from
+  `components/ui/pager.tsx` — never a hand-rolled Previous/Next. Empty states via `EmptyState` /
+  `NoMatches` from `page-states`.
+- **Rows (v3, owner pick 2026-10-27):** the head is 40px, sentence case, 13/500; rows are 44px.
+  `components/ui/table.tsx`, the settings `st` classes and the shared `.portal-*-table` rules all
+  draw this.
+- `TableCard` does not clip its children (no `overflow-hidden`), so toolbar popovers and menus can
+  hang below the toolbar; the table scrolls sideways inside its own wrapper.
+
+### 6c. Dropdowns, calendars and filters (v3)
+**Status:** Live. Set by the owner on 2026-11-02: every dropdown, calendar and filter gets "a different
+design rather than having a default one". Mounted once in `app/layout.tsx`
+(`components/ui/native-controls.tsx`), so every plane and every dialog has it.
+
+- **No browser list.** Clicking a `<select>` opens the app's panel, not the browser's grey list. The
+  panel shows the options with their group headings and a tick on the chosen one. A highlight
+  follows the mouse and the arrow keys. Typing filters, and a long list shows the filter line.
+  Enter picks, Escape closes.
+- **No browser calendar.** A `type="date"` or `"datetime-local"` field opens the app's month
+  calendar, with Today and Clear, and the field's own `min` / `max`. A date-and-time field adds the
+  times of day in 15-minute steps. Typing a date by hand still works.
+- **The same closed look.** Every dropdown shows one chevron and every date field one calendar mark,
+  drawn by `app/globals.css`, with room kept on the right.
+- **Filters use these controls.** A filter is a dropdown, a date or a `ToggleChip` in the toolbar or
+  the `FilterPanel` (§6a), so it looks the same everywhere. A long, searchable choice can use
+  `SelectMenu`.
+- **The control stays real.** Its value, its form and React's `onChange` are untouched; focus never
+  leaves it. Inside a dialog the panel opens inside the dialog, so picking never closes it.
+- **Phones keep their own picker.** A touch screen's native picker is easier there.
+- **Opting out.** `data-native="keep"` opts a control out; say why beside it. A `multiple` or `size`
+  list is never touched.
+
+### 6b. The table foundation (v3)
+**Status:** Live. Set by the owner on 2026-11-02 ("I want this to be as a foundation of the system design").
+`TableCard` applies it to itself (`components/ui/table-card-layout.tsx`); nothing on a page opts in.
+
+- **Full height.** The list that ends the page reaches the bottom of the screen. On a merged page
+  (Data in, Accounting, Commissions) that is the rail's foot. Its rows stay at the top and the
+  footer sits on that line. A card that is not the page's last block keeps its own height.
+- **A page of rows fits.** `PagedTableCard` shows as many rows as fit above that line, and pages
+  the rest with the shared Pager on the bottom line. Inside a dialog, or for a list that is not
+  last, a page is 10 rows. `pageSize` fixes it where a list needs a set number.
+- **Columns spread evenly.** Never one side crammed and the other blank. Each column is measured
+  at its natural width. A column narrower than an equal share of the card is widened to it; a
+  wider one keeps what it needs. No column is ever narrower than its content. A table too wide for
+  the card scrolls sideways as before. A table opts out with `data-even="off"`; say why beside it.
+- **Controls on one line.** A list's own switches (Last month / This month, a view toggle) sit in
+  its toolbar's `actions`, on the Refresh line, Refresh last. They never sit in a row of their own
+  above the card.
+- **Figures above a list are one strip.** `StatStrip` holds its `StatTile`s. A tile is never a box
+  of its own: no `className` with a border, rounding or glass (the `loose-stat-tile` ratchet).
+- **Nothing between the title and the page.** An alert that must be acted on now (an overdue
+  regulator complaint) is not a strip on the page, and not a button of its own. One bell holds
+  notifications and alerts: the urgent item counts on its badge and is the Inbox's pinned first row,
+  on every page, until it is done.
+
+### 6a. Filters open inline (v3)
+**Status:** Live for new and reworked lists. The 10 lists that already had their own filter panels
+keep them until someone works on them; the `hand-filter-panel` ratchet only goes down.
+
+Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in that repo), built from
+`FilterButton`, `FilterPanel` and `ActiveFilters` in `components/ui/data-toolbar.tsx` and the
+`filters` slot of `TableCard`:
+
+```tsx
+<TableCard
+  toolbar={<DataToolbar actions={…}><ToolbarSearch … /><FilterButton open={open} count={chips.length} controls="policy-filters" onClick={() => setOpen(!open)} /></DataToolbar>}
+  filters={<>
+    <FilterPanel id="policy-filters" open={open}>{/* labelled fields */}</FilterPanel>
+    <ActiveFilters filters={chips} onClear={clearAll} />
+  </>}
+>…</TableCard>
+```
+
+
+- The toolbar holds search, one **Filters** button with a count badge of applied filters, then the
+  actions. No individual facet buttons in the toolbar row.
+- **Filters** expands a panel **inside the TableCard, under the toolbar**, that pushes the table
+  down. It is not a dropdown or popover. The panel is a grid of labelled fields
+  (`repeat(auto-fit, minmax(190px, 1fr))`, 12–16px gaps): multi-selects, selects and date fields.
+- Applied filters show in a row under the panel, labelled "Active filters", as removable chips
+  ("Status: In force ×") followed by "Clear filters". The row stays visible when the panel is
+  collapsed.
+
+## 7. Loading — one look everywhere
+- Route level: `app/app/(shell)/loading.tsx` renders `PageLoading` (header + table skeleton).
+- Inside a component: `SectionLoading` from `components/ui/page-states.tsx`, placed where the rows
+  will appear (inside the TableCard, or in place of the panel). Never "Loading …" text, never a
+  spinner-only box, never an empty card with a sentence in it.
+
+## 8. Layout
+- A page is: header → (optional) stat strip → the main TableCard(s) → secondary tables. `space-y-6`.
+- No card around a card. No decorative side panels. Two-column layouts only when the second column is
+  real content (e.g. a detail pane for the selected row), never notes.
+- Compact: prefer fewer, denser blocks.
+- **A record's details or a create form beside a list is `DetailPanel`** (`components/ui/detail-panel.tsx`,
+  2026-10-09): `mode="split"` sits beside the table (30%, the Callbacks booking panel is the model),
+  `mode="overlay"` slides over it from the right. It owns the header, the "Close" button, Escape,
+  focus return and the slide-in — never hand-build an `<aside>` for this. A short confirmation or a
+  small form is a `Dialog` instead.
+- **A page with several lists shows one at a time** with `ViewTabs` (`components/ui/view-tabs.tsx`),
+  page actions on the right of the same row; size the pager with `useFittingPageSize`
+  (`components/ui/use-fitting-page-size.ts`).
+- **Say it in a few words; explain behind an `InfoTip`** (`components/ui/info-tip.tsx`) beside the term.
+  Compliance and legal wording is never moved into a tip: it stays on the screen, in full.
+- **An empty list offers the action that fills it** (`EmptyState`'s `action`), linking only to a page
+  or flow that exists. A filtered list with nothing in it is `NoMatches` with its clear action.
+
+## 9. CSS
+- New screens use Tailwind and the shared components; do not add page-specific `.portal-*` rules to
+  `app/globals.css`. A sweep on 2026-09-28 removed ~2,200 lines of rules whose classes no component
+  used any more. A header cell's own `text-right` now wins over `.portal-lead-table th`.
+- The partner **Messages** page was the largest block left: 147 lines of `.portal-agent-chat-*` and
+  `.portal-chat-*`, and the reason that page looked unlike the rest of the product. It was rebuilt
+  from the kit on 2026-10-30 and the rules are gone; only `.portal-status-chip.is-info` stayed,
+  because the chip is shared. A page rebuilt from the kit should take its CSS with it.
+
+## 10. People and companies (v3)
+**Status:** Live.
+
+- No avatars, initials circles or logo tiles for clients, leads, policyholders or carriers. We never
+  have photos of them, so the name is the identifier. This applies to tables, cards, sheets,
+  dialogs and search results.
+- Avatars appear only for staff users, and only when they uploaded a photo.
+- In search results and menus, a plain Lucide icon may show the record type (person, page).
+
+## 11. Overlays chosen by task (v3)
+**Status:** Live.
+
+| Task | Component | Size |
+|---|---|---|
+| Short edit that keeps context | `Dialog` (`components/ui/dialog.tsx`), `size="md"` (the default); `lg` 560 and `xl` 720 for two-column forms | 440px |
+| Review a detailed record with a statement or item table | `Dialog`, `size="2xl"` | 960px |
+| A step that loses something (cancel, delete) | `ConfirmDialog`, or `await confirmAction({…})` in a handler (`components/ui/confirm-dialog.tsx`) | 400px |
+| Read or work on a record beside a list | `DetailPanel` (§8); over the page, `Sheet` (`components/ui/sheet.tsx`) | 420px |
+| A picker or a short form anchored to a control | `Popover` (`components/ui/popover.tsx`) | — |
+| Row and record actions | `DropdownMenu` (`components/ui/dropdown-menu.tsx`) | 224px |
+| Confirm that something happened | Toast via `notify` (`lib/notify`, drawn by Sileo in `components/ui/toaster.tsx`), with Undo when reversible | 350px |
+| Global search | `SearchCommand` (`components/ui/search-command.tsx`), ⌘K | up to 560px |
+
+- Never a modal for a confirmation; use a toast. Never a toast for an error the user must fix; show
+  it where the fix is.
+- Destructive dialogs name the impact ("Future commission stops") and label the buttons with the
+  action ("Keep policy" / "Cancel policy"), never "OK" / "Cancel".
+
+## 12. Status colours (v3)
+**Status:** Live.
+
+| Meaning | Colour | Examples |
+|---|---|---|
+| Done or good | green | In force, Approved, Appointed |
+| Scheduled or in progress | blue | Scheduled, Appointment set, Pending issue |
+| Needs action | amber | Needs signature, Callback due, Expires soon, Statements late |
+| Stopped or failed | red | Lapsed, Cancelled, Failed |
+| Neutral | grey | Draft, Other, a value that is neither good nor bad |
+
+- Always a dot or icon plus text, never colour alone. Use `StatusChip`
+  (`components/ui/status-chip.tsx`).
+- A rising number is green only when rising is good. A rising pending balance stays grey.
+
+## 13. Auth pages (v3)
+**Status:** Live. Held by `lib/design/authShell.test.mjs` (layout) and
+`lib/design/signupCopy.test.mjs` (copy, trial and Back).
+
+- One layout for sign-in, every sign-up step, the account screens, accept terms, partner and staff
+  sign-in: `AuthLayout` from `components/portal/auth-layout.tsx`, or one of its wrappers
+  (`FunnelFrame`, `AppAuthFrame`, `PartnerAuthFrame`). It is the only component that renders
+  `PortalAuthSplitShell`. Every combination is on `/design/auth` (development only).
+  - The column, always in this order: logo, `AuthSteps`, `AuthBack`, the screen (opening with
+    `AuthHeading`), legal links.
+  - Width: 472px, or `width="wide"` (720px) only for a grid of choices or a document (Your agency,
+    Your plan, Payment, accept terms).
+  - The panel is an `AuthStory` (label, title, rows with a hairline above each; a row can carry a
+    value, or a ✓/✗ state with its word), or real content (the plan summary, the receipt) passed
+    as `story`.
+- Controls from `components/portal/auth-controls.tsx`: `AuthField` + `AuthInput` (or
+  `authLabel` / `authControl` on a native control) at **44px**, `AuthSubmit` (full width, 44px),
+  `AuthSecondary`, and one `AuthAlert` with `tone="error" | "info" | "success"`. Auth screens are
+  exempt from the 36px rule (§5) for this reason; app pages are not.
+- Copy follows the order things happen: the first sign-up step creates an account ("Create your
+  account", button "Create account"); the trial is named only on the payment step, where it
+  starts. The full copy, screen by screen, is in
+  [foundation-v3/SPEC-signup-flow.md](foundation-v3/SPEC-signup-flow.md).
+- Trial length comes from the chosen plan through `trialDaysForPlan` (`lib/checkout/trialDays.ts`,
+  the number checkout and Whop grant) and dates from `firstChargeDate`; before a plan is chosen no
+  number is shown. Card wording comes from `checkoutPaymentMode()`. Nothing types "N-day".
+- Every step from 2 on has Back to the step before it (owner, 2026-10-27). A step that cannot be
+  redone (1 once the account exists, 2 once the email is confirmed) shows what was done and a
+  Continue to where the signup stands (`FunnelReview`), never a form that would only fail:
+
+  | Step | Back |
+  |---|---|
+  | 1 Your account | none |
+  | 2 Your email | ← Back to your account (keeps "Wrong address?" and Sign out) |
+  | 3 Your agency | ← Back to your email; "Signed in as … · Sign out" under the form |
+  | 4 Your plan | ← Back to your agency |
+  | 5 Payment | ← Back to your plan (and "Change plan" in the receipt) |
+- A question with several answers from a short list is a dropdown with checkboxes
+  (`components/app/multi-picker.tsx`), not a row of chips; it shares its list style with the state
+  picker. Picks show as removable tags in the field; the list ends with "N selected · Clear".
+- An open picker list is drawn at the auth shell (a portal), never inside the form column: each
+  line of the column is its own layer while the entrance animation holds, so a list drawn inside
+  it goes under every later line. It fits the room left in the window and never makes it scroll.
+- The brand panel is still: `--brand-700` with one soft light, no ribbon or other motion
+  (owner, 2026-10-27).
+- Every auth screen, sign-up steps included, keeps the logo at the top and centres the rest in the
+  space below it (`AuthLayout` `align`, default "center"). No auth screen scrolls, vertically or
+  sideways, at 1536×826 (the owner's 125%-scaled screen), 1366×657 or 1920×1030.
+- On touch screens a standalone link-button (Back, Sign out, Forgot password?, Switch to agency)
+  is 44px to tap (`data-tap`).
+- "Continue with Google" is on the agent doors only (sign-in, sign-up step 1). It shows only when
+  Google is enabled in Supabase. It uses Google's unmodified mark (`public/brand/google-g.svg`).
+- Step 4 asks who, billing, plan and seats, and nothing else. No add-on modules at sign-up, no
+  seat slider, no band strip (the plan cards are the bands). One-agent seats are one sentence.
+  Segmented controls are 36px with 8px corners and a white thumb; a single billing cycle is text.
+- First screens ask only what is needed: no confirm-password field (show/hide and the strength
+  meter cover typos). Sign-in and every sign-up step fit without scrolling at 1366×768 (a 1366×657 browser window).
+- No marketing claims, internal notes or explanatory text on auth pages beyond one line under the
+  title.
+
+## 14. Numbers and money (v3)
+**Status:** Live.
+
+- `tabular-nums` on every number that can sit above or beside another number.
+- Money: `$1,284.00` in tables and forms, right-aligned in table columns. In cards, the currency
+  sign and cents are muted at about half size.
+- Every change names its comparison: "↑ 11.7% vs. last Monday", never a bare percentage.
+- Monospace only for identifiers people copy or read aloud: policy numbers, Medicare IDs, plan
+  codes.
+
+## 15. Settings pages (v3)
+**Status:** Live. The owner approved the patterns on 2026-10-29; parts in
+`components/app/settings/patterns.tsx`, worked examples on `/design/settings/patterns#patterns`.
+
+- **One frame:** breadcrumb, the section's title top-left and one line on what it is for; the
+  "Last changed · History" line under it. The settings menu starts level with the first card.
+- **Form sections:** a group's title, with its (i), above its fields on a full-width glass card
+  (`FormSection`, stacked: the owner's choice on 2026-10-29). A status or link sits at the end of the
+  title row. Short fields share a row (`FieldRow`).
+- **Help behind the (i)** (owner, 2026-10-29: text across the page is overwhelming). Why a section
+  exists goes in `FormSection`'s `info`, an `InfoTip` beside the title that opens on hover and on
+  click, in one or two plain sentences; `SettingsCard` and `TableCard` take the same `info`. What a
+  field needs while it is typed in, what an action will do, live status and legal wording stay on
+  screen. The `section-help` ratchet keeps help paragraphs from coming back.
+- **Menus as a tree:** the agent sidebar and the settings menu draw one rounded elbow per page under
+  its group, each starting a little under the one above; the current page's elbow is the accent.
+- **One save model per section.** A section edited as a draft has the save bar at the bottom
+  (`SettingsSaveBar` + `DraftActions`, solid, with the change count) and a `LeaveGuard`. Switches and
+  single choices that stand alone save at once with a quiet "Saved" (`useAutosave` / `AutosaveNote`).
+  Never a Save in the header, in a toolbar, floating in a corner, or one per card.
+- **Choices:** on/off is a `Switch`; two to five options a `Segmented`; more than five a dropdown, in
+  words ("Central (Chicago)", never an IANA code).
+- **Advanced:** settings most agencies never change fold under `Advanced`, which opens when a link
+  names something inside it.
+- **Danger zone:** anything that cannot be undone or cuts someone off is last, in `DangerZone`, with
+  `DangerAction` (red outline, a question first).
+- **Tabs:** a section longer than about a screen and a half, or with separate jobs, gets `ViewTabs`:
+  at most five, named for the job, a number only when something needs attention. Each section keeps
+  its anchor, and a link to it opens its tab.
+- **History** is the header's line, never a "Recent changes" card or a change-log tab in a section.
+- **Dates:** `dateTime` / `dayMonthYear` from `lib/format/dates.ts` ("28 Oct, 12:12", "28 Oct 2026");
+  times always with am/pm.
+- **Every page on the agent app that shows its own breadcrumb** (PageHeader `visible`) makes the top
+  bar's crumb step aside (manager review 28 Oct §3.2). Partners pages follow the same frame.
+
+## 16. The owner's look (2026-10-30)
+**Status:** Live. Set by the owner: "no matter who merges it, or whoever pushes some code, this will
+stay consistent." `lib/design/sidebarLook.test.mjs` fails a build that undoes any of it; change a
+rule only with the owner's yes, in this section and the test together.
+
+- **Title on every page.** `PageHeader` always shows the trail ("Partners › Partner Chat", from the
+  menu by `components/ui/page-trail.tsx`) and the title, with the actions on the title's line. The
+  top bar names no page. See §2.
+- **Alerts on the title's line (2026-11-02).** The shell's always-on alerts (an overdue regulator
+  complaint, a payment problem) are one 36px line beside the title that fills the rest of that line,
+  the whole sentence on the left and the action on the right (`PageAlert`, placed by `PageAlertSlot`
+  in `PageHeader`). Never a banner above the trail: it pushed every page into a scroll. A page with
+  no header shows them above it.
+- **One card.** The mockups' card (canvas board LirS1's `.g`): 16px corners; in dark, a white wash
+  from 6% to 1.5% at 160° and a 9% white hairline, blurred 14px. It is `.m-glass`, so `Card`,
+  `TableCard`, `StatStrip`, the home panels and every `cardSurface` draw it. No glossy card.
+- **One figure strip.** `StatStrip` + `StatTile`: label 12/700 uppercase at 0.06em, figure 24/700,
+  one 12px line under it, cells split by hairlines, no lit edge and no halo.
+- **One filter chip.** `ToggleChip` is 36px, 14px semibold, 8px corners, with `count` for the
+  number badge ("Live 22"). Every pick-one filter row is ToggleChips; page tabs stay `ViewTabs`.
+- **One table.** A list is a `TableCard` with `Pager` in its `footer` and `useFittingPageSize`
+  choosing the rows, so the pager sits at the foot of the window (the Source campaigns table).
+- **The sidebar.** Groups 15px/600 in 42px rows, each icon in a soft 30px tile (18px glyph, 2px
+  stroke) that turns green when its group is open; pages 14px text only under the group's name, the
+  current one a soft green row in bold; no tree lines. The block "The sidebar, owner 2026-10-30" is
+  the last sidebar rule in `app/globals.css`.
+
+## 17. Nothing that looks AI-made (2026-11-02)
+**Status:** Live. Set by the owner: "remove any AI looking button or anything that we didn't like".
+The ratchets `caps-label`, `glow`, `magic-icon` and `pill-control` in
+`lib/design/uiConsistency.test.mjs` start at zero and keep it there.
+
+- **No glow.** No blurred coloured shadow (`shadow-[0_0_14px_…]`), no brand orbs behind the page,
+  no glow on hover. A selected or current thing is a flat fill or a border. A 0-blur ring is a border
+  and is fine.
+- **No gradient fills.** A bar or progress line is one token colour. (The dark card's faint wash in
+  §16 and the loading skeleton are the only gradients in the app.)
+- **No endless motion.** A live marker is a still dot; nothing pulses, pings, breathes or wiggles to
+  get attention. Arranging tiles shows a dashed outline. One-off entrances and a single confirm
+  pulse stay.
+- **No magic icons.** No `Sparkles`, `Wand`, `Zap`, `Bot` or `BrainCircuit`, and no emoji: an icon
+  says what the button does (`Shuffle` for auto-assign, `SkipForward` for auto-next, the lock for a
+  locked setting).
+- **Sentence-case labels.** No uppercase letter-spaced eyebrows. The one kept is the figure strip's
+  label (§16, the owner's pick), recorded as an exception in the test.
+- **No pills.** A button, or a link drawn as one, has 8px corners whatever element draws it (§5a).
+  Pills stay for toggle tracks, dots, avatars, the Filters count and the marketing CTAs.
+
+## Ownership notes
+- `components/ui/*` and `app/globals.css` are shared: change them only deliberately, once, for all.
+- Pages that write data when opened (dialer, disposition walks) — do not click their actions to "test".

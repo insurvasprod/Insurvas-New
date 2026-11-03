@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, X } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -16,15 +16,30 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { inputControl } from "@/components/ui/field";
 
 type Line = { label: string; amount: string };
 
-export function CustomInvoiceDialog({ tenants }: { tenants: { id: string; name: string }[] }) {
+export function CustomInvoiceDialog({
+  tenants,
+  lockedTenant,
+  triggerLabel = "Custom invoice",
+  triggerClassName,
+  triggerSize = "sm",
+}: {
+  tenants: { id: string; name: string }[];
+  /** Raise the invoice for this tenant only — the picker becomes a read-only line. */
+  lockedTenant?: { id: string; name: string };
+  triggerLabel?: string;
+  /** When set, the trigger is a plain button with these classes instead of the default small Button. */
+  triggerClassName?: string;
+  /** The Button's size when no class is given: "default" (36px) for a page-header action, "sm" inside a card. */
+  triggerSize?: "default" | "sm";
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [tenantId, setTenantId] = useState("");
+  const [tenantId, setTenantId] = useState(lockedTenant?.id ?? "");
   const [reason, setReason] = useState("");
   const [dueDays, setDueDays] = useState("15");
   const [lines, setLines] = useState<Line[]>([{ label: "", amount: "" }]);
@@ -53,14 +68,14 @@ export function CustomInvoiceDialog({ tenants }: { tenants: { id: string; name: 
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not create the invoice");
+      notify.block(body?.error ?? "Could not create the invoice");
       return;
     }
 
     // The invoice exists either way; whether it could be sent for online payment is a separate
     // outcome and is reported as such rather than as a failure.
-    if (body.sendWarning) toast.warning(`${body.number} created. ${body.sendWarning}`);
-    else toast.success(`${body.number} created and sent`);
+    if (body.sendWarning) notify.warn(`${body.number} created. ${body.sendWarning}`);
+    else notify.done(`${body.number} created and sent`);
 
     setOpen(false);
     setReason("");
@@ -72,9 +87,15 @@ export function CustomInvoiceDialog({ tenants }: { tenants: { id: string; name: 
 
   return (
     <>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        Custom invoice
-      </Button>
+      {triggerClassName ? (
+        <button type="button" className={triggerClassName} onClick={() => setOpen(true)}>
+          {triggerLabel}
+        </button>
+      ) : (
+        <Button size={triggerSize} onClick={() => setOpen(true)}>
+          {triggerLabel}
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
@@ -89,18 +110,17 @@ export function CustomInvoiceDialog({ tenants }: { tenants: { id: string; name: 
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Tenant</Label>
-              <Select value={tenantId} onValueChange={setTenantId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose a tenant…" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.map((tenant) => (
-                    <SelectItem key={tenant.id} value={tenant.id}>
-                      {tenant.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {lockedTenant ? (
+                <p className="text-sm font-medium">{lockedTenant.name}</p>
+              ) : (
+                <select aria-label="Tenant" className={inputControl} value={tenantId} onChange={(event) => setTenantId(event.target.value)}><option value="" disabled>Choose a tenant…</option>
+                    {tenants.map((tenant) => (
+                      <option key={tenant.id} value={tenant.id}>
+                        {tenant.name}
+                      </option>
+                    ))}
+                  </select>
+              )}
             </div>
 
             <div className="space-y-1.5">

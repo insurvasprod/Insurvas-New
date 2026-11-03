@@ -1,12 +1,34 @@
 // SA-5.2 · Checkout constants. Client-safe.
 
 /**
- * Card required at signup, not charged for 14 days.
+ * The last-resort trial length (see resolveTrialDays): card required at signup, not charged for 14 days.
  *
  * The ticket's stated decision: fewer signups than a no-card trial, dramatically better
  * conversion, and no dead fourteenth day where somebody has to chase everyone.
  */
 export const TRIAL_DAYS = 14;
+
+/**
+ * The trial a checkout actually grants (audit, 2026-10-15). TRIAL_DAYS used to be applied to every
+ * plan while plan_prices.trial_days was ignored. Order: the plan version's own trial_days, then the
+ * platform setting billing.default_trial_days, then TRIAL_DAYS. Zero is a real answer (no trial),
+ * not a missing one; anything that is not a whole number in 0–365 is treated as missing.
+ */
+export function resolveTrialDays(planTrialDays: unknown, settingTrialDays?: unknown): number {
+  const usable = (value: unknown): value is number =>
+    typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 365;
+  if (usable(planTrialDays)) return planTrialDays;
+  if (usable(settingTrialDays)) return settingTrialDays;
+  return TRIAL_DAYS;
+}
+
+/**
+ * The day a trial that starts now first charges the card: every sign-up screen draws it from here,
+ * so the plan step, the payment title, the receipt and the renewal terms name the same date.
+ */
+export function firstChargeDate(trialDays: number, now: Date = new Date()): Date {
+  return new Date(now.getTime() + trialDays * 86_400_000);
+}
 
 /** Where Whop sends the customer back to. Must be https — Whop rejects anything else. */
 export function checkoutReturnUrl(): string | null {

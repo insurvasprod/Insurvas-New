@@ -1,0 +1,237 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Owner only"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "Effective-dated and audited"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Settings · Sales"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Carriers and products"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "The carrier library, plus the four things an application needs from a carrier that a contract does not carry: a portal, a reference shape, a descriptor and a payment method."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add a carrier"
+    <div> {gap:24px}
+      <div> {width:236px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              "Carriers and products"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Appointments"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Underwriting templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quotation templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Application field sets"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carrier field maps"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Disclosures"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quote and QA preferences"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Welcome pack"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "AI assistant"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Extension"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Pipeline sync"
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Carriers and products"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Owner only"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Carriers"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "The reference pattern is what validates a number typed in after submission."
+              <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+                <table> {width:100%}
+                  <thead>
+                    <tr> {bg:#e4e8ee}
+                      <th> {width:104px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Carrier"
+                      <th> {width:122px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Products"
+                      <th> {width:62px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Portal"
+                      <th> {width:108px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Reference pattern"
+                      <th> {width:118px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Billing descriptor"
+                      <th> {width:108px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Payment methods"
+                      <th> {width:96px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Field set"
+                      <th> {width:104px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Field map"
+                  <tbody .m-seq>
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Gerber Life"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Final Expense"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <a href="#"> {fsize:14px;fweight:400;color:#15191e}
+                          "Open"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "GL-00000000"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "GERBER LIFE INS"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Bank draft, card"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "Tenant"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "v3"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Mutual of Omaha"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Living Promise, Term life"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <a href="#"> {fsize:14px;fweight:400;color:#15191e}
+                          "Open"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "MOO000000000"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "MUTUAL OMAHA PREM"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Bank draft"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "Tenant"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "v6"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Americo"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Eagle Premier"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <a href="#"> {fsize:14px;fweight:400;color:#15191e}
+                          "Open"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "AM-0000000"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "AMERICO PREMIUM"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Bank draft, card"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                          "Tenant"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                          "Draft"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Foresters"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "PlanRight"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <a href="#"> {fsize:14px;fweight:400;color:#15191e}
+                          "Open"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "FOR00000000"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "FORESTERS FIN"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Bank draft"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                          "Platform"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                          "None"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Portal account"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "One account per carrier, held by the agency. Owner only."
+              <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+                <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Gerber Life · portal account"
+                  <span> {gap:10px}
+                    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                      "Verified 26 Sep"
+                <div> {padding:16px 18px;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 20px}
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Portal URL"
+                    <input type="text" value="agents.gerberlife.example/login"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Where the extension expects to be when it fills this carrier’s form."
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Username"
+                    <input type="text" value="northline.rg"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Shared by the agency. Each agent still signs in as themselves."
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Writing number"
+                    <input type="text" value="884102"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Goes on every application so the commission lands on this agency."
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "MFA"
+                    <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                      <option>
+                        "App"
+                      <option>
+                        "SMS"
+                      <option>
+                        "None"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "SMS codes land on the owner’s phone, which stalls an agent at 9pm."
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Last verified"
+                    <input type="date" value="26 Sep 2026"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Someone signed in and confirmed the writing number still reads 884102."
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Open the portal"
+                    <div> {gap:10px}
+                      <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                        "Open portal"
+                      <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                        "Copy username"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Opening copies the username to the clipboard so the agent only has to fetch the password."
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #c92a2a;bd-radius:12px;bg:#fdeaea}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+                    "There is no password field here, and there never will be"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "A test in the repo fails the build if one is added. Use the password manager your agency already has."
+          <div> {justify-content:space-between;gap:16px;padding:14px 24px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Changes are audited — who, when, and what the value was before. Publishing a new version leaves the old one readable, because an application submitted under it still points at it."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Discard"
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Save changes"

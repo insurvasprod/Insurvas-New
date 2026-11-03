@@ -23,7 +23,14 @@ export type ComplianceVendor = {
   priority: number;
   cost_per_lookup_cents: number;
   credentials_present: boolean;
+  /** False only when recent provider calls show that every observed call failed. */
+  available: boolean;
   last_success_at: string | null;
+  /** The latest lookup or connection test of any outcome (fallback hand-offs excluded), last 7 days. */
+  last_checked_at: string | null;
+  /** That call's duration, when it succeeded; null when it failed or nothing was recorded. */
+  last_latency_ms: number | null;
+  /** Fallback hand-off rows are excluded from both counts (see vendorHealth.ts). */
   calls_24h: number;
   failures_24h: number;
   failure_rate_24h: number;

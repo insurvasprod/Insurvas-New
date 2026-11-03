@@ -2,20 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   SIMULATED_OUTCOMES,
   SIMULATED_OUTCOME_HINTS,
@@ -26,6 +19,9 @@ import {
   type SimulatedOutcome,
   type TenantPaymentProvider,
 } from "@/lib/payments/constants";
+import { inputControl } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 const CALL_STATUS_STYLES: Record<string, string> = {
   ok: "text-[var(--color-success)]",
@@ -55,8 +51,9 @@ export function PaymentProviderPanel({
   const selectable = settings.filter((s) => s.is_enabled || s.provider === record?.provider);
   const dirty = provider !== (record?.provider ?? "") || label !== (record?.payment_method_label ?? "");
 
-  async function save() {
-    if (!provider) return;
+  /** True when it saved; the leave guard keeps the admin on the page otherwise. */
+  async function save(): Promise<boolean> {
+    if (!provider) return false;
     setBusy(true);
 
     const res = await fetch(`/api/admin/tenants/${tenantId}/payment-provider`, {
@@ -68,12 +65,13 @@ export function PaymentProviderPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not set the payment provider");
-      return;
+      notify.block(body?.error ?? "Could not set the payment provider");
+      return false;
     }
 
-    toast.success("Payment provider saved");
+    notify.done("Payment provider saved");
     router.refresh();
+    return true;
   }
 
   async function setOutcome(outcome: SimulatedOutcome) {
@@ -87,11 +85,11 @@ export function PaymentProviderPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not update the simulator");
+      notify.block(body?.error ?? "Could not update the simulator");
       return;
     }
 
-    toast.success(
+    notify.done(
       outcome === "success" ? "Simulator cleared — charges succeed" : `Charges will now ${SIMULATED_OUTCOME_LABELS[outcome].toLowerCase()}`,
     );
     router.refresh();
@@ -101,9 +99,10 @@ export function PaymentProviderPanel({
 
   return (
     <Card>
+      <LeaveGuard dirty={dirty} onSave={save} onDiscard={() => { setProvider(record?.provider ?? platformDefault ?? ""); setLabel(record?.payment_method_label ?? ""); }} what="the payment provider" />
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Payment provider</h2>
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Payment provider</h2>
           {!record && platformDefault && (
             <span className="text-sm text-muted-foreground">
               Using the platform default ({platformDefault})
@@ -114,20 +113,15 @@ export function PaymentProviderPanel({
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[200px] flex-1 space-y-1.5">
             <Label htmlFor="provider">Provider</Label>
-            <Select value={provider} onValueChange={setProvider}>
-              <SelectTrigger id="provider" className="w-full">
-                <SelectValue placeholder="Choose a provider…" />
-              </SelectTrigger>
-              <SelectContent>
+            <select id="provider" className={inputControl} value={provider} onChange={(event) => setProvider(event.target.value)}><option value="" disabled>Choose a provider…</option>
                 {selectable.map((s) => (
-                  <SelectItem key={s.provider} value={s.provider}>
+                  <option key={s.provider} value={s.provider}>
                     {s.display_label}
                     {s.is_default && " · platform default"}
                     {!s.is_enabled && " · disabled"}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
           </div>
 
           <div className="min-w-[200px] flex-1 space-y-1.5">
@@ -161,32 +155,18 @@ export function PaymentProviderPanel({
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium">Failure simulator</span>
               {armed && (
-                <Badge
-                  variant="outline"
-                  className="border-transparent bg-[var(--color-warning)]/10 text-[10px] text-[var(--color-warning)]"
-                >
-                  Armed
-                </Badge>
+                <StatusChip tone="warning">Armed</StatusChip>
               )}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Select
-                value={record.simulate_outcome}
-                onValueChange={(value) => setOutcome(value as SimulatedOutcome)}
-                disabled={busy}
-              >
-                <SelectTrigger className="min-w-[240px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
+              <select className={cn(inputControl, "min-w-[240px]")} value={record.simulate_outcome} onChange={(event) => { const value = event.target.value; setOutcome(value as SimulatedOutcome); }} disabled={busy}>
                   {SIMULATED_OUTCOMES.map((outcome) => (
-                    <SelectItem key={outcome} value={outcome}>
+                    <option key={outcome} value={outcome}>
                       {SIMULATED_OUTCOME_LABELS[outcome]}
-                    </SelectItem>
+                    </option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
             </div>
 
             <p className="text-xs text-muted-foreground">

@@ -4,8 +4,9 @@ import { z } from "zod";
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { CAN_MANAGE_COUPONS } from "@/lib/coupons/permissions";
 import { fetchCoupons } from "@/lib/coupons/queries";
-import { createCoupon } from "@/lib/coupons/service";
+import { createCoupon, ProviderNotConfiguredError } from "@/lib/coupons/service";
 import { parseDollarsToCents } from "@/lib/money";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 
 export async function GET() {
@@ -25,12 +26,22 @@ const schema = z
     amount_off: z.string().trim().nullable().optional(),
     duration: z.enum(["once", "n_periods", "forever"]),
     duration_periods: z.number().int().min(1).max(60).nullable().optional(),
-    billing_cycle: z.enum(["monthly", "quarterly", "yearly"]),
+    /** Null is any billing cycle. */
+    billing_cycle: z.enum(["monthly", "quarterly", "yearly"]).nullable(),
     max_redemptions: z.number().int().min(1).nullable().optional(),
     expires_at: z.string().datetime().nullable().optional(),
+    /** Our plan ids; empty or absent is any plan. Enforced locally, not by Whop. */
+    restricted_to_plan_ids: z.array(z.string().uuid()).max(50).nullable().optional(),
   })
   .refine((v) => (v.duration === "n_periods" ? Boolean(v.duration_periods) : true), {
     message: "Give the number of billing periods",
+  })
+  .refine((v) => !(v.duration === "n_periods" && v.billing_cycle === null), {
+    // durationInMonths: a period is one cycle long, so "3 periods" on any cycle has no one answer.
+    message: "A coupon for a number of periods needs a billing cycle. Choose one, or use one period or forever.",
+  })
+  .refine((v) => !v.expires_at || new Date(v.expires_at).getTime() > Date.now(), {
+    message: "The expiry date has already passed",
   });
 
 export async function POST(request: NextRequest) {
@@ -54,6 +65,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Enter a percentage between 1 and 100" }, { status: 400 });
   }
 
+  // Every named plan must exist, or the restriction would refuse every subscription silently.
+  const planIds = [...new Set(input.restricted_to_plan_ids ?? [])];
+  if (planIds.length > 0) {
+    const { data: plans, error: plansError } = await getSupabaseServiceClient().from("plans").select("id").in("id", planIds);
+    if (plansError) return NextResponse.json({ error: "Could not check the plans. Nothing was created." }, { status: 500 });
+    if ((plans ?? []).length !== planIds.length) {
+      return NextResponse.json({ error: "One of the chosen plans no longer exists" }, { status: 400 });
+    }
+  }
+
   try {
     const created = await createCoupon({
       code: input.code.toUpperCase(),
@@ -65,6 +86,7 @@ export async function POST(request: NextRequest) {
       billingCycle: input.billing_cycle,
       maxRedemptions: input.max_redemptions ?? null,
       expiresAt: input.expires_at ?? null,
+      restrictedToPlanIds: planIds.length > 0 ? planIds : null,
       createdBy: auth.session.sub,
     });
 
@@ -81,6 +103,9 @@ export async function POST(request: NextRequest) {
         duration: input.duration,
         durationPeriods: input.duration_periods ?? null,
         billingCycle: input.billing_cycle,
+        expiresAt: input.expires_at ?? null,
+        restrictedToPlanIds: planIds,
+        maxRedemptions: input.max_redemptions ?? null,
         whopPromoCodeId: created.whopPromoCodeId,
       },
       request,
@@ -88,6 +113,12 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ id: created.id }, { status: 201 });
   } catch (error) {
+    if (error instanceof ProviderNotConfiguredError) {
+      return NextResponse.json(
+        { error: "Whop is not configured here, so no promo code can be created. Nothing was created." },
+        { status: 503 },
+      );
+    }
     const message = error instanceof Error ? error.message : "Could not create the coupon";
     // A duplicate code is the common case and deserves its own message.
     if (message.includes("duplicate key") || message.includes("coupons_code_key")) {

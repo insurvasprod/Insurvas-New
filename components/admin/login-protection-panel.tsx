@@ -1,0 +1,149 @@
+"use client";
+
+import { StatusChip } from "@/components/ui/status-chip";
+import { useEffect, useState } from "react";
+import { Unlock } from "lucide-react";
+import { notify } from "@/lib/notify";
+
+import { st, pillTone } from "@/components/app/settings/primitives";
+import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
+import { SectionLoading } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { formatUtcDateTime } from "@/lib/adminDashboard/figures";
+import { Button } from "@/components/ui/button";
+
+type Lockout = {
+  scope_key: string;
+  actor_type: "admin" | "user";
+  email: string;
+  ip: string;
+  failed_attempts: number;
+  last_failed_at: string;
+  locked_until: string | null;
+};
+
+/**
+ * Current login lockouts, and the super-admin unlock. Sits under the Login protection card on
+ * Advanced; the rows are fetched after mount, so the local-time hover cannot mismatch hydration.
+ */
+export function LoginProtectionPanel() {
+  const [lockouts, setLockouts] = useState<Lockout[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [page, setPage] = useState(1);
+  const pageSize = useFittingPageSize(420, 45);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch("/api/admin/security/rate-limits", { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json().catch(() => null);
+        if (cancelled) return;
+        if (response.ok) setLockouts(body?.lockouts ?? []);
+        else notify.fail(body?.error ?? "Could not load login protection state");
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          notify.fail("Could not load login protection state");
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  async function unlock(scopeKey: string) {
+    setBusy(scopeKey);
+    const response = await fetch("/api/admin/security/rate-limits", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ scopeKey }),
+    }).catch(() => null);
+    const body = response ? await response.json().catch(() => null) : null;
+    setBusy(null);
+    if (!response || !response.ok) {
+      notify.block(body?.error ?? "Could not clear login lockout");
+      return;
+    }
+    setLockouts((current) => current.filter((entry) => entry.scope_key !== scopeKey));
+    notify.done("Login lockout cleared and recorded in the audit log");
+  }
+
+  const locked = lockouts.filter((entry) => entry.locked_until).length;
+  const { current, rows: pageRows } = paginate(lockouts, page, pageSize);
+
+  return (
+    <TableCard
+      title="Login lockouts"
+      footer={loading ? undefined : <Pager page={current} pageSize={pageSize} total={lockouts.length} noun="lockouts" onPage={setPage} />}
+      toolbar={
+        <DataToolbar
+          actions={
+            <RefreshButton
+              onClick={() => {
+                setLoading(true);
+                setReloadKey((key) => key + 1);
+              }}
+              refreshing={loading}
+            />
+          }
+        >
+          {!loading && <StatusChip dot={false} tone={pillTone(locked > 0 ? "error" : "neutral")}>{locked} locked</StatusChip>}
+        </DataToolbar>
+      }
+    >
+      {loading ? (
+        <SectionLoading rows={3} columns={5} label="Loading current lockouts" />
+      ) : lockouts.length === 0 ? (
+        <p className="m-0 px-4 py-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">No recorded login lockouts.</p>
+      ) : (
+        <table className={`${st.table} min-w-[640px]`}>
+          <caption className="sr-only">Current login lockouts</caption>
+          <thead>
+            <tr className={st.headRow}>
+              <th scope="col" className={st.th}>Account</th>
+              <th scope="col" className={st.th}>Plane</th>
+              <th scope="col" className={st.th}>IP</th>
+              <th scope="col" className={`${st.th} ${st.num}`}>Failures</th>
+              <th scope="col" className={st.th}>Locked until</th>
+              <th scope="col" className={st.th}><span className="sr-only">Action</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {pageRows.map((entry) => (
+              <tr key={entry.scope_key}>
+                <td className={`${st.td} ${st.strong}`}>{entry.email}</td>
+                <td className={`${st.td} capitalize`}>{entry.actor_type}</td>
+                <td className={st.td}><span className={st.code}>{entry.ip}</span></td>
+                <td className={`${st.td} ${st.num}`}>{entry.failed_attempts}</td>
+                <td className={st.td}>
+                  {entry.locked_until ? (
+                    <span title={new Date(entry.locked_until).toLocaleString()}>{formatUtcDateTime(entry.locked_until)}</span>
+                  ) : (
+                    "Not locked"
+                  )}
+                </td>
+                <td className={`${st.td} text-right`}>
+                  <Button
+                    type="button"
+                    variant="ghost" size="sm"
+                    onClick={() => void unlock(entry.scope_key)}
+                    disabled={busy === entry.scope_key}
+                  >
+                    <Unlock className="size-3.5" aria-hidden="true" />
+                    {busy === entry.scope_key ? "Clearing…" : "Clear lockout"}
+                  </Button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </TableCard>
+  );
+}

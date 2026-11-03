@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { contactSchema } from "@/lib/contacts/schemas";
 import { findDuplicates } from "@/lib/contacts/service";
+import { scopeFor } from "@/lib/agency/visibility";
 
 /**
  * Authorization boundary for inbound transfer work. The transfer workflow itself is out of
@@ -17,6 +18,10 @@ export async function POST(request: Request) {
   if (body && typeof body === "object") {
     const candidate = contactSchema.safeParse(body);
     if (!candidate.success) return NextResponse.json({ error: candidate.error.issues[0]?.message ?? "Transfer contact details are invalid" }, { status: 400 });
+    // AG-0.5: the duplicate check searches the whole agency's contacts, which may be other producers'.
+    // In an agency a narrow session gets the 501 without them; solo tenants and the all-seeing roles
+    // keep the list exactly as before.
+    if ((await scopeFor(auth.context)) !== null) return NextResponse.json({ error: "Inbound transfer intake is not available in this application frame.", duplicates: [] }, { status: 501 });
     const duplicates = await findDuplicates(auth.context.tenantId, candidate.data);
     return NextResponse.json({ error: "Inbound transfer intake is not available in this application frame.", duplicates }, { status: 501 });
   }

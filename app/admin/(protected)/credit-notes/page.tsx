@@ -3,9 +3,12 @@ import { redirect } from "next/navigation";
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canViewInvoices } from "@/lib/invoices/permissions";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { AdminPageHeader } from "@/components/admin/page-header";
+import { Callout } from "@/components/app/settings/primitives";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { BillingTabs } from "@/components/admin/billing-tabs";
 import { CreditNotesTable, type CreditNoteRow } from "@/components/admin/credit-notes-table";
-import { Card, CardContent } from "@/components/ui/card";
+import { RaiseCreditNotePicker } from "@/components/admin/raise-credit-note-picker";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { refundApprovalThresholdCents } from "@/lib/settings/queries";
 
@@ -14,50 +17,57 @@ export default async function CreditNotesPage() {
   if (!admin) redirect("/admin/login");
   if (!canViewInvoices(admin.role)) redirect("/admin");
 
-  const thresholdCents = await refundApprovalThresholdCents();
-
   const supabase = getSupabaseServiceClient();
-  const { data } = await supabase
-    .from("credit_notes")
-    .select("*, tenants(name), invoices(number)")
-    .order("created_at", { ascending: false });
+  const [thresholdCents, notesResult, paidResult] = await Promise.all([
+    refundApprovalThresholdCents(),
+    supabase.from("credit_notes").select("*, tenants(name), invoice:platform_invoices(id, number)").order("created_at", { ascending: false }),
+    supabase.from("platform_invoices").select("id, number, total_cents, tenants(name)").eq("status", "paid").order("number", { ascending: false }).limit(500),
+  ]);
 
-  const notes = (data ?? []) as unknown as CreditNoteRow[];
+  // This screen holds the pending-approval queue. A failed query renders it empty, which reads as
+  // "nothing is waiting on you" — the one wrong answer, since a refund sitting unapproved is the
+  // whole reason to open the page.
+  if (notesResult.error) throw new Error(`Could not load credit notes: ${notesResult.error.message}`);
+
+  const notes = (notesResult.data ?? []) as unknown as CreditNoteRow[];
   const pending = notes.filter((n) => n.status === "pending_approval");
+  const ownPending = pending.filter((n) => n.requested_by === admin.id);
   const failed = notes.filter((n) => n.status === "failed");
+  const providerPending = notes.filter((n) => n.reconciliation_state === "provider_pending");
+  const paid = ((paidResult.data ?? []) as unknown as Array<{ id: string; number: string; total_cents: number; tenants: { name: string } | null }>).map((row) => ({ id: row.id, number: row.number, total_cents: row.total_cents, tenant_name: row.tenants?.name ?? "—" }));
+  const names = (rows: CreditNoteRow[]) => rows.slice(0, 3).map((n) => n.number).join(", ") + (rows.length > 3 ? ` and ${rows.length - 3} more` : "");
 
   return (
-    <div className="space-y-6">
-      <AdminPageHeader
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader
         title="Refunds & credits"
-        subtitle={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin`}
+        description={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin.`}
+        actions={<RaiseCreditNotePicker invoices={paid} />}
       />
+      <BillingTabs />
 
-      {pending.length > 0 && (
-        <Card className="border-[var(--color-warning)]/40">
-          <CardContent>
-            <p className="text-sm font-medium text-[var(--color-warning)]">
-              {pending.length} request{pending.length === 1 ? "" : "s"} waiting for approval
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              No money moves until a second admin approves. You cannot approve one you raised yourself.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      <StatStrip label="Credit note totals">
+        <StatTile label="Credit notes" value={notes.length.toLocaleString("en-US")} footnote="all time" />
+        <StatTile label="Pending approval" value={pending.length.toLocaleString("en-US")} valueTone={pending.length > 0 ? "warning" : undefined} footnote={ownPending.length > 0 ? `${ownPending.length.toLocaleString("en-US")} raised by you` : pending.length > 0 ? "needs a second admin" : "none waiting"} />
+        <StatTile label="Failed" value={failed.length.toLocaleString("en-US")} valueTone={failed.length > 0 ? "danger" : undefined} footnote={failed.length > 0 ? "at the provider" : "none failed"} />
+        <StatTile label="Awaiting reconciliation" value={providerPending.length.toLocaleString("en-US")} valueTone={providerPending.length > 0 ? "warning" : undefined} footnote={providerPending.length > 0 ? "provider not confirmed" : "all reconciled"} />
+      </StatStrip>
 
-      {failed.length > 0 && (
-        <Card className="border-destructive/40">
-          <CardContent>
-            <p className="text-sm font-medium text-destructive">
-              {failed.length} refund{failed.length === 1 ? "" : "s"} failed at the provider
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              The credit note is kept in <code>failed</code> so the attempt is on record. Investigate before
-              retrying — the money may or may not have moved.
-            </p>
-          </CardContent>
-        </Card>
+      {(pending.length > 0 || failed.length > 0 || providerPending.length > 0) && (
+        <div className="flex flex-col gap-2">
+          {pending.length > 0 && (
+            <Callout
+              tone="warning"
+              title={`${pending.length} pending approval — no money moves until a second admin approves${ownPending.length > 0 ? `; ${names(ownPending)} ${ownPending.length === 1 ? "is" : "are"} yours, so another admin must approve` : ""}.`}
+            />
+          )}
+          {failed.length > 0 && (
+            <Callout tone="error" title={`${failed.length} failed at the provider (${names(failed)}) — investigate before retrying; the money may or may not have moved.`} />
+          )}
+          {providerPending.length > 0 && (
+            <Callout tone="warning" title={`${providerPending.length} awaiting reconciliation — use Retry reconciliation; do not raise a second credit note.`} />
+          )}
+        </div>
       )}
 
       <CreditNotesTable notes={notes} currentAdminId={admin.id} />

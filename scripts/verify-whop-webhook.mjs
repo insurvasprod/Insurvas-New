@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // SA-3.1 acceptance: drives the real /api/webhooks/whop endpoint with genuinely signed requests.
 //
 // Needs the app running. Defaults to the dev server; set WEBHOOK_TARGET_URL to point at a deploy.

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -10,12 +10,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatCents, formatCentsAsCurrency } from "@/lib/money";
 import {
   CREDIT_REASONS, CREDIT_REASON_LABELS, needsSecondApprover,
   type CreditReason,
 } from "@/lib/credits/rules";
+import { inputControl } from "@/components/ui/field";
 
 export function RefundDialog({
   tenantId,
@@ -62,20 +62,20 @@ export function RefundDialog({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not raise the credit note");
+      notify.block(body?.error ?? "Could not raise the credit note");
       return;
     }
 
-    if (body.awaitingApproval) toast.warning(body.message);
-    else toast.success(body.message);
+    if (body.awaitingApproval) notify.warn(body.message);
+    else notify.done(body.message);
     setOpen(false);
     router.refresh();
   }
 
   return (
     <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Refund or credit
+      <Button variant="outline" className="w-full" onClick={() => setOpen(true)}>
+        Raise a credit note
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
@@ -90,15 +90,12 @@ export function RefundDialog({
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>Type</Label>
-              <Select value={type} onValueChange={(v) => setType(v as "refund")}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="refund" disabled={!hasProviderPayment}>
+              <select aria-label="Type" className={inputControl} value={type} onChange={(event) => { const v = event.target.value; setType(v as "refund"); }}>
+                  <option value="refund" disabled={!hasProviderPayment}>
                     Refund — money back to the card
-                  </SelectItem>
-                  <SelectItem value="credit">Credit — applied against future billing</SelectItem>
-                </SelectContent>
-              </Select>
+                  </option>
+                  <option value="credit">Credit — applied against future billing</option>
+                </select>
               {!hasProviderPayment && (
                 <p className="text-xs text-muted-foreground">
                   This invoice was settled outside the provider, so there is no card charge to reverse.
@@ -116,14 +113,11 @@ export function RefundDialog({
 
             <div className="space-y-1.5">
               <Label>Reason</Label>
-              <Select value={reasonCode} onValueChange={(v) => setReasonCode(v as CreditReason)}>
-                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                <SelectContent>
+              <select aria-label="Reason" className={inputControl} value={reasonCode} onChange={(event) => { const v = event.target.value; setReasonCode(v as CreditReason); }}>
                   {CREDIT_REASONS.map((r) => (
-                    <SelectItem key={r} value={r}>{CREDIT_REASON_LABELS[r]}</SelectItem>
+                    <option key={r} value={r}>{CREDIT_REASON_LABELS[r]}</option>
                   ))}
-                </SelectContent>
-              </Select>
+                </select>
               <Input
                 value={reasonText}
                 onChange={(e) => setReasonText(e.target.value)}

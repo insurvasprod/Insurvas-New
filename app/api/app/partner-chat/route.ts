@@ -1,0 +1,164 @@
+import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
+
+import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
+import { audit } from "@/lib/audit/log";
+import { getPartnerChannelFacts } from "@/lib/partnerChat/partnerFacts";
+import { ALLOWED_ATTACHMENT_TYPES, MAX_ATTACHMENT_BYTES, addChannelMembers, createAgentChannel, getAgentChannelHistory, getAgentChatChannels, getAgentChatDirectory, markChannelRead, searchAgentChat, markPartnerChatRead, postChannelText, postPartnerText, removeChannelMember, renameChannel, setAgentChannelArchived, setChannelMember, setConversationState, type ChatAttachmentInput } from "@/lib/partnerChat/service";
+import { GroupsNotLiveError } from "@/lib/partnerChat/groups";
+import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
+import { scopeFor } from "@/lib/agency/visibility";
+
+const roles = ["owner", "producer"] as const;
+const messageSchema = z.object({ channel_id: z.string().uuid().optional(), partner_id: z.string().uuid().optional(), message: z.string().trim().min(1).max(2000), mentions: z.array(z.string().uuid()).max(20).optional() }).strict().refine((value) => Boolean(value.channel_id || value.partner_id), { message: "Choose a chat channel" });
+const stateSchema = z.object({ channel_id: z.string().uuid(), pinned: z.boolean().optional(), archived: z.boolean().optional(), deleted: z.literal(true).optional() }).strict();
+const groupSchema = z.object({
+  action: z.enum(["add_members", "remove_member", "set_member", "rename_channel"]),
+  channel_id: z.string().uuid(),
+  user_ids: z.array(z.string().uuid()).min(1).max(50).optional(),
+  user_id: z.string().uuid().optional(),
+  role: z.enum(["admin", "member", "viewer"]).optional(),
+  can_add_members: z.boolean().optional(),
+  name: z.string().trim().min(1).max(160).optional(),
+}).strict()
+  .refine((value) => value.action !== "add_members" || Boolean(value.user_ids?.length), { message: "Choose who to add" })
+  .refine((value) => (value.action !== "remove_member" && value.action !== "set_member") || Boolean(value.user_id), { message: "Choose a member" })
+  .refine((value) => value.action !== "set_member" || Boolean(value.role), { message: "Choose a role" })
+  .refine((value) => value.action !== "rename_channel" || Boolean(value.name), { message: "Give the group a name" });
+const createSchema =z.object({ action: z.literal("create_channel"), channel_type: z.enum(["direct", "group"]), name: z.string().trim().max(160).optional(), user_ids: z.array(z.string().uuid()).min(1).max(50) }).strict();
+
+async function readInput(request: NextRequest) {
+  if (request.headers.get("content-type")?.startsWith("multipart/form-data")) {
+    const form = await request.formData();
+    const mentionsRaw = form.get("mentions");
+    let mentions: unknown = undefined;
+    if (typeof mentionsRaw === "string" && mentionsRaw) { try { mentions = JSON.parse(mentionsRaw); } catch { throw new Error("Mentions must be valid JSON"); } }
+    const attachments: ChatAttachmentInput[] = [];
+    for (const value of form.getAll("files")) {
+      if (!(value instanceof File)) continue;
+      if (attachments.length >= 3) throw new Error("You can attach up to three files");
+      if (value.size < 1 || value.size > MAX_ATTACHMENT_BYTES) throw new Error("Each attachment must be smaller than 10 MB");
+      if (!(ALLOWED_ATTACHMENT_TYPES as readonly string[]).includes(value.type)) throw new Error("That file type is not supported");
+      attachments.push({ name: value.name, contentType: value.type, size: value.size, data: Buffer.from(await value.arrayBuffer()) });
+    }
+    return { ...(Object.fromEntries(form.entries())), mentions, attachments };
+  }
+  const body = await request.json().catch(() => null);
+  return { ...(body && typeof body === "object" ? body as Record<string, unknown> : {}), attachments: [] as ChatAttachmentInput[] };
+}
+
+const searchSchema = z.object({ q: z.string().trim().min(2, "Type at least two letters").max(100), channel_id: z.string().uuid().optional() });
+const historySchema = z.object({ channel_id: z.string().uuid(), before: z.string().datetime({ offset: true }) });
+
+export async function GET(request: NextRequest) {
+  const auth = await requireFeatureRole("inbound_transfers", roles, { prefetchScope: true });
+  if (auth instanceof NextResponse) return auth;
+  const params = request.nextUrl.searchParams;
+  // ?search=words[&channel_id=]: messages holding those words, in every conversation the person can
+  // open or in one of them (owner, 2026-10-29).
+  if (params.has("search")) {
+    const parsed = searchSchema.safeParse({ q: params.get("search") ?? "", channel_id: params.get("channel_id") || undefined });
+    if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Search for something" }, { status: 400 });
+    try {
+      const result = await searchAgentChat({ tenantId: auth.context.tenantId, userId: auth.context.userId, query: parsed.data.q, channelId: parsed.data.channel_id, scope: await scopeFor(auth.context), limit: parsed.data.channel_id ? 200 : 50 });
+      return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not search the chat" }, { status: 400 }); }
+  }
+  // ?history=<channel>&before=<time>: the page of a conversation before the messages already shown.
+  if (params.has("history")) {
+    const parsed = historySchema.safeParse({ channel_id: params.get("history"), before: params.get("before") });
+    if (!parsed.success) return NextResponse.json({ error: "Choose a valid conversation" }, { status: 400 });
+    try {
+      const result = await getAgentChannelHistory({ tenantId: auth.context.tenantId, userId: auth.context.userId, channelId: parsed.data.channel_id, before: parsed.data.before, scope: await scopeFor(auth.context) });
+      return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load earlier messages" }, { status: 400 }); }
+  }
+  try {
+    // AG-0.5: in an agency a producer keeps the chat itself (messages people wrote, and the transfer
+    // cards about waiting transfers and his own), but not cards about another producer's transfers, and
+    // not the per-partner facts line, which counts every producer's transfers that day. From the
+    // session; null scope (solo, owner/admin) = everything, as before.
+    const scope = await scopeFor(auth.context);
+    // The per-partner facts line is extra: if it cannot be read, the chat still loads without it.
+    const facts = scope !== null ? Promise.resolve([]) : getWorkspaceTimezone(auth.context.tenantId).catch(() => null).then((zone) => getPartnerChannelFacts(auth.context.tenantId, zone)).catch((error) => { console.error("[partner-chat] partner facts failed", error); return []; });
+    const [channels, directory, partnerFacts] = await Promise.all([getAgentChatChannels(auth.context.tenantId, auth.context.userId, scope), getAgentChatDirectory(auth.context.tenantId), facts]);
+    // viewerId: the signed-in person's own id, so the thread can set their messages on the right.
+    return NextResponse.json({ channels, directory, partnerFacts, viewerId: auth.context.userId }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("[partner-chat] channel or directory load failed", error);
+    return NextResponse.json({ error: "Could not load partner channels" }, { status: 503 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  const auth = await requireFeatureRole("inbound_transfers", roles, { write: true });
+  if (auth instanceof NextResponse) return auth;
+  let input: Record<string, unknown> & { attachments: ChatAttachmentInput[] };
+  try { input = await readInput(request) as Record<string, unknown> & { attachments: ChatAttachmentInput[] }; } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Write a valid chat request" }, { status: 400 }); }
+  if (input.action === "create_channel") {
+    const parsedCreate = createSchema.safeParse({ action: input.action, channel_type: input.channel_type, name: input.name, user_ids: input.user_ids });
+    if (!parsedCreate.success) return NextResponse.json({ error: parsedCreate.error.issues[0]?.message ?? "Write a valid channel" }, { status: 400 });
+    try {
+      const channel = await createAgentChannel({ tenantId: auth.context.tenantId, userId: auth.context.userId, channelType: parsedCreate.data.channel_type, name: parsedCreate.data.name, userIds: parsedCreate.data.user_ids });
+      await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_chat_channel_created", targetType: "partner_channel", targetId: channel.id, metadata: { channelType: channel.channel_type }, request });
+      return NextResponse.json({ channel }, { status: 201 });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create chat channel" }, { status: 400 }); }
+  }
+  if (input.action === "archive_channel" || input.action === "restore_channel") {
+    const channelId = z.string().uuid().safeParse(input.channel_id);
+    if (!channelId.success) return NextResponse.json({ error: "Choose a valid chat channel" }, { status: 400 });
+    const archived = input.action === "archive_channel";
+    try {
+      const channel = await setAgentChannelArchived({ tenantId: auth.context.tenantId, channelId: channelId.data, userId: auth.context.userId, archived });
+      await audit({ actorType: "tenant", actorId: auth.context.userId, action: archived ? "tenant.partner_chat_channel_archived" : "tenant.partner_chat_channel_restored", targetType: "partner_channel", targetId: channel.id, metadata: { channelType: channel.channel_type }, request });
+      return NextResponse.json({ channel });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not change the channel" }, { status: 400 }); }
+  }
+  // Each person's own pin, archive and delete (owner, 2026-10-28): nobody else's list changes.
+  if (input.action === "conversation_state") {
+    const parsedState = stateSchema.safeParse({ channel_id: input.channel_id, pinned: input.pinned, archived: input.archived, deleted: input.deleted });
+    if (!parsedState.success) return NextResponse.json({ error: "Choose a valid conversation" }, { status: 400 });
+    try {
+      await setConversationState({ tenantId: auth.context.tenantId, userId: auth.context.userId, channelId: parsedState.data.channel_id, pinned: parsedState.data.pinned, archived: parsedState.data.archived, deleted: parsedState.data.deleted });
+      return NextResponse.json({ ok: true });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not change the conversation" }, { status: error instanceof GroupsNotLiveError ? 503 : 400 }); }
+  }
+  // Group membership: add, remove (or leave), change a role, rename. The rules are lib/partnerChat/groupRules.ts.
+  if (input.action === "add_members" || input.action === "remove_member" || input.action === "set_member" || input.action === "rename_channel") {
+    const parsedGroup = groupSchema.safeParse({ action: input.action, channel_id: input.channel_id, user_ids: input.user_ids, user_id: input.user_id, role: input.role, can_add_members: input.can_add_members, name: input.name });
+    if (!parsedGroup.success) return NextResponse.json({ error: parsedGroup.error.issues[0]?.message ?? "Write a valid group change" }, { status: 400 });
+    const g = parsedGroup.data;
+    const base = { tenantId: auth.context.tenantId, userId: auth.context.userId, channelId: g.channel_id };
+    try {
+      if (g.action === "add_members") await addChannelMembers({ ...base, userIds: g.user_ids ?? [], role: g.role });
+      else if (g.action === "remove_member") await removeChannelMember({ ...base, memberId: g.user_id ?? "" });
+      else if (g.action === "set_member") await setChannelMember({ ...base, memberId: g.user_id ?? "", role: g.role ?? "member", canAddMembers: g.can_add_members ?? false });
+      else await renameChannel({ ...base, name: g.name ?? "" });
+      await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.partner_chat_group_changed", targetType: "partner_channel", targetId: g.channel_id, metadata: { change: g.action, role: g.role ?? null, count: g.user_ids?.length ?? (g.user_id ? 1 : 0) }, request });
+      return NextResponse.json({ ok: true });
+    } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not change the group" }, { status: error instanceof GroupsNotLiveError ? 503 : 400 }); }
+  }
+  const rawMessage = typeof input.message === "string" ? input.message.trim() : "";
+  const attachmentMessage = input.attachments.length === 1 ? "Shared an attachment" : input.attachments.length > 1 ? `Shared ${input.attachments.length} attachments` : "";
+  const parsed = messageSchema.safeParse({ channel_id: input.channel_id, partner_id: input.partner_id, message: rawMessage || attachmentMessage, mentions: input.mentions });
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Write a valid chat message" }, { status: 400 });
+  try {
+    const message = parsed.data.channel_id
+      ? await postChannelText({ tenantId: auth.context.tenantId, channelId: parsed.data.channel_id, userId: auth.context.userId, message: parsed.data.message, mentions: parsed.data.mentions, attachments: input.attachments })
+      : await postPartnerText({ tenantId: auth.context.tenantId, partnerId: parsed.data.partner_id!, userId: auth.context.userId, message: parsed.data.message, mentions: parsed.data.mentions, attachments: input.attachments });
+    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.agent_partner_chat_message_sent", targetType: "partner_channel", targetId: parsed.data.channel_id ?? parsed.data.partner_id!, metadata: { actorPlane: "agent", attachmentCount: input.attachments.length }, request });
+    return NextResponse.json({ message }, { status: 201 });
+  } catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : "Could not send message" }, { status: 400 }); }
+}
+
+export async function PATCH(request: NextRequest) {
+  const auth = await requireFeatureRole("inbound_transfers", roles, { write: true });
+  if (auth instanceof NextResponse) return auth;
+  const body = await request.json().catch(() => null) as { channel_id?: unknown; partner_id?: unknown } | null;
+  try {
+    if (typeof body?.channel_id === "string" && z.string().uuid().safeParse(body.channel_id).success) await markChannelRead(auth.context.tenantId, body.channel_id, auth.context.userId);
+    else if (typeof body?.partner_id === "string" && z.string().uuid().safeParse(body.partner_id).success) await markPartnerChatRead(auth.context.tenantId, body.partner_id, auth.context.userId);
+    else return NextResponse.json({ error: "Choose a valid chat channel" }, { status: 400 });
+    return NextResponse.json({ ok: true });
+  } catch { return NextResponse.json({ error: "Could not update read state" }, { status: 400 }); }
+}

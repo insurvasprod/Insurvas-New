@@ -1,96 +1,132 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useId, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { FeatureCatalog } from "@/components/admin/feature-catalog";
+import { FeatureDialog } from "@/components/admin/feature-dialog";
 import { FeatureSwitchesPanel, type SwitchableFeature } from "@/components/admin/feature-switches-panel";
+import { Callout } from "@/components/app/settings/primitives";
+import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
 import type { FeatureModuleGroup, FeatureModuleRow } from "@/lib/features/constants";
-import type { FeatureSwitch } from "@/lib/features/killSwitchRules";
+import { switchSummaryTitle, type FeatureSwitch, type SwitchReason } from "@/lib/features/killSwitchRules";
+
+type Tab = "catalog" | "switches";
 
 /**
- * Two genuinely separate jobs on one route, so they get tabs rather than a stack.
+ * The Features page (board p-adm-features): header, the platform-wide headline, and two tabs.
  *
- * Stacked, the kill switches sat below the whole catalog — eight module tables and twenty-seven
- * rows of scrolling before you reached the control you open this page for during an incident.
- * Tabs also stop the page implying the switches are part of editing the catalog: naming a feature
- * and taking it away from every paying customer are not the same kind of act, and they do not even
- * have the same permission.
+ * Two genuinely separate jobs on one route, so they get tabs rather than a stack. Stacked, the kill
+ * switches sat below eight module tables — twenty-seven rows of scrolling before the control you
+ * open this page for during an incident. Tabs also stop the page implying the switches are part of
+ * editing the catalog: naming a feature and taking it away from every paying customer are not the
+ * same kind of act, and they do not have the same permission.
  */
 export function FeaturesSection({
-  groups,
+  groups: initialGroups,
   modules,
   switchable,
   switches,
+  reasons,
+  counts,
   canToggle,
 }: {
   groups: FeatureModuleGroup[];
   modules: FeatureModuleRow[];
   switchable: SwitchableFeature[];
   switches: FeatureSwitch[];
+  reasons: Record<string, SwitchReason>;
+  counts: { off: number; beta: number };
   canToggle: boolean;
 }) {
-  const [tab, setTab] = useState<"catalog" | "switches">("catalog");
-  const offCount = switches.filter((s) => s.state !== "on").length;
+  const router = useRouter();
+  const baseId = useId();
+  // A switch that is not fully on is the reason anyone opens this page during an incident.
+  const [tab, setTab] = useState<Tab>(counts.off + counts.beta > 0 ? "switches" : "catalog");
+  const [groups, setGroups] = useState(initialGroups);
+  const [creating, setCreating] = useState(false);
 
-  const tabs = [
-    { id: "catalog" as const, label: "Catalog", count: switchable.length },
-    // The count is on the tab so an active kill switch is visible without opening it.
-    { id: "switches" as const, label: "Kill switches", count: offCount || null },
+  const refresh = useCallback(async () => {
+    const res = await fetch("/api/admin/features");
+    if (res.ok) {
+      const body = await res.json();
+      setGroups(body.groups);
+    }
+    // The switch list and the override counts are read on the server.
+    router.refresh();
+  }, [router]);
+
+  const title = switchSummaryTitle(counts);
+  const tabs: { id: Tab; label: string }[] = [
+    { id: "catalog", label: "Catalog" },
+    { id: "switches", label: "Switches" },
   ];
 
   return (
-    <div>
-      <div role="tablist" aria-label="Features" className="mb-6 flex gap-1 border-b border-border">
-        {tabs.map((t) => {
-          const active = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              role="tab"
-              type="button"
-              aria-selected={active}
-              onClick={() => setTab(t.id)}
-              className={`-mb-px flex items-center gap-2 border-b-2 px-3.5 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-blue)] ${
-                active
-                  ? "border-[var(--color-blue)] font-semibold text-[var(--color-accent-ink)]"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {t.label}
-              {t.count !== null && (
-                <span
-                  className={`rounded-full px-1.5 py-px text-[11px] font-semibold tabular-nums ${
-                    t.id === "switches" && offCount > 0
-                      ? "bg-[var(--color-danger)]/10 text-[var(--color-danger)]"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {t.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader
+        title="Features"
+        actions={
+          <Button type="button" onClick={() => setCreating(true)}>
+            New feature
+          </Button>
+        }
+      />
+
+      {(() => {
+        const all = groups.flatMap((group) => group.features);
+        const live = all.filter((feature) => !feature.is_archived);
+        const unsold = live.filter((feature) => feature.plan_reference_count + feature.addon_reference_count === 0).length;
+        return (
+          <StatStrip label="Features">
+            <StatTile label="Features" value={live.length.toLocaleString("en-US")} footnote={`${(all.length - live.length).toLocaleString("en-US")} archived`} />
+            <StatTile label="Modules" value={modules.length.toLocaleString("en-US")} footnote="groups in the catalog" />
+            <StatTile label="In no plan or add-on" value={unsold.toLocaleString("en-US")} valueTone={unsold > 0 ? "warning" : undefined} footnote="not sold anywhere" />
+            <StatTile label="Switched off" value={counts.off.toLocaleString("en-US")} valueTone={counts.off > 0 ? "danger" : undefined} footnote="for every customer" />
+            <StatTile label="In beta" value={counts.beta.toLocaleString("en-US")} footnote={`of ${switchable.length.toLocaleString("en-US")} switchable`} />
+          </StatStrip>
+        );
+      })()}
+
+      {title && <Callout tone="warning" title={title} />}
+
+      <UnderlineTabs
+        label="Features"
+        tabs={tabs.map((t) => ({ key: t.id, label: t.label }))}
+        value={tab}
+        onChange={setTab}
+        idPrefix={`${baseId}-tab`}
+        controls={(key) => `${baseId}-panel-${key}`}
+      />
+
+      <div
+        role="tabpanel"
+        id={`${baseId}-panel-${tab}`}
+        aria-labelledby={`${baseId}-tab-${tab}`}
+        className="flex min-w-0 flex-col"
+      >
+        {tab === "catalog" ? (
+          <FeatureCatalog groups={groups} modules={modules} onRefresh={refresh} />
+        ) : (
+          <FeatureSwitchesPanel
+            features={switchable}
+            initialSwitches={switches}
+            initialReasons={reasons}
+            canToggle={canToggle}
+          />
+        )}
       </div>
 
-      {tab === "catalog" ? (
-        <FeatureCatalog initialGroups={groups} modules={modules} />
-      ) : canToggle ? (
-        <div>
-          <p className="mb-4 max-w-[72ch] text-sm text-muted-foreground">
-            Switching a feature off takes it away from every tenant immediately, whatever their plan says.
-            Entitlements are untouched &mdash; nobody loses anything they paid for, and agents see a maintenance
-            notice rather than an upgrade prompt.
-          </p>
-          <FeatureSwitchesPanel features={switchable} initialSwitches={switches} />
-        </div>
-      ) : (
-        // platform_config maintains the catalog but cannot switch a feature off. Saying so beats a
-        // tab that silently does nothing, and the API refuses them regardless.
-        <p className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
-          Only a super admin can switch a feature off for everyone. You can still edit the catalog.
-        </p>
-      )}
+      <FeatureDialog
+        mode="create"
+        open={creating}
+        modules={modules}
+        onClose={() => setCreating(false)}
+        onSaved={refresh}
+      />
     </div>
   );
 }

@@ -7,6 +7,8 @@
 //        npm run metrics:build -- 365   (last year)
 import { createClient } from "@supabase/supabase-js";
 
+import { buildMetricsDays } from "../lib/metrics/buildDaily.ts";
+
 const days = Number(process.argv[2] ?? 90);
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
@@ -14,18 +16,11 @@ const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.
 
 console.log(`Building ${days} day(s) of metrics…`);
 
-let built = 0;
-for (let i = days; i >= 0; i--) {
-  const date = new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10);
-  const { error } = await supabase.rpc("compute_metrics_for_date", { p_date: date });
-  if (error) {
-    console.error(`  ${date}: ${error.message}`);
-    process.exit(1);
-  }
-  built++;
-}
+// The same function the nightly /api/cron/metrics-daily route calls (lib/metrics/buildDaily.ts).
+const run = await buildMetricsDays(supabase, days, { log: (line) => console.error(line) });
+if (run.error) process.exit(1);
 
-console.log(`Built ${built} day(s).`);
+console.log(`Built ${run.built} day(s).`);
 
 const { data: latest } = await supabase
   .from("metrics_daily").select("*").order("date", { ascending: false }).limit(1).maybeSingle();

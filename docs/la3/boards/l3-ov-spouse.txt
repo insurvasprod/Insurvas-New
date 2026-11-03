@@ -1,0 +1,147 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "All systems normal"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Read-write"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "Final Expense · $15,000 · 418 W Roosevelt St, Phoenix AZ."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+          "Payment"
+        <span> {gap:10px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+            "Draft day 23rd"
+      <div> {padding:16px 22px;fsize:14px;fweight:400;color:#33383f}
+        "$71.20 a month · account ending 8821 · first draft 23 Oct 2026."
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+          "Household"
+        <span> {gap:10px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "1 application"
+      <div> {padding:16px 22px;fsize:14px;fweight:400;color:#60646c}
+        "Two people at one address are still two applications. Only the facts about the address and the money can be shared."
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+          "Beneficiaries"
+        <span> {gap:10px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+            "100% allocated"
+      <div> {padding:16px 22px;fsize:14px;fweight:400;color:#33383f}
+        "Emmanuel Oyelaran, spouse, 60%. Ayodele Oyelaran, son, 40%."
+--- beside main (overlay) ---
+<div> {bg:rgba(10,12,16,.55);justify-content:center;padding:76px 0 0 0}
+  <div .m-swap> {width:720px;flex-direction:column;bd:1px solid #7a828e;bd-radius:12px;bg:#ffffff}
+    <div> {justify-content:space-between;gap:16px;padding:18px 22px;bd-bottom:1px solid #d5dbe3}
+        <h2> {fsize:18px;fweight:600;color:#15191e}
+          "Link a second application as a household"
+        <p> {fsize:14px;fweight:400;color:#60646c}
+          "Grace Oyelaran · 418 W Roosevelt St, Phoenix AZ"
+      <div> {gap:14px}
+        <button type="button" aria-label="Close"> {width:30px;height:30px;justify-content:center;bd:1px solid #d5dbe3;bd-radius:8px;bg:#ffffff;color:#60646c;padding:0}
+          <svg/>
+    <div> {padding:22px;flex-direction:column;gap:18px}
+      <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+        <label>
+          <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+            "Spouse’s full name"
+          <input type="text" value="Emmanuel Oyelaran"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+        <label>
+          <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+            "Date of birth"
+          <input type="text" value="22 Jun 1956"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+          <span> {fsize:12px;fweight:400;color:#60646c}
+            "He turns 70 in June — rates change then"
+      <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+        <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+          <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+            "What the second application copies"
+          <span> {gap:10px}
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+              "4 of 4 on"
+        <div> {padding:13px 18px;bd-top:1px solid #d5dbe3}
+          <div> {justify-content:space-between;gap:16px}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Address"
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "418 W Roosevelt St, Phoenix AZ 85003. Turn it off and the household link is dropped with it."
+            <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+              <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+        <div> {padding:13px 18px;bd-top:1px solid #d5dbe3}
+          <div> {justify-content:space-between;gap:16px}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Contact details"
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "The same landline and the same email reach both people."
+            <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+              <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+        <div> {padding:13px 18px;bd-top:1px solid #d5dbe3}
+          <div> {justify-content:space-between;gap:16px}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Payment method"
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "One bank account, ending 8821, drafted twice."
+            <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+              <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+        <div> {padding:13px 18px;bd-top:1px solid #d5dbe3}
+          <div> {justify-content:space-between;gap:16px}
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Draft day"
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Both premiums leave on the 23rd, so the statement shows one date."
+            <span role="img" aria-label="On"> {width:38px;height:22px;padding:2px;bd-radius:9999px;bg:#138a43;justify-content:flex-end}
+              <span> {width:18px;height:18px;bd-radius:9999px;bg:#ffffff}
+      <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #c92a2a;bd-radius:12px;bg:#fdeaea}
+        <div> {fsize:14px;fweight:400;fweight:600;color:#b02020}
+          "Health information is never copied"
+        <p> {fsize:14px;fweight:400;color:#33383f}
+          "Two people, two sets of answers. The interview runs again from the start for the second application."
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px}
+        <div> {gap:20px}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Combined monthly total"
+            <div> {gap:8px}
+              <span> {fsize:14px;fweight:400;color:#33383f}
+                "$71.20"
+              <span> {fsize:14px;fweight:400;color:#60646c}
+                "+"
+              <span> {fsize:14px;fweight:400;color:#33383f}
+                "$58.90"
+              <span> {fsize:14px;fweight:400;color:#60646c}
+                "="
+              <span> {fsize:24px;fweight:600;color:#15191e}
+                "$130.10"
+            <div> {fsize:12px;fweight:400;color:#60646c}
+              "Two drafts on the 23rd, not one. Read her both figures — the bank statement will show them separately."
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+              "One welcome email"
+        <div> {fsize:12px;fweight:400;color:#60646c;bd-top:1px solid #d5dbe3}
+          "One welcome email goes out when both applications share an address, covering both policies. Split the address and each gets its own."
+    <div> {justify-content:space-between;gap:16px;padding:14px 22px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+      <span> {fsize:12px;fweight:400;color:#60646c}
+        "Linking can be undone until either application is submitted."
+      <span> {gap:10px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Cancel"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+          "Create the linked application"

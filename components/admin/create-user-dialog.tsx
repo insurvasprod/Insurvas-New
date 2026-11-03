@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,15 +15,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TENANT_ROLES, TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
+import type { PlanListRow } from "@/lib/plans/constants";
 import { InviteLinkPanel } from "./invite-link-panel";
+import { inputControl } from "@/components/ui/field";
 
 export type TenantOption = { id: string; name: string };
 
@@ -35,17 +30,25 @@ type Form = {
   phone: string;
   tenantId: string;
   newTenantName: string;
+  planId: string;
   role: TenantRole;
 };
 
-const EMPTY: Form = { name: "", email: "", phone: "", tenantId: "", newTenantName: "", role: "producer" };
+const EMPTY: Form = { name: "", email: "", phone: "", tenantId: "", newTenantName: "", planId: "", role: "producer" };
 
 export function CreateUserDialog({
   tenants,
+  plans,
   onCreated,
+  triggerLabel,
+  triggerClassName,
 }: {
   tenants: TenantOption[];
+  plans: PlanListRow[];
   onCreated: () => void;
+  /** The Users board's header button ("Create user", 44px). Omitted: the original small button. */
+  triggerLabel?: string;
+  triggerClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<Form>(EMPTY);
@@ -68,6 +71,15 @@ export function CreateUserDialog({
 
   const creatingNewTenant = form.tenantId === NEW_TENANT;
 
+  function chooseTenant(value: string) {
+    setForm((prev) => ({
+      ...prev,
+      tenantId: value,
+      role: value === NEW_TENANT ? "owner" : prev.tenantId === NEW_TENANT ? "producer" : prev.role,
+      planId: value === NEW_TENANT ? prev.planId : "",
+    }));
+  }
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
@@ -81,6 +93,7 @@ export function CreateUserDialog({
         phone: form.phone,
         tenantId: creatingNewTenant ? undefined : form.tenantId,
         newTenantName: creatingNewTenant ? form.newTenantName : "",
+        planId: creatingNewTenant ? form.planId : undefined,
         role: form.role,
       }),
     });
@@ -88,21 +101,27 @@ export function CreateUserDialog({
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not create user");
+      notify.block(body?.error ?? "Could not create user");
       return;
     }
 
-    toast.success(`${body.user.email} created`);
+    notify.done(`${body.user.email} created`);
     setInvite({ url: body.invite.url, expiresAt: body.invite.expiresAt, email: body.user.email });
     onCreated();
   }
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <Button size="sm" onClick={() => setOpen(true)}>
-        <Plus />
-        New user
-      </Button>
+      {triggerLabel ? (
+        <Button type="button" className={triggerClassName} onClick={() => setOpen(true)}>
+          {triggerLabel}
+        </Button>
+      ) : (
+        <Button size="sm" onClick={() => setOpen(true)}>
+          <Plus />
+          New user
+        </Button>
+      )}
       <DialogContent>
         {invite ? (
           <>
@@ -147,34 +166,60 @@ export function CreateUserDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="user-tenant">Tenant</Label>
-                <Select value={form.tenantId} onValueChange={(v) => set("tenantId", v)}>
-                  <SelectTrigger id="user-tenant" className="w-full">
-                    <SelectValue placeholder="Choose…" />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select id="user-tenant" className={inputControl} value={form.tenantId} onChange={(event) => chooseTenant(event.target.value)}><option value="" disabled>Choose…</option>
+                    {/*
+                      The action goes before the data, not after it. This list is every tenant on
+                      the platform — 563 entries on 2026-09-21 — and "+ Create new tenant" sat at
+                      the very bottom, past all of them. It was not merely awkward: the option
+                      rendered off-canvas and could not be clicked at all without scrolling the
+                      listbox to its end.
+                      That matters because creating a tenant is the whole reason SA-1.2 exists
+                      ("sales closes a deal on a call and wants the account ready before hanging
+                      up"), and it is also the only route to the plan picker below.
+                    */}
+                    <option value={NEW_TENANT}>+ Create new tenant</option>
                     {tenants.map((t) => (
-                      <SelectItem key={t.id} value={t.id}>
+                      <option key={t.id} value={t.id}>
                         {t.name}
-                      </SelectItem>
+                      </option>
                     ))}
-                    <SelectItem value={NEW_TENANT}>+ Create new tenant</SelectItem>
-                  </SelectContent>
-                </Select>
+                  </select>
               </div>
+              {creatingNewTenant && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="user-plan">Initial plan</Label>
+                  <select id="user-plan" className={inputControl} value={form.planId} onChange={(event) => { const v = event.target.value; set("planId", v); }}><option value="" disabled>Choose a plan…</option>
+                      {plans.map((plan) => (
+                        <option key={plan.id} value={plan.id}>
+                          {plan.name} ({plan.code}, v{plan.version})
+                        </option>
+                      ))}
+                    </select>
+                  {/*
+                    The trial half of this sentence was missing, and the omission had a price. A
+                    plan with trial days produces a subscription in `trialing`, not `active` — so
+                    an admin creating an account for a customer who has ALREADY agreed to pay was
+                    silently starting a free trial, and the first charge landed a fortnight after
+                    the business expected it. Stated rather than left to be discovered on an
+                    invoice.
+                  */}
+                  <p className="text-xs text-muted-foreground">
+                    The new tenant starts on this plan at the monthly cycle. If the plan includes
+                    trial days, the subscription begins as a trial — not as active — and is not
+                    charged until the trial ends.
+                  </p>
+                </div>
+              )}
               <div className="space-y-1.5">
                 <Label htmlFor="user-role">Role in tenant</Label>
-                <Select value={form.role} onValueChange={(v) => set("role", v as TenantRole)}>
-                  <SelectTrigger id="user-role" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select id="user-role" className={inputControl} value={form.role} onChange={(event) => { const v = event.target.value; set("role", v as TenantRole); }} disabled={creatingNewTenant}>
                     {TENANT_ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
+                      <option key={r} value={r}>
                         {TENANT_ROLE_LABELS[r]}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
+                {creatingNewTenant && <p className="text-xs text-muted-foreground">The first member of a new tenant is always its owner.</p>}
               </div>
               {creatingNewTenant && (
                 <div className="col-span-2 space-y-1.5">
@@ -189,7 +234,7 @@ export function CreateUserDialog({
               )}
             </div>
             <DialogFooter>
-              <Button type="submit" disabled={loading || !form.tenantId}>
+              <Button type="submit" disabled={loading || !form.tenantId || (creatingNewTenant && (!form.newTenantName.trim() || !form.planId))}>
                 {loading ? "Creating…" : "Create & invite"}
               </Button>
             </DialogFooter>

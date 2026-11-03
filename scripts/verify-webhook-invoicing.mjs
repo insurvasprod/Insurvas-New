@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // bugs_sa.md M3-2 · A real payment that cannot be invoiced must NOT be acknowledged.
 //
 // createInvoiceFromPayment returned a bare null on six different conditions and the webhook
@@ -73,12 +74,13 @@ try {
         typeof realEvent?.process_error === "string" && /no invoice|plan_not_found|plan_not_ours/i.test(realEvent.process_error),
         String(realEvent?.process_error).slice(0, 120));
 
-  const { data: invoices } = await supabase.from("invoices").select("id").eq("tenant_id", t.id);
+  const { data: invoices } = await supabase.from("platform_invoices").select("id").eq("tenant_id", t.id);
   check("  and no invoice was invented for it", (invoices ?? []).length === 0, `${invoices?.length} invoice(s)`);
 } finally {
   for (const id of tenants) {
-    await supabase.from("invoices").delete().eq("tenant_id", id);
-    await supabase.from("tenants").delete().eq("id", id);
+    // The real-tenant branch may have produced immutable history before a
+    // later processing step failed. Preserve it and deactivate the fixture.
+    await supabase.from("tenants").update({ status: "suspended" }).eq("id", id);
   }
   for (const id of eventIds) await supabase.from("webhook_events").delete().eq("event_id", id);
 }

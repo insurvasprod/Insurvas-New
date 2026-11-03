@@ -15,7 +15,7 @@ export type LoginEventRow = {
   failure_reason: string | null;
 };
 
-export const ACTIVITY_PAGE_SIZE = 25;
+export const ACTIVITY_PAGE_SIZE = 10;
 
 /** Why an attempt failed. A small closed set so the UI can label them. */
 export const LOGIN_FAILURE_REASONS = {
@@ -26,6 +26,13 @@ export const LOGIN_FAILURE_REASONS = {
   no_membership: "No tenant membership",
   invalid_2fa: "Wrong 2FA code",
   expired_2fa: "2FA step expired",
+  // A correct code that had already been accepted once, or one older than the last accepted code
+  // (admin verify-2fa replay protection). Counts toward the 2FA lockout like a wrong code.
+  replayed_2fa: "2FA code already used",
+  // Refused by login protection before the password was checked (lib/authProtection). Logged at
+  // most once a minute per email + IP, so a burst of blocked requests is one row, not hundreds.
+  locked_out: "Locked out after repeated failures",
+  rate_limited: "Too many attempts, rate limited",
 } as const;
 
 export type LoginFailureReason = keyof typeof LOGIN_FAILURE_REASONS;

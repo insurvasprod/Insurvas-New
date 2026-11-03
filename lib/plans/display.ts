@@ -6,20 +6,19 @@
  * agent app was showing `plan_c` back at the person paying for it, and "You're on plan_c (v3)"
  * across the top of their dashboard.
  *
- * This only tidies. It does NOT map codes to marketing names, because the real names live in
- * `plans.name` and the agent app is forbidden from reading that table: "the agent app reads this
- * one object and obeys it — it never queries a plan, a subscription or a price". Hardcoding a
- * second set of names here would be a copy that silently disagrees with the admin screen the first
- * time somebody renames a plan.
- *
- * The proper fix is for `resolve_tenant_entitlement` to put the plan's display name in the blob.
- * That is a change to the contract and belongs with its own migration — see docs/backlog.md.
+ * The real names live in `plans.name`, and the agent app is forbidden from reading that table: "the
+ * agent app reads this one object and obeys it — it never queries a plan, a subscription or a
+ * price". Since 20261003100000 (LA-4.10, backlog #75) the entitlement blob carries that name as
+ * `plan_name`, so it is used when present — "Ledger", not "Basic". A blob computed before then has
+ * no name, and the code is tidied as before. Never hardcode a second set of names here: it would
+ * silently disagree with the admin screen the first time somebody renames a plan.
  *
  * A version number is dropped entirely rather than tidied. It tells an operator which plan version
  * an entitlement was computed from; it tells a customer nothing except that something they do not
  * understand has changed three times.
  */
-export function planDisplayName(planCode: string | null): string {
+export function planDisplayName(planCode: string | null, planName?: string | null): string {
+  if (planName?.trim()) return planName.trim();
   if (!planCode) return "No plan";
   return planCode
     .replace(/[_-]+/g, " ")

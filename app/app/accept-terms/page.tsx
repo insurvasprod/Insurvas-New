@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 
-import { resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
+import { getTenantSession, resolveTenantContext } from "@/lib/tenantAuth/requireTenant";
 import { outstandingDocuments } from "@/lib/legal/acceptance";
 import { fetchDocument } from "@/lib/legal/queries";
 import { AcceptTermsPanel } from "@/components/app/accept-terms-panel";
+import { AppAuthFrame } from "@/components/app/app-auth-frame";
 
 export const metadata: Metadata = { title: "Updated terms · Insurvas" };
 
@@ -15,12 +16,14 @@ export const metadata: Metadata = { title: "Updated terms · Insurvas" };
  * outstanding, so a screen inside it would redirect to itself forever.
  */
 export default async function AcceptTermsPage() {
-  const context = await resolveTenantContext();
+  // Both keyed by the verified session, so fetched together; the context is still checked first.
+  const session = await getTenantSession();
+  if (!session) redirect("/app/login");
+  const [context, outstanding] = await Promise.all([resolveTenantContext(), outstandingDocuments(session.sub)]);
   if (!context) redirect("/app/login");
 
-  const outstanding = await outstandingDocuments(context.userId);
   // Nothing owed — they arrived by typing the URL, or accepted in another tab.
-  if (outstanding.length === 0) redirect("/app");
+  if (outstanding.length === 0) redirect("/app/dashboard");
 
   // The full text is loaded here rather than linked away to, because "accept without reading" is
   // easier to argue with when the words were on the screen.
@@ -43,11 +46,10 @@ export default async function AcceptTermsPage() {
     }),
   );
 
+  // The one auth layout, wide: a document to read and accept (foundation v3, owner 2026-10-27).
   return (
-    <div className="min-h-screen bg-[var(--color-page-bg)] py-10">
-      <main className="mx-auto max-w-3xl px-4 sm:px-6">
-        <AcceptTermsPanel documents={documents} />
-      </main>
-    </div>
+    <AppAuthFrame width="wide">
+      <AcceptTermsPanel documents={documents} />
+    </AppAuthFrame>
   );
 }

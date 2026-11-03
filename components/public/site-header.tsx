@@ -1,26 +1,117 @@
+"use client";
+
 import Link from "next/link";
-import { Building2 } from "lucide-react";
+import { ViewTransition, useEffect, useState } from "react";
+import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import styles from "@/components/public/site-header.module.css";
+import { ThemeSwitch } from "@/components/public/theme-switch";
 
-export function SiteHeader() {
+/**
+ * The marketing rail (2026-10-13): a floating, borderless glass pill rather than a full-width bar.
+ * At the top of the page it sits nearly clear over the hero; once you scroll it firms up its glass
+ * and casts a soft shadow. A light/dark switch sits beside Sign in. Links are 14px semibold, so the
+ * nav never competes with the headline.
+ *
+ * `floating` (the landing page) lets the hero run underneath it; the other public pages keep it in
+ * the flow. The section links are anchors on the landing page (/#…), so they work from every public
+ * page. Below xl the nav folds into the shared Popover (foundation v3): a tap on one of its links,
+ * Escape, or anywhere outside it closes it again, and focus returns to the menu button.
+ *
+ * Phones (2026-10-22): the pill tightens below sm and the logo steps down below 380px, so logo, trial
+ * button and menu fit a 320px screen; below that (fold covers) the trial button moves into the
+ * menu. The menu also carries the light/dark switch the bar drops below sm.
+ */
+const NAV: Array<{ href: string; label: string; key?: "home" | "pricing" }> = [
+  { href: "/#product", label: "Product" },
+  { href: "/#features", label: "Features" },
+  { href: "/#industries", label: "Who it's for" },
+  { href: "/#faq", label: "FAQ" },
+  { href: "/pricing", label: "Pricing", key: "pricing" },
+];
+
+export function SiteHeader({ current, floating = false }: { current?: "home" | "pricing"; floating?: boolean }) {
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const closeMenu = () => setMenuOpen(false);
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 24);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
+
   return (
-    <header className="border-b border-white/10 bg-[var(--brand-800)] text-white">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/pricing" className="flex items-center gap-2 font-extrabold tracking-tight">
-          <span className="flex size-9 items-center justify-center rounded-xl bg-white/10">
-            <Building2 className="size-5" />
-          </span>
-          Insurvas
+    <header className={`${floating ? "fixed inset-x-0" : "sticky"} top-0 z-50 px-3 pt-3 sm:px-6`}>
+      <div
+        // Borderless frosted glass: mostly transparent, with a strong blur and a little extra
+        // saturation so whatever scrolls underneath shows through softened, like a reflection.
+        className={`relative mx-auto flex items-center gap-2 overflow-visible rounded-full border-0 py-2.5 pl-4 pr-2 backdrop-blur-2xl sm:gap-3 sm:py-3 sm:pl-6 sm:pr-3 backdrop-saturate-150 transition-[max-width,background-color,box-shadow] duration-500 ease-[cubic-bezier(.16,1,.3,1)] md:gap-8 ${
+          scrolled
+            ? "max-w-6xl bg-[color-mix(in_srgb,var(--color-card)_38%,transparent)] shadow-[0_12px_40px_-24px_rgba(13,64,55,.35)]"
+            : "max-w-7xl bg-[color-mix(in_srgb,var(--color-card)_18%,transparent)] shadow-none"
+        }`}
+      >
+        <Link href="/" aria-current={current === "home" ? "page" : undefined} className="flex shrink-0 items-center no-underline">
+          {/* Named, so it glides into the sign-in form's logo (AuthBrand). */}
+          <ViewTransition name="brand-logo" share="ribbon-morph" default="none">
+            <InsurvasLogo size="public" alt="Insurvas" className={styles.introLogo} />
+          </ViewTransition>
         </Link>
-        <nav className="flex items-center gap-2">
-          <Button asChild variant="ghost" className="text-white hover:bg-white/10 hover:text-white">
+
+        <nav aria-label="Primary" className="mx-auto hidden max-w-2xl flex-1 items-center justify-evenly gap-2 xl:flex xl:gap-4">
+          {NAV.map((item) => {
+            const active = item.key && current === item.key;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={active ? "page" : undefined}
+                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold tracking-[-0.01em] no-underline transition-colors ${active ? "bg-[var(--surface-alt)] text-foreground" : "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--surface-alt)_80%,transparent)] hover:text-foreground"}`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
+
+        <span className="flex-1 xl:hidden" />
+
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Off below sm: logo + switch + trial + menu is wider than a 375px phone, which clipped the
+              menu button off the edge (QA 2026-10-22). The phone follows the system theme. */}
+          <span className="hidden sm:contents"><ThemeSwitch /></span>
+          <Button asChild variant="ghost" className="hidden h-10 rounded-full px-4 sm:inline-flex">
             <Link href="/app/login">Sign in</Link>
           </Button>
-          <Button asChild className="bg-white text-[var(--brand-800)] hover:bg-[var(--brand-50)]">
-            <Link href="/signup">Start free trial</Link>
+          <Button asChild className="h-10 rounded-full px-3 text-sm max-[319px]:hidden sm:px-5">
+            <Link href="/signup"><span className="sm:hidden">Try free</span><span className="hidden sm:inline">Start free trial</span></Link>
           </Button>
-        </nav>
+          <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+            <PopoverTrigger asChild>
+              <button type="button" aria-label="Menu" className="flex size-10 cursor-pointer items-center justify-center rounded-full border border-[var(--border-strong)] text-foreground xl:hidden">
+                <Menu className="size-4" aria-hidden="true" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" sideOffset={10} className="w-56 p-2">
+              {NAV.map((item) => (
+                <Link key={item.href} href={item.href} onClick={closeMenu} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-[var(--surface-alt)]">
+                  {item.label}
+                </Link>
+              ))}
+              <div className="my-1 border-t border-border" />
+              <Link href="/app/login" onClick={closeMenu} className="block rounded-lg px-3 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-[var(--surface-alt)]">Sign in</Link>
+              <Link href="/signup" onClick={closeMenu} className="mt-1 block rounded-lg bg-[var(--primary)] px-3 py-2.5 text-center text-sm font-semibold text-[var(--on-primary)] no-underline min-[320px]:hidden">Start free trial</Link>
+              <div className="flex items-center justify-between rounded-lg px-3 py-1 sm:hidden">
+                <span className="text-sm font-semibold text-foreground">Theme</span>
+                <ThemeSwitch />
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
     </header>
   );

@@ -44,7 +44,10 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
   try {
-    await deleteAnnouncement(id);
+    // Audit only a deletion that happened. Claiming one that did not puts a false entry in a log
+    // that is insert-only and therefore cannot be corrected.
+    const deleted = await deleteAnnouncement(id);
+    if (!deleted) return NextResponse.json({ error: "Announcement not found" }, { status: 404 });
     await audit({ actorId: auth.session.sub, action: "announcement.deleted", targetType: "announcement", targetId: id, request });
     return NextResponse.json({ ok: true });
   } catch (error) {

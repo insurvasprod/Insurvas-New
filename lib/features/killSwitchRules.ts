@@ -75,6 +75,53 @@ export function killSwitchNotice(featureSwitch: FeatureSwitch | undefined): stri
   return featureSwitch.off_message?.trim() || null;
 }
 
+/**
+ * What an agent reads on a killed page when the admin left no message. It has to match the fallback
+ * in components/app/feature-gate-notice.tsx word for word, because the admin screen quotes it as
+ * "what the customer sees" — killSwitchRules.test.mjs reads that file and fails if they drift.
+ */
+export const STANDARD_KILL_NOTICE = "We've switched this off for everyone while we work on it. Nothing you need to do.";
+
+/**
+ * The internal half of a switch: the reason given with its most recent change. Not stored on the
+ * switch — it is the `reason` of the latest feature.switch_changed audit row, which is required by
+ * the API, so every change made through the screen has one.
+ */
+export type SwitchReason = {
+  reason: string | null;
+  /** ISO timestamp of that change. */
+  changedAt: string;
+  /** "22 Sep 2026 08:40:55 UTC", formatted on the server so hydration cannot differ. */
+  changedAtUtc: string;
+  changedBy: string | null;
+};
+
+/**
+ * "Off for everyone" and "named tenants only" counted apart. Beta is not off: the named tenants can
+ * still use it, so one number for both made the headline claim more than was true.
+ */
+export function switchCounts(switches: Iterable<Pick<FeatureSwitch, "state">>): { off: number; beta: number } {
+  let off = 0;
+  let beta = 0;
+  for (const s of switches) {
+    if (s.state === "off") off += 1;
+    else if (s.state === "beta") beta += 1;
+  }
+  return { off, beta };
+}
+
+const featureCount = (n: number) => (n === 1 ? "1 feature" : `${n} features`);
+
+/** The Features page's headline, or null when every feature is fully on. */
+export function switchSummaryTitle({ off, beta }: { off: number; beta: number }): string | null {
+  if (off > 0 && beta > 0) {
+    return `${featureCount(off)} ${off === 1 ? "is" : "are"} off for everyone, ${beta} limited to named tenants`;
+  }
+  if (off > 0) return `${featureCount(off)} ${off === 1 ? "is" : "are"} switched off platform-wide`;
+  if (beta > 0) return `${featureCount(beta)} ${beta === 1 ? "is" : "are"} limited to named tenants`;
+  return null;
+}
+
 export const OFF_MESSAGE_MAX = 300;
 
 /** Why a submitted switch was refused, in words an admin can act on. */
@@ -94,4 +141,32 @@ export function switchRefusalReason(input: {
     return `The message must be ${OFF_MESSAGE_MAX} characters or fewer.`;
   }
   return null;
+}
+
+/**
+ * The save named a feature_key the catalog does not have (Postgres 23503 on the foreign key).
+ * Carried as a class with the code, not as text inside a message: the route used to look for
+ * "23503" in the message, and the message setSwitch threw never contained it, so a typo got the
+ * generic "Could not save this switch" (audit, 2026-10-15).
+ */
+export class UnknownFeatureKeyError extends Error {
+  readonly code = "23503";
+  readonly featureKey: string;
+  constructor(featureKey: string) {
+    super(`No feature called "${featureKey}" exists in the catalog.`);
+    this.name = "UnknownFeatureKeyError";
+    this.featureKey = featureKey;
+  }
+}
+
+type DbError = { code?: string | null; message?: string | null; details?: string | null } | null | undefined;
+
+/**
+ * A foreign-key violation (23503) on the feature key — not on updated_by, the other foreign key on
+ * both switch tables, which would mean a missing admin row rather than a mistyped feature.
+ */
+export function isUnknownFeatureKeyViolation(error: DbError): boolean {
+  if (error?.code !== "23503") return false;
+  const text = `${error.message ?? ""} ${error.details ?? ""}`;
+  return !/updated_by/.test(text);
 }

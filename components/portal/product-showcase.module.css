@@ -1,0 +1,186 @@
+/*
+ * The product showcase beside sign-in and sign-up (manager review, 2026-10-28: "images and cool
+ * animations of what the software looks like, and its features, in a slide show").
+ *
+ * Every scene sits in one grid cell; the active one fades and rises in, the others fade out. A
+ * scene's own animations only run while it is active, so they replay each time it comes round.
+ * Composite-only properties (opacity, transform) throughout; nothing animates layout.
+ */
+
+.stage {
+  display: grid;
+}
+
+.scene {
+  grid-area: 1 / 1;
+  opacity: 0;
+  transform: translateY(14px) scale(0.985);
+  transition: opacity 520ms cubic-bezier(0.22, 1, 0.36, 1), transform 620ms cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+}
+
+.scene[data-active="true"] {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+/* The mock window floats a little, so the panel never looks like a still image. */
+.window {
+  animation: float 7s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* ── Parts that enter one after another (delay set inline) ─────────────────────────────────── */
+
+.rise,
+.pop,
+.fadeIn,
+.fadeOut,
+.fill,
+.slideIn,
+.draw {
+  opacity: 0;
+}
+
+.scene[data-active="true"] .rise {
+  animation: rise 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.scene[data-active="true"] .pop {
+  animation: pop 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.scene[data-active="true"] .fadeIn {
+  animation: fadeIn 360ms ease-out both;
+}
+
+/* Shown first, then gone: "Claim" before it becomes "Claimed". */
+.fadeOut {
+  opacity: 1;
+}
+.scene[data-active="true"] .fadeOut {
+  animation: fadeOut 260ms ease-in both;
+}
+
+.scene[data-active="true"] .fill {
+  transform-origin: left center;
+  animation: fill 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.scene[data-active="true"] .slideIn {
+  animation: slideIn 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.scene[data-active="true"] .draw {
+  transform-origin: left center;
+  animation: fill 1400ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+/* A ringing call: two soft rings leaving the avatar. */
+.ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  opacity: 0;
+}
+.scene[data-active="true"] .ring {
+  animation: ring 1.8s ease-out infinite;
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.6); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes fill {
+  from { opacity: 1; transform: scaleX(0); }
+  to { opacity: 1; transform: scaleX(1); }
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes ring {
+  0% { opacity: 0.55; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.9); }
+}
+
+/* ── The slide bars under the window ───────────────────────────────────────────────────────── */
+
+.bar {
+  transform-origin: left center;
+  transform: scaleX(0);
+}
+.bar[data-state="done"] {
+  transform: scaleX(1);
+}
+.bar[data-state="active"] {
+  animation: progress var(--slide-ms, 6500ms) linear both;
+}
+.paused .bar[data-state="active"] {
+  animation-play-state: paused;
+}
+
+@keyframes progress {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* Reduced motion: every part in its final state, no float, no rings, slides change without moving. */
+@media (prefers-reduced-motion: reduce) {
+  .scene { transition: opacity 200ms linear; transform: none; }
+  .window,
+  .scene[data-active="true"] .rise,
+  .scene[data-active="true"] .pop,
+  .scene[data-active="true"] .fadeIn,
+  .scene[data-active="true"] .fill,
+  .scene[data-active="true"] .slideIn,
+  .scene[data-active="true"] .draw,
+  .scene[data-active="true"] .ring { animation: none; }
+  .rise, .pop, .fadeIn, .fill, .slideIn, .draw { opacity: 1; }
+  .fadeOut, .scene[data-active="true"] .fadeOut { animation: none; opacity: 0; }
+  .ring { display: none; }
+  .bar[data-state="active"] { animation: none; transform: scaleX(1); }
+}
+
+/* ── The drawn product screen ──────────────────────────────────────────────────────────────────
+ * An illustration of the app, not the app: its own fixed light palette (it always sits on the green
+ * panel, in both themes) and a small type scale, like a scaled-down screenshot. */
+
+.mock {
+  --m-ink: #0f1f1a;
+  --m-muted: #5d6d68;
+  --m-line: #e2e8e5;
+  --m-surface: #f6f8f7;
+  --m-quiet: #eef1f0;
+  --m-accent: #0b7a55;
+  --m-accent-soft: #e3f6ee;
+  --m-warn: #b4351f;
+  --m-warn-soft: #fbe9e5;
+  --m-toast-icon: #7ee2b8;
+  --m-dot-red: #ff5f57;
+  --m-dot-amber: #febc2e;
+  --m-dot-green: #28c840;
+}
+
+.xs { font-size: 11px; line-height: 1.4; }
+.sm { font-size: 12px; line-height: 1.4; }
+.md { font-size: 13px; line-height: 1.35; }
+.xl { font-size: 20px; line-height: 1.2; }

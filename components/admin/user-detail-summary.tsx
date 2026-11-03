@@ -1,93 +1,103 @@
-import { TriangleAlert } from "lucide-react";
+import { StatusChip } from "@/components/ui/status-chip";
+import Link from "next/link";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { DashboardUtcTime } from "@/components/admin/dashboard-utc-time";
+import { Callout } from "@/components/app/settings/primitives";
+import { pillTone } from "@/lib/ui/pillTone";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import type { UserDetail } from "@/lib/adminUsers/detail";
+import { userStatusTone, utcDate, utcDateTime } from "@/lib/adminUsers/detailFormat";
 import { TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
-import { USER_STATUS_BADGE_CLASS, USER_STATUS_LABELS, type UserStatus } from "@/lib/users/constants";
-import { relativeTime } from "@/lib/relativeTime";
+import { isOnboarded } from "@/lib/adminUsers/credential";
+import { userStatusLabel } from "@/lib/users/constants";
 
-type DetailUser = {
-  name: string | null;
-  email: string | null;
-  phone: string | null;
-  status: UserStatus | null;
-  tenant_name: string | null;
-  tenant_role: string | null;
-  plan_code: string | null;
-  last_login_at: string | null;
-  created_at: string | null;
-  has_password: boolean | null;
-  suspension_reason: string | null;
-  distinct_ips_24h: number | null;
-};
-
-/** More than this many distinct IPs in 24h suggests a shared account (SA-1.5). */
+/** More than this many distinct IPs in 24h suggests a shared account (same threshold as the list). */
 const SHARED_ACCOUNT_IP_THRESHOLD = 3;
 
-export function UserDetailSummary({ user }: { user: DetailUser }) {
-  const sharedAccountSuspected = (user.distinct_ips_24h ?? 0) > SHARED_ACCOUNT_IP_THRESHOLD;
+/** Names, addresses and dates rather than counts: set at 18px and truncated, as on the tenant record. */
+const FACT = "block truncate text-lg leading-[1.33]";
 
-  const fields = [
-    { label: "Tenant", value: user.tenant_name ?? "—" },
-    {
-      label: "Role",
-      value: user.tenant_role ? TENANT_ROLE_LABELS[user.tenant_role as TenantRole] : "—",
-    },
-    { label: "Phone", value: user.phone || "—" },
-    { label: "Plan", value: user.plan_code ?? "No plan yet" },
-    { label: "Last login", value: relativeTime(user.last_login_at) },
-    {
-      label: "Created",
-      value: user.created_at ? new Date(user.created_at).toLocaleDateString() : "—",
-    },
-  ];
+/**
+ * The top of the admin user record (board p-adm-user-detail): back link, header with the state
+ * chips, the shared-account warning when it applies, and the fact card. Server-rendered; times are printed in
+ * UTC with the reader's local time on hover.
+ */
+export function UserDetailSummary({ user }: { user: UserDetail }) {
+  const sharedAccountSuspected = user.distinctIps24h > SHARED_ACCOUNT_IP_THRESHOLD;
+  const roleLabel = (role: string | null) =>
+    role ? (TENANT_ROLE_LABELS[role as TenantRole] ?? role) : null;
+
+  const agencies = user.memberships.map((membership) => membership.tenantName ?? "Unnamed agency");
+  const when = (iso: string | null, text: string) => (iso ? <DashboardUtcTime iso={iso} text={text} /> : text);
 
   return (
-    <div className="space-y-4">
+    <>
+      <div>
+        <PageHeader
+          title={user.name || user.email || "User"}
+          breadcrumbs={[{ label: "Customers" }, { label: "Users", href: "/admin/users" }, { label: user.name || user.email || "User" }]}
+          actions={
+            <span role="group" aria-label="Account state" className="flex flex-wrap items-center gap-2">
+              <StatusChip tone={pillTone(userStatusTone(user.status))} dot>
+                {userStatusLabel(user.status)}
+              </StatusChip>
+              {user.memberships.length === 0 && <StatusChip dot={false} tone="neutral">No agency</StatusChip>}
+              {user.memberships.map((membership) => (
+                <span key={membership.tenantId} className="contents">
+                  {roleLabel(membership.role) && <StatusChip dot={false} tone="neutral">{roleLabel(membership.role)}</StatusChip>}
+                  <Link
+                    href={`/admin/tenants/${membership.tenantId}`}
+                    className="rounded-full no-underline hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                    title="Open this agency's record"
+                  >
+                    <StatusChip dot={false} tone="neutral">{membership.tenantName ?? "Unnamed agency"}</StatusChip>
+                  </Link>
+                </span>
+              ))}
+              {!isOnboarded(user) && <StatusChip dot={false} tone="warning">Invite pending</StatusChip>}
+            </span>
+          }
+        />
+      </div>
+
       {sharedAccountSuspected && (
-        <div className="flex items-start gap-2 rounded-lg border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-4 text-sm">
-          <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]" />
-          <p>
-            <span className="font-medium">Possible shared account.</span> Successful logins from{" "}
-            {user.distinct_ips_24h} distinct IP addresses in the last 24 hours.
-          </p>
-        </div>
+        <Callout
+          tone="warning"
+          title={`Possible shared account: successful logins from ${user.distinctIps24h} different IP addresses in the last 24 hours.`}
+        />
       )}
 
-      {user.status === "suspended" && user.suspension_reason && (
-        <div className="rounded-lg border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/10 p-4 text-sm">
-          <span className="font-medium">Suspended:</span> {user.suspension_reason}
-        </div>
-      )}
-
-      <Card>
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {user.status && (
-              <Badge variant="outline" className={USER_STATUS_BADGE_CLASS[user.status]}>
-                {USER_STATUS_LABELS[user.status]}
-              </Badge>
-            )}
-            {user.has_password === false && (
-              <Badge
-                variant="outline"
-                className="border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]"
-              >
-                Invite pending
-              </Badge>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
-            {fields.map(({ label, value }) => (
-              <div key={label}>
-                <p className="text-sm text-muted-foreground">{label}</p>
-                <p className="font-medium">{value}</p>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+      {/* The same strip as the tenant record, so the person and the agency read alike. */}
+      <StatStrip label="Key facts">
+        <StatTile valueSize="text"
+          label="Email"
+          value={<span className={FACT} title={user.email ?? undefined}>{user.email ?? "—"}</span>}
+          footnote={user.phone ? <span className="block truncate">{user.phone}</span> : "no phone"}
+        />
+        <StatTile valueSize="text"
+          label="Last login"
+          value={<span className={FACT}>{when(user.lastLoginAt, user.lastLoginAt ? utcDateTime(user.lastLoginAt) : "Never")}</span>}
+          valueTone={sharedAccountSuspected ? "warning" : undefined}
+          footnote={`${user.distinctIps24h.toLocaleString("en-US")} ${user.distinctIps24h === 1 ? "address" : "addresses"} in 24 hours`}
+        />
+        <StatTile valueSize="text"
+          label={agencies.length === 1 ? "Agency" : "Agencies"}
+          value={<span className={FACT} title={agencies.join(", ") || undefined}>{agencies[0] ?? "None"}</span>}
+          footnote={agencies.length > 1 ? `and ${agencies.length - 1} more` : (roleLabel(user.memberships[0]?.role ?? null) ?? "not in an agency")}
+        />
+        <StatTile valueSize="text" label="Plan" value={<span className={FACT}>{user.planCode ?? "No plan yet"}</span>} footnote={isOnboarded(user) ? "account set up" : "invite pending"} />
+        <StatTile valueSize="text"
+          label="Joined"
+          value={<span className={FACT}>{when(user.createdAt, utcDate(user.createdAt))}</span>}
+          footnote={user.suspendedAt ? <>Suspended {when(user.suspendedAt, utcDateTime(user.suspendedAt))}</> : "not suspended"}
+        />
+        <StatTile valueSize="text"
+          label="User id"
+          value={<span className="block truncate font-mono text-sm leading-[1.5]" title={user.id}>{user.id}</span>}
+          reserveFootnote
+        />
+      </StatStrip>
+    </>
   );
 }

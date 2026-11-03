@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
+import { refreshDiscrepanciesQuietly } from "@/lib/discrepancies/service";
 import { saveAdvanceRule } from "@/lib/carriers/service";
 import { advanceRuleSchema } from "@/lib/carriers/schemas";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -13,6 +14,9 @@ export async function POST(request: NextRequest) {
   try {
     const row = await saveAdvanceRule(auth.context.tenantId, parsed.data);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.advance_rule_saved", targetType: "advance_rule", targetId: row.id, metadata: { carrierId: row.carrier_id, productCode: row.product_code, effectiveFrom: row.effective_from }, request });
+    // What the contract expects changed, so what the carrier owes did too (LA-4.5 option a). After the response.
+    const tenantId = auth.context.tenantId;
+    after(() => refreshDiscrepanciesQuietly(tenantId));
     return NextResponse.json({ advanceRule: row }, { status: 201 });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not save advance rule" }, { status: 400 });

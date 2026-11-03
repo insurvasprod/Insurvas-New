@@ -18,6 +18,7 @@
 import nodemailer, { type Transporter } from "nodemailer";
 
 import { getSupabaseServiceClient } from "../supabase/service.ts";
+import { EMAIL_LOGO_CID, EMAIL_LOGO_PNG_BASE64 } from "./logo.ts";
 
 export type EmailDelivery =
   | { delivered: true; providerId: string }
@@ -39,6 +40,8 @@ export type SendEmailInput = {
    */
   dedupeKey?: string | null;
   replyTo?: string;
+  /** Files sent with the email (a welcome-pack PDF, say). Kept small: SMTP providers cap messages at ~25 MB. */
+  attachments?: { filename: string; content: Buffer | Uint8Array; contentType: string }[];
 };
 
 type SmtpConfig = {
@@ -49,6 +52,41 @@ type SmtpConfig = {
   fromName: string;
   fromEmail: string;
 };
+
+/**
+ * Whether mail leaves the platform.
+ *
+ * The deployed production site sends (VERCEL_ENV=production, which Vercel sets on production deployments
+ * and nowhere else). It sends whatever EMAIL_DELIVERY_MODE says, unless that says "off", which is the
+ * deliberate kill switch. Until 2026-10-22, production skipped every signup verification because the
+ * variable there was not "smtp". "disabled" is .env.example's template value, and may have been copied in
+ * without anyone meaning to stop real signups, so it does not stop production.
+ *
+ * Everywhere else needs EMAIL_DELIVERY_MODE=smtp: local dev, `next start` on a laptop, scripts and preview
+ * deployments. Those have real SMTP credentials in some developer environments, while QA fixtures and
+ * seed data are full of addresses that must never receive mail. Credentials alone must never turn a test
+ * run into a delivery run.
+ */
+export function emailDeliveryMode(env: Record<string, string | undefined> = process.env): "disabled" | "smtp" {
+  const mode = env.EMAIL_DELIVERY_MODE?.trim().toLowerCase() ?? "";
+  if (env.VERCEL_ENV?.trim().toLowerCase() === "production") return mode === "off" ? "disabled" : "smtp";
+  return mode === "smtp" ? "smtp" : "disabled";
+}
+
+/** RFC-reserved and local-only domains must never receive application mail. */
+export function isReservedTestRecipient(address: string): boolean {
+  const domain = address.trim().toLowerCase().split("@").pop() ?? "";
+  return domain === "localhost"
+    || domain.endsWith(".localhost")
+    || domain === "example.com"
+    || domain === "example.org"
+    || domain === "example.net"
+    || domain === "example"
+    || domain.endsWith(".example")
+    || domain === "invalid"
+    || domain.endsWith(".invalid")
+    || domain.endsWith(".test");
+}
 
 /**
  * Reads SMTP configuration, or explains what is missing.
@@ -87,13 +125,15 @@ function readConfig(): { ok: true; config: SmtpConfig } | { ok: false; missing: 
 }
 
 export function emailIsConfigured(): boolean {
-  return readConfig().ok;
+  return emailDeliveryMode() === "smtp" && readConfig().ok;
 }
 
 /** Missing variable names, for the admin screen and the test-send script. */
 export function emailConfigProblems(): string[] {
   const result = readConfig();
-  return result.ok ? [] : result.missing;
+  const problems = result.ok ? [] : result.missing;
+  if (emailDeliveryMode() !== "smtp") problems.push("EMAIL_DELIVERY_MODE=smtp");
+  return problems;
 }
 
 // One pooled transporter per process. Creating a connection per email is what makes SMTP slow in
@@ -162,6 +202,21 @@ async function record(input: SendEmailInput, row: {
  * makes the failure visible instead of silent, which is the part that was missing before.
  */
 export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
+  if (emailDeliveryMode() !== "smtp") {
+    const reason = "email_delivery_disabled";
+    const files = input.attachments?.length ? ` (${input.attachments.length} attachment${input.attachments.length === 1 ? "" : "s"}, ${input.attachments.reduce((n, a) => n + a.content.byteLength, 0)} bytes)` : "";
+    console.info(`[email] ${input.templateKey} recorded but not sent — ${reason}${files}`);
+    await record(input, { status: "skipped", failureReason: reason });
+    return { delivered: false, reason };
+  }
+
+  if (isReservedTestRecipient(input.to)) {
+    const reason = "reserved_test_recipient";
+    console.info(`[email] ${input.templateKey} recorded but not sent — ${reason}`);
+    await record(input, { status: "skipped", failureReason: reason });
+    return { delivered: false, reason };
+  }
+
   const configured = readConfig();
 
   if (!configured.ok) {
@@ -183,6 +238,13 @@ export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
       text: input.text,
       html: input.html,
       replyTo: input.replyTo,
+      attachments: [
+        ...(input.attachments ?? []).map((a) => ({ filename: a.filename, content: Buffer.from(a.content), contentType: a.contentType })),
+        // The shell's logo travels inside the message (layout.ts), so it shows without loading anything remote.
+        ...(input.html.includes(`cid:${EMAIL_LOGO_CID}`)
+          ? [{ filename: "insurvas.png", content: Buffer.from(EMAIL_LOGO_PNG_BASE64, "base64"), contentType: "image/png", cid: EMAIL_LOGO_CID, contentDisposition: "inline" as const }]
+          : []),
+      ],
     });
 
     await record(input, { status: "sent", providerMessageId: info.messageId });
@@ -197,6 +259,10 @@ export async function sendEmail(input: SendEmailInput): Promise<EmailDelivery> {
 
 /** Proves the credentials and the connection without sending anything. */
 export async function verifyEmailConnection(): Promise<{ ok: boolean; error?: string }> {
+  if (emailDeliveryMode() !== "smtp") {
+    return { ok: false, error: "Email delivery is disabled. Set EMAIL_DELIVERY_MODE=smtp only when external delivery is intended." };
+  }
+
   const configured = readConfig();
   if (!configured.ok) return { ok: false, error: `Not configured: ${configured.missing.join(", ")}` };
 

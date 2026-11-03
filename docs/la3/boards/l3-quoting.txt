@@ -1,0 +1,237 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Quotes"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "Every quote ever captured, including the ones that were not taken."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Export CSV"
+    <div> {grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Quotes this month"
+        <div> {fsize:32px;fweight:600;color:#15191e}
+          "128"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "across 61 cases"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Taken"
+        <div> {fsize:32px;fweight:600;color:#0d7038}
+          "41"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "32.0% of quotes"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Average premium"
+        <div> {fsize:32px;fweight:600;color:#15191e}
+          "$67.80"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "monthly, all carriers"
+      <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:16px 18px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Average face"
+        <div> {fsize:32px;fweight:600;color:#15191e}
+          "$13,400"
+        <div> {fsize:12px;fweight:400;color:#60646c}
+          "Final Expense only"
+    <div> {gap:12px;padding:12px;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <button type="button"> {gap:8px;height:40px;padding:0 14px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:14px;fweight:600}
+        "Last 30 days"
+        <svg/>
+      <span> {gap:8px;height:40px;width:248px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#60646c}
+        <svg/>
+        <input type="search" aria-label="Search a client or a carrier" placeholder="Search a client or a carrier"> {bd:0;bg:transparent;fsize:14px;fweight:400;color:#15191e}
+      <button type="button"> {gap:8px;height:40px;padding:0 14px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:14px;fweight:600}
+        <svg/>
+        "Filters"
+        <span> {height:20px;justify-content:center;padding:0 6px;bd-radius:9999px;bg:#e4e8ee;color:#15191e;fsize:12px;fweight:400;fweight:600}
+          "2"
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <table> {width:100%}
+        <thead>
+          <tr> {bg:#e4e8ee}
+            <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Client"
+            <th> {width:138px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Carrier"
+            <th> {width:118px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Product"
+            <th> {width:96px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Face"
+            <th> {width:96px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Monthly"
+            <th> {width:110px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Per $1,000"
+            <th> {width:74px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "State"
+            <th> {width:96px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Captured"
+            <th> {width:130px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Outcome"
+        <tbody .m-seq>
+          <tr .m-row> {bg:#fff3ec}
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Grace Oyelaran"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$15,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$71.20"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                "$4.75"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "AZ"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "28 Sep"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Selected"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Grace Oyelaran"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$15,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$68.40"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$4.56"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "AZ"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "28 Sep"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "Discarded"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Grace Oyelaran"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$15,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$64.10"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$4.27"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "AZ"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "28 Sep"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "Discarded"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Alonzo Pike"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$10,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$38.90"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$3.89"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "TX"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "26 Sep"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Selected"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Tomas Herrera"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$10,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$41.80"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$4.18"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "NM"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "24 Sep"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+                "Superseded"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mary E Morgan"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Foresters"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$20,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$82.30"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$4.12"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "OH"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "21 Sep"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                "Selected"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mary E Morgan"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Final Expense"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$20,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$88.60"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$4.43"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "OH"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "21 Sep"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "Discarded"
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+        <span> {fsize:12px;fweight:400;color:#60646c}
+          "Showing 1–7 of 128 quotes · most recent first"
+        <span> {gap:8px}
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Previous"
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Next"
+    <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+      <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+        "The quote from three weeks ago is why she is calling back"
+      <p> {fsize:14px;fweight:400;color:#33383f}
+        "A discarded quote is never deleted. It is the price she was read, by the agent she spoke to, on a day she remembers — and it is the only way to answer “you told me sixty-four dollars” without guessing. Selecting one quote discards the rest of that attempt; it does not remove them."

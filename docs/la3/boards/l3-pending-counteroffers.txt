@@ -1,0 +1,148 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Pending cases"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "What each submitted application is waiting on, oldest first."
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Export"
+        <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+          "Chase everything overdue"
+    <div> {gap:24px;bd-bottom:1px solid #d5dbe3}
+      <button type="button"> {height:40px;padding:0 4px;bd:0;bg:transparent;fsize:14px;fweight:600;color:#60646c;bd-bottom:2px solid transparent}
+        "Requirements"
+      <button type="button"> {height:40px;padding:0 4px;bd:0;bg:transparent;fsize:14px;fweight:600;color:#15191e;bd-bottom:2px solid #ff5900}
+        "Counteroffers"
+      <button type="button"> {height:40px;padding:0 4px;bd:0;bg:transparent;fsize:14px;fweight:600;color:#60646c;bd-bottom:2px solid transparent}
+        "Awaiting policy number"
+    <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #b35c00;bd-radius:12px;bg:#fcefdf}
+      <div> {fsize:14px;fweight:400;fweight:600;color:#9a4f00}
+        "An expired offer is an outcome, not a gap in the data"
+      <p> {fsize:14px;fweight:400;color:#33383f}
+        "When the clock runs out the attempt closes with"
+        <code>
+          "offer_expired"
+        "and the case stays open underneath it. The row does not disappear and it is not counted as a decline. From the expired attempt,"
+        <strong>
+          "Start a new attempt"
+        "carries the health answers, medications, address, beneficiaries and payment across in one click; only the quote, the disclosures and the QA verdict start again."
+    <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+      <table> {width:100%}
+        <thead>
+          <tr> {bg:#e4e8ee}
+            <th> {width:160px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Client"
+            <th> {width:146px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Carrier"
+            <th> {width:118px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Applied for"
+            <th> {width:108px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Offered"
+            <th> {width:176px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Difference"
+            <th> {width:118px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Expires"
+            <th> {width:96px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+        <tbody .m-seq>
+          <tr .m-row> {bg:#fff3ec}
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Grace Oyelaran"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$15,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$10,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "−$5,000 · −33.3%"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                "in 1 day"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Open"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Alonzo Pike"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mutual of Omaha"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$10,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$7,500"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "−$2,500 · −25.0%"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                "in 4 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Open"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Delores Whitley"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Gerber Life"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$12,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$9,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "−$3,000 · −25.0%"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                "in 4 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Open"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Tomas Herrera"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Americo"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$10,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$6,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "−$4,000 · −40.0%"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "in 11 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Open"
+          <tr .m-row>
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Mary E Morgan"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "Foresters"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$20,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              "$15,000"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                "−$5,000 · −25.0%"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                "in 11 days"
+            <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Open"
+      <div> {justify-content:space-between;gap:16px;padding:12px 16px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+        <span> {fsize:12px;fweight:400;color:#60646c}
+          "Showing 1–5 of 5 open counteroffers · soonest to expire first"
+        <span> {gap:8px}
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Previous"
+          <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+            "Next"

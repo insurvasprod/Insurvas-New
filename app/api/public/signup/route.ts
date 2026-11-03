@@ -1,19 +1,29 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds } from "@/lib/rateLimit";
+import { SIGNUP_PER_EMAIL, SIGNUP_PER_IP, callerIp, claimAll, retryAfterSeconds, type RateLimitRule } from "@/lib/rateLimit";
 
 import { sendVerificationEmail } from "@/lib/email/sendVerificationEmail";
-import { hashPassword } from "@/lib/password";
 import { fetchPlans } from "@/lib/plans/queries";
-import { publicSignupSchema } from "@/lib/signup/schemas";
+import { availableBillingCycles, type BillingCycle, type PlanPrices } from "@/lib/money";
+import { audienceForPlanType } from "@/lib/agency/constants";
+import { markPlanChosen } from "@/lib/signup/planChoiceQueries";
+import { nameFromEmail, publicSignupSchema } from "@/lib/signup/schemas";
 import { buildVerificationUrl, createEmailVerification } from "@/lib/signup/verification";
 import { documentsRequiredAtSignup, recordAcceptances, verifySignupAcceptance } from "@/lib/legal/acceptance";
+import { recordLastLogin } from "@/lib/loginEvents/record";
+import { getSetting } from "@/lib/settings/queries";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
-  signTenantSessionToken,
   tenantSessionCookieOptions,
   TENANT_SESSION_COOKIE,
 } from "@/lib/tenantAuth/session";
+import { issueTenantSession } from "@/lib/tenantAuth/sessionStore";
+
+/** The first cycle a plan is sold on (monthly before yearly), for a sign-up that has not chosen one yet. */
+async function firstSoldCycle(planId: string): Promise<BillingCycle | null> {
+  const { data } = await getSupabaseServiceClient().from("plan_prices").select("*").eq("plan_id", planId).maybeSingle<PlanPrices>();
+  return availableBillingCycles(data)[0] ?? null;
+}
 
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
@@ -23,12 +33,18 @@ export async function POST(request: NextRequest) {
   }
 
   const input = parsed.data;
+  // Step 1 no longer asks for a name; step 3 replaces this one (lib/signup/schemas.ts).
+  const fullName = input.fullName ?? nameFromEmail(input.email);
 
   // Before anything is created or sent. This endpoint is open to the internet and each call makes
   // a user, a tenant and an email from our sending domain — unthrottled, it is both a way to fill
   // the database and a way to use us to mail somebody repeatedly.
+  const signupIpRule: RateLimitRule = {
+    ...SIGNUP_PER_IP,
+    max: await getSetting<number>("security.signup_per_ip_per_hour"),
+  };
   const limited = await claimAll([
-    { rule: SIGNUP_PER_IP, subject: callerIp(request.headers) },
+    { rule: signupIpRule, subject: callerIp(request.headers) },
     { rule: SIGNUP_PER_EMAIL, subject: input.email },
   ]);
   if (!limited.allowed) {
@@ -53,24 +69,55 @@ export async function POST(request: NextRequest) {
   const acceptance = verifySignupAcceptance(input.acceptedDocumentIds, required.documents);
   if (!acceptance.ok) return NextResponse.json({ error: acceptance.error }, { status: 400 });
 
-  const plan = (await fetchPlans({ includeArchived: false })).find(
-    (candidate) => candidate.code === input.planCode && candidate.is_public,
-  );
+  // The plan is chosen on the plan screen (step 2 of 3) (owner, 2026-10-26). Until then the workspace holds the plan
+  // picked on the pricing page, or the default one, so signup_selections is never empty.
+  const publicPlans = (await fetchPlans({ includeArchived: false })).filter((candidate) => candidate.is_public);
+  const plan = input.planCode
+    ? publicPlans.find((candidate) => candidate.code === input.planCode)
+    : publicPlans.find((candidate) => candidate.is_default) ?? publicPlans[0];
   if (!plan) return NextResponse.json({ error: "That plan is no longer available" }, { status: 409 });
+  const billingCycle = input.billingCycle ?? (await firstSoldCycle(plan.id));
+  if (!billingCycle) return NextResponse.json({ error: "That plan is no longer available" }, { status: 409 });
 
   const verification = createEmailVerification();
-  const passwordHash = await hashPassword(input.password);
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.rpc("self_serve_signup", {
-    p_name: input.fullName,
+
+  // LA-0.2 made Supabase Auth the credential authority for the tenant plane, and public.users.id
+  // references auth.users(id). So the Auth identity is created FIRST and the password lives only
+  // there -- the old path sent a bcrypt hash to self_serve_signup, which then could not supply an
+  // id and failed 23502 on every signup. Same order as SA-1.2/1.3 and partner invitations.
+  const authUser = await supabase.auth.admin.createUser({
+    email: input.email,
+    password: input.password,
+    // The address is confirmed by our own token, sent below. Confirming here only tells Auth not to
+    // send a second, competing email of its own.
+    email_confirm: true,
+    user_metadata: { name: fullName, full_name: fullName },
+  });
+  if (authUser.error || !authUser.data.user) {
+    // Auth reports an existing address as a 422. It is the same answer as the RPC's EMAIL_EXISTS and
+    // must not read as a server fault.
+    if (authUser.error?.status === 422) {
+      return NextResponse.json({ error: "An account already exists for that email address" }, { status: 409 });
+    }
+    console.error("[signup] auth identity could not be created", authUser.error?.message);
+    return NextResponse.json({ error: "Could not create your account" }, { status: 500 });
+  }
+
+  const { data, error } = await supabase.rpc("self_serve_signup_with_auth", {
+    p_auth_user_id: authUser.data.user.id,
+    p_name: fullName,
     p_email: input.email,
-    p_password_hash: passwordHash,
-    p_phone: input.phone,
+    p_phone: input.phone ?? "",
     p_plan_id: plan.id,
-    p_billing_cycle: input.billingCycle,
+    p_billing_cycle: billingCycle,
     p_token_hash: verification.tokenHash,
     p_expires_at: verification.expiresAt.toISOString(),
   });
+
+  // The Auth identity is created before the workspace, so a failure below would strand one with no
+  // profile attached -- and that address could then never sign up again. Remove it.
+  if (error) await supabase.auth.admin.deleteUser(authUser.data.user.id).catch(() => {});
 
   if (error) {
     if (error.code === "23505") {
@@ -85,6 +132,8 @@ export async function POST(request: NextRequest) {
 
   const created = data?.[0];
   if (!created) return NextResponse.json({ error: "Could not create your account" }, { status: 500 });
+  // A plan picked on the pricing page is not asked for again (manager review, 2026-10-28).
+  if (input.planCode) await markPlanChosen(created.tenant_id);
 
   // After the user exists and before they are let in. Throws rather than logs: an acceptance we
   // failed to record is one we cannot prove, and the account has just been created on the strength
@@ -101,21 +150,21 @@ export async function POST(request: NextRequest) {
 
   const delivery = await sendVerificationEmail({
     email: input.email,
-    name: input.fullName,
+    name: fullName,
     verificationUrl: buildVerificationUrl(verification.token),
     verificationId: created.verification_id,
+    audience: audienceForPlanType(plan.plan_type),
+    planName: plan.name,
   });
 
   // Signup issues a session, which is a sign-in. Without this, last_login_at stays null for a user
   // who signed up and never used the login FORM — so SA-5.3's trials screen would report an
   // actively-engaged brand-new customer as "never signed in" and prompt a needless phone call.
   // Found by driving the whole journey in a browser.
-  await supabase
-    .from("users")
-    .update({ last_login_at: new Date().toISOString() })
-    .eq("id", created.user_id);
+  await recordLastLogin("user", created.user_id);
 
-  const token = await signTenantSessionToken(created.user_id, created.tenant_id);
+  // A session row like every other sign-in (LA-8.2), so the owner can see and end it.
+  const { token } = await issueTenantSession({ userId: created.user_id, tenantId: created.tenant_id, sessionVersion: 0, request });
   const response = NextResponse.json({
     ok: true,
     email: input.email,

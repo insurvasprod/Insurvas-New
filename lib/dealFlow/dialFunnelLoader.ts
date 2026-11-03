@@ -1,0 +1,126 @@
+import "server-only";
+
+import { localRangeToUtc } from "./localDate";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
+import { mapLimit } from "@/lib/retention/batch";
+import { buildDialFunnel, type Agent, type ApplicationRow, type AttemptRow, type DealPremiumRow, type DialFunnel, type QuotedRow, type ServedRow } from "./dialFunnel";
+
+/** Hard ceiling per source; a range that exceeds it is reported as capped rather than silently cut. */
+const MAX_ROWS = 50_000;
+const PAGE = 1000;
+
+type Result = { data: unknown[] | null; error: { message: string } | null };
+type Query = {
+  select: (columns: string) => Query;
+  eq: (column: string, value: unknown) => Query;
+  in: (column: string, values: readonly unknown[]) => Query;
+  gte: (column: string, value: unknown) => Query;
+  lt: (column: string, value: unknown) => Query;
+  lte: (column: string, value: unknown) => Query;
+  ilike: (column: string, value: string) => Query;
+  order: (column: string, options?: { ascending?: boolean }) => Query;
+  range: (from: number, to: number) => PromiseLike<Result>;
+} & PromiseLike<Result>;
+type LooseDb = { from: (table: string) => Query };
+
+/** Reads every page of a query (PostgREST returns 1,000 rows at most per request). */
+async function all<T>(build: () => Query, label: string): Promise<{ rows: T[]; capped: boolean }> {
+  const rows: T[] = [];
+  for (let from = 0; from < MAX_ROWS; from += PAGE) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error) throw new Error(`Could not read ${label}: ${error.message}`);
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+    if (page.length < PAGE) return { rows, capped: false };
+  }
+  return { rows, capped: true };
+}
+
+/**
+ * `scope` (AG-0.5, from scopeFor(auth.context)): null — the default — counts the whole agency as before. A
+ * narrowed agency session counts only what its producers did, each source by the agent column it is
+ * already filtered on: served cards (agent_user_id), dials (tenant_call_attempts.agent_id, D1),
+ * applications (tenant_application_cases.opened_by, D1), deals (worked_by) and quoted moves (actor). An
+ * `agentId` outside the scope therefore reads nothing.
+ */
+export async function loadDialFunnel(tenantId: string, input: { fromDate: string; toDate: string; agentId?: string; timeZone: string | null }, scope: ProducerScope = null): Promise<DialFunnel & { capped: boolean; timeZone: string }> {
+  const zone = input.timeZone || "UTC";
+  const { gte, lt } = localRangeToUtc(input.fromDate, input.toDate, zone);
+  const db = getSupabaseServiceClient() as unknown as LooseDb;
+  const agent = input.agentId;
+
+  const served = () => { let q = db.from("tenant_lead_activity").select("lead_id, agent_user_id, campaign_id").eq("tenant_id", tenantId).gte("served_at", gte).lt("served_at", lt).order("served_at"); if (agent) q = q.eq("agent_user_id", agent); return scopeQuery(q, "agent_user_id", scope); };
+  const attempts = () => { let q = db.from("tenant_call_attempts").select("lead_id, agent_id, dial_clicked_at, disposition").eq("tenant_id", tenantId).gte("attempted_at", gte).lt("attempted_at", lt).order("attempted_at"); if (agent) q = q.eq("agent_id", agent); return scopeQuery(q, "agent_id", scope); };
+  const applications = () => { let q = db.from("tenant_application_cases").select("lead_id, opened_by").eq("tenant_id", tenantId).gte("opened_at", gte).lt("opened_at", lt).order("opened_at"); if (agent) q = q.eq("opened_by", agent); return scopeQuery(q, "opened_by", scope); };
+  const deals = () => { let q = db.from("deal_flow").select("monthly_premium_cents").eq("tenant_id", tenantId).gte("local_date", input.fromDate).lte("local_date", input.toDate).order("created_at"); if (agent) q = q.eq("worked_by", agent); return scopeQuery(q, "worked_by", scope); };
+
+  const [servedRows, attemptRows, applicationRows, dealRows, quotedStages, members] = await Promise.all([
+    all<ServedRow>(served, "served leads"),
+    all<AttemptRow>(attempts, "call attempts"),
+    all<ApplicationRow>(applications, "applications"),
+    all<DealPremiumRow>(deals, "deals"),
+    // Pipelines belong to the tenant; their stages are reached through them.
+    db.from("tenant_pipelines").select("id, stages:tenant_pipeline_stages(id, name)").eq("tenant_id", tenantId),
+    db.from("tenant_users").select("user_id, role").eq("tenant_id", tenantId),
+  ]);
+  if (quotedStages.error) throw new Error(`Could not read pipeline stages: ${quotedStages.error.message}`);
+  if (members.error) throw new Error(`Could not read the team: ${members.error.message}`);
+
+  const quotedStageIds = ((quotedStages.data ?? []) as Array<{ stages: Array<{ id: string; name: string }> | null }>)
+    .flatMap((pipeline) => pipeline.stages ?? [])
+    .filter((stage) => /^quot/i.test(stage.name.trim()))
+    .map((stage) => stage.id);
+  let quoted: QuotedRow[] | null = null;
+  let quotedCapped = false;
+
+  // Names and roles for everyone who appears, members or not.
+  // A narrowed session's per-agent breakdown lists its scope's agents only.
+  const memberRows = ((members.data ?? []) as Array<{ user_id: string; role: string }>).filter((row) => scope === null || scope.includes(row.user_id));
+  const roleById = new Map(memberRows.map((row) => [row.user_id, row.role]));
+  const ids = new Set<string>(memberRows.map((row) => row.user_id));
+  for (const row of servedRows.rows) if (row.agent_user_id) ids.add(row.agent_user_id);
+  for (const row of attemptRows.rows) if (row.agent_id) ids.add(row.agent_id);
+
+  // Costs for exactly the served (lead, campaign) pairs.
+  const leadIds = [...new Set(servedRows.rows.map((row) => row.lead_id))];
+  const campaignIds = [...new Set(servedRows.rows.map((row) => row.campaign_id).filter((id): id is string => !!id))];
+  const costStarts = Array.from({ length: Math.ceil(leadIds.length / 300) }, (_, n) => n * 300);
+
+  // The second round (quoted moves, names, lead and campaign costs) needs only the first, so it runs at once
+  // (lead-cost chunks at most 6 at a time); a failure is still reported in the order the reads used to run.
+  const settled = await Promise.allSettled([
+    quotedStageIds.length ? all<QuotedRow>(() => { let q = db.from("tenant_lead_stage_events").select("lead_id, actor_user_id").eq("tenant_id", tenantId).in("to_stage_id", quotedStageIds).gte("created_at", gte).lt("created_at", lt).order("created_at"); if (agent) q = q.eq("actor_user_id", agent); return scopeQuery(q, "actor_user_id", scope); }, "quoted stage moves") : Promise.resolve(null),
+    ids.size ? Promise.resolve(db.from("users").select("id, name").in("id", [...ids])) : Promise.resolve({ data: [], error: null } as Result),
+    mapLimit(costStarts, 6, (index) => db.from("tenant_lead_sources").select("lead_id, campaign_id, cost_cents").eq("tenant_id", tenantId).in("lead_id", leadIds.slice(index, index + 300))),
+    campaignIds.length ? Promise.resolve(db.from("tenant_campaigns").select("id, effective_cost_per_record_cents").eq("tenant_id", tenantId).in("id", campaignIds)) : Promise.resolve(null),
+  ]);
+  for (const outcome of settled) if (outcome.status === "rejected") throw outcome.reason;
+  const [quotedRead, usersRead, costParts, campaignRead] = settled.map((outcome) => (outcome as PromiseFulfilledResult<unknown>).value) as [{ rows: QuotedRow[]; capped: boolean } | null, Result, Result[], Result | null];
+
+  if (quotedRead) {
+    quoted = quotedRead.rows;
+    quotedCapped = quotedRead.capped;
+  }
+  const users = usersRead;
+  if (users.error) throw new Error(`Could not read agent names: ${users.error.message}`);
+  const agents: Agent[] = ((users.data ?? []) as Array<{ id: string; name: string | null }>).map((user) => ({ id: user.id, name: user.name ?? "Unnamed user", role: roleById.get(user.id) ?? "" }));
+
+  const leadCost = new Map<string, number>();
+  for (const { data, error } of costParts) {
+    if (error) throw new Error(`Could not read lead costs: ${error.message}`);
+    for (const row of (data ?? []) as Array<{ lead_id: string; campaign_id: string; cost_cents: number }>) leadCost.set(`${row.lead_id}:${row.campaign_id}`, row.cost_cents);
+  }
+  const campaignPerRecord = new Map<string, number>();
+  if (campaignRead) {
+    const { data, error } = campaignRead;
+    if (error) throw new Error(`Could not read campaign costs: ${error.message}`);
+    for (const row of (data ?? []) as Array<{ id: string; effective_cost_per_record_cents: number | string | null }>) {
+      const value = row.effective_cost_per_record_cents == null ? null : Number(row.effective_cost_per_record_cents);
+      if (value != null && Number.isFinite(value)) campaignPerRecord.set(row.id, Math.round(value));
+    }
+  }
+
+  const funnel = buildDialFunnel({ served: servedRows.rows, attempts: attemptRows.rows, applications: applicationRows.rows, quoted, deals: dealRows.rows, agents, costs: { leadCost, campaignPerRecord } });
+  return { ...funnel, capped: servedRows.capped || attemptRows.capped || applicationRows.capped || dealRows.capped || quotedCapped, timeZone: zone };
+}

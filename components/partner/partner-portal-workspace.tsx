@@ -1,0 +1,2041 @@
+"use client";
+
+import {
+  useCallback,
+  useEffect,
+  useState,
+  useRef,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import Link from "next/link";
+import { notify } from "@/lib/notify";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { SelectMenu } from "@/components/ui/select-menu";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+  cardSurface,
+} from "@/components/ui/card";
+import { CheckCircle2, FileText, Send, Users } from "lucide-react";
+import { PageHeader } from "@/components/ui/page-header";
+import { SectionLoading } from "@/components/ui/page-states";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { PartnerChatPanel } from "@/components/partner/partner-chat-panel";
+import { PartnerLeadPipeline } from "@/components/partner/partner-lead-pipeline";
+import { PartnerPortalOverview } from "@/components/partner/partner-portal-overview";
+import { PartnerSettingsWorkspace } from "@/components/partner/partner-settings-workspace";
+import { PartnerTeamWorkspace } from "@/components/partner/partner-team-workspace";
+import { PartnerTeamReviewWorkspace } from "@/components/partner/partner-team-review-workspace";
+import type { PartnerRole } from "@/lib/partnerAuth/roles";
+import { agoLabel } from "@/lib/format/ago";
+import { productLineLabel } from "@/lib/format/productLine";
+import { outstandingSubmitItems } from "@/lib/partnerPortal/submitReadiness";
+import {
+  isPhoneTemplateField,
+  type TemplateField,
+  type TemplateRow,
+} from "@/lib/templates/constants";
+import {
+  pruneHiddenTemplateValues,
+  templateFormFieldVisible,
+} from "@/lib/templates/visibility";
+import {
+  BANK_ACCOUNT_MAX_DIGITS,
+  DERIVED_AGE_KEY,
+  ageFromDob,
+  bankFormatError,
+  dobFieldKey,
+} from "@/lib/templates/formats";
+import { effectiveTemplateForm } from "@/lib/templates/sectionAvailability";
+import { StatusChip } from "@/components/ui/status-chip";
+import { placementWidth } from "@/lib/templates/placementWidth";
+import { US_STATES } from "@/lib/signup/constants";
+
+type ApprovedProduct = { code: string; name: string; category: string };
+type PartnerMarket = {
+  carrier_id: string;
+  carrier_name: string;
+  state: string;
+};
+type PartnerSubmissionMarket = { state: string };
+
+const US_STATE_NAME_BY_CODE = Object.fromEntries(US_STATES) as Record<string, string>;
+
+function isCustomerStateField(field: TemplateField) {
+  const key = field.field_key.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return /^(state|customer_state|applicant_state|insured_state|policyholder_state)$/.test(key) ||
+    /^(customer|applicant|insured|policyholder)\s+state$/i.test(field.label.trim());
+}
+
+// The submission's retry key, per draft, in this browser (LA-1 audit: it was regenerated on every
+// mount, so a resumed draft lost its number-entry screening link and its replay protection).
+// Storage can be unavailable (private mode, blocked site data); the form then works as before.
+const SUBMISSION_KEY_PREFIX = "insurvas:partner-submission:";
+const SUBMISSION_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function recallSubmissionId(draftId: string | null): string | null {
+  if (!draftId || typeof window === "undefined") return null;
+  try {
+    const value = window.localStorage.getItem(`${SUBMISSION_KEY_PREFIX}${draftId}`);
+    return value && SUBMISSION_UUID.test(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+function rememberSubmissionId(draftId: string | null, submissionId: string) {
+  if (!draftId || typeof window === "undefined") return;
+  try { window.localStorage.setItem(`${SUBMISSION_KEY_PREFIX}${draftId}`, submissionId); } catch { /* storage unavailable */ }
+}
+function forgetSubmissionId(draftId: string | null) {
+  if (!draftId || typeof window === "undefined") return;
+  try { window.localStorage.removeItem(`${SUBMISSION_KEY_PREFIX}${draftId}`); } catch { /* storage unavailable */ }
+}
+
+/**
+ * One answer box, as partners get it. Exported for Settings › Form templates, which draws the form
+ * being edited with this same renderer so the owner sees exactly what partners see.
+ */
+export function PartnerField({
+  field,
+  value,
+  error,
+  onChange,
+  onBlur,
+  id,
+  labelId,
+  readOnly,
+}: {
+  field: TemplateField;
+  value: unknown;
+  error?: string;
+  onChange: (value: unknown) => void;
+  onBlur?: () => void;
+  id?: string;
+  labelId?: string;
+  /** A derived value (age, from the date of birth) is shown, not typed. */
+  readOnly?: boolean;
+}) {
+  if (field.type === "boolean" || field.type === "single_select") {
+    const isBoolean = field.type === "boolean";
+    const isState = /\bstate\b/i.test(field.field_key.replaceAll("_", " ")) || /\bstate\b/i.test(field.label);
+    const selectedValue = isBoolean ? (value === undefined ? "" : String(value)) : String(value ?? "");
+    const options = isBoolean
+      ? [
+          { value: "", label: "Choose…", disabled: true },
+          { value: "true", label: "Yes" },
+          { value: "false", label: "No" },
+        ]
+      : [
+          { value: "", label: "Choose…", disabled: true },
+          ...field.options.map((option) => ({
+            value: option,
+            label: option,
+            ...(isState && US_STATE_NAME_BY_CODE[option.toUpperCase()]
+              ? { description: US_STATE_NAME_BY_CODE[option.toUpperCase()] }
+              : {}),
+          })),
+        ];
+
+    return (
+      <SelectMenu
+        id={id}
+        label={field.label}
+        value={selectedValue}
+        defaultValue=""
+        ariaInvalid={Boolean(error)}
+        onChange={(selected) => onChange(isBoolean ? (selected === "" ? undefined : selected === "true") : selected || undefined)}
+        searchPlaceholder={isBoolean ? "Search choices" : `Search ${field.label.toLowerCase()}`}
+        className="w-full"
+        panelClassName="w-72 max-w-[calc(100vw-2rem)]"
+        panelAlign="start"
+        options={options}
+      />
+    );
+  }
+  if (field.type === "multi_select")
+    return (
+      <div id={id} role="group" aria-labelledby={labelId}
+        aria-label={labelId ? undefined : field.label}
+        className="flex flex-wrap gap-3 rounded-md border p-2"
+      >
+        {field.options.map((option) => (
+          <label className="flex items-center gap-1 text-sm" key={option}>
+            <input
+              type="checkbox"
+              checked={Array.isArray(value) && value.includes(option)}
+              onChange={(event) =>
+                onChange([
+                  ...(Array.isArray(value) ? value : []).filter(
+                    (item) => item !== option,
+                  ),
+                  ...(event.target.checked ? [option] : []),
+                ])
+              }
+            />
+            {option}
+          </label>
+        ))}
+      </div>
+    );
+  if (field.type === "long_text")
+    return (
+      <textarea id={id}
+        aria-label={field.label}
+        aria-invalid={Boolean(error)}
+        className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm"
+        value={String(value ?? "")}
+        onChange={(event) => onChange(event.target.value || undefined)}
+      />
+    );
+  const inputType =
+    field.type === "number" || field.type === "currency"
+      ? "number"
+      : field.type === "date"
+        ? "date"
+        : field.type === "phone"
+          ? "tel"
+          : field.type === "email"
+            ? "email"
+            : "text";
+  const updateInput = (raw: string) => {
+    if (raw === "") return onChange(undefined);
+    // Routing and account numbers are digits only (LA-1.4-6); the checksum is checked on blur.
+    if (field.type === "bank_routing" || field.type === "bank_account")
+      return onChange(raw.replace(/\D/g, "").slice(0, field.type === "bank_routing" ? 9 : BANK_ACCOUNT_MAX_DIGITS) || undefined);
+    if (field.type === "ssn") {
+      const digits = raw.replace(/\D/g, "").slice(0, field.validation?.digit_length ?? 9);
+      const mask = field.validation?.format_mask ?? "###-##-####";
+      let index = 0;
+      const formatted = mask
+        .split("")
+        .map((character) => {
+          if (character !== "#") return index > 0 && index < digits.length ? character : "";
+          const digit = digits[index];
+          index += 1;
+          return digit ?? "";
+        })
+        .join("");
+      return onChange(formatted);
+    }
+    // A currency field is stored in cents, as every agent screen reads it, and typed in dollars:
+    // before 2026-10-22 the typed number was stored as cents, so "250000" became $2,500.00.
+    if (field.type === "currency") return onChange(Math.round(Number(raw) * 100));
+    return onChange(field.type === "number" ? Number(raw) : raw);
+  };
+  return (
+    <Input id={id}
+      aria-label={field.label}
+      aria-invalid={Boolean(error)}
+      type={inputType}
+      inputMode={field.type === "ssn" || field.type === "bank_routing" || field.type === "bank_account" ? "numeric" : undefined}
+      readOnly={readOnly}
+      step={
+        field.type === "currency"
+          ? 0.01
+          : field.type === "number"
+            ? "any"
+            : undefined
+      }
+      value={value === undefined ? "" : field.type === "currency" && typeof value === "number" ? String(value / 100) : String(value)}
+      placeholder={field.validation?.placeholder ?? undefined}
+      onChange={(event) => updateInput(event.target.value)}
+      onInput={
+        field.type === "date"
+          ? (event) => updateInput(event.currentTarget.value)
+          : undefined
+      }
+      onBlur={onBlur}
+    />
+  );
+}
+
+/**
+ * The form definition the settings preview hands the partner form (LA-1.4-5): the same renderer the
+ * partner uses, fed the owner's draft instead of the partner API. In preview nothing is fetched or
+ * saved, screening is simulated as clear, and Submit only validates.
+ */
+export type PartnerFormPreviewSource = {
+  template: TemplateRow;
+  tenant_template_id: string;
+  assignment: { definition_version: number };
+};
+
+export function PartnerLeadForm({
+  productCode,
+  productName,
+  partnerStatus,
+  agencyName,
+  onFormVersion,
+  onHasAnswersChange,
+  market,
+  draftId: resumeDraftId = null,
+  onDraftChange,
+  setupControls,
+  preview,
+}: {
+  productCode: string;
+  productName: string;
+  partnerStatus: "draft" | "active" | "paused" | "offboarded";
+  /** Accepted for the caller's convenience; the form no longer names the partner. */
+  partnerName?: string;
+  agencyName?: string | null;
+  onFormVersion?: (version: number | null) => void;
+  onHasAnswersChange?: (hasAnswers: boolean) => void;
+  market: PartnerSubmissionMarket;
+  /** LA-1.6-5: the saved draft this form resumes; null starts a new form. */
+  draftId?: string | null;
+  /** Told the draft's id after each save (null once it has been submitted). */
+  onDraftChange?: (draftId: string | null) => void;
+  /** Product and market selectors share one header row with the phone gate. */
+  setupControls?: ReactNode;
+  /** Settings → Form templates renders this same form from the owner's unsaved draft. */
+  preview?: PartnerFormPreviewSource;
+}) {
+  type FormTemplate = {
+    template: TemplateRow;
+    tenant_template_id: string;
+    assignment: { definition_version: number };
+  };
+  type ScreeningState = {
+    outcome: string;
+    warning: { code: "dnc" | "internal_dq"; message: string } | null;
+    phone: string | null;
+    cached?: boolean;
+    checked_at?: string;
+    blocked?: boolean;
+  };
+  type RejectionNotice = { code: string; count: number; script: string };
+  const [template, setTemplate] = useState<FormTemplate | null>(null);
+  // LA-1.6: the retry key is the submission's, so it survives a remount of the same draft (a tab
+  // switch, a reload). Kept per draft in this browser; a new phone number still starts a new one.
+  const submissionId = useRef<string>(recallSubmissionId(resumeDraftId) ?? crypto.randomUUID());
+  // The draft this form writes to. It starts as the resumed draft (or none) and is set by the first
+  // save of a new form, so every later save updates that one draft instead of starting another.
+  const draftIdRef = useRef<string | null>(resumeDraftId);
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const valuesRef = useRef<Record<string, unknown>>({});
+  const dirtyRef = useRef(false);
+  // Bumped on every edit. A save only clears `dirty` when nothing was typed while it was in flight;
+  // otherwise those last keystrokes would be marked saved and never sent.
+  const editRevision = useRef(0);
+  const [values, setValues] = useState<Record<string, unknown>>({});
+  const [status, setStatus] = useState("Loading form…");
+  const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [screening, setScreening] = useState<ScreeningState | null>(null);
+  const [screeningBusy, setScreeningBusy] = useState(false);
+  const screeningRequestActive = useRef(false);
+  const lastScreenedPhone = useRef<string | null>(null);
+  const [screeningError, setScreeningError] = useState<string | null>(null);
+  const [rejectionNotice, setRejectionNotice] =
+    useState<RejectionNotice | null>(null);
+  const [dncAcknowledged, setDncAcknowledged] = useState(false);
+  const [duplicateMatches, setDuplicateMatches] = useState<
+    Array<{ matchedOn: string[] }>
+  >([]);
+  const [duplicateJustification, setDuplicateJustification] = useState("");
+  const [formRefresh, setFormRefresh] = useState(0);
+  // The rest of the form opens once the number has been screened (and a DNC warning acknowledged).
+  // After that it stays open: changing the number re-screens it in place, as the board draws it.
+  const [formOpened, setFormOpened] = useState(false);
+  const [consentGiven, setConsentGiven] = useState(false);
+  const consentRef = useRef<HTMLInputElement>(null);
+  const [screenedAt, setScreenedAt] = useState<number | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [duplicateCheck, setDuplicateCheck] = useState<{
+    signature: string;
+    state: "clear" | "match" | "unavailable";
+    /** The newest match: when, whether this team sent it, and (only then) how it ended. */
+    latest?: { submittedAt: string; yours: boolean; outcome: string | null } | null;
+  } | null>(null);
+  // "18 seconds ago" has to keep counting while the page is open.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const clock = window.setInterval(() => setNow(Date.now()), 5000);
+    return () => window.clearInterval(clock);
+  }, []);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (!dirtyRef.current) setFormRefresh((value) => value + 1);
+    };
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, []);
+
+  // Preview: the owner's draft is the form; answers typed so far are kept and pruned against it.
+  useEffect(() => {
+    if (!preview) return;
+    // Syncing from a prop the settings page owns: each new draft replaces the form and re-prunes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setTemplate(preview);
+    onFormVersion?.(preview.assignment.definition_version);
+    const pruned = pruneHiddenTemplateValues(effectiveTemplateForm(preview.template.form_definition, preview.template.fields), valuesRef.current);
+    valuesRef.current = pruned;
+    setValues(pruned);
+    setStatus((current) => (current.startsWith("Loading") ? "Enter a phone number to begin screening" : current));
+  }, [preview, onFormVersion, onHasAnswersChange]);
+
+  useEffect(() => {
+    if (preview) return;
+    let cancelled = false;
+    // A refresh starts when the window regains focus, which a click into the phone field can do; on
+    // a slow server its answer lands after the partner has typed. Answers typed since it started win
+    // (QA pass 2026-10-22: the screened number was wiped and the draft saved "0 answers").
+    const startedAtRevision = editRevision.current;
+    void Promise.all([
+      fetch(`/api/partner/forms/${encodeURIComponent(productCode)}`, {
+        cache: "no-store",
+      }),
+      // LA-1.6-5: this form's own draft, or none for a new form (never "whichever draft is newest").
+      fetch(
+        `/api/partner/forms/${encodeURIComponent(productCode)}/draft?${draftIdRef.current ? `draft_id=${encodeURIComponent(draftIdRef.current)}` : "new=1"}`,
+        { cache: "no-store" },
+      ),
+    ])
+      .then(async ([formResponse, draftResponse]) => ({
+        form: await formResponse.json().catch(() => null),
+        draft: await draftResponse.json().catch(() => null),
+        formResponse,
+        draftResponse,
+      }))
+      .then(({ form, draft, formResponse, draftResponse }) => {
+        if (cancelled) return;
+        if (formRefresh > 0 && editRevision.current !== startedAtRevision) return;
+        if (!formResponse.ok) {
+          setStatus(form?.error ?? "This product form is unavailable");
+          onFormVersion?.(null);
+          return;
+        }
+        // The resumed draft is gone (submitted or discarded elsewhere): carry on as a new form.
+        if (draftIdRef.current && !draftResponse.ok) {
+          forgetSubmissionId(draftIdRef.current);
+          draftIdRef.current = null;
+          onDraftChange?.(null);
+        }
+        // New forms use the current authenticated resolver. A resumed draft uses the immutable
+        // profile revision returned by the draft endpoint, so an agent change cannot rewrite an
+        // in-progress submission. Hidden values are still pruned against that saved snapshot.
+        const draftTemplate =
+          draftResponse.ok && draft?.draft && draft.template
+            ? (draft.template as FormTemplate)
+            : null;
+        const nextTemplate = (draftTemplate ?? form.template) as FormTemplate;
+        const nextValues =
+          draftResponse.ok &&
+          draft?.draft?.payload &&
+          typeof draft.draft.payload === "object"
+            ? pruneHiddenTemplateValues(
+                nextTemplate.template.form_definition,
+                draft.draft.payload as Record<string, unknown>,
+              )
+            : {};
+        const customerStateField = nextTemplate.template.fields.find(isCustomerStateField);
+        if (customerStateField && !nextValues[customerStateField.field_key]) {
+          nextValues[customerStateField.field_key] = market.state;
+        }
+        setTemplate(nextTemplate);
+        onFormVersion?.(nextTemplate.assignment.definition_version);
+        const savedAt =
+          draftResponse.ok && draft?.draft?.updated_at
+            ? Date.parse(String(draft.draft.updated_at))
+            : NaN;
+        setDraftSavedAt(Number.isFinite(savedAt) ? savedAt : null);
+        setValues(nextValues);
+        onHasAnswersChange?.(Object.values(nextValues).some((value) => !isEmpty(value)));
+        valuesRef.current = nextValues;
+        const phoneField = nextTemplate.template.fields.find(isPhoneTemplateField);
+        const restoredPhone = String((phoneField && nextValues[phoneField.field_key]) ?? "");
+        const restoredScreening = draftResponse.ok && draft?.resume_screening && typeof draft.resume_screening === "object"
+          ? draft.resume_screening as Record<string, unknown>
+          : null;
+        if (draftResponse.ok && draft?.draft && draftIdRef.current) {
+          const restoredSubmissionId = restoredScreening?.screened === true && typeof draft.screening_submission_id === "string"
+            ? draft.screening_submission_id
+            : crypto.randomUUID();
+          submissionId.current = restoredSubmissionId;
+          rememberSubmissionId(draftIdRef.current, restoredSubmissionId);
+        }
+        const restoredWarning = restoredScreening?.warning && typeof restoredScreening.warning === "object"
+          ? restoredScreening.warning as { code?: string; message?: string }
+          : null;
+        if (restoredScreening?.screened === true && restoredPhone) {
+          const checkedAt = typeof restoredScreening.checked_at === "string" ? restoredScreening.checked_at : undefined;
+          const restoredId = typeof draft?.screening_submission_id === "string" ? draft.screening_submission_id : null;
+          if (restoredId) {
+            submissionId.current = restoredId;
+            rememberSubmissionId(draftIdRef.current, restoredId);
+          }
+          lastScreenedPhone.current = restoredPhone;
+          setScreening({
+            outcome: restoredScreening.verdict === "cleared" ? "clear" : "blocked",
+            warning: restoredWarning?.code === "dnc" || restoredWarning?.code === "internal_dq"
+              ? { code: restoredWarning.code, message: String(restoredWarning.message ?? "") }
+              : null,
+            phone: restoredPhone,
+            checked_at: checkedAt,
+            blocked: restoredScreening.blocked === true,
+          });
+          if (restoredScreening.blocked === true) {
+            setRejectionNotice({
+              code: String(restoredScreening.code ?? "compliance_screening"),
+              count: Number(restoredScreening.blocked_count ?? 0),
+              script: String(restoredScreening.neutral_end_call_script ?? ""),
+            });
+            setScreeningError(String(restoredScreening.error ?? "Screening is complete. The number requires review before submission."));
+          } else {
+            setRejectionNotice(null);
+            setScreeningError(null);
+          }
+          setScreenedAt(checkedAt ? Date.parse(checkedAt) : null);
+          setDncAcknowledged(false);
+          setFormOpened(true);
+        } else {
+          setScreening(null);
+          setScreenedAt(null);
+          setFormOpened(false);
+          setRejectionNotice(null);
+          setScreeningError(null);
+          setDncAcknowledged(false);
+        }
+        // A reload (the tab regaining focus) can bring back answers without the number that was
+        // screened. The screening result belongs to that number, so it does not survive the swap.
+        const reloadedPhoneKey = nextTemplate.template.fields.find(isPhoneTemplateField)?.field_key;
+        if (
+          lastScreenedPhone.current !== null &&
+          String((reloadedPhoneKey && nextValues[reloadedPhoneKey]) ?? "") !== lastScreenedPhone.current
+        ) {
+          lastScreenedPhone.current = null;
+          setScreening(null);
+          setScreenedAt(null);
+          setDncAcknowledged(false);
+          setConsentGiven(false);
+        }
+        setStatus(
+          draftResponse.ok && draft?.draft
+            ? restoredScreening?.screened === true
+              ? "Draft resumed — continue where you left off"
+              : "Draft resumed — screen the phone number to continue"
+            : "Enter a phone number to begin screening",
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("Could not load this form");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [productCode, market.state, formRefresh, onFormVersion, onDraftChange, onHasAnswersChange, preview]);
+
+  const persistDraft = useCallback(
+    (visibleStatus = true, pause?: { reason: string; notes: string }) => {
+    const saveDraftNow = async () => {
+      if (!template) return false;
+      // What is sent is what is on screen when this save actually runs (saves are queued).
+      const payload = valuesRef.current;
+      const sentRevision = editRevision.current;
+      if (preview) {
+        if (visibleStatus) setStatus("Preview: drafts are not saved");
+        return false;
+      }
+      setSaving(true);
+      try {
+        const response = await fetch(
+          `/api/partner/forms/${encodeURIComponent(productCode)}/draft`,
+          {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              payload,
+              carrier_state: market.state,
+              draft_id: draftIdRef.current,
+              submission_id: submissionId.current,
+              ...(pause ? { pause_reason: pause.reason, pause_notes: pause.notes } : {}),
+            }),
+          },
+        );
+        const saved = (await response.json().catch(() => null)) as { id?: string; error?: string; code?: string } | null;
+        if (response.ok) {
+          setSaveFailed(false);
+          if (editRevision.current === sentRevision) dirtyRef.current = false;
+          if (saved?.id && saved.id !== draftIdRef.current) draftIdRef.current = saved.id;
+          rememberSubmissionId(draftIdRef.current, submissionId.current);
+          onDraftChange?.(draftIdRef.current);
+          setDraftSavedAt(Date.now());
+          if (visibleStatus) setStatus("Draft saved");
+          return true;
+        } else if (response.status === 404 && draftIdRef.current) {
+          // The draft was submitted or discarded in another tab: the next save starts a new one.
+          draftIdRef.current = null;
+          onDraftChange?.(null);
+          if (visibleStatus) setStatus(saved?.error ?? "Draft could not be saved");
+          setSaveFailed(true);
+          return false;
+        } else {
+          // Keep the failure visible so the partner can retry without losing the form.
+          const message = saved?.error ?? "Draft could not be saved";
+          setSaveFailed(true);
+          if (visibleStatus || saved?.code === "form_draft_limit_reached") setStatus(message);
+          if (visibleStatus) notify.fail(message);
+          return false;
+        }
+      } catch {
+        setSaveFailed(true);
+        if (visibleStatus) {
+          setStatus("Draft could not be saved");
+          notify.fail("Draft could not be saved");
+        }
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    };
+      // Saves run one after another, so a new form's first save hands its draft id to the next
+      // one instead of two overlapping saves each starting a draft.
+      const run = saveQueue.current.then(saveDraftNow);
+      saveQueue.current = run.catch(() => undefined);
+      return run;
+    },
+    [template, productCode, market, preview, onDraftChange],
+  );
+
+  useEffect(() => {
+    if (!template || !dirtyRef.current || preview || !formOpened || !screening) return;
+    const timer = window.setTimeout(() => {
+      void persistDraft();
+    }, 750);
+    return () => window.clearTimeout(timer);
+  }, [values, template, productCode, persistDraft, preview, formOpened, screening]);
+
+  useEffect(() => {
+    if (!template || preview || !formOpened || !screening) return;
+    const flush = () => {
+      if (dirtyRef.current) void persistDraft(false);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    const onPageHide = () => {
+      if (!dirtyRef.current) return;
+      void fetch(
+        `/api/partner/forms/${encodeURIComponent(productCode)}/draft`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            payload: valuesRef.current,
+            carrier_state: market.state,
+            draft_id: draftIdRef.current,
+            submission_id: submissionId.current,
+          }),
+          keepalive: true,
+        },
+      );
+    };
+    const interval = window.setInterval(flush, 30000);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [template, productCode, market, persistDraft, preview, formOpened, screening]);
+
+  const fields = template
+    ? new Map(template.template.fields.map((field) => [field.field_key, field]))
+    : new Map<string, TemplateField>();
+  // The sections of switched-off section groups never show (LA-1.4-3). The partner API already
+  // removes them; the preview's draft form is filtered here by the same function.
+  const sections = template ? effectiveTemplateForm(template.template.form_definition, template.template.fields).sections : [];
+  // Age is derived from the date of birth, never typed (LA-1.4-6).
+  const dobKey = template ? dobFieldKey(template.template.fields) : null;
+  const derivedAge = dobKey ? ageFromDob(values[dobKey]) : null;
+  const phoneField = template?.template.fields.find(isPhoneTemplateField);
+  function isEmpty(value: unknown) {
+    return (
+      value === undefined ||
+      value === null ||
+      value === "" ||
+      (Array.isArray(value) && value.length === 0)
+    );
+  }
+  function validateField(fieldKey: string, candidate = values) {
+    const field = fields.get(fieldKey);
+    const formField = sections
+      .flatMap((section) => section.fields)
+      .find((item) => item.field_key === fieldKey);
+    if (!field || !formField || !templateFormFieldVisible(formField, candidate))
+      return null;
+    const value = candidate[fieldKey];
+    if ((field.is_required || formField.is_required) && isEmpty(value))
+      return `${field.label} is required`;
+    if (isEmpty(value)) return null;
+    if (
+      ["text", "long_text", "date", "phone", "email", "ssn", "bank_routing", "bank_account"].includes(
+        field.type,
+      ) &&
+      typeof value !== "string"
+    )
+      return `${field.label} must be text`;
+    const bankError = typeof value === "string" ? bankFormatError(field, value) : null;
+    if (bankError) return bankError;
+    if (
+      ["number", "currency"].includes(field.type) &&
+      (typeof value !== "number" ||
+        !Number.isFinite(value) ||
+        (field.type === "currency" && !Number.isInteger(value)))
+    )
+      return `${field.label} must be a valid ${field.type === "currency" ? "dollar amount" : "number"}`;
+    if (field.type === "email" && !/^\S+@\S+\.\S+$/.test(value as string))
+      return `${field.label} must be a valid email address`;
+    if (
+      field.type === "phone" &&
+      (value as string).replace(/\D/g, "").length < 10
+    )
+      return `${field.label} must include at least 10 digits`;
+    if (field.type === "ssn" && !/^\d{3}-?\d{2}-?\d{4}$/.test(value as string))
+      return `${field.label} must be a valid SSN`;
+    if (field.type === "date" && !/^\d{4}-\d{2}-\d{2}$/.test(value as string))
+      return `${field.label} must be a valid date`;
+    if (
+      field.type === "single_select" &&
+      (typeof value !== "string" || !field.options.includes(value))
+    )
+      return `${field.label} must use one of the listed options`;
+    if (
+      field.type === "multi_select" &&
+      (!Array.isArray(value) ||
+        value.some(
+          (item) => typeof item !== "string" || !field.options.includes(item),
+        ))
+    )
+      return `${field.label} contains an invalid option`;
+    const validation = field.validation ?? {};
+    const numeric = typeof value === "number" ? value : null;
+    if (
+      numeric !== null &&
+      ((validation.min !== undefined && numeric < validation.min) ||
+        (validation.max !== undefined && numeric > validation.max))
+    )
+      return `${field.label} is outside its allowed range`;
+    if (
+      typeof value === "string" &&
+      ((validation.min_length !== undefined &&
+        value.length < validation.min_length) ||
+        (validation.max_length !== undefined &&
+          value.length > validation.max_length))
+    )
+      return `${field.label} has an invalid length`;
+    if (
+      typeof value === "string" &&
+      validation.pattern &&
+      !new RegExp(validation.pattern).test(value)
+    )
+      return `${field.label} has an invalid format`;
+    return null;
+  }
+  function validateRequired(candidate = values) {
+    const next: Record<string, string> = {};
+    for (const section of sections)
+      for (const formField of section.fields) {
+        const field = fields.get(formField.field_key);
+        if (
+          field &&
+          templateFormFieldVisible(formField, candidate) &&
+          (field.is_required || formField.is_required) &&
+          isEmpty(candidate[field.field_key])
+        )
+          next[field.field_key] = `${field.label} is required`;
+      }
+    return next;
+  }
+  function validateAll() {
+    const next: Record<string, string> = {};
+    for (const section of sections)
+      for (const formField of section.fields) {
+        const error = validateField(formField.field_key);
+        if (error) next[formField.field_key] = error;
+      }
+    return next;
+  }
+  function updateValue(fieldKey: string, value: unknown) {
+    const next = pruneHiddenTemplateValues(
+      template?.template.form_definition ?? { sections: [] },
+      { ...valuesRef.current, [fieldKey]: value },
+    );
+    // A form with its own Age field has it filled from the date of birth (LA-1.4-6).
+    if (fieldKey === dobKey && fields.has(DERIVED_AGE_KEY)) {
+      const age = ageFromDob(value);
+      if (age === null) delete next[DERIVED_AGE_KEY];
+      else next[DERIVED_AGE_KEY] = age;
+    }
+    valuesRef.current = next;
+    dirtyRef.current = true;
+    editRevision.current += 1;
+    setValues(next);
+    onHasAnswersChange?.(Object.values(next).some((candidate) => !isEmpty(candidate)));
+    setFieldErrors((current) => {
+      if (!current[fieldKey]) return current;
+      const errors = { ...current };
+      delete errors[fieldKey];
+      return errors;
+    });
+    setSubmitError(null);
+    if (phoneField?.field_key === fieldKey) {
+      submissionId.current = crypto.randomUUID();
+      rememberSubmissionId(draftIdRef.current, submissionId.current);
+      lastScreenedPhone.current = null;
+      setRejectionNotice(null);
+      setConsentGiven(false);
+      if (screening) {
+        setScreening(null);
+        setScreenedAt(null);
+        setDncAcknowledged(false);
+        setScreeningError(
+          "The phone number changed. Screen it again before continuing.",
+        );
+        setStatus("Screen the updated phone number to continue");
+      }
+    }
+  }
+  function blurField(fieldKey: string) {
+    const error = validateField(fieldKey);
+    setFieldErrors((current) => {
+      const next = { ...current };
+      if (error) next[fieldKey] = error;
+      else delete next[fieldKey];
+      return next;
+    });
+  }
+  async function runScreening() {
+    if (!phoneField) {
+      setScreeningError("This form has no phone field configured");
+      return;
+    }
+    const error = validateField(phoneField.field_key);
+    if (error) {
+      setFieldErrors((current) => ({ ...current, [phoneField.field_key]: error }));
+      setScreeningError("Enter a valid phone number before screening");
+      return;
+    }
+    const phoneValue = String(valuesRef.current[phoneField.field_key] ?? "");
+    if (
+      screeningRequestActive.current ||
+      (lastScreenedPhone.current === phoneValue && screening)
+    )
+      return;
+    if (preview) {
+      // Nothing is screened from the settings preview: it shows what a clear number opens.
+      lastScreenedPhone.current = phoneValue;
+      const checked = new Date();
+      setScreening({ outcome: "clear", warning: null, phone: phoneValue, checked_at: checked.toISOString() });
+      setScreenedAt(checked.getTime());
+      setFormOpened(true);
+      setStatus("Preview: screening is simulated as clear");
+      return;
+    }
+    screeningRequestActive.current = true;
+    setScreeningBusy(true);
+    setScreeningError(null);
+    setSubmitError(null);
+    try {
+      const response = await fetch(
+        `/api/partner/forms/${encodeURIComponent(productCode)}/screen`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: valuesRef.current[phoneField.field_key],
+            payload: valuesRef.current,
+            submission_id: submissionId.current,
+            draft_id: draftIdRef.current,
+            // LA-6.2: the calling-hours check needs the state the transfer is for.
+            carrier_state: market?.state ?? null,
+          }),
+        },
+      );
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        setScreening(null);
+        setRejectionNotice(
+          (body?.code === "tcpa_block" || body?.code === "compliance_screening")
+            ? {
+                code: body.code,
+                count: Number(body.blocked_count ?? 0),
+                script: String(body.neutral_end_call_script ?? ""),
+              }
+            : null,
+        );
+        setScreeningError(body?.error ?? "Screening could not be completed");
+        setStatus(
+          body?.blocked
+            ? "Submission is blocked until the phone number is cleared"
+            : "Screening failed",
+        );
+        return;
+      }
+      if (typeof body.draft_id === "string") {
+        draftIdRef.current = body.draft_id;
+        rememberSubmissionId(body.draft_id, submissionId.current);
+        onDraftChange?.(body.draft_id);
+      }
+      setRejectionNotice(null);
+      lastScreenedPhone.current = phoneValue;
+      setScreening(body);
+      const checkedAt = Date.parse(String(body.checked_at ?? ""));
+      setScreenedAt(Number.isFinite(checkedAt) ? checkedAt : null);
+      setDncAcknowledged(false);
+      if (!body.warning || body.warning.code !== "dnc") setFormOpened(true);
+      setStatus(
+        body.warning
+          ? "Review the compliance warning to continue"
+          : "Screening passed — complete the form",
+      );
+    } catch (error) {
+      setScreening(null);
+      setScreeningError(
+        error instanceof Error ? error.message : "Phone screening could not be completed. Check your connection and try again.",
+      );
+      setStatus("Screening failed");
+    } finally {
+      screeningRequestActive.current = false;
+      setScreeningBusy(false);
+    }
+  }
+  async function screenPhone(event: FormEvent) {
+    event.preventDefault();
+    await runScreening();
+  }
+  const requiredErrors = validateRequired(values);
+  const requiredFieldCount = sections
+    .flatMap((section) => section.fields)
+    .filter((formField) => {
+      const field = fields.get(formField.field_key);
+      return (
+        field &&
+        templateFormFieldVisible(formField, values) &&
+        (field.is_required || formField.is_required)
+      );
+    }).length;
+  const completedRequiredFieldCount = Math.max(
+    0,
+    requiredFieldCount - Object.keys(requiredErrors).length,
+  );
+  // The fields a duplicate is matched on. Their values are the signature: the check runs again only
+  // when one of them changes, and only once the number has been screened.
+  const duplicateKeys = template
+    ? template.template.fields
+        .filter(
+          (field) =>
+            isPhoneTemplateField(field) ||
+            field.type === "ssn" ||
+            ["full_name", "name", "first_name", "last_name"].includes(
+              field.field_key,
+            ),
+        )
+        .map((field) => field.field_key)
+    : [];
+  const duplicateSignature =
+    formOpened && screening
+      ? JSON.stringify(
+          Object.fromEntries(
+            duplicateKeys.map((key) => [key, values[key] ?? null]),
+          ),
+        )
+      : null;
+  useEffect(() => {
+    if (!duplicateSignature || preview) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      void fetch(
+        `/api/partner/forms/${encodeURIComponent(productCode)}/duplicates`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ values: JSON.parse(duplicateSignature) }),
+          signal: controller.signal,
+        },
+      )
+        .then(async (response) => ({
+          ok: response.ok,
+          body: (await response.json().catch(() => null)) as {
+            checked?: boolean;
+            matched?: boolean;
+            latest?: { submittedAt: string; yours: boolean; outcome: string | null } | null;
+          } | null,
+        }))
+        .then(({ ok, body }) =>
+          setDuplicateCheck({
+            signature: duplicateSignature,
+            state:
+              !ok || !body?.checked
+                ? "unavailable"
+                : body.matched
+                  ? "match"
+                  : "clear",
+            latest: body?.latest ?? null,
+          }),
+        )
+        .catch(() => {
+          if (!controller.signal.aborted)
+            setDuplicateCheck({
+              signature: duplicateSignature,
+              state: "unavailable",
+            });
+        });
+    }, 900);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [duplicateSignature, productCode, preview]);
+  const duplicateState = !duplicateSignature
+    ? "idle"
+    : duplicateCheck?.signature === duplicateSignature
+      ? duplicateCheck.state
+      : "checking";
+  // A match found early asks for the reason before submit, not after a refused one. The server
+  // still decides (10–1000 characters, stored with the lead).
+  // An internal DQ (the number is already on one of the agency's leads) needs the same reason.
+  const internalDqFlagged = screening?.warning?.code === "internal_dq";
+  const duplicateFlagged = duplicateMatches.length > 0 || duplicateState === "match" || internalDqFlagged;
+  const duplicateReasonReady = !duplicateFlagged || duplicateJustification.trim().length >= 10;
+  const matchLatest = duplicateState === "match" && duplicateCheck?.signature === duplicateSignature ? duplicateCheck?.latest ?? null : null;
+  const progressPercent = requiredFieldCount === 0 ? null : Math.round((completedRequiredFieldCount / requiredFieldCount) * 100);
+  const canSubmit = Boolean(
+    partnerStatus === "active" &&
+    consentGiven &&
+    screening &&
+    !screening.blocked &&
+    (!screening.warning ||
+      screening.warning.code !== "dnc" ||
+      dncAcknowledged) &&
+    Object.keys(requiredErrors).length === 0 &&
+    duplicateReasonReady,
+  );
+  // LA-1.6-7: what is still keeping Submit disabled, by name, in the order the form asks for it.
+  const outstanding = outstandingSubmitItems({
+    screened: Boolean(screening),
+    dncPending: screening?.warning?.code === "dnc" && !dncAcknowledged,
+    missingRequired: sections
+      .flatMap((section) => section.fields)
+      .filter((item) => requiredErrors[item.field_key])
+      .map((item) => fields.get(item.field_key)?.label ?? item.field_key),
+    duplicateReasonMissing: !duplicateReasonReady,
+    consentGiven,
+  });
+  async function saveAndPause(reason: string, notes: string) {
+    if (preview) return false;
+    return persistDraft(true, { reason, notes });
+  }
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const errors = validateAll();
+    if (Object.keys(errors).length) {
+      setFieldErrors(errors);
+      setSubmitError("Complete the highlighted fields before submitting");
+      setStatus("Complete the highlighted fields");
+      const first = sections.flatMap((section) => section.fields).find((item) => errors[item.field_key]);
+      if (first) window.setTimeout(() => {
+        const control = document.getElementById(`partner-field-${productCode}-${first.field_key}`);
+        control?.scrollIntoView({ behavior: "smooth", block: "center" });
+        control?.focus();
+      }, 0);
+      return;
+    }
+    if (!screening) {
+      setSubmitError("Screen the phone number before submitting");
+      return;
+    }
+    if (!consentGiven) {
+      setSubmitError("Confirm the customer's documented consent before submitting");
+      consentRef.current?.focus();
+      return;
+    }
+    setFieldErrors({});
+    setSubmitError(null);
+    if (preview) {
+      setStatus("Preview: this form would submit. Nothing was sent.");
+      notify.done("Preview: every check passed. Nothing was submitted");
+      return;
+    }
+    setSaving(true);
+    try {
+      const response = await fetch("/api/partner/leads", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          product_code: productCode,
+          carrier_state: market.state,
+          values: valuesRef.current,
+          submission_id: submissionId.current,
+          screening_warning_acknowledged: dncAcknowledged,
+          duplicate_override_justification: duplicateJustification,
+          consent_attested: consentGiven,
+          draft_id: draftIdRef.current,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      setSaving(false);
+      if (!response.ok) {
+        const message = body?.error ?? "Could not submit lead";
+        if (body?.code === "duplicate_lead") {
+          setDuplicateMatches(Array.isArray(body.matches) ? body.matches.map((match: { matchedOn?: unknown }) => ({ matchedOn: Array.isArray(match.matchedOn) ? match.matchedOn.map(String) : [] })) : []);
+          setSubmitError(
+            "This person may already be in the pipeline. Review the match and add a justification if this is a separate lead.",
+          );
+          setStatus("Duplicate review required");
+        } else if (body?.code === "internal_dq_reason_required") {
+          setSubmitError(message);
+          setStatus("Duplicate review required");
+        } else {
+          setRejectionNotice(
+            (body?.code === "tcpa_block" || body?.code === "compliance_screening")
+              ? {
+                  code: body.code,
+                  count: Number(body.blocked_count ?? 0),
+                  script: String(body.neutral_end_call_script ?? ""),
+                }
+              : null,
+          );
+          setSubmitError(message);
+          setStatus(message);
+        }
+        notify.fail(message);
+        return;
+      }
+      setValues({});
+      valuesRef.current = {};
+      dirtyRef.current = false;
+      setFieldErrors({});
+      setDuplicateMatches([]);
+      setDuplicateJustification("");
+      setScreening(null);
+      setScreenedAt(null);
+      setDncAcknowledged(false);
+      setConsentGiven(false);
+      setFormOpened(false);
+      setDraftSavedAt(null);
+      // The submitted draft is deleted server-side; the next form starts a new one.
+      forgetSubmissionId(draftIdRef.current);
+      draftIdRef.current = null;
+      onDraftChange?.(null);
+      submissionId.current = crypto.randomUUID();
+      setStatus(body?.replayed ? "Already submitted" : "Submitted");
+      notify.win(
+        body?.replayed
+          ? "This lead was already submitted"
+          : "Lead submitted to the agent",
+      );
+    } catch {
+      setSaving(false);
+      setSubmitError(
+        "Could not submit lead. Check your connection and try again.",
+      );
+      setStatus("Submission failed");
+      notify.fail("Could not submit lead");
+    }
+  }
+  function handleFormSubmit(event: FormEvent<HTMLFormElement>) {
+    if (!formOpened) {
+      void screenPhone(event);
+      return;
+    }
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    if ((submitter as HTMLElement | null)?.id !== `submit-lead-${productCode}`) {
+      event.preventDefault();
+      return;
+    }
+    void submit(event);
+  }
+  const loading = status.startsWith("Loading");
+  if (!template)
+    return loading ? (
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <SectionLoading rows={4} columns={2} label="Loading lead form" />
+      </div>
+    ) : (
+      <div className="portal-partner-submit-panel is-roomy portal-partner-submit-empty" role="status">
+        <h2>Lead form not ready</h2>
+        <p>Your agent needs to configure this product form before this partner can submit a lead.</p>
+        <Button asChild variant="outline">
+          <Link href="/partner/messages">Message your agent</Link>
+        </Button>
+      </div>
+    );
+  if (!phoneField)
+    return (
+      <p className="text-sm text-[var(--error-ink)]" role="alert">
+        This form is missing its configured phone field.
+      </p>
+    );
+  const dncPending = screening?.warning?.code === "dnc" && !dncAcknowledged;
+  const visibleRequired = (section: (typeof sections)[number]) =>
+    section.fields.filter((item) => {
+      const field = fields.get(item.field_key);
+      return (
+        field &&
+        templateFormFieldVisible(item, values) &&
+        (field.is_required || item.is_required)
+      );
+    });
+  const requiredLeft = (section: (typeof sections)[number]) =>
+    visibleRequired(section).filter((item) => validateField(item.field_key, values)).length;
+  const phoneHint = screeningBusy
+    ? "Screening this number…"
+    : screening
+      ? screening.blocked
+        ? `Screening completed — review required${screenedAt ? ` — checked ${agoLabel(screenedAt, now)}` : ""}.`
+        : `Screened on blur. ${
+          screening.warning
+            ? screening.warning.code === "dnc"
+              ? dncAcknowledged
+                ? "DNC warning acknowledged"
+                : "DNC warning — acknowledge it to continue"
+              : "Internal warning noted"
+            : "DNC/TCPA clear"
+        }${screenedAt ? ` — checked ${agoLabel(screenedAt, now)}` : ""}.`
+      : "Screening starts when you leave this field.";
+  const phoneTone: ChipTone =
+    screeningBusy || !screening
+      ? "neutral"
+      : screening.blocked
+        ? "warning"
+      : screening.warning
+        ? "warning"
+        : "success";
+  const phoneLabel = screeningBusy
+    ? "Screening…"
+    : !screening
+      ? "Not yet"
+      : screening.blocked
+        ? "Review required"
+      : screening.warning
+        ? screening.warning.code === "dnc"
+          ? dncAcknowledged
+            ? "DNC acknowledged"
+            : "Needs acknowledgement"
+          : "Internal warning"
+        : "DNC/TCPA clear";
+  const phoneScreenComplete = screening?.outcome === "clear";
+  const duplicateTone: ChipTone =
+    duplicateMatches.length || duplicateState === "match"
+      ? "warning"
+      : duplicateState === "clear"
+        ? "success"
+        : "neutral";
+  const duplicateLabel = duplicateMatches.length
+    ? "Review match"
+    : duplicateState === "match"
+      ? "Possible match"
+      : duplicateState === "clear"
+        ? "No match"
+        : duplicateState === "checking"
+          ? "Checking…"
+          : duplicateState === "unavailable"
+            ? "Runs on submit"
+            : "Not yet";
+  const warningBlock = screening?.warning && (
+    <div className="portal-partner-submit-callout is-warning">
+      <p className="font-medium">Compliance warning</p>
+      <p>{screening.warning.message}</p>
+      {screening.warning.code === "dnc" && (
+        <label className="portal-remember-me">
+          <input
+            type="checkbox"
+            checked={dncAcknowledged}
+            onChange={(event) => {
+              setDncAcknowledged(event.target.checked);
+              if (event.target.checked) setFormOpened(true);
+            }}
+          />
+          I acknowledge this DNC warning and want to continue with the
+          customer-initiated submission.
+        </label>
+      )}
+    </div>
+  );
+  const rejectionBlock = rejectionNotice && (
+    <div className="portal-partner-submit-callout is-error" role="alert">
+      <p className="font-medium">Submission blocked</p>
+      <p>
+        Compliance code:{" "}
+        <span className="font-mono">{rejectionNotice.code.toUpperCase()}</span>.
+        No lead was created.
+      </p>
+      {rejectionNotice.code === "compliance_screening" ? (
+        <p>
+          Rejected — compliance screening.{" "}
+          <strong>{rejectionNotice.count}</strong> this month.
+        </p>
+      ) : (
+        <p>
+          Blocked submissions for this partner:{" "}
+          <strong>{rejectionNotice.count}</strong>
+        </p>
+      )}
+      {rejectionNotice.script && (
+        <p>
+          <span className="font-medium">Suggested neutral close:</span> “
+          {rejectionNotice.script}”
+        </p>
+      )}
+      <p className="portal-partner-submit-muted">
+        Only a coded result and count are shown. Blocked phone numbers are not
+        listed.
+      </p>
+    </div>
+  );
+  const hasDraftAnswers = sections.some((section) => section.fields.some((item) => {
+    const field = fields.get(item.field_key);
+    return Boolean(field && !isCustomerStateField(field) && !isEmpty(values[item.field_key]));
+  }));
+  const renderField = (formField: (typeof sections)[number]["fields"][number]) => {
+    const field = fields.get(formField.field_key);
+    if (!field || isCustomerStateField(field) || isPhoneTemplateField(field) || !templateFormFieldVisible(formField, values)) return null;
+    const error = fieldErrors[field.field_key];
+    const fieldId = `partner-field-${productCode}-${field.field_key}`;
+    const fieldLabelId = `${fieldId}-label`;
+    const isGroup = field.type === "multi_select";
+    const isPhone = field.field_key === phoneField.field_key;
+    return (
+      <div
+        className={`portal-partner-submit-field${placementWidth(field, formField) === "full" ? " is-wide" : ""}`}
+        key={formField.field_key}
+        onBlur={() => {
+          blurField(field.field_key);
+          if (isPhone && !isEmpty(valuesRef.current[field.field_key]))
+            void runScreening();
+        }}
+      >
+        <label id={fieldLabelId} htmlFor={isGroup ? undefined : fieldId}>
+          {field.label}
+          {(field.is_required || formField.is_required) && (
+            <span className="portal-partner-submit-required"> *</span>
+          )}
+        </label>
+        <PartnerField
+          id={fieldId}
+          labelId={fieldLabelId}
+          field={field}
+          value={field.field_key === DERIVED_AGE_KEY && dobKey ? derivedAge ?? undefined : values[field.field_key]}
+          error={error}
+          readOnly={field.field_key === DERIVED_AGE_KEY && Boolean(dobKey)}
+          onChange={(value) => updateValue(field.field_key, value)}
+        />
+        {isPhone ? (
+          <small>{phoneHint}</small>
+        ) : field.field_key === dobKey && derivedAge !== null ? (
+          <small>Age {derivedAge}{field.help_text ? ` · ${field.help_text}` : ""}</small>
+        ) : field.field_key === DERIVED_AGE_KEY && dobKey ? (
+          <small>Worked out from the date of birth.</small>
+        ) : (
+          field.help_text && <small>{field.help_text}</small>
+        )}
+        {error && (
+          <p className="portal-partner-submit-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  };
+  return (
+    <>
+      <LeaveGuard dirty={!preview && formOpened && Boolean(screening) && hasDraftAnswers} mode="autosaved-draft" onPause={saveAndPause} onDiscard={() => undefined} what="this lead" />
+      <div className="portal-partner-submit-product-bar" role="group" aria-labelledby="partner-lead-details-label">
+        <h2 id="partner-lead-details-label" className="sr-only">Lead setup</h2>
+        <div className="portal-partner-submit-product-row has-markets">
+          {setupControls}
+          <div className="portal-partner-submit-screening-control">
+            <label htmlFor={`screen-phone-${productCode}`}>Phone screening · {phoneField.label}<span className="portal-partner-submit-required"> *</span></label>
+            <div className="portal-partner-submit-screening-input">
+              <PartnerField
+                id={`screen-phone-${productCode}`}
+                field={phoneField}
+                value={values[phoneField.field_key]}
+                error={fieldErrors[phoneField.field_key]}
+                onChange={(value) => updateValue(phoneField.field_key, value)}
+                onBlur={() => { void runScreening(); }}
+              />
+              <Button type="button" disabled={screeningBusy || Boolean(screening && lastScreenedPhone.current === String(values[phoneField.field_key] ?? ""))} onClick={() => void runScreening()}>
+                {screeningBusy ? "Screening…" : screening ? "Screened" : "Screen"}
+              </Button>
+            </div>
+            <small>{screening ? phoneLabel : phoneHint}</small>
+            {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
+            {fieldErrors[phoneField.field_key] && <p className="portal-partner-submit-error" role="alert">{fieldErrors[phoneField.field_key]}</p>}
+          </div>
+        </div>
+      </div>
+      <div className="portal-partner-submit-body">
+        <form
+          id={`partner-form-${productCode}`}
+          className="portal-partner-submit-main"
+          onSubmit={handleFormSubmit}
+        >
+          <p className="sr-only" role="status">
+            {status}
+          </p>
+          {!formOpened && (
+            <section className="portal-partner-submit-screening-intro" aria-labelledby={`partner-submit-start-${productCode}`}>
+              <div className="portal-partner-submit-screening-intro-head">
+                <div>
+                  <h2 id={`partner-submit-start-${productCode}`}>Start with a phone screen</h2>
+                  <p>Screen the customer’s number to open the application. Your answers save automatically as you work.</p>
+                </div>
+                <span className="portal-partner-submit-step-count">Step {phoneScreenComplete ? 2 : 1} of 3</span>
+              </div>
+              <ol className="portal-partner-submit-steps" aria-label="Lead submission steps">
+                <li className={phoneScreenComplete ? "is-complete" : "is-current"} aria-current={phoneScreenComplete ? undefined : "step"}>
+                  <span className="portal-partner-submit-step-number">{phoneScreenComplete ? <CheckCircle2 aria-hidden="true" /> : "1"}</span>
+                  <span className="portal-partner-submit-step-copy"><strong>Screen phone</strong><small>{screening ? screening.outcome === "clear" ? "Screening complete" : "Needs review before continuing" : screeningBusy ? "Checking the number…" : "Check DNC/TCPA eligibility"}</small></span>
+                </li>
+                <li className={phoneScreenComplete ? "is-current" : "is-upcoming"} aria-current={phoneScreenComplete ? "step" : undefined}>
+                  <span className="portal-partner-submit-step-number">2</span>
+                  <span className="portal-partner-submit-step-copy"><strong>Complete application</strong><small>Enter the customer and coverage details</small></span>
+                </li>
+                <li className="is-upcoming">
+                  <span className="portal-partner-submit-step-number">3</span>
+                  <span className="portal-partner-submit-step-copy"><strong>Review and submit</strong><small>Check the answers and confirm consent</small></span>
+                </li>
+              </ol>
+              {sections.length > 0 && (
+                <div className="portal-partner-submit-section-preview" aria-labelledby={`partner-submit-sections-${productCode}`}>
+                  <div className="portal-partner-submit-section-preview-head">
+                    <h3 id={`partner-submit-sections-${productCode}`}>Your application sections</h3>
+                    <span>{sections.length} {sections.length === 1 ? "section" : "sections"}</span>
+                  </div>
+                  <ul>{sections.map((item, index) => <li key={item.section_key}>
+                    <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
+                    <strong>{item.label}</strong>
+                  </li>)}</ul>
+                </div>
+              )}
+            </section>
+          )}
+          {!formOpened && (screeningError || rejectionNotice || dncPending) && (
+            <div className="portal-partner-submit-phone-feedback">
+              {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
+              {rejectionBlock}
+              {warningBlock}
+            </div>
+          )}
+          {formOpened && (screeningError || rejectionNotice || dncPending) && (
+            <div className="portal-partner-submit-phone-feedback">
+              {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
+              {rejectionBlock}
+              {dncPending && warningBlock}
+            </div>
+          )}
+          {formOpened && sections.map((section) => (
+            <section key={section.section_key} className="portal-partner-submit-active-section" aria-labelledby={`partner-section-${productCode}-${section.section_key}`}>
+              <div className="portal-partner-submit-panel-head">
+                <h2 id={`partner-section-${productCode}-${section.section_key}`}>{section.label}</h2>
+                <p>{(() => {
+                  const total = visibleRequired(section).length;
+                  const left = requiredLeft(section);
+                  return total === 0 ? "No required fields in this section." : left ? `${left} required ${left === 1 ? "field" : "fields"} left. Required fields are marked *.` : "Required fields complete.";
+                })()}</p>
+              </div>
+              <div className="portal-partner-submit-fields">{section.fields.map(renderField)}</div>
+            </section>
+          ))}
+          {formOpened && duplicateFlagged && (
+            <div className="portal-partner-submit-callout is-warning">
+              <p className="font-medium">
+                {matchLatest
+                  ? `This person was submitted ${agoLabel(new Date(matchLatest.submittedAt).getTime(), now)} ${matchLatest.yours ? "by your team" : "from another source"}`
+                  : "This person may already be in the pipeline"}
+              </p>
+              <p>
+                {duplicateMatches.length > 0
+                  ? `${duplicateMatches.length} existing lead${duplicateMatches.length === 1 ? "" : "s"} matched on ${duplicateMatches.flatMap((match) => match.matchedOn).join(", ")}.`
+                  : duplicateState === "match"
+                    ? "The phone and name match an existing lead."
+                    : "This phone number is already on an existing lead."}
+                {matchLatest?.yours && matchLatest.outcome ? ` Outcome: ${matchLatest.outcome}.` : ""}
+                {" "}To submit anyway, say why. It is required and stored with the lead.
+              </p>
+              <label htmlFor={`duplicate-justification-${productCode}`}>
+                Why this is a separate lead
+              </label>
+              <textarea
+                id={`duplicate-justification-${productCode}`}
+                maxLength={1000}
+                value={duplicateJustification}
+                onChange={(event) =>
+                  setDuplicateJustification(event.target.value)
+                }
+              />
+              <p className="portal-partner-submit-muted">
+                At least 10 characters are required and the reason is stored
+                with the lead.
+              </p>
+            </div>
+          )}
+          {formOpened && (
+            <section className={`${cardSurface} portal-partner-submit-consent`} aria-labelledby={`partner-consent-heading-${productCode}`}>
+              <div className="portal-partner-submit-review-consent-head">
+                <div><h3 id={`partner-consent-heading-${productCode}`}>Customer consent</h3><p>Required before this lead can be submitted.</p></div>
+                <StatusChip tone={consentGiven ? "good" : "warning"}>{consentGiven ? "Confirmed" : "Required"}</StatusChip>
+              </div>
+              <label><input ref={consentRef} id={`partner-consent-${productCode}`} type="checkbox" checked={consentGiven} onChange={(event) => setConsentGiven(event.target.checked)} />
+                <span>The customer gave express written consent to be contacted by a licensed agent at the number above, by phone and by SMS, about insurance products. I hold documentation of that consent and understand every submission is audit logged.</span>
+              </label>
+              <p>Consent is never pre-selected. We record the confirmation time with the lead.</p>
+            </section>
+          )}
+          {submitError && (
+            <p className="portal-partner-submit-error" role="alert">
+              {submitError}
+            </p>
+          )}
+          <div className="portal-partner-submit-actions">
+            <span className="portal-partner-submit-save-status" role="status">
+              {saving ? "Saving draft…" : draftSavedAt ? `Saved ${agoLabel(draftSavedAt, now)}` : "Changes save automatically"}
+            </span>
+            {saveFailed && <Button type="button" variant="outline" disabled={saving} onClick={() => void persistDraft()}>Retry save</Button>}
+            {formOpened && (
+              <Button
+                id={`submit-lead-${productCode}`}
+                type="submit"
+                disabled={saving || !canSubmit}
+                aria-describedby={!canSubmit && outstanding.length ? `partner-outstanding-${productCode}` : undefined}
+              >
+                Submit lead
+              </Button>
+            )}
+          </div>
+          {formOpened && !canSubmit && outstanding.length > 0 && (
+            <p id={`partner-outstanding-${productCode}`} className="portal-partner-submit-muted">
+              Still needed to submit: {outstanding.join(", ")}.
+            </p>
+          )}
+        </form>
+        <aside
+          className="portal-partner-submit-readiness"
+          aria-label="Submission checks"
+        >
+          <div className="portal-partner-submit-panel-head">
+            <h2>Submission checks</h2>
+            <p>Here’s what still needs attention.</p>
+          </div>
+          <div className="portal-partner-submit-progress">
+            <div><span>{formOpened ? "Form progress" : "Current step"}</span><strong>{formOpened ? `${progressPercent == null ? "—" : `${progressPercent}%`} required fields complete` : "Phone screening"}</strong></div>
+            {formOpened && (
+              <div
+                className="portal-partner-submit-progress-track"
+                role="progressbar"
+                aria-label="Required form fields completed"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progressPercent ?? 0}
+              >
+                <span style={{ width: `${progressPercent ?? 0}%` }} />
+              </div>
+            )}
+          </div>
+          <dl className="portal-partner-submit-checks">
+            <div>
+              <dt>Phone screened</dt>
+              <dd>
+                <ReadinessValue tone={phoneTone}>{phoneLabel}</ReadinessValue>
+              </dd>
+            </div>
+            <div>
+              <dt>Required fields</dt>
+              <dd>
+                <ReadinessValue
+                  tone={
+                    requiredFieldCount === 0 || completedRequiredFieldCount === 0
+                      ? "neutral"
+                      : completedRequiredFieldCount === requiredFieldCount
+                        ? "success"
+                        : "warning"
+                  }
+                >
+                  {!formOpened
+                    ? "After screening"
+                    : requiredFieldCount === 0
+                    ? "None required"
+                    : `${completedRequiredFieldCount} of ${requiredFieldCount}`}
+                </ReadinessValue>
+              </dd>
+            </div>
+            <div>
+              <dt>Duplicate check</dt>
+              <dd>
+                <ReadinessValue tone={duplicateTone}>{duplicateLabel}</ReadinessValue>
+              </dd>
+            </div>
+            <div>
+              <dt>Consent captured</dt>
+              <dd>
+                <ReadinessValue tone={consentGiven ? "success" : "neutral"}>
+                  {consentGiven ? "Yes" : "Not yet"}
+                </ReadinessValue>
+              </dd>
+            </div>
+          </dl>
+          <dl className="portal-partner-submit-facts">
+            <div>
+              <dt>Product</dt>
+              <dd>{productName}</dd>
+            </div>
+            <div>
+              <dt>Form version</dt>
+              <dd>v{template.assignment.definition_version}</dd>
+            </div>
+            <div>
+              <dt>Agency</dt>
+              <dd>{agencyName ?? "Your agent"}</dd>
+            </div>
+            <div>
+              <dt>Draft saved</dt>
+              <dd>{draftSavedAt ? agoLabel(draftSavedAt, now) : "Not yet"}</dd>
+            </div>
+          </dl>
+        </aside>
+      </div>
+    </>
+  );
+}
+
+type ChipTone = "success" | "warning" | "neutral";
+
+/** One started form, as GET /api/partner/drafts lists it (LA-1.6-5). */
+type PartnerDraftRow = {
+  id: string;
+  product_code: string;
+  carrier_id: string | null;
+  carrier_state: string | null;
+  label: string | null;
+  phone_last4: string | null;
+  answered: number;
+  pause_reason: string | null;
+  pause_notes: string | null;
+  updated_at: string;
+};
+
+/** Plain status text with one restrained signal dot; the wording carries the meaning. */
+function ReadinessValue({ tone, children }: { tone: ChipTone; children: ReactNode }) {
+  return (
+    <span className={`portal-partner-submit-readiness-value is-${tone}`}>
+      <span aria-hidden="true" />
+      {children}
+    </span>
+  );
+}
+
+export type PartnerPortalSection =
+  "overview" | "submit" | "pipeline" | "team" | "team-review" | "messages" | "settings";
+
+function LegacyPartnerPortalWorkspace({
+  role,
+  partnerStatus,
+  section,
+  partnerName,
+  agencyName,
+  initialDraftId,
+}: {
+  role: PartnerRole;
+  partnerStatus: "draft" | "active" | "paused" | "offboarded";
+  section: PartnerPortalSection;
+  partnerName?: string;
+  agencyName?: string | null;
+  initialDraftId?: string | null;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  // Until the product list answers, the page cannot say "no products": it says it is loading.
+  const [productsLoaded, setProductsLoaded] = useState(false);
+  const [approvedProducts, setApprovedProducts] = useState<ApprovedProduct[]>(
+    [],
+  );
+  const [selectedProduct, setSelectedProduct] = useState("");
+  const [markets, setMarkets] = useState<PartnerMarket[]>([]);
+  const [selectedState, setSelectedState] = useState("");
+  const pendingDraftState = useRef<string | null>(null);
+  const [resumeDraftId, setResumeDraftId] = useState<string | null>(null);
+  const [formHasAnswers, setFormHasAnswers] = useState(false);
+  const initialDraftHandled = useRef(false);
+  async function confirmLeadReset() {
+    if (!formHasAnswers) return true;
+    return confirmAction({
+      title: "Change this lead setup?",
+      description: "Changing the product or customer state clears answers from this form. The saved draft remains available from Drafts.",
+      confirmLabel: "Clear answers",
+      cancelLabel: "Keep answers",
+    });
+  }
+  useEffect(() => {
+    let cancelled = false;
+    const productRequest =
+      section === "submit"
+        ? fetch("/api/partner/products", { cache: "no-store" })
+        : Promise.resolve(null);
+    const marketRequest =
+      section === "submit"
+        ? fetch("/api/partner/markets", { cache: "no-store" })
+        : Promise.resolve(null);
+    Promise.all([
+      Promise.resolve(productRequest),
+      Promise.resolve(marketRequest),
+    ])
+      .then(async ([productResponse, marketResponse]) => ({
+        productResponse,
+        marketResponse,
+        productBody: productResponse
+          ? await productResponse.json().catch(() => null)
+          : null,
+        marketBody: marketResponse
+          ? await marketResponse.json().catch(() => null)
+          : null,
+      }))
+      .then(({ productResponse, productBody, marketResponse, marketBody }) => {
+        if (cancelled) return;
+        setProductsLoaded(true);
+        if (productResponse) {
+          if (productResponse.ok) {
+            setApprovedProducts(productBody?.products ?? []);
+            setSelectedProduct((current) => current || productBody?.products?.[0]?.code || "");
+          } else
+            setError(productBody?.error ?? "Could not load approved products");
+        }
+        if (marketResponse) {
+          if (marketResponse.ok) {
+            const next = marketBody?.markets ?? [];
+            setMarkets(next);
+            const restoredState = pendingDraftState.current;
+            const nextState = restoredState && next.some((market: PartnerMarket) => market.state === restoredState)
+              ? restoredState
+              : next[0]?.state ?? "";
+            setSelectedState((current) => current || nextState);
+          } else
+            setError(marketBody?.error ?? "Could not load available markets");
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setProductsLoaded(true);
+        setError("Could not load approved products");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+  useEffect(() => {
+    if (!initialDraftId || section !== "submit" || !productsLoaded || initialDraftHandled.current) return;
+    if (!markets.length) return;
+    initialDraftHandled.current = true;
+    void fetch(`/api/partner/drafts?draft_id=${encodeURIComponent(initialDraftId)}`, { cache: "no-store" })
+      .then(async (response) => ({ response, body: await response.json().catch(() => null) as { drafts?: PartnerDraftRow[]; error?: string } | null }))
+      .then(({ response, body }) => {
+        const draft = body?.drafts?.[0];
+        if (!response.ok || !draft) { setError(body?.error ?? "That saved draft could not be opened"); return; }
+        if (!approvedProducts.some((product) => product.code === draft.product_code)) { setError("This draft's product is no longer available"); return; }
+        if (!markets.some((market) => market.state === draft.carrier_state)) { setError("This draft's customer state is no longer available"); return; }
+        pendingDraftState.current = draft.carrier_state;
+        setSelectedProduct(draft.product_code);
+        setSelectedState(draft.carrier_state ?? "");
+        setResumeDraftId(draft.id);
+      })
+      .catch(() => setError("That saved draft could not be opened"));
+  }, [initialDraftId, section, productsLoaded, markets, approvedProducts]);
+
+  const marketStates = Array.from(new Set(markets.map((market) => market.state)));
+  const selectedSubmissionMarket = selectedState && marketStates.includes(selectedState)
+    ? { state: selectedState }
+    : null;
+  const setupControls = (
+    <>
+      <div className="portal-partner-submit-select">
+        <span>Product</span>
+        <SelectMenu label="Product" value={selectedProduct} onChange={async (productCode) => {
+          if (!(await confirmLeadReset())) return;
+          pendingDraftState.current = null;
+          setFormHasAnswers(false);
+          setSelectedProduct(productCode);
+          setResumeDraftId(null);
+        }} searchPlaceholder="Search products" className="w-full" panelClassName="w-[var(--radix-popover-trigger-width)]" options={approvedProducts.map((product) => ({ value: product.code, label: productLineLabel(product.code) }))} />
+      </div>
+      <div className="portal-partner-submit-select is-narrow">
+        <span>Customer state</span>
+        {marketStates.length > 1 ? (
+          <SelectMenu label="Customer state" value={selectedState} onChange={async (state) => {
+            if (!(await confirmLeadReset())) return;
+            pendingDraftState.current = null;
+            setFormHasAnswers(false);
+            setSelectedState(state);
+            setResumeDraftId(null);
+          }} searchPlaceholder="Search states" className="w-full" panelClassName="w-[var(--radix-popover-trigger-width)]" panelAlign="start" options={marketStates.map((state) => ({ value: state, label: state, description: US_STATES.find(([code]) => code === state)?.[1] ?? state }))} />
+        ) : <div className="portal-partner-submit-state-value">{marketStates[0] ? `${marketStates[0]} · ${US_STATE_NAME_BY_CODE[marketStates[0]] ?? marketStates[0]}` : "No state available"}</div>}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
+      {section === "overview" && (
+        <section id="overview" className="scroll-mt-6">
+          {/* The one page header (UI-CONSISTENCY §2): no eyebrow, the 24px title. */}
+          <PageHeader
+            title="Overview"
+            description="Submit leads, follow their progress, and manage your team."
+            visible
+            infoDescription
+            actions={
+              <Button asChild>
+                <a href="#submit">
+                  <Send className="mr-1.5 size-4" aria-hidden="true" />
+                  Submit a new lead
+                </a>
+              </Button>
+            }
+          />
+          {error && (
+            <div
+              role="status"
+              className="mt-4 rounded-lg border border-[var(--color-danger)]/40 p-3 text-sm text-[var(--color-danger)]"
+            >
+              {error}
+            </div>
+          )}
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <a
+              href="#submit"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Send
+                className="size-5 text-[var(--color-brand)]"
+                aria-hidden="true"
+              />
+              <p className="mt-3 font-semibold">Submit leads</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Use the form configured by your agent.
+              </p>
+            </a>
+            <a
+              href="#pipeline"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <CheckCircle2
+                className="size-5 text-[var(--color-success)]"
+                aria-hidden="true"
+              />
+              <p className="mt-3 font-semibold">Track pipeline</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                See what is new, claimed, and submitted.
+              </p>
+            </a>
+            <a
+              href="#team"
+              className="rounded-lg border bg-card p-4 transition-colors hover:border-[var(--color-brand)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Users
+                className="size-5 text-[var(--color-brand)]"
+                aria-hidden="true"
+              />
+              <p className="mt-3 font-semibold">Manage team</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Invite partner users inside this account.
+              </p>
+            </a>
+          </div>
+        </section>
+      )}
+      {section === "submit" && (
+        <section id="submit" className="portal-partner-submit-shell scroll-mt-6">
+          {/* A paused or draft partner is told once, by the portal layout's banner. */}
+          <PageHeader
+            title="Submit a lead"
+            description="Start a new application for your customer."
+            visible
+            infoDescription
+            actions={<Button asChild variant="outline"><Link href="/partner/submit-lead/drafts"><FileText aria-hidden="true" />Drafts</Link></Button>}
+          />
+          {!productsLoaded ? (
+            <div className="overflow-hidden rounded-lg border border-border bg-card">
+              <SectionLoading rows={3} columns={3} label="Loading approved products" />
+            </div>
+          ) : approvedProducts.length > 0 ? (
+            <>
+              <div className={`${cardSurface} portal-partner-submit-workspace`}>
+              {selectedProduct && selectedSubmissionMarket && (
+                <div className="portal-partner-submit-flow">
+                <PartnerLeadForm
+                  key={`${selectedProduct}:${selectedState}:${resumeDraftId ?? "new"}`}
+                  draftId={resumeDraftId}
+                  productCode={selectedProduct}
+                  productName={productLineLabel(selectedProduct)}
+                  partnerStatus={partnerStatus}
+                  partnerName={partnerName}
+                  agencyName={agencyName}
+                  onHasAnswersChange={setFormHasAnswers}
+                  market={selectedSubmissionMarket}
+                  setupControls={setupControls}
+                />
+                </div>
+              )}
+              {!markets.length && (
+                <div className="portal-partner-submit-empty" role="status">
+                  <h2>No markets are open yet</h2>
+                  <p>
+                    Your agent has not enabled any carrier and state
+                    combinations for this partner yet. Contact your agent to
+                    request market access.
+                  </p>
+                  <Button asChild variant="outline">
+                    <Link href="/partner/messages">Message your agent</Link>
+                  </Button>
+                </div>
+              )}
+              </div>
+            </>
+          ) : (
+            <div className="portal-partner-submit-panel is-roomy portal-partner-submit-empty" role="status">
+              <h2>No products are enabled yet</h2>
+              <p>
+                Your agent controls which products and forms this partner can
+                submit. Ask them to approve a product, then return here to
+                submit leads.
+              </p>
+              <Button asChild variant="outline">
+                <Link href="/partner/messages">Message your agent</Link>
+              </Button>
+            </div>
+          )}
+        </section>
+      )}
+      {section === "pipeline" && (
+        <section id="pipeline" className="scroll-mt-6">
+          <PartnerLeadPipeline partnerStatus={partnerStatus} role={role} partnerName={partnerName} />
+        </section>
+      )}
+      {section === "messages" && (
+        <section id="messages" className="flex min-h-0 flex-1 flex-col scroll-mt-6">
+          <PartnerChatPanel />
+        </section>
+      )}
+      {section === "settings" && (
+        <section id="settings" className="scroll-mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Partner settings</CardTitle>
+              <CardDescription>
+                Account details and controls that are owned by the agent.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Your access
+                  </p>
+                  <p className="mt-2 font-medium">
+                    {role === "partner_admin"
+                      ? "Partner admin"
+                      : "Partner user"}
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Your role controls what you can do in this portal.
+                  </p>
+                </div>
+                <div className="rounded-lg border p-4">
+                  <p className="text-xs font-semibold text-muted-foreground">
+                    Agent-managed settings
+                  </p>
+                  <p className="mt-2 font-medium">
+                    Products and commercial terms
+                  </p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Contact your agent when these need to change.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+      )}
+    </div>
+  );
+}
+
+export function PartnerPortalWorkspace({
+  role,
+  partnerStatus,
+  partnerId,
+  partnerName,
+  partnerTimezone,
+  agencyName,
+  section = "overview",
+  initialDraftId,
+}: {
+  role: PartnerRole;
+  partnerStatus: "draft" | "active" | "paused" | "offboarded";
+  partnerId?: string;
+  partnerName?: string;
+  partnerTimezone?: string;
+  agencyName?: string | null;
+  section?: PartnerPortalSection;
+  initialDraftId?: string | null;
+}) {
+  useEffect(() => {
+    const destinations: Record<string, string> = {
+      "#overview": "/partner",
+      "#submit": "/partner/submit-lead",
+      "#pipeline": "/partner/pipeline",
+      "#team": "/partner/team",
+      "#team-review": "/partner/team-review",
+      "#messages": "/partner/messages",
+      "#settings": "/partner/settings",
+    };
+    function routeSection(event: MouseEvent) {
+      const anchor = (event.target as HTMLElement).closest<HTMLAnchorElement>(
+        "a[href^='#']",
+      );
+      if (!anchor) return;
+      const destination = destinations[anchor.getAttribute("href") ?? ""];
+      if (!destination) return;
+      event.preventDefault();
+      window.location.assign(destination);
+    }
+    document.addEventListener("click", routeSection);
+    return () => document.removeEventListener("click", routeSection);
+  }, []);
+
+  if (section === "overview")
+    return <PartnerPortalOverview role={role} partnerStatus={partnerStatus} partnerName={partnerName} />;
+  if (section === "team")
+    return <PartnerTeamWorkspace role={role} partnerStatus={partnerStatus} partnerName={partnerName} />;
+  if (section === "team-review")
+    return <PartnerTeamReviewWorkspace partnerName={partnerName ?? "Partner organization"} />;
+  if (section === "settings")
+    return (
+      <PartnerSettingsWorkspace
+        role={role}
+        partnerStatus={partnerStatus}
+        partnerId={partnerId}
+        partnerName={partnerName}
+        partnerTimezone={partnerTimezone}
+      />
+    );
+  return (
+    <LegacyPartnerPortalWorkspace
+      role={role}
+      partnerStatus={partnerStatus}
+      section={section}
+      partnerName={partnerName}
+      agencyName={agencyName}
+      initialDraftId={initialDraftId}
+    />
+  );
+}

@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { X } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import type { Announcement } from "@/lib/system/constants";
 
 const TONE: Record<Announcement["type"], string> = {
-  info: "border-[var(--color-blue)]/30 bg-[var(--color-blue)]/10",
+  info: "border-[var(--color-brand)]/30 bg-[var(--color-brand)]/10",
   warning: "border-[var(--color-warning)]/40 bg-[var(--color-warning)]/10",
   critical: "border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10",
 };
@@ -24,7 +24,7 @@ export function AnnouncementStrip({ initialAnnouncements }: { initialAnnouncemen
     }
 
     const body = await response.json().catch(() => null);
-    toast.error(body?.error ?? "We could not dismiss this announcement. Please try again.");
+    notify.fail(body?.error ?? "We could not dismiss this announcement. Please try again.");
   }
 
   if (announcements.length === 0) return null;

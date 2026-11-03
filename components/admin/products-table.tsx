@@ -1,28 +1,59 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { MoreHorizontal } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { EmptyState, NoMatches } from "@/components/admin/empty-state";
+import { StatusChip } from "@/components/admin/status-chip";
 import { Button } from "@/components/ui/button";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { PageHeader } from "@/components/ui/page-header";
+import { TableCard } from "@/components/ui/table-card";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PRODUCT_CATEGORY_LABELS, type ProductRow } from "@/lib/products/constants";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS, type ProductCategory, type ProductRow } from "@/lib/products/constants";
+import { cn } from "@/lib/utils";
 import { ProductDialog } from "./product-dialog";
 
-export function ProductsTable({ initialProducts }: { initialProducts: ProductRow[] }) {
-  const [products, setProducts] = useState(initialProducts);
-  const [showArchived, setShowArchived] = useState(false);
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+
+export type ProductUsage = { templates: number; partners: number };
+
+/**
+ * The products board (p-adm-products): the insurance product catalogue every template, partner
+ * approval and carrier contract points at. Rows come from the page and refresh through the router,
+ * so a product added from the header appears in the figures and the table together.
+ */
+export function ProductsTable({ products, usage, partnerCount }: { products: ProductRow[]; usage: Record<string, ProductUsage>; partnerCount: number }) {
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState<"" | ProductCategory>("");
+  const [page, setPage] = useState(1);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<ProductRow | null>(null);
   const [pendingId, setPendingId] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
-    const response = await fetch("/api/admin/products");
-    if (response.ok) setProducts((await response.json()).products);
-  }, []);
+  const active = products.filter((p) => p.is_active);
+  const archivedCount = products.length - active.length;
+  const categories = [...new Set(active.map((p) => p.category))];
+  const usedByTemplates = active.filter((p) => (usage[p.code]?.templates ?? 0) > 0).length;
+  const approved = active.filter((p) => (usage[p.code]?.partners ?? 0) > 0).length;
+
+  const needle = query.trim().toLowerCase();
+  const rows = useMemo(
+    () => products.filter((p) => (includeArchived || p.is_active) && (!category || p.category === category) && (!needle || p.name.toLowerCase().includes(needle) || p.code.toLowerCase().includes(needle))),
+    [products, includeArchived, category, needle],
+  );
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(rows, page, pageSize);
+  const anyFilter = Boolean(needle || category);
 
   async function setArchived(product: ProductRow, archived: boolean) {
     setPendingId(product.id);
@@ -33,42 +64,100 @@ export function ProductsTable({ initialProducts }: { initialProducts: ProductRow
     setPendingId(null);
     if (!response.ok) {
       const body = await response.json().catch(() => null);
-      toast.error(body?.error ?? "Could not update the product");
+      notify.block(body?.error ?? "Could not update the product");
       return;
     }
-    toast.success(`${product.name} ${archived ? "archived" : "restored"}`);
-    refresh();
+    notify.done(`${product.name} ${archived ? "archived" : "restored"}`);
+    router.refresh();
   }
 
-  const active = products.filter((product) => product.is_active);
-  const archived = products.filter((product) => !product.is_active);
-  const visible = showArchived ? products : active;
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="text-sm text-muted-foreground">{active.length} active{archived.length > 0 && ` · ${archived.length} archived`}</p>
-        {archived.length > 0 && <Button variant="outline" size="sm" onClick={() => setShowArchived((value) => !value)}>{showArchived ? "Hide archived" : "Show archived"}</Button>}
-        <div className="ml-auto"><Button size="sm" onClick={() => setCreating(true)}>New product</Button></div>
-      </div>
-      <div className={tableShell}>
-        <Table>
-          <TableHeader><TableRow className={tableHeaderRow}><TableHead className={tableHeadCell}>Product</TableHead><TableHead className={tableHeadCell}>Code</TableHead><TableHead className={tableHeadCell}>Category</TableHead><TableHead className={tableHeadCell}>Description</TableHead><TableHead className={tableHeadCell}>Order</TableHead><TableHead className={`${tableHeadCell} w-10`} /></TableRow></TableHeader>
-          <TableBody>
-            {visible.length === 0 && <TableRow><TableCell colSpan={6} className="h-20 text-center text-sm text-muted-foreground">No products yet. Templates and reporting both reference this list, so add what agents actually sell.</TableCell></TableRow>}
-            {visible.map((product) => <TableRow key={product.id} className={!product.is_active ? "opacity-55" : undefined}>
-              <TableCell className="font-medium"><span className="flex items-center gap-2">{product.name}{!product.is_active && <Badge variant="outline" className="border-transparent bg-muted text-muted-foreground">Archived</Badge>}</span></TableCell>
-              <TableCell><code className="rounded bg-muted px-1.5 py-0.5 text-xs">{product.code}</code></TableCell>
-              <TableCell>{PRODUCT_CATEGORY_LABELS[product.category]}</TableCell>
-              <TableCell className="max-w-[260px] truncate text-muted-foreground">{product.description ?? "—"}</TableCell>
-              <TableCell>{product.sort_order}</TableCell>
-              <TableCell><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" disabled={pendingId === product.id}><MoreHorizontal /><span className="sr-only">Actions</span></Button></DropdownMenuTrigger><DropdownMenuContent align="end"><DropdownMenuItem onSelect={() => setEditing(product)}>Edit</DropdownMenuItem>{product.is_active ? <DropdownMenuItem variant="destructive" onSelect={() => setArchived(product, true)}>Archive</DropdownMenuItem> : <DropdownMenuItem onSelect={() => setArchived(product, false)}>Restore</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu></TableCell>
-            </TableRow>)}
-          </TableBody>
-        </Table>
-      </div>
-      <ProductDialog mode="create" open={creating} onClose={() => setCreating(false)} onSaved={refresh} />
-      <ProductDialog key={`edit-${editing?.id ?? "none"}`} mode="edit" product={editing} open={editing !== null} onClose={() => setEditing(null)} onSaved={refresh} />
+    <div className="flex min-w-0 flex-col gap-6">
+      <PageHeader
+        title="Products"
+        description="A product's code is permanent once created."
+        actions={<Button type="button" onClick={() => setCreating(true)}>New product</Button>}
+      />
+
+      <BoardStatGrid>
+        <BoardStatTile label="Products" value={active.length.toLocaleString()} footnote={archivedCount > 0 ? `${archivedCount} archived` : "none archived"} />
+        <BoardStatTile label="Categories" value={categories.length.toLocaleString()} footnote={categories.map((c) => PRODUCT_CATEGORY_LABELS[c]).join(", ") || "none in use"} />
+        <BoardStatTile label="Used by templates" value={usedByTemplates.toLocaleString()} footnote={`of ${active.length.toLocaleString()} active`} />
+        <BoardStatTile label="Approved for partners" value={approved.toLocaleString()} footnote={`across ${partnerCount.toLocaleString()} ${partnerCount === 1 ? "partner" : "partners"}`} />
+      </BoardStatGrid>
+
+      <TableCard
+        className="min-w-0"
+        footer={rows.length ? <Pager page={current} pageSize={pageSize} total={rows.length} noun={rows.length === 1 ? "product" : "products"} suffix="by sort order" onPage={setPage} /> : undefined}
+        toolbar={
+          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search product or code" />
+            <select aria-label="Category" value={category} onChange={(event) => { setCategory(event.target.value as "" | ProductCategory); setPage(1); }} className={toolbarControl}>
+              <option value="">Every category</option>
+              {PRODUCT_CATEGORIES.map((value) => <option key={value} value={value}>{PRODUCT_CATEGORY_LABELS[value]}</option>)}
+            </select>
+            <select aria-label="Archived products" value={includeArchived ? "include" : "hide"} onChange={(event) => { setIncludeArchived(event.target.value === "include"); setPage(1); }} className={toolbarControl}>
+              <option value="hide">Hide archived</option>
+              <option value="include">Including archived{archivedCount > 0 ? ` (${archivedCount})` : ""}</option>
+            </select>
+            {anyFilter && <Button type="button" variant="ghost" onClick={() => { setQuery(""); setCategory(""); setPage(1); }}>Clear</Button>}
+          </DataToolbar>
+        }
+      >
+          <table className="w-full min-w-[860px] border-collapse">
+            <thead>
+              <tr className="bg-[var(--surface-alt)]">
+                <th scope="col" className={th}>Product</th>
+                <th scope="col" className={cn(th, "w-[170px]")}>Code</th>
+                <th scope="col" className={cn(th, "w-[120px]")}>Category</th>
+                <th scope="col" className={th}>Description</th>
+                <th scope="col" className={cn(th, "w-[70px] text-right")}>Sort</th>
+                <th scope="col" className={cn(th, "w-[110px]")}>Status</th>
+                <th scope="col" className={cn(th, "w-[56px]")}><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.length === 0 ? (
+                <tr><td colSpan={7} className="p-0">
+                  {anyFilter ? <NoMatches noun="products" onClear={() => { setQuery(""); setCategory(""); }} /> : <EmptyState title="No products yet" hint="Add what agents actually sell with New product." />}
+                </td></tr>
+              ) : shown.map((product) => {
+                const used = usage[product.code] ?? { templates: 0, partners: 0 };
+                return (
+                  <tr key={product.id} className={cn("hover:bg-[color-mix(in_srgb,var(--primary),transparent_95%)]", !product.is_active && "opacity-60")}>
+                    <td className={td}>
+                      <span className="font-semibold text-[var(--ink)]">{product.name}</span>
+                      <span className="block text-xs text-[var(--muted)]">{used.templates || used.partners ? [used.templates ? `${used.templates} ${used.templates === 1 ? "template" : "templates"}` : null, used.partners ? `${used.partners} ${used.partners === 1 ? "partner" : "partners"}` : null].filter(Boolean).join(" · ") : "Not referenced yet"}</span>
+                    </td>
+                    <td className={td}><code className="font-mono text-sm">{product.code}</code></td>
+                    <td className={td}>{PRODUCT_CATEGORY_LABELS[product.category]}</td>
+                    <td className={cn(td, "max-w-[320px]")}><span className="line-clamp-2">{product.description ?? "—"}</span></td>
+                    <td className={cn(td, "text-right tabular-nums")}>{product.sort_order}</td>
+                    <td className={td}>{product.is_active ? <StatusChip tone="good" dot>Active</StatusChip> : <StatusChip tone="neutral">Archived</StatusChip>}</td>
+                    <td className={cn(td, "text-right")}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button type="button" variant="ghost" size="icon-sm" aria-label={`Actions for ${product.name}`} disabled={pendingId === product.id}>
+                            <MoreHorizontal aria-hidden />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onSelect={() => setEditing(product)}>Edit</DropdownMenuItem>
+                          {product.is_active
+                            ? <DropdownMenuItem variant="destructive" onSelect={() => void setArchived(product, true)}>Archive</DropdownMenuItem>
+                            : <DropdownMenuItem onSelect={() => void setArchived(product, false)}>Restore</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+      </TableCard>
+
+      <ProductDialog mode="create" open={creating} onClose={() => setCreating(false)} onSaved={() => router.refresh()} />
+      <ProductDialog key={`edit-${editing?.id ?? "none"}`} mode="edit" product={editing} open={editing !== null} onClose={() => setEditing(null)} onSaved={() => router.refresh()} />
     </div>
   );
 }

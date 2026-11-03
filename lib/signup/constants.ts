@@ -7,6 +7,36 @@ export const PRODUCT_OPTIONS = [
   { value: "supplemental", label: "Supplemental benefits" },
 ] as const;
 
+export const BUSINESS_FOCUS_OPTIONS = [
+  { key: "life", label: "Life" },
+  { key: "health", label: "Health" },
+  { key: "both", label: "Life + health" },
+  { key: "other", label: "Other" },
+] as const;
+
+export type BusinessFocus = (typeof BUSINESS_FOCUS_OPTIONS)[number]["key"] | "";
+
+const LIFE_PRODUCT_CODES = new Set(["life", "annuities"]);
+const HEALTH_PRODUCT_CODES = new Set(["health", "medicare", "supplemental"]);
+
+export function productsForBusinessFocus(focus: BusinessFocus): string[] {
+  if (focus === "life") return [...LIFE_PRODUCT_CODES];
+  if (focus === "health") return [...HEALTH_PRODUCT_CODES];
+  if (focus === "both") return [...LIFE_PRODUCT_CODES, ...HEALTH_PRODUCT_CODES];
+  if (focus === "other") return ["property_casualty"];
+  return [];
+}
+
+export function inferBusinessFocus(products: readonly string[]): BusinessFocus {
+  if (!products.length) return "";
+  const hasLife = products.some((product) => LIFE_PRODUCT_CODES.has(product));
+  const hasHealth = products.some((product) => HEALTH_PRODUCT_CODES.has(product));
+  if (hasLife && hasHealth) return "both";
+  if (hasLife) return "life";
+  if (hasHealth) return "health";
+  return "other";
+}
+
 export const VOLUME_OPTIONS = [
   { value: "0_25", label: "0–25 applications / month" },
   { value: "26_100", label: "26–100 applications / month" },
@@ -47,14 +77,20 @@ export type SetupProfileInput = {
   leadSources: string[];
 };
 
+/** Lead sources that arrive through a publisher or a feed, and so need routing. Referrals do not. */
+export const ROUTED_LEAD_SOURCES: readonly string[] = ["purchased", "website", "social"];
+/** Saved in business_profiles.recommended_setup_steps; the dashboard checklist reads them back. */
+export const LEAD_SOURCE_SETUP_STEP = "Connect and route your lead sources";
+export const BOOK_IMPORT_SETUP_STEP = "Import your existing book of business";
+
 export function deriveRecommendedSetupSteps(profile: SetupProfileInput): string[] {
   const steps = ["Configure your product workspace"];
 
-  if (profile.leadSources.some((source) => ["purchased", "website", "social"].includes(source))) {
-    steps.push("Connect and route your lead sources");
+  if (profile.leadSources.some((source) => ROUTED_LEAD_SOURCES.includes(source))) {
+    steps.push(LEAD_SOURCE_SETUP_STEP);
   }
   if (profile.leadSources.includes("existing_book")) {
-    steps.push("Import your existing book of business");
+    steps.push(BOOK_IMPORT_SETUP_STEP);
   }
   if (["101_250", "251_500", "500_plus"].includes(profile.monthlyVolumeRange)) {
     steps.push("Configure high-volume workflow automation");
@@ -64,4 +100,26 @@ export function deriveRecommendedSetupSteps(profile: SetupProfileInput): string[
   }
 
   return steps;
+}
+
+/**
+ * The onboarding states that mean "this tenant finished setting up".
+ *
+ * There are **two spellings of the same state** in live data, and both are real:
+ *
+ *     complete 383 · completed 197 · ready_for_checkout 5 · pending 1     (586 tenants, 2026-09-22)
+ *
+ * Nothing writes `not_started`, despite two places in the codebase asserting that the column never
+ * advances past it. Collapsing the two spellings is a data migration and a product decision about
+ * which one wins; until then, anything asking "is this tenant done?" has to accept both, because
+ * matching one silently misclassifies the other group.
+ *
+ * That is not hypothetical — it was a live defect. `setupChecklistForState` compared against
+ * `"completed"` alone, so the 383 tenants stored as `"complete"` saw a permanent **0 of 5** setup
+ * checklist on their dashboard, with every step shown as outstanding, long after finishing.
+ */
+export const ONBOARDING_COMPLETE_STATES = ["complete", "completed"] as const;
+
+export function isOnboardingComplete(onboardingState: string | null | undefined): boolean {
+  return (ONBOARDING_COMPLETE_STATES as readonly string[]).includes(onboardingState ?? "");
 }

@@ -1,178 +1,219 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { StatusChip } from "@/components/ui/status-chip";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-import { Input } from "@/components/ui/input";
+import { Pager, paginate } from "@/components/ui/pager";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { EmptyState, NoMatches } from "@/components/admin/empty-state";
+import { TenantsListDate } from "@/components/admin/tenants-list-date";
+import { st, pillTone } from "@/components/app/settings/primitives";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { TableCard } from "@/components/ui/table-card";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { CreateTenantDialog } from "./create-tenant-dialog";
-import { PaginationBar } from "./pagination-bar";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
-import { NoMatches } from "@/components/admin/empty-state";
-import { StatusChip, accountTone } from "@/components/admin/status-chip";
+  LIST_STATUSES,
+  LIST_STATUS_LABELS,
+  LIST_STATUS_TONES,
+  matchesTenantSearch,
+  onboardingComplete,
+  onboardingLabel,
+  onboardingTone,
+  type ListStatus,
+  type TenantListRow,
+} from "@/lib/tenantsList/present";
+import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 10;
+const NO_PLAN = "__none__";
 
-type TenantStatus = "provisioning" | "active" | "suspended" | "cancelled";
+type StatusFilter = "all" | ListStatus;
+type OnboardingFilter = "all" | "complete" | "incomplete";
 
-type TenantRow = {
-  id: string;
-  name: string;
-  status: TenantStatus;
-  plan_code: string | null;
-  onboarding_state: string;
-  created_at: string;
-  suspended_at: string | null;
-  owner: { name: string; email: string } | null;
-};
-
-type StatusFilter = "all" | TenantStatus;
-
-const STATUS_LABELS: Record<TenantStatus, string> = {
-  provisioning: "Provisioning",
-  active: "Active",
-  suspended: "Suspended",
-  cancelled: "Cancelled",
-};
-
-
-export function TenantsTable({ initialTenants }: { initialTenants: TenantRow[] }) {
-  const [tenants, setTenants] = useState(initialTenants);
+/**
+ * The tenants list below the figures (board p-adm-tenants): one table card with its toolbar and
+ * footer.
+ *
+ * Every tenant is on the client already (the server read them all, in pages), so search, filters
+ * and paging are instant and the counts are exact. Rows open the tenant record.
+ */
+export function TenantsTable({ rows }: { rows: TenantListRow[] }) {
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [onboarding, setOnboarding] = useState<OnboardingFilter>("all");
+  const [plan, setPlan] = useState<string>("all");
   const [page, setPage] = useState(1);
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
 
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/admin/tenants");
-    if (res.ok) {
-      const body = await res.json();
-      setTenants(body.tenants);
+  const planOptions = useMemo(() => {
+    const names = new Set<string>();
+    let unsold = false;
+    for (const row of rows) {
+      if (row.plan) names.add(row.plan.name);
+      else unsold = true;
     }
-  }, []);
+    return [
+      { value: "all", label: "Every plan" },
+      ...[...names].sort((a, b) => a.localeCompare(b)).map((name) => ({ value: name, label: name })),
+      ...(unsold ? [{ value: NO_PLAN, label: "No subscription" }] : []),
+    ];
+  }, [rows]);
 
-  const filtered = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return tenants.filter((tenant) => {
-      if (statusFilter !== "all" && tenant.status !== statusFilter) return false;
-      if (query) {
-        const haystack = `${tenant.name} ${tenant.owner?.name ?? ""} ${tenant.owner?.email ?? ""}`.toLowerCase();
-        if (!haystack.includes(query)) return false;
-      }
-      return true;
-    });
-  }, [tenants, search, statusFilter]);
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(Math.max(page, 1), totalPages);
-  const paged = useMemo(
-    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
-    [filtered, safePage],
+  const filtered = useMemo(
+    () =>
+      rows.filter((row) => {
+        if (status !== "all" && row.status !== status) return false;
+        if (onboarding === "complete" && !onboardingComplete(row.onboardingState)) return false;
+        if (onboarding === "incomplete" && onboardingComplete(row.onboardingState)) return false;
+        if (plan === NO_PLAN && row.plan) return false;
+        if (plan !== "all" && plan !== NO_PLAN && row.plan?.name !== plan) return false;
+        return matchesTenantSearch(row, search);
+      }),
+    [rows, status, onboarding, plan, search],
   );
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search business or owner…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-          <SelectTrigger className="w-[170px]">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => (
-              <SelectItem key={value} value={value}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <div className="ml-auto">
-          <CreateTenantDialog onCreated={refresh} />
-        </div>
-      </div>
+  const pageSize = useFittingPageSize(480, 45);
+  const { current, rows: shown } = paginate(filtered, page, pageSize);
 
-      <div className={tableShell}>
-        <Table>
-          <TableHeader>
-            <TableRow className={tableHeaderRow}>
-              <TableHead className={tableHeadCell}>Business</TableHead>
-              <TableHead className={tableHeadCell}>Owner</TableHead>
-              <TableHead className={tableHeadCell}>Status</TableHead>
-              <TableHead className={tableHeadCell}>Plan</TableHead>
-              <TableHead className={tableHeadCell}>Joined</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {filtered.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="p-0">
-                  <NoMatches
-                    noun="tenants"
-                    onClear={() => { setSearch(""); setStatusFilter("all"); setPage(1); }}
-                  />
-                </TableCell>
-              </TableRow>
-            )}
-            {paged.map((tenant) => (
-              <TableRow key={tenant.id}>
-                <TableCell className="font-medium">
-                  <Link href={`/admin/tenants/${tenant.id}`} className="hover:underline">
-                    {tenant.name}
-                  </Link>
-                </TableCell>
-                <TableCell className="text-muted-foreground">
-                  {tenant.owner ? (
-                    <>
-                      {tenant.owner.name} <span className="text-xs">· {tenant.owner.email}</span>
-                    </>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
-                <TableCell>
-                  <StatusChip tone={accountTone(tenant.status)} dot>
-                    {STATUS_LABELS[tenant.status]}
-                  </StatusChip>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{tenant.plan_code ?? "No plan yet"}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {new Date(tenant.created_at).toLocaleDateString()}
-                </TableCell>
-              </TableRow>
+  function clearAll() {
+    setSearch("");
+    setStatus("all");
+    setOnboarding("all");
+    setPlan("all");
+    setPage(1);
+  }
+
+  return (
+    <TableCard
+      footer={<Pager page={current} pageSize={pageSize} total={filtered.length} noun="tenants" suffix="newest first" onPage={setPage} />}
+      toolbar={
+        <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
+          <ToolbarSearch
+            value={search}
+            onChange={(value) => {
+              setSearch(value);
+              setPage(1);
+            }}
+            placeholder="Search tenant, owner"
+          />
+          <select
+            aria-label="Status"
+            value={status}
+            onChange={(event) => {
+              setStatus(event.target.value as StatusFilter);
+              setPage(1);
+            }}
+            className={toolbarControl}
+          >
+            <option value="all">All statuses</option>
+            {LIST_STATUSES.map((value) => (
+              <option key={value} value={value}>
+                {LIST_STATUS_LABELS[value]}
+              </option>
             ))}
-          </TableBody>
-        </Table>
-        <PaginationBar
-          page={safePage}
-          totalItems={filtered.length}
-          itemsPerPage={PAGE_SIZE}
-          itemLabel="tenants"
-          onPageChange={setPage}
-        />
+          </select>
+          <select
+            aria-label="Onboarding"
+            value={onboarding}
+            onChange={(event) => {
+              setOnboarding(event.target.value as OnboardingFilter);
+              setPage(1);
+            }}
+            className={toolbarControl}
+          >
+            <option value="all">Any onboarding</option>
+            <option value="complete">Onboarding complete</option>
+            <option value="incomplete">Onboarding not complete</option>
+          </select>
+          <select
+            aria-label="Plan"
+            value={plan}
+            onChange={(event) => {
+              setPlan(event.target.value);
+              setPage(1);
+            }}
+            className={toolbarControl}
+          >
+            {planOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </DataToolbar>
+      }
+    >
+      <div className="min-w-0 overflow-x-auto">
+        <table className={cn(st.table, "min-w-[860px]")}>
+          <thead>
+            <tr className={st.headRow}>
+              <th scope="col" className={st.th}>Tenant &amp; owner</th>
+              <th scope="col" className={cn(st.th, "w-[130px]")}>Status</th>
+              <th scope="col" className={cn(st.th, "w-[110px]")}>Plan</th>
+              <th scope="col" className={cn(st.th, "w-[190px]")}>Onboarding</th>
+              <th scope="col" className={cn(st.th, "w-[130px]")}>Created</th>
+              <th scope="col" className={cn(st.th, "w-[130px]")}>Suspended</th>
+            </tr>
+          </thead>
+          <tbody className="m-seq">
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="border-t border-[var(--border)] p-0">
+                  <EmptyState
+                    title="No tenants yet"
+                    hint="Agencies appear here when they sign up or a super admin creates one."
+                  />
+                </td>
+              </tr>
+            )}
+            {rows.length > 0 && filtered.length === 0 && (
+              <tr>
+                <td colSpan={6} className="border-t border-[var(--border)] p-0">
+                  <NoMatches noun="tenants" onClear={clearAll} />
+                </td>
+              </tr>
+            )}
+            {shown.map((row) => (
+              <tr key={row.id} className="m-row hover:bg-[var(--brand-50)]">
+                <td className={st.td}>
+                  <Link
+                    href={`/admin/tenants/${row.id}`}
+                    className="rounded-sm text-inherit no-underline hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                  >
+                    {row.name}
+                  </Link>
+                  <br />
+                  <span className="text-xs text-[var(--muted)]" title={row.owner ? `${row.owner.name} · ${row.owner.email}` : undefined}>
+                    {row.owner ? row.owner.email : "No owner yet"}
+                  </span>
+                </td>
+                <td className={st.td}>
+                  <StatusChip tone={pillTone(LIST_STATUS_TONES[row.status])} dot>
+                    {LIST_STATUS_LABELS[row.status]}
+                  </StatusChip>
+                </td>
+                <td className={st.td}>
+                  {row.plan ? (
+                    <span title={row.plan.version === null ? row.plan.name : `${row.plan.name} v${row.plan.version}`}>{row.plan.name}</span>
+                  ) : (
+                    <span className="text-[var(--muted)]">None</span>
+                  )}
+                </td>
+                <td className={st.td}>
+                  <StatusChip dot={false} tone={pillTone(onboardingTone(row.onboardingState))}>{onboardingLabel(row.onboardingState)}</StatusChip>
+                </td>
+                <td className={st.td}>
+                  <TenantsListDate iso={row.createdAt} />
+                </td>
+                <td className={st.td}>
+                  <TenantsListDate iso={row.status === "suspended" ? row.suspendedAt : null} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </div>
+    </TableCard>
   );
 }

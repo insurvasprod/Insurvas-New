@@ -3,20 +3,14 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { BILLING_CYCLE_LABELS, formatCentsAsCurrency, type BillingCycle } from "@/lib/money";
 import type { AddonRow, AttachedAddon } from "@/lib/addons/constants";
+import { inputControl } from "@/components/ui/field";
 
 export function AddonsPanel({
   subscriptionId,
@@ -61,11 +55,11 @@ export function AddonsPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not attach the add-on");
+      notify.block(body?.error ?? "Could not attach the add-on");
       return;
     }
 
-    toast.success(`${selectedAddon.name} attached`);
+    notify.done(`${selectedAddon.name} attached`);
     setSelected("");
     router.refresh();
   }
@@ -81,11 +75,11 @@ export function AddonsPanel({
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not detach the add-on");
+      notify.block(body?.error ?? "Could not detach the add-on");
       return;
     }
 
-    toast.success(`${item.name} detached`);
+    notify.done(`${item.name} detached`);
     router.refresh();
   }
 
@@ -95,7 +89,7 @@ export function AddonsPanel({
     <Card>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Add-ons</h2>
+          <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Add-ons</h2>
           {attached.length > 0 && (
             <span className="text-sm text-muted-foreground">
               +{formatCentsAsCurrency(monthlyTotal)} / {BILLING_CYCLE_LABELS[subscriptionCycle].toLowerCase()}
@@ -116,13 +110,9 @@ export function AddonsPanel({
                   <span className="font-medium">{item.name}</span>
                   <span className="text-muted-foreground">{formatCentsAsCurrency(item.price_cents)}</span>
                   {item.availability_overridden && (
-                    <Badge
-                      variant="outline"
-                      className="border-transparent bg-[var(--color-warning)]/10 text-[10px] text-[var(--color-warning)]"
-                      title="Attached despite not being offered by this plan"
-                    >
+                    <StatusChip tone="warning" title="Attached despite not being offered by this plan">
                       Off-plan
-                    </Badge>
+                    </StatusChip>
                   )}
                 </span>
                 <Button variant="ghost" size="icon-sm" disabled={busy} onClick={() => detach(item)}>
@@ -136,19 +126,12 @@ export function AddonsPanel({
 
         <div className="flex flex-wrap items-end gap-2 border-t border-border pt-3">
           <div className="min-w-[220px] flex-1">
-            <Select value={selected} onValueChange={setSelected}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={attachable.length ? "Add an add-on…" : "Nothing available to attach"} />
-              </SelectTrigger>
-              <SelectContent>
-                {attachable.map((a) => (
-                  <SelectItem key={a.id} value={a.id}>
-                    {a.name} — {formatCentsAsCurrency(a.price_cents)}
-                    {!available.has(a.id) && " · not on this plan"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <select aria-label="Add-on to attach" className={inputControl} value={selected} onChange={(event) => setSelected(event.target.value)}>
+              <option value="" disabled>{attachable.length ? "Add an add-on…" : "Nothing available to attach"}</option>
+              {attachable.map((a) => (
+                <option key={a.id} value={a.id}>{`${a.name} — ${formatCentsAsCurrency(a.price_cents)}${available.has(a.id) ? "" : " · not on this plan"}`}</option>
+              ))}
+            </select>
           </div>
           <Button size="sm" disabled={busy || !selected} onClick={attach}>
             {needsOverride ? "Attach anyway" : "Attach"}

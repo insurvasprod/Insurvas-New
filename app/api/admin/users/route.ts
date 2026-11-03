@@ -2,8 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { CAN_VIEW_USERS } from "@/lib/users/permissions";
-import { parseUsersQuery } from "@/lib/users/query";
-import { fetchUsersPage } from "@/lib/users/list";
+import { parseUsersListQuery } from "@/lib/adminUsersList/query";
+import { fetchUsersListPage, fetchUsersListStats } from "@/lib/adminUsersList/directory";
 import { USERS_PAGE_SIZE } from "@/lib/users/constants";
 import { createUserSchema } from "@/lib/users/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -15,17 +15,25 @@ import {
   inviteExpiryFromNow,
 } from "@/lib/users/invitations";
 import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
+import { classifyProvisioningError } from "@/lib/users/provisioningErrors";
 
 export async function GET(request: NextRequest) {
   const auth = await requireAdminRole(CAN_VIEW_USERS);
   if (auth instanceof NextResponse) return auth;
 
-  const query = parseUsersQuery(request.nextUrl.searchParams);
+  // The Users list's query: the original filters plus lifecycle state (the one seat rule), tenant
+  // and role. `stats=1` also returns the tiles, which the screen asks for after a write.
+  const query = parseUsersListQuery(request.nextUrl.searchParams);
 
   try {
-    const { users, total } = await fetchUsersPage(query);
-    return NextResponse.json({ users, total, page: query.page, pageSize: USERS_PAGE_SIZE });
-  } catch {
+    const [{ users, total }, stats] = await Promise.all([
+      fetchUsersListPage(query),
+      query.stats ? fetchUsersListStats() : Promise.resolve(undefined),
+    ]);
+    return NextResponse.json({ users, total, page: query.page, pageSize: USERS_PAGE_SIZE, ...(stats ? { stats } : {}) });
+  } catch (error) {
+    console.error(`[admin users] list failed: ${error instanceof Error ? error.message : error}`);
     return NextResponse.json({ error: "Could not load users" }, { status: 500 });
   }
 }
@@ -42,23 +50,63 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid input" }, { status: 400 });
   }
 
-  const { name, email, phone, tenantId, newTenantName, role } = parsed.data;
+  const { name, email, phone, tenantId, newTenantName, planId, role } = parsed.data;
   const supabase = getSupabaseServiceClient();
 
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("agent");
 
-  const { data, error } = await supabase.rpc("admin_create_user", {
+  // The user is born in Supabase Auth, not here. `public.users.id` is foreign-keyed to
+  // `auth.users` (LA-0 made Auth the credential authority for the tenant plane), so a SQL-only
+  // create has nothing to point at. The `on_auth_user_created` trigger writes the `public.users`
+  // row; `admin_attach_user_to_tenant` then does the tenant, role, seat check and invitation in
+  // one transaction.
+  //
+  // No password is set: the account is reached through the invitation link below, which is the
+  // whole point of an invite. `email_confirm` stays false so the address is still unverified
+  // until they act on it.
+  const { data: authUser, error: authError } = await supabase.auth.admin.createUser({
+    email,
+    email_confirm: false,
+    user_metadata: { name, full_name: name },
+  });
+
+  if (authError || !authUser?.user) {
+    const alreadyRegistered = /already|exists|registered|duplicate/i.test(authError?.message ?? "");
+    return NextResponse.json(
+      { error: alreadyRegistered ? "This email is already registered" : "Could not create user" },
+      { status: alreadyRegistered ? 409 : 500 },
+    );
+  }
+
+  const rpcName = newTenantName ? "admin_attach_user_to_tenant_with_plan" : "admin_attach_user_to_tenant";
+  const rpcArgs = {
+    p_user_id: authUser.user.id,
     p_name: name,
     p_email: email,
     p_phone: phone || null,
     p_tenant_id: tenantId ?? null,
     p_new_tenant_name: newTenantName || null,
-    p_role: role,
+    // A tenant's first member is always its owner. The SQL function enforces this once the
+    // additive SA-1.2 migration is applied; keeping the same invariant at the route boundary
+    // also protects the current shared project while that migration awaits DDL authority.
+    p_role: tenantId ? role : "owner",
     p_token_hash: hashInviteToken(token),
     p_expires_at: expiresAt.toISOString(),
     p_created_by: auth.session.sub,
-  });
+    ...(newTenantName ? { p_plan_id: planId } : {}),
+  };
+  const { data, error } = await supabase.rpc(rpcName, rpcArgs);
+
+  // Atomicity does not span the Auth boundary, so it is bought back by compensation: if the
+  // attach failed, the half-made account is removed rather than left as an orphan that blocks the
+  // address from ever being used again.
+  if (error) {
+    await supabase.auth.admin.deleteUser(authUser.user.id).catch(() => {
+      // Nothing more to try. The attach error is the one worth reporting.
+    });
+  }
 
   if (error) {
     // 23505 = unique violation on users.email. The whole function is one transaction, so
@@ -79,12 +127,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ error: "Could not create user" }, { status: 500 });
+    const failure = classifyProvisioningError(error);
+    return NextResponse.json({ error: failure.message, code: failure.code }, { status: failure.status });
   }
 
   const result = Array.isArray(data) ? data[0] : data;
 
-  const origin = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const inviteUrl = buildInviteUrl(token, origin);
   const { delivered } = await sendInvitationEmail({ to: email, name, inviteUrl, expiresAt });
 
@@ -93,7 +141,13 @@ export async function POST(request: NextRequest) {
     action: "user.created",
     targetType: "user",
     targetId: result.user_id,
-    metadata: { email, role, tenantId: result.tenant_id, createdNewTenant: Boolean(newTenantName) },
+    metadata: {
+      email,
+      role: newTenantName ? "owner" : role,
+      planId: planId ?? null,
+      tenantId: result.tenant_id,
+      createdNewTenant: Boolean(newTenantName),
+    },
     request,
   });
 

@@ -1,3 +1,4 @@
+import "./lib/refuseProduction.mjs";
 // bugs_sa.md #1 · The checkout P0 fix depends on findMembershipForTenant actually WORKING.
 //
 // The first version of it omitted company_id, which Whop requires, so every call was a 400. The

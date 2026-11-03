@@ -1,0 +1,10 @@
+/*
+ * The admin console's colours: the app's, with no overrides (owner, 2026-10-13: "make the whole admin
+ * colour the same as in app").
+ *
+ * This file used to re-point the accent tokens to blue on `:root:has(.admin-plane)` (the owner's
+ * earlier "bring back the blue color" decision). That is withdrawn: buttons, links, focus rings,
+ * soft chips and the rail's active row are the app's green again, in both themes, and the sign-in
+ * screen with them. The `.admin-plane` marker in app/admin/layout.tsx stays, so a console-only
+ * token can be added here later without touching the layout.
+ */

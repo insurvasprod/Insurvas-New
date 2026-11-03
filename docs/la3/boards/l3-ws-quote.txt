@@ -1,0 +1,284 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <div> {gap:8px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#ff5900}
+            "Quoting"
+          <button type="button"> {gap:7px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+            "Attempt 2 · Mutual of Omaha"
+            <svg/>
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Final Expense · $15,000"
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "Household · 2 applications"
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open portal"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {gap:20px}
+      <div> {width:186px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Verify"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Interview"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#ff5900;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                "3"
+              "Quote"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "4"
+              "Application"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "5"
+              "Beneficiaries"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "6"
+              "Payment"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "7"
+              "Disclosures"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "8"
+              "Review"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "9"
+              "Submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "10"
+              "After submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-top:1px solid #d5dbe3;bd-radius:0;color:#33383f;fsize:14px;fweight:400;height:auto}
+              "Case timeline"
+      <div> {flex-direction:column;gap:20px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Type the premium from the carrier’s own tool"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Quotation template v2"
+          <div> {padding:18px 20px}
+            <div> {grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+              <label>
+                <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                  "Date of birth"
+                <span> {height:40px;padding:0 12px;bd:1px solid #d5dbe3;bd-radius:8px;bg:#fff3ec}
+                  <span> {fsize:14px;fweight:400;color:#15191e}
+                    "14 Mar 1959"
+                <span> {fsize:12px;fweight:400;color:#a63800}
+                  "Pre-filled from the interview"
+              <label>
+                <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                  "Tobacco"
+                <span> {height:40px;padding:0 12px;bd:1px solid #d5dbe3;bd-radius:8px;bg:#fff3ec}
+                  <span> {fsize:14px;fweight:400;color:#15191e}
+                    "No"
+                <span> {fsize:12px;fweight:400;color:#a63800}
+                  "Pre-filled from the interview"
+              <label>
+                <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                  "Face amount"
+                <input type="text" value="$15,000"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+              <label>
+                <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                  "Monthly premium"
+                <input type="text" value="$71.20"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+              <label>
+                <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                  "Tier"
+                <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                  <option>
+                    "Level"
+                  <option>
+                    "Graded"
+                  <option>
+                    "Guaranteed issue"
+              <label>
+                <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                  "Age basis"
+                <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                  <option>
+                    "Nearest birthday"
+                  <option>
+                    "Last birthday"
+              <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #b35c00;bd-radius:12px;bg:#fcefdf}
+                <div> {fsize:14px;fweight:400;fweight:600;color:#9a4f00}
+                  "$4.75 per $1,000 is above the usual band for this product"
+                <p> {fsize:14px;fweight:400;color:#33383f}
+                  "Between $3.10 and $4.40 is typical at this age. It is allowed — check you read the carrier’s tool correctly before you continue."
+        <div> {grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+          <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+            <div> {padding:12px 14px;bg:#e4e8ee}
+              <div> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "Mutual of Omaha"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Monthly premium"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$68.40"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Face amount"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$15,000"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Per $1,000"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$4.56"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Appointed?"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                  <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                  "No"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Advance"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "9 months"
+            <div> {padding:12px 14px;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;width:100%;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Select"
+          <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+            <div> {padding:12px 14px;bg:#fff3ec}
+              <div> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "Gerber Life"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Monthly premium"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$71.20"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Face amount"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$15,000"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Per $1,000"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$4.75"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Appointed?"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                  <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                  "Yes"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Advance"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "9 months"
+            <div> {padding:12px 14px;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;width:100%;height:32px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Selected"
+          <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+            <div> {padding:12px 14px;bg:#e4e8ee}
+              <div> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "Americo"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Monthly premium"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$64.10"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Face amount"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$15,000"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Per $1,000"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "$4.27"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Appointed?"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+                  <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+                  "Yes"
+            <div> {justify-content:space-between;gap:12px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+              <span> {fsize:12px;fweight:400;color:#60646c}
+                "Advance"
+              <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                "6 months"
+            <div> {padding:12px 14px;bd-top:1px solid #d5dbe3}
+              <button type="button"> {justify-content:center;gap:8px;width:100%;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Select"
+        <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:18px}
+          <div> {justify-content:space-between;gap:16px}
+              <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                "Estimated first-year commission"
+              <div> {gap:18px}
+                  <span> {fsize:24px;fweight:600;color:#15191e}
+                    "$752"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Gerber · 88% · 9mo advance"
+                <span> {fsize:14px;fweight:400;color:#60646c}
+                  "Americo $677 · Mutual $721"
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+              "Agent only"
+          <p> {fsize:12px;fweight:400;color:#60646c}
+            "Recommend on fit first. This strip never reorders the comparison and never selects a quote."
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:16px 20px;justify-content:space-between;gap:16px}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Selecting a quote discards the other two from this attempt. Nothing is deleted — every quote stays on"
+              <code>
+                "/app/quoting"
+              "."
+            <button type="button"> {justify-content:center;gap:8px;height:36px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+              "Client comparison (print)"
+      <div> {width:268px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:14px;bg:#fcefdf;bd-bottom:1px solid #d5dbe3}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Pre-submission QA"
+            <div> {fsize:18px;fweight:600;color:#9a4f00}
+              "Pass with 2 warnings"
+            <div> {fsize:12px;fweight:400;color:#33383f}
+              "Runs as you type. Every line goes to the field it is about."
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Rate per $1,000 is outside the usual band"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "quote.premium_cents"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Mutual of Omaha: no appointment in Arizona"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "appointment.mutual.az"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Face amount is inside the product limits"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "quote.face_amount_cents"
+          <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "Premium greater than or equal to face amount is rejected outright, not warned about."

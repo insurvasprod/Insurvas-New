@@ -1,18 +1,60 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { AtSign, CircleCheck, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AuthHeading } from "@/components/portal/auth-layout";
+import { AuthAlert } from "@/components/portal/auth-controls";
 
 type State =
   | { status: "checking" }
-  | { status: "valid"; newEmail: string }
+  | { status: "valid"; newEmail: string; currentEmail: string | null }
   | { status: "invalid" }
   | { status: "done"; newEmail: string };
 
+/** Email changes are started by Insurvas staff, so "your administrator" is support. */
+const SUPPORT = "mailto:support@insurvas.com?subject=Email%20change%20I%20did%20not%20request";
+
+function Card({ title, lede, children }: { title: string; lede: ReactNode; children?: ReactNode }) {
+  return (
+    <div data-auth-card="" className="m-in w-full">
+      <AuthHeading title={title}>{lede}</AuthHeading>
+      {children}
+    </div>
+  );
+}
+
+function Chip({ tone, children }: { tone: "good" | "action"; children: ReactNode }) {
+  const style =
+    tone === "good"
+      ? { chip: "bg-[var(--success-surface)] text-[var(--success-ink)]", dot: "bg-[var(--success)]" }
+      : { chip: "bg-[var(--primary-soft)] text-[var(--accent-ink)]", dot: "bg-[var(--primary)]" };
+  return (
+    <span className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold leading-normal tracking-[-0.01em] ${style.chip}`}>
+      <span className={`size-1.5 shrink-0 rounded-full ${style.dot}`} aria-hidden="true" />
+      {children}
+    </span>
+  );
+}
+
+function AddressRow({ label, email, chip, highlight }: { label: string; email: string; chip: ReactNode; highlight?: boolean }) {
+  return (
+    <div className={`flex items-center justify-between gap-4 px-4 py-3.5 ${highlight ? "border-t border-border bg-[var(--primary-soft)]" : "bg-card"}`}>
+      <span className="min-w-0">
+        <span className="block text-xs leading-normal tracking-[-0.01em] text-muted-foreground">{label}</span>
+        <span className="mt-0.5 block break-all text-base font-semibold leading-normal tracking-[-0.02em] text-foreground">{email}</span>
+      </span>
+      {chip}
+    </div>
+  );
+}
+
+/**
+ * Confirming an email change. Opening the link changes nothing — link previewers and mail scanners
+ * open links too — so the change happens only when the person presses the button.
+ */
 export function ConfirmEmailPanel() {
   const router = useRouter();
   const token = useSearchParams().get("token") ?? "";
@@ -30,7 +72,11 @@ export function ConfirmEmailPanel() {
       .then((res) => (res.ok ? res.json() : null))
       .then((body) => {
         if (cancelled) return;
-        setState(body?.valid ? { status: "valid", newEmail: body.newEmail } : { status: "invalid" });
+        setState(
+          body?.valid
+            ? { status: "valid", newEmail: body.newEmail, currentEmail: body.currentEmail ?? null }
+            : { status: "invalid" },
+        );
       })
       .catch(() => !cancelled && setState({ status: "invalid" }));
 
@@ -47,7 +93,13 @@ export function ConfirmEmailPanel() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
-    });
+    }).catch(() => null);
+    // A dropped connection hands the button back with a reason, and the link is still unused.
+    if (!res) {
+      setLoading(false);
+      setError("Could not reach Insurvas. Check your connection and press Confirm again.");
+      return;
+    }
     const body = await res.json().catch(() => null);
     setLoading(false);
 
@@ -62,61 +114,54 @@ export function ConfirmEmailPanel() {
 
   if (state.status === "checking") {
     return (
-      <Card className="w-full max-w-sm">
-        <CardContent className="py-8 text-center text-sm text-muted-foreground">Checking your link…</CardContent>
-      </Card>
+      <Card title="Confirm your new address" lede="Checking your link…" />
     );
   }
 
   if (state.status === "invalid") {
     return (
-      <Card className="w-full max-w-sm">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-[var(--color-danger)]/10 text-[var(--color-danger)]">
-            <TriangleAlert className="size-5" />
-          </div>
-          <CardTitle className="text-xl">Link no longer valid</CardTitle>
-          <CardDescription>
-            This confirmation has expired or was already used. Your email address is unchanged — ask your
-            administrator to try again.
-          </CardDescription>
-        </CardHeader>
+      <Card
+        title="This link no longer works"
+        lede="It has expired or was already used. Your email address is unchanged."
+      >
+        <Button asChild className="mt-6 h-11 w-full"><Link href="/app/login">Sign in</Link></Button>
+        <p className="mt-4 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+          Still need the change? Ask for it again from your profile, or <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">contact your administrator</a>.
+        </p>
       </Card>
     );
   }
 
   if (state.status === "done") {
     return (
-      <Card className="w-full max-w-sm">
-        <CardHeader className="items-center text-center">
-          <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-[var(--color-success)]/10 text-[var(--color-success)]">
-            <CircleCheck className="size-5" />
-          </div>
-          <CardTitle className="text-xl">Email updated</CardTitle>
-          <CardDescription>Sign in with {state.newEmail} from now on.</CardDescription>
-        </CardHeader>
+      <Card title="Email updated" lede={<>Sign in with <span className="font-semibold text-foreground">{state.newEmail}</span> from now on. Taking you to sign in…</>}>
+        <div className="mt-7 overflow-hidden rounded-md border border-border">
+          <AddressRow label="Your address" email={state.newEmail} chip={<Chip tone="good">Active</Chip>} />
+        </div>
       </Card>
     );
   }
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader className="items-center text-center">
-        <div className="mb-2 flex size-10 items-center justify-center rounded-full bg-[var(--color-blue-faint)] text-[var(--color-blue)]">
-          <AtSign className="size-5" />
-        </div>
-        <CardTitle className="text-xl">Confirm your new email</CardTitle>
-        <CardDescription>
-          Confirm that <span className="font-medium text-foreground">{state.newEmail}</span> is your address. Until
-          you do, your existing email keeps working.
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {error && <p className="text-sm text-[var(--color-danger)]">{error}</p>}
-        <Button className="w-full" onClick={confirm} disabled={loading}>
-          {loading ? "Confirming…" : "Confirm email address"}
-        </Button>
-      </CardContent>
+    <Card title="Confirm your new address" lede="Your current address keeps working until you confirm. Nothing changes by opening this page.">
+      <div className="mt-7 overflow-hidden rounded-md border border-border">
+        {state.currentEmail && (
+          <AddressRow label="Current" email={state.currentEmail} chip={<Chip tone="good">Still active</Chip>} />
+        )}
+        <AddressRow label="New" email={state.newEmail} highlight={Boolean(state.currentEmail)} chip={<Chip tone="action">Awaiting confirmation</Chip>} />
+      </div>
+
+      {error && (
+        <AuthAlert>{error}</AuthAlert>
+      )}
+
+      <Button onClick={confirm} disabled={loading} className="mt-6 h-11 w-full px-4">
+        {loading ? "Confirming…" : "Confirm email address"}
+      </Button>
+
+      <p className="mt-4 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
+        Didn’t ask for this change? <a href={SUPPORT} className="font-semibold text-foreground underline underline-offset-2">Contact your administrator</a>.
+      </p>
     </Card>
   );
 }

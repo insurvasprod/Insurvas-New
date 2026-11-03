@@ -1,24 +1,26 @@
-import { ArrowRight, Clock3 } from "lucide-react";
+import type { ReactNode } from "react";
 
-import { Card, CardContent } from "@/components/ui/card";
-import type { ConfigurationSection } from "@/lib/configuration/sections";
-
-export function ConfigurationPlaceholder({ section }: { section: ConfigurationSection }) {
+/**
+ * A platform section with no controls on this screen: one compact card saying what is true in this
+ * environment and where the settings actually live. The words come from the page, which knows what
+ * is true here.
+ */
+export function ConfigurationPlaceholder({
+  title,
+  lede,
+  detail,
+}: {
+  title: string;
+  /** What is true right now. */
+  lede: ReactNode;
+  /** Where the settings actually live. */
+  detail?: ReactNode;
+}) {
   return (
-    <Card>
-      <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 text-[var(--color-accent-ink)]">
-          <Clock3 className="size-5" />
-          <p className="font-semibold">Section reserved for {section.owner}</p>
-        </div>
-        <p className="text-sm text-muted-foreground">
-          {section.description} This route and permission boundary are ready; the section&apos;s own
-          controls will be implemented by its ticket without changing the Configuration Center shell.
-        </p>
-        <p className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground">
-          Independent save workflow will live here <ArrowRight className="size-4" />
-        </p>
-      </CardContent>
-    </Card>
+    <section className="flex flex-col items-center gap-2 rounded-lg border border-border bg-card px-6 py-10 text-center">
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <p className="max-w-[64ch] text-sm text-muted-foreground">{lede}</p>
+      {detail && <p className="max-w-[64ch] text-sm text-muted-foreground">{detail}</p>}
+    </section>
   );
 }

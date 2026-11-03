@@ -1,0 +1,238 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <div> {gap:8px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+            "Counteroffer pending"
+          <button type="button"> {gap:7px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+            "Attempt 2 · Mutual of Omaha"
+            <svg/>
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Final Expense · $15,000"
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "Household · 2 applications"
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open portal"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {gap:20px}
+      <div> {width:186px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Verify"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Interview"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Quote"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Application"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Beneficiaries"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Payment"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Disclosures"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Review"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#ff5900;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                "10"
+              "After submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-top:1px solid #d5dbe3;bd-radius:0;color:#33383f;fsize:14px;fweight:400;height:auto}
+              "Case timeline"
+      <div> {flex-direction:column;gap:20px}
+        <div> {bd:1px solid #d5dbe3;bd-left:3px solid #b35c00;bd-radius:12px;bg:#fcefdf;padding:20px}
+          <div> {gap:16px}
+              <div> {gap:10px}
+                <span> {fsize:18px;fweight:600;color:#15191e}
+                  "Gerber came back with a counteroffer"
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                  <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                  "Expires in 4 days"
+              <p> {fsize:14px;fweight:400;color:#33383f}
+                "The original application is untouched. This sits beside it."
+              <div> {grid-template-columns:repeat(4,minmax(0,1fr));gap:16px 24px}
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Applied for"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "$15,000 · $71.20/mo"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Offered"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "$10,000 · $58.40/mo"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "Difference"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "−$5,000 face · −$12.80/mo"
+                  <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                    "As a percentage"
+                  <div> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "−33.3% face · −18.0% premium"
+              <div> {gap:10px}
+                <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                  "Accept the offer"
+                <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                  "Client declined"
+                <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                  "Let it expire"
+        <div> {gap:20px}
+          <div> {flex-direction:column;gap:20px}
+            <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+              <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                  "Pending requirements"
+                <span> {gap:10px}
+                  <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                    <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                    "2 waiting on the client"
+              <div> {gap:14px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Attending physician statement (APS)"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Waiting on the carrier"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Last chased 4 days ago"
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fdeaea;color:#b02020;fsize:12px;fweight:400;fweight:600}
+                  <span> {width:6px;height:6px;bd-radius:9999px;bg:#c92a2a}
+                  "11 days"
+                <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                  "Log a chase"
+                <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                  "Set a callback"
+              <div> {gap:14px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Phone health interview"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Waiting on the client"
+                  <div> {fsize:12px;fweight:400;color:#60646c}
+                    "Last chased yesterday"
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                  <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                  "6 days"
+                <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                  "Log a chase"
+                <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                  "Set a callback"
+              <div> {gap:14px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                    "Voice verification"
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Waiting on the client"
+                <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                  <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                  "2 days"
+                <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                  "Log a chase"
+                <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                  "Set a callback"
+              <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+                "Amber after 5 days, red after 10. Nothing here ever marks a policy issued on its own."
+            <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+              <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+                <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                  "Outcome"
+                <span> {gap:10px}
+                  <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                    <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+                    "Not recorded"
+              <div> {padding:18px 22px}
+                <div> {grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Outcome"
+                    <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                      <option>
+                        "Issued"
+                      <option>
+                        "Counteroffer"
+                      <option>
+                        "Declined by carrier"
+                      <option>
+                        "Declined by client"
+                      <option>
+                        "Offer expired"
+                      <option>
+                        "Withdrawn"
+                  <label>
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Reason"
+                    <select> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+                      <option>
+                        "Health — cardiac"
+                      <option>
+                        "Health — build"
+                      <option>
+                        "Prescription history"
+                      <option>
+                        "Unable to verify identity"
+                      <option>
+                        "Client changed their mind"
+                  <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+                    <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+                      "A decline opens the next attempt, it does not end the case"
+                    <p> {fsize:14px;fweight:400;color:#33383f}
+                      "Health answers, medications, address, beneficiaries and payment carry forward. The quote, the disclosures, the QA verdict and the copy-assist ticks do not."
+              <div> {justify-content:space-between;gap:16px;padding:14px 20px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+                <span> {gap:12px}
+                  <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                    "Back to Submit"
+                  <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                    "Start attempt 3"
+      <div> {width:268px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:14px;bg:#e0f3e7;bd-bottom:1px solid #d5dbe3}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Pre-submission QA"
+            <div> {fsize:18px;fweight:600;color:#0d7038}
+              "Frozen at submission"
+            <div> {fsize:12px;fweight:400;color:#33383f}
+              "Runs as you type. Every line goes to the field it is about."
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Submitted 28 Sep, 2:41 pm"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "attempt.submitted_at"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Reference GL-40771902 recorded"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "attempt.carrier_reference"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#60646c}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Policy number not yet issued"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "policy.policy_number"
+          <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "This verdict is a record of the moment it was sent, not a live check."

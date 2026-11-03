@@ -9,6 +9,8 @@ export type FeatureRow = {
   description: string | null;
   sort_order: number;
   is_archived: boolean;
+  plan_reference_count: number;
+  addon_reference_count: number;
 };
 
 export type FeatureModuleRow = {

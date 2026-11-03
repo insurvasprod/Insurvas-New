@@ -1,16 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowLeftRight,
+  Award,
+  CreditCard,
+  Network,
+  ReceiptText,
+  Split,
+  UserRoundSearch,
+  UserX,
+  Wallet,
   BookOpen,
+  Brain,
   BriefcaseBusiness,
   Calculator,
   CalendarCheck,
+  UserRoundCheck,
   CalendarClock,
   CalendarDays,
   ChartNoAxesCombined,
+  ChevronDown,
   Circle,
   ClipboardList,
   ContactRound,
@@ -19,87 +31,402 @@ import {
   FileChartColumn,
   FileCheck,
   FileText,
+  FolderInput,
   Landmark,
   LayoutDashboard,
+  ListChecks,
   ListPlus,
   LockKeyhole,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  MessageSquare,
+  Package,
   PhoneIncoming,
   PhoneOutgoing,
   Radar,
+  RadioTower,
   Receipt,
   RotateCcw,
+  Route,
   Settings,
   ShieldCheck,
+  Store,
   TriangleAlert,
   TrendingUp,
   Users,
   WalletCards,
   Wrench,
+  Activity,
+  BadgeCheck,
+  BadgeDollarSign,
+  BookUser,
+  ChartColumn,
+  ChartLine,
+  CircleAlert,
+  FilePenLine,
+  Files,
+  Gauge,
+  Gavel,
+  HandCoins,
+  Handshake,
+  Headset,
+  HeartHandshake,
+  Hourglass,
+  Import,
+  Inbox,
+  LifeBuoy,
+  Link2,
+  PhoneCall,
+  PhoneOff,
+  Recycle,
+  Scale,
+  ScrollText,
+  SquareKanban,
+  Undo2,
   X,
-  Building2,
 } from "lucide-react";
 
-import type { MenuSection } from "@/lib/menu/definition";
+import type { MenuItem, MenuSection } from "@/lib/menu/definition";
+import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
+import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/menu/sidebar";
+import { titleCaseNode } from "@/components/ui/title-case";
+import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { leadsInStepOf } from "@/lib/leadSources/steps";
+import { complianceStepOf } from "@/lib/compliance/steps";
+import { reportsViewOf } from "@/lib/reports/views";
+import { bookAreaOf, dataInStepOf } from "@/lib/dataIn/steps";
+import { accountingStepOf } from "@/lib/accounting/steps";
+import { commissionsStepOf } from "@/lib/commissions/steps";
 
-/**
- * The agent's navigation, on a phone as well as a desktop.
- *
- * Two things changed here beyond the styling.
- *
- * It works below 768px. The shell was a fixed 240px column with no way to reach it on a phone —
- * which mattered because LA-0.1 requires the agent app to work on one, and an agent between
- * appointments is the person most likely to be holding a phone.
- *
- * And an item whose screen is not built yet says so, rather than looking identical to one that
- * works right up until it 404s. The dot is not a warning: these are features the customer has paid
- * for and will get. It is there so the sidebar stops over-promising what is clickable *today*.
- */
-function NavList({ menu, onNavigate }: { menu: MenuSection[]; onNavigate?: () => void }) {
+/** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
+export type AgentModuleAccess = ModuleAccess;
+
+function iconFor(name: string) {
+  return ICONS[name as keyof typeof ICONS] ?? Circle;
+}
+
+// Settings sections that live on their own route (Accounting, Retention, Compliance) belong to Settings
+// in the menu: /app/compliance/settings is not "Compliance › Overview" (owner's demo, 2026-10-29).
+const SETTINGS_ROUTES = SETTINGS_SECTIONS.flatMap((section) => (section.route ? [section.route] : []));
+
+function isActivePath(pathname: string, href: string) {
+  if (SETTINGS_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))) return href === "/app/settings";
+  // Every Lead sources step (/app/campaigns, /app/import, …) is Lead sources in the menu, so Leads opens there.
+  if (href === "/app/lead-sources" && leadsInStepOf(pathname)) return true;
+  // Every Compliance step (/app/tcpa, /app/consent, …) is Compliance › Overview in the menu (2026-10-30).
+  if (href === "/app/compliance" && complianceStepOf(pathname)) return true;
+  // Every Reports view is the one Reports entry, whichever view it opens on.
+  if (reportsViewOf(href) && reportsViewOf(pathname)) return true;
+  // Every Data in step is the one Data in entry (2026-11-02), whichever page it opens on.
+  if (dataInStepOf(href) && bookAreaOf(pathname)) return true;
+  // Every Accounting step is the one Accounting entry (2026-11-02).
+  if (accountingStepOf(href) && accountingStepOf(pathname)) return true;
+  // Every Commissions step is the one Commissions entry (2026-11-02).
+  if (commissionsStepOf(href) && commissionsStepOf(pathname)) return true;
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function NavItemLink({
+  item,
+  onNavigate,
+  nested = false,
+}: {
+  item: MenuItem;
+  onNavigate?: () => void;
+  nested?: boolean;
+}) {
   const pathname = usePathname();
+  const active = isActivePath(pathname, item.path);
+  const Icon = iconFor(item.icon);
+  const label = item.navLabel ?? item.label;
 
   return (
-    <nav className="space-y-5">
-      {menu.map((section) => (
-        <div key={section.id}>
-          <p className="mb-1.5 px-3 text-[11px] font-bold uppercase tracking-wider text-white/45">
-            {section.label}
-          </p>
-          <ul className="space-y-0.5">
-            {section.items.map((item) => {
-              const href = item.path;
-              const isActive = pathname === href;
-              const Icon = iconFor(item.icon);
+    <li>
+      <Link
+        href={item.path}
+        onClick={onNavigate}
+        aria-label={label}
+        title={label}
+        aria-current={active ? "page" : undefined}
+        className={`portal-agent-nav-link ${nested ? "portal-agent-nav-link-nested" : ""} ${active ? "is-active" : ""}`}
+      >
+        <span className="portal-agent-nav-link-copy">
+          {createElement(Icon, {
+            className: "portal-agent-nav-icon",
+            "aria-hidden": true,
+          })}
+          <span className="portal-agent-nav-label">{titleCaseNode(label)}</span>
+        </span>
+        {!item.built && (
+          <span
+            className="portal-agent-nav-waypoint"
+            title="On the way"
+            aria-label="On the way"
+          />
+        )}
+      </Link>
+    </li>
+  );
+}
 
-              return (
-                <li key={item.key}>
-                  <Link
-                    href={href}
-                    onClick={onNavigate}
-                    aria-current={isActive ? "page" : undefined}
-                    className={`flex items-center justify-between gap-2 rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60 ${
-                      isActive
-                        ? "bg-white/15 font-semibold text-white"
-                        : "text-white/80 hover:bg-white/8 hover:text-white"
-                    }`}
-                  >
-                    <span className="flex min-w-0 items-center gap-2 truncate">
-                      <Icon className="size-4 shrink-0" aria-hidden="true" />
-                      <span className="truncate">{item.label}</span>
-                    </span>
-                    {!item.built && (
-                      <span
-                        className="size-1.5 shrink-0 rounded-full bg-white/40"
-                        title="On the way"
-                        aria-label="On the way"
-                      />
-                    )}
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
+function DisclosureSection({
+  label,
+  icon: Icon,
+  items,
+  children,
+  open,
+  onToggle,
+  onNavigate,
+  active,
+  nested = false,
+  collapsed = false,
+}: {
+  label: string;
+  icon: typeof BriefcaseBusiness;
+  items: MenuItem[];
+  children?: ReactNode;
+  open: boolean;
+  onToggle: () => void;
+  onNavigate?: () => void;
+  active: boolean;
+  nested?: boolean;
+  collapsed?: boolean;
+}) {
+  if (items.length === 0 && !children) return null;
+
+  const sectionId = `agent-nav-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+
+  const section = (
+    <section
+      className={`portal-agent-nav-section ${nested ? "portal-agent-nav-business-group" : ""} ${active ? "is-active" : ""}`}
+    >
+      <button
+        type="button"
+        className="portal-agent-nav-disclosure"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={sectionId}
+        onClick={onToggle}
+      >
+        <span className="portal-agent-nav-disclosure-copy">
+          <Icon className="portal-agent-nav-icon" aria-hidden="true" />
+          <span>{titleCaseNode(label)}</span>
+        </span>
+        <ChevronDown
+          className={`portal-agent-nav-chevron ${open ? "is-open" : ""}`}
+          aria-hidden="true"
+        />
+      </button>
+      {children ? (
+        <div id={sectionId} className="portal-agent-nav-disclosure-content" hidden={!open}>
+          {children}
         </div>
+      ) : (
+        <ul id={sectionId} hidden={!open} className={`portal-agent-nav-sublist ${nested ? "portal-agent-nav-sublist-nested" : ""}`}>
+          {items.map((item) => (
+            <NavItemLink
+              key={item.key}
+              item={item}
+              nested
+              onNavigate={onNavigate}
+            />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+
+  return collapsed ? <CollapsedFlyout label={label} icon={Icon} items={items}>{section}</CollapsedFlyout> : section;
+}
+
+/** How long the pointer may be off both the icon and the flyout before it shuts (crossing the gap). */
+const FLYOUT_CLOSE_MS = 180;
+
+/**
+ * Collapsed rail (owner 2026-10-30): hovering or focusing a group's icon shows its pages in a panel
+ * beside the rail, so a page is one move away without opening the sidebar. Clicking the icon still
+ * opens the sidebar on that group. The kit Popover portals the panel, so the rail's scroll box never
+ * clips it.
+ */
+function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: string; icon: typeof BriefcaseBusiness; items: MenuItem[]; children: ReactNode }) {
+  const pathname = usePathname();
+  const [open, setOpen] = useState(false);
+  const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const show = () => {
+    if (closing.current) clearTimeout(closing.current);
+    setOpen(true);
+  };
+  const hide = () => {
+    if (closing.current) clearTimeout(closing.current);
+    closing.current = setTimeout(() => setOpen(false), FLYOUT_CLOSE_MS);
+  };
+  useEffect(() => () => { if (closing.current) clearTimeout(closing.current); }, []);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverAnchor asChild>
+        <div data-flyout={open ? "open" : "closed"} onPointerEnter={show} onPointerLeave={hide} onFocus={show} onBlur={hide}>
+          {children}
+        </div>
+      </PopoverAnchor>
+      <PopoverContent
+        side="right"
+        align="start"
+        sideOffset={40}
+        onOpenAutoFocus={(event) => event.preventDefault()}
+        onCloseAutoFocus={(event) => event.preventDefault()}
+        onPointerEnter={show}
+        onPointerLeave={hide}
+        // A short slide out of the rail (m-flyout-in/out in globals.css): 160ms in, 110ms out; still for reduced motion.
+        // Drawn in the rail's own colours (owner 2026-10-30, "a nicer design"), so it reads as the sidebar opening.
+        className="relative w-64 origin-left overflow-visible rounded-xl border-[var(--nav-line)] bg-[var(--nav-bg)] p-2 text-[var(--nav-ink)] shadow-[0_18px_40px_-12px_rgba(0,0,0,.55),0_0_0_1px_color-mix(in_srgb,var(--nav-success)_10%,transparent)] motion-safe:data-[state=open]:animate-[m-flyout-in_.16s_cubic-bezier(.2,.8,.2,1)_both] motion-safe:data-[state=closed]:animate-[m-flyout-out_.11s_ease-in_both]"
+      >
+        {/* The nub that points back at the icon. */}
+        <span aria-hidden="true" className="absolute top-[18px] -left-[6px] size-3 rotate-45 rounded-[2px] border-b border-l border-[var(--nav-line)] bg-[var(--nav-bg)]" />
+        <div className="flex items-center gap-2.5 px-2 pt-1 pb-2.5">
+          <span className="inline-grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--nav-active-bg)] text-[var(--nav-success)]">
+            <GroupIcon className="size-[18px]" strokeWidth={2} aria-hidden="true" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-semibold text-[var(--nav-active-ink)]">{titleCaseNode(label)}</span>
+            <span className="block text-xs text-[var(--nav-muted)]">{items.length} {items.length === 1 ? "page" : "pages"}</span>
+          </span>
+        </div>
+        <div aria-hidden="true" className="mx-2 mb-1.5 h-px bg-[var(--nav-line)]" />
+        <ul className="m-0 grid list-none gap-0.5 p-0">
+          {items.map((item) => {
+            const Icon = iconFor(item.icon);
+            const current = isActivePath(pathname, item.path);
+            const itemLabel = item.navLabel ?? item.label;
+            return (
+              <li key={item.key}>
+                <Link
+                  href={item.path}
+                  onClick={() => setOpen(false)}
+                  aria-current={current ? "page" : undefined}
+                  className={`group/fly relative flex h-9 items-center gap-2.5 rounded-lg px-2 text-sm outline-none transition-[background-color,color,padding] duration-150 focus-visible:ring-2 focus-visible:ring-[var(--nav-success)] ${current ? "bg-[var(--nav-active-bg)] font-semibold text-[var(--nav-active-ink)]" : "text-[var(--nav-ink)] hover:bg-[color-mix(in_srgb,var(--nav-ink)_8%,transparent)] hover:pl-3 motion-reduce:hover:pl-2"}`}
+                >
+                  {current && <span aria-hidden="true" className="absolute top-2 bottom-2 left-0 w-[3px] rounded-full bg-[var(--nav-success)]" />}
+                  <span aria-hidden="true" className={`inline-grid size-6 shrink-0 place-items-center rounded-md transition-colors duration-150 ${current ? "text-[var(--nav-success)]" : "bg-[color-mix(in_srgb,var(--nav-ink)_7%,transparent)] text-[var(--nav-muted)] group-hover/fly:text-[var(--nav-ink)]"}`}>
+                    <Icon className="size-[15px]" strokeWidth={1.9} />
+                  </span>
+                  <span className="truncate">{titleCaseNode(itemLabel)}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export type AgentPlanSummary = {
+  /** Display name of the plan, or null when the workspace has none. */
+  name: string | null;
+  /** The plan's seat limit. Null means unlimited, and then no number is shown. */
+  seats: number | null;
+  roleLabel: string;
+  isOwner: boolean;
+};
+
+/**
+ * The rail's last block, as the board draws it: what plan this is, how big, and what you may do in
+ * it. It used to repeat "Inbound enabled / Outbound enabled", which the LA-1 and LA-2 headings
+ * directly above already say.
+ */
+function PlanCard({ plan }: { plan: AgentPlanSummary }) {
+  const size = [plan.name ?? "No plan", plan.seats === null ? null : `${plan.seats} ${plan.seats === 1 ? "seat" : "seats"}`]
+    .filter(Boolean)
+    .join(" · ");
+  return (
+    <section className="portal-agent-plan-card" aria-label="Plan">
+      <p className="portal-agent-plan-card-label">Plan</p>
+      <p className="portal-agent-plan-card-name">{size}</p>
+      <p className="portal-agent-plan-card-role">
+        {plan.roleLabel} · {plan.isOwner ? "full access" : "role-based access"}
+      </p>
+    </section>
+  );
+}
+
+/**
+ * Entitlement-aware navigation for the licensed-agent shell.
+ *
+ * The server still supplies the filtered menu and every route keeps its own guard. The arrangement
+ * — Home, the job groups in order, Settings — is data in `lib/menu/sidebar.ts` (UX-3; regrouped by
+ * job 2026-10-13); this component renders `buildSidebarTree()` and only owns what is open.
+ */
+function NavList({
+  menu,
+  moduleAccess,
+  onNavigate,
+  isCollapsed = false,
+  onExpand,
+}: {
+  menu: MenuSection[];
+  moduleAccess?: AgentModuleAccess;
+  onNavigate?: () => void;
+  isCollapsed?: boolean;
+  onExpand?: (groupLabel: string) => void;
+}) {
+  const pathname = usePathname();
+  const tree = buildSidebarTree(menu, moduleAccess);
+  const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
+  const activeGroupLabel = tree.groups.find((group) => group.items.some(isActive))?.label;
+  const [navState, setNavState] = useState<{ pathname: string; openGroup: string | null }>(() => ({
+    pathname,
+    openGroup: initialOpenGroups(tree, isActive)[0] ?? null,
+  }));
+  let openGroup = navState.openGroup;
+  if (navState.pathname !== pathname) {
+    openGroup = activeGroupLabel ?? navState.openGroup;
+    setNavState({ pathname, openGroup });
+  }
+
+  return (
+    <nav className={`portal-agent-nav ${isCollapsed ? "is-collapsed" : ""}`} aria-label="Agent workspace navigation">
+      <ul className="portal-agent-nav-home">
+        {tree.home.map((item) => (
+          <NavItemLink key={item.key} item={item} onNavigate={onNavigate} />
+        ))}
+      </ul>
+
+      {tree.groups.map((group) => group.items.length === 1 && group.items[0].groupLink ? (
+        // A group that is one page (Compliance): one link under the group's own name and icon, no dropdown.
+        <ul key={group.label} className="portal-agent-nav-home">
+          <NavItemLink item={{ ...group.items[0], navLabel: group.label, icon: group.icon }} onNavigate={onNavigate} />
+        </ul>
+      ) : (
+        <DisclosureSection
+          key={group.label}
+          label={group.label}
+          icon={iconFor(group.icon)}
+          items={group.items}
+          open={openGroup === group.label}
+          active={group.items.some(isActive)}
+          collapsed={isCollapsed}
+          onToggle={() => {
+            if (isCollapsed) {
+              onExpand?.(group.label);
+              setNavState({ pathname, openGroup: group.label });
+              return;
+            }
+            setNavState({
+              pathname,
+              openGroup: openGroup === group.label ? null : group.label,
+            });
+          }}
+          onNavigate={onNavigate}
+        />
+      ))}
+
+      {tree.settings.map((item) => (
+        <ul key={item.key} className="portal-agent-nav-settings">
+          <NavItemLink item={item} onNavigate={onNavigate} />
+        </ul>
       ))}
     </nav>
   );
@@ -109,6 +436,7 @@ const ICONS = {
   "layout-dashboard": LayoutDashboard,
   "book-open": BookOpen,
   "file-text": FileText,
+  "folder-input": FolderInput,
   receipt: Receipt,
   "calendar-days": CalendarDays,
   "triangle-alert": TriangleAlert,
@@ -121,8 +449,10 @@ const ICONS = {
   "file-check": FileCheck,
   "calendar-clock": CalendarClock,
   "calendar-check": CalendarCheck,
+  "user-round-check": UserRoundCheck,
   "clipboard-list": ClipboardList,
   radar: Radar,
+  "radio-tower": RadioTower,
   wrench: Wrench,
   "rotate-ccw": RotateCcw,
   "chart-no-axes-combined": ChartNoAxesCombined,
@@ -136,35 +466,93 @@ const ICONS = {
   "lock-keyhole": LockKeyhole,
   "briefcase-business": BriefcaseBusiness,
   settings: Settings,
+  "messages-square": MessageSquare,
+  route: Route,
+  "list-checks": ListChecks,
+  package: Package,
+  // Both LA-2 destinations. `iconFor()` falls back to a featureless Circle for an unknown name, so
+  // a missing entry here is invisible in review and looks deliberate on screen.
+  // `lib/design/contract.test.mjs` now fails when the menu names an icon this map lacks.
+  store: Store,
+  brain: Brain,
+  // One icon per page (2026-10-06): no two destinations, and no page and its own heading, share one.
+  "activity": Activity,
+  "badge-check": BadgeCheck,
+  "badge-dollar-sign": BadgeDollarSign,
+  "book-user": BookUser,
+  "chart-column": ChartColumn,
+  "chart-line": ChartLine,
+  "circle-alert": CircleAlert,
+  "file-pen-line": FilePenLine,
+  "files": Files,
+  "gauge": Gauge,
+  "gavel": Gavel,
+  "hand-coins": HandCoins,
+  "handshake": Handshake,
+  "headset": Headset,
+  "heart-handshake": HeartHandshake,
+  "hourglass": Hourglass,
+  "import": Import,
+  "inbox": Inbox,
+  "life-buoy": LifeBuoy,
+  link: Link2,
+  "phone-call": PhoneCall,
+  "phone-off": PhoneOff,
+  "recycle": Recycle,
+  "scale": Scale,
+  "scroll-text": ScrollText,
+  "square-kanban": SquareKanban,
+  undo: Undo2,
+  // Every page shows its icon (owner 2026-10-30), so no two pages in one group share one.
+  "arrow-left-right": ArrowLeftRight,
+  award: Award,
+  "credit-card": CreditCard,
+  network: Network,
+  "receipt-text": ReceiptText,
+  split: Split,
+  "user-round-search": UserRoundSearch,
+  "user-x": UserX,
+  wallet: Wallet,
 } as const;
 
-function iconFor(name: string) {
-  return ICONS[name as keyof typeof ICONS] ?? Circle;
-}
-
-export function AgentSidebar({ menu, footer }: { menu: MenuSection[]; footer?: React.ReactNode }) {
+export function AgentSidebar({
+  menu,
+  footer,
+  moduleAccess,
+  plan,
+}: {
+  menu: MenuSection[];
+  footer?: ReactNode;
+  moduleAccess?: AgentModuleAccess;
+  plan?: AgentPlanSummary;
+}) {
   const [open, setOpen] = useState(false);
+
+  // One mark everywhere the product names itself — the phone bar and drawer used a building icon.
+  // The rail and drawer are always ink, so they take the on-dark mark; the white phone bar follows
+  // the theme.
+  const brandMark = (tone?: "dark") => (
+    <div className="flex items-center gap-2.5">
+      <InsurvasLogo size="sidebar" tone={tone} />
+    </div>
+  );
 
   return (
     <>
-      {/* Phone: a bar that is always reachable, and a drawer over the content. */}
       <header
         data-print-hide
-        className="sticky top-0 z-30 flex items-center gap-3 border-b border-white/10 bg-[var(--brand-700)] px-4 py-3 text-white md:hidden"
+        className="portal-agent-sidebar-mobile sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3 text-foreground md:hidden"
       >
         <button
           type="button"
           onClick={() => setOpen(true)}
           aria-label="Open menu"
           aria-expanded={open}
-          className="-ml-1 rounded-md p-1.5 transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
+          className="-ml-1 rounded-md p-1.5 transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
         >
           <Menu className="size-5" aria-hidden="true" />
         </button>
-        <div className="flex items-center gap-2">
-          <Building2 className="size-4" aria-hidden="true" />
-          <span className="font-semibold tracking-tight">Insurvas</span>
-        </div>
+        {brandMark()}
       </header>
 
       {open && (
@@ -175,45 +563,68 @@ export function AgentSidebar({ menu, footer }: { menu: MenuSection[]; footer?: R
             onClick={() => setOpen(false)}
             className="absolute inset-0 bg-black/50"
           />
-          <div className="absolute inset-y-0 left-0 flex w-72 max-w-[85vw] flex-col justify-between overflow-y-auto bg-[var(--brand-700)] p-4 text-white">
-            <div>
-              <div className="mb-6 flex items-center justify-between px-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="size-5" aria-hidden="true" />
-                  <span className="font-semibold tracking-tight">Insurvas</span>
-                </div>
+          <div className="portal-agent-sidebar-mobile-drawer absolute inset-y-0 left-0 flex w-80 max-w-[88vw] flex-col overflow-y-auto p-4 text-foreground">
+            <div className="min-h-0 flex-1">
+              <div className="portal-agent-sidebar-brand">
+                {brandMark("dark")}
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close menu"
-                  className="rounded-md p-1.5 transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/60"
+                  className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                 >
                   <X className="size-5" aria-hidden="true" />
                 </button>
               </div>
-              {/* Tapping a link closes the drawer — otherwise it stays open over the page it just
-                  navigated to, which reads as the tap having done nothing. */}
-              <NavList menu={menu} onNavigate={() => setOpen(false)} />
+              <NavList
+                menu={menu}
+                moduleAccess={moduleAccess}
+                onNavigate={() => setOpen(false)}
+              />
             </div>
-            {footer && <div className="mt-6 border-t border-white/10 pt-4">{footer}</div>}
+            {plan && <PlanCard plan={plan} />}
+            {footer && <div className="portal-agent-sidebar-footer">{footer}</div>}
           </div>
         </div>
       )}
 
-      {/* Desktop: the column, unchanged in spirit. */}
-      <aside
-        data-print-hide
-        className="hidden w-60 shrink-0 flex-col justify-between bg-[var(--brand-700)] p-4 text-white md:flex"
-      >
-        <div>
-          <div className="mb-7 flex items-center gap-2 px-3">
-            <Building2 className="size-5" aria-hidden="true" />
-            <span className="font-semibold tracking-tight">Insurvas</span>
-          </div>
-          <NavList menu={menu} />
-        </div>
-        {footer && <div className="border-t border-white/10 pt-4">{footer}</div>}
-      </aside>
+      <DesktopSidebar menu={menu} moduleAccess={moduleAccess} />
     </>
+  );
+}
+
+/** Desktop keeps the full navigation tree inside the workspace sidebar. */
+function DesktopSidebar({ menu, moduleAccess }: { menu: MenuSection[]; moduleAccess?: AgentModuleAccess }) {
+  const tree = buildSidebarTree(menu, moduleAccess);
+  // Starts collapsed (owner 2026-10-30): icons with a hover panel of pages; the toggle opens it.
+  const [isCollapsed, setIsCollapsed] = useState(true);
+
+  return (
+    <aside data-print-hide className={`portal-agent-sidebar-desktop portal-agent-desktop-nav hidden md:flex md:flex-col ${isCollapsed ? "is-collapsed" : ""}`}>
+      <div className="portal-agent-sidebar-brand">
+        <Link href={tree.home[0]?.path ?? "/app/dashboard"} aria-label="Insurvas home" className="portal-agent-desktop-brand-link">
+          <InsurvasLogo size="sidebar" tone="dark" className="portal-agent-desktop-brand-full" />
+          <InsurvasLogo size="compact" variant="symbol" tone="dark" className="portal-agent-desktop-brand-compact" />
+        </Link>
+        <button
+          type="button"
+          onClick={() => setIsCollapsed((collapsed) => !collapsed)}
+          aria-label={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? "Expand navigation" : "Collapse navigation"}
+          className="portal-agent-sidebar-collapse rounded-md p-1.5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+        >
+          {isCollapsed ? <PanelLeftOpen className="size-4" aria-hidden="true" /> : <PanelLeftClose className="size-4" aria-hidden="true" />}
+        </button>
+      </div>
+      <div className="portal-agent-sidebar-scroll flex-1">
+        <NavList
+          menu={menu}
+          moduleAccess={moduleAccess}
+          isCollapsed={isCollapsed}
+          onExpand={() => setIsCollapsed(false)}
+        />
+      </div>
+    </aside>
   );
 }

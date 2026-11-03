@@ -1,0 +1,199 @@
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Sell · Application"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Grace Oyelaran"
+        <div> {gap:8px}
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fff3ec;color:#a63800;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#ff5900}
+            "In application"
+          <button type="button"> {gap:7px;height:28px;padding:0 10px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;color:#15191e;fsize:12px;fweight:400;fweight:600}
+            "Attempt 2 · Mutual of Omaha"
+            <svg/>
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#60646c}
+            "Final Expense · $15,000"
+          <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f2f6;color:#005e75;fsize:12px;fweight:400;fweight:600}
+            <span> {width:6px;height:6px;bd-radius:9999px;bg:#00708a}
+            "Household · 2 applications"
+      <div> {gap:12px}
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Open portal"
+        <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+          "Add spouse"
+    <div> {gap:20px}
+      <div> {width:186px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Verify"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Interview"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Quote"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#138a43;color:#ffffff}
+                <svg/>
+              "Application"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#ff5900;color:#15191e;fsize:12px;fweight:400;fweight:600}
+                "5"
+              "Beneficiaries"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "6"
+              "Payment"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "7"
+              "Disclosures"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "8"
+              "Review"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "9"
+              "Submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-radius:8px;bg:transparent;color:#60646c;fsize:14px;fweight:400}
+              <span> {width:18px;height:18px;justify-content:center;bd-radius:9999px;bg:#e4e8ee;color:#60646c;fsize:12px;fweight:400;fweight:600}
+                "10"
+              "After submit"
+            <a href="#"> {gap:9px;height:34px;padding:0 10px;bd-top:1px solid #d5dbe3;bd-radius:0;color:#33383f;fsize:14px;fweight:400;height:auto}
+              "Case timeline"
+      <div> {flex-direction:column;gap:20px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Beneficiaries"
+            <span> {gap:10px}
+              <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Split evenly"
+              <button type="button"> {justify-content:center;gap:8px;height:32px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Add beneficiary"
+          <div> {grid-template-columns:1.4fr 1fr .8fr .9fr 40px;gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Name"
+              <input type="text" value="Michael Oyelaran"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Relationship"
+              <input type="text" value="Son"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Share %"
+              <input type="text" value="33.34"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+              "Primary"
+            <button type="button" aria-label="Remove"> {height:40px;bd:0;bg:transparent;color:#60646c}
+              <svg/>
+          <div> {grid-template-columns:1.4fr 1fr .8fr .9fr 40px;gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Name"
+              <input type="text" value="Adaeze Oyelaran"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Relationship"
+              <input type="text" value="Daughter"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Share %"
+              <input type="text" value="33.33"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+              "Primary"
+            <button type="button" aria-label="Remove"> {height:40px;bd:0;bg:transparent;color:#60646c}
+              <svg/>
+          <div> {grid-template-columns:1.4fr 1fr .8fr .9fr 40px;gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Name"
+              <input type="text" value="Chidi Oyelaran"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Relationship"
+              <input type="text" value="Son"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Share %"
+              <input type="text" value="33.33"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+              "Primary"
+            <button type="button" aria-label="Remove"> {height:40px;bd:0;bg:transparent;color:#60646c}
+              <svg/>
+          <div> {justify-content:space-between;gap:16px;padding:14px 22px;bd-top:1px solid #d5dbe3;bg:#e0f3e7}
+            <span> {fsize:14px;fweight:400;color:#33383f}
+              "Primary shares must total exactly 100.00"
+            <span> {fsize:18px;fweight:600;color:#0d7038}
+              "100.00%"
+          <div> {grid-template-columns:1.4fr 1fr .8fr .9fr 40px;gap:12px;padding:14px 22px;bd-top:1px solid #d5dbe3}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Name"
+              <input type="text" value="The estate of Grace Oyelaran"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Relationship"
+              <input type="text" value="Estate"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <label>
+              <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                "Share %"
+              <input type="text" value="100.00"> {width:100%;height:44px;padding:0 12px;bd:1px solid #7a828e;bd-radius:8px;bg:#ffffff;fsize:16px;fweight:400;color:#15191e}
+            <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+              "Contingent"
+            <button type="button" aria-label="Remove"> {height:40px;bd:0;bg:transparent;color:#60646c}
+              <svg/>
+            <div> {fsize:12px;fweight:400;color:#9a4f00}
+              "“Estate” sends the money through probate. Most people do not mean that."
+          <div> {justify-content:space-between;gap:16px;padding:14px 20px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Split evenly gives 33.34 / 33.33 / 33.33, because three thirds of 100 is not a round number."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Back to Application"
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Continue to Payment"
+      <div> {width:268px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:14px;bg:#fcefdf;bd-bottom:1px solid #d5dbe3}
+            <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+              "Pre-submission QA"
+            <div> {fsize:18px;fweight:600;color:#9a4f00}
+              "Pass with 2 warnings"
+            <div> {fsize:12px;fweight:400;color:#33383f}
+              "Runs as you type. Every line goes to the field it is about."
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Primary shares total 100.00"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "beneficiaries.primary_total"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "Every contingent has a primary above it"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "beneficiaries.contingent"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#b35c00}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "“Estate” named as contingent"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "beneficiaries.3.relationship"
+          <a href="#" .m-row> {gap:9px;padding:9px 14px;bd-top:1px solid #d5dbe3}
+            <span> {width:7px;height:7px;bd-radius:9999px;bg:#60646c}
+              <span> {fsize:12px;fweight:400;color:#33383f}
+                "No beneficiary under 18"
+              <span> {fsize:12px;fweight:400;color:#60646c;fsize:11px}
+                "beneficiaries.minors"
+          <div> {padding:12px 14px;bd-top:1px solid #d5dbe3;bg:#f1f3f7;fsize:12px;fweight:400;color:#60646c}
+            "The total is green only at exactly 100.00. 99.99 is not 100."

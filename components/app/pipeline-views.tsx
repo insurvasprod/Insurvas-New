@@ -1,0 +1,582 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+
+import { Download } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/components/ui/bulk-bar";
+import { toolbarControl } from "@/components/ui/data-toolbar";
+import { downloadCsv } from "@/components/app/partner-quality-parts";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { InfoTip } from "@/components/ui/info-tip";
+import { Pager, paginate } from "@/components/ui/pager";
+import type { PipelineStage } from "@/lib/pipelines/types";
+import type { MappedDisposition, PipelineViewContext, StageEvent } from "@/lib/pipelines/views";
+import { cn } from "@/lib/utils";
+import { dateTime, dayMonth, viewerTimeZone } from "@/lib/format/dates";
+import { useSolo } from "@/components/app/solo-context";
+
+/**
+ * The pipeline views beside the board: Stages (the pipeline's shape and the dispositions that land
+ * on each stage), Table (dense, selectable, bulk moves) and List (grouped by stage, with a preview
+ * that shows the stage history and offers the outcomes).
+ *
+ * One rule runs through all of them: a lead changes stage only by a disposition. Every move goes to
+ * POST /api/app/leads/move, which applies the outcome, moves the lead and records the change.
+ *
+ * The views render bare: the lead workspace's TableCard is the card, so none of them draws an outer
+ * border of its own (UI consistency standard: no card around a card).
+ */
+
+export type ViewLead = {
+  id: string;
+  pipeline_id: string;
+  stage_id: string;
+  values: Record<string, unknown>;
+  created_at: string;
+  submitter_name?: string | null;
+  owner_user_id?: string | null;
+  owner_name?: string | null;
+  disposition?: string | null;
+  disposition_at?: string | null;
+  stage_entered_at?: string | null;
+  monthly_premium_cents?: number | null;
+};
+export type ViewPipeline = { id: string; name: string; stages: PipelineStage[] };
+export type ViewContext = PipelineViewContext;
+
+/** Outcomes a board or table cannot apply: they need what only the call path collects. */
+const CALL_PATH_KEYS = new Set(["callback_scheduled", "do_not_call"]);
+/** Where a move came from, when it was the outcome of a call (tenant_lead_stage_events.source; 'inbound' is LA-1.12-10). */
+const STAGE_EVENT_SOURCE_NOTE: Record<string, string> = { inbound: " · inbound call outcome", dialer: " · dialer call outcome" };
+const callPathOnly = (option: MappedDisposition) => CALL_PATH_KEYS.has(option.key) || option.nextAction === "callback" || option.nextAction === "suppress";
+
+export function leadName(lead: ViewLead) {
+  const values = lead.values;
+  const full = values.full_name ?? values.name ?? [values.first_name, values.last_name].filter(Boolean).join(" ");
+  return typeof full === "string" && full ? full : "Unnamed lead";
+}
+export function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "?"; }
+export function inStageMs(lead: ViewLead, now: number) { return lead.stage_entered_at && now ? Math.max(0, now - Date.parse(lead.stage_entered_at)) : null; }
+export function durationLabel(ms: number | null) {
+  if (ms == null) return "—";
+  const minutes = Math.floor(ms / 60_000);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ${String(minutes % 60).padStart(2, "0")}m`;
+  return `${Math.floor(hours / 24)}d ${String(hours % 24).padStart(2, "0")}h`;
+}
+/** "2d 04h in stage", or — before the stage-entered time exists — "7d 06h since arrival". Never a guess dressed as the other. */
+export function stageAge(lead: ViewLead, now: number) {
+  const ms = inStageMs(lead, now);
+  if (ms != null) return `${durationLabel(ms)} in stage`;
+  return now ? `${durationLabel(Math.max(0, now - Date.parse(lead.created_at)))} since arrival` : "";
+}
+export function allowedLabel(minutes: number | null | undefined) {
+  if (!minutes) return null;
+  if (minutes < 60) return `${minutes} min`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)}h`;
+  return `${Math.round(minutes / 1440)}d`;
+}
+export function isOverdue(lead: ViewLead, context: ViewContext | null, now: number) {
+  const allowed = context?.stageRules[lead.stage_id]?.timeAllowedMinutes;
+  const ms = inStageMs(lead, now);
+  return Boolean(allowed && ms != null && ms > allowed * 60_000);
+}
+export function dispositionLabel(key: string | null | undefined, context: ViewContext | null) {
+  if (!key) return null;
+  for (const options of Object.values(context?.dispositionsByStage ?? {})) {
+    const found = options.find((option) => option.key === key);
+    if (found) return found.label;
+  }
+  return context?.unmapped.find((entry) => entry.key === key)?.label ?? key.replaceAll("_", " ");
+}
+
+/** The outcomes that can move a lead, grouped: those that keep it where it is, then those that move it. */
+export function dispositionGroups(pipeline: ViewPipeline | undefined, currentStageId: string | null, context: ViewContext | null) {
+  if (!pipeline || !context) return [];
+  const live = pipeline.stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position);
+  const groups: Array<{ label: string; stageId: string; options: MappedDisposition[] }> = [];
+  const current = live.find((stage) => stage.id === currentStageId);
+  if (current && context.dispositionsByStage[current.id]?.length) groups.push({ label: `Stays in ${current.name}`, stageId: current.id, options: context.dispositionsByStage[current.id] });
+  for (const stage of live) {
+    if (stage.id === currentStageId) continue;
+    const options = context.dispositionsByStage[stage.id];
+    if (options?.length) groups.push({ label: `Moves to ${stage.name}`, stageId: stage.id, options });
+  }
+  return groups;
+}
+
+// ── the picker ───────────────────────────────────────────────────────────────────────────────
+
+export function DispositionPicker({
+  open, onOpenChange, title, description, groups, busy, onPick, emptyText = "Map a disposition to this stage in Settings › Dispositions to move leads here.",
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description: string;
+  groups: Array<{ label: string; options: MappedDisposition[] }>;
+  busy: boolean;
+  onPick: (key: string) => void;
+  emptyText?: string;
+}) {
+  const empty = groups.every((group) => group.options.length === 0);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {empty ? (
+          <p className="rounded-lg border border-dashed border-border p-4 text-sm text-muted-foreground">{emptyText}</p>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {groups.filter((group) => group.options.length).map((group) => (
+              <div key={group.label}>
+                <p className="text-xs font-semibold leading-[1.33] text-muted-foreground">{group.label}</p>
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  {group.options.map((option) => {
+                    const blocked = callPathOnly(option);
+                    return (
+                      <button
+                        key={option.key}
+                        type="button"
+                        disabled={busy || blocked}
+                        onClick={() => onPick(option.key)}
+                        title={blocked ? "Needs the call path: record it from the lead or the dialer" : undefined}
+                        className="rounded-lg border border-[var(--border-strong)] bg-card px-3 py-2 text-left text-sm font-semibold hover:bg-[var(--surface-alt)] disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {option.label}
+                        {blocked && <span className="block text-xs font-normal text-muted-foreground">from the lead or dialer</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── shared bits ──────────────────────────────────────────────────────────────────────────────
+
+function Chip({ className, dot, children }: { className?: string; dot?: string; children: React.ReactNode }) {
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-[3px] text-xs font-semibold leading-normal", className ?? "bg-[var(--surface-alt)] text-[var(--body)]")}>
+      {dot && <span className="size-1.5 shrink-0 rounded-full" style={{ background: dot }} aria-hidden="true" />}
+      {children}
+    </span>
+  );
+}
+
+function stageMeta(stage: PipelineStage, context: ViewContext | null) {
+  const rule = context?.stageRules[stage.id];
+  const parts: string[] = [];
+  const allowed = allowedLabel(rule?.timeAllowedMinutes);
+  if (allowed) parts.push(`time allowed ${allowed}`);
+  if (rule?.countsAsWorked === true) parts.push("counts as worked");
+  if (rule?.countsAsWorked === false) parts.push("not worked yet");
+  if (stage.stage_type === "won") parts.push("terminal · a sale");
+  if (stage.stage_type === "lost") parts.push("terminal · closed");
+  return parts.join(" · ");
+}
+
+// ── Stages ───────────────────────────────────────────────────────────────────────────────────
+
+/** A one-line alert at the top of a view, for something that is actually wrong. */
+function ViewAlert({ tone, children }: { tone: "warning" | "error"; children: React.ReactNode }) {
+  return (
+    <p role="alert" className={cn("border-b px-4 py-2.5 text-sm", tone === "error" ? "border-[var(--error)]/30 bg-[var(--error-surface)] text-[var(--error-ink)]" : "border-[var(--warning)]/30 bg-[var(--warning-surface)] text-[var(--warning-ink)]")}>
+      {children}
+    </p>
+  );
+}
+
+export function StagesView({ pipelines, leads, context, isOwner, now }: { pipelines: ViewPipeline[]; leads: ViewLead[]; context: ViewContext | null; isOwner: boolean; now: number }) {
+  const unmapped = context?.unmapped ?? [];
+  const unmappedUses = unmapped.reduce((sum, entry) => sum + entry.uses, 0);
+  const drift = context?.stageDrift ?? 0;
+  return (
+    <div className="flex flex-col">
+      {unmapped.length > 0 && (
+        <ViewAlert tone="warning">
+          {unmapped.length} {unmapped.length === 1 ? "disposition has" : "dispositions have"} no stage ({unmapped.slice(0, 3).map((entry) => entry.label).join(", ")}{unmapped.length > 3 ? ", …" : ""}) — {unmappedUses.toLocaleString()} {unmappedUses === 1 ? "outcome" : "outcomes"} left out of the counts.
+          {isOwner && <> <Link href="/app/settings#pipelines" className="font-semibold text-foreground underline-offset-4 hover:underline">Map them in Settings › Pipelines</Link></>}
+        </ViewAlert>
+      )}
+      {drift > 0 && (
+        <ViewAlert tone="error">
+          Move {drift === 1 ? "1 lead" : `${drift} leads`} with a disposition to fix {drift === 1 ? "its" : "their"} stage.
+          <InfoTip className="ml-1" label="About stage mismatches">The lead and its stage history name different stages. Recording a disposition sets both again.</InfoTip>
+        </ViewAlert>
+      )}
+      {pipelines.map((pipeline, pipelineIndex) => {
+        const live = pipeline.stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position);
+        const owned = leads.filter((lead) => lead.pipeline_id === pipeline.id).length;
+        return (
+          <section key={pipeline.id} aria-label={pipeline.name} className={cn(pipelineIndex > 0 && "border-t border-border")}>
+            <header className="flex items-baseline gap-2 px-4 pb-1 pt-3">
+              <h2 className="text-sm font-semibold">{pipeline.name}{context?.draftPipelineIds.includes(pipeline.id) ? " · draft" : ""}</h2>
+              <span className="text-xs text-muted-foreground tabular-nums">{live.length} {live.length === 1 ? "stage" : "stages"} · {owned.toLocaleString()} {owned === 1 ? "lead" : "leads"}</span>
+            </header>
+            {live.map((stage, index) => {
+              const count = leads.filter((lead) => lead.stage_id === stage.id).length;
+              const overdue = leads.filter((lead) => lead.stage_id === stage.id && isOverdue(lead, context, now)).length;
+              const options = context?.dispositionsByStage[stage.id] ?? [];
+              const meta = stageMeta(stage, context);
+              return (
+                <div key={stage.id} className={cn("flex flex-col gap-3 px-4 py-3 md:flex-row md:items-start", index > 0 && "border-t border-border")}>
+                  <div className="flex min-w-0 items-start gap-3 md:w-[320px] md:shrink-0">
+                    <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white" style={{ background: stage.color }}>{index + 1}</span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold">{stage.name}</span>
+                      <span className="block text-xs text-muted-foreground tabular-nums">{count.toLocaleString()} {count === 1 ? "lead" : "leads"} · {options.length} {options.length === 1 ? "disposition" : "dispositions"}{overdue ? <span className="font-semibold text-[var(--error-ink)]"> · {overdue} past the time allowed</span> : null}</span>
+                      {(meta || stage.description) && <span className="mt-0.5 block text-xs text-muted-foreground">{[stage.description, meta].filter(Boolean).join(" — ")}</span>}
+                    </span>
+                  </div>
+                  <div className="flex flex-grow flex-wrap items-center gap-1.5">
+                    {options.map((option) => <Chip key={option.key} dot={stage.color}>{option.label}</Chip>)}
+                    {/* The first stage is where leads arrive, so it needs no disposition; any other stage without one cannot be entered. */}
+                    {options.length === 0 && index > 0 && <span className="text-xs font-semibold text-[var(--warning-ink)]">No disposition lands here</span>}
+                    {isOwner && <Link href="/app/settings#dispositions" className="text-xs font-semibold text-foreground underline-offset-4 hover:underline">+ Disposition</Link>}
+                  </div>
+                </div>
+              );
+            })}
+            {live.length === 0 && <EmptyState title="No stages yet" hint="Add stages to this pipeline to sort its leads." action={isOwner ? <Button asChild variant="outline"><Link href="/app/settings#pipelines">Open Settings › Pipelines</Link></Button> : undefined} />}
+          </section>
+        );
+      })}
+      {pipelines.length === 0 && <EmptyState title="No pipelines yet" hint={isOwner ? "Set up a pipeline to start sorting leads." : "Ask an owner to set up a pipeline."} action={isOwner ? <Button asChild variant="outline"><Link href="/app/settings#pipelines">Open Settings › Pipelines</Link></Button> : undefined} />}
+    </div>
+  );
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Which leads the Table shows of those the workspace filters let through. Chosen from the
+ * workspace's Saved views control (components/ui/saved-views.tsx, 2026-10-09 saved views), which
+ * replaced the row of scope chips that used to sit here.
+ */
+export type TableScope = "all" | "overdue" | "mine" | "unassigned";
+export const TABLE_SCOPES: readonly TableScope[] = ["all", "overdue", "mine", "unassigned"];
+
+export function inTableScope(lead: ViewLead, scope: TableScope, context: ViewContext | null, now: number, currentUserId: string | null) {
+  return scope === "all" || (scope === "overdue" && isOverdue(lead, context, now)) || (scope === "mine" && Boolean(currentUserId) && lead.owner_user_id === currentUserId) || (scope === "unassigned" && !lead.owner_user_id);
+}
+
+export function tableScopeCounts(leads: ViewLead[], context: ViewContext | null, now: number, currentUserId: string | null): Record<TableScope, number> {
+  return {
+    all: leads.length,
+    overdue: leads.filter((lead) => inTableScope(lead, "overdue", context, now, currentUserId)).length,
+    mine: leads.filter((lead) => inTableScope(lead, "mine", context, now, currentUserId)).length,
+    unassigned: leads.filter((lead) => inTableScope(lead, "unassigned", context, now, currentUserId)).length,
+  };
+}
+
+export function TableView({
+  leads, stageName, context, now, money, currentUserId, readOnly, onOpen, onBulkMove, filtered = false, onClearFilters, emptyAction, scope = "all", onScopeChange,
+}: {
+  /** The saved view's scope (Assigned to me, Unassigned, Overdue in stage); the workspace owns it. */
+  scope?: TableScope;
+  onScopeChange?: (scope: TableScope) => void;
+  /** The workspace's search or filters are narrowing `leads`: an empty table is then "no matches", not "no leads". */
+  filtered?: boolean;
+  onClearFilters?: () => void;
+  /** What fills an empty pipeline (Add lead, Import). */
+  emptyAction?: React.ReactNode;
+  leads: ViewLead[];
+  stageName: (stageId: string) => { name: string; color: string; pipeline: string };
+  context: ViewContext | null;
+  now: number;
+  money: boolean;
+  currentUserId: string | null;
+  readOnly: boolean;
+  onOpen: (lead: ViewLead) => void;
+  onBulkMove: (leadIds: string[]) => void;
+}) {
+  // The page resets when the scope changes (the workspace keys this view by scope).
+  const [page, setPage] = useState(1);
+  const PAGE = 10;
+  const rows = useMemo(() => {
+    const filtered = leads.filter((lead) => inTableScope(lead, scope, context, now, currentUserId));
+    // Longest in stage first — the leads most likely to need a hand.
+    return [...filtered].sort((a, b) => (inStageMs(b, now) ?? -1) - (inStageMs(a, now) ?? -1));
+  }, [leads, scope, context, now, currentUserId]);
+  // Ticked rows survive paging; a lead that leaves the list (a filter, a move, a refresh) drops out.
+  const selection = useRowSelection(useMemo(() => rows.map((lead) => lead.id), [rows]));
+  const { current, rows: pageRows } = paginate(rows, page, PAGE);
+  const pageIds = pageRows.map((lead) => lead.id);
+  const premiumTotal = pageRows.reduce((sum, lead) => sum + (lead.monthly_premium_cents ?? 0) * 12, 0);
+
+  /** Export selected: the table's own columns, for the ticked leads, built in the browser. */
+  function exportSelected() {
+    const chosen = rows.filter((lead) => selection.selected.has(lead.id));
+    downloadCsv("leads-selected.csv",
+      ["Lead", "Partner", "Stage", "Disposition", "In stage", "Owner", ...(money ? ["Premium"] : [])],
+      chosen.map((lead) => [
+        leadName(lead),
+        lead.submitter_name ?? "Workspace",
+        stageName(lead.stage_id).name,
+        dispositionLabel(lead.disposition, context) ?? "",
+        durationLabel(inStageMs(lead, now)),
+        lead.owner_name ?? (lead.owner_user_id ? "Member" : "Unassigned"),
+        ...(money ? [lead.monthly_premium_cents != null ? Math.round((lead.monthly_premium_cents * 12) / 100) : null] : []),
+      ]));
+  }
+
+  return (
+    <div className="flex flex-col">
+      {/* The bulk actions, directly under the workspace toolbar, only while leads are ticked. */}
+      <BulkBar
+        count={selection.count}
+        noun={["lead", "leads"]}
+        onClear={selection.clear}
+        actions={<>
+          <Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>
+          {/* One request for every ticked lead (POST /api/app/leads/move takes lead_ids); the
+              workspace asks which disposition, then confirms how many and where they go. */}
+          <Button type="button" disabled={readOnly} onClick={() => onBulkMove(selection.ids)}>Change stage</Button>
+        </>}
+      />
+
+      {rows.length === 0 ? (
+        scope !== "all" ? <NoMatches noun="leads" onClear={() => { onScopeChange?.("all"); setPage(1); }} />
+          : filtered ? <NoMatches noun="leads" onClear={onClearFilters} />
+          : <EmptyState title="No leads in this pipeline yet" hint="Add a lead or import a list." action={emptyAction} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
+            <thead>
+              <tr>
+                <th className="w-10"><SelectAllCheckbox selection={selection} ids={pageIds} label="Select every lead on this page" /></th>
+                <th>Lead</th>
+                <th>Partner</th>
+                <th>Stage</th>
+                <th>Disposition</th>
+                <th className="text-right">In stage</th>
+                <th>Owner</th>
+                {money && <th className="text-right">Premium</th>}
+              </tr>
+            </thead>
+            <tbody className="m-seq">
+              {pageRows.map((lead) => {
+                const stage = stageName(lead.stage_id);
+                const late = isOverdue(lead, context, now);
+                return (
+                  <tr key={lead.id} className={cn("m-row", selection.isSelected(lead.id) && "bg-[var(--primary-soft)]")}>
+                    <td><RowCheckbox selection={selection} id={lead.id} label={`Select ${leadName(lead)}`} /></td>
+                    <td><button type="button" className="font-semibold text-foreground underline-offset-4 hover:underline" onClick={() => onOpen(lead)}>{leadName(lead)}</button></td>
+                    <td className="text-[var(--body)]">{lead.submitter_name ?? "Workspace"}</td>
+                    <td><Chip dot={stage.color}>{stage.name}</Chip></td>
+                    <td className="text-[var(--body)]">{dispositionLabel(lead.disposition, context) ?? "—"}</td>
+                    <td className={cn("text-right tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-[var(--body)]")}>{durationLabel(inStageMs(lead, now))}</td>
+                    <td className={lead.owner_name ? "text-[var(--body)]" : "font-semibold text-[var(--error-ink)]"}>{lead.owner_name ?? (lead.owner_user_id ? "Member" : "Unassigned")}</td>
+                    {money && <td className="text-right tabular-nums">{lead.monthly_premium_cents != null ? `$${Math.round((lead.monthly_premium_cents * 12) / 100).toLocaleString("en-US")}` : "—"}</td>}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* The card's footer row, drawn here because the pager belongs to this view's rows. Same plinth as TableCard's footer slot. */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-b-[7px] border-t border-border bg-[var(--canvas)] px-4 py-2.5 text-xs text-muted-foreground">
+        <Pager
+          page={current}
+          total={rows.length}
+          noun="leads"
+          pageSize={PAGE}
+          onPage={setPage}
+          suffix={`longest in stage first${money && premiumTotal ? ` · $${Math.round(premiumTotal / 100).toLocaleString("en-US")} on this page` : ""}`}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── List ─────────────────────────────────────────────────────────────────────────────────────
+
+/** Leads per page inside one List group. */
+const LIST_GROUP_PAGE = 10;
+
+export function ListView({
+  pipelines, leads, context, now, readOnly, onMove, filtered = false, onClearFilters, emptyAction,
+}: {
+  filtered?: boolean;
+  onClearFilters?: () => void;
+  emptyAction?: React.ReactNode;
+  pipelines: ViewPipeline[];
+  leads: ViewLead[];
+  context: ViewContext | null;
+  now: number;
+  readOnly: boolean;
+  onMove: (lead: ViewLead, key: string) => Promise<boolean>;
+}) {
+  const [groupBy, setGroupBy] = useState<"stage" | "owner">("stage");
+  // Solo mode (owner 2026-10-29): every lead is the one agent's, so there is no grouping by owner.
+  const solo = useSolo();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  // Each group pages on its own, so a long stage does not push the others off the screen.
+  const [groupPages, setGroupPages] = useState<Record<string, number>>({});
+  const [history, setHistory] = useState<{ leadId: string; events: StageEvent[] | null; error: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const stagesById = useMemo(() => new Map(pipelines.flatMap((pipeline) => pipeline.stages.map((stage) => [stage.id, { stage, pipeline }] as const))), [pipelines]);
+  const selected = leads.find((lead) => lead.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+    void fetch(`/api/app/leads/${selected.id}/stage-history`, { cache: "no-store" })
+      .then(async (response) => ({ response, body: await response.json().catch(() => null) }))
+      .then(({ response, body }) => { if (!cancelled) setHistory({ leadId: selected.id, events: response.ok ? body?.events ?? [] : null, error: response.ok ? "" : body?.error ?? "Could not load the history" }); })
+      .catch(() => { if (!cancelled) setHistory({ leadId: selected.id, events: null, error: "Could not load the history" }); });
+    return () => { cancelled = true; };
+  }, [selected]);
+
+  const groups = useMemo(() => {
+    if (groupBy === "owner") {
+      const byOwner = new Map<string, ViewLead[]>();
+      for (const lead of leads) { const key = lead.owner_name ?? (lead.owner_user_id ? "Member" : "Unassigned"); byOwner.set(key, [...(byOwner.get(key) ?? []), lead]); }
+      return [...byOwner.entries()].sort(([a], [b]) => (a === "Unassigned" ? -1 : b === "Unassigned" ? 1 : a.localeCompare(b))).map(([name, items]) => ({ id: `owner:${name}`, name, color: name === "Unassigned" ? "var(--error)" : "var(--muted-foreground)", rule: "", terminal: false, items }));
+    }
+    // Live stages in order, then any archived stage that still holds leads (LA-1.9-6): archiving a
+    // stage takes it out of the pickers, never its leads off the list.
+    return pipelines.flatMap((pipeline) =>
+      [
+        ...pipeline.stages.filter((stage) => !stage.is_archived).sort((a, b) => a.position - b.position),
+        ...pipeline.stages.filter((stage) => stage.is_archived).sort((a, b) => a.position - b.position),
+      ].map((stage) => ({
+        id: stage.id,
+        name: `${pipelines.length > 1 ? `${pipeline.name} · ${stage.name}` : stage.name}${stage.is_archived ? " (archived)" : ""}`,
+        color: stage.color,
+        rule: stageMeta(stage, context),
+        terminal: stage.stage_type !== "open",
+        items: leads.filter((lead) => lead.stage_id === stage.id).sort((a, b) => (inStageMs(b, now) ?? -1) - (inStageMs(a, now) ?? -1)),
+      })),
+    ).filter((group) => group.items.length > 0);
+  }, [groupBy, leads, pipelines, context, now]);
+  const lateCount = leads.filter((lead) => isOverdue(lead, context, now)).length;
+  const selectedStage = selected ? stagesById.get(selected.stage_id) : undefined;
+  const quick = selected ? dispositionGroups(selectedStage?.pipeline, selected.stage_id, context) : [];
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex min-h-[3.25rem] flex-wrap items-center gap-3 border-b border-border px-4 py-2 text-sm">
+        {!solo && (
+          <label className="inline-flex items-center gap-2">
+            <span className="text-muted-foreground">Group by</span>
+            <select value={groupBy} onChange={(event) => setGroupBy(event.target.value as "stage" | "owner")} className={toolbarControl}><option value="stage">Stage</option><option value="owner">Owner</option></select>
+          </label>
+        )}
+        <span className="text-xs text-muted-foreground tabular-nums">{leads.length.toLocaleString()} leads{lateCount ? <> · <strong className="text-[var(--error-ink)]">{lateCount} past their stage&rsquo;s time allowed</strong></> : null}</span>
+      </div>
+      <div className="flex flex-col xl:flex-row xl:items-start">
+        <section aria-label="Leads" className="flex min-w-0 flex-col xl:w-[60%] xl:self-stretch xl:border-r xl:border-border">
+          {groups.map((group) => {
+            // Every group starts open, closed stages included; the header still folds one away.
+            const open = expanded[group.id] ?? true;
+            const page = paginate(group.items, groupPages[group.id] ?? 1, LIST_GROUP_PAGE);
+            return (
+              <div key={group.id}>
+                <button type="button" onClick={() => setExpanded((state) => ({ ...state, [group.id]: !open }))} aria-expanded={open} className="flex w-full items-center justify-between gap-3 border-t border-border bg-[var(--surface-alt)] px-4 py-1.5 text-left first:border-t-0">
+                  <span className="flex items-center gap-2"><span className="size-1.5 rounded-full" style={{ background: group.color }} aria-hidden="true" /><span className="text-xs font-semibold">{group.name}</span><span className="text-xs text-muted-foreground tabular-nums">{group.items.length} {group.items.length === 1 ? "lead" : "leads"}</span></span>
+                  <span className="text-xs text-muted-foreground">{group.rule}{open ? "" : " · show"}</span>
+                </button>
+                {open && page.rows.map((lead) => {
+                  const active = lead.id === selectedId;
+                  const late = isOverdue(lead, context, now);
+                  return (
+                    <button key={lead.id} type="button" onClick={() => setSelectedId(active ? null : lead.id)} aria-pressed={active} className={cn("flex w-full items-center gap-2.5 border-t border-border px-4 py-2 text-left", active ? "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]" : "bg-card hover:bg-[var(--surface-alt)]")}>
+                      <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-xs font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{initials(leadName(lead))}</span>
+                      <span className="min-w-0 flex-grow">
+                        <span className="block truncate text-sm font-semibold">{leadName(lead)}</span>
+                        <span className="block truncate text-xs text-muted-foreground tabular-nums">{lead.submitter_name ?? "Workspace"} · {stageAge(lead, now)}</span>
+                      </span>
+                      {lead.disposition && <Chip>{dispositionLabel(lead.disposition, context)}</Chip>}
+                      <span className="w-[120px] shrink-0 text-right">
+                        <span className={cn("block text-xs font-semibold", late ? "text-[var(--error-ink)]" : "text-[var(--body)]")}>{late ? "Past the time allowed" : lead.disposition_at ? "Last outcome recorded" : "Not yet worked"}</span>
+                        <span className={cn("block text-xs", lead.owner_user_id ? "text-muted-foreground" : "font-semibold text-[var(--error-ink)]")}>{lead.owner_name ?? (lead.owner_user_id ? "Member" : "Unassigned")}</span>
+                      </span>
+                    </button>
+                  );
+                })}
+                {open && page.pages > 1 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-[var(--canvas)] px-4 py-2 text-xs text-muted-foreground">
+                    <Pager page={page.current} total={group.items.length} pageSize={LIST_GROUP_PAGE} noun="leads" onPage={(next) => setGroupPages((state) => ({ ...state, [group.id]: next }))} />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {groups.length === 0 && (filtered ? <NoMatches noun="leads" onClear={onClearFilters} /> : <EmptyState title="No leads in this pipeline yet" hint="Add a lead or import a list." action={emptyAction} />)}
+        </section>
+
+        <section aria-label="Selected lead" className="flex min-w-0 flex-grow flex-col border-t border-border xl:border-t-0">
+          {selected ? (
+            <>
+              <div className="border-b border-border bg-[var(--primary-soft)] px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold">{leadName(selected)}</p>
+                    <p className="text-xs text-[var(--body)]">{selected.submitter_name ?? "Workspace"} · arrived {dayMonth(selected.created_at, viewerTimeZone())}</p>
+                  </div>
+                  <Button asChild size="sm" className="shrink-0"><Link href={`/app/leads/${selected.id}`}>Open workspace</Link></Button>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {selectedStage && <Chip className="border border-[var(--primary)] bg-card text-[var(--accent-ink)]" dot={selectedStage.stage.color}>{selectedStage.stage.name}</Chip>}
+                  {selected.disposition && <Chip>{dispositionLabel(selected.disposition, context)}</Chip>}
+                  <Chip className={isOverdue(selected, context, now) ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : undefined}>{stageAge(selected, now)}</Chip>
+                </div>
+              </div>
+              <div className="border-b border-border px-4 py-3">
+                <p className="text-xs font-semibold text-muted-foreground">Stage history</p>
+                {history?.leadId !== selected.id ? <div className="-mx-4 mt-1"><SectionLoading rows={3} columns={2} label="Loading stage history" /></div> : history.error ? <p className="mt-2 text-sm text-[var(--error-ink)]">{history.error}</p> : history.events && history.events.length ? (
+                  <ol className="mt-2 flex flex-col gap-2">
+                    {history.events.map((event) => (
+                      <li key={event.id} className="flex gap-2 text-sm">
+                        <span className="mt-1.5 size-1.5 shrink-0 rounded-full" style={{ background: stagesById.get(event.toStageId)?.stage.color ?? "var(--muted-foreground)" }} aria-hidden="true" />
+                        <span>
+                          <span className="block font-semibold">{stagesById.get(event.toStageId)?.stage.name ?? "A stage no longer shown"}{event.dispositionKey ? ` — ${dispositionLabel(event.dispositionKey, context)}` : " — corrected by an owner"}</span>
+                          <span className="block text-xs text-muted-foreground">{event.actorName ?? "System"} · {dateTime(event.at, viewerTimeZone())}{event.fromStageId && stagesById.get(event.fromStageId) ? ` · from ${stagesById.get(event.fromStageId)!.stage.name}` : ""}{STAGE_EVENT_SOURCE_NOTE[event.source] ?? ""}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ol>
+                ) : <p className="mt-2 text-sm text-muted-foreground">No stage change recorded yet.</p>}
+              </div>
+              <div className="px-4 py-3">
+                <p className="text-xs font-semibold text-muted-foreground">Record an outcome</p>
+                {quick.length ? quick.map((group) => (
+                  <div key={group.label} className="mt-2.5">
+                    <p className="text-xs text-muted-foreground">{group.label}</p>
+                    <div className="mt-1 grid gap-1.5 sm:grid-cols-2">
+                      {group.options.map((option) => (
+                        <button key={option.key} type="button" disabled={busy || readOnly || callPathOnly(option)} title={callPathOnly(option) ? "Record it from the lead or the dialer" : undefined} onClick={async () => { setBusy(true); const ok = await onMove(selected, option.key); setBusy(false); if (ok) setHistory(null); }} className="rounded-md border border-[var(--border-strong)] bg-card px-2.5 py-1.5 text-left text-xs font-semibold hover:bg-[var(--surface-alt)] disabled:opacity-50">
+                          {option.label}{group.stageId !== selected.stage_id ? " →" : ""}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )) : <p className="mt-2 text-sm text-muted-foreground">No disposition is mapped in this pipeline yet.</p>}
+              </div>
+            </>
+          ) : (
+            <p className="m-auto px-6 py-16 text-center text-sm text-muted-foreground">Pick a lead to record an outcome.</p>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

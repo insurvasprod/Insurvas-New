@@ -81,7 +81,7 @@ for (const event of events) {
   }
 
   const { data: already } = await supabase
-    .from("invoices")
+    .from("platform_invoices")
     .select("id, number, reconciliation")
     .eq("provider", "whop")
     .eq("provider_payment_id", paymentId)

@@ -5,6 +5,10 @@ Control plane for the Insurvas platform. Built against the `SA-x.y` tickets in t
 
 Next.js 16 (App Router) · Tailwind v4 · shadcn/ui · Supabase (Postgres).
 
+**Building or changing a screen?** Read the design rules first:
+[`docs/design/UI-CONSISTENCY.md`](docs/design/UI-CONSISTENCY.md) (§0 is the v3 foundation), and
+the `README.md` in the folder you are working in.
+
 ## The two planes
 
 The split that shapes the whole codebase:
@@ -62,6 +66,8 @@ npm run dev
 - **Tenant scope comes only from the session**, never from a request parameter.
 - **The audit log is append-only at the database level.** `UPDATE`, `DELETE` and `TRUNCATE` are
   revoked from every role the app connects as, including `service_role`.
-- **Email isn't wired up yet.** `lib/email/sendInvitationEmail.ts` logs and returns
-  `delivered: false`; the admin UI shows a copyable link instead. SA-4.11 replaces those function
-  bodies — no callers change.
+- **Email uses the shared guarded transport.** `lib/email/sendInvitationEmail.ts` and the other
+  lifecycle senders record every attempt through `lib/email/transport.ts`. External delivery is
+  disabled unless `EMAIL_DELIVERY_MODE=smtp` is explicitly set, and reserved QA recipients such
+  as `.test`, `.example`, `.invalid`, and `localhost` are refused even in SMTP mode. When delivery
+  is disabled or unavailable, the admin UI shows a copyable link instead.

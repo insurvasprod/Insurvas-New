@@ -1,39 +1,91 @@
 import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { PageHeader } from "@/components/ui/page-header";
+import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
+import { TenantsListCreate } from "@/components/admin/tenants-list-create";
 import { TenantsTable } from "@/components/admin/tenants-table";
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { canViewTenants } from "@/lib/tenants/permissions";
+import { tenantListStats } from "@/lib/tenantsList/present";
+import { fetchTenantList } from "@/lib/tenantsList/queries";
+import { fetchPlansForPicker } from "@/lib/plans/queries";
+
+/** A server render reads the clock once per request, which is the point. */
+function readClock() {
+  return Date.now();
+}
+
+function plural(n: number, one: string, many: string) {
+  return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
+}
 
 export default async function TenantsPage() {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/login");
   if (!canViewTenants(admin.role)) redirect("/admin");
 
-  const supabase = getSupabaseServiceClient();
+  // Throws on a failed read rather than rendering an empty table: a query that failed and a platform
+  // with no customers must never look the same. The route's error boundary offers Try again.
+  const isSuperAdmin = admin.role === "super_admin";
+  const [rows, plans] = await Promise.all([
+    fetchTenantList(),
+    // The Create tenant dialog picks a plan (doc 2 §5.3); only super_admin is offered it.
+    isSuperAdmin ? fetchPlansForPicker() : Promise.resolve([]),
+  ]);
+  const stats = tenantListStats(rows, readClock());
 
-  const { data: tenants } = await supabase
-    .from("tenants")
-    .select("id, name, status, plan_code, onboarding_state, created_at, suspended_at")
-    .order("created_at", { ascending: true });
+  const beyond = [
+    stats.provisioning > 0 ? `${stats.provisioning.toLocaleString("en-US")} provisioning` : null,
+    stats.cancelled > 0 ? `${stats.cancelled.toLocaleString("en-US")} cancelled` : null,
+  ].filter(Boolean);
 
-  const { data: owners } = await supabase
-    .from("tenant_users")
-    .select("tenant_id, users(name, email)")
-    .eq("role", "owner")
-    .returns<{ tenant_id: string; users: { name: string; email: string } | null }[]>();
-
-  const ownerByTenant = new Map((owners ?? []).map((row) => [row.tenant_id, row.users]));
-  const withOwners = (tenants ?? []).map((tenant) => ({ ...tenant, owner: ownerByTenant.get(tenant.id) ?? null }));
+  const trialFoot =
+    stats.trial === 0
+      ? "none in flight"
+      : [
+          `${stats.trialsEndingSoon.toLocaleString("en-US")} end within 7 days`,
+          stats.trialsPastEnd > 0 ? `${stats.trialsPastEnd.toLocaleString("en-US")} past end date` : null,
+        ]
+          .filter(Boolean)
+          .join(" · ");
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6">
-      <AdminPageHeader
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader
         title="Tenants"
-        subtitle="Every customer account on the platform. Suspend/reactivate and billing land in later tickets."
+        // POST /api/admin/tenants is super_admin only; nobody else is offered a button it would refuse.
+        actions={isSuperAdmin ? <TenantsListCreate plans={plans} /> : undefined}
       />
-      <TenantsTable initialTenants={withOwners} />
+
+      <BoardStatGrid>
+        <BoardStatTile
+          label="Tenants"
+          value={stats.total.toLocaleString("en-US")}
+          footnote={["all states", ...beyond].join(" · ")}
+        />
+        <BoardStatTile
+          label="Active"
+          value={stats.active.toLocaleString("en-US")}
+          tone={stats.active > 0 ? "success" : "default"}
+          footnote={stats.total > 0 ? `${((stats.active / stats.total) * 100).toFixed(1)}%` : "no tenants yet"}
+          title="Active and not in a trial, as a share of every tenant"
+        />
+        <BoardStatTile
+          label="In trial"
+          value={stats.trial.toLocaleString("en-US")}
+          tone={stats.trial > 0 ? "warning" : "default"}
+          footnote={trialFoot}
+          title="Active tenants whose live subscription is trialing"
+        />
+        <BoardStatTile
+          label="Suspended"
+          value={stats.suspended.toLocaleString("en-US")}
+          tone={stats.suspended > 0 ? "error" : "default"}
+          footnote={stats.oldestSuspendedDays === null ? (stats.suspended > 0 ? "no suspension date recorded" : "none on hold") : `oldest ${plural(stats.oldestSuspendedDays, "day", "days")}`}
+        />
+      </BoardStatGrid>
+
+      <TenantsTable rows={rows} />
     </div>
   );
 }

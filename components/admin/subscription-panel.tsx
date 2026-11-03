@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { TriangleAlert } from "lucide-react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
-import { Badge } from "@/components/ui/badge";
+import { StatusChip, subscriptionTone } from "@/components/admin/status-chip";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -18,14 +18,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  SUBSCRIPTION_STATUS_BADGE_CLASS,
   SUBSCRIPTION_STATUS_LABELS,
   accessLevelForStatus,
   availableActions,
@@ -39,6 +31,28 @@ import {
   type PlanPrices,
 } from "@/lib/money";
 import type { SubscriptionRow } from "@/lib/subscriptions/queries";
+import { inputControl } from "@/components/ui/field";
+
+/** SA-2.7: every subscription change is audit-logged with a reason; the server refuses one under 5 characters. */
+const REASON_MIN = 5;
+const reasonOk = (reason: string) => reason.trim().length >= REASON_MIN;
+
+function ReasonField({ id, value, onChange, placeholder }: { id: string; value: string; onChange: (value: string) => void; placeholder: string }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>Reason</Label>
+      <textarea
+        id={id}
+        rows={2}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      />
+      <p className="text-xs text-muted-foreground">Required, and recorded in the audit log.</p>
+    </div>
+  );
+}
 
 export type AssignablePlan = {
   id: string;
@@ -69,23 +83,25 @@ export function SubscriptionPanel({
   const [assignOpen, setAssignOpen] = useState(false);
   const [changeOpen, setChangeOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  const [reasonFor, setReasonFor] = useState<null | "pause" | "resume">(null);
 
   async function post(url: string, body: unknown, successMessage: string) {
     setBusy(true);
+    const idempotencyKey = crypto.randomUUID();
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
       body: JSON.stringify(body),
     });
     const payload = await res.json().catch(() => null);
     setBusy(false);
 
     if (!res.ok) {
-      toast.error(payload?.error ?? "Something went wrong");
+      notify.block(payload?.error ?? "Something went wrong");
       return null;
     }
 
-    toast.success(successMessage);
+    notify.done(successMessage);
     router.refresh();
     return payload;
   }
@@ -95,7 +111,7 @@ export function SubscriptionPanel({
       <>
         <Card>
           <CardContent className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Subscription</h2>
+            <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Subscription</h2>
             <p className="text-sm text-muted-foreground">
               Nothing sold to this tenant yet — no plan, no allowances, no seat limit.
             </p>
@@ -110,8 +126,8 @@ export function SubscriptionPanel({
           onClose={() => setAssignOpen(false)}
           plans={plans}
           busy={busy}
-          onAssign={(planId, cycle) =>
-            post("/api/admin/subscriptions", { tenant_id: tenantId, plan_id: planId, billing_cycle: cycle }, "Plan assigned").then(
+          onAssign={(planId, cycle, reason) =>
+            post("/api/admin/subscriptions", { tenant_id: tenantId, plan_id: planId, billing_cycle: cycle, reason }, "Plan assigned").then(
               (ok) => {
                 if (ok) setAssignOpen(false);
               },
@@ -130,33 +146,35 @@ export function SubscriptionPanel({
     <>
       <Card>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--color-accent-ink)]">Subscription</h2>
-            <Badge variant="outline" className={SUBSCRIPTION_STATUS_BADGE_CLASS[status]}>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Subscription</h2>
+            </div>
+            <StatusChip tone={subscriptionTone(status)}>
               {SUBSCRIPTION_STATUS_LABELS[status]}
-            </Badge>
+            </StatusChip>
           </div>
 
           {access !== "full" && (
-            <div className="flex items-start gap-2 rounded-md border border-[var(--color-warning)]/30 bg-[var(--color-warning)]/10 p-3 text-sm">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]" />
+            <div className="flex items-start gap-2 rounded-lg bg-[var(--warning-surface)] p-3.5 text-sm">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[var(--warning-ink)]" />
               <p>{ACCESS_NOTE[access]}</p>
             </div>
           )}
 
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4 text-sm">
             <div>
-              <p className="text-muted-foreground">Plan</p>
+              <p className="text-xs font-semibold text-muted-foreground">Plan</p>
               <p className="font-medium">
                 {subscription.plan_name} <span className="text-xs">v{subscription.plan_version}</span>
               </p>
             </div>
             <div>
-              <p className="text-muted-foreground">Billing</p>
+              <p className="text-xs font-semibold text-muted-foreground">Billing</p>
               <p className="font-medium">{BILLING_CYCLE_LABELS[subscription.billing_cycle]}</p>
             </div>
             <div>
-              <p className="text-muted-foreground">Period ends</p>
+              <p className="text-xs font-semibold text-muted-foreground">Period ends</p>
               <p className="font-medium">
                 {subscription.current_period_end
                   ? new Date(subscription.current_period_end).toLocaleDateString()
@@ -164,7 +182,7 @@ export function SubscriptionPanel({
               </p>
             </div>
             <div>
-              <p className="text-muted-foreground">Trial ends</p>
+              <p className="text-xs font-semibold text-muted-foreground">Trial ends</p>
               <p className="font-medium">
                 {subscription.trial_ends_at ? new Date(subscription.trial_ends_at).toLocaleDateString() : "—"}
               </p>
@@ -173,17 +191,21 @@ export function SubscriptionPanel({
 
           {/* A queued change must be visible and dated — SA-2.7 is explicit about labelling it. */}
           {subscription.pending_plan_name && (
-            <p className="rounded-md bg-muted px-3 py-2 text-sm">
-              Moving to <span className="font-medium">{subscription.pending_plan_name}</span> — takes effect{" "}
-              <span className="font-medium">
+            <div className="rounded-lg bg-[var(--warning-surface)] px-4 py-3.5">
+              <div className="text-sm text-[var(--warning-ink)]">
+                Queued change — takes effect{" "}
                 {subscription.current_period_end
                   ? new Date(subscription.current_period_end).toLocaleDateString()
                   : "at period end"}
-              </span>
-            </p>
+              </div>
+              <p className="mt-0.5 text-sm">
+                Moving to <span className="font-medium">{subscription.pending_plan_name}</span>. Nothing is prorated
+                because the change was scheduled rather than applied now.
+              </p>
+            </div>
           )}
           {subscription.cancel_at_period_end && (
-            <p className="rounded-md bg-[var(--color-danger)]/10 px-3 py-2 text-sm text-[var(--color-danger)]">
+            <p className="rounded-lg bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
               Cancelling — ends{" "}
               {subscription.current_period_end
                 ? new Date(subscription.current_period_end).toLocaleDateString()
@@ -203,13 +225,7 @@ export function SubscriptionPanel({
                 size="sm"
                 variant="outline"
                 disabled={busy}
-                onClick={() =>
-                  post(
-                    `/api/admin/subscriptions/${subscription.id}`,
-                    { action: "pause", reason: "Paused by administrator" },
-                    "Subscription paused",
-                  )
-                }
+                onClick={() => setReasonFor("pause")}
               >
                 Pause
               </Button>
@@ -219,9 +235,7 @@ export function SubscriptionPanel({
                 size="sm"
                 variant="outline"
                 disabled={busy}
-                onClick={() =>
-                  post(`/api/admin/subscriptions/${subscription.id}`, { action: "resume" }, "Subscription resumed")
-                }
+                onClick={() => setReasonFor("resume")}
               >
                 Resume
               </Button>
@@ -247,13 +261,28 @@ export function SubscriptionPanel({
         }
         periodEnd={subscription.current_period_end}
         busy={busy}
-        onChange={(planId, applyNow) =>
+        onChange={(planId, applyNow, reason) =>
           post(
             `/api/admin/subscriptions/${subscription.id}`,
-            { action: "change_plan", plan_id: planId, apply_now: applyNow },
+            { action: "change_plan", plan_id: planId, apply_now: applyNow, reason },
             applyNow ? "Plan changed" : "Plan change queued for period end",
           ).then((ok) => {
             if (ok) setChangeOpen(false);
+          })
+        }
+      />
+
+      <ReasonDialog
+        mode={reasonFor}
+        onClose={() => setReasonFor(null)}
+        busy={busy}
+        onConfirm={(mode, reason) =>
+          post(
+            `/api/admin/subscriptions/${subscription.id}`,
+            { action: mode, reason },
+            mode === "pause" ? "Subscription paused" : "Subscription resumed",
+          ).then((ok) => {
+            if (ok) setReasonFor(null);
           })
         }
       />
@@ -277,7 +306,7 @@ export function SubscriptionPanel({
   );
 }
 
-function AssignDialog({
+export function AssignDialog({
   open,
   onClose,
   plans,
@@ -288,10 +317,11 @@ function AssignDialog({
   onClose: () => void;
   plans: AssignablePlan[];
   busy: boolean;
-  onAssign: (planId: string, cycle: BillingCycle) => void;
+  onAssign: (planId: string, cycle: BillingCycle, reason: string) => void;
 }) {
   const [planId, setPlanId] = useState("");
   const [cycle, setCycle] = useState<BillingCycle | "">("");
+  const [reason, setReason] = useState("");
 
   const plan = plans.find((p) => p.id === planId);
   const cycles = availableBillingCycles(plan?.prices ?? null);
@@ -309,50 +339,37 @@ function AssignDialog({
         <div className="space-y-4 py-4">
           <div className="space-y-1.5">
             <Label htmlFor="assign-plan">Plan</Label>
-            <Select
-              value={planId}
-              onValueChange={(v) => {
-                setPlanId(v);
-                setCycle("");
-              }}
-            >
-              <SelectTrigger id="assign-plan" className="w-full">
-                <SelectValue placeholder="Choose…" />
-              </SelectTrigger>
-              <SelectContent>
+            <select id="assign-plan" className={inputControl} value={planId} onChange={(event) => { const v = event.target.value; setPlanId(v);
+                setCycle(""); }}><option value="" disabled>Choose…</option>
                 {plans.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
+                  <option key={p.id} value={p.id}>
                     {p.name} v{p.version}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="assign-cycle">Billing cycle</Label>
-            <Select value={cycle} onValueChange={(v) => setCycle(v as BillingCycle)} disabled={!plan}>
-              <SelectTrigger id="assign-cycle" className="w-full">
-                <SelectValue placeholder={plan ? "Choose…" : "Pick a plan first"} />
-              </SelectTrigger>
-              <SelectContent>
+            <select id="assign-cycle" className={inputControl} value={cycle} onChange={(event) => { const v = event.target.value; setCycle(v as BillingCycle); }} disabled={!plan}><option value="" disabled>{plan ? "Choose…" : "Pick a plan first"}</option>
                 {cycles.map((c) => (
-                  <SelectItem key={c} value={c}>
+                  <option key={c} value={c}>
                     {BILLING_CYCLE_LABELS[c]} — {formatCentsAsCurrency(priceForCycle(plan!.prices, c) ?? 0)}
-                  </SelectItem>
+                  </option>
                 ))}
-              </SelectContent>
-            </Select>
+              </select>
             {plan && cycles.length === 0 && (
               <p className="text-xs text-[var(--color-danger)]">
                 This plan has no prices set, so it can&apos;t be sold.
               </p>
             )}
           </div>
+
+          <ReasonField id="assign-reason" value={reason} onChange={setReason} placeholder="e.g. Signed the annual agreement on the call" />
         </div>
 
         <DialogFooter>
-          <Button disabled={busy || !planId || !cycle} onClick={() => onAssign(planId, cycle as BillingCycle)}>
+          <Button disabled={busy || !planId || !cycle || !reasonOk(reason)} onClick={() => onAssign(planId, cycle as BillingCycle, reason.trim())}>
             {busy ? "Assigning…" : "Assign plan"}
           </Button>
         </DialogFooter>
@@ -361,7 +378,7 @@ function AssignDialog({
   );
 }
 
-function ChangePlanDialog({
+export function ChangePlanDialog({
   open,
   onClose,
   plans,
@@ -370,6 +387,8 @@ function ChangePlanDialog({
   periodEnd,
   busy,
   onChange,
+  seatLimits,
+  note,
 }: {
   open: boolean;
   onClose: () => void;
@@ -378,19 +397,49 @@ function ChangePlanDialog({
   currentPrice: number | null;
   periodEnd: string | null;
   busy: boolean;
-  onChange: (planId: string, applyNow: boolean) => void;
+  onChange: (planId: string, applyNow: boolean, reason: string) => void;
+  /** Seat limit per plan id (null = unlimited). When given, each option says what it allows. */
+  seatLimits?: Record<string, number | null>;
+  /** Extra context above the picker, e.g. why seats are changed by changing plan. */
+  note?: ReactNode;
 }) {
   const [planId, setPlanId] = useState("");
   const [override, setOverride] = useState<boolean | null>(null);
+  const [reason, setReason] = useState("");
 
   const plan = plans.find((p) => p.id === planId);
   const newPrice = plan ? priceForCycle(plan.prices, cycle) : null;
 
   // Upgrade = costs more on the same cycle -> immediate. Otherwise queued to period end, so the
-  // customer keeps what they already paid for. The admin can override either way.
-  const inferredUpgrade = newPrice !== null && currentPrice !== null && newPrice > currentPrice;
-  const applyNow = override ?? inferredUpgrade;
+  // customer keeps what they already paid for. The server decides (20261015600000): a downgrade is
+  // always queued, so "now" is not offered for one; an upgrade or a same-price move can be queued.
+  //
+  // Same price is its own case. It used to fall through to "a downgrade", so moving a tenant to the
+  // next version of their plan at an unchanged price was announced as a downgrade. The timing is
+  // unchanged (it still waits for the period end by default); only the description was wrong.
+  const direction: "upgrade" | "downgrade" | "same" | "unknown" =
+    newPrice === null || currentPrice === null
+      ? "unknown"
+      : newPrice > currentPrice
+        ? "upgrade"
+        : newPrice < currentPrice
+          ? "downgrade"
+          : "same";
+  const inferredUpgrade = direction === "upgrade";
+  const canApplyNow = direction !== "downgrade";
+  const applyNow = canApplyNow && (override ?? inferredUpgrade);
   const sellableOnCycle = newPrice !== null;
+  const DIRECTION_LABEL = {
+    upgrade: "an upgrade",
+    downgrade: "a downgrade",
+    same: "the same price",
+    unknown: "no current price to compare against",
+  } as const;
+  const seatsFor = (id: string) => {
+    if (!seatLimits || !(id in seatLimits)) return "";
+    const max = seatLimits[id];
+    return max === null ? " · unlimited seats" : ` · ${max} seat${max === 1 ? "" : "s"}`;
+  };
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
@@ -398,38 +447,30 @@ function ChangePlanDialog({
         <DialogHeader>
           <DialogTitle>Change plan</DialogTitle>
           <DialogDescription>
-            Upgrades apply immediately; downgrades wait for period end so nothing already paid for is
-            taken away.
+            Upgrades apply immediately; downgrades always wait for period end so nothing already paid
+            for is taken away.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {note && <div className="text-sm text-muted-foreground">{note}</div>}
           <div className="space-y-1.5">
             <Label htmlFor="change-plan">New plan</Label>
-            <Select
-              value={planId}
-              onValueChange={(v) => {
-                setPlanId(v);
-                setOverride(null);
-              }}
-            >
-              <SelectTrigger id="change-plan" className="w-full">
-                <SelectValue placeholder="Choose…" />
-              </SelectTrigger>
-              <SelectContent>
+            <select id="change-plan" className={inputControl} value={planId} onChange={(event) => { const v = event.target.value; setPlanId(v);
+                setOverride(null); }}><option value="" disabled>Choose…</option>
                 {plans.map((p) => {
                   const price = priceForCycle(p.prices, cycle);
                   return (
-                    <SelectItem key={p.id} value={p.id} disabled={price === null}>
+                    <option key={p.id} value={p.id} disabled={price === null}>
                       {p.name} v{p.version}
                       {price === null
                         ? ` — not sold ${BILLING_CYCLE_LABELS[cycle].toLowerCase()}`
                         : ` — ${formatCentsAsCurrency(price)}`}
-                    </SelectItem>
+                      {seatsFor(p.id)}
+                    </option>
                   );
                 })}
-              </SelectContent>
-            </Select>
+              </select>
           </div>
 
           {plan && sellableOnCycle && (
@@ -437,27 +478,33 @@ function ChangePlanDialog({
               <p>
                 {formatCentsAsCurrency(currentPrice ?? 0)} → {formatCentsAsCurrency(newPrice)} per{" "}
                 {BILLING_CYCLE_LABELS[cycle].toLowerCase()} —{" "}
-                <span className="font-medium">{inferredUpgrade ? "an upgrade" : "a downgrade"}</span>
+                <span className="font-medium">{DIRECTION_LABEL[direction]}</span>
               </p>
               <p className="text-muted-foreground">
                 {applyNow
                   ? "Takes effect immediately."
                   : `Takes effect ${periodEnd ? new Date(periodEnd).toLocaleDateString() : "at period end"}.`}
               </p>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setOverride(!applyNow)}
-              >
-                {applyNow ? "Queue for period end instead" : "Apply immediately instead"}
-              </Button>
+              {canApplyNow ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOverride(!applyNow)}
+                >
+                  {applyNow ? "Queue for period end instead" : "Apply immediately instead"}
+                </Button>
+              ) : (
+                <p className="text-xs text-muted-foreground">A downgrade cannot apply before the period it was paid for ends.</p>
+              )}
             </div>
           )}
+
+          <ReasonField id="change-reason" value={reason} onChange={setReason} placeholder="e.g. Customer asked to move to the yearly plan" />
         </div>
 
         <DialogFooter>
-          <Button disabled={busy || !planId || !sellableOnCycle} onClick={() => onChange(planId, applyNow)}>
+          <Button disabled={busy || !planId || !sellableOnCycle || !reasonOk(reason)} onClick={() => onChange(planId, applyNow, reason.trim())}>
             {busy ? "Saving…" : applyNow ? "Change now" : "Queue change"}
           </Button>
         </DialogFooter>
@@ -466,7 +513,7 @@ function ChangePlanDialog({
   );
 }
 
-function CancelDialog({
+export function CancelDialog({
   open,
   onClose,
   periodEnd,
@@ -501,7 +548,7 @@ function CancelDialog({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. Customer moved to a competitor"
-              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             />
             <p className="text-xs text-muted-foreground">Required, and recorded in the audit log.</p>
           </div>
@@ -530,6 +577,53 @@ function CancelDialog({
             onClick={() => onCancel(reason, immediate)}
           >
             {busy ? "Cancelling…" : immediate ? "Cancel now" : "Cancel at period end"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Pause and resume: one reason, recorded in the audit log like every other subscription change. */
+export function ReasonDialog({
+  mode,
+  onClose,
+  busy,
+  onConfirm,
+}: {
+  mode: "pause" | "resume" | null;
+  onClose: () => void;
+  busy: boolean;
+  onConfirm: (mode: "pause" | "resume", reason: string) => void;
+}) {
+  const [reason, setReason] = useState("");
+  const pausing = mode === "pause";
+
+  return (
+    <Dialog open={mode !== null} onOpenChange={(next) => !next && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{pausing ? "Pause subscription" : "Resume subscription"}</DialogTitle>
+          <DialogDescription>
+            {pausing
+              ? "They keep read access to their book of business but cannot dial, import or sell until it is resumed."
+              : "Full access returns immediately."}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="py-2">
+          <ReasonField
+            id="pause-reason"
+            value={reason}
+            onChange={setReason}
+            placeholder={pausing ? "e.g. Customer on leave until March" : "e.g. Customer back from leave"}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={onClose} disabled={busy}>
+            Keep as is
+          </Button>
+          <Button disabled={busy || !mode || !reasonOk(reason)} onClick={() => mode && onConfirm(mode, reason.trim())}>
+            {busy ? "Saving…" : pausing ? "Pause" : "Resume"}
           </Button>
         </DialogFooter>
       </DialogContent>

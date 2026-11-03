@@ -14,10 +14,14 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
-import { TRIAL_DAYS } from "./constants";
+import { trialDaysForPlan } from "./trialDays";
+import { applyAutoOffer } from "@/lib/offers/service";
+import { audit } from "@/lib/audit/log";
+import { readSignupAddonIds } from "@/lib/signup/planChoiceQueries";
 import type { BillingCycle } from "@/lib/money";
 
-export type CompletionSource = "return" | "webhook";
+/** "no_payment": a checkout with CHECKOUT_PAYMENT_MODE=none (lib/checkout/noPayment.ts). */
+export type CompletionSource = "return" | "webhook" | "no_payment";
 
 export type Completion = {
   subscriptionId: string;
@@ -64,13 +68,25 @@ export async function completeCheckout(
     p_plan_id: planId,
     p_billing_cycle: billingCycle,
     p_whop_membership_id: options.membershipId ?? null,
-    p_trial_days: TRIAL_DAYS,
+    // The plan version's own trial (plan_prices.trial_days), not a platform-wide 14 (audit 2026-10-15).
+    p_trial_days: await trialDaysForPlan(planId),
   });
 
   if (error) throw new Error(`Could not create the subscription for ${tenantId}: ${error.message}`);
 
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) return null;
+
+  // The add-ons ticked on the plan screen (step 2 of 3), attached the way an admin attaches one, before the entitlement
+  // is rebuilt so their features are there on the first screen. Only by the caller that created the
+  // subscription. A refused add-on (retired, or no longer offered) is logged and skipped: the plan
+  // the owner paid for must start either way.
+  if (row.created) {
+    for (const addonId of await readSignupAddonIds(tenantId)) {
+      const attached = await supabase.rpc("admin_attach_addon", { p_subscription_id: row.subscription_id, p_addon_id: addonId, p_override_availability: false, p_attached_by: null });
+      if (attached.error) console.error(`[checkout] sign-up add-on ${addonId} not attached to ${row.subscription_id}`, attached.error.message);
+    }
+  }
 
   // Immediately, not on a schedule: the acceptance criterion is that completing checkout lands the
   // user in the product with their plan's menu already correct, and the entitlement blob is what
@@ -85,6 +101,23 @@ export async function completeCheckout(
       .eq("status", "open");
 
     console.log(`[checkout] tenant ${tenantId}: subscription ${row.status} created via ${options.source}`);
+
+    // SA-4.4: platform auto-offers reach self-serve signups too, not only admin-assigned
+    // subscriptions (audit, 2026-10-15). Exactly once: only the caller whose call CREATED the
+    // subscription runs it, and the SQL itself refuses a second coupon (already_has_coupon). A
+    // failure never undoes the checkout — applyAutoOffer logs and returns null.
+    const autoOfferId = await applyAutoOffer(row.subscription_id);
+    if (autoOfferId) {
+      await audit({
+        actorId: null,
+        actorType: "system",
+        action: "offer.applied",
+        targetType: "subscription",
+        targetId: row.subscription_id,
+        metadata: { offerId: autoOfferId, application: "auto", source: `checkout_${options.source}`, tenantId },
+        request: new Request("https://internal.invalid/checkout/complete"),
+      }).catch((error) => console.error(`[checkout] auto-offer ${autoOfferId} applied to ${row.subscription_id} but not audited`, error));
+    }
   }
 
   return {

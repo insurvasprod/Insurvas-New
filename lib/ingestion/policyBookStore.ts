@@ -1,0 +1,561 @@
+import "server-only";
+
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
+import { mapLimit } from "@/lib/retention/batch";
+
+import { ENTRY_LABELS, type EntryType } from "./commissionLedger";
+import { loadPolicyMoney } from "./commissionLedgerStore";
+import { loadPolicyExpected } from "./expectedCommissionStore";
+import { fileHref, rowHref } from "./trace";
+import { changeLabel, changeValue, fieldWord, mergeTimeline, readableDay, statusLabel, type BookRow, type RiskBand, type TimelineItem } from "./policyBook";
+
+/**
+ * LA-4.11 (Notion sprint) · the reads behind the policy list and the policy page, and the two writes
+ * that are the agency's own (notes and lead source; saved filters). Everything carrier-sourced comes
+ * from LA-4.7's policy_current and is never written here.
+ *
+ * A producer sees the policies credited to them (policy_current.agent_user_id); an owner and a
+ * bookkeeper see the whole book.
+ *
+ * AG-0.5 · a Viewer may carry the producer scope from its session (`scopeFor(auth.context)`). In an agency a
+ * narrow session then sees only policies credited to a visible producer (policy_current.agent_user_id), hand
+ * policies they recorded (tenant_policies.created_by), sales they worked (deal_flow.worked_by); and on a
+ * policy page, the client's and household's other policies and the household total only over those. Absent
+ * or null = today's behaviour (the role rule above).
+ */
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Loose = any;
+const db = (): Loose => getSupabaseServiceClient();
+
+export class PolicyBookError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "PolicyBookError";
+  }
+}
+
+export const POLICY_BOOK_PENDING_MESSAGE = "The policy list needs a database update (20261008160000).";
+export const POLICY_NOTES_PENDING_MESSAGE = "Notes and saved filters need a database update (20261008210000).";
+
+export type Viewer = { tenantId: string; userId: string; role: string; scope?: ProducerScope };
+
+/** AG-0.5 · a query narrowed to the viewer's visible producers on `column`; unchanged without a scope. */
+function inScope<Q extends { in(column: string, values: readonly string[]): Q }>(viewer: Viewer, query: Q, column: string): Q {
+  return scopeQuery(query, column, viewer.scope ?? null);
+}
+
+const PAGE = 1000;
+const CHUNK = 200;
+
+/** Every row of a query, a page at a time (the API returns at most 1,000 at once). */
+async function everyRow(build: () => Loose, max = 50_000): Promise<{ rows: Loose[]; error: Loose }> {
+  const rows: Loose[] = [];
+  for (let from = 0; from < max; from += PAGE) {
+    const { data, error } = await build().range(from, from + PAGE - 1);
+    if (error) return { rows, error };
+    rows.push(...(data ?? []));
+    if (!data || data.length < PAGE) break;
+  }
+  return { rows, error: null };
+}
+
+/** Rows whose id is in a long list, in parallel chunks (a URL holds only so many ids). */
+async function byIds(table: string, columns: string, ids: string[], tenantId?: string): Promise<Loose[]> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  const chunks: string[][] = [];
+  for (let at = 0; at < unique.length; at += CHUNK) chunks.push(unique.slice(at, at + CHUNK));
+  const results = await Promise.all(chunks.map((chunk) => {
+    let query = db().from(table).select(columns).in("id", chunk);
+    if (tenantId) query = query.eq("tenant_id", tenantId);
+    return query;
+  }));
+  return results.flatMap((result: Loose) => result.data ?? []);
+}
+
+const CURRENT_COLUMNS = "carrier_id, policy_number, contact_id, household_id, application_id, agent_user_id, agency_id, vendor_id, campaign_id, status_normalized, carrier_status_raw, premium_cents, premium_mode, annualised_premium_cents, face_amount_cents, product_code, product_tier, days_past_due, days_until_carrier_closes, risk_band, issued_on, issue_date, effective_date";
+
+/** For policies linked to a sale but to no client: the sale's person, by application id. */
+async function saleNames(tenantId: string, rows: Loose[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const appIds = rows.filter((row) => !row.contact_id && row.application_id).map((row) => row.application_id);
+  if (!appIds.length) return out;
+  const apps = await byIds("tenant_applications", "id, lead_id", appIds, tenantId);
+  const leads = new Map<string, Loose>((await byIds("agent_leads", "id, values", apps.map((app: Loose) => app.lead_id), tenantId)).map((lead: Loose) => [lead.id, lead]));
+  for (const app of apps) {
+    const name = leadPersonName(leads.get(app.lead_id)?.values);
+    if (name) out.set(app.id, name);
+  }
+  return out;
+}
+
+const fullName = (row: Loose) => [row?.first_name, row?.last_name].filter(Boolean).join(" ") || null;
+/** A lead's person, as its form values name them ("Rinor Gllareva"), or null. */
+const leadPersonName = (values: Loose) => {
+  if (!values || typeof values !== "object") return null;
+  const part = (key: string) => (typeof values[key] === "string" ? values[key].trim() : "");
+  return [part("first_name"), part("last_name")].filter(Boolean).join(" ") || part("full_name") || part("name") || null;
+};
+const productOf = (row: Loose) => [row.product_code, row.product_tier].filter(Boolean).join(" · ") || null;
+
+/** Names for the people, carriers and lead sources a set of policy rows points at. */
+async function namesFor(tenantId: string, rows: Loose[]) {
+  const [carriers, contacts, users, vendors, campaigns] = await Promise.all([
+    db().from("carriers").select("id, name"),
+    byIds("contacts", "id, first_name, last_name, provisional", rows.map((row) => row.contact_id), tenantId),
+    byIds("users", "id, name, email", rows.map((row) => row.agent_user_id)),
+    db().from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId),
+    db().from("tenant_campaigns").select("id, name, vendor_id, effective_cost_per_record_cents").eq("tenant_id", tenantId),
+  ]);
+  return {
+    carrier: new Map<string, string>((carriers.data ?? []).map((row: Loose) => [row.id, row.name])),
+    contact: new Map<string, Loose>(contacts.map((row: Loose) => [row.id, row])),
+    user: new Map<string, string>(users.map((row: Loose) => [row.id, row.name || row.email])),
+    vendor: new Map<string, string>((vendors.data ?? []).map((row: Loose) => [row.id, row.name])),
+    campaign: new Map<string, Loose>((campaigns.data ?? []).map((row: Loose) => [row.id, row])),
+    vendors: (vendors.data ?? []) as Array<{ id: string; name: string }>,
+    campaigns: (campaigns.data ?? []) as Array<{ id: string; name: string; vendor_id: string | null }>,
+  };
+}
+
+/** "Apex Call Center · FE-Q3-Spanish": the vendor, then the campaign. */
+function leadSourceName(names: Awaited<ReturnType<typeof namesFor>>, vendorId: string | null, campaignId: string | null): string | null {
+  const campaign = campaignId ? names.campaign.get(campaignId) : null;
+  const vendor = vendorId ? names.vendor.get(vendorId) : campaign?.vendor_id ? names.vendor.get(campaign.vendor_id) : null;
+  return [vendor, campaign?.name].filter(Boolean).join(" · ") || null;
+}
+
+async function annotations(tenantId: string): Promise<{ available: boolean; byKey: Map<string, Loose> }> {
+  const { rows, error } = await everyRow(() => db().from("policy_annotation").select("carrier_id, policy_number, notes, lead_vendor_id, lead_campaign_id").eq("tenant_id", tenantId).order("carrier_id").order("policy_number"));
+  if (error) {
+    if (isSchemaGap(error)) return { available: false, byKey: new Map() };
+    throw new Error(`Could not load the policy notes: ${error.message}`);
+  }
+  return { available: true, byKey: new Map(rows.map((row) => [`${row.carrier_id}|${row.policy_number}`, row])) };
+}
+
+const HAND_STATUS: Record<string, string> = { active: "active", pending: "submitted", lapsed: "lapsed", cancelled: "lapsed" };
+
+/**
+ * The policies the agency entered or imported by hand (LA-0.7's tenant_policies), as rows of the
+ * same list (2026-10-08 overlap merge: one Policies list, with a source filter, not two tabs). The
+ * carrier is free text there; it is matched to the carrier library by name, so one carrier is one
+ * filter choice. A producer sees the ones they recorded, as the carrier rows credited to them.
+ */
+export async function loadHandPolicies(viewer: Viewer): Promise<BookRow[]> {
+  const [read, carrierRead] = await Promise.all([
+    everyRow(() => {
+      let query = db().from("tenant_policies").select("id, policy_number, insured_name, carrier, product, effective_date, annual_premium_cents, status, source").eq("tenant_id", viewer.tenantId);
+      if (viewer.role === "producer") query = query.eq("created_by", viewer.userId);
+      return inScope(viewer, query, "created_by").order("id");
+    }),
+    db().from("carriers").select("id, name"),
+  ]);
+  if (read.error) {
+    if (isSchemaGap(read.error)) return [];
+    throw new Error(`Could not load the policies entered by hand: ${read.error.message}`);
+  }
+  const carriers = (carrierRead.data ?? []) as Loose[];
+  const byName = new Map<string, Loose>(carriers.map((c) => [String(c.name).trim().toLowerCase(), c]));
+  return read.rows.map((p: Loose): BookRow => {
+    const carrier = byName.get(String(p.carrier ?? "").trim().toLowerCase());
+    return {
+      carrierId: carrier?.id ?? `hand:${String(p.carrier ?? "").trim().toLowerCase()}`, carrierName: carrier?.name ?? p.carrier, policyNumber: p.policy_number,
+      clientName: p.insured_name, contactId: null, provisional: false, product: p.product ?? null,
+      premiumCents: p.annual_premium_cents, premiumMode: "annual", annualCents: p.annual_premium_cents, faceCents: null,
+      status: HAND_STATUS[p.status] ?? null, statusRaw: p.status === "cancelled" ? "Cancelled" : null,
+      daysPastDue: null, daysLeft: null, riskBand: "none", issueDate: p.effective_date ?? null,
+      agentUserId: null, agentName: null, agency: null, leadSource: null,
+      source: "hand", href: `/app/policies/${p.id}`,
+    };
+  });
+}
+
+/** The carrier library row a free-text carrier name or code stands for, or undefined. */
+function carrierByText(carriers: Loose[], text: unknown): Loose | undefined {
+  const key = String(text ?? "").trim().toLowerCase();
+  return key ? carriers.find((c) => String(c.name).trim().toLowerCase() === key || String(c.code ?? "").trim().toLowerCase() === key) : undefined;
+}
+
+export type AwaitingSale = { carrierId: string | null; carrierName: string; policyNumber: string; clientName: string | null; leadId: string | null; dealId: string | null; issuedOn: string | null; monthlyCents: number | null; faceCents: number | null; product: string | null; agentUserId: string | null; agentName: string | null };
+
+/**
+ * Module 4 · Door 1: sales recorded as issued (LA-2.17's tenant_issued_policies, written when an
+ * application closes as issued) whose policy no carrier file has listed yet. One row per sale; a
+ * sale whose carrier and number the book already holds is left out, so the carrier's own row takes
+ * over the moment its file arrives. A producer sees the sales they worked.
+ */
+async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policyNumber: string }): Promise<AwaitingSale[]> {
+  // Every page (the API answers 1,000 rows a request; a .limit(5000) used to stop there without saying so), ordered
+  // along tenant_issued_policies_number_idx with carrier as the tail (tenant, carrier, number is unique).
+  const query = () => {
+    const q = db().from("tenant_issued_policies").select("lead_id, deal_id, carrier, policy_number, issued_at, product_line").eq("tenant_id", viewer.tenantId).eq("status", "issued").not("policy_number", "is", null);
+    return (only ? q.eq("policy_number", only.policyNumber) : q).order("policy_number").order("carrier");
+  };
+  const [{ rows: data, error }, carrierRead] = await Promise.all([everyRow(query), db().from("carriers").select("id, name, code")]);
+  if (error) {
+    if (isSchemaGap(error)) return [];
+    throw new Error(`Could not load the recorded sales: ${error.message}`);
+  }
+  if (!data?.length) return [];
+  const carriers = (carrierRead.data ?? []) as Loose[];
+  const sales = (data as Loose[]).map((row) => ({ row, carrier: carrierByText(carriers, row.carrier) })).filter(({ carrier }) => !only || carrier?.id === only.carrierId);
+  if (!sales.length) return [];
+  // Already in the book: the carrier's own row is the truth from then on. Every (carrier, chunk) read is independent, so a few run at once.
+  const known = new Set<string>();
+  const lookups: Array<{ carrierId: string; numbers: string[] }> = [];
+  for (const carrierId of [...new Set(sales.map(({ carrier }) => carrier?.id).filter(Boolean))] as string[]) {
+    const numbers = sales.filter(({ carrier }) => carrier?.id === carrierId).map(({ row }) => row.policy_number);
+    for (let start = 0; start < numbers.length; start += 500) lookups.push({ carrierId, numbers: numbers.slice(start, start + 500) });
+  }
+  await mapLimit(lookups, 6, async ({ carrierId, numbers }) => {
+    const { data: current } = await db().from("policy_current").select("policy_number").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).in("policy_number", numbers);
+    for (const row of current ?? []) known.add(`${carrierId}|${row.policy_number}`);
+  });
+  const waiting = sales.filter(({ row, carrier }) => !carrier || !known.has(`${carrier.id}|${row.policy_number}`));
+  const [deals, leads] = await Promise.all([
+    byIds("deal_flow", "id, worked_by, insured_name, monthly_premium_cents, face_amount_cents, product_type", waiting.map(({ row }) => row.deal_id), viewer.tenantId),
+    byIds("agent_leads", "id, values", waiting.map(({ row }) => row.lead_id), viewer.tenantId),
+  ]);
+  const dealById = new Map<string, Loose>(deals.map((deal: Loose) => [deal.id, deal]));
+  const leadById = new Map<string, Loose>(leads.map((lead: Loose) => [lead.id, lead]));
+  const users = await byIds("users", "id, name, email", deals.map((deal: Loose) => deal.worked_by));
+  const userName = new Map<string, string>(users.map((user: Loose) => [user.id, user.name || user.email]));
+  return waiting
+    .map(({ row, carrier }): AwaitingSale => {
+      const deal = row.deal_id ? dealById.get(row.deal_id) : undefined;
+      return {
+        carrierId: carrier?.id ?? null, carrierName: carrier?.name ?? String(row.carrier ?? ""), policyNumber: row.policy_number,
+        clientName: leadPersonName(row.lead_id ? leadById.get(row.lead_id)?.values : null) ?? deal?.insured_name ?? null,
+        leadId: row.lead_id ?? null, dealId: row.deal_id ?? null, issuedOn: row.issued_at ? String(row.issued_at).slice(0, 10) : null,
+        monthlyCents: deal?.monthly_premium_cents ?? null, faceCents: deal?.face_amount_cents ?? null, product: deal?.product_type ?? row.product_line ?? null,
+        agentUserId: deal?.worked_by ?? null, agentName: deal?.worked_by ? userName.get(deal.worked_by) ?? null : null,
+      };
+    })
+    .filter((sale) => viewer.role !== "producer" || sale.agentUserId === viewer.userId)
+    .filter((sale) => rowVisible(viewer.scope ?? null, sale.agentUserId));
+}
+
+/** The recorded sales still waiting for their carrier's file, as rows of the one Policies list. */
+export async function loadIssuedAwaiting(viewer: Viewer): Promise<BookRow[]> {
+  return (await issuedAwaiting(viewer)).map((sale): BookRow => ({
+    carrierId: sale.carrierId ?? `issued:${sale.carrierName.trim().toLowerCase()}`, carrierName: sale.carrierName, policyNumber: sale.policyNumber,
+    clientName: sale.clientName, contactId: null, provisional: false, product: sale.product,
+    premiumCents: sale.monthlyCents, premiumMode: sale.monthlyCents === null ? null : "monthly", annualCents: sale.monthlyCents === null ? null : sale.monthlyCents * 12, faceCents: sale.faceCents,
+    status: null, statusRaw: null, daysPastDue: null, daysLeft: null, riskBand: "none", issueDate: sale.issuedOn,
+    agentUserId: sale.agentUserId, agentName: sale.agentName, agency: null, leadSource: null,
+    source: "issued",
+    // A carrier we know opens the policy page (which says what it is waiting for); otherwise the sale's lead.
+    href: sale.carrierId ? undefined : sale.leadId ? `/app/leads/${sale.leadId}` : undefined,
+  }));
+}
+
+/** One recorded sale awaiting its carrier file, for the policy page, or null. */
+export async function loadIssuedAwaitingOne(viewer: Viewer, carrierId: string, policyNumber: string): Promise<AwaitingSale | null> {
+  return (await issuedAwaiting(viewer, { carrierId, policyNumber }))[0] ?? null;
+}
+
+export async function loadBook(viewer: Viewer) {
+  const scoped = viewer.role === "producer";
+  // The reads that need no policy rows start beside the book read; a failure among them surfaces below, after it.
+  const side = Promise.all([
+    annotations(viewer.tenantId), savedFilters(viewer),
+    // LA-4.13: policies whose pay trigger has occurred but which no rate can price.
+    everyRow(() => db().from("expected_commission").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("confidence", "no_rate_card").order("carrier_id").order("policy_number").order("policy_year")),
+  ]);
+  side.catch(() => {});
+  const read = await everyRow(() => {
+    // Ordered along the primary key (tenant first), so each page is an index range, not a scan.
+    let query = db().from("policy_current").select(CURRENT_COLUMNS).eq("tenant_id", viewer.tenantId);
+    if (scoped) query = query.eq("agent_user_id", viewer.userId);
+    return inScope(viewer, query, "agent_user_id").order("carrier_id").order("policy_number");
+  });
+  if (read.error) {
+    if (isSchemaGap(read.error)) return { available: false as const };
+    throw new Error(`Could not load the policies: ${read.error.message}`);
+  }
+  const [names, [notes, filters, unpricedRead], sales] = await Promise.all([
+    namesFor(viewer.tenantId, read.rows), side,
+    saleNames(viewer.tenantId, read.rows),
+  ]);
+  const rows: BookRow[] = read.rows.map((row: Loose): BookRow => {
+    const contact = row.contact_id ? names.contact.get(row.contact_id) : null;
+    const note = notes.byKey.get(`${row.carrier_id}|${row.policy_number}`);
+    return {
+      carrierId: row.carrier_id,
+      carrierName: names.carrier.get(row.carrier_id) ?? "Carrier not known",
+      policyNumber: row.policy_number,
+      // No client yet but a sale behind it: the sale's person, never "No client linked".
+      clientName: fullName(contact) ?? (row.application_id ? sales.get(row.application_id) ?? null : null),
+      contactId: row.contact_id,
+      provisional: Boolean(contact?.provisional),
+      product: productOf(row),
+      premiumCents: row.premium_cents,
+      premiumMode: row.premium_mode,
+      annualCents: row.annualised_premium_cents,
+      faceCents: row.face_amount_cents,
+      status: row.status_normalized,
+      statusRaw: row.carrier_status_raw,
+      daysPastDue: row.days_past_due,
+      daysLeft: row.days_until_carrier_closes,
+      riskBand: (row.risk_band ?? "none") as RiskBand,
+      issueDate: row.issued_on ?? row.issue_date ?? null,
+      agentUserId: row.agent_user_id,
+      agentName: row.agent_user_id ? names.user.get(row.agent_user_id) ?? null : null,
+      agency: row.agency_id ?? null,
+      leadSource: note && (note.lead_vendor_id || note.lead_campaign_id) ? leadSourceName(names, note.lead_vendor_id, note.lead_campaign_id) : leadSourceName(names, row.vendor_id, row.campaign_id),
+    };
+  });
+  // The "add your rate" line: the carrier with the most unpriced monthly premium.
+  const unpricedKeys = new Set(unpricedRead.error ? [] : unpricedRead.rows.map((r: Loose) => `${r.carrier_id}|${r.policy_number}`));
+  const byCarrier = new Map<string, { carrierName: string; policies: number; monthlyCents: number }>();
+  for (const row of rows) {
+    if (!unpricedKeys.has(`${row.carrierId}|${row.policyNumber}`)) continue;
+    const entry = byCarrier.get(row.carrierId) ?? { carrierName: row.carrierName, policies: 0, monthlyCents: 0 };
+    entry.policies++;
+    entry.monthlyCents += Math.floor((row.annualCents ?? 0) / 12);
+    byCarrier.set(row.carrierId, entry);
+  }
+  const unpriced = [...byCarrier.values()].sort((a, b) => b.monthlyCents - a.monthlyCents);
+  return { available: true as const, rows, scoped, savedFilters: filters.list, savedFiltersAvailable: filters.available, unpriced: unpriced.length ? { top: unpriced[0], carriers: unpriced.length, policies: unpriced.reduce((sum, u) => sum + u.policies, 0) } : null };
+}
+
+// ─── saved filters (each person's own) ─────────────────────────────────────────────────────────
+
+async function savedFilters(viewer: Viewer): Promise<{ available: boolean; list: Array<{ id: string; name: string; query: string }> }> {
+  const { data, error } = await db().from("policy_saved_filter").select("id, name, query").eq("tenant_id", viewer.tenantId).eq("user_id", viewer.userId).order("name");
+  if (error) {
+    if (isSchemaGap(error)) return { available: false, list: [] };
+    throw new Error(`Could not load saved filters: ${error.message}`);
+  }
+  return { available: true, list: data ?? [] };
+}
+
+export async function saveFilter(viewer: Viewer, name: string, query: string): Promise<{ id: string }> {
+  const { data, error } = await db().from("policy_saved_filter").upsert({ tenant_id: viewer.tenantId, user_id: viewer.userId, name: name.trim(), query }, { onConflict: "tenant_id,user_id,name" }).select("id").single();
+  if (error) {
+    if (isSchemaGap(error)) throw new PolicyBookError(POLICY_NOTES_PENDING_MESSAGE, 503);
+    throw new Error(`Could not save the filter: ${error.message}`);
+  }
+  return { id: data.id };
+}
+
+export async function deleteFilter(viewer: Viewer, id: string): Promise<void> {
+  const { data, error } = await db().from("policy_saved_filter").delete().eq("tenant_id", viewer.tenantId).eq("user_id", viewer.userId).eq("id", id).select("id");
+  if (error) {
+    if (isSchemaGap(error)) throw new PolicyBookError(POLICY_NOTES_PENDING_MESSAGE, 503);
+    throw new Error(`Could not remove the filter: ${error.message}`);
+  }
+  if (!data?.length) throw new PolicyBookError("That saved filter is not yours.", 404);
+}
+
+// ─── one policy ────────────────────────────────────────────────────────────────────────────────
+
+async function currentRow(viewer: Viewer, carrierId: string, policyNumber: string): Promise<Loose | null> {
+  let query = db().from("policy_current").select("*").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber);
+  if (viewer.role === "producer") query = query.eq("agent_user_id", viewer.userId);
+  const { data, error } = await inScope(viewer, query, "agent_user_id").maybeSingle();
+  if (error) {
+    if (isSchemaGap(error)) throw new PolicyBookError(POLICY_BOOK_PENDING_MESSAGE, 503);
+    throw new Error(`Could not load the policy: ${error.message}`);
+  }
+  return data;
+}
+
+/**
+ * LA-4.20: where each current value comes from. Carrier fields are read from the policy's current
+ * snapshot (its file and row); `changed*` names the file whose row last moved it. A computed field
+ * says what it is computed from instead.
+ */
+export type SourceRef = { fileId: string; fileName: string | null; rowNumber: number | null; snapshotDate: string };
+export type SourceField = { label: string; value: string; changedOn: string | null; fromFile: string | null; readFrom: SourceRef | null; changedIn: SourceRef | null; computed: string | null };
+
+export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber: string) {
+  const row = await currentRow(viewer, carrierId, policyNumber);
+  if (!row) return null;
+  const t = viewer.tenantId;
+  const [names, snapshot, changes, events, note, application, contactPolicies, householdPolicies, ledger, expected, ownSnapshotRead, submissionRead] = await Promise.all([
+    namesFor(t, [row]),
+    db().from("policy_snapshot").select("id, file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("id", row.snapshot_id).maybeSingle(),
+    db().from("policy_change").select("field_name, old_value, new_value, to_snapshot_date, to_file_id, detected_at").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("to_snapshot_date").order("detected_at").limit(500),
+    db().from("policy_event").select("event_type, snapshot_date, file_id").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).limit(50),
+    db().from("policy_annotation").select("notes, lead_vendor_id, lead_campaign_id, updated_by, updated_at").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).maybeSingle(),
+    row.application_id ? db().from("tenant_applications").select("id, created_at, submitted_at, outcome, outcome_recorded_at, draft_day, insured_role, case_id, lead_id, status").eq("tenant_id", t).eq("id", row.application_id).maybeSingle() : { data: null },
+    // AG-0.5 · the client's and household's other policies (and so the household total) over visible producers only.
+    row.contact_id ? inScope(viewer, db().from("policy_current").select("carrier_id, policy_number, status_normalized, annualised_premium_cents, product_code").eq("tenant_id", t).eq("contact_id", row.contact_id), "agent_user_id").limit(50) : { data: [] },
+    row.household_id ? inScope(viewer, db().from("policy_current").select("carrier_id, policy_number, contact_id, status_normalized, annualised_premium_cents").eq("tenant_id", t).eq("household_id", row.household_id), "agent_user_id").limit(100) : { data: [] },
+    // LA-4.12: every money line the carriers reported for this policy, and the unearned advance.
+    loadPolicyMoney(t, carrierId, policyNumber, { monthsPaid: row.months_paid, productCode: row.product_code, asOf: row.as_of }),
+    loadPolicyExpected(t, carrierId, policyNumber),
+    // LA-4.20: this policy's snapshot in each file, with its raw row, so a change names the row that made it.
+    db().from("policy_snapshot").select("file_id, raw_row_id, snapshot_date").eq("tenant_id", t).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("snapshot_date").limit(500),
+    row.application_id ? db().from("tenant_application_submissions").select("submitted_at, submitted_via, attempt_no").eq("tenant_id", t).eq("application_id", row.application_id).order("submitted_at") : { data: [] },
+  ]);
+  const ownSnapshots = (ownSnapshotRead.data ?? []) as Loose[];
+  const submissions = (submissionRead.data ?? []) as Loose[];
+
+  // The files behind the snapshot, the changes and the first sighting, for names and dates. The second
+  // round of reads each need only the first round, so they go together.
+  const fileIds = [snapshot.data?.file_id, ...(changes.data ?? []).map((c: Loose) => c.to_file_id), ...(events.data ?? []).map((e: Loose) => e.file_id)].filter(Boolean);
+  const householdContactIds = [...new Set((householdPolicies.data ?? []).map((p: Loose) => p.contact_id).filter(Boolean))] as string[];
+  const [fileRows, rawRowRead, rowNumberRows, saleLeadRead, householdRows] = await Promise.all([
+    byIds("file_registry", "id, original_filename, file_date, source, received_at", fileIds, t),
+    snapshot.data?.raw_row_id ? db().from("raw_rows").select("row_number, payload").eq("tenant_id", t).eq("file_id", snapshot.data.file_id).eq("id", snapshot.data.raw_row_id).maybeSingle() : { data: null },
+    byIds("raw_rows", "id, row_number", ownSnapshots.map((s) => s.raw_row_id), t),
+    // The sale this policy is linked to (LA-3), named after its lead's person.
+    application.data?.lead_id ? db().from("agent_leads").select("values").eq("tenant_id", t).eq("id", application.data.lead_id).maybeSingle() : { data: null },
+    byIds("contacts", "id, first_name, last_name", householdContactIds, t),
+  ]);
+  const files = new Map<string, Loose>(fileRows.map((file: Loose) => [file.id, file]));
+  const rawRow = rawRowRead.data;
+  const rowNumbers = new Map<string, number>((rowNumberRows as Loose[]).map((r) => [r.id, r.row_number]));
+  const saleLead = saleLeadRead.data;
+  const householdPeople = new Map<string, Loose>(householdRows.map((c: Loose) => [c.id, c]));
+  const refIn = (fileId: string | null | undefined): SourceRef | null => {
+    if (!fileId) return null;
+    const s = ownSnapshots.find((x) => x.file_id === fileId);
+    return { fileId, fileName: files.get(fileId)?.original_filename ?? null, rowNumber: s?.raw_row_id ? rowNumbers.get(s.raw_row_id) ?? null : null, snapshotDate: s?.snapshot_date ?? "" };
+  };
+  const contact = row.contact_id ? names.contact.get(row.contact_id) ?? null : null;
+  const fileName = (id: string | null | undefined) => (id ? files.get(id)?.original_filename ?? null : null);
+  // The timeline names the line each item was read from, as a link to it.
+  const sourceLink = (ref: SourceRef | null) => (ref ? { href: ref.rowNumber ? rowHref(ref.fileId, ref.rowNumber) : fileHref(ref.fileId), text: `${ref.fileName ?? "The file"}${ref.rowNumber ? `, row ${ref.rowNumber}` : ""}` } : null);
+
+  // Timeline: the sale (LA-3), the carrier's milestones and every change between files. Commission
+  // entries join it with LA-4.12's ledger.
+  const items: Array<Omit<TimelineItem, "order">> = [];
+  if (application.data?.created_at) items.push({ date: application.data.created_at, kind: "sale", label: "Application started" });
+  for (const submission of submissions) if (submission.submitted_at) items.push({ date: submission.submitted_at, kind: "sale", label: submission.attempt_no > 1 ? `Application resubmitted (attempt ${submission.attempt_no})` : "Application submitted", detail: submission.submitted_via ?? null });
+  if (application.data?.outcome && application.data.outcome_recorded_at) items.push({ date: application.data.outcome_recorded_at, kind: "sale", label: `Outcome recorded: ${String(application.data.outcome).replaceAll("_", " ")}` });
+  const issued = row.issued_on ?? row.issue_date;
+  if (issued) items.push({ date: issued, kind: "carrier", label: "Issued by the carrier" });
+  if (row.effective_date) items.push({ date: row.effective_date, kind: "carrier", label: "Policy effective" });
+  for (const event of events.data ?? []) if (event.event_type === "first_seen") items.push({ date: event.snapshot_date, kind: "carrier", label: "First seen in a carrier file", source: sourceLink(refIn(event.file_id)) });
+  for (const change of changes.data ?? []) {
+    if (change.field_name === "carrier_status_raw") continue; // shown with the status change it explains
+    items.push({ date: change.to_snapshot_date, kind: "change", label: changeLabel({ field: change.field_name, oldValue: change.old_value, newValue: change.new_value }), detail: `${changeValue(change.field_name, change.old_value)} → ${changeValue(change.field_name, change.new_value)}`, source: sourceLink(refIn(change.to_file_id)) });
+  }
+  // The lapse date, unless a status change on file already says it.
+  for (const entry of ledger.entries) {
+    const word = entry.type === "reversal" && entry.correctsType ? `Reversal of ${ENTRY_LABELS[entry.correctsType as EntryType]?.label.toLowerCase() ?? entry.correctsType}` : ENTRY_LABELS[entry.type as EntryType]?.label ?? entry.type;
+    const amount = `${entry.amountCents < 0 ? "−" : "+"}$${(Math.abs(entry.amountCents) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    items.push({ date: entry.transactionDate ?? entry.statementDate ?? entry.createdAt, kind: "money", label: `${word} ${amount}`, detail: [entry.payeeLevel === "upline" ? "to the upline" : null, entry.reversalReason].filter(Boolean).join(" · ") || null, source: { href: rowHref(entry.fileId, entry.rowNumber), text: `${entry.fileName ?? "The file"}, row ${entry.rowNumber}` } });
+  }
+  if (row.lapsed_on && !(changes.data ?? []).some((c: Loose) => c.field_name === "status_normalized" && c.new_value === "lapsed")) items.push({ date: row.lapsed_on, kind: "carrier", label: "Lapsed" });
+
+  // Source: each current value, and the file that last changed it (else the file it was first read from).
+  const lastChange = new Map<string, Loose>();
+  for (const change of changes.data ?? []) lastChange.set(change.field_name, change);
+  const snapshotFile = snapshot.data ? files.get(snapshot.data.file_id) : null;
+  const current: SourceRef | null = snapshot.data ? { fileId: snapshot.data.file_id, fileName: snapshotFile?.original_filename ?? null, rowNumber: rawRow?.row_number ?? null, snapshotDate: snapshot.data.snapshot_date } : null;
+  const sourceOf = (field: string, label: string, value: string | null): SourceField => {
+    const change = lastChange.get(field);
+    return { label, value: value ?? "—", changedOn: change?.to_snapshot_date ?? null, fromFile: change ? fileName(change.to_file_id) : snapshotFile?.original_filename ?? null, readFrom: current, changedIn: change ? refIn(change.to_file_id) : null, computed: null };
+  };
+  const computedField = (label: string, value: string | null, from: string): SourceField => ({ label, value: value ?? "—", changedOn: null, fromFile: null, readFrom: null, changedIn: null, computed: from });
+  const money = (cents: number | null) => (cents === null || cents === undefined ? null : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  const day = (value: string | null) => (value ? readableDay(value) : null);
+  const source: SourceField[] = [
+    sourceOf("status_normalized", "Status", row.status_normalized ? `${statusLabel(row.status_normalized)} (carrier: ${row.carrier_status_raw ?? "—"})` : null),
+    sourceOf("paid_to_date", "Paid-to date", day(row.paid_to_date)),
+    sourceOf("premium_cents", "Premium", money(row.premium_cents)),
+    sourceOf("premium_mode", "Premium mode", row.premium_mode),
+    sourceOf("payment_method", "Payment method", row.payment_method),
+    sourceOf("face_amount_cents", "Face amount", money(row.face_amount_cents)),
+    sourceOf("product_code", "Product", row.product_code),
+    sourceOf("product_tier", "Product tier", row.product_tier),
+    sourceOf("termination_date", "Termination date", day(row.termination_date)),
+    sourceOf("agent_identifier", "Writing agent (carrier's code)", row.agent_identifier),
+    sourceOf("effective_date", "Effective date", day(row.effective_date)),
+    sourceOf("issue_date", "Issue date", day(row.issue_date)),
+    computedField("Months paid", row.months_paid === null ? null : String(row.months_paid), "the paid-to date and the effective date above"),
+    computedField("Days past due", row.days_past_due === null ? null : String(row.days_past_due), `the paid-to date above, as of ${day(row.as_of) ?? "today"}`),
+    computedField("Days until the carrier closes it", row.days_until_carrier_closes === null ? null : String(row.days_until_carrier_closes), row.retention_rule_id ? "the days past due and the carrier's window in Carrier rules" : "no carrier window is set in Carrier rules, so none"),
+    computedField("Annualised premium", money(row.annualised_premium_cents), "the premium and premium mode above"),
+  ];
+
+  const leadVendor = note.data?.lead_vendor_id ?? null;
+  const leadCampaign = note.data?.lead_campaign_id ?? null;
+  const overridden = Boolean(leadVendor || leadCampaign);
+  const campaign = (overridden ? leadCampaign : row.campaign_id) ? names.campaign.get((overridden ? leadCampaign : row.campaign_id) as string) : null;
+  const householdInForce = (householdPolicies.data ?? []).filter((p: Loose) => p.status_normalized === "active" || p.status_normalized === "at_risk");
+  const householdMonthly = householdInForce.reduce((sum: number, p: Loose) => sum + Number(p.annualised_premium_cents ?? 0), 0) / 12;
+
+  return {
+    policy: {
+      carrierId: row.carrier_id,
+      carrierName: names.carrier.get(row.carrier_id) ?? "Carrier not known",
+      policyNumber: row.policy_number,
+      status: row.status_normalized as string | null,
+      statusRaw: row.carrier_status_raw as string | null,
+      riskBand: (row.risk_band ?? "none") as RiskBand,
+      product: productOf(row),
+      premiumCents: row.premium_cents as number | null,
+      premiumMode: row.premium_mode as string | null,
+      annualCents: row.annualised_premium_cents as number | null,
+      faceCents: row.face_amount_cents as number | null,
+      paymentMethod: row.payment_method as string | null,
+      paidTo: row.paid_to_date as string | null,
+      effectiveDate: row.effective_date as string | null,
+      issuedOn: issued as string | null,
+      daysPastDue: row.days_past_due as number | null,
+      daysLeft: row.days_until_carrier_closes as number | null,
+      inClawbackWindow: row.in_clawback_window as boolean | null,
+      monthsPaid: row.months_paid as number | null,
+      draftDay: (application.data?.draft_day ?? null) as number | null,
+      agentName: row.agent_user_id ? names.user.get(row.agent_user_id) ?? null : null,
+      agentCode: row.agent_identifier as string | null,
+      asOf: row.as_of as string | null,
+      lastFileDate: row.last_snapshot_date as string | null,
+      money: { advancedCents: row.total_advanced_cents, earnedCents: row.total_earned_cents, chargedBackCents: row.total_charged_back_cents, unearnedCents: row.unearned_advance_cents },
+    },
+    client: contact ? { id: contact.id as string, name: fullName(contact), provisional: Boolean(contact.provisional) } : null,
+    sale: application.data?.case_id
+      ? { caseId: application.data.case_id as string, name: leadPersonName(saleLead?.values), status: (application.data.status ?? null) as string | null, outcome: (application.data.outcome ?? null) as string | null }
+      : null,
+    lead: {
+      name: leadSourceName(names, overridden ? leadVendor : row.vendor_id, overridden ? leadCampaign : row.campaign_id),
+      // AG-0.2: inside an agency a producer does not see lead costs; a narrowed scope means exactly that session.
+      costPerLeadCents: viewer.scope ? null : ((campaign?.effective_cost_per_record_cents ?? null) as number | null),
+      fromSale: !overridden && Boolean(row.vendor_id || row.campaign_id),
+      vendorId: overridden ? leadVendor : null,
+      campaignId: overridden ? leadCampaign : null,
+    },
+    notes: { available: !note.error || !isSchemaGap(note.error), text: (note.data?.notes ?? "") as string, updatedAt: (note.data?.updated_at ?? null) as string | null },
+    choices: { vendors: names.vendors, campaigns: names.campaigns },
+    timeline: mergeTimeline(items),
+    source: { fields: source, file: snapshotFile ? { name: snapshotFile.original_filename as string, date: snapshotFile.file_date as string | null, rowNumber: (rawRow?.row_number ?? null) as number | null } : null, raw: (rawRow?.payload ?? null) as Record<string, unknown> | null },
+    others: ((contactPolicies.data ?? []) as Loose[]).filter((p: Loose) => !(p.carrier_id === carrierId && p.policy_number === policyNumber)).map((p: Loose): { carrierId: string; carrierName: string; policyNumber: string; status: string | null; annualCents: number | null } => ({ carrierId: p.carrier_id, carrierName: names.carrier.get(p.carrier_id) ?? "Carrier not known", policyNumber: p.policy_number, status: p.status_normalized, annualCents: p.annualised_premium_cents })),
+    household: householdContactIds.length > 1 ? { monthlyCents: Math.round(householdMonthly), people: householdContactIds.map((id) => fullName(householdPeople.get(id)) ?? "A client"), policies: householdInForce.length } : null,
+    changedFields: [...lastChange.keys()].map(fieldWord),
+    ledger,
+    expected,
+  };
+}
+
+// ─── the agency's own fields ───────────────────────────────────────────────────────────────────
+
+export async function saveAnnotation(viewer: Viewer, input: { carrierId: string; policyNumber: string; notes: string | null; leadVendorId: string | null; leadCampaignId: string | null }) {
+  const row = await currentRow(viewer, input.carrierId, input.policyNumber);
+  if (!row) throw new PolicyBookError("That policy is not in your book.", 404);
+  // A lead source must be the agency's own vendor and campaign, and the campaign the vendor's.
+  if (input.leadVendorId || input.leadCampaignId) {
+    const [vendor, campaign] = await Promise.all([
+      input.leadVendorId ? db().from("tenant_lead_vendors").select("id").eq("tenant_id", viewer.tenantId).eq("id", input.leadVendorId).maybeSingle() : { data: true },
+      input.leadCampaignId ? db().from("tenant_campaigns").select("id, vendor_id").eq("tenant_id", viewer.tenantId).eq("id", input.leadCampaignId).maybeSingle() : { data: true },
+    ]);
+    if (!vendor.data || !campaign.data) throw new PolicyBookError("Choose a lead vendor and campaign from your own list.", 400);
+    if (input.leadVendorId && input.leadCampaignId && (campaign.data as Loose).vendor_id && (campaign.data as Loose).vendor_id !== input.leadVendorId) throw new PolicyBookError("That campaign belongs to a different vendor.", 400);
+  }
+  const { error } = await db().from("policy_annotation").upsert({
+    tenant_id: viewer.tenantId, carrier_id: input.carrierId, policy_number: input.policyNumber,
+    notes: input.notes?.trim() || null, lead_vendor_id: input.leadVendorId, lead_campaign_id: input.leadCampaignId,
+    updated_by: viewer.userId, updated_at: new Date().toISOString(),
+  }, { onConflict: "tenant_id,carrier_id,policy_number" });
+  if (error) {
+    if (isSchemaGap(error)) throw new PolicyBookError(POLICY_NOTES_PENDING_MESSAGE, 503);
+    throw new Error(`Could not save: ${error.message}`);
+  }
+}

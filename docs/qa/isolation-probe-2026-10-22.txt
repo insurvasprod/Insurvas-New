@@ -1,0 +1,153 @@
+===== as b
+LEAK 200    2018ms /api/app/search?q=Ramsey  <-- contains "Ramsey"
+ok   200     837ms /api/app/search?q=Secretta
+LEAK 200     847ms /api/app/search?q=QA-B-POL  <-- contains "Ramsey"
+LEAK 200    1195ms /api/app/search?q=5550102  <-- contains "Ramsey"
+LEAK 200    7364ms /api/app/dialer/search?q=Ramsey  <-- contains "Ramsey"
+LEAK 200    1041ms /api/app/contacts?q=Bonly  <-- contains "Secretta"
+LEAK 200     903ms /api/app/contacts  <-- contains "Secretta"
+LEAK 200    1663ms /api/app/leads  <-- contains "Ramsey"
+LEAK 200    1645ms /api/app/leads?q=Ramsey  <-- contains "Ramsey"
+LEAK 200    1812ms /api/app/policies  <-- contains "Ramsey"
+ok   405   33201ms /api/app/policy-book
+LEAK 200   17446ms /api/app/campaigns  <-- contains "QA Campaign"
+LEAK 200    5429ms /api/app/vendors  <-- contains "QA Vendor One"
+LEAK 200   15231ms /api/app/callbacks  <-- contains "Ramsey"
+LEAK 200   31779ms /api/app/applications  <-- contains "Emerson"
+LEAK 200    3476ms /api/app/lead-lists  <-- contains "QA Campaign"
+ok   200    1387ms /api/app/dialer/queue?priority=all
+LEAK 200   10050ms /api/app/deal-flow  <-- contains "QA Campaign"
+ok   400    2776ms /api/app/calendar
+LEAK 200    5614ms /api/app/activity  <-- contains "QA Campaign"
+LEAK 200    7639ms /api/app/contacts/export  <-- contains "Secretta"
+LEAK 200   39611ms /api/app/leads/export  <-- contains "Ramsey"
+LEAK 200     985ms /api/app/policies?format=csv  <-- contains "Ramsey"
+LEAK 200    8269ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4  <-- contains "Ramsey"
+LEAK 200    5695ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/notes  <-- contains "Blair Test"
+ok   200   17445ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/stage-history
+LEAK 200   74412ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/record  <-- contains "Blair Test"
+ok   200   26393ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/signature-readiness
+LEAK 200   25007ms /api/app/dialer/panel?lead_id=0f3c34e9-f329-4cde-bd64-c56f62619cf4  <-- contains "Ramsey"
+LEAK 200   88126ms /api/app/applications/for-lead/b979df87-4514-4d31-b6be-37f94f2b0633  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+LEAK 200   15738ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd  <-- contains "QA Campaign"
+LEAK 200   18418ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/timeline  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+ok   405   63511ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/quotes
+ok   405   26785ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/interview
+ok   ERR TimeoutError  90185ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/values
+ok   405   30990ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/sensitive
+ok   405   28740ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/beneficiaries
+ok   405   87434ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/payment
+ok   405   33114ms /api/app/campaigns/03b28abe-4e27-44f8-b4e2-27ca46d2454a
+ok   405   78490ms /api/app/policies/issued/83d2d17c-678a-4156-ada4-dcd06ed12f7d
+ok   405   12595ms /api/app/deal-flow/b979df87-4514-4d31-b6be-37f94f2b0633
+LEAK 200    3148ms /app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4  <-- contains "Blair Test"
+LEAK 200   49142ms /app/policies/83d2d17c-678a-4156-ada4-dcd06ed12f7d  <-- contains "Ramsey"
+LEAK 200   17717ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd  <-- contains "QA Campaign"
+LEAK 200    6587ms /app/lead-lists/03b28abe-4e27-44f8-b4e2-27ca46d2454a  <-- contains "QA Campaign"
+LEAK 200    4366ms /app/import/review/4db61dab-f38a-4e54-92f3-63b3becaf17a  <-- contains "Blair Test"
+LEAK 200   33803ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd/copy-assist  <-- contains "Emerson"
+ok   ERR TimeoutError  90057ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd/quotes/print
+
+32 LEAK(S)
+===== as a
+ok   200   31093ms /api/app/search?q=Ramsey
+ok   200   58196ms /api/app/search?q=Secretta
+ok   200    1449ms /api/app/search?q=QA-B-POL
+ok   200    4408ms /api/app/search?q=5550102
+ok   500    6578ms /api/app/dialer/search?q=Ramsey
+LEAK 200   20502ms /api/app/contacts?q=Bonly  <-- contains "Bonly"
+ok   200    8971ms /api/app/contacts
+ok   500    3813ms /api/app/leads
+ok   500   10360ms /api/app/leads?q=Ramsey
+ok   200   21595ms /api/app/policies
+ok   405    4377ms /api/app/policy-book
+ok   200   14582ms /api/app/campaigns
+ok   200   36298ms /api/app/vendors
+ok   200    1904ms /api/app/callbacks
+ok   200     521ms /api/app/applications
+ok   200    1270ms /api/app/lead-lists
+ok   200     748ms /api/app/dialer/queue?priority=all
+ok   200     781ms /api/app/deal-flow
+ok   400     262ms /api/app/calendar
+ok   200     688ms /api/app/activity
+ok   200    1494ms /api/app/contacts/export
+ok   500    1071ms /api/app/leads/export
+ok   200     492ms /api/app/policies?format=csv
+ok   404     860ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4
+ok   404     871ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/notes
+ok   200     895ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/stage-history
+ok   404    2145ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/record
+ok   404    1158ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/signature-readiness
+ok   400    1573ms /api/app/dialer/panel?lead_id=0f3c34e9-f329-4cde-bd64-c56f62619cf4
+ok   200    2139ms /api/app/applications/for-lead/b979df87-4514-4d31-b6be-37f94f2b0633
+ok   404     871ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd
+ok   404    6300ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/timeline
+ok   405    1395ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/quotes
+ok   405    1591ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/interview
+ok   405     341ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/values
+ok   405     822ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/sensitive
+ok   405    1393ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/beneficiaries
+ok   405    1185ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/payment
+ok   405     491ms /api/app/campaigns/03b28abe-4e27-44f8-b4e2-27ca46d2454a
+ok   405     572ms /api/app/policies/issued/83d2d17c-678a-4156-ada4-dcd06ed12f7d
+ok   405     709ms /api/app/deal-flow/b979df87-4514-4d31-b6be-37f94f2b0633
+LEAK 200    7800ms /app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4  <-- contains "0f3c34e9-f329-4cde-bd64-c56f62619cf4"
+LEAK 200    6177ms /app/policies/83d2d17c-678a-4156-ada4-dcd06ed12f7d  <-- contains "83d2d17c-678a-4156-ada4-dcd06ed12f7d"
+LEAK 200   16197ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+LEAK 200   22325ms /app/lead-lists/03b28abe-4e27-44f8-b4e2-27ca46d2454a  <-- contains "03b28abe-4e27-44f8-b4e2-27ca46d2454a"
+LEAK 200   48789ms /app/import/review/4db61dab-f38a-4e54-92f3-63b3becaf17a  <-- contains "4db61dab-f38a-4e54-92f3-63b3becaf17a"
+LEAK 404   14535ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd/copy-assist  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+LEAK 404    3506ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd/quotes/print  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+
+8 LEAK(S)
+===== as m1
+ok   200    2204ms /api/app/search?q=Ramsey
+ok   200    1867ms /api/app/search?q=Secretta
+ok   200    1123ms /api/app/search?q=QA-B-POL
+ok   200    2160ms /api/app/search?q=5550102
+ok   500    1718ms /api/app/dialer/search?q=Ramsey
+LEAK 200    1554ms /api/app/contacts?q=Bonly  <-- contains "Bonly"
+ok   200    1340ms /api/app/contacts
+ok   500    1274ms /api/app/leads
+ok   500    1315ms /api/app/leads?q=Ramsey
+ok   200     557ms /api/app/policies
+ok   405     155ms /api/app/policy-book
+ok   403     401ms /api/app/campaigns
+ok   200    1111ms /api/app/vendors
+ok   200    1120ms /api/app/callbacks
+ok   200     594ms /api/app/applications
+ok   403     455ms /api/app/lead-lists
+ok   200    1090ms /api/app/dialer/queue?priority=all
+ok   200    1112ms /api/app/deal-flow
+ok   400     295ms /api/app/calendar
+ok   200     731ms /api/app/activity
+ok   200    2773ms /api/app/contacts/export
+ok   500    8014ms /api/app/leads/export
+ok   200    4880ms /api/app/policies?format=csv
+ok   404    3140ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4
+ok   404    4314ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/notes
+ok   404     831ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/stage-history
+ok   404     853ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/record
+ok   404     680ms /api/app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4/signature-readiness
+ok   404     718ms /api/app/dialer/panel?lead_id=0f3c34e9-f329-4cde-bd64-c56f62619cf4
+ok   404     689ms /api/app/applications/for-lead/b979df87-4514-4d31-b6be-37f94f2b0633
+ok   404     656ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd
+ok   404     622ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/timeline
+ok   405     128ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/quotes
+ok   405     161ms /api/app/applications/cases/c7271c05-695f-487f-a032-5ce3bead24bd/interview
+ok   405     180ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/values
+ok   405     291ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/sensitive
+ok   405     555ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/beneficiaries
+ok   405     186ms /api/app/applications/attempts/de7a0e22-19ea-490d-90c2-71b0aeea6604/payment
+ok   405     202ms /api/app/campaigns/03b28abe-4e27-44f8-b4e2-27ca46d2454a
+ok   405     204ms /api/app/policies/issued/83d2d17c-678a-4156-ada4-dcd06ed12f7d
+ok   405     403ms /api/app/deal-flow/b979df87-4514-4d31-b6be-37f94f2b0633
+LEAK 200    2393ms /app/leads/0f3c34e9-f329-4cde-bd64-c56f62619cf4  <-- contains "0f3c34e9-f329-4cde-bd64-c56f62619cf4"
+LEAK 200    1541ms /app/policies/83d2d17c-678a-4156-ada4-dcd06ed12f7d  <-- contains "83d2d17c-678a-4156-ada4-dcd06ed12f7d"
+LEAK 200    1430ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+LEAK 200    1210ms /app/lead-lists/03b28abe-4e27-44f8-b4e2-27ca46d2454a  <-- contains "03b28abe-4e27-44f8-b4e2-27ca46d2454a"
+LEAK 200    1161ms /app/import/review/4db61dab-f38a-4e54-92f3-63b3becaf17a  <-- contains "4db61dab-f38a-4e54-92f3-63b3becaf17a"
+LEAK 404    1372ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd/copy-assist  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+LEAK 404    1029ms /app/applications/c7271c05-695f-487f-a032-5ce3bead24bd/quotes/print  <-- contains "c7271c05-695f-487f-a032-5ce3bead24bd"
+
+8 LEAK(S)

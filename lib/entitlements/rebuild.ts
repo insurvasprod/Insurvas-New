@@ -28,10 +28,11 @@ export async function rebuildEntitlement(
   try {
     await refreshEntitlement(tenantId);
   } catch (error) {
-    // A failed rebuild leaves a stale entitlement, which is a real problem — but failing the
-    // admin's action would leave the database changed and the response an error, which is worse.
-    // Log loudly; `tenant_entitlements.version` makes the staleness detectable.
+    // A successful source mutation with stale cached access is not a successful entitlement
+    // change. Throw so the caller reports the recoverable post-commit state and an operator can
+    // retry the rebuild; swallowing this made revoked features remain available silently.
     console.error(`[entitlement] rebuild FAILED for tenant ${tenantId} after ${reason}`, error);
+    throw error;
   }
 }
 

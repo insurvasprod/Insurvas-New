@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Insurvas carrier fill",
+  "short_name": "Insurvas",
+  "version": "0.1.0",
+  "description": "Fills a carrier's application form from an Insurvas application you have opened a grant for. It fills; you check and submit.",
+  "minimum_chrome_version": "116",
+  "permissions": ["activeTab", "storage", "scripting", "sidePanel"],
+  "host_permissions": ["http://localhost:3000/*", "https://app.insurvas.com/*"],
+  "optional_host_permissions": ["https://*/*"],
+  "background": { "service_worker": "service-worker.js", "type": "module" },
+  "side_panel": { "default_path": "sidepanel/sidepanel.html" },
+  "action": { "default_title": "Insurvas carrier fill" },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*", "https://app.insurvas.com/*"],
+      "js": ["content/bridge.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; connect-src http://localhost:3000 https://app.insurvas.com; frame-ancestors 'none'"
+  }
+}

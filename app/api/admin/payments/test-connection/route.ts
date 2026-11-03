@@ -3,7 +3,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireAdminRole } from "@/lib/adminAuth/requireAdminRole";
 import { audit } from "@/lib/audit/log";
 import { CAN_CONFIGURE_PROVIDER } from "@/lib/payments/permissions";
+import { withCallLogging } from "@/lib/payments/logging";
 import { WhopClient, WhopApiError } from "@/lib/payments/whop/client";
+import { WhopProvider } from "@/lib/payments/whop/provider";
 import { deriveMode } from "@/lib/payments/statusRules";
 
 /**
@@ -32,18 +34,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const client = new WhopClient({ apiKey, baseUrl });
+  // The probe is the one call whose outer PaymentProvider decorator owns the log row. Normal
+  // Whop calls are logged inside WhopClient so the Whop-specific methods cannot skip logging.
+  const provider = withCallLogging(
+    new WhopProvider(new WhopClient({ apiKey, baseUrl, logCalls: false })),
+    { tenantId: null },
+  );
   const startedAt = Date.now();
 
   let ok: boolean;
   let message: string;
 
   try {
-    // 404 is the expected proof of success here, so it is declared as such and never counted
-    // against payment health.
-    await client.request("GET", "/payments/pmt_connection_test_does_not_exist", undefined, undefined, {
-      okStatuses: [404],
-    });
+    await provider.testConnection?.();
     ok = true;
     message = "Whop answered and accepted the API key.";
   } catch (error) {

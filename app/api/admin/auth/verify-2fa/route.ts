@@ -1,19 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
-import { recordLoginEvent } from "@/lib/loginEvents/record";
+import { recordLastLogin, recordLoginEvent } from "@/lib/loginEvents/record";
 import { verify2faSchema } from "@/lib/adminAuth/schemas";
-import { verifyTotpCode } from "@/lib/adminAuth/totp";
+import { verifyTotpStep } from "@/lib/adminAuth/totp";
+import { openAdminTotpSecret, sealAdminTotpSecret } from "@/lib/adminAuth/totpSecret";
+import { claimTotpStep, type TotpStepClient } from "@/lib/adminAuth/totpReplay";
 import { isAdminRole } from "@/lib/adminAuth/roles";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   ADMIN_PENDING_2FA_COOKIE,
   ADMIN_SESSION_COOKIE,
+  ADMIN_TOTP_ENROL_COOKIE,
+  clearedAdminCookieOptions,
+  isTotpEnrolled,
   sessionCookieOptions,
   signAdminSessionToken,
   verifyPending2faToken,
+  verifyTotpEnrolToken,
 } from "@/lib/adminAuth/session";
+import {
+  checkLoginAllowed,
+  clearLoginFailures,
+  logBlockedLoginAttempt,
+  loginRateLimitResponse,
+  recordLoginFailure,
+} from "@/lib/authProtection";
 
+// One answer for a wrong code, a replayed code and a locked-out email + IP: the response never
+// says which of them happened (only the status differs, 429 with Retry-After for a lockout).
 const GENERIC_ERROR = { error: "Invalid or expired code" };
 
 export async function POST(request: NextRequest) {
@@ -35,27 +50,135 @@ export async function POST(request: NextRequest) {
     .from("admin_users")
     .select("id, email, role, totp_secret, is_active")
     .eq("id", pending.sub)
-    .maybeSingle<{ id: string; email: string; role: string; totp_secret: string; is_active: boolean }>();
+    .maybeSingle<{ id: string; email: string; role: string; totp_secret: string | null; is_active: boolean }>();
 
   if (!admin || !admin.is_active || !isAdminRole(admin.role)) {
     return NextResponse.json(GENERIC_ERROR, { status: 401 });
   }
 
-  const codeOk = verifyTotpCode(admin.email, admin.totp_secret, parsed.data.code);
-  if (!codeOk) {
-    // A run of these against one admin is the brute-force signal SA-6.2 will act on.
-    await recordLoginEvent({
-      request,
-      email: admin.email,
-      success: false,
-      adminId: admin.id,
-      actorType: "admin",
-      failureReason: "invalid_2fa",
-    });
+  // Lockout and rate limit, keyed on this staff email + IP in the second-factor buckets (at most
+  // five wrong codes; lib/authProtection/factor.ts). Checked before the code is: a locked-out
+  // caller learns nothing about whether the code they sent was right.
+  const protection = await checkLoginAllowed("admin", admin.email, request, "totp");
+  if (!protection.allowed) {
+    // Scheduled after the response and capped; never delays or changes the refusal.
+    logBlockedLoginAttempt("admin", admin.email, request, protection, "totp");
+    return NextResponse.json(GENERIC_ERROR, loginRateLimitResponse(protection.retryAfterSeconds));
+  }
+
+  // First sign-in of an account with no second factor yet: the code is checked against the secret
+  // enroll-2fa minted for THIS admin (signed cookie), never against the empty stored secret. An
+  // unenrolled account with no enrolment cookie cannot pass at all — 2FA stays mandatory.
+  const enrolled = isTotpEnrolled(admin.totp_secret);
+  // The stored secret is sealed (lib/adminAuth/totpSecret.ts). One that does not open — a missing
+  // key, or a ciphertext moved from another row — fails closed with the same answer as a wrong code.
+  let opened: ReturnType<typeof openAdminTotpSecret> = null;
+  if (enrolled) {
+    try {
+      opened = openAdminTotpSecret(admin.id, admin.totp_secret);
+    } catch (error) {
+      console.error(`[verify-2fa] could not open the stored authenticator: ${error instanceof Error ? error.message : "unknown"}`);
+    }
+    if (!opened) {
+      console.error("[verify-2fa] the stored authenticator secret did not open; refusing the sign-in");
+      return NextResponse.json(GENERIC_ERROR, { status: 401 });
+    }
+  }
+  let secret = opened ? opened.secret : null;
+  if (!enrolled) {
+    const enrolToken = request.cookies.get(ADMIN_TOTP_ENROL_COOKIE)?.value;
+    const enrol = enrolToken ? await verifyTotpEnrolToken(enrolToken) : null;
+    if (!enrol || enrol.sub !== admin.id) {
+      return NextResponse.json({ error: "Set up your authenticator app first, then enter its code" }, { status: 401 });
+    }
+    secret = enrol.secret;
+  }
+
+  const step = secret ? verifyTotpStep(admin.email, secret, parsed.data.code) : null;
+  if (step === null) {
+    await Promise.all([
+      recordLoginEvent({
+        request,
+        email: admin.email,
+        success: false,
+        adminId: admin.id,
+        actorType: "admin",
+        failureReason: "invalid_2fa",
+      }),
+      recordLoginFailure("admin", admin.email, request, "totp"),
+    ]);
     return NextResponse.json(GENERIC_ERROR, { status: 401 });
   }
 
-  await supabase.from("admin_users").update({ last_login_at: new Date().toISOString() }).eq("id", admin.id);
+  if (!enrolled) {
+    // Store the secret only now that a code from it has verified, sealed, never in plain text.
+    // Conditional on the account still being unenrolled, so two racing enrolments cannot overwrite
+    // one another's factor.
+    let sealed: string;
+    try {
+      sealed = sealAdminTotpSecret(admin.id, secret as string);
+    } catch (error) {
+      console.error(`[verify-2fa] could not seal the enrolled authenticator: ${error instanceof Error ? error.message : "unknown"}`);
+      return NextResponse.json({ error: "Two-factor setup is unavailable until the server's encryption key is configured" }, { status: 503 });
+    }
+    const { data: stored, error: storeError } = await supabase
+      .from("admin_users")
+      .update({ totp_secret: sealed })
+      .eq("id", admin.id)
+      .eq("totp_secret", "")
+      .select("id");
+    if (storeError || !stored || stored.length !== 1) {
+      console.error("[verify-2fa] could not store the enrolled authenticator; refusing the sign-in");
+      return NextResponse.json(GENERIC_ERROR, { status: 401 });
+    }
+  } else if (opened?.legacy) {
+    // A plain-text secret from before sealing: re-store it sealed now that it has proved itself.
+    // Conditional on the row still holding that plain value; best effort, the sign-in stands.
+    try {
+      const { error: sealError } = await supabase
+        .from("admin_users")
+        .update({ totp_secret: sealAdminTotpSecret(admin.id, opened.secret) })
+        .eq("id", admin.id)
+        .eq("totp_secret", admin.totp_secret as string);
+      if (sealError) console.error(`[verify-2fa] could not seal a legacy authenticator secret: ${sealError.message}`);
+    } catch (error) {
+      console.error(`[verify-2fa] could not seal a legacy authenticator secret: ${error instanceof Error ? error.message : "unknown"}`);
+    }
+  }
+
+  // Replay protection: the step must be newer than the last one accepted for this admin, and
+  // claiming it is one conditional update, so two concurrent verifies cannot both pass.
+  // database.types.ts predates admin_users.last_totp_step, hence the local client type.
+  const claim = await claimTotpStep(supabase as unknown as TotpStepClient, admin.id, step);
+  if (claim === "replayed") {
+    await Promise.all([
+      recordLoginEvent({
+        request,
+        email: admin.email,
+        success: false,
+        adminId: admin.id,
+        actorType: "admin",
+        failureReason: "replayed_2fa",
+      }),
+      recordLoginFailure("admin", admin.email, request, "totp"),
+    ]);
+    return NextResponse.json(GENERIC_ERROR, { status: 401 });
+  }
+  if (claim === "error") {
+    // Fail closed: a replay check that could not run is not a pass. Not counted as a wrong code.
+    console.error("[verify-2fa] replay check failed; refusing the sign-in");
+    return NextResponse.json(GENERIC_ERROR, { status: 401 });
+  }
+  if (claim === "unavailable") {
+    // 20260924364000 not applied yet: sign in as before, without the replay check.
+    console.warn("[verify-2fa] admin_users.last_totp_step is missing; replay check skipped until 20260924364000 is applied");
+  }
+
+  // Only a correct, unused code clears the second-factor count. A correct password does not
+  // (it clears the password bucket only), so re-entering it cannot reset the guesses.
+  await clearLoginFailures("admin", admin.email, request, "totp");
+
+  await recordLastLogin("admin", admin.id);
 
   // Both steps passed — this is the point the login actually succeeded.
   await recordLoginEvent({
@@ -71,12 +194,15 @@ export async function POST(request: NextRequest) {
     action: "admin.login",
     targetType: "admin_user",
     targetId: admin.id,
+    // One row for the sign-in; a first-login enrolment is recorded on it, not as a second row.
+    ...(enrolled ? {} : { metadata: { totp_enrolled: true } }),
     request,
   });
 
   const sessionToken = await signAdminSessionToken(admin.id, admin.role);
   const response = NextResponse.json({ ok: true });
   response.cookies.set(ADMIN_SESSION_COOKIE, sessionToken, sessionCookieOptions);
-  response.cookies.delete(ADMIN_PENDING_2FA_COOKIE);
+  response.cookies.set(ADMIN_PENDING_2FA_COOKIE, "", clearedAdminCookieOptions);
+  if (!enrolled) response.cookies.set(ADMIN_TOTP_ENROL_COOKIE, "", clearedAdminCookieOptions);
   return response;
 }

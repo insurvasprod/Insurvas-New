@@ -44,7 +44,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const supabase = getSupabaseServiceClient();
 
   const { data: invoice } = await supabase
-    .from("invoices")
+    .from("platform_invoices")
     .select("id, number, tenant_id, total_cents")
     .eq("id", id)
     .maybeSingle<{ id: string; number: string; tenant_id: string; total_cents: number }>();

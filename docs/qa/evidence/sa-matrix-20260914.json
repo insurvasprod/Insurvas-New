@@ -1,0 +1,685 @@
+{
+  "base": "http://localhost:3000",
+  "collected_at": "2026-09-14T12:32:35.765Z",
+  "sessions": [
+    {
+      "role": "super_admin",
+      "available": true,
+      "reason": null
+    },
+    {
+      "role": "support_agent",
+      "available": true,
+      "reason": null
+    },
+    {
+      "role": "billing_admin",
+      "available": true,
+      "reason": null
+    },
+    {
+      "role": "platform_config",
+      "available": true,
+      "reason": null
+    },
+    {
+      "role": "owner",
+      "available": true,
+      "reason": null
+    },
+    {
+      "role": "assistant",
+      "available": true,
+      "reason": null
+    }
+  ],
+  "api": {
+    "/api/admin/activity": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/addons": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/admins": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/audit-log": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/auth/login": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/auth/logout": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/auth/verify-2fa": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/billing/run": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/billing/waivers": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/carriers": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/compliance-vendors": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/coupons": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/credit-notes": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/credits-limits": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/credits-limits/grants": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/credits-limits/pricing": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/feature-switches": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/features": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/invoices": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/invoices/custom": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/legal": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/me": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/offers": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/payments/status": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/payments/test-connection": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/plans": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/products": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/settings": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/subscriptions": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/system": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/system/announcements": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/system/maintenance": {
+      "anonymous": 405,
+      "super_admin": 405,
+      "support_agent": 405,
+      "billing_admin": 405,
+      "platform_config": 405,
+      "owner": 405,
+      "assistant": 405
+    },
+    "/api/admin/templates": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 403,
+      "billing_admin": 403,
+      "platform_config": 200,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/tenants": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/users": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    },
+    "/api/admin/users/stats": {
+      "anonymous": 401,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 403,
+      "owner": 401,
+      "assistant": 401
+    }
+  },
+  "screens": {
+    "/admin": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/activity": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/addons": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/admins": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/advanced": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/audit-log": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/billing": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/carriers": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/compliance-sources": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/coupons": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/credit-notes": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/credits-limits": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/email": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/features": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/invoices": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/legal": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/login": {
+      "anonymous": 200,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 200,
+      "owner": 200,
+      "assistant": 200
+    },
+    "/admin/offers": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/payments": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/plans": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/products": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/revenue": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/settings": {
+      "anonymous": 307,
+      "super_admin": 307,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/subscriptions": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/system": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/templates": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 307,
+      "platform_config": 200,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/tenants": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/trials": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 307,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    },
+    "/admin/users": {
+      "anonymous": 307,
+      "super_admin": 200,
+      "support_agent": 200,
+      "billing_admin": 200,
+      "platform_config": 307,
+      "owner": 307,
+      "assistant": 307
+    }
+  },
+  "counts": {
+    "static_api": 36,
+    "dynamic_api_skipped": 35,
+    "screens": 29
+  },
+  "dynamic_api_skipped": [
+    "/api/admin/addons/[id]",
+    "/api/admin/admins/[id]",
+    "/api/admin/carriers/[id]",
+    "/api/admin/compliance-vendors/[id]",
+    "/api/admin/compliance-vendors/[id]/test-connection",
+    "/api/admin/credit-notes/[id]/approve",
+    "/api/admin/credit-notes/[id]/reconcile",
+    "/api/admin/credits-limits/packs/[id]",
+    "/api/admin/credits-limits/packs/[id]/purchase",
+    "/api/admin/features/[id]",
+    "/api/admin/invoices/[id]",
+    "/api/admin/invoices/[id]/mark-paid",
+    "/api/admin/invoices/[id]/void",
+    "/api/admin/offers/[id]",
+    "/api/admin/offers/[id]/apply",
+    "/api/admin/plans/[id]",
+    "/api/admin/plans/[id]/new-version",
+    "/api/admin/plans/[id]/version",
+    "/api/admin/products/[id]",
+    "/api/admin/subscriptions/[id]",
+    "/api/admin/subscriptions/[id]/addons",
+    "/api/admin/subscriptions/[id]/coupon",
+    "/api/admin/system/announcements/[id]",
+    "/api/admin/templates/[id]",
+    "/api/admin/templates/[id]/duplicate",
+    "/api/admin/tenants/[id]/billing-mode",
+    "/api/admin/tenants/[id]/payment-provider",
+    "/api/admin/trials/[id]",
+    "/api/admin/users/[id]",
+    "/api/admin/users/[id]/activate",
+    "/api/admin/users/[id]/deactivate",
+    "/api/admin/users/[id]/resend-invite",
+    "/api/admin/users/[id]/send-reset",
+    "/api/admin/users/[id]/suspend",
+    "/api/admin/users/[id]/unsuspend"
+  ],
+  "summary": {
+    "server_errors": [],
+    "anonymous_leaks": [],
+    "transport_errors": [],
+    "missing_sessions": [],
+    "public_paths": [
+      "/admin/login"
+    ],
+    "ok_counts": {
+      "anonymous": 1,
+      "super_admin": 52,
+      "support_agent": 13,
+      "billing_admin": 26,
+      "platform_config": 23,
+      "owner": 1,
+      "assistant": 1
+    }
+  }
+}

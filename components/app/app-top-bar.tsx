@@ -1,0 +1,1097 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRightLeft, Bell, BellOff, Check, ChevronDown, KeyboardIcon, LogOut, Search, SlidersHorizontal,
+  TriangleAlert, UserRound,
+} from "lucide-react";
+
+import { useAgentAlertFeed, type AgentAlert } from "@/lib/agentAlerts/useAgentAlertFeed";
+import { WORKSPACE_ALERT_EVENTS } from "@/lib/agentAlerts/presentation";
+import { bellToneOf } from "@/lib/agentAlerts/bell";
+import { AgentAlertPreferences } from "@/components/app/agent-alert-preferences";
+import { NotificationCentrePanel, useBellCentre } from "@/components/app/agent-notification-centre";
+import { ThemeSwitch } from "@/components/public/theme-switch";
+import { KeyboardShortcutsDialog } from "@/components/app/keyboard-shortcuts-dialog";
+import { allMenuItems } from "@/lib/menu/definition";
+import { OPEN_ALERT_SETTINGS_EVENT } from "@/lib/agentAlerts/openAlertSettings";
+import { KBD_ITEM_ATTRIBUTE, KBD_LIST_ATTRIBUTE, isTypingTarget, listKeyDirection, nextListIndex } from "@/lib/keyboard/listNavigation";
+import { notify } from "@/lib/notify";
+import { OPEN_WORKSPACES_EVENT } from "@/lib/menu/navEvents";
+import { ViewTabs } from "@/components/ui/view-tabs";
+import type { MenuSection } from "@/lib/menu/definition";
+import { TopBarNew } from "@/components/app/nav/top-bar-nav";
+
+/**
+ * The top bar.
+ *
+ * Until this component the workspace had thirty destinations in a sidebar and no way to reach a
+ * lead by name, and the only thing above the page was a breadcrumb card. This is the bar: search,
+ * the two things a person checks without navigating anywhere, and the way out.
+ *
+ * Three decisions worth keeping:
+ *
+ *   · ONE MENU AT A TIME. Opening the bell closes the account menu, and typing in the field closes
+ *     both. Two panels overlapping is how a person loses track of which one they are reading.
+ *
+ *   · NOTIFICATIONS AND ALERTS ARE DIFFERENT THINGS. A handoff offered to you is addressed to you
+ *     and clears when you read it. An unclaimed escalation is wrong with the queue and clears when
+ *     somebody fixes it — so it carries no "mark as read", which would hide a live problem.
+ *     Each shell supplies both lists from its own real sources; the bar invents neither.
+ *
+ *   · THE BADGE COUNTS WHAT IS UNHANDLED. Never an all-time total, and never drawn at zero.
+ */
+
+const PAGE_LABELS = new Map(allMenuItems().map((item) => [item.path, item.label]));
+
+/**
+ * What an agent alert's link opens, in words. "Open" alone makes a person click to find out where
+ * they are going; the sidebar already names every page, so the alert borrows that name. A path the
+ * menu does not know stays "Open" rather than guessing.
+ */
+function destinationLabel(link: string) {
+  const path = link.split(/[?#]/)[0].replace(/\/$/, "");
+  const page = PAGE_LABELS.get(path);
+  if (page) return `Open ${page}`;
+  if (/^\/app\/leads\/[^/]+$/.test(path)) return "Open the lead";
+  return "Open";
+}
+
+type SearchHit = { group: string; title: string; meta: string; href: string };
+
+/**
+ * The last few results this person opened from search, in this browser (2026-10-09). A convenience
+ * only: storage can be missing or blocked, so every read and write is guarded and the box works
+ * without it. Keyed by the shell's search endpoint, so an agent's and a partner's recents never mix.
+ */
+const RECENT_LIMIT = 5;
+const recentKey = (endpoint: string) => `insurvas.search.recent.v1:${endpoint}`;
+function readRecent(endpoint: string): SearchHit[] {
+  try {
+    const raw = window.localStorage.getItem(recentKey(endpoint));
+    const parsed = raw ? (JSON.parse(raw) as SearchHit[]) : [];
+    return Array.isArray(parsed) ? parsed.filter((hit) => typeof hit?.href === "string" && typeof hit?.title === "string").slice(0, RECENT_LIMIT) : [];
+  } catch { return []; }
+}
+function writeRecent(endpoint: string, hit: SearchHit) {
+  try {
+    const next = [{ ...hit, group: "Recent" }, ...readRecent(endpoint).filter((row) => row.href !== hit.href)].slice(0, RECENT_LIMIT);
+    window.localStorage.setItem(recentKey(endpoint), JSON.stringify(next));
+  } catch { /* a recent list is a nicety; nothing breaks without it */ }
+}
+
+/** Addressed to the person; clears when read. `tone` picks the dot colour. */
+export type TopBarNotification = {
+  id: string;
+  title: string;
+  body: string;
+  link: string;
+  created_at: string;
+  tone?: "accent" | "success" | "warning" | "muted";
+};
+
+/** Wrong with the workspace; clears when fixed. Carries the one action that resolves it. */
+export type TopBarAlert = {
+  id: string;
+  title: string;
+  body: string;
+  link: string;
+  actionLabel: string;
+  severity: "critical" | "warning";
+};
+
+/**
+ * The feed the bar draws, supplied by whichever shell mounts it.
+ *
+ * A prop rather than a hook call inside, because the three shells have three different sources:
+ * the agent polls `/api/app/notifications`, the partner `/api/partner/notifications`, staff
+ * `/api/admin/notifications`. A shell that passes `null` gets a bar with search and an account
+ * menu and no bell — the honest rendering of "there is nothing to notify you about here".
+ */
+/**
+ * Something that must be done now (owner 2026-11-02): an overdue regulator complaint. Not a strip on the
+ * page — a red warning icon beside the bell on every page, and the first row of the Inbox. It has no
+ * close and no "mark read": it clears only when the thing behind it is done.
+ */
+export type TopBarUrgent = { id: string; text: string; href: string; action: string };
+
+export type TopBarFeed = {
+  /** What must be done now: pinned first in the Inbox, with the red icon in the bar (TopBarUrgent). */
+  urgent?: TopBarUrgent[];
+  notifications: TopBarNotification[];
+  alerts: TopBarAlert[];
+  /** Marks exactly these ids read. The bar passes notification ids only — alerts are never marked read. */
+  markRead: (ids: string[]) => void | Promise<void>;
+  /**
+   * Set when read state cannot be stored yet (a pending migration). The bar then says so in place
+   * of "Mark all as read" rather than offering a button that forgets on the next check.
+   */
+  readStateUnavailable?: string | null;
+  /** The shell's own preference controls, or null when it has none to offer. */
+  preferences: ReactNode | null;
+  /** The account-menu hint under "Notification preferences". */
+  preferencesHint: string;
+  /** The alert centre page, or null when this shell has none. */
+  alertCentreHref: string | null;
+  notificationsEmptyBody: string;
+  alertsEmpty: { head: string; body: string };
+  /**
+   * LA-1.25-6: do not disturb is on (sound and browser alerts muted, the escalation email still
+   * sent). The bar shows it next to the bell, so it is never on without the agent seeing it.
+   */
+  doNotDisturb?: boolean;
+  /**
+   * The agent bell only (2026-10-09 notification centre): draws the notifications panel's content
+   * (filters, groups, snooze) in place of the plain list. The partner and staff shells omit it and
+   * keep the list below. `notifications` still drives the badge.
+   */
+  renderNotifications?: (api: { close: () => void; openPreferences: (() => void) | null }) => ReactNode;
+};
+
+export type TopBarUser = {
+  name: string;
+  email: string;
+  roleLabel: string;
+  workspaceName: string;
+  /** Set when the person has a profile picture; it versions the picture's address. */
+  avatarVersion?: string | null;
+};
+
+type TopBarWorkspace = { tenantId: string; name: string; roleLabel: string; current: boolean };
+
+type OpenMenu = "notifications" | "alerts" | "preferences" | "account" | null;
+type PreferencesOrigin = "notifications" | "alerts" | "account";
+
+const PREFERENCES_TITLE: Record<PreferencesOrigin, string> = {
+  notifications: "Notification preferences",
+  alerts: "Alert settings",
+  account: "Notification preferences",
+};
+const PREFERENCES_BACK: Record<PreferencesOrigin, string> = {
+  notifications: "Back to notifications",
+  alerts: "Back to alerts",
+  account: "Back to your account",
+};
+
+/** The profile picture when there is one (served by /api/app/profile/avatar), else the initials. */
+function AvatarFace({ user }: { user: TopBarUser }) {
+  if (!user.avatarVersion) return <>{initials(user.name)}</>;
+  // eslint-disable-next-line @next/next/no-img-element -- a session-bound redirect to a signed URL; next/image cannot optimise it
+  return <img src={`/api/app/profile/avatar?v=${encodeURIComponent(user.avatarVersion)}`} alt="" className="size-full rounded-full object-cover" />;
+}
+
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  return (parts[0][0] + (parts.length > 1 ? parts[parts.length - 1][0] : "")).toUpperCase();
+}
+
+function whenLabel(iso: string) {
+  const seconds = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seconds < 45) return "just now";
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86_400) return `${Math.round(seconds / 3600)}h`;
+  return new Date(iso).toLocaleDateString();
+}
+
+const ARROW = (
+  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6" /></svg>
+);
+
+/**
+ * J and K, applied to the page: move focus to the next or previous `data-kbd-item` inside the
+ * `data-kbd-list` that already holds focus. Nothing happens when focus is outside such a list.
+ */
+function moveFocusInList(direction: "next" | "previous"): boolean {
+  const active = document.activeElement as HTMLElement | null;
+  const list = active?.closest<HTMLElement>(`[${KBD_LIST_ATTRIBUTE}]`);
+  if (!active || !list) return false;
+  const items = Array.from(list.querySelectorAll<HTMLElement>(`[${KBD_ITEM_ATTRIBUTE}]`));
+  const current = items.findIndex((item) => item === active || item.contains(active));
+  const next = nextListIndex(current, items.length, direction);
+  if (next < 0 || next === current) return next >= 0;
+  items[next].focus();
+  items[next].scrollIntoView({ block: "nearest" });
+  return true;
+}
+
+/**
+ * The bar itself: presentational, and the same in every shell. The caller decides what the search
+ * looks in, who the person is, and what the feed holds.
+ */
+export function TopBarShell({
+  user,
+  feed,
+  searchEndpoint,
+  searchPlaceholder,
+  searchScope,
+  profileHref,
+  profileLabel,
+  profileHint,
+  signOutEndpoint,
+  signOutRedirect,
+  workspacesEndpoint,
+  switchWorkspaceEndpoint,
+  accountHostId,
+  accountExtra,
+  leading,
+  spacer = false,
+  actions,
+  inbox = false,
+}: {
+  /** Drawn before the search: the agent shell's breadcrumb (Navigation A). */
+  leading?: ReactNode;
+  /**
+   * An empty slot before the search, so the search sits where the agent shell's does (the partner
+   * portal, 2026-10-30). It names nothing: the page names itself (PageHeader), never the bar.
+   */
+  spacer?: boolean;
+  /** Drawn first on the right: the agent shell's Inbound pill and New menu. */
+  actions?: ReactNode;
+  /**
+   * One Inbox button in place of the bell and the triangle (Navigation A, agent shell): one count,
+   * and the two lists as tabs in its panel. Notifications and alerts keep their own rules inside it —
+   * a notification clears when read, an alert when fixed.
+   */
+  inbox?: boolean;
+  /**
+   * The id of an element in the side rail that holds the account button instead of the bar (agent
+   * shell, owner ask 2026-10-26: "the account goes bottom left, in the sidebar"). Its menu then opens
+   * beside the rail. Below md the rail is hidden, so the bar keeps its own button there.
+   */
+  accountHostId?: string;
+  /** Shown in the account menu under who you are: the agent shell puts the plan there. */
+  accountExtra?: ReactNode;
+  user: TopBarUser;
+  feed: TopBarFeed | null;
+  searchEndpoint: string;
+  searchPlaceholder: string;
+  /**
+   * What an empty result means in this shell. An agent's search stops at their agency, a partner's
+   * at what their organisation sent, and staff search every customer — so "a lead another agency
+   * owns will never appear here" is true for one of the three and nonsense for the other two.
+   */
+  searchScope: string;
+  /**
+   * The account menu's first row, named by each shell for what its page really holds. Omit
+   * `profileHref` when the shell has no page of its own for the person — the staff shell has none,
+   * and a row pointing somewhere else would be a second door to that page.
+   */
+  profileHref?: string;
+  profileLabel?: string;
+  profileHint?: string;
+  signOutEndpoint: string;
+  signOutRedirect: string;
+  /**
+   * Where the list of this person's workspaces comes from, and where switching is asked for. Only
+   * the agent shell has memberships in several workspaces; the row is drawn only when the server
+   * says there is more than one.
+   */
+  workspacesEndpoint?: string;
+  switchWorkspaceEndpoint?: string;
+}) {
+  const router = useRouter();
+  const [menu, setMenu] = useState<OpenMenu>(null);
+  const [preferencesOrigin, setPreferencesOrigin] = useState<PreferencesOrigin>("account");
+  const [query, setQuery] = useState("");
+  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [total, setTotal] = useState(0);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [cursor, setCursor] = useState(0);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [workspaces, setWorkspaces] = useState<TopBarWorkspace[]>([]);
+  const [choosingWorkspace, setChoosingWorkspace] = useState(false);
+  const [switchingTo, setSwitchingTo] = useState<string | null>(null);
+  // The box is useful before anything is typed (2026-10-09): recent picks and suggested actions.
+  const [focused, setFocused] = useState(false);
+  const [suggestions, setSuggestions] = useState<SearchHit[] | null>(null);
+  const [recent, setRecent] = useState<SearchHit[]>([]);
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // The rail's account slot, found once mounted (the rail renders before the bar).
+  const [accountHost, setAccountHost] = useState<HTMLElement | null>(null);
+  const [accountFromRail, setAccountFromRail] = useState(false);
+  // Opened from the sidebar's workspace card (Navigation A): the same menu, drawn at the top.
+  const [accountFromWorkspace, setAccountFromWorkspace] = useState(false);
+  useEffect(() => {
+    if (accountHostId) setAccountHost(document.getElementById(accountHostId)); // eslint-disable-line react-hooks/set-state-in-effect
+  }, [accountHostId]);
+
+  const notifications = feed?.notifications ?? [];
+  const alerts = feed?.alerts ?? [];
+
+  const trimmed = query.trim();
+  // The panel opens on the first keystroke, as drawn. The query waits for a second character: one
+  // letter would match half the workspace, so the panel says so instead of "Nothing matches".
+  const idleHits = useMemo(() => (trimmed ? [] : [...recent, ...(suggestions ?? []).filter((hit) => !recent.some((row) => row.href === hit.href)).map((hit) => ({ ...hit, group: "Suggested" }))]), [trimmed, recent, suggestions]);
+  const shown = trimmed ? hits : idleHits;
+  const searchOpen = trimmed.length >= 1 || (focused && idleHits.length > 0);
+  const tooShort = trimmed.length >= 1 && trimmed.length < 2;
+
+  function onSearchFocus() {
+    setFocused(true);
+    setRecent(readRecent(searchEndpoint));
+    setCursor(0);
+    if (suggestions !== null) return;
+    setSuggestions([]);
+    fetch(`${searchEndpoint}?q=&suggest=1`, { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { hits?: SearchHit[] } | null) => setSuggestions(body?.hits ?? []))
+      .catch(() => setSuggestions([]));
+  }
+
+  // ---- the search itself -------------------------------------------------
+  useEffect(() => {
+    if (trimmed.length < 2) {
+      // Cleared in a callback rather than in the effect body: emptying the list is a reaction to
+      // the field, not a render the field depends on, and doing it synchronously here cascades.
+      const clear = window.setTimeout(() => { setHits([]); setTotal(0); setSearchError(null); setSearching(false); }, 0);
+      return () => window.clearTimeout(clear);
+    }
+    const controller = new AbortController();
+    let inFlight = false;
+    // 180ms is long enough that a normal typist issues one request per word and short enough that
+    // the list feels attached to the keyboard.
+    const timer = window.setTimeout(async () => {
+      inFlight = true;
+      setSearching(true);
+      try {
+        const response = await fetch(`${searchEndpoint}?q=${encodeURIComponent(trimmed)}`, {
+          cache: "no-store", signal: controller.signal,
+        });
+        if (!response.ok) { setSearchError("Search is unavailable right now."); setHits([]); return; }
+        const body = (await response.json()) as { hits: SearchHit[]; total: number };
+        setSearchError(null);
+        setHits(body.hits);
+        setTotal(body.total);
+        setCursor(0);
+      } catch (cause) {
+        // A superseded keystroke, not a failure. Checked on the signal rather than the error's name:
+        // the rejection's shape varies by browser and by whatever has wrapped fetch.
+        if (controller.signal.aborted || (cause as Error)?.name === "AbortError") return;
+        setSearchError("Search is unavailable right now.");
+        setHits([]);
+      } finally {
+        inFlight = false;
+        if (!controller.signal.aborted) setSearching(false);
+      }
+    }, 180);
+    return () => {
+      window.clearTimeout(timer);
+      // Only a request that actually left needs cancelling, and it gets a named reason: a bare
+      // abort() surfaced in the dev overlay as an uncaught "signal is aborted without reason".
+      if (inFlight) controller.abort(new DOMException("Search superseded", "AbortError"));
+    };
+  }, [trimmed, searchEndpoint]);
+
+  // ---- this person's workspaces: read once, drawn only when there is a choice ----
+  useEffect(() => {
+    if (!workspacesEndpoint) return;
+    const controller = new AbortController();
+    fetch(workspacesEndpoint, { cache: "no-store", signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body: { workspaces?: TopBarWorkspace[] } | null) => { if (body?.workspaces) setWorkspaces(body.workspaces); })
+      .catch(() => { /* No row is the honest fallback: a switch that cannot list its choices cannot switch. */ });
+    return () => controller.abort();
+  }, [workspacesEndpoint]);
+
+  // ---- the sidebar's workspace card opens the account menu at the workspace switch ----
+  const several = workspaces.length > 1 && Boolean(switchWorkspaceEndpoint);
+  useEffect(() => {
+    if (!accountHostId) return;
+    const open = () => {
+      setQuery("");
+      setAccountFromRail(true);
+      setAccountFromWorkspace(true);
+      setChoosingWorkspace(several);
+      setMenu((current) => (current === "account" ? null : "account"));
+    };
+    window.addEventListener(OPEN_WORKSPACES_EVENT, open);
+    return () => window.removeEventListener(OPEN_WORKSPACES_EVENT, open);
+  }, [accountHostId, several]);
+
+  // ---- one menu at a time, and a click outside closes it ------------------
+  const close = useCallback(() => { setMenu(null); setChoosingWorkspace(false); }, []);
+
+  const openPreferences = useCallback((origin: PreferencesOrigin) => {
+    setQuery("");
+    setChoosingWorkspace(false);
+    setPreferencesOrigin(origin);
+    setMenu("preferences");
+  }, []);
+
+  // The Settings › Alerts page has no controls of its own — alert preferences are per person and
+  // live here — so its one button asks the bar to open them rather than linking to a page.
+  const hasPreferences = Boolean(feed?.preferences);
+  useEffect(() => {
+    if (!hasPreferences) return;
+    const open = () => openPreferences("alerts");
+    window.addEventListener(OPEN_ALERT_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_ALERT_SETTINGS_EVENT, open);
+  }, [hasPreferences, openPreferences]);
+
+  useEffect(() => {
+    if (!menu && !searchOpen && !focused) return;
+    function onPointerDown(event: MouseEvent) {
+      // An InfoTip inside a panel opens in a portal; reading it is not a click outside the bar.
+      if ((event.target as Element | null)?.closest?.("[data-radix-popper-content-wrapper]")) return;
+      // The rail's account button and its menu sit outside the bar but belong to it, as does the
+      // sidebar's workspace card that opens the same menu.
+      if (accountHost?.contains(event.target as Node)) return;
+      if ((event.target as Element | null)?.closest?.("[data-account-trigger]")) return;
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        close();
+        setQuery("");
+        setFocused(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, [menu, searchOpen, focused, close, accountHost]);
+
+  // ---- keyboard ----------------------------------------------------------
+  useEffect(() => {
+    function onKey(event: KeyboardEvent) {
+      const typing = isTypingTarget(event.target as HTMLElement | null);
+      if ((event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+        return;
+      }
+      if (event.key === "/" && !typing) {
+        event.preventDefault();
+        inputRef.current?.focus();
+        return;
+      }
+      if (!typing) {
+        const direction = listKeyDirection(event);
+        if (direction && moveFocusInList(direction)) { event.preventDefault(); return; }
+      }
+      if (event.key === "Escape") { close(); setQuery(""); setFocused(false); }
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [close]);
+
+  function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (!searchOpen || !shown.length) return;
+    if (event.key === "ArrowDown") { event.preventDefault(); setCursor((c) => (c + 1) % shown.length); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); setCursor((c) => (c - 1 + shown.length) % shown.length); }
+    else if (event.key === "Enter") {
+      event.preventDefault();
+      const hit = shown[cursor];
+      if (hit) go(hit.href, hit);
+    }
+  }
+
+  /**
+   * Open a result. A result on the page already open that differs only by `#section` is set as the
+   * hash rather than pushed: the settings rail and the lead list select from `hashchange`, which a
+   * router push does not fire, so the click would otherwise land and change nothing.
+   */
+  function go(href: string, hit?: SearchHit) {
+    if (hit) writeRecent(searchEndpoint, hit);
+    setQuery("");
+    setFocused(false);
+    inputRef.current?.blur();
+    const [path, hash] = href.split("#");
+    if (hash && path === window.location.pathname) window.location.hash = hash;
+    else router.push(href);
+  }
+
+  function toggle(which: Exclude<OpenMenu, null | "preferences">) {
+    setQuery("");
+    setChoosingWorkspace(false);
+    setMenu((current) => (current === which || (current === "preferences" && preferencesOrigin === which) ? null : which));
+  }
+
+  /**
+   * Switching re-issues the session on the server, which checks the membership itself; the browser
+   * only names the workspace it wants. A full navigation afterwards so nothing drawn from the old
+   * workspace — a cached list, an open panel, a poll in flight — survives into the new one.
+   */
+  async function switchWorkspace(tenantId: string) {
+    if (!switchWorkspaceEndpoint) return;
+    setSwitchingTo(tenantId);
+    try {
+      const response = await fetch(switchWorkspaceEndpoint, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tenantId }),
+      });
+      const body = (await response.json().catch(() => null)) as { redirectTo?: string; error?: string } | null;
+      if (!response.ok || !body?.redirectTo) throw new Error(body?.error ?? "That workspace could not be opened.");
+      window.location.assign(body.redirectTo);
+    } catch (cause) {
+      notify.block(cause instanceof Error ? cause.message : "That workspace could not be opened.");
+      setSwitchingTo(null);
+    }
+  }
+
+  const grouped = useMemo(() => {
+    const order: string[] = [];
+    const byGroup = new Map<string, SearchHit[]>();
+    for (const hit of shown) {
+      if (!byGroup.has(hit.group)) { byGroup.set(hit.group, []); order.push(hit.group); }
+      byGroup.get(hit.group)!.push(hit);
+    }
+    return order.map((group) => ({ group, rows: byGroup.get(group)! }));
+  }, [shown]);
+
+  const currentWorkspaceIndex = workspaces.findIndex((workspace) => workspace.current);
+  const canSwitch = workspaces.length > 1 && currentWorkspaceIndex >= 0 && Boolean(switchWorkspaceEndpoint);
+
+  // The bell and the triangle stay lit while their own preferences are open.
+  const bellOpen = menu === "notifications" || (menu === "preferences" && preferencesOrigin === "notifications");
+  const alertsOpen = menu === "alerts" || (menu === "preferences" && preferencesOrigin === "alerts");
+  const accountOpen = menu === "account" || (menu === "preferences" && preferencesOrigin === "account");
+
+  // The Inbox (Navigation A): one button, the two lists as tabs. It opens on alerts only when there
+  // is nothing addressed to you and something is wrong with the queue.
+  const urgent = feed?.urgent ?? [];
+  const inboxCount = notifications.length + alerts.length + urgent.length;
+  function toggleInbox() {
+    if (bellOpen || alertsOpen) { close(); return; }
+    toggle(urgent.length || (!notifications.length && alerts.length) ? "alerts" : "notifications");
+  }
+  const urgentText = urgent.map((item) => item.text).join(" ");
+  // Pinned above either list, never scrolled away, never marked read.
+  const urgentRows = urgent.length ? (
+    <div className="portal-top-urgent-list" role="alert">
+      {urgent.map((item) => (
+        <a key={item.id} href={item.href} onClick={close} className="portal-top-urgent-row">
+          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+          <span className="portal-top-urgent-text">{item.text}</span>
+          <span className="portal-top-urgent-action">{item.action}</span>
+        </a>
+      ))}
+    </div>
+  ) : null;
+  const inboxTabs = inbox && feed ? (
+    <div className="portal-top-inbox-tabs">
+      <ViewTabs
+        label="Inbox"
+        value={menu === "alerts" ? "alerts" : "notifications"}
+        onChange={(key) => { setQuery(""); setMenu(key); }}
+        tabs={[
+          { key: "notifications", label: "Notifications", count: notifications.length || null },
+          { key: "alerts", label: "Alerts", count: alerts.length + urgent.length || null, tone: "danger" },
+        ]}
+      />
+    </div>
+  ) : null;
+
+  let flatIndex = -1;
+
+  return (
+    <div ref={rootRef} className="portal-top-bar" data-open={menu ?? undefined} data-inbox={inbox || undefined}>
+      {leading ?? (spacer ? <span className="portal-top-crumb" aria-hidden="true" /> : null)}
+      {/* ---------------------------------------------------------- search */}
+      <form role="search" className="portal-top-search" onSubmit={(event) => event.preventDefault()}>
+        <Search className="portal-top-search-icon size-[15px]" aria-hidden="true" />
+        <input
+          ref={inputRef}
+          type="search"
+          aria-label="Search this workspace"
+          autoComplete="off"
+          placeholder={searchPlaceholder}
+          value={query}
+          onChange={(event) => { setQuery(event.target.value); setMenu(null); }}
+          onKeyDown={onSearchKeyDown}
+          onFocus={onSearchFocus}
+          className="portal-top-search-input"
+        />
+        <span className="portal-top-search-keys" aria-hidden="true"><kbd>⌘</kbd><kbd>K</kbd></span>
+
+        {searchOpen && (
+          <div className="portal-top-panel portal-top-panel-search m-swap" role="listbox" aria-label="Search results" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
+            <div className="portal-top-panel-scroll">
+              {grouped.map(({ group, rows }) => (
+                <div key={group}>
+                  <div className="portal-top-group">{group}</div>
+                  {rows.map((hit) => {
+                    flatIndex += 1;
+                    const index = flatIndex;
+                    return (
+                      <button
+                        key={`${hit.href}-${hit.title}`}
+                        type="button"
+                        role="option"
+                        aria-selected={index === cursor}
+                        data-active={index === cursor || undefined}
+                        {...{ [KBD_ITEM_ATTRIBUTE]: "" }}
+                        onMouseEnter={() => setCursor(index)}
+                        onFocus={() => setCursor(index)}
+                        onClick={() => go(hit.href, hit)}
+                        className="portal-top-hit m-row"
+                      >
+                        <span className="portal-top-hit-text">
+                          <span className="portal-top-hit-title">{hit.title}</span>
+                          <span className="portal-top-hit-meta">{hit.meta}</span>
+                        </span>
+                        <code className="portal-top-hit-path">{hit.href}</code>
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+
+              {tooShort && (
+                <div className="portal-top-empty">
+                  <p className="portal-top-empty-head">Keep typing</p>
+                  <p className="portal-top-empty-body">Search starts at the second letter. {searchScope}</p>
+                </div>
+              )}
+              {trimmed.length >= 2 && !hits.length && !searching && !searchError && (
+                <div className="portal-top-empty">
+                  <p className="portal-top-empty-head">Nothing matches that</p>
+                  <p className="portal-top-empty-body">{searchScope}</p>
+                </div>
+              )}
+              {searchError && (
+                <div className="portal-top-empty">
+                  <p className="portal-top-empty-head">{searchError}</p>
+                  <p className="portal-top-empty-body">Nothing has changed. Try the same search again in a moment.</p>
+                </div>
+              )}
+            </div>
+            <div className="portal-top-panel-foot">
+              <span>
+                {!trimmed
+                  ? "Type to search leads, policies, pages and actions"
+                  : tooShort
+                  ? "Type one more letter"
+                  : searching
+                  ? "Searching…"
+                  : total > hits.length
+                    ? `${hits.length} of ${total} results`
+                    : total === 1 ? "1 result" : `${total} results`}
+              </span>
+              <span aria-hidden="true">↑↓ move · ↵ open · esc close</span>
+            </div>
+          </div>
+        )}
+      </form>
+
+      {/* ------------------------------------------------------- the right */}
+      <div className="portal-top-actions">
+        {actions}
+        {/* Light / dark, the landing page's switch and reveal, in front of the bell (owner, 2026-10-13). */}
+        {!inbox && <ThemeSwitch compact />}
+        {feed?.doNotDisturb && <span className="hidden text-xs leading-[1.5] font-semibold text-[var(--warning-ink)] sm:inline" title="Sound and browser alerts are muted. Escalation emails are still sent.">Do not disturb</span>}
+        {/* One icon for notifications and alerts (owner 2026-11-02): what must be done now rides on the bell's
+            count and opens first in the Inbox; no second button beside it. */}
+        {feed && inbox && <button
+          type="button"
+          aria-label={`Inbox${urgent.length ? `, needs action now: ${urgentText}` : ""}${notifications.length ? `, ${notifications.length} unread` : ""}${alerts.length ? `, ${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"} open` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
+          aria-haspopup="true"
+          aria-expanded={bellOpen || alertsOpen}
+          onClick={toggleInbox}
+          className="portal-top-icon"
+          data-alert={alerts.length > 0 || undefined}
+        >
+          {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
+          {inboxCount > 0 && <span className="portal-top-badge">{inboxCount > 99 ? "99+" : inboxCount}</span>}
+        </button>}
+        {inbox && <ThemeSwitch compact />}
+        {feed && !inbox && <button
+          type="button"
+          aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
+          aria-haspopup="true"
+          aria-expanded={bellOpen}
+          onClick={() => toggle("notifications")}
+          className="portal-top-icon"
+        >
+          {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
+          {notifications.length > 0 && <span className="portal-top-badge">{notifications.length}</span>}
+        </button>}
+
+        {feed && !inbox && <button
+          type="button"
+          aria-label={`Alerts${alerts.length ? `, ${alerts.length} open` : ""}`}
+          aria-haspopup="true"
+          aria-expanded={alertsOpen}
+          onClick={() => toggle("alerts")}
+          className="portal-top-icon portal-top-icon-alert"
+        >
+          <TriangleAlert className="size-4" aria-hidden="true" />
+          {alerts.length > 0 && <span className="portal-top-badge">{alerts.length}</span>}
+        </button>}
+
+        {feed && <span className="portal-top-divider" aria-hidden="true" />}
+
+        <button
+          type="button"
+          aria-haspopup="true"
+          aria-expanded={accountOpen && !accountFromRail}
+          onClick={() => { setAccountFromRail(false); setAccountFromWorkspace(false); toggle("account"); }}
+          className="portal-top-account"
+        >
+          <span className="portal-top-avatar" aria-hidden="true"><AvatarFace user={user} /></span>
+          <span className="portal-top-account-name">{user.name.split(/\s+/)[0]}</span>
+          <ChevronDown className="size-3.5 text-[var(--muted)]" aria-hidden="true" />
+        </button>
+
+        {/* ------------------------------------------- notifications panel */}
+        {feed?.renderNotifications && menu === "notifications" && (
+          <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
+            {inboxTabs}
+            {urgentRows}
+            {feed.renderNotifications({ close, openPreferences: feed.preferences ? () => openPreferences("notifications") : null })}
+          </section>
+        )}
+        {feed && !feed.renderNotifications && menu === "notifications" && (
+          <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
+            {inboxTabs}
+            {urgentRows}
+            <header className="portal-top-panel-head">
+              <span>Notifications</span>
+              <span>{notifications.length ? `${notifications.length} unread` : "Nothing unread"}</span>
+            </header>
+            <div className="portal-top-panel-scroll" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
+              {notifications.map((item) => (
+                <a
+                  key={item.id}
+                  href={item.link}
+                  {...{ [KBD_ITEM_ATTRIBUTE]: "" }}
+                  onClick={() => { if (!feed.readStateUnavailable) void feed.markRead([item.id]); }}
+                  className="portal-top-notif m-row"
+                >
+                  <span className="portal-top-notif-dot" data-tone={item.tone ?? "accent"} aria-hidden="true" />
+                  <span className="portal-top-notif-text">
+                    <span className="portal-top-notif-head">
+                      <span className="portal-top-notif-title">{item.title}</span>
+                      <time dateTime={item.created_at}>{whenLabel(item.created_at)}</time>
+                    </span>
+                    <span className="portal-top-notif-body">{item.body}</span>
+                  </span>
+                </a>
+              ))}
+              {!notifications.length && (
+                <div className="portal-top-empty">
+                  <p className="portal-top-empty-head">Nothing addressed to you</p>
+                  <p className="portal-top-empty-body">{feed.notificationsEmptyBody}</p>
+                </div>
+              )}
+            </div>
+            <div className="portal-top-panel-foot">
+              {feed.readStateUnavailable
+                ? <span>{feed.readStateUnavailable}</span>
+                : (
+                  <button type="button" onClick={() => void feed.markRead(notifications.map((item) => item.id))} disabled={!notifications.length} className="portal-top-foot-action">
+                    Mark all as read
+                  </button>
+                )}
+              {feed.preferences && (
+                <button type="button" onClick={() => openPreferences("notifications")} className="portal-top-foot-link">
+                  Notification preferences
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* -------------------------------------------------- alerts panel */}
+        {feed && menu === "alerts" && (
+          <section aria-label="Alerts" className={`portal-top-panel m-swap ${inbox ? "portal-top-panel-notif" : "portal-top-panel-alerts"}`}>
+            {inboxTabs}
+            {urgentRows}
+            <header className="portal-top-panel-head">
+              <span>Alerts</span>
+              <span>Clears when fixed, not when read</span>
+            </header>
+            <div className="portal-top-panel-scroll" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
+              {alerts.map((alert) => (
+                <div key={alert.id} className="portal-top-alert" data-severity={alert.severity}>
+                  <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+                  <span>
+                    <span className="portal-top-alert-title">{alert.title}</span>
+                    <span className="portal-top-alert-body">{alert.body}</span>
+                    <a href={alert.link} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-alert-cta m-arrow">
+                      {alert.actionLabel}
+                      {ARROW}
+                    </a>
+                  </span>
+                </div>
+              ))}
+              {!alerts.length && (
+                <div className="portal-top-empty">
+                  <p className="portal-top-empty-head">{feed.alertsEmpty.head}</p>
+                  <p className="portal-top-empty-body">{feed.alertsEmpty.body}</p>
+                </div>
+              )}
+            </div>
+            <div className="portal-top-panel-foot">
+              {feed.alertCentreHref && (
+                <Link href={feed.alertCentreHref} onClick={close} className="portal-top-foot-action">
+                  Open the alert centre
+                </Link>
+              )}
+              {feed.preferences && (
+                <button type="button" onClick={() => openPreferences("alerts")} className="portal-top-foot-link portal-top-foot-end">
+                  Alert settings
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* ---------------------------------------------- preferences panel */}
+        {feed?.preferences && menu === "preferences" && (
+          <section aria-label={PREFERENCES_TITLE[preferencesOrigin]} className="portal-top-panel portal-top-panel-alerts m-swap">
+            <header className="portal-top-panel-head">
+              <span>{PREFERENCES_TITLE[preferencesOrigin]}</span>
+              <span>Only affects you</span>
+            </header>
+            <div className="portal-top-panel-scroll">{feed.preferences}</div>
+            <div className="portal-top-panel-foot">
+              <button type="button" onClick={() => setMenu(preferencesOrigin)} className="portal-top-foot-link portal-top-foot-end">
+                {PREFERENCES_BACK[preferencesOrigin]}
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ------------------------------------------------- account menu */}
+        {accountHost && createPortal(
+          <button
+            type="button"
+            aria-haspopup="true"
+            aria-label="Your account"
+            aria-expanded={accountOpen && accountFromRail && !accountFromWorkspace}
+            onClick={() => { setAccountFromRail(true); setAccountFromWorkspace(false); toggle("account"); }}
+            className="portal-rail-account"
+            title={`${user.name} · ${user.roleLabel}`}
+          >
+            <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
+            {/* The labelled sidebar shows who you are beside the face; the icon rail hides it (CSS). */}
+            <span className="portal-rail-account-text" aria-hidden="true">
+              <span className="portal-rail-account-name">{user.name}</span>
+              <span className="portal-rail-account-meta">{user.roleLabel}</span>
+            </span>
+          </button>,
+          accountHost,
+        )}
+        {menu === "account" && (accountFromRail && accountHost ? (panel: ReactNode) => createPortal(panel, accountHost) : (panel: ReactNode) => panel)(
+          <section aria-label="Your account" className={`portal-top-panel portal-top-panel-account m-swap ${accountFromRail && accountHost ? "portal-top-panel-rail" : ""} ${accountFromWorkspace && accountHost ? "portal-top-panel-rail-top" : ""}`}>
+            <div className="portal-top-identity">
+              <span className="portal-top-avatar portal-top-avatar-lg" aria-hidden="true"><AvatarFace user={user} /></span>
+              <span>
+                <span className="portal-top-identity-name">{user.name}</span>
+                <span className="portal-top-identity-email">{user.email}</span>
+                <span className="portal-top-identity-role">{user.roleLabel} · {user.workspaceName}</span>
+              </span>
+            </div>
+            {accountExtra && <div className="portal-top-account-extra">{accountExtra}</div>}
+            {choosingWorkspace && canSwitch ? (
+              <div className="portal-top-menu" role="group" aria-label="Your workspaces" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
+                {workspaces.map((workspace) => (
+                  <button
+                    key={workspace.tenantId}
+                    type="button"
+                    {...{ [KBD_ITEM_ATTRIBUTE]: "" }}
+                    disabled={workspace.current || switchingTo !== null}
+                    aria-current={workspace.current || undefined}
+                    onClick={() => void switchWorkspace(workspace.tenantId)}
+                    className="portal-top-menu-row m-row"
+                  >
+                    {workspace.current
+                      ? <Check className="size-3.5" aria-hidden="true" />
+                      : <ArrowRightLeft className="size-3.5" aria-hidden="true" />}
+                    <span>
+                      <span>{workspace.name}</span>
+                      <span>
+                        {switchingTo === workspace.tenantId
+                          ? "Opening…"
+                          : workspace.current ? `${workspace.roleLabel} · you are here` : workspace.roleLabel}
+                      </span>
+                    </span>
+                  </button>
+                ))}
+                <button type="button" onClick={() => setChoosingWorkspace(false)} className="portal-top-menu-row m-row">
+                  <ChevronDown className="size-3.5 rotate-90" aria-hidden="true" />
+                  <span><span>Back</span><span>To your account menu</span></span>
+                </button>
+              </div>
+            ) : (
+              <div className="portal-top-menu" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
+                {profileHref && (
+                  <Link href={profileHref} onClick={close} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                    <UserRound className="size-3.5" aria-hidden="true" />
+                    <span><span>{profileLabel}</span><span>{profileHint}</span></span>
+                  </Link>
+                )}
+                {feed?.preferences && (
+                  <button type="button" onClick={() => openPreferences("account")} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                    <SlidersHorizontal className="size-3.5" aria-hidden="true" />
+                    <span><span>Notification preferences</span><span>{feed.preferencesHint}</span></span>
+                  </button>
+                )}
+                <button type="button" onClick={() => { close(); setShortcutsOpen(true); }} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                  <KeyboardIcon className="size-3.5" aria-hidden="true" />
+                  <span><span>Keyboard shortcuts</span><span>Slash to search, J and K to move</span></span>
+                </button>
+                {canSwitch && (
+                  <button type="button" onClick={() => setChoosingWorkspace(true)} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                    <ArrowRightLeft className="size-3.5" aria-hidden="true" />
+                    <span>
+                      <span>Switch workspace</span>
+                      <span>{workspaces[currentWorkspaceIndex].name} · {currentWorkspaceIndex + 1} of {workspaces.length}</span>
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="portal-top-signout">
+              <TopBarSignOut endpoint={signOutEndpoint} redirect={signOutRedirect} />
+            </div>
+          </section>,
+        )}
+      </div>
+
+      <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+    </div>
+  );
+}
+
+/**
+ * Sign-out, in the account menu rather than as a lone icon, and it says what it ends. Its own
+ * component so the sidebar's button — which is styled for a dark ground — is left alone.
+ */
+function TopBarSignOut({ endpoint, redirect }: { endpoint: string; redirect: string }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function signOut() {
+    setError(null);
+    setLoading(true);
+    try {
+      const response = await fetch(endpoint, { method: "POST" });
+      if (!response.ok) throw new Error("Sign out could not be completed");
+      router.push(redirect);
+      router.refresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Sign out could not be completed");
+      setLoading(false);
+    }
+  }
+
+  return (
+    <>
+      <button type="button" onClick={() => void signOut()} disabled={loading} aria-busy={loading} className="portal-top-menu-row portal-top-menu-signout m-row">
+        <LogOut className="size-3.5" aria-hidden="true" />
+        <span>
+          <span>{loading ? "Signing out…" : "Log out"}</span>
+          <span>Ends this session on this device only</span>
+        </span>
+      </button>
+      {error && <p role="alert" className="portal-top-signout-error">{error}</p>}
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- the agent
+
+/** Splits the agent feed into what is addressed to you and what is wrong with the workspace. */
+function agentFeedLists(alerts: AgentAlert[]) {
+  const notifications: TopBarNotification[] = [];
+  const workspace: AgentAlert[] = [];
+  for (const alert of alerts) {
+    if (WORKSPACE_ALERT_EVENTS.includes(alert.event_type)) workspace.push(alert);
+    else notifications.push({ ...alert, tone: bellToneOf(alert.event_type) });
+  }
+  // Newest first, as the board draws them ("just now", then "6m"). The feed arrives oldest first.
+  notifications.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  // Stable, so alerts of the same severity keep the feed's order. Most severe first.
+  workspace.sort((a, b) => WORKSPACE_ALERT_EVENTS.indexOf(a.event_type) - WORKSPACE_ALERT_EVENTS.indexOf(b.event_type));
+  const topBarAlerts: TopBarAlert[] = workspace.map((alert) => ({
+    id: alert.id,
+    title: alert.title,
+    body: alert.body,
+    link: alert.link,
+    actionLabel: destinationLabel(alert.link),
+    severity: alert.event_type === "unclaimed_escalation" ? "critical" : "warning",
+  }));
+  return { notifications, alerts: topBarAlerts };
+}
+
+/**
+ * The agent's bar. Owns the one poller for the whole page — the alert centre used to own it, and
+ * mounting both would mean two requests every 2.5 seconds and two toasts per alert.
+ */
+/**
+ * The plan, in the account menu (owner ask 2026-10-26): it used to be a rail icon of its own that
+ * only opened a card. What the plan is and how big; owners get the way to change it.
+ */
+export type TopBarPlan = { name: string | null; seats: number | null; isOwner: boolean };
+
+function PlanLine({ plan, onNavigate }: { plan: TopBarPlan; onNavigate?: () => void }) {
+  const size = [plan.name ?? "No plan", plan.seats === null ? null : `${plan.seats} ${plan.seats === 1 ? "seat" : "seats"}`].filter(Boolean).join(" · ");
+  return (
+    <div className="portal-top-plan">
+      <span>
+        <span className="portal-top-plan-label">Plan</span>
+        <span className="portal-top-plan-name">{size}</span>
+      </span>
+      {plan.isOwner && <Link href="/app/settings#billing" onClick={onNavigate} className="portal-top-plan-link">Plan &amp; billing</Link>}
+    </div>
+  );
+}
+
+export function AppTopBar({ user, userId, plan, menu, urgent }: {
+  user: TopBarUser;
+  /** Keys this browser's snoozes to the person. */
+  userId?: string;
+  plan?: TopBarPlan;
+  /** The same server-filtered menu as the sidebar: the breadcrumb and the New menu read it. */
+  menu?: MenuSection[];
+  /** What must be done now (an overdue regulator complaint): the red icon and the Inbox's first row. */
+  urgent?: TopBarUrgent[];
+}) {
+  const source = useAgentAlertFeed();
+  const lists = useMemo(() => agentFeedLists(source.alerts), [source.alerts]);
+  // The notification centre (2026-10-09): the same feed, grouped, filtered and snoozable. Snoozed
+  // notifications leave the badge until their time.
+  const personal = useMemo(() => source.alerts.filter((alert) => !WORKSPACE_ALERT_EVENTS.includes(alert.event_type)), [source.alerts]);
+  const centre = useBellCentre(personal, userId, source.markRead);
+  const feed: TopBarFeed = {
+    ...lists,
+    urgent,
+    notifications: lists.notifications.filter((item) => centre.badgeIds.has(item.id)),
+    renderNotifications: ({ close, openPreferences }) => <NotificationCentrePanel centre={centre} close={close} openPreferences={openPreferences} />,
+    markRead: source.markRead,
+    preferences: <AgentAlertPreferences feed={source} />,
+    preferencesHint: "Which events reach you, and how",
+    alertCentreHref: "/app/alerts",
+    doNotDisturb: source.settings?.do_not_disturb === true,
+    notificationsEmptyBody: "Handoffs, mentions, partner messages and callbacks due appear here as they happen.",
+    alertsEmpty: {
+      head: "Nothing is wrong with the queue",
+      body: "Unclaimed leads and escalations appear here. They are not messages — they clear when somebody claims the work, not when you read this.",
+    },
+  };
+  return (
+    <TopBarShell
+      user={user}
+      feed={feed}
+      searchEndpoint="/api/app/search"
+      searchPlaceholder="Search or jump to…"
+      searchScope="Search covers this workspace only. A lead another agency owns will never appear here."
+      profileHref="/app/settings#my-profile"
+      profileLabel="Your profile"
+      profileHint="Name, phone, licence numbers"
+      signOutEndpoint="/api/app/auth/logout"
+      signOutRedirect="/app/login"
+      workspacesEndpoint="/api/app/auth/workspaces"
+      switchWorkspaceEndpoint="/api/app/auth/switch-workspace"
+      accountExtra={plan ? <PlanLine plan={plan} /> : undefined}
+      actions={menu ? <TopBarNew menu={menu} /> : undefined}
+      inbox
+    />
+  );
+}

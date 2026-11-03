@@ -1,13 +1,15 @@
 import { Suspense } from "react";
 
+import { AppAuthFrame } from "@/components/app/app-auth-frame";
 import { ConfirmEmailPanel } from "@/components/app/confirm-email-panel";
 
+/** Confirming a changed email address, in the agent sign-in frame. */
 export default function ConfirmEmailPage() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-page-bg)] p-4">
+    <AppAuthFrame>
       <Suspense fallback={null}>
         <ConfirmEmailPanel />
       </Suspense>
-    </div>
+    </AppAuthFrame>
   );
 }

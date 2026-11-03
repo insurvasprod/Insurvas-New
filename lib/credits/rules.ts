@@ -55,14 +55,24 @@ export const DEFAULT_REFUND_APPROVAL_THRESHOLD_CENTS = 50_000;
  * caller that forgot to resolve the setting silently gate on $500 while the screen next to it
  * says something else — and this is the one control in the product where that divergence moves
  * real money.
+ *
+ * `priorRefundedCents` is what is already refunded or requested against the same invoice (pending,
+ * approved, in flight or done — not failed or rejected). The threshold is on the CUMULATIVE total:
+ * checking each refund alone let two $499 refunds on a $998 invoice skip the $500 second approver
+ * (billing audit, 2026-10-15). request_credit_note enforces the same sum in SQL, under a per-invoice
+ * lock; a screen that does not know the prior total may pass 0 and the server still decides.
  */
 export function needsSecondApprover(
   type: CreditNoteType,
   amountCents: number,
   thresholdCents: number,
+  priorRefundedCents = 0,
 ): boolean {
-  return type === "refund" && amountCents > thresholdCents;
+  return type === "refund" && Math.max(0, priorRefundedCents) + amountCents > thresholdCents;
 }
+
+/** Credit-note statuses whose amount still counts against an invoice's refund total. */
+export const REFUND_COUNTING_STATUSES = ["pending_approval", "approved", "processing", "succeeded"] as const;
 
 const CAN_REQUEST: readonly AdminRole[] = ["super_admin", "billing_admin"];
 
@@ -121,7 +131,20 @@ export function creditBalanceDelta(type: CreditNoteType, amountCents: number): n
  * that is not.
  */
 export function creditToFreeDays(creditCents: number, periodPriceCents: number, periodDays: number): number {
-  if (periodPriceCents <= 0 || periodDays <= 0) return 0;
-  const perDay = periodPriceCents / periodDays;
-  return Math.floor(creditCents / perDay);
+  if (periodPriceCents <= 0 || periodDays <= 0 || creditCents <= 0) return 0;
+  // Integer arithmetic throughout: credit × days ÷ price, floored. The old per-day float
+  // (price / days) could land a hair under the true rate and round a whole day the wrong way.
+  return Math.floor((Math.trunc(creditCents) * Math.trunc(periodDays)) / Math.trunc(periodPriceCents));
+}
+
+/**
+ * What `days` free days cost, in whole cents: days × price ÷ period, rounded UP so the credit
+ * spent always covers the value given. Never more than the balance creditToFreeDays was given,
+ * because those days were floored from it.
+ */
+export function creditCentsForDays(days: number, periodPriceCents: number, periodDays: number): number {
+  if (days <= 0 || periodPriceCents <= 0 || periodDays <= 0) return 0;
+  const numerator = Math.trunc(days) * Math.trunc(periodPriceCents);
+  const d = Math.trunc(periodDays);
+  return Math.floor((numerator + d - 1) / d);
 }

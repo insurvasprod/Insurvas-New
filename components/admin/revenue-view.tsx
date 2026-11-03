@@ -1,0 +1,213 @@
+import "server-only";
+
+import { fetchMetrics, fetchFunnel, fetchSnapshotFreshness, biggestDropOff, type MetricsDay } from "@/lib/metrics/queries";
+import { computeChurn, formatRate } from "@/lib/metrics/churn";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { BillingTabs } from "@/components/admin/billing-tabs";
+import { BoardStatGrid, BoardStatTile } from "@/components/admin/board-stat-tile";
+import { Callout } from "@/components/app/settings/primitives";
+import { EmptyState } from "@/components/ui/page-states";
+import { PageHeader } from "@/components/ui/page-header";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { formatCentsAsCurrency } from "@/lib/money";
+import { cn } from "@/lib/utils";
+
+const card = "min-w-0 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-5";
+const h2 = "text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]";
+const sub = "mt-1 text-sm text-[var(--muted)]";
+const th = "px-3 py-2 text-left text-xs leading-[1.33] font-semibold text-[var(--muted)]";
+const td = "border-t border-[var(--border)] px-3 py-2 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]";
+const LONG = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+const SHORT = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+const signed = (cents: number) => `${cents > 0 ? "+" : cents < 0 ? "−" : ""}${formatCentsAsCurrency(Math.abs(cents))}`;
+
+/** Gross revenue churn over one run of snapshot days: what was lost ÷ MRR on the first day. */
+function grossChurn(window: MetricsDay[]) {
+  const base = window[0]?.mrr_cents ?? 0;
+  return computeChurn({
+    customersAtStart: window[0]?.active_customers ?? 0,
+    customersChurned: window.reduce((s, d) => s + d.churned_customers, 0),
+    mrrAtStart: base,
+    churnedMrrCents: window.reduce((s, d) => s + d.churned_mrr_cents, 0),
+    expansionMrrCents: window.reduce((s, d) => s + d.expansion_mrr_cents, 0),
+    contractionMrrCents: window.reduce((s, d) => s + d.contraction_mrr_cents, 0),
+  });
+}
+
+/** The revenue board (p-adm-revenue), for an admin the page has already checked. */
+export async function RevenueView() {
+  const renderedAt = new Date();
+  const windowStart = new Date(renderedAt.getTime() - 30 * 86_400_000);
+  const [history, funnel, freshness, invoicedResult] = await Promise.all([
+    fetchMetrics(183),
+    fetchFunnel(90),
+    fetchSnapshotFreshness(),
+    getSupabaseServiceClient().from("platform_invoices").select("total_cents").neq("status", "void").gte("created_at", windowStart.toISOString()),
+  ]);
+
+  // The last 31 snapshot days are this page's window; the longer history only feeds the 6-month mean.
+  const cutoff = new Date(renderedAt.getTime() - 31 * 86_400_000).toISOString().slice(0, 10);
+  const days = history.filter((d) => d.date >= cutoff);
+  const latest = days.at(-1);
+  const monthAgo = days[0];
+
+  const churn = grossChurn(days);
+  // Six consecutive 30-day windows, newest first; only windows that started with revenue count.
+  const windows: MetricsDay[][] = [];
+  for (let end = history.length; end > 0 && windows.length < 6; end -= 30) windows.push(history.slice(Math.max(0, end - 30), end));
+  const measured = windows.filter((w) => w.length >= 20 && (w[0]?.mrr_cents ?? 0) > 0).map((w) => grossChurn(w).grossRevenueChurnRate);
+  const sixMonthMean = measured.length >= 2 ? measured.reduce((a, b) => a + b, 0) / measured.length : null;
+
+  const mrr = latest?.mrr_cents ?? 0;
+  const base = monthAgo?.mrr_cents ?? 0;
+  const collected = days.reduce((sum, d) => sum + d.collected_cents, 0);
+  const invoiced = (invoicedResult.data ?? []).reduce((sum, row) => sum + (row.total_cents as number), 0);
+  const arpc = latest && latest.active_customers > 0 ? Math.round(mrr / latest.active_customers) : 0;
+
+  const newMrr = days.reduce((s, d) => s + d.new_mrr_cents, 0);
+  const churned = days.reduce((s, d) => s + d.churned_mrr_cents, 0);
+  const expansion = days.reduce((s, d) => s + d.expansion_mrr_cents, 0);
+  const contraction = days.reduce((s, d) => s + d.contraction_mrr_cents, 0);
+  // Expansion and contraction are columns the snapshot has but nothing records yet: shown as "not
+  // measured", never as a confident zero bar, and the unexplained remainder is shown rather than
+  // letting the waterfall silently not add up.
+  const movementMeasured = expansion !== 0 || contraction !== 0;
+  const net = mrr - base;
+  const unexplained = net - (newMrr + expansion - contraction - churned);
+  const bars = [
+    { label: "New", cents: newMrr, measured: true, tone: "bg-[var(--success)]", ink: "text-[var(--success-ink)]" },
+    { label: "Expansion", cents: expansion, measured: movementMeasured, tone: "bg-[var(--success)]", ink: "text-[var(--success-ink)]" },
+    { label: "Contraction", cents: -contraction, measured: movementMeasured, tone: "bg-[var(--warning)]", ink: "text-[var(--warning-ink)]" },
+    { label: "Churn", cents: -churned, measured: true, tone: "bg-[var(--error)]", ink: "text-[var(--error-ink)]" },
+    ...(unexplained !== 0 ? [{ label: "Unexplained", cents: unexplained, measured: true, tone: "bg-[var(--border-strong)]", ink: "text-[var(--body)]" }] : []),
+    { label: "Net", cents: net, measured: true, tone: "bg-[var(--info)]", ink: "text-[var(--info-ink)]" },
+  ];
+  const tallest = Math.max(1, ...bars.filter((b) => b.measured).map((b) => Math.abs(b.cents)));
+
+  const planRows = Object.entries(latest?.plan_breakdown ?? {}).sort((a, b) => b[1].mrr_cents - a[1].mrr_cents);
+  const signups = funnel[0]?.measured ? funnel[0].count ?? 0 : null;
+
+  // See fetchSnapshotFreshness: every figure here is read from a nightly snapshot, and a page that
+  // cannot say how old its numbers are will present stale ones as current.
+  const { date: snapshotDate, ageDays: snapshotAgeDays, isStale: snapshotIsStale } = freshness;
+  const snapshotLabel = snapshotDate ? SHORT.format(new Date(`${snapshotDate}T00:00:00Z`)) : null;
+
+  return (
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader title="Revenue" />
+      <BillingTabs />
+
+      <BoardStatGrid>
+        <BoardStatTile label="MRR" value={formatCentsAsCurrency(mrr)} footnote={snapshotLabel ? `contracted, ${snapshotLabel}` : "contracted"} />
+        <BoardStatTile label="ARR" value={formatCentsAsCurrency(latest?.arr_cents ?? 0)} footnote="MRR × 12" />
+        <BoardStatTile label="Collected, 30 days" value={formatCentsAsCurrency(collected)} footnote={invoiced > 0 ? `${((collected / invoiced) * 100).toFixed(1)}% of invoiced` : "nothing invoiced in the window"} title="Recorded payments in the snapshot window, against non-void invoices raised in the last 30 days." />
+        {/* A rate needs MRR at the start of the window. With none, safeRate returns 0 — which would
+            read as "nobody churned" even when revenue was lost — so the tile says there is no rate. */}
+        {base > 0 ? (
+          <BoardStatTile label="Gross churn" value={formatRate(churn.grossRevenueChurnRate)} footnote={sixMonthMean === null ? "last 30 days" : `last 30 days, 6-month mean ${formatRate(sixMonthMean)}`} tone={churn.grossRevenueChurnRate > 0.05 ? "warning" : "default"} />
+        ) : (
+          <BoardStatTile label="Gross churn" value="—" footnote={`no MRR at the start of the window, so no rate${churned > 0 ? ` · ${formatCentsAsCurrency(churned)} churned` : ""}`} />
+        )}
+      </BoardStatGrid>
+
+      {/* The page reads a nightly snapshot: absent or old numbers must not pass for current ones. */}
+      {snapshotDate === null ? (
+        <Callout tone="warning" title="No metrics have been computed yet — the figures are absent, not zero. Run npm run metrics:build." />
+      ) : snapshotIsStale ? (
+        <Callout tone="warning" title={`These figures are ${snapshotAgeDays} days old (last snapshot ${snapshotDate}). Run npm run metrics:build to catch up.`} />
+      ) : null}
+
+      {mrr === 0 && collected > 0 && (
+        <Callout tone="warning" title={`${formatCentsAsCurrency(collected)} collected in 30 days with no subscription recorded — provider-checkout customers need a subscription on our side.`} />
+      )}
+
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
+        <section className={card} aria-labelledby="mrr-movement">
+          <h2 id="mrr-movement" className={h2}>MRR movement</h2>
+          <p className={sub}>{monthAgo && latest ? `${LONG.format(new Date(`${monthAgo.date}T00:00:00Z`))} – ${LONG.format(new Date(`${latest.date}T00:00:00Z`))}. Base ${formatCentsAsCurrency(base)} at ${SHORT.format(new Date(`${monthAgo.date}T00:00:00Z`))}.` : "No snapshot days in the window yet."}</p>
+          <div className="mt-5 flex h-[170px] items-end gap-3 sm:gap-5" role="list" aria-label="MRR movement">
+            {bars.map((bar) => (
+              <div key={bar.label} role="listitem" className="flex min-w-0 flex-1 flex-col items-center gap-2">
+                <span className={cn("text-sm font-semibold tabular-nums whitespace-nowrap", bar.measured ? bar.ink : "text-[var(--muted)]")}>{bar.measured ? signed(bar.cents) : "—"}</span>
+                {bar.measured
+                  ? <span className={cn("w-full rounded-t-[6px]", bar.tone)} style={{ height: `${Math.max(4, Math.round((Math.abs(bar.cents) / tallest) * 124))}px` }} aria-hidden />
+                  : <span className="w-full rounded-t-[6px] border border-dashed border-[var(--border-strong)]" style={{ height: "24px" }} aria-hidden />}
+                <span className="text-center text-xs text-[var(--muted)]">{bar.label}{!bar.measured && <span className="block">not measured</span>}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className={card} aria-labelledby="activation-funnel">
+          <h2 id="activation-funnel" className={h2}>Activation funnel</h2>
+          <p className={sub}>Last 90 days{signups !== null ? ` · ${signups.toLocaleString()} signups` : ""}</p>
+          <ol className="mt-2">
+            {funnel.map((step) => {
+              const share = signups && step.measured && step.count !== null ? step.count / signups : null;
+              return (
+                <li key={step.label} className="border-t border-[var(--border)] py-2.5">
+                  <div className="flex justify-between gap-3">
+                    <span className={cn("text-sm", step.measured ? "text-[var(--body)]" : "text-[var(--muted)]")}>{step.label}</span>
+                    <span className={cn("text-sm tabular-nums", step.measured ? "font-semibold text-[var(--ink)]" : "text-xs text-[var(--muted)]")}>
+                      {step.measured && step.count !== null ? `${step.count.toLocaleString()}${share !== null ? ` · ${Math.round(share * 100)}%` : ""}` : "not instrumented"}
+                    </span>
+                  </div>
+                  {step.measured && share !== null && (
+                    <span role="meter" aria-label={step.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} className="mt-1.5 block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]">
+                      <span className="block h-1.5 rounded-full bg-[var(--info)]" style={{ width: `${Math.min(100, share * 100)}%` }} />
+                    </span>
+                  )}
+                  {step.note && <span className="mt-1 block text-xs text-[var(--muted)]">{step.note}</span>}
+                </li>
+              );
+            })}
+          </ol>
+          {/* Stated in words — and unmeasured steps are skipped rather than counted as zero, which would always name them as the biggest drop. */}
+          <p className="border-t border-[var(--border)] pt-2.5 text-sm text-[var(--body)]">{biggestDropOff(funnel)}</p>
+        </section>
+      </div>
+
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_520px] xl:items-start">
+        <PagedTableCard total={planRows.length} noun="plans" className="min-w-0" title={`Plan mix${snapshotLabel ? ` · ${snapshotLabel}` : ""}`}>
+          {planRows.length === 0 ? (
+            <EmptyState title="No revenue to break down yet" hint="It fills in once a subscription has billed at least once." />
+          ) : (
+              <table className="w-full min-w-[420px] border-collapse">
+                <thead><tr className="bg-[var(--surface-alt)]"><th scope="col" className={th}>Plan</th><th scope="col" className={cn(th, "text-right")}>Customers</th><th scope="col" className={cn(th, "text-right")}>MRR</th><th scope="col" className={cn(th, "text-right")}>Share</th></tr></thead>
+                <PagedBody>
+                  {planRows.map(([code, stats]) => (
+                    <tr key={code}>
+                      <td className={cn(td, "font-semibold text-[var(--ink)]")}>{code}</td>
+                      <td className={cn(td, "text-right tabular-nums")}>{stats.customers.toLocaleString()}</td>
+                      <td className={cn(td, "text-right tabular-nums")}>{formatCentsAsCurrency(stats.mrr_cents)}</td>
+                      <td className={cn(td, "text-right tabular-nums")}>{mrr > 0 ? `${((stats.mrr_cents / mrr) * 100).toFixed(1)}%` : "—"}</td>
+                    </tr>
+                  ))}
+                </PagedBody>
+              </table>
+          )}
+        </PagedTableCard>
+
+        <section className={card} aria-labelledby="customers-churn">
+          <h2 id="customers-churn" className={h2}>Customers &amp; churn</h2>
+          <dl className="m-0 mt-3">
+            {[
+              ["Active customers", (latest?.active_customers ?? 0).toLocaleString()],
+              ["Average revenue per customer", formatCentsAsCurrency(arpc)],
+              ["New in 30 days", days.reduce((s, d) => s + d.new_customers, 0).toLocaleString()],
+              ["Churned in 30 days", days.reduce((s, d) => s + d.churned_customers, 0).toLocaleString()],
+              ["Trials in flight", (latest?.trials_active ?? 0).toLocaleString()],
+              ["Logo churn", (monthAgo?.active_customers ?? 0) > 0 ? formatRate(churn.logoChurnRate) : "— (no customers at the start)"],
+              ["Net revenue churn", base > 0 ? formatRate(churn.netRevenueChurnRate) : "— (no MRR at the start)"],
+            ].map(([label, value]) => (
+              <div key={label} className="flex justify-between gap-4 border-t border-[var(--border)] py-2 first:border-t-0">
+                <dt className="text-sm text-[var(--body)]">{label}</dt>
+                <dd className="m-0 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      </div>
+    </div>
+  );
+}

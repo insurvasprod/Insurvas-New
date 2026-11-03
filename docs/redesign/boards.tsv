@@ -1,0 +1,181 @@
+Before.dc.html	Today — the grey wall
+Main.dc.html	Proposed — light
+Dark.dc.html	Proposed — dark
+Foundations.dc.html	Foundations — what changed and why
+List.dc.html	1 · List + filters — 45 pages
+Detail.dc.html	2 · Record detail — 8 pages
+Settings.dc.html	3 · Settings & forms — 8 pages
+Board.dc.html	4 · Board view — 1 page
+Auth.dc.html	5 · Auth & gates — 16 pages
+Overview.dc.html	6 · Overview — 5 pages
+Console.dc.html	7 · Live console — 3 pages
+Flow.dc.html	8 · Guided flow — 3 pages
+Marketing.dc.html	9 · Marketing — 5 pages
+Dialer.dc.html	LA-2 §10 · Dialer
+QueueScoring.dc.html	LA-2 §13 · Queue scoring
+Assignment.dc.html	LA-2.24 · Lead assignment
+Pool.dc.html	LA-2 §6 · Before it reaches an agent
+Appointments.dc.html	LA-2 §11 · Appointments & setters
+Activity.dc.html	LA-2 §16 · Activity / call log
+Scorecard.dc.html	LA-2 §14 · Scorecard
+Recycling.dc.html	LA-2 §4 · Lead recycling
+Returns.dc.html	LA-2 §15 · Vendor returns
+Vendors.dc.html	LA-2 §5 · Vendors
+Campaigns.dc.html	LA-2 §5 · Campaigns & cadence
+DealFlow.dc.html	LA-2 §3 · Daily deal flow
+Floor.dc.html	LA-1 §7 · Agent floor
+Inbox.dc.html	LA-1 §6 · Inbound inbox
+LeadWorkspace.dc.html	LA-1 §8 · Lead workspace
+SubmitLead.dc.html	LA-1 §4 · Partner submits a lead
+Callbacks.dc.html	LA-1 §9 · Callbacks
+PartnerChat.dc.html	LA-1 §12 · Partner chat
+Publishers.dc.html	LA-1 §3 · Partners & publishers
+Pipelines.dc.html	LA-1 §10 · Pipelines — 4 views
+PipelineBoard.dc.html	Board — kanban by stage
+PipelineTable.dc.html	Table — sort, select, act
+PipelineList.dc.html	List — grouped, with preview
+StageEditor.dc.html	Edit a stage
+DispositionLibrary.dc.html	Disposition library
+NewPipeline.dc.html	New pipeline — guided flow
+p-pub-root.dc.html	/  ·  Root redirect
+p-pub-pricing.dc.html	/pricing  ·  Pricing · interactive
+p-pub-signup.dc.html	/signup  ·  Public signup
+p-pub-legal.dc.html	/legal/[type]  ·  Legal document
+p-pub-affiliate.dc.html	/affiliate/[slug]  ·  Affiliate intake
+p-pub-design.dc.html	/design  ·  Primitives
+p-pub-maintenance.dc.html	/maintenance  ·  Maintenance
+p-pub-verification-failed.dc.html	/verification-failed  ·  Verification failed
+p-app-home.dc.html	/app  ·  Home redirect
+p-pub-app-login.dc.html	/app/login  ·  Agent sign-in
+p-pub-app-signup.dc.html	/app/signup  ·  Agent signup
+p-pub-verify-email.dc.html	/app/verify-email  ·  Verify email
+p-pub-confirm-email.dc.html	/app/confirm-email  ·  Confirm email
+p-pub-set-password.dc.html	/app/set-password  ·  Set password
+p-pub-business-profile.dc.html	/app/onboarding/business-profile  ·  Business profile
+p-pub-checkout.dc.html	/app/checkout  ·  Checkout
+p-pub-checkout-return.dc.html	/app/checkout/return  ·  Checkout return
+p-pub-accept-terms.dc.html	/app/accept-terms  ·  Accept terms
+p-app-dashboard.dc.html	/app/dashboard  ·  Dashboard
+p-app-floor.dc.html	/app/floor  ·  Agent Floor
+p-app-inbound.dc.html	/app/inbound  ·  Inbound transfers
+p-app-verification.dc.html	/app/inbound/[id]/verification  ·  Verification
+p-app-disposition.dc.html	/app/inbound/[id]/disposition  ·  Disposition
+p-app-partner-chat.dc.html	/app/partner-chat  ·  Partner chat
+p-app-dialer.dc.html	/app/dialer  ·  Dialer
+p-app-import.dc.html	/app/import  ·  List import
+p-app-import-review.dc.html	/app/import/review/[batchId]  ·  Import review
+p-app-campaigns.dc.html	/app/campaigns  ·  Vendors & campaigns
+p-app-nurture.dc.html	/app/nurture  ·  Lead recycling
+p-app-assignments.dc.html	/app/assignments  ·  Lead assignment
+p-app-scoring.dc.html	/app/scoring  ·  Queue scoring
+p-app-activity.dc.html	/app/activity  ·  Activity & scorecard
+p-app-true-cpa.dc.html	/app/true-cpa  ·  True CPA
+p-app-vendor-returns.dc.html	/app/vendor-returns  ·  Vendor returns
+p-app-deal-flow.dc.html	/app/deal-flow  ·  Daily deal flow
+p-app-callbacks.dc.html	/app/callbacks  ·  Callback calendar
+p-app-leads.dc.html	/app/leads  ·  Lead workspace
+p-app-lead-detail.dc.html	/app/leads/[id]  ·  Lead detail
+p-app-duplicates.dc.html	/app/duplicates  ·  Duplicate check
+p-app-policies.dc.html	/app/policies  ·  Policies
+p-app-ledger.dc.html	/app/ledger  ·  Commission ledger
+p-app-appointments.dc.html	/app/appointments  ·  Carrier appointments
+p-app-lapse-risk.dc.html	/app/lapse-risk  ·  Lapse risk
+p-app-publishers.dc.html	/app/publishers  ·  Partners
+p-app-publisher-detail.dc.html	/app/publishers/[id]  ·  Partner detail
+p-app-partner-quality.dc.html	/app/partner-quality  ·  Partner quality
+p-app-settings.dc.html	/app/settings  ·  Settings · overview
+p-app-section.dc.html	/app/[section]  ·  On the way
+p-app-vendors-alias.dc.html	/app/vendors  ·  Vendors alias
+p-app-scorecard-alias.dc.html	/app/scorecard  ·  Scorecard alias
+p-adm-login.dc.html	/admin/login  ·  Staff sign-in
+p-adm-home.dc.html	/admin  ·  Dashboard
+p-adm-tenants.dc.html	/admin/tenants  ·  Tenants
+p-adm-tenant-detail.dc.html	/admin/tenants/[id]  ·  Tenant overview
+p-adm-users.dc.html	/admin/users  ·  Users
+p-adm-user-detail.dc.html	/admin/users/[id]  ·  User detail
+p-adm-billing.dc.html	/admin/billing  ·  Billing
+p-adm-subscriptions.dc.html	/admin/subscriptions  ·  Subscriptions
+p-adm-trials.dc.html	/admin/trials  ·  Trials
+p-adm-invoices.dc.html	/admin/invoices  ·  Invoices
+p-adm-invoice-detail.dc.html	/admin/invoices/[id]  ·  Invoice detail
+p-adm-invoice-print.dc.html	/admin/invoices/[id]/print  ·  Invoice print
+p-adm-credit-notes.dc.html	/admin/credit-notes  ·  Credit notes
+p-adm-coupons.dc.html	/admin/coupons  ·  Coupons
+p-adm-offers.dc.html	/admin/offers  ·  Offers
+p-adm-credits-limits.dc.html	/admin/credits-limits  ·  Credits & limits
+p-adm-revenue.dc.html	/admin/revenue  ·  Revenue
+p-adm-payments.dc.html	/admin/payments  ·  Payments
+p-adm-plans.dc.html	/admin/plans  ·  Plans
+p-adm-plan-edit.dc.html	/admin/plans/[id]/edit  ·  Plan editor
+p-adm-addons.dc.html	/admin/addons  ·  Addons
+p-adm-features.dc.html	/admin/features  ·  Feature flags
+p-adm-products.dc.html	/admin/products  ·  Products
+p-adm-carriers.dc.html	/admin/carriers  ·  Carriers
+p-adm-templates.dc.html	/admin/templates  ·  Templates
+p-adm-activity.dc.html	/admin/activity  ·  Activity
+p-adm-audit-log.dc.html	/admin/audit-log  ·  Audit log
+p-adm-compliance.dc.html	/admin/compliance-sources  ·  Compliance sources
+p-adm-email.dc.html	/admin/email  ·  Email
+p-adm-system.dc.html	/admin/system  ·  System
+p-adm-advanced.dc.html	/admin/advanced  ·  Advanced
+p-adm-admins.dc.html	/admin/admins  ·  Admins
+p-adm-legal.dc.html	/admin/legal  ·  Legal
+p-adm-settings-alias.dc.html	/admin/settings  ·  Settings
+p-par-login.dc.html	/partner/login  ·  Partner sign-in
+p-par-set-password.dc.html	/partner/set-password  ·  Set password
+p-par-accept-invite.dc.html	/partner/accept-invite  ·  Accept invite
+p-par-overview.dc.html	/partner  ·  Overview
+p-par-submit-lead.dc.html	/partner/submit-lead  ·  Submit a lead
+p-par-pipeline.dc.html	/partner/pipeline  ·  Pipeline
+p-par-messages.dc.html	/partner/messages  ·  Messages
+p-par-team.dc.html	/partner/team  ·  Team access
+p-par-team-review.dc.html	/partner/team-review  ·  Team review
+p-par-settings.dc.html	/partner/settings  ·  Settings
+p-mkt-home.dc.html	/ (marketing)  ·  Landing page
+p-mkt-logins.dc.html	The three sign-in doors
+p-mkt-motion.dc.html	Motion
+p-app-lead-lists.dc.html	/app/lead-lists  ·  Lead lists
+p-app-lead-list-detail.dc.html	/app/lead-lists/[batchId]  ·  Lead list detail
+p-mkt-chain.dc.html	The outbound chain
+p-app-booked-appointments.dc.html	Appointments & setters
+p-adm-state-disclosures.dc.html	/admin/state-disclosures  ·  Disclosures
+p-adm-tenant-features.dc.html	↳ tab  ·  Feature overrides
+p-adm-tenant-subscription.dc.html	↳ tab  ·  Subscription & billing
+p-adm-tenant-users.dc.html	↳ tab  ·  Users & seats
+p-app-calendar.dc.html	/app/calendar  ·  Appointment calendar
+p-app-consent.dc.html	/app/consent  ·  Consent locker
+p-app-tcpa.dc.html	/app/tcpa  ·  TCPA / DNC
+p-gate-404.dc.html	404  ·  Not found
+p-gate-feature.dc.html	gate  ·  Plan does not include it
+p-gate-role.dc.html	gate  ·  Role does not include it
+p-index.dc.html	Every screen in Insurvas
+p-lead-attempts.dc.html	↳ tab  ·  Attempts
+p-lead-callbacks.dc.html	↳ tab  ·  Callbacks
+p-lead-notes.dc.html	↳ tab  ·  Notes
+p-lead-nurture.dc.html	↳ tab  ·  Nurture
+p-nav-admin.dc.html	↳ staff  ·  Staff search
+p-nav-alerts.dc.html	↳ state  ·  Alerts
+p-nav-notifications.dc.html	↳ state  ·  Notifications
+p-nav-profile.dc.html	↳ state  ·  Account menu
+p-nav-search.dc.html	↳ state  ·  Search
+p-nav-spec.dc.html	The top bar
+p-ov-assign-drawer.dc.html	↳ overlay  ·  Assign the remainder
+p-ov-column-mapping.dc.html	↳ overlay  ·  Map the columns
+p-ov-confirm-revoke.dc.html	↳ overlay  ·  Revoke a posting key
+p-ov-dialer-preflight.dc.html	↳ overlay  ·  Screening preflight
+p-ov-disposition-wizard.dc.html	↳ overlay  ·  Record call outcome
+p-ov-stage-manager.dc.html	↳ overlay  ·  New stage
+p-set-agency-profile.dc.html	↳ agency-profile  ·  Agency profile
+p-set-cadence.dc.html	↳ cadence  ·  Dialing cadence
+p-set-calendar.dc.html	↳ calendar  ·  Calendar & availability
+p-set-calling-windows.dc.html	↳ calling-windows  ·  Calling windows
+p-set-carrier-library.dc.html	↳ carrier-library  ·  Carrier library
+p-set-dispositions.dc.html	↳ dispositions  ·  Dispositions
+p-set-form-templates.dc.html	↳ form-templates  ·  Form templates
+p-set-lead-posting.dc.html	↳ lead-posting  ·  Lead posting
+p-set-managed.dc.html	↳ alerts, billing  ·  Managed elsewhere
+p-set-pipelines.dc.html	↳ pipelines  ·  Pipelines
+p-set-queue-sla.dc.html	↳ queue-sla  ·  Queue & SLA
+p-set-states-licences.dc.html	↳ states-licences  ·  States & licences
+p-set-team-access.dc.html	↳ team-access  ·  Team & access
+p-states.dc.html	The five states of a list

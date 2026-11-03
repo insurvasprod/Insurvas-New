@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
 import { canAccessConfigurationSection } from "@/lib/configuration/sections";
-import { AdminPageHeader } from "@/components/admin/page-header";
 import { OffersTable } from "@/components/admin/offers-table";
 import { fetchOffers } from "@/lib/offers/queries";
 import { fetchPlans } from "@/lib/plans/queries";
@@ -18,13 +17,9 @@ export default async function OffersPage() {
   const [offers, plans, subscriptions] = await Promise.all([fetchOffers(), fetchPlans(), fetchSubscriptions()]);
 
   return (
-    <div className="space-y-6">
-      <AdminPageHeader title="Offers &amp; discounts" subtitle="Promotions and automatic discount rules." />
-      <OffersTable
-        initialOffers={offers}
-        plans={plans}
-        subscriptions={subscriptions.filter((item) => item.status !== "cancelled")}
-      />
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      {/* A cancelled subscription can never be targeted, so it is never offered in Apply. */}
+      <OffersTable initialOffers={offers} plans={plans} subscriptions={subscriptions.filter((item) => item.status !== "cancelled")} now={new Date().getTime()} />
     </div>
   );
 }

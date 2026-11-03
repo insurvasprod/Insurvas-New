@@ -4,6 +4,9 @@ import { z } from "zod";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { checkCoupon } from "@/lib/checkout/start";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { couponSummary } from "@/lib/checkout/couponSummary";
+import { isFullComp } from "@/lib/coupons/discount";
+import type { BillingCycle } from "@/lib/money";
 
 const schema = z.object({ code: z.string().trim().min(1).max(40) });
 
@@ -34,18 +37,33 @@ export async function POST(request: NextRequest) {
   const supabase = getSupabaseServiceClient();
   const { data: selection } = await supabase
     .from("signup_selections")
-    .select("plan_id")
+    .select("plan_id, billing_cycle")
     .eq("tenant_id", context.tenantId)
-    .maybeSingle<{ plan_id: string }>();
+    .maybeSingle<{ plan_id: string; billing_cycle: BillingCycle }>();
 
   if (!selection) return NextResponse.json({ error: "No plan selected" }, { status: 409 });
 
   const result = await checkCoupon(parsed.data.code, selection.plan_id);
   if (!result.ok) return NextResponse.json({ error: result.reason }, { status: 409 });
 
+  // 100% off forever: checkout starts the plan with no payment page at all (lib/checkout/fullComp.ts).
+  if (isFullComp(result.terms)) {
+    return NextResponse.json({
+      ok: true,
+      code: result.code,
+      summary: "100% off, forever",
+      fullComp: true,
+      mustEnterAtCheckout: false,
+      instruction: "No card needed. Your plan starts free and is never charged.",
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     code: result.code,
+    // What the code is worth on THIS plan's cycle — "20% off the first three months" — so the
+    // buyer knows what to expect on the payment page. It describes the discount; it applies nothing.
+    summary: couponSummary(result.terms, selection.billing_cycle),
     // Explicit rather than implied, so a future caller cannot read `ok: true` as "discounted".
     mustEnterAtCheckout: true,
     instruction: `Enter ${result.code} on the payment page to get your discount.`,

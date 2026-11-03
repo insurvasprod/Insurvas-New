@@ -1,13 +1,19 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
+import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { getTeamSnapshot } from "@/lib/tenantTeam/service";
 import { inviteTeamMemberSchema } from "@/lib/tenantTeam/schemas";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { audit } from "@/lib/audit/log";
 import { buildInviteUrl, generateInviteToken, hashInviteToken, inviteExpiryFromNow } from "@/lib/users/invitations";
-import { sendInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { sendTeamInvitationEmail } from "@/lib/email/sendInvitationEmail";
+import { configuredAppOrigin } from "@/lib/urls/origin";
+import { assertOutboundLimit, outboundLimitResponse, outboundLimitSnapshot } from "@/lib/metering/outbound";
+import { isAgencyTenant } from "@/lib/agency/audience";
+import { inviteAgencyMember } from "@/lib/agency/invite";
+import { isAgencyTitle } from "@/lib/tenantAuth/roles";
 
 export async function GET() {
   const auth = await requireTenant(["owner"]);
@@ -15,8 +21,9 @@ export async function GET() {
 
   try {
     const entitlement = await getEntitlement(auth.context.tenantId);
-    return NextResponse.json(await getTeamSnapshot(auth.context.tenantId, entitlement));
-  } catch {
+    return NextResponse.json({ ...(await getTeamSnapshot(auth.context.tenantId, entitlement)), outboundLimits: await outboundLimitSnapshot(auth.context.tenantId) });
+  } catch (error) {
+    console.error("[team] failed to load team snapshot", error instanceof Error ? error.message : error);
     return NextResponse.json({ error: "Could not load your team" }, { status: 500 });
   }
 }
@@ -31,10 +38,65 @@ export async function POST(request: NextRequest) {
   }
 
   const { name, email, role } = parsed.data;
+
+  // AG-0.6 · an agency's invite: titles, a person already on Insurvas elsewhere, the producer row from the
+  // moment of the invite, the 7-day link and the band check. Same route, same email, one flow (LA-8.6).
+  if (await isAgencyTenant(auth.context.tenantId)) {
+    if (role === "owner") return NextResponse.json({ error: "An agency has one owner. Invite an admin instead.", code: "owner_not_invitable" }, { status: 400 });
+    if (role === "admin" && auth.context.memberRole === "admin") return NextResponse.json({ error: "Only the account owner can invite an admin.", code: "owner_only" }, { status: 403 });
+    const agencyToken = generateInviteToken();
+    const entitlementForAgency = await getEntitlement(auth.context.tenantId);
+    const invited = await inviteAgencyMember({
+      tenantId: auth.context.tenantId,
+      actorId: auth.context.userId,
+      name,
+      email,
+      memberRole: role,
+      tokenHash: hashInviteToken(agencyToken),
+      maxBufferSeats: entitlementForAgency.limits.max_buffer_seats,
+    });
+    if (!invited.ok) return NextResponse.json(invited.body, { status: invited.status });
+    const agencyInviteUrl = buildInviteUrl(agencyToken, configuredAppOrigin("agent"));
+    const { delivered: sent } = await sendTeamInvitationEmail({ to: email, name, inviteUrl: agencyInviteUrl, expiresAt: invited.expiresAt, userId: invited.userId, tenantId: auth.context.tenantId, inviterId: auth.context.userId, role, audience: "agency", existingAccount: invited.existing });
+    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.member_invited", targetType: "user", targetId: invited.userId, metadata: { email, role, tenantId: auth.context.tenantId, delivered: sent, existingAccount: invited.existing, producerId: invited.producerId }, request });
+    await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${invited.userId}`, label: `${name} (${email})`, from: null, to: `invited as ${role}` }] });
+    return NextResponse.json({ ok: true, member: { id: invited.userId, name, email, role, producerId: invited.producerId }, invite: { url: agencyInviteUrl, expiresAt: invited.expiresAt.toISOString(), delivered: sent } }, { status: 201 });
+  }
+  if (isAgencyTitle(role)) return NextResponse.json({ error: "Admin and manager exist only on an agency plan.", code: "agency_plan_required" }, { status: 400 });
+
   const token = generateInviteToken();
   const expiresAt = await inviteExpiryFromNow();
+  const origin = configuredAppOrigin("agent");
   const supabase = getSupabaseServiceClient();
-  const { data, error } = await supabase.rpc("tenant_invite_user", {
+  const entitlement = await getEntitlement(auth.context.tenantId);
+  if (role === "setter") {
+    try { await assertOutboundLimit(auth.context.tenantId, "max_setter_seats"); }
+    catch (error) { const limit = outboundLimitResponse(error); if (limit) return NextResponse.json(limit, { status: 403 }); return NextResponse.json({ error: "Could not check setter-seat availability" }, { status: 500 }); }
+  }
+  const { data: existingUser, error: existingUserError } = await supabase
+    .from("users")
+    .select("id")
+    .ilike("email", email)
+    .maybeSingle<{ id: string }>();
+  if (existingUserError) return NextResponse.json({ error: "Could not invite this teammate" }, { status: 500 });
+  if (existingUser) return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
+
+  // The public profile is correctly FK-linked to auth.users. Create the Auth identity first;
+  // the database trigger creates its profile, and the invitation RPC attaches that identity to
+  // this tenant atomically. The random password is unusable until the invitation is redeemed.
+  const { data: authUser, error: authUserError } = await supabase.auth.admin.createUser({
+    email,
+    password: `Invite-${crypto.randomUUID()}-Only!`,
+    email_confirm: false,
+    user_metadata: { name, full_name: name, display_name: name },
+  });
+  if (authUserError || !authUser.user) {
+    if (authUserError?.code === "email_exists") return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
+    return NextResponse.json({ error: "Could not invite this teammate" }, { status: 500 });
+  }
+
+  const { data, error } = await supabase.rpc("tenant_invite_user_with_auth", {
+    p_auth_user_id: authUser.user.id,
     p_name: name,
     p_email: email,
     p_role: role,
@@ -42,17 +104,27 @@ export async function POST(request: NextRequest) {
     p_token_hash: hashInviteToken(token),
     p_expires_at: expiresAt.toISOString(),
     p_created_by: auth.context.userId,
+    p_max_buffer_seats: entitlement.limits.max_buffer_seats,
   });
 
   if (error) {
-    if (error.code === "23505") return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
+    await supabase.auth.admin.deleteUser(authUser.user.id);
+    // LA-2.12: the invite path now refuses past max_seats as well as max_buffer_seats. Both arrive
+    // as the same shape of message, and both have to reach the user as an upgrade prompt rather
+    // than as "Could not invite this teammate".
+    const seats = error.message?.match(/seat_limit_reached:(\d+):(\d+)/);
+    if (seats) return NextResponse.json({ error: `Your plan has reached its seat limit (${seats[1]} of ${seats[2]} seats). Upgrade to add another teammate.`, code: "limit_reached", limitKey: "max_seats", usage: Number(seats[1]), limit: Number(seats[2]), upgrade: true }, { status: 403 });
+    const limit = error.message?.match(/max_buffer_seats:(\d+):(\d+)/);
+    if (limit) return NextResponse.json({ error: `Your plan has reached its buffer-agent seat limit (${limit[1]} of ${limit[2]} buffer seats). Upgrade to invite another buffer agent.`, code: "limit_reached", limitKey: "max_buffer_seats", usage: Number(limit[1]), limit: Number(limit[2]), upgrade: true }, { status: 403 });
+    const setters = error.message?.match(/max_setter_seats:(\d+):(\d+)/);
+    if (setters) return NextResponse.json({ error: `Your plan has reached setter seats (${setters[1]} of ${setters[2]}). Upgrade to invite another setter.`, code: "limit_reached", limitKey: "max_setter_seats", usage: Number(setters[1]), limit: Number(setters[2]), upgrade: true }, { status: 403 });
+    if (error.code === "23505" || error.message?.includes("email_exists")) return NextResponse.json({ error: "This email is already registered" }, { status: 409 });
     return NextResponse.json({ error: "Could not invite this teammate" }, { status: 500 });
   }
 
   const result = Array.isArray(data) ? data[0] : data;
-  const origin = process.env.NEXT_PUBLIC_AGENT_APP_URL || process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin;
   const inviteUrl = buildInviteUrl(token, origin);
-  const { delivered } = await sendInvitationEmail({ to: email, name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id });
+  const { delivered } = await sendTeamInvitationEmail({ to: email, name, inviteUrl, expiresAt, userId: result.user_id, tenantId: result.tenant_id, inviterId: auth.context.userId, role, audience: "individual", existingAccount: false });
 
   await audit({
     actorType: "tenant",
@@ -64,5 +136,6 @@ export async function POST(request: NextRequest) {
     request,
   });
 
+  await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "team-access", changes: [{ key: `member:${result.user_id}`, label: `${name} (${email})`, from: null, to: `invited as ${role}` }] });
   return NextResponse.json({ ok: true, member: { id: result.user_id, name, email, role }, invite: { url: inviteUrl, expiresAt: expiresAt.toISOString(), delivered } }, { status: 201 });
 }

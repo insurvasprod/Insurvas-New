@@ -6,7 +6,9 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 import { decryptVendorCredentials, encryptVendorCredentials } from "./crypto";
 import { DNC_BLOCK_MESSAGE, type ComplianceVendor, type ComplianceVendorType } from "./constants";
 import { runOrderedFallback } from "./fallback";
-import { maskDialPhone, normalizeDialPhone, parseDncScrubDecision, type DncScrubDecision } from "./scrub";
+import { maskDialPhone, parseDncScrubDecision, type DncScrubDecision } from "./scrub";
+import { demoDncAllowed, demoScreeningEnabled } from "./demo";
+import { FALLBACK_METHOD, LAST_CHECK_LOOKBACK_DAYS, TEST_CONNECTION_METHOD, countVendorCalls, vendorAvailable, type CountSource } from "./vendorHealth";
 
 type VendorRow = {
   id: string; name: string; vendor_type: ComplianceVendorType; endpoint: string; credentials_enc: string | null;
@@ -16,25 +18,51 @@ type VendorRow = {
 
 function providerCode(id: string) { return `compliance_vendor:${id}`; }
 
+// Head counts, not row fetches: downloading every 24h row grew with dial volume and silently
+// undercounted past PostgREST's 1000-row cap. Fallback hand-off rows are excluded (vendorHealth.ts):
+// one failed lookup used to count as two failures. This is the gate's count as well as the page's.
+function callCounts(id: string, since: string) {
+  return countVendorCalls(getSupabaseServiceClient() as unknown as CountSource, providerCode(id), since);
+}
+
 async function health(id: string) {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await getSupabaseServiceClient()
-    .from("provider_calls")
-    .select("ts, status")
-    .eq("provider", providerCode(id))
-    .gte("ts", since);
-  if (error) throw new Error(`Could not load compliance vendor health: ${error.message}`);
-  const calls = data ?? [];
-  const failures = calls.filter((row) => row.status !== "ok").length;
-  const latestSuccess = calls.filter((row) => row.status === "ok").sort((a, b) => b.ts.localeCompare(a.ts))[0]?.ts ?? null;
-  return { calls24h: calls.length, failures24h: failures, failureRate24h: calls.length ? Math.round((failures / calls.length) * 100) : 0, latestSuccess };
+  const db = getSupabaseServiceClient();
+  const [counts, latestOk, latestAny] = await Promise.all([
+    callCounts(id, since),
+    db.from("provider_calls").select("ts").eq("provider", providerCode(id)).gte("ts", since).eq("status", "ok")
+      .neq("method", FALLBACK_METHOD).neq("method", TEST_CONNECTION_METHOD).order("ts", { ascending: false }).limit(1).maybeSingle<{ ts: string }>(),
+    // "Last checked": the latest call of any outcome over a longer look-back than the health window,
+    // so a vendor that has gone quiet still shows when it was last asked. Bounded because
+    // provider_calls has no (provider, ts) index: an unbounded newest-first search for a vendor that
+    // was never called would walk the whole table.
+    db.from("provider_calls").select("ts, status, duration_ms").eq("provider", providerCode(id))
+      .gte("ts", new Date(Date.now() - LAST_CHECK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString())
+      .neq("method", FALLBACK_METHOD).order("ts", { ascending: false }).limit(1)
+      .maybeSingle<{ ts: string; status: string; duration_ms: number | null }>(),
+  ]);
+  if (latestOk.error) throw new Error(`Could not load compliance vendor health: ${latestOk.error.message}`);
+  if (latestAny.error) throw new Error(`Could not load compliance vendor health: ${latestAny.error.message}`);
+  const { calls24h, failures24h } = counts;
+  return {
+    calls24h, failures24h, failureRate24h: calls24h ? Math.round((failures24h / calls24h) * 100) : 0,
+    latestSuccess: latestOk.data?.ts ?? null,
+    lastCheckedAt: latestAny.data?.ts ?? null,
+    lastLatencyMs: latestAny.data?.status === "ok" ? latestAny.data.duration_ms ?? null : null,
+  };
 }
 
 function safe(row: VendorRow, stats: Awaited<ReturnType<typeof health>>): ComplianceVendor {
   return {
     id: row.id, name: row.name, vendor_type: row.vendor_type, endpoint: row.endpoint,
     is_enabled: row.is_enabled, priority: row.priority, cost_per_lookup_cents: row.cost_per_lookup_cents,
-    credentials_present: Boolean(row.credentials_enc), last_success_at: stats.latestSuccess ?? row.last_success_at,
+    credentials_present: Boolean(row.credentials_enc),
+    // No calls means health is unknown, not down. Once calls exist, a vendor is unavailable
+    // only when every observed call in the rolling window failed.
+    available: vendorAvailable({ calls24h: stats.calls24h, failures24h: stats.failures24h }),
+    last_success_at: stats.latestSuccess ?? row.last_success_at,
+    last_checked_at: stats.lastCheckedAt,
+    last_latency_ms: stats.lastLatencyMs,
     calls_24h: stats.calls24h, failures_24h: stats.failures24h, failure_rate_24h: stats.failureRate24h,
   };
 }
@@ -75,26 +103,86 @@ export async function updateComplianceVendor(id: string, input: {
   return data;
 }
 
-export async function getComplianceVendorType(id: string): Promise<ComplianceVendorType | null> {
-  const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
-    .select("vendor_type").eq("id", id).maybeSingle<{ vendor_type: ComplianceVendorType }>();
-  if (error) throw new Error(`Could not load compliance vendor: ${error.message}`);
-  return data?.vendor_type ?? null;
-}
-
 export async function getDncDialingStatus() {
-  const count = await getEnabledDncVendorCount();
-  return { blocked: count === 0, reason: count === 0 ? DNC_BLOCK_MESSAGE : null };
-}
-
-export async function getEnabledDncVendorCount() {
-  const { count, error } = await getSupabaseServiceClient().from("compliance_vendors")
-    .select("id", { count: "exact", head: true }).eq("vendor_type", "dnc_scrub").eq("is_enabled", true);
+  if (demoScreeningEnabled()) return { blocked: false, reason: null };
+  const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
+    .select("id").eq("vendor_type", "dnc_scrub").eq("is_enabled", true);
   if (error) throw new Error(`Could not determine DNC availability: ${error.message}`);
-  return count ?? 0;
+  const vendors = (data ?? []) as Array<{ id: string }>;
+  // The gate only needs the counts; latestSuccess is display data for the admin list.
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const healthResults = await Promise.all(vendors.map((vendor) => callCounts(vendor.id, since)));
+  const available = healthResults.some(vendorAvailable);
+  return { blocked: vendors.length === 0 || !available, reason: vendors.length === 0 || !available ? DNC_BLOCK_MESSAGE : null };
 }
 
-/** Every outbound dialer must call this gate immediately before dialing. */
+export type ScreeningServiceStatus = {
+  /** True when every screening the scrub needs (litigator and DNC) has an enabled vendor whose latest real lookup answered, or that has not been asked yet. */
+  answering: boolean;
+  demo: boolean;
+  providers: Array<{ name: string; vendor_type: "dnc_scrub" | "litigator_scrub"; last_call_at: string | null; last_call_ok: boolean | null }>;
+  checkedAt: string;
+};
+
+/**
+ * "Check again" on a campaign whose scrub an outage stopped (2026-10-29): is the screening service
+ * answering now? Read-only — no vendor is called and nothing is billed. It reads the latest real
+ * lookup each enabled vendor answered or failed (any agency's; the vendors are the platform's), the
+ * same provider_calls rows the gate counts, with fallback hand-offs and admin tests left out.
+ */
+export async function getScreeningServiceStatus(): Promise<ScreeningServiceStatus> {
+  const checkedAt = new Date().toISOString();
+  if (demoScreeningEnabled()) return { answering: true, demo: true, providers: [], checkedAt };
+  const db = getSupabaseServiceClient();
+  const { data, error } = await db.from("compliance_vendors")
+    .select("id, name, vendor_type").in("vendor_type", ["dnc_scrub", "litigator_scrub"]).eq("is_enabled", true)
+    .order("vendor_type").order("priority");
+  if (error) throw new Error(`Could not load screening vendors: ${error.message}`);
+  const since = new Date(Date.now() - LAST_CHECK_LOOKBACK_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const providers = await Promise.all(((data ?? []) as Array<{ id: string; name: string; vendor_type: "dnc_scrub" | "litigator_scrub" }>).map(async (row) => {
+    const latest = await db.from("provider_calls").select("ts, status").eq("provider", providerCode(row.id)).gte("ts", since)
+      .neq("method", FALLBACK_METHOD).neq("method", TEST_CONNECTION_METHOD).order("ts", { ascending: false }).limit(1)
+      .maybeSingle<{ ts: string; status: string }>();
+    if (latest.error) throw new Error(`Could not load screening vendor health: ${latest.error.message}`);
+    return { name: row.name, vendor_type: row.vendor_type, last_call_at: latest.data?.ts ?? null, last_call_ok: latest.data ? latest.data.status === "ok" : null };
+  }));
+  const answering = (["litigator_scrub", "dnc_scrub"] as const).every((type) => providers.some((vendor) => vendor.vendor_type === type && vendor.last_call_ok !== false));
+  return { answering, demo: false, providers, checkedAt };
+}
+
+/**
+ * The registry screen's data: the vendors, plus the DNC verdict from the real gate (which honours
+ * demo mode) rather than one recomputed in the browser.
+ */
+export async function getComplianceRegistry(): Promise<{ vendors: ComplianceVendor[]; dialing: { demo: boolean; dncBlocked: boolean }; readAt: string }> {
+  const [vendors, dnc] = await Promise.all([listComplianceVendors(), getDncDialingStatus()]);
+  return { vendors, dialing: { demo: demoScreeningEnabled(), dncBlocked: dnc.blocked }, readAt: new Date().toISOString() };
+}
+
+export async function getComplianceVendorState(id: string): Promise<{ name: string; vendor_type: ComplianceVendorType; is_enabled: boolean } | null> {
+  const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
+    .select("name, vendor_type, is_enabled").eq("id", id)
+    .maybeSingle<{ name: string; vendor_type: ComplianceVendorType; is_enabled: boolean }>();
+  if (error) throw new Error(`Could not load compliance vendor: ${error.message}`);
+  return data ?? null;
+}
+
+/**
+ * What taking vendor `id` out of the DNC pool would leave: how many OTHER enabled DNC vendors there
+ * are, and how many of them the gate counts as available (the gate's own rule and counts). Zero
+ * available means the change blocks dialing platform-wide.
+ */
+export async function otherDncVendorsAfterRemoving(id: string): Promise<{ enabled: number; available: number }> {
+  const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
+    .select("id").eq("vendor_type", "dnc_scrub").eq("is_enabled", true).neq("id", id);
+  if (error) throw new Error(`Could not determine DNC availability: ${error.message}`);
+  const others = (data ?? []) as Array<{ id: string }>;
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const counts = await Promise.all(others.map((vendor) => callCounts(vendor.id, since)));
+  return { enabled: others.length, available: counts.filter(vendorAvailable).length };
+}
+
+/** The vendor-availability gate for vendor work (import scrubs). Never a dial gate: owner decision 3. */
 export async function assertDncVendorAvailable(): Promise<void> {
   const status = await getDncDialingStatus();
   if (status.blocked) throw new Error(DNC_BLOCK_MESSAGE);
@@ -104,7 +192,7 @@ type SafeJson = { [key: string]: Json };
 
 async function logCall(id: string, status: "ok" | "error" | "timeout", startedAt: number, response: SafeJson | null, errorCategory?: string) {
   await recordProviderCall({
-    tenantId: null, provider: providerCode(id), method: "test_connection",
+    tenantId: null, provider: providerCode(id), method: TEST_CONNECTION_METHOD,
     request: { vendorId: id }, response: response ?? (errorCategory ? { errorCategory } : null), status,
     durationMs: Math.round(performance.now() - startedAt),
   });
@@ -144,7 +232,7 @@ export async function testComplianceVendor(id: string, fetcher: typeof fetch = f
 
 export async function runWithComplianceFallback<T>(
   vendorType: ComplianceVendorType,
-  operation: (vendor: { id: string; endpoint: string; credentials: string | null }) => Promise<T>,
+  operation: (vendor: { id: string; name: string; endpoint: string; credentials: string | null }) => Promise<T>,
   options: {
     tenantId?: string | null;
     method?: string;
@@ -153,18 +241,21 @@ export async function runWithComplianceFallback<T>(
   } = {},
 ) {
   const { data, error } = await getSupabaseServiceClient().from("compliance_vendors")
-    .select("id, endpoint, credentials_enc").eq("vendor_type", vendorType).eq("is_enabled", true).order("priority").order("name");
+    .select("id, name, endpoint, credentials_enc").eq("vendor_type", vendorType).eq("is_enabled", true).order("priority").order("name");
   if (error) throw new Error(`Could not load ${vendorType} vendors: ${error.message}`);
   const vendors = (data ?? []).map((row) => {
-    const item = row as { id: string; endpoint: string; credentials_enc: string | null };
+    const item = row as { id: string; name: string; endpoint: string; credentials_enc: string | null };
     return { id: item.id, endpoint: item.endpoint, credentials: decryptVendorCredentials(item.credentials_enc) };
   });
+  // The vendor's display name rides beside the fallback loop (which only knows id/endpoint/credentials),
+  // so a caller can say which vendor answered — the dial preflight dialog names it.
+  const names = new Map((data ?? []).map((row) => [(row as { id: string }).id, (row as { name: string }).name]));
   const method = options.method ?? "compliance_lookup";
   const request = options.request ?? { vendorType };
   return runOrderedFallback(vendors, async (vendor) => {
     const startedAt = performance.now();
     try {
-      const result = await operation(vendor);
+      const result = await operation({ ...vendor, name: names.get(vendor.id) ?? "" });
       await recordProviderCall({
         tenantId: options.tenantId ?? null,
         provider: providerCode(vendor.id),
@@ -200,13 +291,40 @@ export async function runWithComplianceFallback<T>(
   });
 }
 
-export async function performDncDialPreflight(
-  phone: string,
+/**
+ * There is no vendor lookup at the dial. Owner decision 3 ("Sixteen Open Questions, Answered",
+ * LA-2.3): the serve- and dial-time check reads our own tables only — the internal DNC list, the
+ * stored scrub hits and the import's stored litigator answers (lib/dialerScripts/service.ts,
+ * getDialerEligibility, re-run at the click). A vendor outage blocks import, not dialling. The
+ * vendor is asked at import, by the periodic re-scrub, and by the "Check a number" dialog below.
+ */
+
+/**
+ * The vendor half of the preflight: the demo shortcut, the fail-closed availability gate, then the
+ * ordered vendor lookup, for the "Check a number" dialog (lib/compliance/dialPreflight.ts), which
+ * runs it even when the tenant list already refuses (it shows every check), and say which vendor
+ * answered. Throws DNC_BLOCK_MESSAGE when no vendor is available, as before.
+ */
+export async function performDncVendorLookup(
+  normalized: string,
   tenantId: string,
   fetcher: typeof fetch = fetch,
-): Promise<{ allowed: boolean; phone: string }> {
-  const normalized = normalizeDialPhone(phone);
+): Promise<{ allowed: boolean; vendorName: string }> {
+  if (demoScreeningEnabled()) {
+    const allowed = demoDncAllowed(normalized);
+    await recordProviderCall({
+      tenantId,
+      provider: providerCode("demo:dnc_scrub"),
+      method: "dnc_scrub",
+      request: { phone: maskDialPhone(normalized) },
+      response: { demo: true, allowed },
+      status: "ok",
+      durationMs: 0,
+    });
+    return { allowed, vendorName: "Demo DNC screening" };
+  }
   await assertDncVendorAvailable();
+  let vendorName = "";
   const decision = await runWithComplianceFallback<DncScrubDecision>(
     "dnc_scrub",
     async (vendor) => {
@@ -220,7 +338,9 @@ export async function performDncDialPreflight(
       });
       if (!response.ok) throw new Error(`Vendor answered with HTTP ${response.status}`);
       const payload = await response.json().catch(() => null);
-      return parseDncScrubDecision(payload);
+      const parsed = parseDncScrubDecision(payload);
+      vendorName = vendor.name;
+      return parsed;
     },
     {
       tenantId,
@@ -229,5 +349,5 @@ export async function performDncDialPreflight(
       response: (result) => ({ allowed: result.allowed }),
     },
   );
-  return { allowed: decision.allowed, phone: maskDialPhone(normalized) };
+  return { allowed: decision.allowed, vendorName };
 }

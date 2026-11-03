@@ -1,0 +1,173 @@
+<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="Default" ss:Name="Normal">
+   <Alignment ss:Vertical="Bottom"/>
+   <Font ss:FontName="Calibri" x:Family="Swiss" ss:Size="11" ss:Color="#000000"/>
+  </Style>
+  <Style ss:ID="h"><Font ss:Bold="1"/></Style>
+ </Styles>
+ <Worksheet ss:Name="PolicyList">
+  <Table>
+   <Row>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Policy Number</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Client Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Joint Client Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Line Of Business</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Product Description</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Issue Date</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Purchase Premium $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Balance $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Surrender $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Annual Premium $</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Tax Qualified</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Tax Account Type</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Status</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Reason</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Writing Agent</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Writing Agent Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Split Agent</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Split Agent Name</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Servicing Agent</Data></Cell>
+    <Cell ss:StyleID="h"><Data ss:Type="String">Servicing Agent Name</Data></Cell>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0810001</Data></Cell>
+    <Cell><Data ss:Type="String">REMY TAMBERLANE</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-03T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">375.00</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0810002</Data></Cell>
+    <Cell><Data ss:Type="String">SUTTON UMBERFIELD</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-06-17T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">460.80</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0810003</Data></Cell>
+    <Cell><Data ss:Type="String">TATUM VIOLETTA</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-01T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">529.20</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0810004</Data></Cell>
+    <Cell><Data ss:Type="String">VESPER WEXLEY</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-07-15T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">334.20</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0810005</Data></Cell>
+    <Cell><Data ss:Type="String">WINSLOW YORKSHIRE</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-08-05T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">631.20</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+   <Row>
+    <Cell><Data ss:Type="String">0810006</Data></Cell>
+    <Cell><Data ss:Type="String">ZEPHYR ZELLWOOD</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">Life</Data></Cell>
+    <Cell><Data ss:Type="String">New Vantage III</Data></Cell>
+    <Cell><Data ss:Type="DateTime">2026-08-19T00:00:00.000</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell><Data ss:Type="Number">429.00</Data></Cell>
+    <Cell><Data ss:Type="String">               </Data></Cell>
+    <Cell><Data ss:Type="String">                              </Data></Cell>
+    <Cell><Data ss:Type="String">Active</Data></Cell>
+    <Cell/>
+    <Cell><Data ss:Type="String">K099581428</Data></Cell>
+    <Cell><Data ss:Type="String">HUNTER, ALISHA</Data></Cell>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+    <Cell/>
+   </Row>
+  </Table>
+ </Worksheet>
+</Workbook>

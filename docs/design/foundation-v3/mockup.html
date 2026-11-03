@@ -1,0 +1,1222 @@
+<meta charset="utf-8">
+<title>Insurvas UI Foundation v3</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@500;600;700&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Public+Sans:wght@400;500;600;700&family=Instrument+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a review document. Sticky control bar (typeface + theme), then sections that each show one shadcn pattern
+   rendered live in the chosen face: money cards, record cards, data table, card grid, overlays, then the critique.
+   Tokens are the v2 theme roles from the PDF; only typography and the card/table/overlay patterns are new. */
+:root {
+  --canvas: #F6F8FA;
+  --surface: #FFFFFF;
+  --raised: #F0F3F5;
+  --text: #18212B;
+  --muted: #5F6B7A;
+  --border: #E3E8EE;
+  --input: #8E99A6;
+  --primary: #087F63;
+  --primary-fg: #FFFFFF;
+  --primary-hover: #066B53;
+  --primary-soft: #E3F4EE;
+  --primary-ink: #06614B;
+  --chart-a: #087F63;
+  --chart-b: #9ED8C6;
+  --chart-c: #D9E5E1;
+  --good: #067A5E; --good-bg: #E3F4EE;
+  --info: #1F4FB8; --info-bg: #E8EFFD;
+  --warn: #8A5300; --warn-bg: #FDF1D6; --warn-dot: #D48A0B;
+  --bad: #B42318;  --bad-bg: #FDE8E7;
+  --scrim: rgba(16, 24, 32, 0.42);
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, 0.05);
+  --shadow-lg: 0 16px 40px -12px rgba(16, 24, 40, 0.22), 0 2px 6px rgba(16, 24, 40, 0.06);
+  --ring: 0 0 0 3px rgba(8, 127, 99, 0.28);
+  /* gloss: the foundation metric-card surface */
+  --gloss-top: #FFFFFF; --gloss-bottom: #F5F8F7; --gloss-sheen: rgba(7, 214, 160, 0.08); --gloss-edge: #DCE3E9;
+  --gloss-hi: rgba(255, 255, 255, 1); --gloss-glare: rgba(255, 255, 255, 0.75); --gloss-rim: rgba(255, 255, 255, 0.95);
+  --gloss-shadow: 0 1px 1px rgba(16, 24, 40, 0.04), 0 2px 4px -1px rgba(16, 24, 40, 0.05), 0 14px 30px -18px rgba(16, 24, 40, 0.24);
+  --gloss-shadow-hover: 0 1px 1px rgba(16, 24, 40, 0.04), 0 6px 10px -4px rgba(16, 24, 40, 0.08), 0 24px 40px -20px rgba(16, 24, 40, 0.32);
+  --gloss-foot: rgba(238, 243, 245, 0.72); --gloss-divider: #E4EAEF;
+  --ic-top: #ECFBF5; --ic-bottom: #C9EEDF; --ic-hi: rgba(255, 255, 255, 0.95); --ic-drop: rgba(8, 127, 99, 0.2); --ic-ring: rgba(8, 127, 99, 0.16);
+  --font-ui: 'Inter', system-ui, sans-serif;
+  --font-display: 'Inter Tight', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Geist Mono', ui-monospace, Menlo, Consolas, monospace;
+  --track-display: -0.025em;
+  --r-control: 8px; --r-card: 12px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --canvas: #101715; --surface: #18211E; --raised: #202B26; --text: #F2F6F4; --muted: #9FB0A7;
+    --border: #2A3631; --input: #55665F;
+    --primary: #35D6AA; --primary-fg: #0B2119; --primary-hover: #5ADFBB; --primary-soft: #173A30; --primary-ink: #6BE3C1;
+    --chart-a: #35D6AA; --chart-b: #1F7A62; --chart-c: #3A4C45;
+    --good: #6BE3C1; --good-bg: #173A30; --info: #A4C0F8; --info-bg: #172A4A;
+    --warn: #F3C266; --warn-bg: #3A2B0C; --warn-dot: #F3C266; --bad: #F7A1A1; --bad-bg: #3F1A1A;
+    --scrim: rgba(0, 0, 0, 0.6);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+    --ring: 0 0 0 3px rgba(53, 214, 170, 0.35);
+    --gloss-top: #212D28; --gloss-bottom: #151E1B; --gloss-sheen: rgba(53, 214, 170, 0.10); --gloss-edge: #2D3B36;
+    --gloss-hi: rgba(255, 255, 255, 0.07); --gloss-glare: rgba(255, 255, 255, 0.035); --gloss-rim: rgba(255, 255, 255, 0.16);
+    --gloss-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 34px -20px rgba(0, 0, 0, 0.95);
+    --gloss-shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.5), 0 26px 44px -20px rgba(0, 0, 0, 1);
+    --gloss-foot: rgba(0, 0, 0, 0.18); --gloss-divider: #2A3631;
+    --ic-top: #22503F; --ic-bottom: #12332A; --ic-hi: rgba(255, 255, 255, 0.14); --ic-drop: rgba(0, 0, 0, 0.45); --ic-ring: rgba(53, 214, 170, 0.22);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --canvas: #101715; --surface: #18211E; --raised: #202B26; --text: #F2F6F4; --muted: #9FB0A7;
+  --border: #2A3631; --input: #55665F;
+  --primary: #35D6AA; --primary-fg: #0B2119; --primary-hover: #5ADFBB; --primary-soft: #173A30; --primary-ink: #6BE3C1;
+  --chart-a: #35D6AA; --chart-b: #1F7A62; --chart-c: #3A4C45;
+  --good: #6BE3C1; --good-bg: #173A30; --info: #A4C0F8; --info-bg: #172A4A;
+  --warn: #F3C266; --warn-bg: #3A2B0C; --warn-dot: #F3C266; --bad: #F7A1A1; --bad-bg: #3F1A1A;
+  --scrim: rgba(0, 0, 0, 0.6);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 16px 40px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  --ring: 0 0 0 3px rgba(53, 214, 170, 0.35);
+  --gloss-top: #212D28; --gloss-bottom: #151E1B; --gloss-sheen: rgba(53, 214, 170, 0.10); --gloss-edge: #2D3B36;
+  --gloss-hi: rgba(255, 255, 255, 0.07); --gloss-glare: rgba(255, 255, 255, 0.035); --gloss-rim: rgba(255, 255, 255, 0.16);
+  --gloss-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 34px -20px rgba(0, 0, 0, 0.95);
+  --gloss-shadow-hover: 0 1px 2px rgba(0, 0, 0, 0.5), 0 26px 44px -20px rgba(0, 0, 0, 1);
+  --gloss-foot: rgba(0, 0, 0, 0.18); --gloss-divider: #2A3631;
+  --ic-top: #22503F; --ic-bottom: #12332A; --ic-hi: rgba(255, 255, 255, 0.14); --ic-drop: rgba(0, 0, 0, 0.45); --ic-ring: rgba(53, 214, 170, 0.22);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--canvas); color: var(--text);
+  font-family: var(--font-ui); font-size: 14px; line-height: 1.5;
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--canvas); }
+.doc { max-width: 1160px; margin: 0 auto; }
+h1, h2, h3, h4 { margin: 0; text-wrap: balance; font-family: var(--font-display); letter-spacing: var(--track-display); }
+p { margin: 0; }
+.num { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono); font-size: 0.92em; letter-spacing: 0; }
+svg.i { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.sm { width: 14px; height: 14px; }
+:focus-visible { outline: none; box-shadow: var(--ring); }
+
+/* ---------- document chrome ---------- */
+.masthead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; padding: 36px 0 20px; }
+.wordmark { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; letter-spacing: -0.02em; color: var(--text); }
+.wordmark i { width: 18px; height: 18px; border-radius: 5px; background: #07D6A0; display: inline-block; }
+.masthead h1 { font-size: 32px; font-weight: 600; line-height: 1.15; margin-top: 14px; }
+.masthead p { color: var(--muted); max-width: 64ch; margin-top: 8px; font-size: 15px; }
+.meta { font-size: 12px; color: var(--muted); text-align: right; line-height: 1.7; }
+.meta b { color: var(--text); font-weight: 600; }
+
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; background: color-mix(in srgb, var(--canvas) 92%, transparent); backdrop-filter: saturate(1.2) blur(8px); border-block: 1px solid var(--border); padding: 10px 0; display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; }
+.bar-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.bar-label { font-size: 12px; font-weight: 500; color: var(--muted); }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--raised); border-radius: var(--r-control); flex-wrap: wrap; }
+.seg button { font: inherit; font-size: 13px; font-weight: 500; height: 28px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--muted); cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm), 0 0 0 1px var(--border); }
+
+.section { padding-top: 56px; }
+.sec-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; align-items: end; margin-bottom: 20px; }
+.sec-head h2 { font-size: 22px; font-weight: 600; line-height: 1.25; }
+.sec-head p { color: var(--muted); max-width: 70ch; margin-top: 6px; grid-column: 1; }
+.kicker { font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+.spec-note { font-size: 12px; color: var(--muted); margin-top: 12px; }
+.spec-note code, .rules code { font-family: var(--font-mono); font-size: 11.5px; background: var(--raised); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+
+/* ---------- shadcn primitives ---------- */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-sm); min-width: 0; }
+.btn { font: inherit; font-size: 14px; font-weight: 500; height: 36px; padding: 0 14px; border-radius: var(--r-control); border: 1px solid transparent; display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer; white-space: nowrap; letter-spacing: -0.005em; }
+.btn.primary { background: var(--primary); color: var(--primary-fg); }
+.btn.primary:hover { background: var(--primary-hover); }
+.btn.outline { background: var(--surface); border-color: var(--border); color: var(--text); box-shadow: var(--shadow-sm); }
+.btn.outline:hover { background: var(--raised); }
+.btn.ghost { background: transparent; color: var(--text); }
+.btn.ghost:hover { background: var(--raised); }
+.btn.danger { background: var(--bad); color: var(--surface); }
+.btn.dashed { border: 1px dashed var(--input); background: transparent; color: var(--text); height: 32px; font-size: 13px; padding: 0 10px; }
+.btn.sm { height: 32px; font-size: 13px; padding: 0 10px; }
+.btn.icon { width: 32px; height: 32px; padding: 0; }
+.input { height: 36px; border: 1px solid var(--input); border-radius: var(--r-control); background: var(--surface); display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 14px; color: var(--text); min-width: 0; }
+.input.ph { color: var(--muted); }
+.input .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.input.focus { border-color: var(--primary); box-shadow: var(--ring); }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: 13px; font-weight: 500; }
+.field .hint { font-size: 12px; color: var(--muted); }
+.badge { display: inline-flex; align-items: center; gap: 6px; height: 22px; padding: 0 8px; border-radius: 6px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.badge.plain::before { display: none; }
+.b-good { background: var(--good-bg); color: var(--good); }
+.b-info { background: var(--info-bg); color: var(--info); }
+.b-warn { background: var(--warn-bg); color: var(--warn); }
+.b-bad { background: var(--bad-bg); color: var(--bad); }
+.b-neutral { background: var(--raised); color: var(--muted); }
+.delta { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.delta.up { color: var(--good); }
+.delta.down { color: var(--bad); }
+.check { width: 16px; height: 16px; border: 1px solid var(--input); border-radius: 4px; display: inline-grid; place-items: center; background: var(--surface); vertical-align: middle; }
+.check.on { background: var(--primary); border-color: var(--primary); color: var(--primary-fg); }
+.check.on svg { width: 12px; height: 12px; stroke-width: 3; }
+.avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; background: var(--primary-soft); color: var(--primary-ink); flex-shrink: 0; }
+.mark { width: 32px; height: 32px; border-radius: 8px; display: grid; place-items: center; font-size: 12px; font-weight: 700; border: 1px solid var(--border); background: var(--raised); color: var(--text); flex-shrink: 0; letter-spacing: -0.02em; }
+.kbd { font-family: var(--font-mono); font-size: 11px; color: var(--muted); border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; line-height: 18px; background: var(--surface); }
+.sep { height: 1px; background: var(--border); }
+
+/* ---------- typeface cards ---------- */
+.faces { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.face { text-align: left; font: inherit; color: inherit; cursor: pointer; padding: 18px; display: flex; flex-direction: column; gap: 12px; position: relative; }
+.face:hover { border-color: var(--input); }
+.face[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.face-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.face-name { font-size: 13px; font-weight: 600; font-family: var(--font-ui); letter-spacing: 0; }
+.face-sample { font-size: 30px; font-weight: 600; line-height: 1.1; letter-spacing: -0.03em; }
+.face-figs { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; display: flex; justify-content: space-between; gap: 8px; border-top: 1px dashed var(--border); padding-top: 10px; }
+.face-who { font-size: 12px; color: var(--muted); font-family: var(--font-ui); line-height: 1.5; }
+.face-who b { color: var(--text); font-weight: 500; }
+.rec { font-size: 11px; font-weight: 600; color: var(--primary-ink); background: var(--primary-soft); padding: 2px 7px; border-radius: 999px; }
+
+/* ---------- money cards ---------- */
+.kpi-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 12px; }
+.kpi-hero { grid-column: span 7; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.kpi-side { grid-column: span 5; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+.kpi-strip { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.kpi-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.kpi-title { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; color: var(--muted); }
+.kpi-title .ic { width: 28px; height: 28px; border-radius: 7px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary-ink); }
+.money { font-family: var(--font-display); font-size: 40px; font-weight: 600; letter-spacing: -0.035em; line-height: 1; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; }
+.money .cur { font-size: 0.55em; font-weight: 500; color: var(--muted); margin-right: 3px; align-self: flex-start; margin-top: 4px; letter-spacing: 0; }
+.money .cents { font-size: 0.5em; color: var(--muted); font-weight: 500; letter-spacing: -0.01em; }
+.value-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px 16px; }
+.value-sub { font-size: 13px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding-bottom: 3px; }
+.chart { width: 100%; height: 132px; display: block; }
+.chart text { font-family: var(--font-ui); font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.goal { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center; font-size: 13px; margin: auto -20px -20px; padding: 12px 20px 14px; border-top: 1px solid var(--border); }
+.goal .track { grid-column: 1 / -1; height: 6px; border-radius: 999px; background: var(--raised); overflow: hidden; }
+.goal .fill { height: 100%; background: var(--primary); border-radius: inherit; }
+.goal .muted { color: var(--muted); }
+.stack { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px; }
+.stack span { display: block; height: 100%; }
+.legend { display: flex; flex-direction: column; }
+.legend-row { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.legend-row:first-child { border-top: 0; }
+.legend-row .dot { width: 10px; height: 10px; border-radius: 3px; }
+.legend-row .n { font-weight: 600; font-variant-numeric: tabular-nums; text-align: right; }
+.legend-row .p { color: var(--muted); font-variant-numeric: tabular-nums; width: 46px; text-align: right; }
+/* stat card: the same anatomy as the two lead cards (header, value, footer on a divider), scaled down */
+.kpi-stats { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.stat { padding: 16px 16px 0; display: flex; flex-direction: column; gap: 14px; }
+.stat .kpi-title { font-size: 13px; }
+.stat .kpi-title .ic { width: 26px; height: 26px; }
+.stat .kpi-title .per { font-weight: 400; color: var(--muted); }
+.stat-row { display: grid; grid-template-columns: auto auto 1fr; align-items: center; gap: 6px 10px; }
+.stat-row .cmpx { grid-column: 1 / -1; }
+.stat .stat-foot { margin-top: auto; }
+.pill { display: inline-flex; align-items: center; gap: 3px; height: 22px; white-space: nowrap; flex-shrink: 0; padding: 0 7px; border-radius: 6px; font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pill.up { background: var(--good-bg); color: var(--good); }
+.pill.down { background: var(--bad-bg); color: var(--bad); }
+.stat-row .cmpx { font-size: 12px; color: var(--muted); }
+.stat-foot b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-row .v { font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; line-height: 1; }
+.stat-row .v .cur { font-size: 0.55em; color: var(--muted); font-weight: 500; margin-right: 2px; vertical-align: 0.55em; letter-spacing: 0; }
+.spark { width: 76px; height: 30px; flex-shrink: 0; display: block; }
+.stat-foot { margin: 0 -16px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); display: flex; gap: 6px; align-items: center; min-height: 41px; }
+.stat-foot .go { margin-left: auto; color: var(--text); font-weight: 500; display: inline-flex; align-items: center; gap: 2px; }
+.stat.warn .stat-foot { background: var(--warn-bg); color: var(--warn); border-top-color: transparent; border-radius: 0 0 var(--r-card) var(--r-card); }
+.stat.warn .stat-foot .go { color: var(--warn); }
+.kpi-foot { margin: 0 -20px -20px; padding: 12px 20px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: auto; }
+.kpi-foot a, .kpi-foot .go { color: var(--text); font-weight: 500; display: inline-flex; align-items: center; gap: 2px; }
+
+/* ---------- stat card options ---------- */
+.opts { display: flex; flex-direction: column; gap: 28px; }
+.opt-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.opt-letter { font-family: var(--font-mono); font-size: 12px; font-weight: 500; width: 22px; height: 22px; border-radius: 6px; display: inline-grid; place-items: center; background: var(--text); color: var(--surface); align-self: center; }
+.opt-head h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.opt-head p { font-size: 13px; color: var(--muted); }
+.opt-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.opt-head .rec { align-self: center; }
+.opt-crit { margin: 0 0 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px 20px; font-size: 13px; color: var(--muted); padding: 14px 16px; border: 1px dashed var(--input); border-radius: var(--r-card); }
+.opt-crit b { color: var(--text); font-weight: 600; display: block; margin-bottom: 2px; }
+/* shared stat-card parts: one header, one value, one change */
+.sv { display: flex; flex-direction: column; min-width: 0; padding: 16px 18px; gap: 12px; }
+.sv .hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 22px; }
+.sv .lbl { font-size: 13px; font-weight: 500; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv .lbl b { color: var(--text); font-weight: 500; }
+.sv .go { color: var(--muted); display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px; flex-shrink: 0; }
+.sv .go:hover { background: var(--raised); color: var(--text); }
+.sv .val { font-family: var(--font-display); font-size: 30px; font-weight: 600; letter-spacing: -0.035em; font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
+.sv .val .cur { font-size: 0.55em; color: var(--muted); font-weight: 500; margin-right: 2px; vertical-align: 0.55em; letter-spacing: 0; }
+.sv .val .of { font-size: 14px; color: var(--muted); font-weight: 500; letter-spacing: 0; margin-left: 4px; }
+.sv .vrow { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.sv .chg { font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sv .chg.up { color: var(--good); } .sv .chg.down { color: var(--bad); } .sv .chg.flat { color: var(--muted); } .sv .chg.warn { color: var(--warn); }
+.sv .sub { font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sv .sub b { color: var(--text); font-weight: 500; }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.flat { background: var(--raised); color: var(--muted); }
+.chip-per { font-size: 11.5px; font-weight: 500; color: var(--muted); background: var(--raised); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+/* A ledger */
+.sv-a { gap: 14px; padding: 18px; }
+.sv-a .val { font-size: 34px; }
+.sv-a .ln { border-top: 1px solid var(--border); padding-top: 12px; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; margin-top: auto; }
+/* B comparison chart */
+.sv-b { padding-bottom: 12px; }
+.sv-b svg { display: block; width: 100%; height: 64px; overflow: visible; }
+.sv-b .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: -4px; }
+.sv-b .key { display: flex; gap: 12px; font-size: 11px; color: var(--muted); }
+.sv-b .key i { display: inline-block; width: 12px; height: 0; border-top: 2px solid var(--chart-a); vertical-align: middle; margin-right: 5px; }
+.sv-b .key i.prev { border-top: 2px dashed var(--input); }
+/* C breakdown */
+.sv-c .sbar { display: flex; gap: 2px; height: 8px; border-radius: 999px; overflow: hidden; }
+.sv-c .sbar span { display: block; height: 100%; }
+.sv-c .lg { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; font-size: 12.5px; }
+.sv-c .lg div { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.sv-c .lg .d { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+.sv-c .lg .n { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sv-c .lg .q { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* D pace to target */
+.sv-d .trk { position: relative; height: 8px; border-radius: 999px; background: var(--raised); margin-top: auto; }
+.sv-d .trk .f { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--primary); }
+.sv-d.behind .trk .f { background: var(--warn-dot); }
+.sv-d .trk .tick { position: absolute; top: -4px; bottom: -4px; width: 2px; border-radius: 1px; background: var(--text); }
+.sv-d .ends { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sv-d .ends b { color: var(--text); font-weight: 600; }
+/* E current footer-fact design, kept for comparison */
+.sv-e { padding: 16px 16px 0; gap: 14px; }
+.sv-e .ttl { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--muted); }
+.sv-e .ic { width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center; background: var(--primary-soft); color: var(--primary-ink); }
+.sv-e .vrow { align-items: center; }
+.sv-e .foot { margin: auto -16px 0; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.sv-e .foot b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sv-e.warn .foot { background: var(--warn-bg); color: var(--warn); border-top-color: transparent; border-radius: 0 0 var(--r-card) var(--r-card); }
+.sv-e.warn .foot b { color: var(--warn); }
+@media (max-width: 960px) { .opt-row { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .opt-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- gloss: foundation metric card ----------
+   Soft top-lit gradient, a brand sheen in the top-left, a bright rim on the top edge, layered shadow.
+   Text sits on opaque color, so contrast matches a plain card. */
+.gloss {
+  position: relative; isolation: isolate;
+  background: radial-gradient(140% 90% at 0% 0%, var(--gloss-sheen), transparent 60%), linear-gradient(180deg, var(--gloss-top), var(--gloss-bottom));
+  border-color: var(--gloss-edge);
+  box-shadow: inset 0 1px 0 var(--gloss-hi), var(--gloss-shadow);
+}
+.gloss::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none; background: linear-gradient(180deg, var(--gloss-glare), transparent 40%); }
+.gloss::after {
+  content: ""; position: absolute; inset: -1px; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(180deg, var(--gloss-rim), transparent 55%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.gloss:hover { box-shadow: inset 0 1px 0 var(--gloss-hi), var(--gloss-shadow-hover); }
+.gloss .ic, .gloss .kpi-title .ic {
+  background: linear-gradient(180deg, var(--ic-top), var(--ic-bottom)); color: var(--primary-ink);
+  box-shadow: inset 0 1px 0 var(--ic-hi), 0 1px 2px var(--ic-drop), 0 0 0 1px var(--ic-ring);
+}
+.gloss .stat-foot, .gloss .foot, .gloss .kpi-foot, .gloss .goal { background: var(--gloss-foot); border-top-color: var(--gloss-divider); border-radius: 0 0 calc(var(--r-card) - 1px) calc(var(--r-card) - 1px); }
+.gloss.warn .stat-foot, .gloss.warn .foot { background: linear-gradient(180deg, color-mix(in srgb, var(--warn-bg) 80%, var(--surface)), var(--warn-bg)); box-shadow: inset 0 1px 0 var(--gloss-hi); border-top-color: transparent; }
+.gloss .pill { box-shadow: inset 0 1px 0 var(--gloss-hi), 0 0 0 1px color-mix(in srgb, currentColor 16%, transparent); }
+@media (prefers-reduced-motion: no-preference) {
+  .gloss { transition: transform .2s cubic-bezier(.2, .8, .2, 1), box-shadow .2s ease; }
+  .gloss:hover { transform: translateY(-2px); }
+}
+
+/* ---------- record cards ---------- */
+.rec-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.rec-grid > .card { display: flex; flex-direction: column; }
+.rec-grid .rc-body { flex: 1; }
+.rc-head { padding: 16px 16px 0; display: flex; align-items: flex-start; gap: 12px; }
+.rc-head .t { flex: 1; min-width: 0; }
+.rc-head h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.rc-head .sub { font-size: 13px; color: var(--muted); margin-top: 1px; }
+.rc-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; margin: 0; }
+.dl dt { font-size: 12px; color: var(--muted); }
+.dl dd { margin: 2px 0 0; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.idrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--raised); border-radius: var(--r-control); padding: 6px 6px 6px 10px; }
+.idrow .l { font-size: 12px; color: var(--muted); }
+.rc-foot { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.rc-foot .muted { font-size: 12px; color: var(--muted); }
+.contact { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+.contact div { display: flex; align-items: center; gap: 8px; color: var(--text); min-width: 0; }
+.contact svg { color: var(--muted); }
+.callout { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: var(--r-control); background: var(--warn-bg); color: var(--warn); font-size: 13px; }
+.callout b { font-weight: 600; }
+.date-tile { width: 52px; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; text-align: center; flex-shrink: 0; }
+.date-tile .m { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; background: var(--primary); color: var(--primary-fg); padding: 2px 0; }
+.date-tile .d { font-family: var(--font-display); font-size: 20px; font-weight: 600; padding: 3px 0 4px; font-variant-numeric: tabular-nums; }
+.timeline { display: flex; flex-direction: column; gap: 0; font-size: 13px; }
+.timeline div { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; padding: 7px 0; border-top: 1px dashed var(--border); }
+.timeline div:first-child { border-top: 0; }
+.timeline .tm { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------- data table ---------- */
+.dt { position: relative; }
+.dt-toolbar { display: flex; gap: 8px; align-items: center; padding: 12px; border-bottom: 1px solid var(--border); }
+.dt-toolbar .search { flex: 0 1 300px; height: 32px; font-size: 13px; }
+.dt-toolbar .spacer { flex: 1; }
+.facet-count { font-size: 11px; font-weight: 600; background: var(--primary); color: var(--primary-fg); border-radius: 999px; min-width: 18px; padding: 0 5px; line-height: 18px; text-align: center; }
+.btn[aria-expanded="true"] { background: var(--raised); }
+/* filters expand inline under the toolbar (INSURVAS-CRM DataGrid pattern), then applied filters show as chips */
+.fpanel { padding: 14px 12px 16px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--raised) 45%, var(--surface)); display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px 16px; }
+.fpanel .field label { font-size: 12px; color: var(--muted); font-weight: 500; }
+.fpanel .input { height: 34px; font-size: 13.5px; }
+.fpanel .input .ct { font-size: 11px; font-weight: 600; color: var(--primary-ink); background: var(--primary-soft); border-radius: 4px; padding: 0 5px; line-height: 18px; }
+.chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13px; }
+.chips .cl { font-size: 12px; color: var(--muted); font-weight: 500; margin-right: 4px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); font-size: 12.5px; }
+.chip .k { color: var(--muted); }
+.chip .x { width: 18px; height: 18px; border-radius: 4px; display: grid; place-items: center; color: var(--muted); }
+.chip .x:hover { background: var(--raised); color: var(--text); }
+.chips .clear { margin-left: 4px; font-weight: 500; color: var(--text); text-decoration: underline; text-underline-offset: 3px; font-size: 12.5px; }
+@media (max-width: 720px) { .dt-toolbar { flex-wrap: wrap; } .dt-toolbar .search { flex-basis: 100%; } }
+.bulk { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 12px; background: var(--primary-soft); color: var(--primary-ink); font-size: 13px; font-weight: 500; border-bottom: 1px solid var(--border); }
+.bulk .btn { height: 28px; font-size: 12.5px; }
+.tscroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 860px; }
+th { text-align: left; font-weight: 500; color: var(--muted); font-size: 13px; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th .sort { display: inline-flex; align-items: center; gap: 4px; }
+th.sorted { color: var(--text); }
+td { height: 52px; padding: 0 12px; border-bottom: 1px solid var(--border); white-space: nowrap; vertical-align: middle; }
+tbody tr:hover { background: color-mix(in srgb, var(--raised) 70%, transparent); }
+tbody tr.sel { background: color-mix(in srgb, var(--primary-soft) 55%, transparent); }
+tbody tr:last-child td { border-bottom: 0; }
+td.r, th.r { text-align: right; font-variant-numeric: tabular-nums; }
+.w-check { width: 44px; }
+.who { display: flex; align-items: center; gap: 10px; }
+.who .n { font-weight: 500; }
+.who .e { font-size: 12px; color: var(--muted); }
+.carrier { display: flex; align-items: center; gap: 8px; }
+.carrier .mark { width: 24px; height: 24px; border-radius: 6px; font-size: 10px; }
+.cell-muted { color: var(--muted); }
+.dt-foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border-top: 1px solid var(--border); font-size: 13px; color: var(--muted); }
+.pager { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pager .btns { display: flex; gap: 4px; }
+.pager .now { color: var(--text); font-weight: 500; }
+.density { margin-left: auto; }
+
+/* ---------- card grid ---------- */
+.grid-head { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 10px; align-items: center; margin: 32px 0 12px; }
+.grid-head h3 { font-size: 16px; font-weight: 600; }
+.cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.cg { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.cg-top { display: flex; align-items: center; gap: 10px; }
+.cg-top .t { flex: 1; min-width: 0; }
+.cg-top h4 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.cg-top .sub { font-size: 12px; color: var(--muted); }
+.cg-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.cg-stats div { display: flex; flex-direction: column; }
+.cg-stats .l { font-size: 11.5px; color: var(--muted); }
+.cg-stats .v { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.states { display: flex; flex-wrap: wrap; gap: 4px; }
+.states span { font-size: 11px; font-weight: 500; font-family: var(--font-mono); padding: 1px 5px; border-radius: 4px; background: var(--raised); color: var(--muted); }
+.cg.add { border-style: dashed; box-shadow: none; background: transparent; align-items: center; justify-content: center; text-align: center; color: var(--muted); min-height: 172px; font-size: 13px; gap: 8px; }
+.cg.add .plus { width: 36px; height: 36px; border-radius: 50%; border: 1px dashed var(--input); display: grid; place-items: center; color: var(--text); }
+
+/* ---------- overlays ---------- */
+.ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.stage { position: relative; border: 1px solid var(--border); border-radius: var(--r-card); overflow: hidden; background: var(--canvas); min-height: 400px; display: flex; flex-direction: column; }
+.stage.wide { grid-column: 1 / -1; min-height: 460px; }
+.stage-cap { position: relative; z-index: 3; display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; font-size: 12px; color: var(--muted); background: var(--surface); border-bottom: 1px solid var(--border); }
+.stage-cap b { color: var(--text); font-weight: 600; }
+.stage-body { position: relative; flex: 1; display: grid; place-items: center; padding: 28px 16px; }
+.ghost-ui { position: absolute; inset: 0; padding: 18px; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.ghost-ui div { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.scrim { position: absolute; inset: 0; background: var(--scrim); }
+.dialog { position: relative; z-index: 2; width: min(440px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-lg); }
+.dialog .dh { padding: 20px 20px 0; display: flex; flex-direction: column; gap: 4px; position: relative; }
+.dialog .dh h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; padding-right: 28px; }
+.dialog .dh p { font-size: 13.5px; color: var(--muted); }
+.dialog .x { position: absolute; right: 12px; top: 12px; width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; color: var(--muted); }
+.dialog .db { padding: 18px 20px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.dialog .db .full { grid-column: 1 / -1; }
+.dialog .df { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; background: color-mix(in srgb, var(--raised) 40%, var(--surface)); border-radius: 0 0 var(--r-card) var(--r-card); }
+.alert-ic { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--bad-bg); color: var(--bad); margin-bottom: 8px; }
+.summary { margin: 0 20px; border: 1px solid var(--border); border-radius: var(--r-control); padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; font-size: 13px; }
+.summary .k { color: var(--muted); }
+.summary .v { font-weight: 500; text-align: right; font-variant-numeric: tabular-nums; }
+.sheet-stage .stage-body { place-items: stretch; justify-items: end; padding: 0; }
+.sheet { position: relative; z-index: 2; width: min(420px, 100%); height: 100%; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; }
+.sheet .sh { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-start; position: relative; }
+.sheet .sh h3 { font-size: 17px; font-weight: 600; }
+.sheet .sh .sub { font-size: 13px; color: var(--muted); }
+.tabs { display: flex; gap: 2px; padding: 0 20px; border-bottom: 1px solid var(--border); }
+.tabs span { font-size: 13px; font-weight: 500; color: var(--muted); padding: 10px 8px; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs span.on { color: var(--text); border-color: var(--text); }
+.sheet .sb { padding: 18px 20px; display: flex; flex-direction: column; gap: 16px; flex: 1; overflow: hidden; }
+.sheet .sf { padding: 12px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.menu-stage .stage-body { place-items: start; align-content: start; gap: 6px; }
+.menu-anchor { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.menu { width: 224px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 4px; font-size: 13.5px; }
+.menu .lbl { font-size: 12px; font-weight: 500; color: var(--muted); padding: 6px 8px 4px; }
+.menu .it { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; border-radius: 6px; color: var(--text); }
+.menu .it.hl { background: var(--raised); }
+.menu .it .k { margin-left: auto; font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+.menu .it svg { color: var(--muted); }
+.menu .it.del { color: var(--bad); }
+.menu .it.del svg { color: var(--bad); }
+.menu .sep { margin: 4px -4px; }
+.toasts { position: absolute; right: 14px; bottom: 14px; z-index: 2; display: flex; flex-direction: column; gap: 8px; width: min(340px, calc(100% - 28px)); }
+.toast { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow-lg); padding: 12px 14px; display: flex; gap: 10px; align-items: flex-start; font-size: 13px; }
+.toast .t { flex: 1; min-width: 0; }
+.toast b { display: block; font-weight: 600; font-size: 13.5px; }
+.toast .d { color: var(--muted); }
+.toast .act { font-weight: 600; color: var(--text); text-decoration: underline; text-underline-offset: 3px; font-size: 13px; }
+.toast svg.ok { color: var(--good); margin-top: 1px; }
+.cmdk { position: relative; z-index: 2; width: min(560px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-card); box-shadow: var(--shadow-lg); overflow: hidden; align-self: start; margin-top: 8px; }
+.cmdk .ci { display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 48px; border-bottom: 1px solid var(--border); font-size: 15px; }
+.cmdk .ci .q { flex: 1; }
+.cmdk .ci .caret { display: inline-block; width: 1.5px; height: 18px; background: var(--primary); vertical-align: middle; margin-left: 1px; }
+.cmdk .grp { padding: 6px; }
+.cmdk .gl { font-size: 12px; font-weight: 500; color: var(--muted); padding: 6px 8px; }
+.cmdk .row { display: flex; align-items: center; gap: 10px; height: 44px; padding: 0 8px; border-radius: 8px; font-size: 14px; }
+.cmdk .row.hl { background: var(--raised); }
+.cmdk .row .t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmdk .row .t small { color: var(--muted); font-size: 12.5px; margin-left: 6px; }
+.cmdk .row .avatar, .cmdk .row .mark { width: 26px; height: 26px; font-size: 10px; }
+.cmdk .cf { display: flex; gap: 14px; padding: 8px 14px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+.cmdk .cf span { display: inline-flex; gap: 5px; align-items: center; }
+mark { background: transparent; color: var(--primary-ink); font-weight: 600; }
+
+/* ---------- critique ---------- */
+.crit { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.crit .card { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.crit h4 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; display: flex; gap: 8px; align-items: center; }
+.crit .pair { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 4px 10px; font-size: 13.5px; }
+.crit .pair .k { font-size: 12px; font-weight: 500; color: var(--muted); padding-top: 1px; }
+.crit .pair .was { color: var(--muted); }
+.rules { overflow-x: auto; }
+.rules table { min-width: 680px; font-size: 13.5px; }
+.rules td, .rules th { height: auto; padding: 10px 14px; white-space: normal; }
+.rules td:first-child { font-weight: 500; white-space: nowrap; }
+.sources { font-size: 13px; color: var(--muted); display: flex; flex-direction: column; gap: 4px; }
+.sources a { color: var(--primary-ink); text-underline-offset: 3px; }
+.foot { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 960px) {
+  .kpi-hero, .kpi-side { grid-column: 1 / -1; }
+  .kpi-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .kpi-stats { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .rec-grid, .ov-grid, .crit { grid-template-columns: minmax(0, 1fr); }
+  .money { font-size: 34px; }
+  .masthead h1 { font-size: 26px; }
+  .meta { text-align: left; }
+  .sec-head { grid-template-columns: minmax(0, 1fr); }
+  .dialog .db { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .btn, .seg button, .face, tbody tr { transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease, color .15s ease; }
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+  <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-updown" viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></symbol>
+  <symbol id="i-arrowdown" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="m19 12-7 7-7-7"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></symbol>
+  <symbol id="i-dn" viewBox="0 0 24 24"><polyline points="22 17 13.5 8.5 8.5 13.5 2 7"/><polyline points="16 17 22 17 22 11"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-dollar" viewBox="0 0 24 24"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></symbol>
+  <symbol id="i-tri" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-cal" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-pluscircle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/><path d="M12 8v8"/></symbol>
+  <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></symbol>
+  <symbol id="i-mail" viewBox="0 0 24 24"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+  <symbol id="i-ok" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></symbol>
+  <symbol id="i-ext" viewBox="0 0 24 24"><path d="M7 7h10v10"/><path d="M7 17 17 7"/></symbol>
+  <symbol id="i-building" viewBox="0 0 24 24"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/></symbol>
+</svg>
+
+<div class="doc">
+
+  <header class="masthead">
+    <div>
+      <div class="wordmark"><i></i>insurvas</div>
+      <h1>UI Foundation v3: type, cards, grids and overlays</h1>
+      <p>Follow-up to the v2 review. Same theme roles and contrast-checked colors, now with fintech-grade typefaces to choose from, redesigned money and policy cards, a full data table and card grid, and the overlay set. Every pattern maps to a shadcn/ui component we already ship or can add with one CLI command.</p>
+    </div>
+    <div class="meta"><b>Proposed v3</b><br>27 Oct 2026<br>Builds on v2 tokens</div>
+  </header>
+
+  <div class="bar" role="toolbar" aria-label="Preview settings">
+    <div class="bar-group">
+      <span class="bar-label">Sans-serif typeface</span>
+      <div class="seg" id="faceSeg"></div>
+    </div>
+    <div class="bar-group">
+      <span class="bar-label">Theme</span>
+      <div class="seg" id="themeSeg">
+        <button type="button" data-theme-set="light">Light</button>
+        <button type="button" data-theme-set="dark">Dark</button>
+        <button type="button" data-theme-set="system">System</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== 1. Typefaces ===================== -->
+  <section class="section" id="type">
+    <div class="sec-head">
+      <div>
+        <div class="kicker">Typeface</div>
+        <h2>Nine sans-serif typefaces from finance and YC-backed product teams</h2>
+        <p><b>Decision: Inter</b> (Inter Tight for headings and big numbers) is the foundation typeface. The others stay here for reference. Every option is a sans-serif family, the style banking and fintech apps use for screens and numbers. The fonts many fintechs are known for (Söhne, Aeonik, Lausanne) are paid licences, so each card pairs the look with a free Google Font we can self-host through <code>next/font</code> today. Pick one and the whole page re-sets in it, including every card, table and popup below.</p>
+      </div>
+    </div>
+    <div class="faces" id="faces"></div>
+    <p class="spec-note">Attributions come from public design write-ups and font-in-use listings, not from the companies' own brand guides. Treat them as reported, not confirmed. Every face here supports tabular figures, which keeps money columns aligned.</p>
+  </section>
+
+  <!-- ===================== 2. Money cards ===================== -->
+  <section class="section" id="money">
+    <div class="sec-head">
+      <div>
+        <div class="kicker">Card · Chart · Progress · Badge</div>
+        <h2>Money and policy cards</h2>
+        <p>One lead metric with context (period, comparison, target, daily shape), one composition card for policies, and the secondary numbers in a single divided strip instead of four identical boxes.</p>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="card gloss kpi-hero">
+        <div class="kpi-head">
+          <div class="kpi-title"><span class="ic"><svg class="i sm"><use href="#i-dollar"/></svg></span>Premium written</div>
+          <div class="seg" aria-label="Period"><button type="button">Today</button><button type="button" aria-pressed="true">Month</button><button type="button">Quarter</button></div>
+        </div>
+        <div class="value-row">
+          <div class="money" id="mtd"><span class="cur">$</span>0<span class="cents">.00</span></div>
+          <div class="value-sub"><span class="delta up"><svg class="i sm"><use href="#i-up"/></svg>8.9%</span><span>vs. Sep 1–27</span></div>
+        </div>
+        <svg class="chart" id="chart" viewBox="0 0 640 132" preserveAspectRatio="none" role="img" aria-label="Daily premium written, October 1 to 27"></svg>
+        <div class="goal">
+          <span><b class="num" id="goalPct">0%</b> <span class="muted">of the $210,000 October target</span></span>
+          <span class="muted num" id="goalLeft"></span>
+          <div class="track"><div class="fill" id="goalFill"></div></div>
+        </div>
+      </div>
+
+      <div class="card gloss kpi-side">
+        <div class="kpi-head">
+          <div class="kpi-title"><span class="ic"><svg class="i sm"><use href="#i-shield"/></svg></span>Active policies</div>
+        </div>
+        <div class="value-row">
+          <div class="money" style="font-size:40px">3,482</div>
+          <div class="value-sub"><span class="delta up"><svg class="i sm"><use href="#i-up"/></svg>126</span><span>net new this month</span></div>
+        </div>
+        <div class="stack" aria-hidden="true">
+          <span style="width:89.1%;background:var(--chart-a)"></span>
+          <span style="width:7.1%;background:var(--chart-b)"></span>
+          <span style="width:3.8%;background:var(--warn-dot)"></span>
+        </div>
+        <div class="legend">
+          <div class="legend-row"><span class="dot" style="background:var(--chart-a)"></span><span>In force</span><span class="n">3,104</span><span class="p">89.1%</span></div>
+          <div class="legend-row"><span class="dot" style="background:var(--chart-b)"></span><span>Pending issue</span><span class="n">248</span><span class="p">7.1%</span></div>
+          <div class="legend-row"><span class="dot" style="background:var(--warn-dot)"></span><span>Lapse risk</span><span class="n">130</span><span class="p">3.8%</span></div>
+        </div>
+        <div class="kpi-foot"><span>130 policies need a retention call</span><span class="go">View all<svg class="i sm"><use href="#i-right"/></svg></span></div>
+      </div>
+
+      <div class="kpi-stats">
+        <div class="card gloss stat">
+          <div class="kpi-title"><span class="ic"><svg class="i sm"><use href="#i-user"/></svg></span>New leads <span class="per">· today</span></div>
+          <div class="stat-row"><span class="v">86</span><span class="pill up"><svg class="i sm"><use href="#i-up"/></svg>11.7%</span><span class="cmpx">vs. last Monday</span></div>
+          <div class="stat-foot">Top source<b style="margin-left:auto">Facebook · 38</b></div>
+        </div>
+        <div class="card gloss stat">
+          <div class="kpi-title"><span class="ic"><svg class="i sm"><use href="#i-phone"/></svg></span>Contact rate <span class="per">· 7 days</span></div>
+          <div class="stat-row"><span class="v">41.7%</span><span class="pill up"><svg class="i sm"><use href="#i-up"/></svg>2.1 pts</span><span class="cmpx">vs. prior 7 days</span></div>
+          <div class="stat-foot">Dials connected<b style="margin-left:auto">512 of 1,228</b></div>
+        </div>
+        <div class="card gloss stat">
+          <div class="kpi-title"><span class="ic"><svg class="i sm"><use href="#i-cal"/></svg></span>Appointments <span class="per">· 7 days</span></div>
+          <div class="stat-row"><span class="v">214</span><span class="pill down"><svg class="i sm"><use href="#i-dn"/></svg>3.6%</span><span class="cmpx">vs. prior 7 days</span></div>
+          <div class="stat-foot">Today<b style="margin-left:auto">38 booked · 4 no-shows</b></div>
+        </div>
+        <div class="card gloss stat warn">
+          <div class="kpi-title"><span class="ic"><svg class="i sm"><use href="#i-dollar"/></svg></span>Commission <span class="per">· pending</span></div>
+          <div class="stat-row"><span class="v"><span class="cur">$</span>41,920</span><span class="cmpx">across 312 policies</span></div>
+          <div class="stat-foot"><svg class="i sm"><use href="#i-clock"/></svg>18 statements late<span class="go">Review<svg class="i sm"><use href="#i-right"/></svg></span></div>
+        </div>
+      </div>
+    </div>
+    <p class="spec-note">One card anatomy at two sizes: header (icon tile, label, period), value, then a footer on a divider that names the comparison or the next action. Lead value 40/600, stat value 30/600, currency and cents muted at about half size, tabular figures everywhere. Stat cards carry the change as a small tinted pill beside the value, and the footer gives one supporting fact as label and value. In the premium chart, only today's unfinished day is lighter. Amber fills the footer only when the card needs action. Illustrative data.</p>
+  </section>
+
+  <!-- ===================== 2b. Stat card options ===================== -->
+  <section class="section" id="stat-options">
+    <div class="sec-head">
+      <div>
+        <div class="kicker">Card · Badge · Progress</div>
+        <h2>Stat card options</h2>
+        <p>Four directions for the same four numbers, reviewed against the UI Taste dashboard checklist, with the current design last for comparison. Every option uses the same tokens, type, radius and header, so whichever is chosen becomes the one stat card used everywhere.</p>
+      </div>
+    </div>
+    <div class="opts" id="statOptions"></div>
+  </section>
+
+  <!-- ===================== 3. Record cards ===================== -->
+  <section class="section" id="records">
+    <div class="sec-head">
+      <div>
+        <div class="kicker">Card · Badge · Button</div>
+        <h2>Record cards</h2>
+        <p>Three shapes cover most of the CRM: a policy, a person, and a scheduled event. Same header, body and footer rhythm on each, so they sit together without looking templated.</p>
+      </div>
+    </div>
+    <div class="rec-grid">
+      <article class="card">
+        <div class="rc-head">
+          <div class="t"><h3>Medicare Advantage PPO</h3><div class="sub">Mutual of Omaha</div></div>
+          <span class="badge b-good">In force</span>
+        </div>
+        <div class="rc-body">
+          <div class="idrow"><div><div class="l">Policy number</div><span class="mono">MU-4471920-03</span></div><button class="btn ghost icon" type="button" aria-label="Copy policy number"><svg class="i sm"><use href="#i-copy"/></svg></button></div>
+          <dl class="dl">
+            <div><dt>Policyholder</dt><dd>Maria Hernandez</dd></div>
+            <div><dt>Annual premium</dt><dd>$1,284.00</dd></div>
+            <div><dt>Effective</dt><dd>Jan 1, 2027</dd></div>
+            <div><dt>Commission</dt><dd>$256.80</dd></div>
+          </dl>
+        </div>
+        <div class="rc-foot"><span class="muted">Written by Avery Morgan</span><button class="btn outline sm" type="button">Open policy</button></div>
+      </article>
+
+      <article class="card">
+        <div class="rc-head">
+          <div class="t"><h3>James O'Connell</h3><div class="sub">72 · Tampa, FL</div></div>
+          <button class="btn ghost icon" type="button" aria-label="More actions"><svg class="i"><use href="#i-more"/></svg></button>
+        </div>
+        <div class="rc-body">
+          <div class="contact">
+            <div><svg class="i sm"><use href="#i-phone"/></svg><span class="num">(212) 555-0193</span><span class="badge b-neutral plain" style="height:20px">Mobile</span></div>
+            <div><svg class="i sm"><use href="#i-mail"/></svg><span>joconnell@example.com</span></div>
+          </div>
+          <div class="callout"><svg class="i sm" style="margin-top:2px"><use href="#i-clock"/></svg><span><b>Callback due 3:30 PM today.</b> Asked to compare two Aetna plans.</span></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="badge b-info">Appointment set</span><span class="badge b-neutral plain">Medicare</span><span class="badge b-neutral plain">Spanish</span></div>
+        </div>
+        <div class="rc-foot"><span class="muted">Owner: Jordan Lee</span><button class="btn primary sm" type="button"><svg class="i sm"><use href="#i-phone"/></svg>Call now</button></div>
+      </article>
+
+      <article class="card">
+        <div class="rc-head">
+          <div class="date-tile"><div class="m">Oct</div><div class="d">28</div></div>
+          <div class="t"><h3>Plan review with Priya Raman</h3><div class="sub num">Tomorrow · 10:30–11:00 AM ET</div></div>
+        </div>
+        <div class="rc-body">
+          <div class="timeline">
+            <div><span class="tm">Oct 21</span><span>Lead claimed from Facebook campaign</span></div>
+            <div><span class="tm">Oct 24</span><span>Screened, eligible for Humana and UHC</span></div>
+            <div><span class="tm">Oct 28</span><span><b style="font-weight:600">Video call</b>, compare 3 quotes</span></div>
+          </div>
+        </div>
+        <div class="rc-foot"><button class="btn ghost sm" type="button">Reschedule</button><button class="btn outline sm" type="button"><svg class="i sm"><use href="#i-video"/></svg>Join call</button></div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===================== 4. Grid: table + cards ===================== -->
+  <section class="section" id="grid">
+    <div class="sec-head">
+      <div>
+        <div class="kicker">Data Table (TanStack) · Checkbox · Dropdown Menu · Pagination</div>
+        <h2>Tables and grids</h2>
+        <p>The shadcn data-table recipe on top of our existing <code>ui/table</code>: the Filters button expands a row of filter fields under the toolbar, the same way the INSURVAS-CRM DataGrid does, and applied filters stay visible as removable chips. Then sortable headers, row selection with a bulk bar, right-aligned money, and one row height. Shown expanded; click Filters to collapse it.</p>
+      </div>
+    </div>
+
+    <div class="card dt">
+      <div class="dt-toolbar">
+        <div class="input ph search"><svg class="i sm"><use href="#i-search"/></svg><span class="grow">Search name, policy or phone</span></div>
+        <span class="spacer"></span>
+        <button class="btn outline sm" type="button" id="filterBtn" aria-expanded="true" aria-controls="filterPop"><svg class="i sm"><use href="#i-sliders"/></svg>Filters<span class="facet-count">2</span><svg class="i sm" id="filterChev"><use href="#i-down"/></svg></button>
+        <button class="btn primary sm" type="button"><svg class="i sm"><use href="#i-plus"/></svg>New policy</button>
+      </div>
+      <div class="fpanel" id="filterPop" role="region" aria-label="Filters">
+        <div class="field"><label>Status</label><div class="input focus"><span class="grow">In force, Scheduled</span><span class="ct">2</span><svg class="i sm"><use href="#i-down"/></svg></div></div>
+        <div class="field"><label>Carrier</label><div class="input"><span class="grow" style="color:var(--muted)">All carriers</span><svg class="i sm"><use href="#i-down"/></svg></div></div>
+        <div class="field"><label>Owner</label><div class="input"><span class="grow" style="color:var(--muted)">All owners</span><svg class="i sm"><use href="#i-down"/></svg></div></div>
+        <div class="field"><label>Effective date</label><div class="input"><svg class="i sm" style="color:var(--muted)"><use href="#i-cal"/></svg><span class="grow" style="color:var(--muted)">Any date</span></div></div>
+      </div>
+      <div class="chips"><span class="cl">Active filters</span>
+        <span class="chip"><span class="k">Status:</span>In force<span class="x" role="button" aria-label="Remove In force"><svg class="i sm"><use href="#i-x"/></svg></span></span>
+        <span class="chip"><span class="k">Status:</span>Scheduled<span class="x" role="button" aria-label="Remove Scheduled"><svg class="i sm"><use href="#i-x"/></svg></span></span>
+        <span class="clear">Clear filters</span>
+      </div>
+      <div class="bulk"><span>2 selected</span><button class="btn outline" type="button">Assign owner</button><button class="btn outline" type="button"><svg class="i sm"><use href="#i-download"/></svg>Export</button><button class="btn ghost" type="button">Clear</button></div>
+      <div class="tscroll">
+        <table>
+          <thead><tr>
+            <th class="w-check"><span class="check"></span></th>
+            <th><span class="sort">Policyholder<svg class="i sm"><use href="#i-updown"/></svg></span></th>
+            <th>Policy no.</th>
+            <th>Carrier</th>
+            <th>Status</th>
+            <th class="sorted"><span class="sort">Effective<svg class="i sm"><use href="#i-arrowdown"/></svg></span></th>
+            <th class="r"><span class="sort">Annual premium<svg class="i sm"><use href="#i-updown"/></svg></span></th>
+            <th class="w-check"></th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="dt-foot">
+        <span>2 of 128 rows selected</span>
+        <div class="pager">
+          <span>Rows per page</span><span class="input" style="height:32px;width:72px;font-size:13px"><span class="grow num">25</span><svg class="i sm"><use href="#i-down"/></svg></span>
+          <span class="now num">Page 1 of 6</span>
+          <span class="btns"><button class="btn outline icon" type="button" aria-label="Previous page" disabled style="opacity:.5"><svg class="i sm"><use href="#i-left"/></svg></button><button class="btn outline icon" type="button" aria-label="Next page"><svg class="i sm"><use href="#i-right"/></svg></button></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-head">
+      <h3>Card grid: carrier appointments</h3>
+      <div class="seg"><button type="button" aria-pressed="true">Grid</button><button type="button">Table</button></div>
+    </div>
+    <div class="cgrid" id="carriers"></div>
+    <p class="spec-note">Grid rule: <code>repeat(auto-fill, minmax(250px, 1fr))</code> with a 12px gap, so columns follow the container instead of fixed breakpoints. Tables and grids share the same card radius, toolbar and empty state.</p>
+  </section>
+
+  <!-- ===================== 5. Overlays ===================== -->
+  <section class="section" id="overlays">
+    <div class="sec-head">
+      <div>
+        <div class="kicker">Dialog · Alert Dialog · Sheet · Dropdown Menu · Sonner · Command</div>
+        <h2>Popups and overlays</h2>
+        <p>Choose by task. A short edit is a Dialog, a destructive step is an Alert Dialog, a record you read while working is a Sheet, quick actions are a Menu, and confirmation is a Toast instead of another modal.</p>
+      </div>
+    </div>
+    <div class="ov-grid">
+
+      <div class="stage">
+        <div class="stage-cap"><span><b>Dialog</b> · short edit, keeps context</span><span class="mono">ui/dialog</span></div>
+        <div class="stage-body">
+          <div class="ghost-ui" aria-hidden="true"><div style="height:36px"></div><div style="flex:1"></div></div>
+          <div class="scrim"></div>
+          <div class="dialog" role="dialog" aria-label="Edit policy example">
+            <div class="dh"><h3>Edit policy</h3><p>Changes are logged on the policy timeline.</p><span class="x"><svg class="i sm"><use href="#i-x"/></svg></span></div>
+            <div class="db">
+              <div class="field full"><label>Carrier</label><div class="input"><span class="grow">Mutual of Omaha</span><svg class="i sm"><use href="#i-updown"/></svg></div></div>
+              <div class="field"><label>Effective date</label><div class="input"><svg class="i sm" style="color:var(--muted)"><use href="#i-cal"/></svg><span class="grow num">Jan 1, 2027</span></div></div>
+              <div class="field"><label>Annual premium</label><div class="input focus"><span style="color:var(--muted)">$</span><span class="grow num">1,284.00</span></div></div>
+            </div>
+            <div class="df"><button class="btn outline" type="button">Cancel</button><button class="btn primary" type="button">Save changes</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-cap"><span><b>Alert Dialog</b> · destructive, names the impact</span><span class="mono">ui/alert-dialog</span></div>
+        <div class="stage-body">
+          <div class="ghost-ui" aria-hidden="true"><div style="height:36px"></div><div style="flex:1"></div></div>
+          <div class="scrim"></div>
+          <div class="dialog" role="alertdialog" aria-label="Cancel policy example" style="width:min(400px,100%)">
+            <div class="dh"><span class="alert-ic"><svg class="i"><use href="#i-tri"/></svg></span><h3>Cancel this policy?</h3><p>The carrier is notified and future commission stops. This cannot be undone from Insurvas.</p></div>
+            <div style="height:14px"></div>
+            <div class="summary"><span class="k">Policy</span><span class="v mono">MU-4471920-03</span><span class="k">Policyholder</span><span class="v">Maria Hernandez</span><span class="k">Commission lost</span><span class="v">$256.80 / yr</span></div>
+            <div style="height:18px"></div>
+            <div class="df"><button class="btn outline" type="button">Keep policy</button><button class="btn danger" type="button">Cancel policy</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage wide sheet-stage">
+        <div class="stage-cap"><span><b>Sheet</b> · read a record without leaving the table</span><span class="mono">ui/sheet</span></div>
+        <div class="stage-body">
+          <div class="ghost-ui" aria-hidden="true"><div style="height:36px"></div><div style="height:40px"></div><div style="flex:1"></div></div>
+          <div class="scrim"></div>
+          <aside class="sheet" aria-label="Lead details example">
+            <div class="sh"><div style="flex:1;min-width:0"><h3>Priya Raman</h3><div class="sub">65 · San Francisco, CA</div></div><span class="badge b-warn">Callback</span><span class="x" style="position:static;width:28px;height:28px;display:grid;place-items:center;color:var(--muted)"><svg class="i sm"><use href="#i-x"/></svg></span></div>
+            <div class="tabs"><span class="on">Overview</span><span>Quotes <span class="num">3</span></span><span>Activity</span><span>Files</span></div>
+            <div class="sb">
+              <dl class="dl">
+                <div><dt>Phone</dt><dd>(415) 555-0107</dd></div>
+                <div><dt>Medicare ID</dt><dd class="mono">1EG4-TE5-MK73</dd></div>
+                <div><dt>Date of birth</dt><dd>Apr 18, 1961</dd></div>
+                <div><dt>Owner</dt><dd>Avery Morgan</dd></div>
+              </dl>
+              <div class="sep"></div>
+              <div class="timeline">
+                <div><span class="tm">10:12</span><span>Called, no answer. Voicemail left.</span></div>
+                <div><span class="tm">Yesterday</span><span>Quote sent: Humana Gold Plus, $1,047.25 / yr</span></div>
+                <div><span class="tm">Oct 21</span><span>Lead claimed from Facebook campaign</span></div>
+              </div>
+            </div>
+            <div class="sf"><button class="btn outline" type="button">Add note</button><button class="btn primary" type="button"><svg class="i sm"><use href="#i-phone"/></svg>Call</button></div>
+          </aside>
+        </div>
+      </div>
+
+      <div class="stage menu-stage">
+        <div class="stage-cap"><span><b>Dropdown Menu</b> + <b>Sonner</b> toast</span><span class="mono">ui/dropdown-menu</span></div>
+        <div class="stage-body">
+          <div class="menu-anchor">
+            <button class="btn outline icon" type="button" aria-label="Row actions" style="box-shadow:var(--ring)"><svg class="i"><use href="#i-more"/></svg></button>
+            <div class="menu" role="menu">
+              <div class="lbl">Policy MU-4471920</div>
+              <div class="it hl"><svg class="i sm"><use href="#i-pencil"/></svg>Edit<span class="k">E</span></div>
+              <div class="it"><svg class="i sm"><use href="#i-copy"/></svg>Copy policy number<span class="k">⌘C</span></div>
+              <div class="it"><svg class="i sm"><use href="#i-file"/></svg>Download PDF</div>
+              <div class="sep"></div>
+              <div class="it del"><svg class="i sm"><use href="#i-trash"/></svg>Cancel policy</div>
+            </div>
+          </div>
+          <div class="toasts">
+            <div class="toast"><svg class="i ok"><use href="#i-ok"/></svg><div class="t"><b>Policy updated</b><span class="d">Premium changed to $1,284.00</span></div><span class="act">Undo</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-cap"><span><b>Command</b> · global search, <span class="kbd">⌘</span> <span class="kbd">K</span></span><span class="mono">ui/command</span></div>
+        <div class="stage-body" style="place-items:start center">
+          <div class="scrim"></div>
+          <div class="cmdk" role="dialog" aria-label="Command menu example">
+            <div class="ci"><svg class="i" style="color:var(--muted)"><use href="#i-search"/></svg><span class="q">mar<span class="caret"></span></span><span class="kbd">Esc</span></div>
+            <div class="grp">
+              <div class="gl">Leads</div>
+              <div class="row hl"><svg class="i" style="color:var(--muted)"><use href="#i-user"/></svg><span class="t"><mark>Mar</mark>ia Hernandez<small class="num">(305) 555-0148</small></span><svg class="i sm" style="color:var(--muted)"><use href="#i-right"/></svg></div>
+              <div class="row"><svg class="i" style="color:var(--muted)"><use href="#i-user"/></svg><span class="t"><mark>Mar</mark>cus Webb<small class="num">(602) 555-0181</small></span></div>
+              <div class="gl">Pages</div>
+              <div class="row"><svg class="i" style="color:var(--muted)"><use href="#i-building"/></svg><span class="t"><mark>Mar</mark>keting campaigns<small>Settings</small></span></div>
+            </div>
+            <div class="cf"><span><span class="kbd">↑</span><span class="kbd">↓</span> Navigate</span><span><span class="kbd">↵</span> Open</span></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ===================== 6. Critique ===================== -->
+  <section class="section" id="critique">
+    <div class="sec-head">
+      <div>
+        <div class="kicker">Design critique</div>
+        <h2>What the review changed</h2>
+        <p>Run against the UI Taste product-interface checklist: hierarchy, density, honest data, one component vocabulary, overlays chosen by task.</p>
+      </div>
+    </div>
+    <div class="crit">
+      <div class="card"><h4>KPI cards had no hierarchy</h4>
+        <div class="pair"><span class="k">Before</span><span class="was">Four equal boxes: big number, small label, a delta with no comparison.</span><span class="k">Now</span><span>Premium leads with period, comparison, target and daily shape. Policies show composition. Everything else lives in one divided strip.</span></div></div>
+      <div class="card"><h4>Money was hard to scan</h4>
+        <div class="pair"><span class="k">Before</span><span class="was">Proportional digits, cents at full weight, mixed alignment.</span><span class="k">Now</span><span>Tabular figures, muted cents and currency, right-aligned money columns, one format: <span class="num">$1,284.00</span>.</span></div></div>
+      <div class="card"><h4>Status relied on color</h4>
+        <div class="pair"><span class="k">Before</span><span class="was">Colored text pills, with each screen choosing its own colors for the same state.</span><span class="k">Now</span><span>Dot plus label, a fixed meaning per hue (green done, blue scheduled, amber needs action, red stopped).</span></div></div>
+      <div class="card"><h4>Every popup was a modal</h4>
+        <div class="pair"><span class="k">Before</span><span class="was">Detail views and confirmations both interrupted the page.</span><span class="k">Now</span><span>Sheet for reading records, Dialog for short edits, Alert Dialog only when something is lost, Toast with Undo for confirmations.</span></div></div>
+      <div class="card"><h4>Cards were used as wallpaper</h4>
+        <div class="pair"><span class="k">Before</span><span class="was">Nested panels and borders around every group.</span><span class="k">Now</span><span>A card marks one object (a policy, a person, an event). Inside it, spacing and a single divider do the grouping.</span></div></div>
+      <div class="card"><h4>Monospace was decoration</h4>
+        <div class="pair"><span class="k">Before</span><span class="was">Mono used for whole tables to look technical.</span><span class="k">Now</span><span>Mono only for identifiers people copy or read aloud: policy numbers, Medicare IDs, plan codes.</span></div></div>
+    </div>
+
+    <h3 style="font-size:16px;font-weight:600;margin:32px 0 12px">Consistency rules to adopt</h3>
+    <div class="card rules"><table>
+      <thead><tr><th>Element</th><th>Rule</th><th>shadcn source</th></tr></thead>
+      <tbody>
+        <tr><td>Typeface</td><td><b>Inter</b> for all UI text, <b>Inter Tight</b> for page titles and large numbers, Geist Mono only for IDs. Tabular figures on.</td><td><code>next/font/google</code></td></tr>
+        <tr><td>Type scale</td><td>Page 24/600 · Section 18/600 · Card title 15/600 · Body 14/400 · Label 13/500 · Meta 12/400. Lead metric 40/600, stat metric 30/600.</td><td><code>globals.css</code> tokens</td></tr>
+        <tr><td>Numbers</td><td><code>tabular-nums</code> on every number, money right-aligned in tables, cents muted in cards, deltas always name the comparison.</td><td>utility class</td></tr>
+        <tr><td>Radius</td><td>Controls 8px · cards, dialogs, sheets 12px · menus 10px · badges 6px. No pill shapes except the toggle track.</td><td><code>--radius</code></td></tr>
+        <tr><td>Heights</td><td>Buttons and inputs 36px, toolbar controls 32px, table rows 52px, table header 40px.</td><td>Button, Input, Table</td></tr>
+        <tr><td>Card anatomy</td><td>Header 16px padding (icon or mark, title, status) · body 16px · optional footer with a top border, actions right.</td><td>Card</td></tr>
+        <tr><td>Grid</td><td><code>auto-fill, minmax(250px, 1fr)</code>, gap 12px for record grids; 12-column grid for dashboards.</td><td>new <code>ui/grid</code></td></tr>
+        <tr><td>Overlays</td><td>Dialog ≤ 440px for edits · Alert Dialog ≤ 400px for destructive steps · Sheet 420px for records · Toast with Undo for confirmations.</td><td>Dialog, AlertDialog, Sheet, Sonner</td></tr>
+        <tr><td>Filters</td><td>One Filters button with an applied-count badge. It expands a row of labelled filter fields under the toolbar (no dropdown overlay), and applied filters show as removable chips with Clear filters.</td><td>Collapsible, Select, Badge</td></tr>
+        <tr><td>People and carriers</td><td>No avatars, initials or logo tiles for clients, leads or carriers. The name is the identifier. Avatars only for staff who upload a photo.</td><td>none</td></tr>
+        <tr><td>Status</td><td>Green done · blue scheduled · amber needs action · red stopped or failed · grey neutral. Dot plus text, never color alone.</td><td>Badge variants</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="section" id="sources" style="padding-top:40px">
+    <div class="kicker">Sources</div>
+    <div class="sources">
+      <a href="https://fontalternatives.com/best-fonts-for/fintech/">Best Free Fonts for Fintech &amp; Banking (fontalternatives.com)</a>
+      <a href="https://www.telerik.com/blogs/font-strategies-fintech-websites-apps">Font Strategies for Fintech Websites and Apps (Telerik)</a>
+      <a href="https://fullstop360.com/blog/insights/branding/saas-typography-playbook-what-leading-companies-use">SaaS Typography Playbook: What 50 Companies Actually Use</a>
+      <a href="https://fontsinuse.com/uses/61484/revolut">Revolut on Fonts In Use</a>
+      <a href="https://blog.mean.ceo/website-typography-statistics/">Website typography statistics, 2026</a>
+      <a href="https://ui.shadcn.com/docs/components">shadcn/ui components</a>
+    </div>
+  </section>
+
+  <div class="foot"><span>Insurvas · Product UI Foundation · Proposed v3</span><span>Interactive mockup. Data is illustrative.</span></div>
+</div>
+
+<script>
+(function () {
+  var FACES = [
+    { id: 'geist', name: 'Geist', ui: "'Geist', system-ui, sans-serif", display: "'Geist', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.025em',
+      look: 'YC and developer-tool look', who: '<b>Seen at</b> Vercel and many AI and infra startups. Crisp digits, comes with a matching mono for IDs.' },
+    { id: 'inter', name: 'Inter + Inter Tight', ui: "'Inter', system-ui, sans-serif", display: "'Inter Tight', 'Inter', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.02em',
+      rec: 'Chosen', look: 'Neutral fintech default', who: '<b>Reported at</b> Brex, and as the body face at Wise. The most common SaaS body font. Tight cut for headings.' },
+    { id: 'hanken', name: 'Hanken Grotesk', ui: "'Hanken Grotesk', system-ui, sans-serif", display: "'Hanken Grotesk', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.03em',
+      look: 'Söhne-style grotesk', who: '<b>Free stand-in for</b> Söhne, the face widely reported at Stripe. Warmer and more editorial than Inter.' },
+    { id: 'plex', name: 'IBM Plex Sans', ui: "'IBM Plex Sans', system-ui, sans-serif", display: "'IBM Plex Sans', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.02em',
+      look: 'Institutional finance', who: '<b>Feels like</b> banking and enterprise software. Very clear figures, slightly formal. Good for compliance-heavy screens.' },
+    { id: 'manrope', name: 'Manrope', ui: "'Manrope', system-ui, sans-serif", display: "'Manrope', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.03em',
+      look: 'Aeonik-style neo-banks', who: '<b>Free stand-in for</b> Aeonik, reported at Revolut. Geometric and confident, strongest for big money numbers.' },
+    { id: 'dmsans', name: 'DM Sans', ui: "'DM Sans', system-ui, sans-serif", display: "'DM Sans', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.025em',
+      look: 'Soft geometric', who: '<b>Feels like</b> modern SaaS and payments apps. Low contrast and built for small sizes. Closest in spirit to today’s Montserrat.' },
+    { id: 'jakarta', name: 'Plus Jakarta Sans', ui: "'Plus Jakarta Sans', system-ui, sans-serif", display: "'Plus Jakarta Sans', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.03em',
+      look: 'Friendly fintech', who: '<b>Feels like</b> consumer finance and onboarding flows. Warm and roomy; better for client-facing screens than dense tables.' },
+    { id: 'public', name: 'Public Sans', ui: "'Public Sans', system-ui, sans-serif", display: "'Public Sans', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.02em',
+      look: 'Trust and clarity', who: '<b>Made for</b> the U.S. Web Design System, used across government sites. Neutral and highly legible, which suits insurance and compliance.' },
+    { id: 'instrument', name: 'Instrument Sans', ui: "'Instrument Sans', system-ui, sans-serif", display: "'Instrument Sans', system-ui, sans-serif", mono: "'Geist Mono', ui-monospace, Menlo, monospace", track: '-0.025em',
+      look: 'Lausanne-style grotesk', who: '<b>Free stand-in for</b> TWK Lausanne, reported at Ramp. Slightly narrow, so tables fit more columns before they scroll.' }
+  ];
+  var root = document.documentElement, faceSeg = document.getElementById('faceSeg'), faces = document.getElementById('faces');
+
+  function setFace(id) {
+    var f = FACES.filter(function (x) { return x.id === id; })[0] || FACES[0];
+    root.style.setProperty('--font-ui', f.ui);
+    root.style.setProperty('--font-display', f.display);
+    root.style.setProperty('--font-mono', f.mono);
+    root.style.setProperty('--track-display', f.track);
+    [].forEach.call(document.querySelectorAll('[data-face]'), function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-face') === f.id ? 'true' : 'false'); });
+    try { localStorage.setItem('ui3-face-v2', f.id); } catch (e) {}
+  }
+  FACES.forEach(function (f) {
+    var b = document.createElement('button'); b.type = 'button'; b.setAttribute('data-face', f.id); b.textContent = f.name.split(' + ')[0]; b.onclick = function () { setFace(f.id); }; faceSeg.appendChild(b);
+    var c = document.createElement('button'); c.type = 'button'; c.className = 'card face'; c.setAttribute('data-face', f.id);
+    c.innerHTML = '<div class="face-top"><span class="face-name">' + f.name + '</span>' + (f.rec ? '<span class="rec">' + f.rec + '</span>' : '<span class="face-who">' + f.look + '</span>') + '</div>' +
+      '<div class="face-sample" style="font-family:' + f.display.replace(/"/g, '&quot;') + '">Premium written</div>' +
+      '<div class="face-figs" style="font-family:' + f.ui.replace(/"/g, '&quot;') + '"><span>$184,260.00</span><span>41.7%</span><span>3,482</span></div>' +
+      '<div class="face-who">' + (f.rec ? f.look + '. ' : '') + f.who + '</div>';
+    c.onclick = function () { setFace(f.id); };
+    faces.appendChild(c);
+  });
+
+  function setTheme(t) {
+    if (t === 'system') root.removeAttribute('data-theme'); else root.setAttribute('data-theme', t);
+    [].forEach.call(document.querySelectorAll('[data-theme-set]'), function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-theme-set') === t ? 'true' : 'false'); });
+    try { localStorage.setItem('ui3-theme', t); } catch (e) {}
+  }
+  [].forEach.call(document.querySelectorAll('[data-theme-set]'), function (b) { b.onclick = function () { setTheme(b.getAttribute('data-theme-set')); }; });
+
+  /* ---- premium chart: one scale for bars, target line and labels ---- */
+  var daily = [5120, 6480, 7210, 4390, 2140, 1380, 6920, 7740, 8130, 8410, 7260, 2610, 1820, 7930, 8640, 6650, 9180, 8820, 3120, 2240, 8590, 9940, 7110, 8360, 9420, 3460, 2490];
+  var total = daily.reduce(function (a, b) { return a + b; }, 0), target = 210000;
+  var whole = Math.floor(total).toLocaleString('en-US');
+  document.getElementById('mtd').innerHTML = '<span class="cur">$</span>' + whole + '<span class="cents">.00</span>';
+  var pct = total / target * 100;
+  document.getElementById('goalPct').textContent = pct.toFixed(1) + '%';
+  document.getElementById('goalFill').style.width = Math.min(pct, 100).toFixed(1) + '%';
+  document.getElementById('goalLeft').textContent = '$' + (target - total).toLocaleString('en-US') + ' to go · 4 days left';
+
+  var W = 640, H = 132, top = 8, bottom = 20, left = 0, right = 44, max = 10000, dailyTarget = 6500;
+  var ns = 'http://www.w3.org/2000/svg', svg = document.getElementById('chart');
+  var y = function (v) { return top + (H - top - bottom) * (1 - v / max); };
+  var band = (W - left - right) / daily.length, bw = band * 0.62;
+  function el(n, a) { var e = document.createElementNS(ns, n); for (var k in a) e.setAttribute(k, a[k]); return e; }
+  [0, 5000, 10000].forEach(function (v) {
+    svg.appendChild(el('line', { x1: left, x2: W - right + 6, y1: y(v), y2: y(v), stroke: 'var(--border)', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }));
+    var t = el('text', { x: W - 2, y: y(v) + 4, 'text-anchor': 'end' }); t.textContent = v === 0 ? '$0' : '$' + v / 1000 + 'k'; svg.appendChild(t);
+  });
+  daily.forEach(function (v, i) {
+    var x = left + i * band + (band - bw) / 2, isToday = i === daily.length - 1;
+    var r = el('rect', { x: x, y: y(v), width: bw, height: y(0) - y(v), rx: 2, fill: isToday ? 'var(--chart-b)' : 'var(--chart-a)' });
+    var tt = el('title', {}); tt.textContent = 'Oct ' + (i + 1) + ': $' + v.toLocaleString('en-US'); r.appendChild(tt);
+    svg.appendChild(r);
+  });
+  svg.appendChild(el('line', { x1: left, x2: W - right + 6, y1: y(dailyTarget), y2: y(dailyTarget), stroke: 'var(--muted)', 'stroke-width': 1, 'stroke-dasharray': '3 4', 'vector-effect': 'non-scaling-stroke' }));
+  var tl = el('text', { x: W - 2, y: y(dailyTarget) + 4, 'text-anchor': 'end' }); tl.textContent = 'Goal'; svg.appendChild(tl);
+  [[0, 'Oct 1'], [13, 'Oct 14'], [26, 'Today']].forEach(function (p) {
+    var t = el('text', { x: left + p[0] * band + band / 2, y: H - 4, 'text-anchor': p[0] === 0 ? 'start' : 'middle' });
+    if (p[0] === 0) t.setAttribute('x', left + (band - bw) / 2);
+    t.textContent = p[1]; svg.appendChild(t);
+  });
+
+  /* ---- stat card trends: 7 bars, own scale, today lighter ---- */
+  [].forEach.call(document.querySelectorAll('[data-spark]'), function (s) {
+    var vals = s.getAttribute('data-spark').split(',').map(Number);
+    var hi = Math.max.apply(null, vals), lo = s.hasAttribute('data-min') ? +s.getAttribute('data-min') : 0;
+    var bw = 7, gap = (76 - bw * vals.length) / (vals.length - 1);
+    vals.forEach(function (v, i) {
+      var h = Math.max(3, 30 * (v - lo) / (hi - lo));
+      s.appendChild(el('rect', { x: i * (bw + gap), y: 30 - h, width: bw, height: h, rx: 1.5, fill: i === vals.length - 1 ? 'var(--chart-a)' : 'var(--chart-c)' }));
+    });
+  });
+
+  /* ---- stat card options: same four metrics, five treatments ---- */
+  var M = [
+    { l: 'New leads', per: 'Today', v: '86', d: '11.7%', dir: 'up', prev: '77', prevK: 'last Monday',
+      cur: [0, 9, 21, 34, 48, 61, 74, 86], old: [0, 8, 18, 29, 41, 52, 64, 77], ax: ['8 AM', '3 PM'],
+      parts: [['Facebook', 38, 'var(--chart-a)'], ['Google', 27, 'var(--chart-b)'], ['Referral', 13, 'var(--info)'], ['Other', 8, 'var(--chart-c)']],
+      pace: { val: '86', of: 'of 100', fill: 86, tick: 67, ok: true, l: 'Expected by now <b>67</b>', r: '<b>19 ahead</b>' },
+      fk: 'Top source', fv: 'Facebook · 38' },
+    { l: 'Contact rate', per: '7 days', v: '41.7%', d: '2.1 pts', dir: 'up', prev: '39.6%', prevK: 'prior 7 days',
+      cur: [40.2, 41.0, 40.5, 42.1, 41.8, 42.6, 43.4], old: [38.9, 39.4, 40.1, 39.0, 39.8, 40.3, 39.7], ax: ['Oct 21', 'Today'], lo: 36,
+      parts: [['Connected', 512, 'var(--chart-a)'], ['No answer', 431, 'var(--chart-c)'], ['Voicemail', 238, 'var(--chart-b)'], ['Bad number', 47, 'var(--warn-dot)']],
+      pace: { val: '41.7%', of: 'target 45%', fill: 83.4, tick: 90, ok: false, l: '<b>512</b> of 1,228 dials', r: '<b>3.3 pts</b> under' },
+      fk: 'Dials connected', fv: '512 of 1,228' },
+    { l: 'Appointments', per: '7 days', v: '214', d: '3.6%', dir: 'down', prev: '222', prevK: 'prior 7 days',
+      cur: [31, 28, 35, 30, 33, 19, 38], old: [33, 30, 34, 32, 35, 22, 36], ax: ['Oct 21', 'Today'], lo: 0,
+      parts: [['Completed', 151, 'var(--chart-a)'], ['Upcoming', 41, 'var(--chart-b)'], ['No-show', 22, 'var(--warn-dot)']],
+      pace: { val: '214', of: 'of 250', fill: 85.6, tick: 100, ok: false, l: 'Goal <b>250</b> a week', r: '<b>36 short</b>' },
+      fk: 'Today', fv: '38 booked · 4 no-shows' },
+    { l: 'Commission', per: 'Pending', v: '41,920', money: true, d: '9.2%', dir: 'flat', prev: '$38,400', prevK: 'last week', warn: '18 statements late',
+      cur: [36.1, 37.4, 38.0, 39.2, 40.1, 41.0, 41.92], old: [31.0, 32.5, 33.1, 34.4, 35.0, 36.2, 38.4], ax: ['Oct 21', 'Today'], lo: 28,
+      parts: [['Due this week', 23610, 'var(--chart-a)'], ['Due next week', 12490, 'var(--chart-b)'], ['Late', 5820, 'var(--warn-dot)']],
+      pace: { label: 'Commission paid', per: 'October', val: '24,310', money: true, of: 'of $66,230', fill: 36.7, tick: 87.1, ok: false, l: 'Pace <b>$57,684</b>', r: '<b>$33,374</b> behind' },
+      fk: '18 statements late', fv: 'Review' }
+  ];
+  function ico(id) { return '<svg class="i sm"><use href="#' + id + '"/></svg>'; }
+  function money(n) { return '$' + Math.round(n).toLocaleString('en-US'); }
+  function val(m, v, isMoney) { return '<span class="val">' + (isMoney ? '<span class="cur">$</span>' : '') + v + '</span>'; }
+  function chg(m) {
+    var a = m.dir === 'up' ? '↑ ' : m.dir === 'down' ? '↓ ' : '↑ ';
+    return '<span class="chg ' + m.dir + '">' + a + m.d + '</span>';
+  }
+  function pill(m) {
+    return '<span class="pill ' + m.dir + '">' + ico(m.dir === 'down' ? 'i-dn' : 'i-up') + m.d + '</span>';
+  }
+  function hd(label, per, right) {
+    return '<div class="hd"><span class="lbl"><b>' + label + '</b></span>' + right + '</div>';
+  }
+  var goLink = '<span class="go" role="link" aria-label="Open report">' + ico('i-right') + '</span>';
+
+  function compare(m) {
+    var all = m.cur.concat(m.old), hi = Math.max.apply(null, all), lo = m.lo != null ? m.lo : 0, W = 240, H = 64;
+    function path(a) { return a.map(function (v, i) { return (i ? 'L' : 'M') + (i * W / (a.length - 1)).toFixed(1) + ' ' + (4 + (H - 8) * (1 - (v - lo) / (hi - lo))).toFixed(1); }).join(' '); }
+    var c = path(m.cur);
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="' + m.l + ', this period against the previous one">' +
+      '<line x1="0" x2="' + W + '" y1="' + (H - 0.5) + '" y2="' + (H - 0.5) + '" stroke="var(--border)" vector-effect="non-scaling-stroke"/>' +
+      '<path d="' + c + ' L' + W + ' ' + H + ' L0 ' + H + ' Z" fill="var(--chart-a)" fill-opacity="0.1"/>' +
+      '<path d="' + path(m.old) + '" fill="none" stroke="var(--input)" stroke-width="1.5" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>' +
+      '<path d="' + c + '" fill="none" stroke="var(--chart-a)" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/></svg>';
+  }
+
+  var OPTS = [
+    { k: 'A', name: 'Ledger', note: 'The number does the work. Label, period chip, value, and one line that says what changed and against what. Calm enough to repeat across every page.',
+      r: function (m) {
+        var line = m.warn
+          ? '<span class="chg warn">' + m.warn + '</span><span class="sub">· <b>312</b> policies</span>'
+          : chg(m) + '<span class="sub">vs. <b>' + m.prev + '</b> ' + m.prevK + '</span>';
+        return '<article class="card sv sv-a">' + hd(m.l, m.per, '<span class="chip-per">' + m.per + '</span>') + val(m, m.v, m.money) + '<div class="ln">' + line + '</div></article>';
+      } },
+    { k: 'B', name: 'Period comparison', note: 'This period as a solid line, the previous one dashed behind it, so the change is visible and not just a percentage. Uses the same chart grammar as Premium written.',
+      r: function (m) {
+        return '<article class="card sv sv-b">' + hd(m.l, m.per, pill(m)) +
+          '<div class="vrow">' + val(m, m.v, m.money) + '<span class="sub">vs. ' + m.prev + '</span></div>' + compare(m) +
+          '<div class="axis"><span>' + m.ax[0] + '</span><span class="key"><span><i></i>This period</span><span><i class="prev"></i>Previous</span></span><span>' + m.ax[1] + '</span></div></article>';
+      } },
+    { k: 'C', name: 'Breakdown', note: 'What the number is made of. A segmented bar and a legend answer the first question a manager asks: where did it come from?',
+      r: function (m) {
+        var tot = m.parts.reduce(function (a, p) { return a + p[1]; }, 0);
+        var seg = m.parts.map(function (p) { return '<span style="width:' + (p[1] / tot * 100).toFixed(2) + '%;background:' + p[2] + '"></span>'; }).join('');
+        var lg = m.parts.map(function (p) { return '<div><span class="d" style="background:' + p[2] + '"></span><span class="n">' + p[0] + '</span><span class="q">' + (m.money ? money(p[1]) : p[1].toLocaleString('en-US')) + '</span></div>'; }).join('');
+        return '<article class="card sv sv-c">' + hd(m.l, m.per, goLink) + '<div class="vrow">' + val(m, m.v, m.money) + (m.warn ? '<span class="chg warn">' + m.warn + '</span>' : chg(m)) + '</div>' +
+          '<div class="sbar">' + seg + '</div><div class="lg">' + lg + '</div></article>';
+      } },
+    { k: 'D', name: 'Pace to target', note: 'Progress against the goal plus a marker for where we should be by now, so "on pace" and "behind" are read, not calculated.',
+      r: function (m) {
+        var p = m.pace, badge = p.ok ? '<span class="badge b-good">On pace</span>' : '<span class="badge b-warn">Behind</span>';
+        return '<article class="card sv sv-d' + (p.ok ? '' : ' behind') + '">' + hd(p.label || m.l, p.per || m.per, badge) +
+          '<div class="vrow">' + val(m, p.val, p.money) + '<span class="sub">' + p.of + '</span></div>' +
+          '<div class="trk" role="img" aria-label="' + p.fill + '% of target"><span class="f" style="width:' + p.fill + '%"></span><span class="tick" style="left:calc(' + p.tick + '% - 1px)"></span></div>' +
+          '<div class="ends"><span>' + p.l + '</span><span>' + p.r + '</span></div></article>';
+      } },
+    { k: 'E', name: 'Footer fact, glossy', rec: 'Chosen', note: 'The foundation stat card: change pill beside the value, one supporting fact in the footer, on the glossy surface used by every metric card. Hover a card to see the lift.',
+      r: function (m) {
+        var icons = { 'New leads': 'i-user', 'Contact rate': 'i-phone', 'Appointments': 'i-cal', 'Commission': 'i-dollar' };
+        return '<article class="card gloss sv sv-e' + (m.warn ? ' warn' : '') + '"><div class="ttl"><span class="ic">' + ico(icons[m.l]) + '</span>' + m.l + '</div>' +
+          '<div class="vrow">' + val(m, m.v, m.money) + (m.warn ? '' : pill(m)) + '</div>' +
+          '<div class="foot"><span>' + m.fk + '</span><b>' + m.fv + '</b></div></article>';
+      } }
+  ];
+  var so = document.getElementById('statOptions');
+  so.innerHTML = '<div class="opt-crit">' +
+    '<div><b>Icon tiles removed</b>Every card had the same green tile. It decorated without telling the cards apart.</div>' +
+    '<div><b>Charts need a scale</b>The old sparklines had no axis or comparison. Charts now show this period against the previous one.</div>' +
+    '<div><b>Change names its baseline</b>"+11.7%" alone is not enough. Each card says vs. what, with the previous value.</div>' +
+    '<div><b>Color means something</b>Green and red only for good and bad direction. A rising pending balance stays neutral grey.</div></div>';
+  OPTS.unshift(OPTS.pop());
+  OPTS.forEach(function (o) {
+    var w = document.createElement('div');
+    w.innerHTML = '<div class="opt-head"><span class="opt-letter">' + o.k + '</span><h3>' + o.name + '</h3>' + (o.rec ? '<span class="rec">' + o.rec + '</span>' : '') + '<p>' + o.note + '</p></div>' +
+      '<div class="opt-row">' + M.map(o.r).join('') + '</div>';
+    so.appendChild(w);
+  });
+
+  /* ---- table rows ---- */
+  var ROWS = [
+    ['Maria Hernandez', 'maria.h@example.com', 'MU-4471920-03', 'MO', 'Mutual of Omaha', 'good', 'In force', 'Jan 1, 2027', '1,284.00', true],
+    ['James O’Connell', 'joconnell@example.com', 'AE-1180027-11', 'AE', 'Aetna', 'info', 'Scheduled', 'Jan 1, 2027', '962.50', true],
+    ['Priya Raman', 'priya.r@example.com', 'HU-7720613-00', 'HU', 'Humana', 'warn', 'Needs signature', 'Dec 1, 2026', '1,047.25', false],
+    ['Linh Nguyen', 'linh.n@example.com', 'UH-3309458-07', 'UH', 'UnitedHealthcare', 'good', 'In force', 'Nov 1, 2026', '1,511.80', false],
+    ['Daniel Whitfield', 'dwhitfield@example.com', 'CI-5521093-02', 'CI', 'Cigna', 'bad', 'Lapsed', 'Oct 1, 2026', '874.00', false]
+  ];
+  var tb = document.getElementById('rows');
+  ROWS.forEach(function (r) {
+    var tr = document.createElement('tr'); if (r[9]) tr.className = 'sel';
+    tr.innerHTML = '<td><span class="check' + (r[9] ? ' on' : '') + '">' + (r[9] ? '<svg class="i"><use href="#i-check"/></svg>' : '') + '</span></td>' +
+      '<td><div class="who"><div><div class="n">' + r[0] + '</div><div class="e">' + r[1] + '</div></div></div></td>' +
+      '<td><span class="mono cell-muted">' + r[2] + '</span></td>' +
+      '<td>' + r[4] + '</td>' +
+      '<td><span class="badge b-' + r[5] + '">' + r[6] + '</span></td>' +
+      '<td class="num">' + r[7] + '</td>' +
+      '<td class="r"><span class="cell-muted">$</span>' + r[8] + '</td>' +
+      '<td><button class="btn ghost icon" type="button" aria-label="Actions for ' + r[0] + '"><svg class="i"><use href="#i-more"/></svg></button></td>';
+    tb.appendChild(tr);
+  });
+
+  /* ---- carrier grid ---- */
+  var CAR = [
+    ['MO', 'Mutual of Omaha', 'Medicare Supplement, Final Expense', 'good', 'Appointed', 412, '$84.2k', 14, ['FL', 'TX', 'AZ', 'GA', '+10']],
+    ['HU', 'Humana', 'Medicare Advantage, PDP', 'good', 'Appointed', 368, '$71.9k', 11, ['FL', 'OH', 'KY', 'TN', '+7']],
+    ['AE', 'Aetna', 'Medicare Advantage', 'info', 'Pending · 2 states', 141, '$29.4k', 6, ['NY', 'NJ', 'PA', '+3']],
+    ['UH', 'UnitedHealthcare', 'Medicare Advantage, Supplement', 'warn', 'Expires Nov 14', 290, '$62.0k', 9, ['CA', 'NV', 'WA', '+6']],
+    ['AM', 'Americo', 'Final Expense, Term Life', 'good', 'Appointed', 97, '$18.6k', 9, ['TX', 'MO', 'KS', '+6']]
+  ];
+  var cg = document.getElementById('carriers');
+  CAR.forEach(function (c) {
+    var d = document.createElement('article'); d.className = 'card cg';
+    d.innerHTML = '<div class="cg-top"><div class="t"><h4>' + c[1] + '</h4><div class="sub">' + c[2] + '</div></div><span class="badge b-' + c[3] + '">' + c[4] + '</span></div>' +
+      '<div class="cg-stats"><div><span class="l">Policies</span><span class="v">' + c[5].toLocaleString('en-US') + '</span></div><div><span class="l">Premium MTD</span><span class="v">' + c[6] + '</span></div><div><span class="l">States</span><span class="v">' + c[7] + '</span></div></div>' +
+      '<div class="states">' + c[8].map(function (s) { return '<span>' + s + '</span>'; }).join('') + '</div>';
+    cg.appendChild(d);
+  });
+  var add = document.createElement('button'); add.type = 'button'; add.className = 'card cg add';
+  add.innerHTML = '<span class="plus"><svg class="i"><use href="#i-plus"/></svg></span><b style="color:var(--text);font-weight:600">Request an appointment</b><span>Add a carrier and the states you sell in</span>';
+  cg.appendChild(add);
+
+  var fb = document.getElementById('filterBtn'), fp = document.getElementById('filterPop');
+  fb.onclick = function () { var open = fb.getAttribute('aria-expanded') !== 'true'; fb.setAttribute('aria-expanded', open ? 'true' : 'false'); fp.hidden = !open; document.getElementById('filterChev').style.transform = open ? 'rotate(180deg)' : ''; };
+  document.getElementById('filterChev').style.transform = 'rotate(180deg)';
+
+  var sf = 'inter', st = 'system';
+  try { sf = localStorage.getItem('ui3-face-v2') || sf; st = localStorage.getItem('ui3-theme') || st; } catch (e) {}
+  setFace(sf); setTheme(st);
+})();
+</script>

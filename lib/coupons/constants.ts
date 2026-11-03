@@ -24,6 +24,8 @@ export type CouponRow = {
   max_redemptions: number | null;
   redeemed_count: number;
   expires_at: string | null;
+  /** Null or empty: any plan. Checked by admin_apply_coupon and by checkout's checkCoupon. */
+  restricted_to_plan_ids: string[] | null;
   whop_promo_code_id: string | null;
   is_active: boolean;
   created_at: string;

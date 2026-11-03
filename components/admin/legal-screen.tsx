@@ -1,406 +1,388 @@
 "use client";
 
-import { useState } from "react";
+// Admin Legal page (board p-adm-legal).
+//
+// Left: the chosen document's versions (draft on top) and the acceptance lookup. Right: the draft
+// editor, or the text and record of the version picked on the left. Below: every version of every
+// document. Drafts live in legal_document_drafts (20260924363000) and no customer surface reads
+// them; publishing a draft is what customers see, and it is confirmed with its consequence first.
+
+import { StatusChip } from "@/components/ui/status-chip";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { ExternalLink, Search } from "lucide-react";
-import { toast } from "sonner";
-
-import { Badge } from "@/components/ui/badge";
+import { notify } from "@/lib/notify";
+import { PageHeader } from "@/components/ui/page-header";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { LEGAL_DOC_LABELS, type LegalDocType } from "@/lib/legal/constants";
+import { LEGAL_MIN_CONTENT_LENGTH, legalDay, nextLegalVersion, type AdminLegalVersion, type LegalDraft } from "@/lib/legal/adminTypes";
+import { CARD_TITLE, DRAFT_KEY, type EditorState, type Lookup, type Stat, VISIBLE_VERSIONS, fromDraft, plural, post, sameEditor } from "@/components/admin/legal/model";
+import { DocSwitch, HistoryTable, VersionRow, VersionView } from "@/components/admin/legal/versions";
+import { DraftSummaryCard, DraftTextCard, LookupCard } from "@/components/admin/legal/draft-cards";
+import { ClearDialog, PublishDialog } from "@/components/admin/legal/dialogs";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { LEGAL_DOC_LABELS, LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
-import { tableHeaderRow, tableHeadCell, tableShell } from "./table-styles";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 
-type Stat = {
-  document_id: string;
-  doc_type: string;
-  version: number;
-  title: string;
-  label: string;
-  is_draft: boolean;
-  requires_reacceptance: boolean;
-  eligible_users: number;
-  accepted_count: number;
+type Props = {
+  canPublish: boolean;
+  initialDoc: LegalDocType;
+  today: string;
+  stats: Stat[];
+  versions: AdminLegalVersion[];
+  drafts: LegalDraft[];
+  draftsSupported: boolean;
+  /** Users whose status is not 'inactive', at page load. The publish dialog re-reads it live. */
+  eligibleUsers: number | null;
+  lookup: Lookup | null;
 };
 
-type Version = {
-  id: string;
-  doc_type: string;
-  version: number;
-  title: string;
-  effective_date: string;
-  change_summary: string | null;
-  requires_reacceptance: boolean;
-  is_draft: boolean;
-  published_at: string;
-};
-
-type Lookup = {
-  email: string;
-  found: boolean;
-  records: { id: string; doc_type: string; version: number; accepted_at: string; ip: string | null; context: string }[];
-};
-
-type Props = { canPublish: boolean; stats: Stat[]; versions: Version[]; lookup: Lookup | null };
-
-export function LegalScreen({ canPublish, stats, versions, lookup }: Props) {
+export function LegalScreen({
+  canPublish,
+  initialDoc,
+  today,
+  stats,
+  versions,
+  drafts,
+  draftsSupported,
+  eligibleUsers,
+  lookup,
+}: Props) {
   const router = useRouter();
-  const [publishing, setPublishing] = useState(false);
-  const [open, setOpen] = useState(false);
-  const [email, setEmail] = useState(lookup?.email ?? "");
-  const [form, setForm] = useState({
-    docType: "tos" as LegalDocType,
-    title: "Terms of Service",
-    content: "",
-    effectiveDate: new Date().toISOString().slice(0, 10),
+  const [doc, setDoc] = useState<LegalDocType>(initialDoc);
+  const [selection, setSelection] = useState<Partial<Record<LegalDocType, string>>>({});
+  const [editors, setEditors] = useState<Partial<Record<LegalDocType, EditorState>>>({});
+  // A save/discard/publish answers before router.refresh() brings new props. These overrides bridge
+  // that gap and are dropped as soon as the props they were made against are replaced.
+  const [overrides, setOverrides] = useState<{ against: LegalDraft[]; map: Partial<Record<LegalDocType, LegalDraft | null>> }>({
+    against: drafts,
+    map: {},
+  });
+  const [busy, setBusy] = useState<null | "save" | "discard" | "publish">(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [clearTarget, setClearTarget] = useState<AdminLegalVersion | null>(null);
+  const [showAll, setShowAll] = useState(false);
+
+  const overrideMap = overrides.against === drafts ? overrides.map : {};
+  const draftFor = (type: LegalDocType): LegalDraft | null =>
+    type in overrideMap ? (overrideMap[type] ?? null) : (drafts.find((d) => d.doc_type === type) ?? null);
+
+  const docVersions = useMemo(() => versions.filter((v) => v.doc_type === doc), [versions, doc]);
+  const current = docVersions[0] ?? null;
+  const stat = stats.find((s) => s.doc_type === doc) ?? null;
+  const draft = draftFor(doc);
+  const nextVersion = nextLegalVersion(versions, doc);
+
+  const freshEditor = (): EditorState => ({
+    title: current?.title ?? LEGAL_DOC_LABELS[doc],
+    content: current?.content ?? "",
+    effectiveDate: today,
     changeSummary: "",
     requiresReacceptance: true,
   });
+  const editor: EditorState = editors[doc] ?? (draft ? fromDraft(draft) : freshEditor());
+  const saved = draft !== null && sameEditor(editor, fromDraft(draft));
 
-  async function publish() {
-    setPublishing(true);
-    const response = await fetch("/api/admin/legal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "publish", ...form }),
+  const canStartDraft = canPublish;
+  const defaultKey = draft || (canStartDraft && !current) ? DRAFT_KEY : (current?.id ?? (canStartDraft ? DRAFT_KEY : ""));
+  const requested = selection[doc];
+  const selectedKey =
+    requested === DRAFT_KEY && (draft || canStartDraft)
+      ? DRAFT_KEY
+      : requested && docVersions.some((v) => v.id === requested)
+        ? requested
+        : defaultKey;
+  const selectedVersion = selectedKey === DRAFT_KEY ? null : (docVersions.find((v) => v.id === selectedKey) ?? null);
+
+  function switchDoc(next: LegalDocType) {
+    setDoc(next);
+    setShowAll(false);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("doc", next);
+      window.history.replaceState(null, "", url.toString());
+    } catch {
+      // The URL is a convenience; the switch itself has happened.
+    }
+  }
+
+  function edit(patch: Partial<EditorState>) {
+    setEditors((prev) => ({ ...prev, [doc]: { ...editor, ...patch } }));
+  }
+
+  function setOverride(type: LegalDocType, value: LegalDraft | null) {
+    setOverrides({ against: drafts, map: { ...overrideMap, [type]: value } });
+  }
+
+  async function saveDraft() {
+    setBusy("save");
+    const result = await post({
+      action: "save_draft",
+      docType: doc,
+      title: editor.title,
+      content: editor.content,
+      effectiveDate: editor.effectiveDate,
+      changeSummary: editor.changeSummary.trim() || undefined,
+      requiresReacceptance: editor.requiresReacceptance,
+      expectedUpdatedAt: draft?.updated_at ?? null,
     });
-    const body = await response.json().catch(() => null);
-    setPublishing(false);
-
-    if (!response.ok) {
-      toast.error(body?.error ?? "Could not publish");
+    setBusy(null);
+    if (!result.ok) {
+      notify.block(String(result.body?.error ?? "Could not save the draft"));
       return;
     }
+    const savedDraft = result.body?.draft as LegalDraft;
+    setOverride(doc, savedDraft);
+    setEditors((prev) => ({ ...prev, [doc]: fromDraft(savedDraft) }));
+    notify.done("Draft saved. Customers cannot see it until it is published.");
+    router.refresh();
+  }
 
-    toast.success(
-      form.requiresReacceptance
-        ? `Published v${body.version}. Every user will be asked to accept it on their next request.`
-        : `Published v${body.version}. Nobody is interrupted.`,
+  async function discardDraft() {
+    if (!draft) {
+      setEditors((prev) => ({ ...prev, [doc]: undefined }));
+      return;
+    }
+    if (!(await confirmAction({ title: `Discard the draft of version ${nextVersion}?`, description: "Its text is deleted; nothing published changes.", confirmLabel: "Discard draft", cancelLabel: "Keep draft" }))) return;
+    setBusy("discard");
+    const result = await post({ action: "discard_draft", docType: doc, expectedUpdatedAt: draft.updated_at });
+    setBusy(null);
+    if (!result.ok) {
+      notify.block(String(result.body?.error ?? "Could not discard the draft"));
+      return;
+    }
+    setOverride(doc, null);
+    setEditors((prev) => ({ ...prev, [doc]: undefined }));
+    setSelection((prev) => ({ ...prev, [doc]: undefined }));
+    notify.done("Draft discarded.");
+    router.refresh();
+  }
+
+  /** Returns an error to show in the dialog, or null when it published. */
+  async function publish(): Promise<string | null> {
+    setBusy("publish");
+    const result = draftsSupported
+      ? await post({ action: "publish_draft", docType: doc, expectedVersion: nextVersion, expectedUpdatedAt: draft?.updated_at })
+      : await post({
+          action: "publish",
+          docType: doc,
+          title: editor.title,
+          content: editor.content,
+          effectiveDate: editor.effectiveDate,
+          changeSummary: editor.changeSummary.trim() || undefined,
+          requiresReacceptance: editor.requiresReacceptance,
+        });
+    setBusy(null);
+    if (!result.ok) return String(result.body?.error ?? "Could not publish");
+
+    const version = Number(result.body?.version);
+    notify.done(
+      editor.requiresReacceptance
+        ? `Published version ${version}. Every user will be asked to accept it on their next request.`
+        : `Published version ${version}. Nobody is interrupted.`,
     );
-    setOpen(false);
-    setForm({ ...form, content: "", changeSummary: "" });
+    setOverride(doc, null);
+    setEditors((prev) => ({ ...prev, [doc]: undefined }));
+    setSelection((prev) => ({ ...prev, [doc]: undefined }));
+    setConfirmOpen(false);
     router.refresh();
+    return null;
   }
 
-  async function clearReacceptance(documentId: string, title: string) {
-    const reason = window.prompt(`Why is the re-acceptance requirement being cleared on ${title}?`);
-    if (!reason || reason.trim().length < 5) {
-      if (reason !== null) toast.error("Give a reason of at least 5 characters");
-      return;
-    }
+  const contentLongEnough = editor.content.trim().length >= LEGAL_MIN_CONTENT_LENGTH;
+  const titleOk = editor.title.trim().length >= 3;
+  const publishBlocker = !contentLongEnough
+    ? `The text must be at least ${LEGAL_MIN_CONTENT_LENGTH} characters before it can be published.`
+    : !titleOk
+      ? "Give the document a title of at least 3 characters."
+      : draftsSupported && !draft
+        ? "Save the draft first. Publishing sends the saved text, so what customers get is exactly what was saved."
+        : draftsSupported && !saved
+          ? "Save your changes first. Publishing sends the saved draft, not unsaved edits."
+          : null;
 
-    const response = await fetch("/api/admin/legal", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "clear_reacceptance", documentId, reason: reason.trim() }),
-    });
-
-    if (!response.ok) {
-      const body = await response.json().catch(() => null);
-      toast.error(body?.error ?? "Could not clear it");
-      return;
-    }
-
-    toast.success("Cleared — nobody is blocked by this version any more.");
-    router.refresh();
-  }
+  const shownVersions = showAll ? docVersions : docVersions.slice(0, VISIBLE_VERSIONS);
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {stats.map((stat) => {
-          const rate = stat.eligible_users === 0 ? 0 : stat.accepted_count / stat.eligible_users;
-          return (
-            <Card key={stat.document_id}>
-              <CardContent className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{stat.label}</p>
-                    <p className="text-2xl font-bold">
-                      v{stat.version}{" "}
-                      <span className="text-base font-normal text-muted-foreground">
-                        · {(rate * 100).toFixed(0)}% accepted
-                      </span>
-                    </p>
-                  </div>
-                  {stat.is_draft && (
-                    <Badge variant="outline" className="border-transparent bg-[var(--color-warning)]/10 text-[var(--color-warning)]">
-                      Draft
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {stat.accepted_count} of {stat.eligible_users} active users
-                </p>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Link
-                    href={`/legal/${stat.doc_type}?v=${stat.version}`}
-                    target="_blank"
-                    className="inline-flex items-center gap-1 text-xs font-medium text-[var(--brand-600)] underline"
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+      <PageHeader title="Legal" actions={<DocSwitch value={doc} onChange={switchDoc} />} />
+
+      <StatStrip label={LEGAL_DOC_LABELS[doc]}>
+        <StatTile label="Live version" value={current ? `v${current.version}` : "None"} footnote={current ? `effective ${legalDay(current.effective_date)}` : "nothing published"} />
+        <StatTile
+          label="Accepted"
+          value={stat && stat.eligible_users > 0 ? `${Math.round((stat.accepted_count / stat.eligible_users) * 100)}%` : "—"}
+          footnote={stat ? `${stat.accepted_count.toLocaleString("en-US")} of ${stat.eligible_users.toLocaleString("en-US")} active users` : "not counted"}
+        />
+        <StatTile label="Versions" value={docVersions.length.toLocaleString("en-US")} footnote={current?.requires_reacceptance ? "live one needs re-acceptance" : "published so far"} />
+        <StatTile label="Draft" value={draft ? "Saved" : "None"} valueSize="text" footnote={draftsSupported ? (draft ? "ready to publish" : "start one to edit") : "drafts not set up"} />
+      </StatStrip>
+
+      <div className="flex min-w-0 flex-col gap-6 lg:flex-row">
+        {/* ── left column ───────────────────────────────────────────────────────────────── */}
+        <div className="flex min-w-0 flex-col gap-5 lg:w-[340px] lg:shrink-0">
+          <section className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)] bg-[var(--surface)]">
+            <div className="flex items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+              <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">{CARD_TITLE[doc]}</span>
+              <span className="flex items-center gap-2.5">
+                {stat && (
+                  <span
+                    className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)] tabular-nums"
+                    title={`${stat.accepted_count.toLocaleString("en-US")} of ${stat.eligible_users.toLocaleString("en-US")} active users accepted version ${stat.version}`}
                   >
-                    Read it <ExternalLink className="size-3" />
-                  </Link>
-                  {canPublish && stat.requires_reacceptance && rate < 1 && (
-                    <button
-                      type="button"
-                      onClick={() => clearReacceptance(stat.document_id, stat.title)}
-                      className="text-xs font-medium text-muted-foreground underline"
-                      title="Stops this version blocking anyone. Use if it was published by mistake."
-                    >
-                      Stop requiring acceptance
-                    </button>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-
-        {stats.length === 0 && (
-          <Card className="sm:col-span-2 lg:col-span-3">
-            <CardContent className="text-sm text-muted-foreground">
-              No legal documents have been published. Signup is blocked until at least a Terms of
-              Service and a Privacy Policy exist — nobody can be asked to agree to a document that
-              does not exist.
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {canPublish && (
-        <div>
-          <Button onClick={() => setOpen(true)}>Publish a new version</Button>
-        </div>
-      )}
-
-      <Card>
-        <CardContent className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wide text-[var(--brand-700)]">
-            Look up a user&apos;s acceptance history
-          </h2>
-
-          <form
-            className="flex gap-2"
-            onSubmit={(event) => {
-              event.preventDefault();
-              router.push(`/admin/legal?user=${encodeURIComponent(email.trim())}`);
-            }}
-          >
-            <Input
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="user@example.com"
-              className="max-w-sm"
-            />
-            <Button type="submit" variant="outline">
-              <Search className="size-4" /> Look up
-            </Button>
-          </form>
-
-          {lookup && !lookup.found && (
-            <p className="text-sm text-muted-foreground">No user with that email address.</p>
-          )}
-
-          {lookup?.found && lookup.records.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              That user exists but has accepted nothing. They signed up before acceptance was
-              recorded, or their signup did not complete.
-            </p>
-          )}
-
-          {lookup?.found && lookup.records.length > 0 && (
-            <div className={tableShell}>
-              <Table>
-                <TableHeader>
-                  <TableRow className={tableHeaderRow}>
-                    <TableHead className={tableHeadCell}>Document</TableHead>
-                    <TableHead className={tableHeadCell}>Version</TableHead>
-                    <TableHead className={tableHeadCell}>Accepted</TableHead>
-                    <TableHead className={tableHeadCell}>Where</TableHead>
-                    <TableHead className={tableHeadCell}>IP</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lookup.records.map((record) => (
-                    <TableRow key={record.id}>
-                      <TableCell className="font-medium">
-                        {LEGAL_DOC_LABELS[record.doc_type as LegalDocType]}
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          href={`/legal/${record.doc_type}?v=${record.version}`}
-                          target="_blank"
-                          className="text-[var(--brand-600)] underline"
-                        >
-                          v{record.version}
-                        </Link>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">
-                        {new Date(record.accepted_at).toLocaleString()}
-                      </TableCell>
-                      <TableCell>{record.context === "signup" ? "At signup" : "Re-acceptance"}</TableCell>
-                      <TableCell className="font-mono text-xs">{record.ip ?? "—"}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      <div className={tableShell}>
-        <Table>
-          <TableHeader>
-            <TableRow className={tableHeaderRow}>
-              <TableHead className={tableHeadCell}>Document</TableHead>
-              <TableHead className={tableHeadCell}>Version</TableHead>
-              <TableHead className={tableHeadCell}>Effective</TableHead>
-              <TableHead className={tableHeadCell}>Material</TableHead>
-              <TableHead className={tableHeadCell}>What changed</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {versions.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">
-                  Nothing published yet.
-                </TableCell>
-              </TableRow>
-            ) : (
-              versions.map((doc) => (
-                <TableRow key={doc.id}>
-                  <TableCell className="font-medium">
-                    {LEGAL_DOC_LABELS[doc.doc_type as LegalDocType]}
-                    {doc.is_draft && <span className="ml-2 text-xs text-[var(--color-warning)]">draft</span>}
-                  </TableCell>
-                  <TableCell>
-                    <Link
-                      href={`/legal/${doc.doc_type}?v=${doc.version}`}
-                      target="_blank"
-                      className="text-[var(--brand-600)] underline"
-                    >
-                      v{doc.version}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap">
-                    {new Date(doc.effective_date).toLocaleDateString()}
-                  </TableCell>
-                  <TableCell>{doc.requires_reacceptance ? "Yes" : "No"}</TableCell>
-                  <TableCell className="max-w-md text-sm text-muted-foreground">
-                    {doc.change_summary ?? "—"}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Publish a new version</DialogTitle>
-            <DialogDescription>
-              The version number is allocated when you publish. Older versions stay readable
-              forever — that is what makes an acceptance record mean anything.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-3">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="docType">Document</Label>
-                <select
-                  id="docType"
-                  value={form.docType}
-                  onChange={(event) => {
-                    const docType = event.target.value as LegalDocType;
-                    setForm({ ...form, docType, title: LEGAL_DOC_LABELS[docType] });
-                  }}
-                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-                >
-                  {LEGAL_DOC_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {LEGAL_DOC_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="effectiveDate">Effective date</Label>
-                <Input
-                  id="effectiveDate"
-                  type="date"
-                  value={form.effectiveDate}
-                  onChange={(event) => setForm({ ...form, effectiveDate: event.target.value })}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                value={form.title}
-                onChange={(event) => setForm({ ...form, title: event.target.value })}
-              />
-            </div>
-
-            <div className="space-1.5 space-y-1.5">
-              <Label htmlFor="content">Text (markdown: # headings, - bullets, **bold**)</Label>
-              <textarea
-                id="content"
-                value={form.content}
-                onChange={(event) => setForm({ ...form, content: event.target.value })}
-                rows={12}
-                className="w-full rounded-md border border-input bg-transparent p-3 font-mono text-xs"
-                placeholder="# Terms of Service&#10;&#10;## 1. ..."
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="changeSummary">What changed (shown to users on the acceptance screen)</Label>
-              <Input
-                id="changeSummary"
-                value={form.changeSummary}
-                onChange={(event) => setForm({ ...form, changeSummary: event.target.value })}
-                placeholder="Clarified the refund policy and added a data retention period."
-              />
-            </div>
-
-            <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border p-3 text-sm">
-              <input
-                type="checkbox"
-                checked={form.requiresReacceptance}
-                onChange={(event) => setForm({ ...form, requiresReacceptance: event.target.checked })}
-                className="mt-0.5 size-4 accent-[var(--brand-600)]"
-              />
-              <span>
-                <span className="font-medium">This is a material change.</span> Every user is blocked
-                from the product until they accept it. Leave unticked for a typo fix — interrupting
-                every customer over a comma teaches them to click through without reading.
+                    {stat.eligible_users === 0 ? "No active users" : `${Math.round((stat.accepted_count / stat.eligible_users) * 100)}% accepted`}
+                  </span>
+                )}
               </span>
-            </label>
-          </div>
+            </div>
 
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setOpen(false)} disabled={publishing}>
-              Cancel
-            </Button>
-            <Button onClick={publish} disabled={publishing || form.content.trim().length < 50}>
-              {publishing ? "Publishing…" : "Publish"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <div className="divide-y divide-[var(--border)]">
+              {(draft || canStartDraft) && (
+                <VersionRow
+                  selected={selectedKey === DRAFT_KEY}
+                  onSelect={() => setSelection((prev) => ({ ...prev, [doc]: DRAFT_KEY }))}
+                  title={`Version ${nextVersion}`}
+                  meta={
+                    draft
+                      ? `Draft · edited ${legalDay(draft.updated_at)}`
+                      : !draftsSupported
+                        ? "New version · drafts need a database update"
+                        : current
+                          ? `No draft yet · starts from version ${current.version}`
+                          : "No draft yet"
+                  }
+                  pills={
+                    <StatusChip tone="warning" dot>
+                      Draft
+                    </StatusChip>
+                  }
+                />
+              )}
+
+              {shownVersions.map((version) => {
+                const isCurrent = version.id === current?.id;
+                const count = version.accepted_count ?? (isCurrent && stat ? stat.accepted_count : null);
+                return (
+                  <VersionRow
+                    key={version.id}
+                    selected={selectedKey === version.id}
+                    onSelect={() => setSelection((prev) => ({ ...prev, [doc]: version.id }))}
+                    title={`Version ${version.version}`}
+                    meta={`Effective ${legalDay(version.effective_date)} · ${count === null ? "acceptances not counted yet" : plural(count, "acceptance", "acceptances")}`}
+                    pills={
+                      <>
+                        {isCurrent ? (
+                          <StatusChip tone="good" dot>
+                            Published
+                          </StatusChip>
+                        ) : (
+                          <StatusChip tone="neutral" dot>
+                            Superseded
+                          </StatusChip>
+                        )}
+                        {version.is_draft && <StatusChip dot={false} tone="warning">Unreviewed text</StatusChip>}
+                      </>
+                    }
+                  />
+                );
+              })}
+
+              {docVersions.length > VISIBLE_VERSIONS && (
+                <div className="px-4 py-2.5">
+                  <Button type="button" onClick={() => setShowAll((v) => !v)} variant="ghost" size="sm" className="px-0 text-[var(--accent-ink)]">
+                    {showAll ? "Show fewer versions" : `Show all ${docVersions.length} versions`}
+                  </Button>
+                </div>
+              )}
+
+              {docVersions.length === 0 && !draft && (
+                <div className="px-4 py-[11px]">
+                  <span className="block text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Nothing published yet</span>
+                  <span className="mt-0.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--muted)]">
+                    {doc === "dpa"
+                      ? "Signup does not require a Data Processing Agreement. Once a version is published, everyone is asked to accept it."
+                      : "Signup is blocked until a Terms of Service and a Privacy Policy both exist. Nobody can be asked to agree to a document that does not exist."}
+                  </span>
+                </div>
+              )}
+            </div>
+          </section>
+
+          <LookupCard doc={doc} lookup={lookup} />
+        </div>
+
+        {/* ── right column ──────────────────────────────────────────────────────────────── */}
+        <div className="flex min-w-0 flex-1 flex-col gap-5">
+          {selectedKey === DRAFT_KEY ? (
+            <>
+              <DraftTextCard
+                key={`text-${doc}`}
+                version={nextVersion}
+                editor={editor}
+                canEdit={canPublish}
+                hasSavedDraft={draft !== null}
+                onEdit={edit}
+              />
+              <DraftSummaryCard
+                doc={doc}
+                version={nextVersion}
+                editor={editor}
+                canEdit={canPublish}
+                draft={draft}
+                saved={saved}
+                draftsSupported={draftsSupported}
+                eligibleUsers={eligibleUsers}
+                busy={busy}
+                publishBlocker={publishBlocker}
+                titleOk={titleOk}
+                onEdit={edit}
+                onSave={saveDraft}
+                onDiscard={discardDraft}
+                onPublish={() => setConfirmOpen(true)}
+              />
+            </>
+          ) : selectedVersion ? (
+            <VersionView
+              doc={doc}
+              version={selectedVersion}
+              isCurrent={selectedVersion.id === current?.id}
+              stat={stat}
+              canClear={canPublish}
+              onClear={() => setClearTarget(selectedVersion)}
+            />
+          ) : (
+            <section className="rounded-[12px] border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center">
+              <div className="text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">Nothing to show yet</div>
+              <p className="mx-auto mt-1.5 max-w-[46ch] text-sm leading-[1.5] tracking-[-0.02em] text-[var(--muted)]">
+                No version of the {LEGAL_DOC_LABELS[doc]} has been published. Only a super admin can write and publish one.
+              </p>
+            </section>
+          )}
+        </div>
+      </div>
+
+      <HistoryTable versions={versions} stats={stats} />
+
+      <PublishDialog
+        open={confirmOpen}
+        onOpenChange={(next) => busy !== "publish" && setConfirmOpen(next)}
+        doc={doc}
+        version={nextVersion}
+        editor={editor}
+        pageLoadEligible={eligibleUsers}
+        busy={busy === "publish"}
+        onConfirm={publish}
+      />
+
+      <ClearDialog
+        target={clearTarget}
+        doc={doc}
+        onClose={() => setClearTarget(null)}
+        onCleared={() => {
+          setClearTarget(null);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }
+
+/* ── document switch ───────────────────────────────────────────────────────────────────────── */

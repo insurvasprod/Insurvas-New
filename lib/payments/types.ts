@@ -56,6 +56,8 @@ export type ChargeLookup = {
 
 export interface PaymentProvider {
   readonly code: ProviderCode;
+  /** Optional provider reachability/authentication probe used by platform configuration screens. */
+  testConnection?(): Promise<void>;
   createCustomer(input: CreateCustomerInput): Promise<CreateCustomerResult>;
   createCheckoutSession(input: CreateCheckoutSessionInput): Promise<CheckoutSession>;
   /**

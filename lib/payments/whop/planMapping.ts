@@ -10,7 +10,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildProvider } from "../registry";
 import { WhopProvider } from "./provider";
 import type { BillingCycle } from "@/lib/money";
-import { TRIAL_DAYS } from "@/lib/checkout/constants";
+import { trialDaysForPlan } from "@/lib/checkout/trialDays";
 
 const PRICE_COLUMN: Record<BillingCycle, "price_monthly_cents" | "price_quarterly_cents" | "price_yearly_cents"> = {
   monthly: "price_monthly_cents",
@@ -88,7 +88,8 @@ export async function ensureWhopPlan(
     accountId: process.env.WHOP_ACCOUNT_ID,
     priceCents,
     setupFeeCents: prices?.setup_fee_cents ?? 0,
-    trialDays: TRIAL_DAYS,
+    // The same trial our subscription records (lib/checkout/complete.ts), from the plan's own price row.
+    trialDays: await trialDaysForPlan(planId),
     billingCycle,
     ourPlanId: plan.id,
     planCode: plan.code,

@@ -1,127 +1,309 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type ReactNode } from "react";
+import { Info } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Save } from "lucide-react";
 
+import { authControl, authLabel } from "@/components/app/auth-card";
+import { AuthAlert } from "@/components/portal/auth-controls";
+import { FunnelActions } from "@/components/portal/funnel-actions";
+import { FunnelHeading } from "@/components/app/funnel-frame";
+import { MultiPicker } from "@/components/app/multi-picker";
+import { StatePicker } from "@/components/app/state-picker";
+import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, US_STATES, VOLUME_OPTIONS } from "@/lib/signup/constants";
+import { Segmented } from "@/components/ui/view-tabs";
+import { BUSINESS_FOCUS_OPTIONS, inferBusinessFocus, LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, productsForBusinessFocus, type BusinessFocus, VOLUME_OPTIONS } from "@/lib/signup/constants";
+import { checkPhone, phoneCountry, splitPhone } from "@/lib/signup/phone";
+import { cn } from "@/lib/utils";
 
-export function BusinessProfileForm() {
+const chip = (on: boolean) =>
+  cn(
+    "min-h-10 rounded-full px-3.5 text-sm font-semibold tracking-[-0.02em] transition-colors duration-150",
+    on ? "border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border border-[var(--border-strong)] bg-card text-[var(--body)] hover:border-[var(--accent-ink)]",
+  );
+
+/**
+ * What each field needs, one short sentence (owner, 2026-10-26: "an informational icon that explains
+ * each field"; then: shown on hover, not as a card that pushes the form down).
+ */
+const AGENCY_INFO = {
+  name: "Your agency's legal name, or the DBA your clients know you by.",
+  state: "The main state your agency will operate in. Type its name or two-letter code.",
+  sell: "Every product line your agency writes. Pick as many as apply.",
+  focus: "Choose Life, Health, or both. Existing non-Life/Health work can use Other. Product choices stay broad and customizable.",
+  volume: "Roughly how many applications the whole agency submits a month.",
+  sources: "Where your leads come from today. Pick all that apply.",
+  phone: "The number we reach you on about your account. Never shown to your clients.",
+} as const;
+type InfoKey = keyof typeof AGENCY_INFO;
+
+/** The same hints for one independent agent: "you", not "your agency". */
+const AGENT_INFO: Record<InfoKey, string> = {
+  name: "The name you do business under, if you have one. Leave it empty to use your own name.",
+  state: "The main state you sell in. Type its name or two-letter code.",
+  sell: "Every product line you write. Pick as many as apply.",
+  focus: "Choose Life, Health, or both. Existing non-Life/Health work can use Other. Product choices stay broad and customizable.",
+  volume: "Roughly how many applications you submit a month.",
+  sources: "Where your leads come from today. Pick all that apply.",
+  phone: AGENCY_INFO.phone,
+};
+
+/** A field's label with its (i). Hover or focus shows the hint floating above, so nothing below moves. */
+function FieldLabel({ id, label, info, end = false }: { id: InfoKey; label: string; info: string; end?: boolean }) {
+  return (
+    // On a phone the hint spans the label row (the outer span is its box), so it never runs off the
+    // screen; from 640px it sits by the (i), toward the inside of the column.
+    <span className="relative flex items-center gap-1.5">
+      <span className={authLabel}>{label}</span>
+      <span className="group inline-flex sm:relative">
+        <button
+          type="button"
+          aria-label={`What ${label.toLowerCase()} needs`}
+          aria-describedby={`info-${id}`}
+          // A tap focuses it, which shows the hint on a touch screen where there is no hover.
+          onClick={(event) => event.currentTarget.focus()}
+          className="inline-flex size-6 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-[var(--accent-ink)] focus-visible:text-[var(--accent-ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
+        >
+          <Info className="size-4" aria-hidden="true" />
+        </button>
+        <span
+          id={`info-${id}`}
+          role="tooltip"
+          className={cn("pointer-events-none invisible absolute bottom-full inset-x-0 z-20 mb-1.5 rounded-lg sm:right-auto sm:-left-2 sm:w-64 border border-[var(--border-strong)] bg-[var(--color-card)] px-3 py-2 text-xs font-normal leading-normal text-[var(--body)] opacity-0 shadow-[var(--shadow-overlay,0_12px_30px_rgba(0,0,0,.35))] transition-opacity duration-150 group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100", end && "sm:left-auto sm:-right-2")}
+        >
+          {info}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+export type BusinessProfileInitial = {
+  businessName: string;
+  primaryState: string;
+  productsSold: string[];
+  monthlyVolumeRange: string;
+  leadSources: string[];
+  leadSourceOther: string | null;
+};
+
+/** The person, asked here since step 1 is only email and password (manager review, 2026-10-28). */
+export type AboutYouInitial = { firstName: string; lastName: string; phone: string };
+
+/**
+ * Step 3 of 3, About you (after payment). The person (name, phone) and the business. The answers decide the setup
+ * checklist shown after checkout; the server derives it when it saves the profile.
+ *
+ * `audience` is who signed up, from the plan picked on the pricing page: one independent agent reads
+ * "Tell us about you" and may leave the business name empty; an agency reads "Tell us about your agency"
+ * (manager review, 2026-10-28: "I started as an independent agent... it's common sense").
+ *
+ * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
+ * The name starts empty otherwise: guessing it from the email domain is gone (owner, 2026-10-27).
+ */
+export function BusinessProfileForm({ initial = null, person, audience = "agency", back, skipHref, gate = false }: {
+  initial?: BusinessProfileInitial | null;
+  person: AboutYouInitial;
+  audience?: "individual" | "agency";
+  /** The Back button beside Continue. */
+  back?: string;
+  /** "Skip for now", after payment: into the app without the profile (asked again at the next login). */
+  skipHref?: string;
+  /** The first-login gate: "Finish setting up" and no Skip (the page puts Sign out on the step line). */
+  gate?: boolean;
+}) {
   const router = useRouter();
-  const [products, setProducts] = useState<string[]>([]);
-  const [leadSources, setLeadSources] = useState<string[]>([]);
+  const solo = audience === "individual";
+  const info = solo ? AGENT_INFO : AGENCY_INFO;
+  const [firstName, setFirstName] = useState(person.firstName);
+  const [lastName, setLastName] = useState(person.lastName);
+  const [phoneCountryCode, setPhoneCountryCode] = useState(() => splitPhone(person.phone).country);
+  const [phone, setPhone] = useState(() => splitPhone(person.phone).national);
+  const [phoneTouched, setPhoneTouched] = useState(false);
+  const [businessName, setBusinessName] = useState(initial?.businessName ?? "");
+  // A field in the right column opens its hint toward the left, so it never runs past the column
+  // (owner, 2026-10-27: the page scrolled sideways at 125% Windows scaling).
+  const label = (id: InfoKey, text: string, end = false): ReactNode => <FieldLabel id={id} label={text} info={info[id]} end={end} />;
+  const [primaryState, setPrimaryState] = useState(initial?.primaryState ?? "");
+  const [products, setProducts] = useState<string[]>(initial?.productsSold ?? []);
+  const [businessFocus, setBusinessFocus] = useState<BusinessFocus>(() => inferBusinessFocus(initial?.productsSold ?? []));
+  const [volume, setVolume] = useState(initial?.monthlyVolumeRange ?? "");
+  const [leadSources, setLeadSources] = useState<string[]>(initial?.leadSources ?? []);
+  const [leadSourceOther, setLeadSourceOther] = useState(initial?.leadSourceOther ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function toggle(value: string, current: string[], setCurrent: (value: string[]) => void) {
-    setCurrent(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
-  }
+  const phoneCheck = checkPhone(phoneCountryCode, phone);
+  const phoneError = phoneTouched && !phoneCheck.ok ? phoneCheck.error : null;
+  const fullName = `${firstName.trim()} ${lastName.trim()}`.trim();
+  // One agent without a business name does business under their own.
+  // One agent does business under their own name (no business-name field for them).
+  const sentBusinessName = solo ? fullName : businessName.trim();
+  const focusProductCodes = productsForBusinessFocus(businessFocus);
+  const focusProducts = products.filter((product) => focusProductCodes.includes(product));
+  const businessFocusProducts = businessFocus === "life" ? ["life"]
+    : businessFocus === "health" ? ["health"]
+      : businessFocus === "both" ? ["life", "health"]
+        : businessFocus === "other" ? ["property_casualty"] : [];
+  const productsForSubmit = [...new Set([...businessFocusProducts, ...focusProducts])];
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  const missing = [
+    !firstName.trim() && "first name",
+    !lastName.trim() && "last name",
+    !phoneCheck.ok && "phone number",
+    !solo && sentBusinessName.length < 2 && "agency name",
+    !primaryState && "primary state",
+    !businessFocus && "a business focus",
+    focusProducts.length === 0 && "a product",
+    !volume && "monthly applications",
+    leadSources.length === 0 && "a lead source",
+    leadSources.includes("other") && !leadSourceOther.trim() && "the other lead source",
+  ].filter(Boolean) as string[];
+
+  // One way out of this step (2026-10-26, owner: "remove save and exit"): save, then the plan step.
+  async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    if (missing.length) { setPhoneTouched(true); setError(`Still needed: ${missing.join(", ")}.`); return; }
     setSubmitting(true);
-    const form = new FormData(event.currentTarget);
-    const response = await fetch("/api/app/onboarding/business-profile", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        businessName: form.get("businessName"),
-        npn: form.get("npn"),
-        primaryState: form.get("primaryState"),
-        productsSold: products,
-        monthlyVolumeRange: form.get("monthlyVolumeRange"),
-        leadSources,
-        leadSourceOther: form.get("leadSourceOther"),
-      }),
-    });
-    const body = await response.json().catch(() => null);
-    setSubmitting(false);
-    if (!response.ok) {
-      setError(body?.error ?? "Could not save your business profile");
-      return;
+    try {
+      const response = await fetch("/api/app/onboarding/business-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName: firstName.trim(), lastName: lastName.trim(), phone: phoneCheck.ok ? phoneCheck.e164 : undefined, businessName: sentBusinessName, primaryState, productsSold: productsForSubmit, monthlyVolumeRange: volume, leadSources, leadSourceOther: leadSources.includes("other") ? leadSourceOther : null }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setError(body?.error ?? "Could not save your business profile"); return; }
+      router.push(body?.redirectTo ?? "/app/onboarding/plan");
+      router.refresh();
+    } catch {
+      setError("Could not save your business profile. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
     }
-    router.push(body?.redirectTo ?? "/app/checkout");
-    router.refresh();
   }
 
   return (
-    <Card className="bg-white shadow-[0_18px_50px_rgba(0,64,127,0.12)]">
-      <CardHeader>
-        <p className="text-sm font-bold uppercase tracking-[0.18em] text-[var(--brand-600)]">Email verified</p>
-        <CardTitle className="text-3xl font-extrabold tracking-tight">Tell us about your business</CardTitle>
-        <p className="text-sm text-[var(--color-text-muted)]">These answers personalize the setup checklist you see after checkout.</p>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-7">
-          <div className="grid gap-5 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="businessName">Business name</Label>
-              <Input id="businessName" name="businessName" minLength={2} maxLength={160} required />
+    <div>
+      {/* One line saying why (copy table, owner 2026-10-27); the NPN is asked later in Settings. */}
+      <FunnelHeading title={gate ? "Finish setting up your workspace" : solo ? "Tell us about you" : "Tell us about your agency"}>
+        {gate ? "One last step before you start. It takes a minute." : "We use this to set up your workspace."}
+      </FunnelHeading>
+      <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-5">
+        {/* One grid, two to a row on a wide screen, so the step fits without scrolling (2026-10-26).
+            One grid rather than one per row: an independent agent has no business-name field, and the
+            fields after it move up a cell instead of leaving a gap (manager review, 2026-10-28). */}
+        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+          <label className="block">
+            <span className={authLabel}>First name</span>
+            <input className={authControl} autoComplete="given-name" maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} />
+          </label>
+          <label className="block">
+            <span className={authLabel}>Last name</span>
+            <input className={authControl} autoComplete="family-name" maxLength={60} value={lastName} onChange={(event) => setLastName(event.target.value)} />
+          </label>
+          <div>
+            {label("phone", "Phone number")}
+            {/* One field, not two boxes side by side: the country code and the number share one border
+                with a divider, so they always line up (owner, 2026-10-28: "the code is not in line"). */}
+            <div
+              className={cn(
+                "mt-1.5 flex h-11 overflow-hidden rounded-md border border-[var(--border-strong)] bg-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]",
+                phoneError && "border-[var(--error)]",
+              )}
+            >
+              <PhoneCountryPicker value={phoneCountryCode} onChange={setPhoneCountryCode} className="h-full w-[92px] shrink-0 rounded-none border-0 border-r border-[var(--border-strong)] bg-transparent focus-visible:ring-0" />
+              <input
+                className="h-full min-w-0 flex-1 bg-transparent px-3 text-base leading-normal tracking-[-0.02em] text-foreground outline-none placeholder:text-muted-foreground"
+                aria-label="Phone number"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel-national"
+                maxLength={24}
+                value={phone}
+                onChange={(event) => setPhone(event.target.value)}
+                onBlur={() => setPhoneTouched(true)}
+                placeholder={phoneCountry(phoneCountryCode)?.example}
+                aria-invalid={phoneError ? true : undefined}
+                aria-describedby="about-phone-note"
+              />
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="npn">National Producer Number (NPN)</Label>
-              <Input id="npn" name="npn" inputMode="numeric" pattern="[0-9]{1,10}" maxLength={10} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="primaryState">Primary state</Label>
-              <select id="primaryState" name="primaryState" required defaultValue="" className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm">
-                <option value="" disabled>Choose state</option>
-                {US_STATES.map(([code, name]) => <option key={code} value={code}>{name}</option>)}
-              </select>
-            </div>
+            <p id="about-phone-note" aria-live="polite" className="mt-1 text-xs leading-normal text-[var(--error-ink)] empty:hidden">{phoneError}</p>
           </div>
-
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-semibold">Products sold</legend>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {PRODUCT_OPTIONS.map((option) => (
-                <label key={option.value} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition ${products.includes(option.value) ? "border-[var(--brand-500)] bg-[var(--brand-50)]" : "hover:bg-[var(--color-row-bg)]"}`}>
-                  <input type="checkbox" checked={products.includes(option.value)} onChange={() => toggle(option.value, products, setProducts)} />
-                  {option.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="monthlyVolumeRange">Monthly application volume</Label>
-            <select id="monthlyVolumeRange" name="monthlyVolumeRange" required defaultValue="" className="h-10 w-full rounded-md border border-[var(--color-border)] bg-white px-3 text-sm">
-              <option value="" disabled>Choose a range</option>
-              {VOLUME_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-            </select>
-          </div>
-
-          <fieldset className="space-y-3">
-            <legend className="text-sm font-semibold">How do you get leads?</legend>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {LEAD_SOURCE_OPTIONS.map((option) => (
-                <label key={option.value} className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 text-sm transition ${leadSources.includes(option.value) ? "border-[var(--brand-500)] bg-[var(--brand-50)]" : "hover:bg-[var(--color-row-bg)]"}`}>
-                  <input type="checkbox" checked={leadSources.includes(option.value)} onChange={() => toggle(option.value, leadSources, setLeadSources)} />
-                  {option.label}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-
-          {leadSources.includes("other") && (
-            <div className="space-y-1.5">
-              <Label htmlFor="leadSourceOther">Other lead source</Label>
-              <Input id="leadSourceOther" name="leadSourceOther" maxLength={120} required />
+          {/* "I am an independent agent… tell us more about you, not the agency" (manager review,
+              2026-10-28, 02:15): one-agent plans are not asked for a business name at all; the
+              workspace carries the person's name, and a DBA can be added in Settings › Business identity. */}
+          {!solo && (
+            <div>
+              {label("name", "Agency name", true)}
+              <input className={authControl} aria-label="Agency name" autoComplete="organization" maxLength={160} value={businessName} onChange={(event) => setBusinessName(event.target.value)} />
             </div>
           )}
+          {/* Hints open toward the inside of the column they land in, which shifts by one for an agent. */}
+          <div>
+            {label("state", "Primary State", solo)}
+            <StatePicker value={primaryState} onChange={setPrimaryState} />
+          </div>
+          <div>
+            {label("focus", "Business focus")}
+            <div className="mt-1.5">
+              <Segmented label="Business focus" options={BUSINESS_FOCUS_OPTIONS} value={businessFocus} onChange={setBusinessFocus} />
+            </div>
+            {businessFocus && (
+              <div className="mt-3">
+                {label("sell", "What you sell", !solo)}
+                <MultiPicker
+                  label="What you sell"
+                  placeholder="Choose products"
+                  options={PRODUCT_OPTIONS.filter((option) => focusProductCodes.includes(option.value))}
+                  value={focusProducts}
+                  onChange={(next) => setProducts((current) => [...current.filter((product) => !focusProductCodes.includes(product)), ...next])}
+                />
+              </div>
+            )}
+          </div>
+          {/* Lead sources beside the monthly volume (2026-10-28: the step fits a 1366×657 laptop window).
+              The five volume chips fill the column, each as wide as its words, at the field height. */}
+          <div>
+            {label("sources", "Where your leads come from", solo)}
+            <MultiPicker label="Where your leads come from" placeholder="Choose lead sources" options={LEAD_SOURCE_OPTIONS} value={leadSources} onChange={setLeadSources} />
+          </div>
+          {/* Alone on the last row for one agent: it takes the whole row rather than half of it. */}
+          <fieldset className={cn("min-w-0", solo && "sm:col-span-2")}>
+            <legend className="contents">{label("volume", "Applications a month", !solo)}</legend>
+            <div className="mt-1.5 flex gap-1" role="radiogroup" aria-label="Applications a month">
+              {VOLUME_OPTIONS.map((option) => (
+                <button key={option.value} type="button" role="radio" aria-checked={volume === option.value} className={cn(chip(volume === option.value), "min-h-11 flex-auto whitespace-nowrap px-1 text-xs tabular-nums")} onClick={() => setVolume(option.value)}>
+                  {option.label.replace(/\s*applications\s*\/\s*month$/, "")}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+        </div>
 
-          {error && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-[var(--color-danger)]">{error}</p>}
-          <Button type="submit" size="lg" className="w-full" disabled={submitting || products.length === 0 || leadSources.length === 0}>
-            {submitting ? <LoaderCircle className="animate-spin" /> : <Save />}
-            {submitting ? "Saving profile…" : "Save and continue"}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+        {leadSources.includes("other") && (
+          <label className="block">
+            <span className={authLabel}>Other lead source</span>
+            <input className={authControl} maxLength={120} value={leadSourceOther} onChange={(event) => setLeadSourceOther(event.target.value)} />
+          </label>
+        )}
+
+        {error && <AuthAlert>{error}</AuthAlert>}
+        {/* Back beside Continue, the footer of every step (manager review, 2026-10-28). */}
+        <FunnelActions back={back}>
+          {/* Skip beside Continue, quieter (manager review, 2026-10-28: "make a skip button … he can
+              skip business information"). A plain link: nothing typed here is sent. */}
+          <div className="flex gap-3">
+            {skipHref && (
+              <Button asChild variant="outline" className="h-11 shrink-0 border-[var(--border-strong)] px-5">
+                <a href={skipHref} data-profile-skip="">Skip for now</a>
+              </Button>
+            )}
+            <Button type="submit" className="h-11 min-w-0 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
+          </div>
+        </FunnelActions>
+      </form>
+    </div>
   );
 }

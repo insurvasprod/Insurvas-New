@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { toast } from "sonner";
+import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,16 +14,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { TENANT_ROLES, TENANT_ROLE_LABELS, type TenantRole } from "@/lib/tenantAuth/roles";
 import type { UserListRow } from "@/lib/users/list";
 import { InviteLinkPanel } from "./invite-link-panel";
+import { inputControl } from "@/components/ui/field";
 
 export function EditUserDialog({
   user,
@@ -31,7 +25,8 @@ export function EditUserDialog({
   onClose,
   onSaved,
 }: {
-  user: UserListRow | null;
+  /** `phone` is the stored number; the save sends the whole form, so it must start from it. */
+  user: (UserListRow & { phone?: string | null }) | null;
   /** Separate from `user` so the row stays rendered while the dialog animates closed. */
   open: boolean;
   onClose: () => void;
@@ -41,7 +36,9 @@ export function EditUserDialog({
   // opening a different user remounts it with fresh initial state — which is why there's no
   // effect here re-seeding the fields (that would be a cascading render).
   const [name, setName] = useState(user?.name ?? "");
-  const [phone, setPhone] = useState("");
+  // Seeded from the row, not "": PATCH sends `p_phone: phone || null`, so an empty field here
+  // wiped the stored number on every save, even one that only changed the name.
+  const [phone, setPhone] = useState(user?.phone ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [role, setRole] = useState<TenantRole>((user?.tenant_role as TenantRole) ?? "producer");
   const [loading, setLoading] = useState(false);
@@ -55,13 +52,14 @@ export function EditUserDialog({
     const res = await fetch(`/api/admin/users/${user.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, phone, email, role }),
+      // The row's tenant: the role is per tenant, and the route refuses to guess for a user in several.
+      body: JSON.stringify({ name, phone, email, role, tenantId: user.tenant_id ?? null }),
     });
     const body = await res.json().catch(() => null);
     setLoading(false);
 
     if (!res.ok) {
-      toast.error(body?.error ?? "Could not update user");
+      notify.block(body?.error ?? "Could not update user");
       return;
     }
 
@@ -69,12 +67,12 @@ export function EditUserDialog({
 
     if (body.emailChange) {
       // Keep the dialog open so the admin can hand over the confirmation link.
-      toast.success("Saved — the new email needs confirming");
+      notify.done("Saved — the new email needs confirming");
       setEmailChange(body.emailChange);
       return;
     }
 
-    toast.success(`${name} updated`);
+    notify.done(`${name} updated`);
     onClose();
   }
 
@@ -125,18 +123,13 @@ export function EditUserDialog({
               </div>
               <div className="col-span-2 space-y-1.5">
                 <Label htmlFor="edit-role">Role in tenant</Label>
-                <Select value={role} onValueChange={(v) => setRole(v as TenantRole)}>
-                  <SelectTrigger id="edit-role" className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
+                <select id="edit-role" className={inputControl} value={role} onChange={(event) => { const v = event.target.value; setRole(v as TenantRole); }}>
                     {TENANT_ROLES.map((r) => (
-                      <SelectItem key={r} value={r}>
+                      <option key={r} value={r}>
                         {TENANT_ROLE_LABELS[r]}
-                      </SelectItem>
+                      </option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
               </div>
             </div>
             <DialogFooter>

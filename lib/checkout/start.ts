@@ -10,10 +10,15 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { buildProvider } from "@/lib/payments/registry";
 import { WhopProvider } from "@/lib/payments/whop/provider";
 import { ensureWhopPlan } from "@/lib/payments/whop/planMapping";
-import { couponRejectionReason } from "@/lib/coupons/discount";
+import { couponRejectionReason, isFullComp } from "@/lib/coupons/discount";
+import { redeemFullComp } from "./fullComp";
 import { availableBillingCycles } from "@/lib/money";
 import type { PlanPrices } from "@/lib/money";
-import { TRIAL_DAYS, checkoutReturnUrl } from "./constants";
+import { checkoutReturnUrl } from "./constants";
+import { trialDaysForPlan } from "./trialDays";
+import { checkoutPaymentMode } from "./paymentMode";
+import { completeWithoutPayment, NO_PAYMENT_LANDING } from "./noPayment";
+import type { CouponTerms } from "./couponSummary";
 import type { BillingCycle } from "@/lib/money";
 
 export class CheckoutError extends Error {}
@@ -23,9 +28,16 @@ export type StartedCheckout = {
   sessionId: string;
   planName: string;
   trialDays: number;
+  /**
+   * Whop's checkout configuration (`ch_…`), which the Payment step mounts in Whop's embedded Checkout
+   * element (owner pick A, 2026-10-26). Null when nothing is paid: a free coupon or no-payment mode.
+   */
+  configId: string | null;
 };
 
-export type CouponCheck = { ok: true; couponId: string; code: string } | { ok: false; reason: string };
+export type CouponCheck =
+  | { ok: true; couponId: string; code: string; terms: CouponTerms }
+  | { ok: false; reason: string };
 
 /**
  * Validates a coupon BEFORE checkout opens, against our mirror of Whop's promo codes.
@@ -38,7 +50,7 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
   const supabase = getSupabaseServiceClient();
   const { data: coupon } = await supabase
     .from("coupons")
-    .select("id, code, is_active, expires_at, max_redemptions, redeemed_count, restricted_to_plan_ids")
+    .select("id, code, is_active, expires_at, max_redemptions, redeemed_count, restricted_to_plan_ids, discount_type, percent_off, amount_off_cents, duration, duration_periods")
     .eq("code", code.trim().toUpperCase())
     .maybeSingle<{
       id: string;
@@ -48,6 +60,11 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
       max_redemptions: number | null;
       redeemed_count: number;
       restricted_to_plan_ids: string[] | null;
+      discount_type: CouponTerms["discountType"];
+      percent_off: number | null;
+      amount_off_cents: number | null;
+      duration: CouponTerms["duration"];
+      duration_periods: number | null;
     }>();
 
   if (!coupon) return { ok: false, reason: "That code was not recognised." };
@@ -64,7 +81,18 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
     return { ok: false, reason: "That code does not apply to the plan you have chosen." };
   }
 
-  return { ok: true, couponId: coupon.id, code: coupon.code };
+  return {
+    ok: true,
+    couponId: coupon.id,
+    code: coupon.code,
+    terms: {
+      discountType: coupon.discount_type,
+      percentOff: coupon.percent_off,
+      amountOffCents: coupon.amount_off_cents,
+      duration: coupon.duration,
+      durationPeriods: coupon.duration_periods,
+    },
+  };
 }
 
 /**
@@ -76,6 +104,19 @@ export async function checkCoupon(code: string, planId: string): Promise<CouponC
  */
 export async function startCheckout(tenantId: string, couponCode?: string): Promise<StartedCheckout> {
   const supabase = getSupabaseServiceClient();
+
+  // A workspace whose plan has already started has nothing to buy here. Opening a checkout anyway
+  // used to put it back to awaiting_payment, and the shell then bounced the owner from the dashboard
+  // to Payment for good (2026-10-26: a free coupon started the plan, a later visit to /app/checkout
+  // undid the "completed" state). Send them to the product instead.
+  const { data: live } = await supabase
+    .from("subscriptions")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .neq("status", "cancelled")
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (live) return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: live.id, planName: "", trialDays: 0, configId: null };
 
   const { data: selection } = await supabase
     .from("signup_selections")
@@ -112,6 +153,19 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     const check = await checkCoupon(couponCode, plan.id);
     if (!check.ok) throw new CheckoutError(check.reason);
     couponId = check.couponId;
+    // 100% off forever: nothing will ever be owed, so the provider is never called. There is no card
+    // page and no membership, so there is nothing that could be charged (lib/checkout/fullComp.ts).
+    if (isFullComp(check.terms)) {
+      const started = await redeemFullComp(tenantId, { id: plan.id, name: plan.name }, selection.billing_cycle, { id: check.couponId, code: check.code });
+      return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: null };
+    }
+  }
+
+  // No payment taken (CHECKOUT_PAYMENT_MODE=none): the plan chosen at signup starts here, the same way a
+  // paid checkout ends, and the owner is sent straight into the workspace. The provider is never called.
+  if (checkoutPaymentMode() === "none") {
+    const started = await completeWithoutPayment(tenantId, { id: plan.id, name: plan.name }, selection.billing_cycle);
+    return { checkoutUrl: NO_PAYMENT_LANDING, sessionId: started.subscriptionId, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: null };
   }
 
   // An open session is reused so returning to checkout does not strand the first one.
@@ -120,30 +174,59 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
     .select("id, checkout_url, provider_config_id")
     .eq("tenant_id", tenantId)
     .eq("status", "open")
+    // Only a session for the plan and cycle chosen now: "Change plan" on Payment (the payment screen (step 2 of 3)) must
+    // not send the buyer back to a page for the plan they moved away from.
+    .eq("plan_id", plan.id)
+    .eq("billing_cycle", selection.billing_cycle)
     .order("created_at", { ascending: false })
+    // Without it, two open sessions make maybeSingle() error, nothing is reused, and every visit
+    // to checkout opens yet another session.
+    .limit(1)
     .maybeSingle<{ id: string; checkout_url: string; provider_config_id: string }>();
 
   if (open && !couponId) {
-    return { checkoutUrl: open.checkout_url, sessionId: open.id, planName: plan.name, trialDays: TRIAL_DAYS };
+    return { checkoutUrl: open.checkout_url, sessionId: open.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: open.provider_config_id };
   }
 
   // Creates the Whop plan on first sale of this (version, cycle) and reuses it forever after. The
   // trial lives on that plan.
   const mapping = await ensureWhopPlan(plan.id, selection.billing_cycle);
 
-  const provider = buildProvider("whop");
+  const provider = buildProvider("whop", { tenantId });
   if (!(provider instanceof WhopProvider)) throw new CheckoutError("Checkout requires the Whop provider.");
 
-  const session = await provider.createCheckoutSession({
-    providerPlanId: mapping.whopPlanId,
-    tenantId,
-    metadata: {
-      insurvas_plan_id: plan.id,
-      insurvas_billing_cycle: selection.billing_cycle,
-      ...(couponId ? { insurvas_coupon_id: couponId } : {}),
-    },
-    returnUrl: checkoutReturnUrl() ?? undefined,
-  });
+  // `ensureWhopPlan` returns a stored mapping without asking Whop whether it still exists, which is
+  // right on the hot path — one fewer round trip per checkout — but it means a wrong row is believed
+  // forever. When that happens Whop answers `404 This Plan was not found` from
+  // `POST /checkout_configurations`, the route logs a stack and the buyer gets "Could not open
+  // checkout", and nothing anywhere names the actual problem: one bad row in `whop_plans`.
+  //
+  // That is not hypothetical — `scripts/seed-demo-data.mjs` used to seed six invented ids into that
+  // table, so every checkout 404'd and `verify:checkout` had never passed. The seeding is fixed; this
+  // makes the failure diagnosable if a mapping ever goes stale again (a plan deleted in the Whop
+  // dashboard, or a mapping carried between accounts).
+  let session;
+  try {
+    session = await provider.createCheckoutSession({
+      providerPlanId: mapping.whopPlanId,
+      tenantId,
+      metadata: {
+        insurvas_plan_id: plan.id,
+        insurvas_billing_cycle: selection.billing_cycle,
+        ...(couponId ? { insurvas_coupon_id: couponId } : {}),
+      },
+      returnUrl: checkoutReturnUrl() ?? undefined,
+    });
+  } catch (error) {
+    const status = (error as { status?: number } | null)?.status;
+    if (status === 404) {
+      throw new CheckoutError(
+        `The stored Whop plan for ${plan.code} v${plan.version} (${selection.billing_cycle}) no longer exists on Whop ` +
+          `— whop_plans maps it to "${mapping.whopPlanId}". Delete that row so the next checkout recreates the plan.`,
+      );
+    }
+    throw error;
+  }
 
   const { data: row, error } = await supabase
     .from("checkout_sessions")
@@ -162,7 +245,8 @@ export async function startCheckout(tenantId: string, couponCode?: string): Prom
   if (error) throw new CheckoutError(`Could not record the checkout session: ${error.message}`);
 
   // Abandoning leaves the tenant here rather than in a broken half-state, and returning resumes.
-  await supabase.from("tenants").update({ onboarding_state: "awaiting_payment" }).eq("id", tenantId);
+  // Never over a finished sign-up: a completed workspace is not waiting for a payment.
+  await supabase.from("tenants").update({ onboarding_state: "awaiting_payment" }).eq("id", tenantId).neq("onboarding_state", "completed");
 
-  return { checkoutUrl: session.url, sessionId: row.id, planName: plan.name, trialDays: TRIAL_DAYS };
+  return { checkoutUrl: session.url, sessionId: row.id, planName: plan.name, trialDays: await trialDaysForPlan(plan.id), configId: session.id };
 }

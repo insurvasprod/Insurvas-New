@@ -1,0 +1,226 @@
+<div> {justify-content:space-between;gap:16px;padding:10px 32px;bd-bottom:1px solid #d5dbe3;bg:#ffffff}
+  <span> {fsize:14px;fweight:400;color:#33383f}
+    "Northline Insurance · Growth plan · Owner"
+  <span> {gap:8px}
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+      "Owner only"
+    <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e0f3e7;color:#0d7038;fsize:12px;fweight:400;fweight:600}
+      <span> {width:6px;height:6px;bd-radius:9999px;bg:#138a43}
+      "Effective-dated and audited"
+<div> {flex-direction:column;padding:24px 32px 32px}
+  <div .m-stagger> {flex-direction:column;gap:24px}
+    <div> {justify-content:space-between;gap:24px}
+        <div> {fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+          "Settings · Sales"
+        <h1> {fsize:32px;fweight:600;color:#15191e}
+          "Extension"
+        <p> {fsize:16px;fweight:400;color:#60646c}
+          "The browser extension that fills a carrier’s own form, the sites it is allowed on, and how to take that permission back."
+      <div> {gap:12px}
+    <div> {gap:24px}
+      <div> {width:236px}
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {padding:10px}
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carriers and products"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Appointments"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Underwriting templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quotation templates"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Application field sets"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Carrier field maps"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Disclosures"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Quote and QA preferences"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Welcome pack"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "AI assistant"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:#fff3ec;color:#a63800;fweight:600;fsize:14px;fweight:400}
+              "Extension"
+            <a href="#"> {gap:8px;height:36px;padding:0 12px;bd-radius:8px;bg:transparent;color:#33383f;fsize:14px;fweight:400}
+              "Pipeline sync"
+        <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+          <div> {justify-content:space-between;gap:16px;padding:12px 16px;bg:#e4e8ee;bd-bottom:1px solid #d5dbe3}
+            <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+              "Extension"
+            <span> {gap:10px}
+              <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#e4e8ee;color:#33383f;fsize:12px;fweight:400;fweight:600}
+                "Owner only"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Install"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "Per device and per person. Nothing here is installed for an agent on their behalf."
+              <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:18px 20px}
+                <div> {gap:14px}
+                  <span> {gap:6px;padding:3px 10px;bd-radius:9999px;bg:#fcefdf;color:#9a4f00;fsize:12px;fweight:400;fweight:600}
+                    <span> {width:6px;height:6px;bd-radius:9999px;bg:#b35c00}
+                    "Not installed on this device"
+                  <span> {fsize:14px;fweight:400;color:#33383f}
+                    "Chrome 141 · macOS · signed in as Rinor G."
+                  <span> {gap:10px}
+                    <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                      "Install for Chrome"
+                    <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                      "Copy the install link"
+                <div> {fsize:12px;fweight:400;color:#60646c}
+                  "Priya S. and Dwayne A. have it on their own machines. It is per device and per person: their grants are not yours."
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Where it is allowed to run"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "The extension has no access to any site that is not on this list, including a carrier we are appointed with."
+              <div> {flex-direction:column;bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff}
+                <table> {width:100%}
+                  <thead>
+                    <tr> {bg:#e4e8ee}
+                      <th> {padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Domain"
+                      <th> {width:132px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Carrier"
+                      <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Granted by"
+                      <th> {width:150px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                        "Granted at"
+                      <th> {width:100px;padding:8px 12px;fsize:12px;fweight:600;text-transform:uppercase;color:#60646c}
+                  <tbody .m-seq>
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "agents.gerberlife.example"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Gerber Life"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Rinor G."
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "14 Aug 2026"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                          "Revoke"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "producer.mutualofomaha.example"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Mutual of Omaha"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Rinor G."
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "14 Aug 2026"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                          "Revoke"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "agent.americo.example"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Americo"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Priya S."
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "2 Sep 2026"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <button type="button"> {justify-content:center;gap:8px;height:30px;padding:0 16px;bd-radius:8px;bg:transparent;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                          "Revoke"
+                    <tr .m-row>
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <code> {fsize:12px;color:#15191e}
+                          "myforesters.example"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "Foresters"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "—"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        <span> {color:#60646c}
+                          "Never granted"
+                      <td> {padding:8px 12px;fsize:14px;fweight:400;color:#33383f;bd-top:1px solid #d5dbe3}
+                        "—"
+                  <h2> {fsize:18px;fweight:600;color:#15191e}
+                    "Grant history"
+                  <p> {fsize:14px;fweight:400;color:#60646c}
+                    "Every grant and every revocation, with who did it."
+                  <div> {flex-direction:column;gap:14px}
+                    <div> {gap:12px}
+                      <span> {width:7px;height:7px;bd-radius:9999px;bg:#c92a2a}
+                        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                          "Dwayne A. revoked"
+                          <strong>
+                            "agent.americo.example"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "28 Sep 3:12pm · his own grant · reason: shared machine"
+                    <div> {gap:12px}
+                      <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+                        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                          "Priya S. granted"
+                          <strong>
+                            "agent.americo.example"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "2 Sep 9:41am · from the Submit step of Tomas Herrera’s case"
+                    <div> {gap:12px}
+                      <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+                        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                          "Rinor G. granted"
+                          <strong>
+                            "producer.mutualofomaha.example"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "14 Aug 11:02am · from Settings"
+                    <div> {gap:12px}
+                      <span> {width:7px;height:7px;bd-radius:9999px;bg:#138a43}
+                        <span> {fsize:14px;fweight:400;fweight:600;color:#15191e}
+                          "Rinor G. granted"
+                          <strong>
+                            "agents.gerberlife.example"
+                        <span> {fsize:12px;fweight:400;color:#60646c}
+                          "14 Aug 11:01am · from Settings"
+          <div> {padding:20px 24px;bd-bottom:1px solid #d5dbe3}
+              <h2> {fsize:18px;fweight:600;color:#15191e}
+                "Tokens"
+              <p> {fsize:14px;fweight:400;color:#60646c}
+                "Read-only facts about what a granted session can actually do."
+              <div> {bd:1px solid #d5dbe3;bd-radius:12px;bg:#ffffff;padding:6px 18px 16px}
+                <div> {justify-content:space-between;gap:16px;padding:11px 0;bd-top:1px solid #d5dbe3}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Token lifetime"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "Scoped to one application and one carrier domain. Not a setting — it is what the server issues."
+                  <span> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "90 minutes"
+                <div> {justify-content:space-between;gap:16px;padding:11px 0;bd-top:1px solid #d5dbe3}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "What a token can read"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "It cannot list cases, and it cannot see a second application on the same household."
+                  <span> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "One case, one attempt"
+                <div> {justify-content:space-between;gap:16px;padding:11px 0;bd-top:1px solid #d5dbe3}
+                    <span> {fsize:14px;fweight:400;fweight:600;color:#33383f}
+                      "Sensitive fields"
+                    <span> {fsize:12px;fweight:400;color:#60646c}
+                      "A revealed Social Security number goes back to dots whether or not it was used."
+                  <span> {fsize:14px;fweight:400;color:#15191e;fweight:600}
+                    "Re-masked after 60 seconds"
+                <div> {justify-content:space-between;gap:16px;bd-top:1px solid #d5dbe3}
+                  <span> {fsize:12px;fweight:400;color:#60646c}
+                    "Revoking ends every grant for every person in this agency at once. Each agent re-grants from the Submit step, one carrier at a time."
+                  <button type="button"> {justify-content:center;gap:8px;height:44px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#b02020;bd:1px solid #c92a2a;fsize:14px;fweight:600}
+                    "Revoke every grant"
+                <div> {padding:14px 16px;bd:1px solid #d5dbe3;bd-left:3px solid #00708a;bd-radius:12px;bg:#e0f2f6}
+                  <div> {fsize:14px;fweight:400;fweight:600;color:#005e75}
+                    "Revocation is checked on every request"
+                  <p> {fsize:14px;fweight:400;color:#33383f}
+                    "A revoked grant stops working in under a second, not at the end of the token’s life. That is why the lifetime can be generous."
+          <div> {justify-content:space-between;gap:16px;padding:14px 24px;bd-top:1px solid #d5dbe3;bg:#f1f3f7}
+            <span> {fsize:12px;fweight:400;color:#60646c}
+              "Changes are audited — who, when, and what the value was before. Publishing a new version leaves the old one readable, because an application submitted under it still points at it."
+            <span> {gap:12px}
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ffffff;color:#15191e;bd:1px solid #7a828e;fsize:14px;fweight:600}
+                "Discard"
+              <button type="button"> {justify-content:center;gap:8px;height:40px;padding:0 16px;bd-radius:8px;bg:#ff5900;color:#15191e;bd:1px solid transparent;fsize:14px;fweight:600}
+                "Save changes"

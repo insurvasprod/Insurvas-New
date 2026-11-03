@@ -6,6 +6,7 @@ import { CAN_MANAGE_TEMPLATES } from "@/lib/templates/permissions";
 import { fetchTemplates } from "@/lib/templates/queries";
 import { updateTemplateSchema } from "@/lib/templates/schemas";
 import { saveTemplate } from "@/lib/templates/service";
+import { fetchTemplatePublishedAt } from "@/lib/templates/usage";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -14,14 +15,36 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const { id } = await params;
   const body = await request.json().catch(() => null);
 
+  // SA-4.7: make this template the one its product hands out to agents with no template yet. Not
+  // content either, so no new version. admin_set_default_template (20261015610000) clears the
+  // product's previous default in the same transaction.
+  if (body && Object.keys(body).length === 1 && body.is_default === true) {
+    const { data: before } = await getSupabaseServiceClient().from("templates").select("id, name, product_code, is_active").eq("id", id).maybeSingle();
+    if (!before) return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    if (!before.is_active) return NextResponse.json({ error: "Restore the template before making it the default" }, { status: 409 });
+    const { error } = await getSupabaseServiceClient().rpc("admin_set_default_template" as never, { p_template_id: id } as never) as unknown as { error: { code?: string; message: string } | null };
+    if (error && (error.code === "PGRST202" || error.code === "42883")) {
+      return NextResponse.json({ error: "Default templates need a database update that has not been applied yet." }, { status: 503 });
+    }
+    if (error) return NextResponse.json({ error: "Could not make this the default template" }, { status: 500 });
+    await audit({ actorId: auth.session.sub, action: "template.default_set", targetType: "template", targetId: id, metadata: { name: before.name, product_code: before.product_code }, request });
+    return NextResponse.json({ template: { id, is_default: true } });
+  }
+
   // Availability is not content. Toggling it does not create a meaningless new schema version.
   if (body && Object.keys(body).length === 1 && typeof body.is_active === "boolean") {
     const { data: before } = await getSupabaseServiceClient().from("templates").select("id, name, is_active").eq("id", id).maybeSingle();
     if (!before) return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    // A template never offered before (published_at null, once 20260925504000 is applied) is a draft:
+    // making it active is its first publication, not a restore. Before the migration every inactive
+    // template was once active, so this stays "restored" exactly as it always was.
+    const publication = before.is_active || !body.is_active ? null : await fetchTemplatePublishedAt(id).catch(() => null);
+    const firstPublication = publication !== null && publication.supported && publication.publishedAt === null;
     const { data: updated, error } = await getSupabaseServiceClient().from("templates").update({ is_active: body.is_active }).eq("id", id).select("id, name, is_active, version").single();
     if (error) return NextResponse.json({ error: "Could not update the template" }, { status: 500 });
     if (before.is_active !== body.is_active) {
-      await audit({ actorId: auth.session.sub, action: body.is_active ? "template.restored" : "template.archived", targetType: "template", targetId: id, metadata: { name: before.name }, request });
+      const action = body.is_active ? (firstPublication ? "template.published" : "template.restored") : "template.archived";
+      await audit({ actorId: auth.session.sub, action, targetType: "template", targetId: id, metadata: { name: before.name, version: updated.version }, request });
     }
     return NextResponse.json({ template: updated });
   }

@@ -1,0 +1,2971 @@
+{
+  "base": "http://localhost:3100",
+  "runs": 3,
+  "at": "2026-10-20T13:14:14.169Z",
+  "results": [
+    {
+      "member": "owner",
+      "page": "accounting-settings",
+      "status": 200,
+      "location": null,
+      "ttfb": 519.1832000000004,
+      "html": 521.4112999999998,
+      "kb": 103,
+      "ready": 1465.4515999999994,
+      "lcp": 612,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/settings-audit/last",
+        "ms": 539.3375000000005,
+        "status": 200
+      },
+      "finalUrl": "/app/accounting-settings",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "activity",
+      "status": 200,
+      "location": null,
+      "ttfb": 467.3546000000006,
+      "html": 469.4413000000004,
+      "kb": 83,
+      "ready": 2476.1674999999996,
+      "lcp": 696,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/activity",
+        "ms": 1635.4366999999984,
+        "status": 200
+      },
+      "finalUrl": "/app/activity",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "agency",
+      "status": 200,
+      "location": null,
+      "ttfb": 410.42879999999786,
+      "html": 414.5880999999972,
+      "kb": 83,
+      "ready": 3249.170399999999,
+      "lcp": 652,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/agency/dashboard",
+        "ms": 2496.0185999999994,
+        "status": 200
+      },
+      "finalUrl": "/app/agency",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "alerts",
+      "status": 200,
+      "location": null,
+      "ttfb": 437.8974999999991,
+      "html": 806.7897999999986,
+      "kb": 102,
+      "ready": 1282.3308000000034,
+      "lcp": 604,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 518.8977000000014,
+        "status": 200
+      },
+      "finalUrl": "/app/alerts",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "application-review",
+      "status": 200,
+      "location": null,
+      "ttfb": 421.63210000000254,
+      "html": 423.76030000000173,
+      "kb": 84,
+      "ready": 1704.8828999999969,
+      "lcp": 628,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agency/review",
+        "ms": 995.3407000000007,
+        "status": 200
+      },
+      "finalUrl": "/app/application-review",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "applications",
+      "status": 200,
+      "location": null,
+      "ttfb": 395.50130000000354,
+      "html": 802.3515000000043,
+      "kb": 129,
+      "ready": 971.7981,
+      "lcp": 520,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 372.29559999999765,
+        "status": 200
+      },
+      "finalUrl": "/app/applications",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "appointments",
+      "status": 200,
+      "location": null,
+      "ttfb": 470.01800000000367,
+      "html": 472.60949999999866,
+      "kb": 85,
+      "ready": 1485.9132000000027,
+      "lcp": 644,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/appointment-vault",
+        "ms": 574.9044000000067,
+        "status": 200
+      },
+      "finalUrl": "/app/appointments",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "assignments",
+      "status": 200,
+      "location": null,
+      "ttfb": 697.5216999999975,
+      "html": 786.8625000000029,
+      "kb": 89,
+      "ready": 5109.2644,
+      "lcp": 780,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/assignments",
+        "ms": 3808.541400000002,
+        "status": 200
+      },
+      "finalUrl": "/app/assignments",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "attribution",
+      "status": 200,
+      "location": null,
+      "ttfb": 463.98129999999946,
+      "html": 466.1738999999943,
+      "kb": 84,
+      "ready": 1769.2971000000107,
+      "lcp": 1828,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agency/attribution",
+        "ms": 1005.754700000005,
+        "status": 200
+      },
+      "finalUrl": "/app/attribution",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "bank",
+      "status": 200,
+      "location": null,
+      "ttfb": 434.39809999999125,
+      "html": 562.1716999999917,
+      "kb": 91,
+      "ready": 1141.7792000000045,
+      "lcp": 656,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 367.3018000000011,
+        "status": 200
+      },
+      "finalUrl": "/app/bank",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "book-import",
+      "status": 200,
+      "location": null,
+      "ttfb": 439.54739999999583,
+      "html": 517.821299999996,
+      "kb": 113,
+      "ready": 1075.0440999999992,
+      "lcp": 620,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 366.1918000000005,
+        "status": 200
+      },
+      "finalUrl": "/app/book-import",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "book-scorecards",
+      "status": 200,
+      "location": null,
+      "ttfb": 378.6854999999923,
+      "html": 798.4391000000032,
+      "kb": 235,
+      "ready": 980.8872999999876,
+      "lcp": 560,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 347.37300000000687,
+        "status": 200
+      },
+      "finalUrl": "/app/book-scorecards",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "calendar",
+      "status": 200,
+      "location": null,
+      "ttfb": 384.39210000001185,
+      "html": 392.1247000000003,
+      "kb": 83,
+      "ready": 2596.6054000000004,
+      "lcp": 608,
+      "apiCount": 7,
+      "slowestApi": {
+        "url": "/api/app/appointments",
+        "ms": 1091.5071999999927,
+        "status": 200
+      },
+      "finalUrl": "/app/calendar",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "callbacks",
+      "status": 200,
+      "location": null,
+      "ttfb": 375.05890000000363,
+      "html": 377.10719999999856,
+      "kb": 84,
+      "ready": 2356.1684999999998,
+      "lcp": 600,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/callbacks",
+        "ms": 1577.2662999999884,
+        "status": 200
+      },
+      "finalUrl": "/app/callbacks",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "campaigns",
+      "status": 200,
+      "location": null,
+      "ttfb": 433.0176999999967,
+      "html": 434.9189999999944,
+      "kb": 84,
+      "ready": 2942.9035999999905,
+      "lcp": 584,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/campaigns",
+        "ms": 2209.026199999993,
+        "status": 200
+      },
+      "finalUrl": "/app/campaigns",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "carrier-files",
+      "status": 200,
+      "location": null,
+      "ttfb": 546.2257999999856,
+      "html": 604.4144999999844,
+      "kb": 137,
+      "ready": 1337.213300000003,
+      "lcp": 736,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 440.8973999999871,
+        "status": 200
+      },
+      "finalUrl": "/app/carrier-files",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "carrier-rules",
+      "status": 200,
+      "location": null,
+      "ttfb": 416.1923999999999,
+      "html": 657.7902999999933,
+      "kb": 141,
+      "ready": 1466.19200000001,
+      "lcp": 612,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/settings-audit/last",
+        "ms": 534.7082999999984,
+        "status": 200
+      },
+      "finalUrl": "/app/carrier-rules",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "commission-splits",
+      "status": 200,
+      "location": null,
+      "ttfb": 397.19940000001225,
+      "html": 399.8362999999954,
+      "kb": 84,
+      "ready": 1262.9879000000074,
+      "lcp": 1108,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agency/overrides",
+        "ms": 598.8036999999895,
+        "status": 200
+      },
+      "finalUrl": "/app/commission-splits",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "complaints",
+      "status": 200,
+      "location": null,
+      "ttfb": 401.4774000000034,
+      "html": 773.3797999999952,
+      "kb": 107,
+      "ready": 954.7881000000052,
+      "lcp": 536,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 341.9408000000112,
+        "status": 200
+      },
+      "finalUrl": "/app/complaints",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "compliance",
+      "status": 200,
+      "location": null,
+      "ttfb": 364.6993000000075,
+      "html": 1194.078199999989,
+      "kb": 102,
+      "ready": 1187.9618000000191,
+      "lcp": 564,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 507.93270000000484,
+        "status": 200
+      },
+      "finalUrl": "/app/compliance",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "consent",
+      "status": 200,
+      "location": null,
+      "ttfb": 392.9544000000169,
+      "html": 424.79610000000685,
+      "kb": 83,
+      "ready": 2422.3799,
+      "lcp": 628,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/consent",
+        "ms": 1226.8753000000142,
+        "status": 200
+      },
+      "finalUrl": "/app/consent",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "dashboard",
+      "status": 200,
+      "location": null,
+      "ttfb": 522.1742000000086,
+      "html": 2888.010800000018,
+      "kb": 250,
+      "ready": 2092.5859000000055,
+      "lcp": 804,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/pending/summary",
+        "ms": 1252.5097999999998,
+        "status": 200
+      },
+      "finalUrl": "/app/dashboard",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "deal-flow",
+      "status": 200,
+      "location": null,
+      "ttfb": 484.68660000001546,
+      "html": 486.26070000001346,
+      "kb": 82,
+      "ready": 1886.5148000000045,
+      "lcp": 636,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/deal-flow",
+        "ms": 1180.766099999979,
+        "status": 200
+      },
+      "finalUrl": "/app/deal-flow",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "deletion-requests",
+      "status": 200,
+      "location": null,
+      "ttfb": 427.50740000000224,
+      "html": 665.960299999977,
+      "kb": 99,
+      "ready": 1130.4770000000135,
+      "lcp": 616,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 361.6267999999982,
+        "status": 200
+      },
+      "finalUrl": "/app/deletion-requests",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "dialer",
+      "status": 200,
+      "location": null,
+      "ttfb": 434.69109999999637,
+      "html": 436.711100000015,
+      "kb": 87,
+      "ready": 2346.6630000000005,
+      "lcp": 2360,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/dialer/queue",
+        "ms": 1617.4663999999757,
+        "status": 200
+      },
+      "finalUrl": "/app/dialer",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "discrepancies",
+      "status": 200,
+      "location": null,
+      "ttfb": 432.4941000000108,
+      "html": 1126.7368000000133,
+      "kb": 331,
+      "ready": 1123.4223999999813,
+      "lcp": 612,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 373.31849999999395,
+        "status": 200
+      },
+      "finalUrl": "/app/discrepancies",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "draft-dates",
+      "status": 200,
+      "location": null,
+      "ttfb": 567.9814000000479,
+      "html": 569.8127000000095,
+      "kb": 84,
+      "ready": 1325.8238999999594,
+      "lcp": 600,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/settings/sales/settings",
+        "ms": 639.8131000000285,
+        "status": 200
+      },
+      "finalUrl": "/app/draft-dates",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "duplicates",
+      "status": 200,
+      "location": null,
+      "ttfb": 432.8656999999657,
+      "html": 435.21489999996265,
+      "kb": 84,
+      "ready": 1942.6241000000155,
+      "lcp": 588,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/contacts",
+        "ms": 1259.6278000000166,
+        "status": 200
+      },
+      "finalUrl": "/app/duplicates",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "evidence-report",
+      "status": 200,
+      "location": null,
+      "ttfb": 465.4126999999862,
+      "html": 7156.382600000012,
+      "kb": 217,
+      "ready": 5385.479999999981,
+      "lcp": 672,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 572.0021999999881,
+        "status": 200
+      },
+      "finalUrl": "/app/evidence-report",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "exceptions",
+      "status": 200,
+      "location": null,
+      "ttfb": 530.7147000000114,
+      "html": 79219.19949999999,
+      "kb": 1654,
+      "ready": null,
+      "lcp": 1240,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 559.2509999999893,
+        "status": 200
+      },
+      "finalUrl": "/app/exceptions",
+      "note": "skeleton"
+    },
+    {
+      "member": "owner",
+      "page": "expenses",
+      "status": 200,
+      "location": null,
+      "ttfb": 710.7768999999389,
+      "html": 863.5553000000073,
+      "kb": 98,
+      "ready": 1292.6536000000779,
+      "lcp": 672,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 427.1103000000585,
+        "status": 200
+      },
+      "finalUrl": "/app/expenses",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "floor",
+      "status": 200,
+      "location": null,
+      "ttfb": 459.0720999999903,
+      "html": 461.4963999999454,
+      "kb": 84,
+      "ready": 2571.2379000000656,
+      "lcp": 600,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agent-floor",
+        "ms": 1386.589399999939,
+        "status": 200
+      },
+      "finalUrl": "/app/floor",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "hierarchy",
+      "status": 200,
+      "location": null,
+      "ttfb": 467.5515000000596,
+      "html": 469.6798000000417,
+      "kb": 85,
+      "ready": 1873.546800000011,
+      "lcp": 628,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/agency/overrides",
+        "ms": 921.4636999999639,
+        "status": 200
+      },
+      "finalUrl": "/app/hierarchy",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "import",
+      "status": 200,
+      "location": null,
+      "ttfb": 396.1519000000553,
+      "html": 397.8231000000378,
+      "kb": 83,
+      "ready": 1990.7336999999825,
+      "lcp": 500,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/leads/import",
+        "ms": 1346.4467999999179,
+        "status": 200
+      },
+      "finalUrl": "/app/import",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "inbound",
+      "status": 200,
+      "location": null,
+      "ttfb": 443.0703999999678,
+      "html": 444.6091000000015,
+      "kb": 84,
+      "ready": 2444.4638999999734,
+      "lcp": 580,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/inbound/today",
+        "ms": 857.0577000000048,
+        "status": 200
+      },
+      "finalUrl": "/app/inbound",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "invoices",
+      "status": 200,
+      "location": null,
+      "ttfb": 412.73159999994095,
+      "html": 430.42310000001453,
+      "kb": 101,
+      "ready": 965.2060000000056,
+      "lcp": 584,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 333.4505000000354,
+        "status": 200
+      },
+      "finalUrl": "/app/invoices",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "lapse-risk",
+      "status": 200,
+      "location": null,
+      "ttfb": 357.6779000000097,
+      "html": 1251.489200000069,
+      "kb": 228,
+      "ready": 1165.704000000027,
+      "lcp": 492,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 504.76110000000335,
+        "status": 200
+      },
+      "finalUrl": "/app/lapse-risk",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "lead-lists",
+      "status": 200,
+      "location": null,
+      "ttfb": 695.890999999945,
+      "html": 697.3972999999532,
+      "kb": 87,
+      "ready": 4384.538300000015,
+      "lcp": 536,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/lead-lists",
+        "ms": 3720.633999999962,
+        "status": 200
+      },
+      "finalUrl": "/app/lead-lists",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "lead-routing",
+      "status": 200,
+      "location": null,
+      "ttfb": 396.3520000000717,
+      "html": 398.50210000004154,
+      "kb": 88,
+      "ready": 1749.6938999999547,
+      "lcp": 588,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/assignments",
+        "ms": 925.6557999999495,
+        "status": 200
+      },
+      "finalUrl": "/app/lead-routing",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "leads",
+      "status": 200,
+      "location": null,
+      "ttfb": 438.1289000000106,
+      "html": 439.67229999997653,
+      "kb": 84,
+      "ready": 3156.6426999999676,
+      "lcp": 592,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/leads/pipeline-context",
+        "ms": 2471.5999999999767,
+        "status": 200
+      },
+      "finalUrl": "/app/leads",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "ledger",
+      "status": 200,
+      "location": null,
+      "ttfb": 397.6783999999752,
+      "html": 1569.7872000000207,
+      "kb": 145,
+      "ready": 1349.3530000000028,
+      "lcp": 552,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 361.98830000008456,
+        "status": 200
+      },
+      "finalUrl": "/app/ledger",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "my-balance",
+      "status": 200,
+      "location": null,
+      "ttfb": 425.07500000006985,
+      "html": 560.2660000000615,
+      "kb": 88,
+      "ready": 993.0215000000317,
+      "lcp": 552,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 359.0712000000058,
+        "status": 200
+      },
+      "finalUrl": "/app/my-balance",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "my-pay",
+      "status": 200,
+      "location": null,
+      "ttfb": 431.1511000000173,
+      "html": 570.7537000000011,
+      "kb": 88,
+      "ready": 1188.5121999999974,
+      "lcp": 576,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 538.9284999999218,
+        "status": 200
+      },
+      "finalUrl": "/app/my-pay",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "nurture",
+      "status": 200,
+      "location": null,
+      "ttfb": 580.6675999999279,
+      "html": 582.2284000000218,
+      "kb": 84,
+      "ready": 2787.6319999999832,
+      "lcp": 504,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/nurture",
+        "ms": 2204.7360000000335,
+        "status": 200
+      },
+      "finalUrl": "/app/nurture",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "partner-chat",
+      "status": 200,
+      "location": null,
+      "ttfb": 458.76600000006147,
+      "html": 460.3634000000311,
+      "kb": 83,
+      "ready": 2755.2346999999136,
+      "lcp": 2780,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/partner-chat",
+        "ms": 2032.2778000000399,
+        "status": 200
+      },
+      "finalUrl": "/app/partner-chat",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "partner-quality",
+      "status": 200,
+      "location": null,
+      "ttfb": 373.72809999994934,
+      "html": 375.27390000002924,
+      "kb": 83,
+      "ready": 2010.438199999975,
+      "lcp": 552,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/partner-quality",
+        "ms": 1332.578600000008,
+        "status": 200
+      },
+      "finalUrl": "/app/partner-quality",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "payouts",
+      "status": 200,
+      "location": null,
+      "ttfb": 427.6933999999892,
+      "html": 430.4806999999564,
+      "kb": 114,
+      "ready": 1131.0570999999763,
+      "lcp": 576,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 496.5448000000324,
+        "status": 200
+      },
+      "finalUrl": "/app/payouts",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "pending",
+      "status": 200,
+      "location": null,
+      "ttfb": 359.8788000000641,
+      "html": 896.9018999999389,
+      "kb": 108,
+      "ready": 1003.8920999999391,
+      "lcp": 544,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 341.6091000000015,
+        "status": 200
+      },
+      "finalUrl": "/app/pending",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "persistency",
+      "status": 200,
+      "location": null,
+      "ttfb": 427.1966000000248,
+      "html": 429.6069000000134,
+      "kb": 77,
+      "ready": 1705.6536000000779,
+      "lcp": 604,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 430.0825000000186,
+        "status": "failed"
+      },
+      "finalUrl": "/app/book-scorecards?view=persistency",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "pnl",
+      "status": 200,
+      "location": null,
+      "ttfb": 374.8969999999972,
+      "html": 669.7153999999864,
+      "kb": 97,
+      "ready": 959.0783999999985,
+      "lcp": 532,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 371.20739999995567,
+        "status": 200
+      },
+      "finalUrl": "/app/pnl",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "policies",
+      "status": 200,
+      "location": null,
+      "ttfb": 362.610800000024,
+      "html": 998.6289999999572,
+      "kb": 407,
+      "ready": 1110.1557999999495,
+      "lcp": 524,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 457.7978000000585,
+        "status": 200
+      },
+      "finalUrl": "/app/policies",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "policy-matching",
+      "status": 200,
+      "location": null,
+      "ttfb": 420.0537999999942,
+      "html": 971.3793999999762,
+      "kb": 175,
+      "ready": 994.0392999999458,
+      "lcp": 572,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 349.6215000000084,
+        "status": 200
+      },
+      "finalUrl": "/app/policy-matching",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "producer-payouts",
+      "status": 200,
+      "location": null,
+      "ttfb": 445.63959999999497,
+      "html": 448.1516999999294,
+      "kb": 83,
+      "ready": 1875.5954999999376,
+      "lcp": 656,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/agency/payouts",
+        "ms": 1124.8544000000693,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-payouts",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "producer-reconciliation",
+      "status": 200,
+      "location": null,
+      "ttfb": 445.9616999999853,
+      "html": 448.4173999999184,
+      "kb": 83,
+      "ready": 1807.8482999999542,
+      "lcp": 596,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agency/reconciliation",
+        "ms": 1169.1879999999655,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-reconciliation",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "producer-scorecards",
+      "status": 200,
+      "location": null,
+      "ttfb": 439.9261000000406,
+      "html": 441.74660000007134,
+      "kb": 85,
+      "ready": 1954.6930000000866,
+      "lcp": 576,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/agency/scorecards",
+        "ms": 1285.2293000000063,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-scorecards",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "producer-splits",
+      "status": 200,
+      "location": null,
+      "ttfb": 435.32810000004247,
+      "html": 563.7212999999756,
+      "kb": 98,
+      "ready": 1059.1075999999885,
+      "lcp": 620,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 358.81199999991804,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-splits",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "producers",
+      "status": 200,
+      "location": null,
+      "ttfb": 379.05830000003334,
+      "html": 422.20649999997113,
+      "kb": 93,
+      "ready": 2999.599500000011,
+      "lcp": 576,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agency/dashboard",
+        "ms": 2341.574799999944,
+        "status": 200
+      },
+      "finalUrl": "/app/producers",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "profile",
+      "status": 200,
+      "location": null,
+      "ttfb": 383.89690000005066,
+      "html": 511.0394999999553,
+      "kb": 110,
+      "ready": 1776.5631000000285,
+      "lcp": 640,
+      "apiCount": 5,
+      "slowestApi": {
+        "url": "/api/app/profile/security-events",
+        "ms": 1011.3360000000102,
+        "status": 200
+      },
+      "finalUrl": "/app/profile",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "publishers",
+      "status": 200,
+      "location": null,
+      "ttfb": 398.45979999995325,
+      "html": 400.95759999996517,
+      "kb": 82,
+      "ready": 5232.923499999917,
+      "lcp": 564,
+      "apiCount": 33,
+      "slowestApi": {
+        "url": "/api/app/partners/e39236f6-1577-4a17-b440-07416e89fc53/products",
+        "ms": 2989.5195999999996,
+        "status": 200
+      },
+      "finalUrl": "/app/publishers",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "quoting",
+      "status": 200,
+      "location": null,
+      "ttfb": 419.50030000007246,
+      "html": 420.9808999999659,
+      "kb": 81,
+      "ready": 938.500100000063,
+      "lcp": 548,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 340.7086999999592,
+        "status": 200
+      },
+      "finalUrl": "/app/quoting",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "rate-card",
+      "status": 200,
+      "location": null,
+      "ttfb": 457.4287000000477,
+      "html": 1507.0178000000305,
+      "kb": 120,
+      "ready": 1520.2767000000458,
+      "lcp": 612,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 504.62569999997504,
+        "status": 200
+      },
+      "finalUrl": "/app/rate-card",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "reinstatement",
+      "status": 200,
+      "location": null,
+      "ttfb": 471.95960000006016,
+      "html": 2034.826500000083,
+      "kb": 99,
+      "ready": 2008.8792999999132,
+      "lcp": 644,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 365.41070000000764,
+        "status": 200
+      },
+      "finalUrl": "/app/reinstatement",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "retention-results",
+      "status": 200,
+      "location": null,
+      "ttfb": 496.4035000000149,
+      "html": 739.4028000000399,
+      "kb": 93,
+      "ready": 1491.8418999999994,
+      "lcp": 888,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 463.47569999995176,
+        "status": 200
+      },
+      "finalUrl": "/app/retention-results",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "retention-scorecard",
+      "status": 200,
+      "location": null,
+      "ttfb": 485.62609999999404,
+      "html": 940.4881000000751,
+      "kb": 102,
+      "ready": 1274.3203999999678,
+      "lcp": 752,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 383.9736999999732,
+        "status": 200
+      },
+      "finalUrl": "/app/retention-scorecard",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "retention-settings",
+      "status": 200,
+      "location": null,
+      "ttfb": 427.88360000005923,
+      "html": 2070.0526000000536,
+      "kb": 135,
+      "ready": 2768.663100000005,
+      "lcp": 576,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 597.0425999999279,
+        "status": 200
+      },
+      "finalUrl": "/app/retention-settings",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "sales-performance",
+      "status": 200,
+      "location": null,
+      "ttfb": 429.718200000003,
+      "html": 792.6590999999316,
+      "kb": 109,
+      "ready": 1130.6922999999952,
+      "lcp": 528,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 437.451999999932,
+        "status": 200
+      },
+      "finalUrl": "/app/sales-performance",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "save-queue",
+      "status": 200,
+      "location": null,
+      "ttfb": 439.9853999998886,
+      "html": 2448.158099999884,
+      "kb": 110,
+      "ready": 2725.1194000001997,
+      "lcp": 696,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 518.155700000003,
+        "status": 200
+      },
+      "finalUrl": "/app/save-queue",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "scorecard",
+      "status": 307,
+      "location": "/app/activity?view=scorecard",
+      "ttfb": 5.298600000096485,
+      "html": 5.495000000111759,
+      "kb": 0,
+      "ready": 3882.405800000066,
+      "lcp": 816,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/activity",
+        "ms": 2564.2276000001,
+        "status": 200
+      },
+      "finalUrl": "/app/activity?view=scorecard",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "scoring",
+      "status": 200,
+      "location": null,
+      "ttfb": 429.18169999984093,
+      "html": 431.76759999990463,
+      "kb": 83,
+      "ready": 2098.379900000058,
+      "lcp": 564,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/scoring",
+        "ms": 1188.4788000001572,
+        "status": 200
+      },
+      "finalUrl": "/app/scoring",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "servicing",
+      "status": 200,
+      "location": null,
+      "ttfb": 431.3325000000186,
+      "html": 1523.7106999999378,
+      "kb": 99,
+      "ready": 1580.3850999998394,
+      "lcp": 724,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 553.4563999997918,
+        "status": 200
+      },
+      "finalUrl": "/app/servicing",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "setters",
+      "status": 200,
+      "location": null,
+      "ttfb": 521.3854999998584,
+      "html": 1268.7842999999411,
+      "kb": 123,
+      "ready": 1670.716000000015,
+      "lcp": 736,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 527.8166000000201,
+        "status": 200
+      },
+      "finalUrl": "/app/setters",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "settings",
+      "status": 200,
+      "location": null,
+      "ttfb": 543.0961000001989,
+      "html": 1102.0753999999724,
+      "kb": 136,
+      "ready": 3123.256700000027,
+      "lcp": 2648,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/agency-profile",
+        "ms": 1162.777299999958,
+        "status": 200
+      },
+      "finalUrl": "/app/settings",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "statements",
+      "status": 200,
+      "location": null,
+      "ttfb": 524.2280999999493,
+      "html": 770.7960000000894,
+      "kb": 90,
+      "ready": 1255.563499999931,
+      "lcp": 760,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 436.26049999985844,
+        "status": 200
+      },
+      "finalUrl": "/app/statements",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "tax",
+      "status": 200,
+      "location": null,
+      "ttfb": 464.8708999999799,
+      "html": 675.564100000076,
+      "kb": 99,
+      "ready": 1012.2934999999125,
+      "lcp": 608,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 350.80039999983273,
+        "status": 200
+      },
+      "finalUrl": "/app/tax",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "tcpa",
+      "status": 200,
+      "location": null,
+      "ttfb": 506.7245000000112,
+      "html": 508.65520000015385,
+      "kb": 83,
+      "ready": 2892.628199999919,
+      "lcp": 572,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/suppression",
+        "ms": 2026.3220999999903,
+        "status": 200
+      },
+      "finalUrl": "/app/tcpa",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "true-cpa",
+      "status": 200,
+      "location": null,
+      "ttfb": 665.3869999998715,
+      "html": 1503.2945999999065,
+      "kb": 83,
+      "ready": 1484.3345000001136,
+      "lcp": 668,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 553.3878000001423,
+        "status": 200
+      },
+      "finalUrl": "/app/true-cpa",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "vendor-returns",
+      "status": 200,
+      "location": null,
+      "ttfb": 540.59710000013,
+      "html": 542.9221000000834,
+      "kb": 84,
+      "ready": 4048.026799999876,
+      "lcp": 672,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/vendor-returns",
+        "ms": 3256.2298999999184,
+        "status": 200
+      },
+      "finalUrl": "/app/vendor-returns",
+      "note": ""
+    },
+    {
+      "member": "owner",
+      "page": "vendors",
+      "status": 307,
+      "location": "/app/campaigns",
+      "ttfb": 3.316499999957159,
+      "html": 3.5136999997776,
+      "kb": 0,
+      "ready": 2913.471399999922,
+      "lcp": 540,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/campaigns",
+        "ms": 2025.2818999998271,
+        "status": 200
+      },
+      "finalUrl": "/app/campaigns",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "accounting-settings",
+      "status": 200,
+      "location": null,
+      "ttfb": 451.6459999999497,
+      "html": 606.1321000000462,
+      "kb": 72,
+      "ready": 1201.5165999999736,
+      "lcp": 588,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 388.4421000001021,
+        "status": 200
+      },
+      "finalUrl": "/app/accounting-settings",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "activity",
+      "status": 200,
+      "location": null,
+      "ttfb": 466.4150999998674,
+      "html": 468.2326999998186,
+      "kb": 65,
+      "ready": 5024.8296000000555,
+      "lcp": 624,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/activity",
+        "ms": 3625.094100000104,
+        "status": 200
+      },
+      "finalUrl": "/app/activity",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "agency",
+      "status": 200,
+      "location": null,
+      "ttfb": 413.79389999993145,
+      "html": 531.0417000001762,
+      "kb": 72,
+      "ready": 1173.7961999999825,
+      "lcp": 636,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 417.3603000000585,
+        "status": 200
+      },
+      "finalUrl": "/app/agency",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "alerts",
+      "status": 200,
+      "location": null,
+      "ttfb": 365.10190000012517,
+      "html": 908.4158000000753,
+      "kb": 82,
+      "ready": 1020.6621000000741,
+      "lcp": 500,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 396.04349999991246,
+        "status": 200
+      },
+      "finalUrl": "/app/alerts",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "application-review",
+      "status": 200,
+      "location": null,
+      "ttfb": 403.30239999992773,
+      "html": 404.72689999989234,
+      "kb": 66,
+      "ready": 1648.9176000000443,
+      "lcp": 632,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agency/producers",
+        "ms": 916.092399999965,
+        "status": 200
+      },
+      "finalUrl": "/app/application-review",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "applications",
+      "status": 200,
+      "location": null,
+      "ttfb": 391.1547000000719,
+      "html": 764.7083999998868,
+      "kb": 85,
+      "ready": 1114.7930999998935,
+      "lcp": 492,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 415.5063000000082,
+        "status": 200
+      },
+      "finalUrl": "/app/applications",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "appointments",
+      "status": 200,
+      "location": null,
+      "ttfb": 433.8388000000268,
+      "html": 436.3804999999702,
+      "kb": 69,
+      "ready": 1326.7321999999695,
+      "lcp": 588,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/appointment-vault",
+        "ms": 464.40360000007786,
+        "status": 200
+      },
+      "finalUrl": "/app/appointments",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "assignments",
+      "status": 200,
+      "location": null,
+      "ttfb": 443.7378000000026,
+      "html": 887.1714999999385,
+      "kb": 67,
+      "ready": 1349.0034999998752,
+      "lcp": 660,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 520.971300000092,
+        "status": 200
+      },
+      "finalUrl": "/app/assignments",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "attribution",
+      "status": 200,
+      "location": null,
+      "ttfb": 472.1313999998383,
+      "html": 560.7169000001159,
+      "kb": 72,
+      "ready": 1240.2735999999568,
+      "lcp": 668,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 398.28710000007413,
+        "status": 200
+      },
+      "finalUrl": "/app/attribution",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "bank",
+      "status": 200,
+      "location": null,
+      "ttfb": 438.7557000000961,
+      "html": 531.6125999998767,
+      "kb": 72,
+      "ready": 1455.8573000000324,
+      "lcp": 804,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 401.80040000006557,
+        "status": 200
+      },
+      "finalUrl": "/app/bank",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "book-import",
+      "status": 200,
+      "location": null,
+      "ttfb": 426.2700000000186,
+      "html": 543.2136999999639,
+      "kb": 72,
+      "ready": 1202.813499999931,
+      "lcp": 608,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 373.2664999999106,
+        "status": 200
+      },
+      "finalUrl": "/app/book-import",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "book-scorecards",
+      "status": 200,
+      "location": null,
+      "ttfb": 410.29509999998845,
+      "html": 684.5215000000317,
+      "kb": 106,
+      "ready": 940.56119999988,
+      "lcp": 488,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 349.4295000000857,
+        "status": 200
+      },
+      "finalUrl": "/app/book-scorecards",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "calendar",
+      "status": 200,
+      "location": null,
+      "ttfb": 404.812099999981,
+      "html": 410.5926000000909,
+      "kb": 68,
+      "ready": 2997.2331999999005,
+      "lcp": 772,
+      "apiCount": 7,
+      "slowestApi": {
+        "url": "/api/app/appointments",
+        "ms": 1146.2039000000805,
+        "status": 200
+      },
+      "finalUrl": "/app/calendar",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "callbacks",
+      "status": 200,
+      "location": null,
+      "ttfb": 483.8329000000376,
+      "html": 486.25050000008196,
+      "kb": 68,
+      "ready": 2788.7679000000935,
+      "lcp": 812,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/callbacks",
+        "ms": 1691.249799999874,
+        "status": 200
+      },
+      "finalUrl": "/app/callbacks",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "campaigns",
+      "status": 200,
+      "location": null,
+      "ttfb": 379.8337000000756,
+      "html": 761.4388999999501,
+      "kb": 70,
+      "ready": 1239.657399999909,
+      "lcp": 692,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 403.0529999998398,
+        "status": 200
+      },
+      "finalUrl": "/app/campaigns",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "carrier-files",
+      "status": 200,
+      "location": null,
+      "ttfb": 431.65910000004806,
+      "html": 566.3869999998715,
+      "kb": 73,
+      "ready": 1170.6344999999274,
+      "lcp": 704,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 349.9871999998577,
+        "status": 200
+      },
+      "finalUrl": "/app/carrier-files",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "carrier-rules",
+      "status": 200,
+      "location": null,
+      "ttfb": 449.2685000000056,
+      "html": 519.9561000000685,
+      "kb": 72,
+      "ready": 1025.8810000000522,
+      "lcp": 604,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 351.6746999998577,
+        "status": 200
+      },
+      "finalUrl": "/app/carrier-rules",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "commission-splits",
+      "status": 200,
+      "location": null,
+      "ttfb": 449.40039999992587,
+      "html": 515.8917000000365,
+      "kb": 72,
+      "ready": 1119.7043000000995,
+      "lcp": 596,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 382.2365000001155,
+        "status": 200
+      },
+      "finalUrl": "/app/commission-splits",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "complaints",
+      "status": 200,
+      "location": null,
+      "ttfb": 371.11349999997765,
+      "html": 692.6393999999855,
+      "kb": 69,
+      "ready": 1098.7830999998841,
+      "lcp": 608,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 361.6236000000499,
+        "status": 200
+      },
+      "finalUrl": "/app/complaints",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "compliance",
+      "status": 200,
+      "location": null,
+      "ttfb": 372.8326999999117,
+      "html": 702.2482000000309,
+      "kb": 69,
+      "ready": 1052.9355000001378,
+      "lcp": 532,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 362.282600000035,
+        "status": 200
+      },
+      "finalUrl": "/app/compliance",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "consent",
+      "status": 200,
+      "location": null,
+      "ttfb": 424.2399999999907,
+      "html": 751.9007999999449,
+      "kb": 69,
+      "ready": 1061.7409999999218,
+      "lcp": 552,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 349.686699999962,
+        "status": 200
+      },
+      "finalUrl": "/app/consent",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "dashboard",
+      "status": 200,
+      "location": null,
+      "ttfb": 431.9739000000991,
+      "html": 1344.5542999999598,
+      "kb": 199,
+      "ready": 2011.156799999997,
+      "lcp": 824,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/pending/summary",
+        "ms": 1050.2967000000644,
+        "status": 200
+      },
+      "finalUrl": "/app/dashboard",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "deal-flow",
+      "status": 200,
+      "location": null,
+      "ttfb": 389.2035999998916,
+      "html": 391.47509999992326,
+      "kb": 67,
+      "ready": 1858.5039999999572,
+      "lcp": 616,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/deal-flow",
+        "ms": 909.6414999999106,
+        "status": 200
+      },
+      "finalUrl": "/app/deal-flow",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "deletion-requests",
+      "status": 200,
+      "location": null,
+      "ttfb": 364.90400000009686,
+      "html": 691.3452999999281,
+      "kb": 69,
+      "ready": 1062.814200000139,
+      "lcp": 564,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 347.9192000001203,
+        "status": 200
+      },
+      "finalUrl": "/app/deletion-requests",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "dialer",
+      "status": 200,
+      "location": null,
+      "ttfb": 390.61129999998957,
+      "html": 392.78750000009313,
+      "kb": 71,
+      "ready": 2273.290500000119,
+      "lcp": 2280,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/dialer/queue",
+        "ms": 1400.8606999998447,
+        "status": 200
+      },
+      "finalUrl": "/app/dialer",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "discrepancies",
+      "status": 200,
+      "location": null,
+      "ttfb": 417.12329999986105,
+      "html": 536.2768999999389,
+      "kb": 73,
+      "ready": 1096.6034999999683,
+      "lcp": 584,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 357.8084000002127,
+        "status": 200
+      },
+      "finalUrl": "/app/discrepancies",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "draft-dates",
+      "status": 200,
+      "location": null,
+      "ttfb": 373.0810000000056,
+      "html": 375.1614999999292,
+      "kb": 68,
+      "ready": 1483.2417999999598,
+      "lcp": 648,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/settings/sales/settings",
+        "ms": 602.6920000000391,
+        "status": 200
+      },
+      "finalUrl": "/app/draft-dates",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "duplicates",
+      "status": 200,
+      "location": null,
+      "ttfb": 436.47179999994114,
+      "html": 768.3842999998014,
+      "kb": 70,
+      "ready": 1336.033700000029,
+      "lcp": 624,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 540.2049000000115,
+        "status": 200
+      },
+      "finalUrl": "/app/duplicates",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "evidence-report",
+      "status": 200,
+      "location": null,
+      "ttfb": 365.1673999999184,
+      "html": 699.9539000000805,
+      "kb": 69,
+      "ready": 1015.6687999998685,
+      "lcp": 548,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 430.2775000000838,
+        "status": 200
+      },
+      "finalUrl": "/app/evidence-report",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "exceptions",
+      "status": 200,
+      "location": null,
+      "ttfb": 413.55409999983385,
+      "html": 727.7240999999922,
+      "kb": 69,
+      "ready": 1007.6455999999307,
+      "lcp": 584,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 338.96529999980703,
+        "status": 200
+      },
+      "finalUrl": "/app/exceptions",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "expenses",
+      "status": 200,
+      "location": null,
+      "ttfb": 510.78549999999814,
+      "html": 612.2691999999806,
+      "kb": 72,
+      "ready": 1210.0858000000007,
+      "lcp": 640,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 348.1966999999713,
+        "status": 200
+      },
+      "finalUrl": "/app/expenses",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "floor",
+      "status": 200,
+      "location": null,
+      "ttfb": 546.186699999962,
+      "html": 547.7916000001132,
+      "kb": 68,
+      "ready": 2396.9181000001263,
+      "lcp": 616,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/agent-floor",
+        "ms": 1223.3737000001129,
+        "status": 200
+      },
+      "finalUrl": "/app/floor",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "hierarchy",
+      "status": 200,
+      "location": null,
+      "ttfb": 420.17479999992065,
+      "html": 571.438599999994,
+      "kb": 73,
+      "ready": 1418.2634999998845,
+      "lcp": 800,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 504.218200000003,
+        "status": 200
+      },
+      "finalUrl": "/app/hierarchy",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "import",
+      "status": 200,
+      "location": null,
+      "ttfb": 360.1748999999836,
+      "html": 673.8308999999426,
+      "kb": 70,
+      "ready": 972.6040000000503,
+      "lcp": 568,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 344.83520000008866,
+        "status": 200
+      },
+      "finalUrl": "/app/import",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "inbound",
+      "status": 200,
+      "location": null,
+      "ttfb": 420.2638999999035,
+      "html": 421.91400000010617,
+      "kb": 69,
+      "ready": 1903.6706999999005,
+      "lcp": 592,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/inbound",
+        "ms": 1065.4514000001363,
+        "status": 200
+      },
+      "finalUrl": "/app/inbound",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "invoices",
+      "status": 200,
+      "location": null,
+      "ttfb": 446.8231000001542,
+      "html": 525.5475000001024,
+      "kb": 72,
+      "ready": 1015.1752000001725,
+      "lcp": 576,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 376.22859999979846,
+        "status": 200
+      },
+      "finalUrl": "/app/invoices",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "lapse-risk",
+      "status": 200,
+      "location": null,
+      "ttfb": 373.29369999980554,
+      "html": 1006.5049999998882,
+      "kb": 82,
+      "ready": 995.5476000001654,
+      "lcp": 476,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 373.0793999999296,
+        "status": 200
+      },
+      "finalUrl": "/app/lapse-risk",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "lead-lists",
+      "status": 200,
+      "location": null,
+      "ttfb": 367.34440000006,
+      "html": 697.9440000001341,
+      "kb": 69,
+      "ready": 932.9209000000264,
+      "lcp": 504,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 345.7331000000704,
+        "status": 200
+      },
+      "finalUrl": "/app/lead-lists",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "lead-routing",
+      "status": 200,
+      "location": null,
+      "ttfb": 421.91740000015125,
+      "html": 516.246399999829,
+      "kb": 73,
+      "ready": 1068.6144999999087,
+      "lcp": 648,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 345.7286999998614,
+        "status": 200
+      },
+      "finalUrl": "/app/lead-routing",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "leads",
+      "status": 200,
+      "location": null,
+      "ttfb": 461.6998999998905,
+      "html": 463.25109999999404,
+      "kb": 65,
+      "ready": 2931.092399999965,
+      "lcp": 552,
+      "apiCount": 3,
+      "slowestApi": {
+        "url": "/api/app/leads",
+        "ms": 2258.8858000000473,
+        "status": 200
+      },
+      "finalUrl": "/app/leads",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "ledger",
+      "status": 200,
+      "location": null,
+      "ttfb": 377.76909999991767,
+      "html": 790.121499999892,
+      "kb": 70,
+      "ready": 933.939000000013,
+      "lcp": 488,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 361.25640000007115,
+        "status": 200
+      },
+      "finalUrl": "/app/ledger",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "my-balance",
+      "status": 200,
+      "location": null,
+      "ttfb": 383.67210000008345,
+      "html": 927.5394000001252,
+      "kb": 70,
+      "ready": 1028.5060000000522,
+      "lcp": 568,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 342.3271999999415,
+        "status": 200
+      },
+      "finalUrl": "/app/my-balance",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "my-pay",
+      "status": 200,
+      "location": null,
+      "ttfb": 441.9539999999106,
+      "html": 443.5653999999631,
+      "kb": 63,
+      "ready": 2493.4947000001557,
+      "lcp": 556,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/agency/my-pay",
+        "ms": 1670.0074999998324,
+        "status": 200
+      },
+      "finalUrl": "/app/my-pay",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "nurture",
+      "status": 200,
+      "location": null,
+      "ttfb": 352.70590000017546,
+      "html": 684.3349000001326,
+      "kb": 69,
+      "ready": 932.8856999999844,
+      "lcp": 496,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 355.18009999999776,
+        "status": 200
+      },
+      "finalUrl": "/app/nurture",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "partner-chat",
+      "status": 200,
+      "location": null,
+      "ttfb": 369.04370000003837,
+      "html": 370.566900000209,
+      "kb": 66,
+      "ready": 3001.5261000001337,
+      "lcp": 3036,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/partner-chat",
+        "ms": 2267.716000000015,
+        "status": 200
+      },
+      "finalUrl": "/app/partner-chat",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "partner-quality",
+      "status": 200,
+      "location": null,
+      "ttfb": 368.09419999993406,
+      "html": 699.2801000000909,
+      "kb": 69,
+      "ready": 992.2384000001475,
+      "lcp": 576,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 347.6674999999814,
+        "status": 200
+      },
+      "finalUrl": "/app/partner-quality",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "payouts",
+      "status": 200,
+      "location": null,
+      "ttfb": 424.6158000000287,
+      "html": 550.653399999952,
+      "kb": 72,
+      "ready": 1141.0425999998115,
+      "lcp": 580,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 517.750900000101,
+        "status": 200
+      },
+      "finalUrl": "/app/payouts",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "pending",
+      "status": 200,
+      "location": null,
+      "ttfb": 390.408400000073,
+      "html": 809.6089000001084,
+      "kb": 85,
+      "ready": 901.0212999999058,
+      "lcp": 504,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 353.67960000014864,
+        "status": 200
+      },
+      "finalUrl": "/app/pending",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "persistency",
+      "status": 200,
+      "location": null,
+      "ttfb": 418.7892999998294,
+      "html": 420.153999999864,
+      "kb": 62,
+      "ready": 1667.3955999999307,
+      "lcp": 520,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 481.5110000001732,
+        "status": "failed"
+      },
+      "finalUrl": "/app/book-scorecards?view=persistency",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "pnl",
+      "status": 200,
+      "location": null,
+      "ttfb": 451.3074000000488,
+      "html": 531.2553999999072,
+      "kb": 72,
+      "ready": 1005.2605000000913,
+      "lcp": 572,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 348.01419999985956,
+        "status": 200
+      },
+      "finalUrl": "/app/pnl",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "policies",
+      "status": 200,
+      "location": null,
+      "ttfb": 381.31359999999404,
+      "html": 744.1935000000522,
+      "kb": 110,
+      "ready": 1181.5518999998458,
+      "lcp": 588,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 427.2382000000216,
+        "status": 200
+      },
+      "finalUrl": "/app/policies",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "policy-matching",
+      "status": 200,
+      "location": null,
+      "ttfb": 428.3853000001982,
+      "html": 528.8697000001557,
+      "kb": 72,
+      "ready": 990.8015000000596,
+      "lcp": 528,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 360.49259999999776,
+        "status": 200
+      },
+      "finalUrl": "/app/policy-matching",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "producer-payouts",
+      "status": 200,
+      "location": null,
+      "ttfb": 424.5643999997992,
+      "html": 505.60960000008345,
+      "kb": 72,
+      "ready": 1039.0194999999367,
+      "lcp": 512,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 420.71610000007786,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-payouts",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "producer-reconciliation",
+      "status": 200,
+      "location": null,
+      "ttfb": 421.1783000000287,
+      "html": 546.2476000001188,
+      "kb": 73,
+      "ready": 1046.028500000015,
+      "lcp": 624,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 347.3115000000689,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-reconciliation",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "producer-scorecards",
+      "status": 200,
+      "location": null,
+      "ttfb": 424.00279999990016,
+      "html": 426.0164999999106,
+      "kb": 67,
+      "ready": 2194.6452999999747,
+      "lcp": 588,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/agency/scorecards",
+        "ms": 1527.5452000000514,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-scorecards",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "producer-splits",
+      "status": 200,
+      "location": null,
+      "ttfb": 436.08990000002086,
+      "html": 605.8355999998748,
+      "kb": 72,
+      "ready": 1069.1685999999754,
+      "lcp": 532,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 474.30770000000484,
+        "status": 200
+      },
+      "finalUrl": "/app/producer-splits",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "producers",
+      "status": 200,
+      "location": null,
+      "ttfb": 431.67619999987073,
+      "html": 433.1658999999054,
+      "kb": 59,
+      "ready": 2902.150600000052,
+      "lcp": 588,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/agency/scorecards",
+        "ms": 1303.7299999999814,
+        "status": 200
+      },
+      "finalUrl": "/app/producers/ae489d0d-ac78-472e-81f9-47d9e13adf4c",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "profile",
+      "status": 200,
+      "location": null,
+      "ttfb": 390.5561000001617,
+      "html": 423.03040000004694,
+      "kb": 92,
+      "ready": 1815.7993999999017,
+      "lcp": 604,
+      "apiCount": 5,
+      "slowestApi": {
+        "url": "/api/app/profile/security-events",
+        "ms": 888.7894000001252,
+        "status": 200
+      },
+      "finalUrl": "/app/profile",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "publishers",
+      "status": 200,
+      "location": null,
+      "ttfb": 424.45879999990575,
+      "html": 530.0918000000529,
+      "kb": 73,
+      "ready": 1164.0117999999784,
+      "lcp": 572,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 363.3884000000544,
+        "status": 200
+      },
+      "finalUrl": "/app/publishers",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "quoting",
+      "status": 200,
+      "location": null,
+      "ttfb": 424.0150999999605,
+      "html": 425.49540000013076,
+      "kb": 66,
+      "ready": 1070.342599999858,
+      "lcp": 584,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 366.1385999999475,
+        "status": 200
+      },
+      "finalUrl": "/app/quoting",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "rate-card",
+      "status": 200,
+      "location": null,
+      "ttfb": 439.4934999998659,
+      "html": 518.0777999998536,
+      "kb": 72,
+      "ready": 1158.346900000004,
+      "lcp": 680,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 346.89259999990463,
+        "status": 200
+      },
+      "finalUrl": "/app/rate-card",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "reinstatement",
+      "status": 200,
+      "location": null,
+      "ttfb": 410.4026000001468,
+      "html": 1950.6352000001352,
+      "kb": 70,
+      "ready": 1950.0993999999482,
+      "lcp": 556,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 367.8854000000283,
+        "status": 200
+      },
+      "finalUrl": "/app/reinstatement",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "retention-results",
+      "status": 200,
+      "location": null,
+      "ttfb": 868.0064000000712,
+      "html": 869.778299999889,
+      "kb": 72,
+      "ready": 1163.8992999999318,
+      "lcp": 664,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 351.9932999999728,
+        "status": 200
+      },
+      "finalUrl": "/app/retention-results",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "retention-scorecard",
+      "status": 200,
+      "location": null,
+      "ttfb": 434.467299999902,
+      "html": 836.6347999998834,
+      "kb": 79,
+      "ready": 1179.966299999971,
+      "lcp": 724,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 397.92009999998845,
+        "status": 200
+      },
+      "finalUrl": "/app/retention-scorecard",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "retention-settings",
+      "status": 200,
+      "location": null,
+      "ttfb": 464.35599999991246,
+      "html": 578.1345999999903,
+      "kb": 72,
+      "ready": 1065.5733000000473,
+      "lcp": 604,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 374.06090000015683,
+        "status": 200
+      },
+      "finalUrl": "/app/retention-settings",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "sales-performance",
+      "status": 200,
+      "location": null,
+      "ttfb": 438.31420000013895,
+      "html": 1103.6147000000346,
+      "kb": 80,
+      "ready": 1469.3044000000227,
+      "lcp": 696,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 614.032700000098,
+        "status": 200
+      },
+      "finalUrl": "/app/sales-performance",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "save-queue",
+      "status": 200,
+      "location": null,
+      "ttfb": 363.08319999999367,
+      "html": 2682.4858000001404,
+      "kb": 74,
+      "ready": 2815.7041999998037,
+      "lcp": 552,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 518.4699000001419,
+        "status": 200
+      },
+      "finalUrl": "/app/save-queue",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "scorecard",
+      "status": 307,
+      "location": "/app/activity?view=scorecard",
+      "ttfb": 3.622800000011921,
+      "html": 3.7242000000551343,
+      "kb": 0,
+      "ready": 2599.973999999929,
+      "lcp": 524,
+      "apiCount": 4,
+      "slowestApi": {
+        "url": "/api/app/activity",
+        "ms": 1781.967899999814,
+        "status": 200
+      },
+      "finalUrl": "/app/activity?view=scorecard",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "scoring",
+      "status": 200,
+      "location": null,
+      "ttfb": 416.00470000016503,
+      "html": 899.6832000000868,
+      "kb": 69,
+      "ready": 1644.903900000034,
+      "lcp": 1032,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 531.4529000001494,
+        "status": 200
+      },
+      "finalUrl": "/app/scoring",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "servicing",
+      "status": 200,
+      "location": null,
+      "ttfb": 374.9103999999352,
+      "html": 1396.1406999998726,
+      "kb": 71,
+      "ready": 1423.1981000001542,
+      "lcp": 580,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 521.1263999999501,
+        "status": 200
+      },
+      "finalUrl": "/app/servicing",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "setters",
+      "status": 200,
+      "location": null,
+      "ttfb": 434.2689000000246,
+      "html": 1339.658900000155,
+      "kb": 108,
+      "ready": 1320.8240000000224,
+      "lcp": 600,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 359.4206000000704,
+        "status": 200
+      },
+      "finalUrl": "/app/setters",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "settings",
+      "status": 200,
+      "location": null,
+      "ttfb": 422.4690999998711,
+      "html": 425.33599999989383,
+      "kb": 92,
+      "ready": 1525.6223000001628,
+      "lcp": 1544,
+      "apiCount": 2,
+      "slowestApi": {
+        "url": "/api/app/notification-preferences",
+        "ms": 540.4634000000078,
+        "status": 200
+      },
+      "finalUrl": "/app/settings",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "statements",
+      "status": 200,
+      "location": null,
+      "ttfb": 433.58279999997467,
+      "html": 543.0990999999922,
+      "kb": 73,
+      "ready": 1045.1674999999814,
+      "lcp": 588,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 344.3354999998119,
+        "status": 200
+      },
+      "finalUrl": "/app/statements",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "tax",
+      "status": 200,
+      "location": null,
+      "ttfb": 429.5529000000097,
+      "html": 576.5742999999784,
+      "kb": 72,
+      "ready": 1229.4936999999918,
+      "lcp": 636,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 522.9427000000142,
+        "status": 200
+      },
+      "finalUrl": "/app/tax",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "tcpa",
+      "status": 200,
+      "location": null,
+      "ttfb": 375.2944000000134,
+      "html": 696.6452000001445,
+      "kb": 70,
+      "ready": 1006.1986000000034,
+      "lcp": 576,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 347.59440000006,
+        "status": 200
+      },
+      "finalUrl": "/app/tcpa",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "true-cpa",
+      "status": 200,
+      "location": null,
+      "ttfb": 401.4490999998525,
+      "html": 712.5155999998096,
+      "kb": 70,
+      "ready": 1153.7915999998804,
+      "lcp": 540,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 497.7945999999065,
+        "status": 200
+      },
+      "finalUrl": "/app/true-cpa",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "vendor-returns",
+      "status": 200,
+      "location": null,
+      "ttfb": 369.08749999990687,
+      "html": 694.0742999999784,
+      "kb": 70,
+      "ready": 974.9191000000574,
+      "lcp": 536,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 344.92330000014044,
+        "status": 200
+      },
+      "finalUrl": "/app/vendor-returns",
+      "note": ""
+    },
+    {
+      "member": "producer",
+      "page": "vendors",
+      "status": 307,
+      "location": "/app/campaigns",
+      "ttfb": 1.4162999999243766,
+      "html": 1.4916000000666827,
+      "kb": 0,
+      "ready": 969.4853999998886,
+      "lcp": 532,
+      "apiCount": 1,
+      "slowestApi": {
+        "url": "/api/app/auth/workspaces",
+        "ms": 351.2255000001751,
+        "status": 200
+      },
+      "finalUrl": "/app/campaigns",
+      "note": ""
+    }
+  ]
+}

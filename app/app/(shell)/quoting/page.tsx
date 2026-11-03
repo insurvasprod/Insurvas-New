@@ -1,0 +1,48 @@
+import { scopeFor } from "@/lib/agency/visibility";
+import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
+import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
+import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { QuotesList } from "@/components/app/applications/quotes-list";
+import { SetupPending } from "@/components/app/applications/setup-pending";
+// LA-8.2: times show in the viewer's own display timezone, else the agency's.
+import { getViewerTimezone } from "@/lib/users/viewerTimezone";
+import { ApplicationError } from "@/lib/applications/db";
+import { FIXTURE_QUOTE_LIST } from "@/lib/applications/listFixtures";
+import { listQuoteRows } from "@/lib/applications/lists";
+import type { QuoteRow } from "@/lib/applications/listRules";
+import { ApplicationsHub } from "@/components/app/applications/applications-hub";
+import { applicationsTabs, hasCalculator } from "@/components/app/applications/applications-tabs";
+import { canWrite } from "@/lib/entitlements/types";
+
+/** The design fixtures in the list's shape (?preview=sample, outside production). */
+function sampleRows(): QuoteRow[] {
+  return FIXTURE_QUOTE_LIST.map((q) => ({
+    id: q.id, caseId: q.caseId, applicationId: null, clientName: q.clientName, insuredRole: q.insuredRole, state: q.state,
+    carrierName: q.carrierName, productLabel: q.productLabel, productCode: "final_expense", tier: q.tier,
+    faceAmountCents: q.faceAmountCents, monthlyPremiumCents: q.monthlyPremiumCents,
+    outcome: q.status, per1000Warning: q.warnings.find((w) => w.code === "QUOTE_PER1000_BAND")?.message ?? null, createdAt: q.createdAt,
+  }));
+}
+
+/** The page's data, or null while its migration is not applied. */
+async function orPending<T>(read: Promise<T>): Promise<T | null> {
+  try {
+    return await read;
+  } catch (error) {
+    if (error instanceof ApplicationError && error.code === "SCHEMA_PENDING") return null;
+    throw error;
+  }
+}
+
+export default async function QuotingPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const guard = await guardPage("quoting");
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Quoting" description="Compare carrier premiums side by side." />;
+  if (!actAsPage(guard, ["owner", "producer"])) return <RoleGateNotice featureLabel="Quoting" detail="Owners and producers quote clients." />;
+  const query = await searchParams;
+  // The Quotes tab of Applications (2026-10-26).
+  const hub = (body: React.ReactNode) => <><ApplicationsHub view="quotes" tabs={applicationsTabs(guard.entitlement)} calculator={hasCalculator(guard.entitlement)} readOnly={!canWrite(guard.entitlement)}>{body}</ApplicationsHub></>;
+  if (query.preview === "sample" && process.env.NODE_ENV !== "production") return hub(<QuotesList rows={sampleRows()} sample embedded />);
+  const [rows, timeZone] = await Promise.all([orPending(scopeFor(guard.context).then((scope) => listQuoteRows(guard.context.tenantId, scope))), getViewerTimezone(guard.context.tenantId, guard.context.userId).catch(() => null)]);
+  if (!rows) return <SetupPending title="Quotes" />;
+  return hub(<QuotesList rows={rows} timeZone={timeZone ?? undefined} embedded />);
+}

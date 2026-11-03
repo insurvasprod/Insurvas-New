@@ -8,8 +8,7 @@ import "server-only";
 // invoice and therefore the first thing to exercise overdue, void and manual settlement.
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { buildProvider } from "@/lib/payments/registry";
-import { WhopProvider } from "@/lib/payments/whop/provider";
+import { sendInvoiceForCollection } from "@/lib/billing/collect";
 import type { InvoiceLineInput } from "./constants";
 
 export type CustomInvoiceInput = {
@@ -47,55 +46,23 @@ export async function createCustomInvoice(input: CustomInvoiceInput): Promise<Cu
   const row = Array.isArray(data) ? data[0] : data;
   if (!row) throw new Error("The invoice was not created");
 
-  // Pushing it to Whop is best effort. If it fails the invoice still exists and can be settled by
-  // bank transfer — losing the pay-online link is worth far less than losing the invoice.
-  let payOnlineUrl: string | null = null;
-  let sendWarning: string | null = null;
-
-  const { data: provider } = await supabase
-    .from("payment_providers")
-    .select("provider_customer_id")
-    .eq("tenant_id", input.tenantId)
-    .eq("is_default", true)
-    .maybeSingle<{ provider_customer_id: string | null }>();
-
-  const memberId = provider?.provider_customer_id ?? null;
-  const companyId = process.env.WHOP_ACCOUNT_ID;
-
-  if (!memberId) {
-    sendWarning =
-      "No provider customer is known for this tenant yet, so there is no pay-online link. It can still be settled by bank transfer.";
-  } else if (!companyId) {
-    sendWarning = "WHOP_ACCOUNT_ID is not set, so the invoice was not sent for online payment.";
-  } else {
-    try {
-      const whop = buildProvider("whop");
-      if (whop instanceof WhopProvider) {
-        const sent = await whop.createInvoice({
-          companyId,
-          memberId,
-          amountCents: row.total_cents,
-          description: input.reason,
-          dueAt: input.dueAt,
-        });
-        payOnlineUrl = sent.payOnlineUrl;
-        await supabase
-          .from("invoices")
-          .update({ provider_invoice_id: sent.invoiceId, pay_online_url: sent.payOnlineUrl })
-          .eq("id", row.invoice_id);
-      }
-    } catch (sendError) {
-      const message = sendError instanceof Error ? sendError.message : String(sendError);
-      console.error(`[custom-invoice] ${row.number} created locally but not sent: ${message}`);
-      sendWarning = `The invoice was created but could not be sent for online payment: ${message}`;
-    }
-  }
+  // Pushing it to Whop is best effort, and is the same push the period billing run uses — one
+  // implementation, in lib/billing/collect.ts, so a fix to either caller reaches both. It used to
+  // live here alone, which is why hand-raised invoices were collectable and period invoices were
+  // not — the same code, missing from the one path that runs unattended.
+  const sent = await sendInvoiceForCollection(supabase, {
+    invoiceId: row.invoice_id,
+    tenantId: input.tenantId,
+    amountCents: row.total_cents,
+    description: input.reason,
+    dueAt: input.dueAt,
+  });
 
   return {
     invoiceId: row.invoice_id,
     number: row.number,
     totalCents: row.total_cents,
-    payOnlineUrl,
-    sendWarning,
+    payOnlineUrl: sent.payOnlineUrl,
+    sendWarning: sent.warning,
   };
 }

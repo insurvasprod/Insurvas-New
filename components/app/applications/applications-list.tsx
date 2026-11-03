@@ -1,0 +1,396 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { Download, Plus } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
+import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection } from "@/components/ui/bulk-bar";
+import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { PageHeader } from "@/components/ui/page-header";
+import { DetailPanel } from "@/components/ui/detail-panel";
+import { NextStepLine } from "@/components/app/next-step-line";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { Pager, paginate } from "@/components/ui/pager";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
+import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { downloadCsv } from "@/components/app/partner-quality-parts";
+import {
+  APPLICATION_OUTCOME_LABEL, APPLICATION_OUTCOME_TONE, APPLICATION_OUTCOMES, APPLICATION_STATUS_LABEL, type ApplicationStatus,
+} from "@/lib/applications/constants";
+import { dayMonthTime, missingNumber as orphanRule, SUBMITTED_STATUSES, type ApplicationRow } from "@/lib/applications/listRules";
+import type { ApplicationListRow } from "@/lib/applications/types";
+import { formatCents } from "@/lib/money";
+import { cn } from "@/lib/utils";
+import { useFittingPageSize } from "@/components/app/book-views";
+import { ATTEMPT_STATUS_TONE, money, ordinal, SampleDataNotice } from "./parts";
+
+// ── Small helpers the LA-3 list pages share ──────────────────────────────────
+
+/** Whole days between an ISO time and now (never negative). */
+export function daysSince(iso: string | null | undefined, now = Date.now()): number | null {
+  if (!iso) return null;
+  return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 86_400_000));
+}
+
+/** "today", "yesterday", "3 days ago". */
+export function daysAgoLabel(days: number | null, never = "never"): string {
+  if (days === null) return never;
+  if (days === 0) return "today";
+  if (days === 1) return "yesterday";
+  return `${days} days ago`;
+}
+
+/**
+ * Refresh for a page that reads fixtures: the button spins briefly and nothing reloads, so the
+ * control is where it will be once the page fetches.
+ */
+export function useSampleRefresh() {
+  const [refreshing, setRefreshing] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refresh = useCallback(() => {
+    setRefreshing(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setRefreshing(false), 450);
+  }, []);
+  return { refreshing, refresh };
+}
+
+/**
+ * Refresh a list from its route: sample pages spin and keep the fixtures; live pages fetch with
+ * `cache: "no-store"` and keep what is on screen when the fetch fails, saying so.
+ */
+export function useLiveRefresh<T>(opts: { sample: boolean; url: string; pick: (body: unknown) => T | null; apply: (value: T) => void }) {
+  const sampleRefresh = useSampleRefresh();
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { url, pick, apply, sample } = opts;
+  const refresh = useCallback(async () => {
+    if (sample) { sampleRefresh.refresh(); return; }
+    setRefreshing(true);
+    try {
+      const r = await fetch(url, { cache: "no-store" });
+      const body = (await r.json().catch(() => null)) as { error?: string } | null;
+      const value = r.ok ? pick(body) : null;
+      if (value === null) { setError(body?.error ?? "Refresh failed — try again. Showing the last load."); return; }
+      apply(value);
+      setError(null);
+    } catch {
+      setError("Refresh failed — check your connection. Showing the last load.");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [sample, sampleRefresh, url, pick, apply]);
+  return { refresh, refreshing: sample ? sampleRefresh.refreshing : refreshing, error };
+}
+
+export const clientLinkClass = "font-semibold text-foreground underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]";
+
+/** The case link for a row, landing on the right insured and (optionally) step. */
+export function caseHref(caseId: string, opts: { insured?: "primary" | "spouse"; step?: string; attempt?: number; from?: string } = {}) {
+  const q = new URLSearchParams();
+  if (opts.attempt) q.set("attempt", String(opts.attempt));
+  if (opts.insured === "spouse") q.set("insured", "spouse");
+  if (opts.step) q.set("step", opts.step);
+  // The workspace's back link returns here (lib/applications/backLink.ts).
+  if (opts.from) q.set("from", opts.from);
+  const query = q.toString();
+  return `/app/applications/${caseId}${query ? `?${query}` : ""}`;
+}
+
+/** The orphan rule (LA-3.15): submitted with no carrier reference, or issued with no policy number. */
+export function missingNumber(row: ApplicationListRow): "reference" | "policy_number" | null {
+  return orphanRule(row);
+}
+
+// ── Applications ─────────────────────────────────────────────────────────────
+
+const OPEN_STATUSES = ["draft", "ready", "submitted", "pending_carrier", "counteroffer_pending"] as const satisfies readonly ApplicationStatus[];
+
+/** One row per insured on an attempt: the table's key, and the id a selection holds. */
+const rowId = (row: ApplicationRow) => `${row.applicationId}-${row.insuredRole}`;
+
+function statusKey(row: ApplicationListRow) {
+  return row.status === "closed" && row.outcome ? `outcome:${row.outcome}` : row.status;
+}
+
+/** The status the board prints: an issued attempt with no policy number reads "Awaiting policy #". */
+function statusView(row: ApplicationListRow): { label: string; tone: StatusTone } {
+  if (row.status === "closed" && row.outcome) {
+    if (row.outcome === "issued" && orphanRule(row) === "policy_number") return { label: "Awaiting policy #", tone: "danger" };
+    return { label: APPLICATION_OUTCOME_LABEL[row.outcome], tone: APPLICATION_OUTCOME_TONE[row.outcome] };
+  }
+  return { label: APPLICATION_STATUS_LABEL[row.status], tone: ATTEMPT_STATUS_TONE[row.status] };
+}
+
+/** QA as the board prints it: from the verdict frozen at submission, "Pass" at ready, nothing on a draft. */
+function QaCell({ row }: { row: ApplicationRow }) {
+  if (row.qaVerdict === "fail") return <StatusChip tone="danger">{row.qaBlocking ? `${row.qaBlocking} to fix` : "To fix"}</StatusChip>;
+  if (row.qaVerdict === "pass_with_warnings") return <StatusChip tone="warning">{row.qaWarnings ? `${row.qaWarnings} ${row.qaWarnings === 1 ? "warning" : "warnings"}` : "Warnings"}</StatusChip>;
+  if (row.qaVerdict === "pass" || row.status === "ready") return <StatusChip tone="good" title={row.qaVerdict ? "The check frozen when it was submitted" : "Passed the check when it was marked ready"}>Pass</StatusChip>;
+  return <span className="text-muted-foreground" title="Not checked yet — the check runs on the Review step">—</span>;
+}
+
+/** Where an attempt is, as the five marks of the preview's bar: qualified, applied, submitted, decision, issued. */
+function stageOf(row: ApplicationRow): number {
+  if (row.status === "closed") return row.outcome === "issued" ? (orphanRule(row) ? 4 : 5) : 3;
+  return { draft: 1, ready: 2, submitted: 3, pending_carrier: 3, counteroffer_pending: 3 }[row.status] ?? 1;
+}
+
+/** The one thing the case needs next, in words. */
+function nextFor(row: ApplicationRow): string {
+  if (row.status === "draft") return row.qaVerdict === "fail" ? "Fix what the checks found, then mark it ready" : "Finish the application";
+  if (row.status === "ready") return "Submit it on the carrier’s site, then capture the reference";
+  if (row.status === "counteroffer_pending") return "The carrier offered something different — decide with the client";
+  if (row.status === "pending_carrier") return "Waiting on the carrier’s decision — work any requirement on the case";
+  if (row.status === "submitted") return orphanRule(row) === "reference" ? "Add the carrier reference so it can be matched" : "Waiting on the carrier";
+  if (row.outcome === "issued") return orphanRule(row) === "policy_number" ? "Add the policy number" : "Issued — nothing to do";
+  return "Closed — start another attempt from the case if it makes sense";
+}
+
+const STAGE_MARKS = ["Qualified", "Applied", "Submitted", "Carrier decision", "Issued"];
+
+/** The case beside the list (2026-10-26, Applications A): where it is, what it needs, and the way in. */
+function CasePreview({ row, timeZone, onClose }: { row: ApplicationRow; timeZone?: string; onClose: () => void }) {
+  const s = statusView(row);
+  const reached = stageOf(row);
+  const fact = (label: string, value: React.ReactNode) => <span className="min-w-0"><span className="block text-xs font-semibold text-muted-foreground">{label}</span><span className="mt-0.5 block truncate text-sm text-foreground">{value}</span></span>;
+  return (
+    <DetailPanel
+      mode="split"
+      title={row.clientName}
+      subtitle={[row.insuredRole === "spouse" ? "Spouse" : null, row.carrierName ?? "No carrier yet", row.productLabel, `attempt ${row.attemptNo}`].filter(Boolean).join(" · ")}
+      status={<StatusChip tone={s.tone} dot>{s.label}</StatusChip>}
+      onClose={onClose}
+      className="m-glass lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:self-start"
+      footer={<div className="flex justify-end"><Button asChild><Link href={caseHref(row.caseId, { insured: row.insuredRole, attempt: row.attemptNo, from: "/app/applications" })}>Open the case</Link></Button></div>}
+    >
+      <div className="grid grid-cols-2 gap-3">
+        {fact("Premium", money(row.monthlyPremiumCents))}
+        {fact("Checks", <QaCell row={row} />)}
+        {fact("Carrier reference", row.reference ? <code className="font-mono text-xs">{row.reference}</code> : "—")}
+        {fact("Policy number", row.policyNumber ? <code className="font-mono text-xs">{row.policyNumber}</code> : "—")}
+        {fact("Updated", dayMonthTime(row.updatedAt, timeZone))}
+        {fact("Submitted", row.submittedAt ? dayMonthTime(row.submittedAt, timeZone) : "Not yet")}
+      </div>
+      <div className="flex flex-col gap-2 border-t border-border pt-4">
+        <span className="text-xs font-semibold text-muted-foreground">Where it is</span>
+        <div className="flex gap-1.5" aria-hidden>
+          {STAGE_MARKS.map((mark, index) => <span key={mark} className={cn("h-1.5 flex-1 rounded-full", index < reached - 1 || reached === STAGE_MARKS.length ? "bg-[var(--primary)]" : index === reached - 1 ? "bg-[var(--warning)]" : "bg-[var(--surface-alt)]")} />)}
+        </div>
+        <span className="text-xs text-[var(--body)]">{STAGE_MARKS.map((mark, index) => <span key={mark} className={index === reached - 1 ? cn("font-semibold", reached === STAGE_MARKS.length ? "text-[var(--success-ink)]" : "text-[var(--warning-ink)]") : undefined}>{index ? " · " : ""}{mark}</span>)}</span>
+      </div>
+      <div className="flex flex-col gap-1 border-t border-border pt-4">
+        <span className="text-xs font-semibold text-muted-foreground">What it needs</span>
+        <span className="text-sm text-foreground">{nextFor(row)}</span>
+      </div>
+    </DetailPanel>
+  );
+}
+
+export function ApplicationsList({ rows: initialRows, sample = false, timeZone, embedded = false }: { rows: ApplicationRow[]; sample?: boolean; timeZone?: string; /** The Cases tab of Applications (2026-10-26): no header of its own, a Next step line, and a case preview. */ embedded?: boolean }) {
+  const [rows, setRows] = useState(initialRows);
+  const [search, setSearch] = useState("");
+  const [status, setStatus] = useState("all");
+  const [carrier, setCarrier] = useState("all");
+  const [missingOnly, setMissingOnly] = useState(false);
+  const [page, setPage] = useState(1);
+  const [now] = useState(() => Date.now());
+  // Header, strip, toolbar, column heads and pager: the rest of the viewport is rows.
+  const pageSize = useFittingPageSize(500, 45);
+  const pick = useCallback((body: unknown) => (body as { applications?: ApplicationRow[] } | null)?.applications ?? null, []);
+  const { refresh, refreshing, error: loadError } = useLiveRefresh({ sample, url: "/api/app/applications", pick, apply: setRows });
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  // On a wide screen the case to act on first opens beside the list, so the preview is never empty on arrival.
+  useEffect(() => {
+    if (!embedded || !window.matchMedia("(min-width: 1024px)").matches) return;
+    const first = initialRows.find((row) => row.status === "counteroffer_pending") ?? initialRows.find((row) => row.status === "ready") ?? initialRows.find((row) => orphanRule(row) !== null);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- open the first case once, on arrival
+    if (first) setPreviewId((current) => current ?? rowId(first));
+  }, [embedded, initialRows]);
+
+  const carriers = useMemo(() => [...new Set(rows.map((row) => row.carrierName).filter((name): name is string => Boolean(name)))].sort(), [rows]);
+  const sorted = useMemo(() => [...rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.clientName.localeCompare(b.clientName)), [rows]);
+
+  const needle = search.trim().toLowerCase();
+  const shown = sorted.filter((row) =>
+    (status === "all" || statusKey(row) === status)
+    && (carrier === "all" || row.carrierName === carrier)
+    && (!missingOnly || orphanRule(row) === "reference")
+    && (!needle || [row.clientName, row.carrierName, row.reference, row.policyNumber].some((value) => value?.toLowerCase().includes(needle))));
+  const { current, rows: pageRows } = paginate(shown, page, pageSize);
+  const filtered = needle !== "" || status !== "all" || carrier !== "all" || missingOnly;
+  const clearFilters = () => { setSearch(""); setStatus("all"); setCarrier("all"); setMissingOnly(false); setPage(1); };
+
+  const countOf = (s: ApplicationStatus) => rows.filter((row) => row.status === s).length;
+  const awaiting = rows.filter((row) => orphanRule(row) !== null);
+  const noReference = awaiting.filter((row) => orphanRule(row) === "reference").length;
+  const issuedNoNumber = awaiting.length - noReference;
+  const weekAgo = now - 7 * 86_400_000;
+  const sentThisWeek = rows.filter((row) => row.submittedAt && Date.parse(row.submittedAt) >= weekAgo).length;
+  const readyToday = rows.filter((row) => row.status === "ready" && new Date(row.updatedAt).toDateString() === new Date(now).toDateString()).length;
+  const drafts = countOf("draft");
+  const withCarrier = countOf("pending_carrier") + countOf("counteroffer_pending");
+
+  function exportCsv(list: ApplicationRow[] = shown, filename = "applications.csv") {
+    downloadCsv(filename,
+      ["Client", "Insured", "Carrier", "Product", "Attempt", "Status", "Monthly premium", "QA", "Carrier reference", "Policy number", "Updated"],
+      list.map((row) => [row.clientName, row.insuredRole, row.carrierName, row.productLabel, row.attemptNo, statusView(row).label, row.monthlyPremiumCents === null ? null : formatCents(row.monthlyPremiumCents), row.qaVerdict, row.reference, row.policyNumber, row.updatedAt]));
+  }
+
+  // Ticked rows (2026-10-09 saved views): one per insured, kept across pages, dropped when a filter hides them.
+  const selection = useRowSelection(shown.map(rowId));
+  // Saved views: the search and the three filters as one state. Built-ins are the status filter's
+  // own choices (and Missing reference), with how many rows each would show.
+  const viewState: ViewState = { status: status === "all" ? "" : status, carrier: carrier === "all" ? "" : carrier, missingOnly, q: needle };
+  const builtInViews: BuiltInView[] = [
+    { id: "all", name: "All", state: {}, count: rows.length },
+    { id: "draft", name: APPLICATION_STATUS_LABEL.draft, state: { status: "draft" }, count: countOf("draft") },
+    { id: "ready", name: APPLICATION_STATUS_LABEL.ready, state: { status: "ready" }, count: countOf("ready") },
+    { id: "submitted", name: APPLICATION_STATUS_LABEL.submitted, state: { status: "submitted" }, count: countOf("submitted") },
+    { id: "pending_carrier", name: APPLICATION_STATUS_LABEL.pending_carrier, state: { status: "pending_carrier" }, count: countOf("pending_carrier") },
+    { id: "counteroffer_pending", name: APPLICATION_STATUS_LABEL.counteroffer_pending, state: { status: "counteroffer_pending" }, count: countOf("counteroffer_pending") },
+    { id: "missing", name: "Missing reference", state: { missingOnly: true }, count: noReference },
+  ];
+  function applyView(state: ViewState) {
+    const text = (key: string) => (typeof state[key] === "string" ? (state[key] as string) : "");
+    setStatus(text("status") || "all");
+    setCarrier(text("carrier") || "all");
+    setMissingOnly(state.missingOnly === true);
+    setSearch(text("q"));
+    setPage(1);
+  }
+
+  const preview = previewId ? rows.find((row) => rowId(row) === previewId) ?? null : null;
+  // The one thing to do next: an offer to decide, then a case ready to submit, then a number to add.
+  const offers = rows.filter((row) => row.status === "counteroffer_pending");
+  const ready = rows.filter((row) => row.status === "ready").sort((a, b) => a.updatedAt.localeCompare(b.updatedAt));
+  const nextStep = offers.length ? (
+    <NextStepLine action={<Button asChild size="sm"><Link href="/app/pending?tab=counteroffers">See {offers.length === 1 ? "the offer" : "the offers"}</Link></Button>}>
+      <strong className="font-semibold text-[var(--ink)]">{offers.length === 1 ? `${offers[0].clientName}’s carrier came back with a different offer` : `${offers.length} carriers came back with a different offer`}</strong> — decide with the client before it expires.
+    </NextStepLine>
+  ) : ready.length ? (
+    <NextStepLine action={<Button asChild size="sm"><Link href={caseHref(ready[0].caseId, { insured: ready[0].insuredRole, attempt: ready[0].attemptNo, step: "submit", from: "/app/applications" })}>Submit {ready[0].clientName.split(" ")[0]}&rsquo;s</Link></Button>}>
+      <strong className="font-semibold text-[var(--ink)]">{ready.length === 1 ? `${ready[0].clientName}’s application is ready` : `${ready.length} applications are ready`}</strong> — the checks passed; submit on the carrier’s site and capture the reference.
+    </NextStepLine>
+  ) : awaiting.length ? (
+    <NextStepLine action={<Button asChild size="sm" variant="outline"><Link href="/app/pending?tab=awaiting">Add the numbers</Link></Button>}>
+      <strong className="font-semibold text-[var(--ink)]">{awaiting.length === 1 ? "One application is" : `${awaiting.length} applications are`} waiting for a number</strong> — {[noReference ? `${noReference} with no carrier reference` : null, issuedNoNumber ? `${issuedNoNumber} issued with no policy number` : null].filter(Boolean).join(", ")}.
+    </NextStepLine>
+  ) : null;
+
+  return (
+    <div className={embedded ? "flex flex-col gap-6" : "m-stagger flex flex-col gap-6"}>
+      {!embedded && <PageHeader
+        title="Applications"
+        actions={<>
+          <Button type="button" variant="outline" onClick={() => exportCsv()} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>
+          <Button asChild title="An application starts from the lead: open it and choose Start application"><Link href="/app/leads"><Plus aria-hidden="true" />New application</Link></Button>
+        </>}
+      />}
+      {sample && <SampleDataNotice />}
+      {embedded && nextStep}
+
+      {/* Four figures an operator acts on (2026-10-06 redesign): drafts ride on Ready's footnote. */}
+      <StatStrip label="Application totals">
+        <StatTile label="Ready to submit" value={countOf("ready")} footnote={`${readyToday} QA passed today · ${drafts} ${drafts === 1 ? "draft" : "drafts"}`} />
+        <StatTile label="Submitted" value={countOf("submitted")} footnote={`${sentThisWeek} sent this week`} />
+        <StatTile label="Pending carrier" value={withCarrier} valueTone={withCarrier > 0 ? "warning" : undefined} footnote="waiting on a decision" />
+        <StatTile label="Awaiting policy number" value={awaiting.length} valueTone={awaiting.length > 0 ? "danger" : undefined} footnote={noReference ? `${issuedNoNumber} issued · ${noReference} no reference` : "issued, number not back"} />
+      </StatStrip>
+
+      <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
+      <TableCard
+        className="flex min-h-[calc(100dvh-var(--top-bar-h)-332px)] min-w-0 flex-1 flex-col [&>*:nth-child(2)]:flex-1"
+        toolbar={<>
+          <DataToolbar actions={<>
+            {filtered && <ClearFiltersButton onClick={clearFilters} />}
+            <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+            {embedded && <Button type="button" variant="outline" onClick={() => exportCsv()} disabled={shown.length === 0} title={shown.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>}
+          </>}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search client, reference, policy #" />
+            <select aria-label="Status" className={toolbarControl} value={status} onChange={(event) => { setStatus(event.target.value); setPage(1); }}>
+              <option value="all">All statuses</option>
+              {OPEN_STATUSES.map((s) => <option key={s} value={s}>{APPLICATION_STATUS_LABEL[s]}</option>)}
+              <optgroup label="Closed">
+                {APPLICATION_OUTCOMES.map((o) => <option key={o} value={`outcome:${o}`}>{APPLICATION_OUTCOME_LABEL[o]}</option>)}
+              </optgroup>
+            </select>
+            <select aria-label="Carrier" className={toolbarControl} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }}>
+              <option value="all">All carriers</option>
+              {carriers.map((name) => <option key={name} value={name}>{name}</option>)}
+            </select>
+            <ToggleChip selected={missingOnly} onClick={() => { setMissingOnly((value) => !value); setPage(1); }}>
+              Missing reference
+            </ToggleChip>
+            <SavedViews storageKey="applications" current={viewState} builtIns={builtInViews} onApply={applyView} />
+          </DataToolbar>
+          {loadError && <p role="alert" className="w-full text-sm text-destructive">{loadError}</p>}
+        </>}
+        footer={<Pager page={current} total={shown.length} pageSize={pageSize} noun="applications" onPage={setPage} suffix={filtered ? `filtered from ${rows.length}` : "most recently touched first"} />}
+      >
+        {rows.length === 0
+          ? <EmptyState title="No applications yet" hint="Start one from a lead's page." action={<Button asChild variant="outline"><Link href="/app/leads">Open leads</Link></Button>} />
+          : shown.length === 0
+            ? <NoMatches noun="applications" onClear={clearFilters} />
+            : <>
+              <BulkBar
+                count={selection.count}
+                noun={["application", "applications"]}
+                onClear={selection.clear}
+                actions={<Button type="button" variant="outline" onClick={() => exportCsv(shown.filter((row) => selection.selected.has(rowId(row))), "applications-selected.csv")}><Download aria-hidden="true" />Export selected</Button>}
+              />
+              <table className="portal-lead-table w-full min-w-[1160px] text-left text-sm">
+                <thead>
+                  <tr>
+                    <th className="w-10"><SelectAllCheckbox selection={selection} ids={pageRows.map(rowId)} label="Select every application on this page" /></th>
+                    <th>Client</th>
+                    <th className="w-[90px]">Insured</th>
+                    <th className="w-[150px]">Carrier</th>
+                    <th className="w-[140px]">Product</th>
+                    <th className="w-[80px]">Attempt</th>
+                    <th className="w-[160px]">Status</th>
+                    <th className="w-[100px] text-right">Premium</th>
+                    <th className="w-[124px]">QA</th>
+                    <th className="w-[136px]">Policy #</th>
+                    <th className="w-[124px]">Updated</th>
+                  </tr>
+                </thead>
+                <tbody className="m-seq">
+                  {pageRows.map((row) => {
+                    const href = caseHref(row.caseId, { insured: row.insuredRole, attempt: row.attemptNo });
+                    const s = statusView(row);
+                    return (
+                      <tr key={rowId(row)} className={cn("m-row", embedded && "cursor-pointer", (selection.isSelected(rowId(row)) || previewId === rowId(row)) && "bg-[var(--primary-soft)]", previewId === rowId(row) && "shadow-[inset_3px_0_0_var(--primary)]")} onClick={embedded ? (event) => { if ((event.target as HTMLElement).closest("a, button, input, label")) return; setPreviewId(previewId === rowId(row) ? null : rowId(row)); } : undefined}>
+                        <td><RowCheckbox selection={selection} id={rowId(row)} label={`Select ${row.clientName}${row.insuredRole === "spouse" ? " (spouse)" : ""}`} /></td>
+                        <td className="max-w-[220px] truncate" title={row.clientName}><Link href={href} className={clientLinkClass}>{row.clientName}</Link></td>
+                        <td>{row.insuredRole === "spouse" ? "Spouse" : "Primary"}</td>
+                        <td className="max-w-[150px] truncate" title={row.carrierName ?? undefined}>{row.carrierName ?? <span className="text-muted-foreground">No carrier yet</span>}</td>
+                        <td className="max-w-[140px] truncate" title={row.productLabel ?? undefined}>{row.productLabel ?? "—"}</td>
+                        <td className="tabular-nums">{ordinal(row.attemptNo)}</td>
+                        <td><StatusChip tone={s.tone} dot>{s.label}</StatusChip></td>
+                        <td className="text-right tabular-nums">{money(row.monthlyPremiumCents)}</td>
+                        <td><QaCell row={row} /></td>
+                        <td>
+                          {row.policyNumber
+                            ? <code className="font-mono text-xs tabular-nums">{row.policyNumber}</code>
+                            : SUBMITTED_STATUSES.includes(row.status) && !row.reference
+                              ? <span className="text-muted-foreground" title="Submitted with no carrier reference yet — it stays on Pending › Awaiting policy number until one is typed in">—</span>
+                              : "—"}
+                        </td>
+                        <td className="tabular-nums">{dayMonthTime(row.updatedAt, timeZone)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>}
+      </TableCard>
+      {embedded && preview && <CasePreview key={rowId(preview)} row={preview} timeZone={timeZone} onClose={() => setPreviewId(null)} />}
+      </div>
+    </div>
+  );
+}

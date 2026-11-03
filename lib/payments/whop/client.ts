@@ -45,7 +45,11 @@ export class WhopApiError extends Error {
 export type WhopClientOptions = {
   apiKey: string;
   baseUrl: string;
+  /** Tenant context for provider_calls; null is reserved for platform-wide operations. */
+  tenantId?: string | null;
   fetchImpl?: typeof fetch;
+  /** False only when an outer PaymentProvider decorator owns the log row. */
+  logCalls?: boolean;
 };
 
 /**
@@ -76,12 +80,16 @@ export class WhopClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly logCalls: boolean;
+  private readonly tenantId: string | null;
 
   constructor(options: WhopClientOptions) {
     if (!options.apiKey) throw new Error("WHOP_API_KEY is not set");
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.logCalls = options.logCalls ?? true;
+    this.tenantId = options.tenantId ?? null;
   }
 
   /**
@@ -107,6 +115,11 @@ export class WhopClient {
        * a monitoring screen made worse by the act of monitoring.
        */
       okStatuses?: readonly number[];
+      /**
+       * Give up after this many milliseconds. The abort is recorded as a timeout like any other
+       * network silence. Opt-in, so no existing call changes behaviour.
+       */
+      timeoutMs?: number;
     },
   ): Promise<T> {
     const startedAt = performance.now();
@@ -124,11 +137,12 @@ export class WhopClient {
         method,
         headers,
         body: body === undefined ? undefined : JSON.stringify(body),
+        ...(options?.timeoutMs ? { signal: AbortSignal.timeout(options.timeoutMs) } : {}),
       });
     } catch (error) {
       // The network never answered. Recorded as a timeout so "they said nothing" stays distinct
       // from "they said no".
-      await this.log(method, path, startedAt, "timeout", null, idempotencyKey);
+      if (this.logCalls) await this.log(method, path, startedAt, "timeout", null, idempotencyKey);
       throw error;
     }
 
@@ -142,14 +156,16 @@ export class WhopClient {
 
     const treatAsOk = response.ok || (options?.okStatuses?.includes(response.status) ?? false);
 
-    await this.log(
-      method,
-      path,
-      startedAt,
-      treatAsOk ? "ok" : "error",
-      { status: response.status, body: parsed as never },
-      idempotencyKey,
-    );
+    if (this.logCalls) {
+      await this.log(
+        method,
+        path,
+        startedAt,
+        treatAsOk ? "ok" : "error",
+        { status: response.status, body: parsed as never },
+        idempotencyKey,
+      );
+    }
 
     if (!response.ok) throw new WhopApiError(method, path, response.status, parsed);
     return parsed as T;
@@ -178,7 +194,7 @@ export class WhopClient {
     try {
       const { recordProviderCall } = await import("../logging");
       await recordProviderCall({
-        tenantId: null,
+        tenantId: this.tenantId,
         provider: "whop",
         method: `${method} ${path}`,
         request: { method, path },

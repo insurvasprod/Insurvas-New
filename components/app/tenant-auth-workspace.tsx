@@ -1,0 +1,498 @@
+"use client";
+
+import { startTransition, useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
+
+import { LinkArrow } from "@/components/ui/link-arrow";
+import type { PortalAuthMode } from "@/components/portal/portal-auth-split-shell";
+import { AuthHeading, AuthLayout } from "@/components/portal/auth-layout";
+import { AuthShowcase } from "@/components/app/auth-showcase";
+import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
+import { GoogleButton } from "@/components/portal/google-button";
+import { OtpInput } from "@/components/app/otp-input";
+import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
+import type { MaintenanceStatus } from "@/lib/system/constants";
+
+/** The address that last signed in on this browser, so a returning agent types only the password. */
+const LAST_EMAIL_KEY = "insurvas:last-sign-in-email";
+
+/**
+ * A refused sign-in's message. A 429 is the attempt limit (lib/authProtection), checked before the
+ * password, so its body is the generic "Invalid email or password" — which read as a wrong password
+ * on a shared demo account whose budget was spent (2026-10-30). The 429 and its Retry-After already
+ * say so for any address, existing or not, so naming it here reveals nothing new.
+ */
+function signInError(response: Response, body: { error?: string } | null, fallback: string) {
+  if (response.status === 429) {
+    const minutes = Math.max(1, Math.ceil(Number(response.headers.get("retry-after") || 60) / 60));
+    return `Too many sign-in attempts for this address. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.`;
+  }
+  return body?.error ?? fallback;
+}
+
+/**
+ * The brand panel beside the agent forms: the product, moving (components/app/auth-showcase.tsx).
+ * Manager review, 2026-10-28: show what the software looks like, one feature at a time, animated.
+ * Sign-up screen N opens on feature N, so each step moves the story on; sign-in starts at the first.
+ * The payment line stays as a footnote; it never names a trial length, because that depends on the
+ * plan (owner, 2026-10-27). AppAuthFrame (set password, confirm email) shows the sign-in one.
+ */
+export function StoryPanel({ mode, step = 1, noPayment = false }: { mode: PortalAuthMode; step?: number; noPayment?: boolean }) {
+  if (mode === "sign-up") {
+    return <AuthShowcase step={step} footnote={noPayment ? "No card needed" : "Card on Whop's secure checkout · not charged during your trial"} />;
+  }
+  return <AuthShowcase step={0} />;
+}
+
+/**
+ * Sign-in only. Sign-up is the one public flow at /signup (/api/public/signup): email verification,
+ * legal acceptance, the disposable-address check and Whop checkout. The form that used to live here
+ * posted to the legacy app sign-up route (now 410), which skipped all of that and failed on every attempt.
+ */
+export function TenantAuthWorkspace({
+  maintenance,
+  googleEnabled = false,
+  initialStep,
+  notice = null,
+}: {
+  maintenance?: MaintenanceStatus | null;
+  /** "Continue with Google" shows only once Google is switched on in Supabase (lib/tenantAuth/google.ts). */
+  googleEnabled?: boolean;
+  /** "code": Google signed the person in and two-factor is next (the pending cookie is already set). */
+  initialStep?: "code";
+  /** Why Google sent the person back, already turned into a sentence (lib/tenantAuth/googleMessages.ts). */
+  notice?: string | null;
+}) {
+  const router = useRouter();
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(notice);
+  const [loginLoading, setLoginLoading] = useState(false);
+  // LA-8.2: with two-factor on, the password is step one; the authenticator (or a recovery) code is step two.
+  const [twoFactorStep, setTwoFactorStep] = useState(initialStep === "code");
+  const [twoFactorCode, setTwoFactorCode] = useState("");
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
+
+  // "Forgot password" swaps the sign-in form for a one-field reset request in the same panel.
+  const [resetting, setResetting] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetState, setResetState] = useState<"idle" | "sending" | "sent">("idle");
+  const [resetError, setResetError] = useState<string | null>(null);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const emailRef = useRef<HTMLInputElement>(null);
+  // "Keep me signed in on this device" (ticked by default, the cookie the app always gave) and
+  // "Trust this device for 30 days" at the code step.
+  const [remember, setRemember] = useState(true);
+  const [trustDevice, setTrustDevice] = useState(false);
+
+  // "Email me a sign-in link": the request panel, and the link itself when this page was opened from one.
+  const [linkRequest, setLinkRequest] = useState<"closed" | "open" | "sending" | "sent">("closed");
+  const [linkEmail, setLinkEmail] = useState("");
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const [linkCooldown, setLinkCooldown] = useState(0);
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+
+  // A link arrives as /app/login#link=…: the fragment never reaches a server, and it is cleared from
+  // the address bar at once so it is not left in history or shared by accident.
+  useEffect(() => {
+    const match = /^#link=(.+)$/.exec(window.location.hash);
+    if (!match) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the fragment is only readable after mount
+    setLinkToken(decodeURIComponent(match[1]));
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }, []);
+
+  useEffect(() => {
+    if (linkCooldown <= 0) return;
+    const timer = window.setInterval(() => setLinkCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [linkCooldown]);
+
+  // A remembered address fills the field and puts the cursor in the password; otherwise the email.
+  useEffect(() => {
+    if (/^#link=/.test(window.location.hash)) return;
+    let remembered = "";
+    try { remembered = window.localStorage.getItem(LAST_EMAIL_KEY) ?? ""; } catch { /* storage blocked */ }
+    if (remembered) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
+      setLoginEmail((current) => current || remembered);
+      passwordRef.current?.focus();
+    } else {
+      emailRef.current?.focus();
+    }
+  }, []);
+
+  function rememberEmail() {
+    try { window.localStorage.setItem(LAST_EMAIL_KEY, loginEmail.trim()); } catch { /* storage blocked */ }
+  }
+
+  function openReset() {
+    startTransition(() => {
+      setResetEmail(loginEmail);
+      setResetState("idle");
+      setResetError(null);
+      setResetting(true);
+    });
+  }
+
+  async function handleReset(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setResetError(null);
+    if (!resetEmail.trim()) { setResetError("Enter the email address you sign in with."); return; }
+    setResetState("sending");
+    try {
+      const response = await fetch("/api/app/auth/forgot-password", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: resetEmail }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setResetError(body?.error ?? "Could not send a reset link. Try again."); setResetState("idle"); return; }
+      setResetState("sent");
+    } catch {
+      setResetError("Could not send a reset link. Check your connection and try again.");
+      setResetState("idle");
+    }
+  }
+
+  async function requestLink(event?: FormEvent<HTMLFormElement>) {
+    event?.preventDefault();
+    if (linkCooldown > 0) return;
+    setLinkError(null);
+    if (!linkEmail.trim()) { setLinkError("Enter the email address you sign in with."); return; }
+    setLinkRequest("sending");
+    try {
+      const response = await fetch("/api/app/auth/sign-in-link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: linkEmail, remember }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setLinkError(body?.error ?? "Could not send a sign-in link. Try again."); setLinkRequest("open"); return; }
+      setLinkRequest("sent");
+      setLinkCooldown(30);
+    } catch {
+      setLinkError("Could not send a sign-in link. Check your connection and try again.");
+      setLinkRequest("open");
+    }
+  }
+
+  /** The password, or the emailed link, goes to the same sign-in route. */
+  async function submitSignIn(payload: Record<string, unknown>) {
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, remember }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setLoginError(signInError(response, body, "Something went wrong")); return; }
+      if (body?.twoFactor) { setLinkToken(null); setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
+      router.replace(body?.redirectTo ?? "/app/dashboard");
+    } catch {
+      setLoginError("Could not sign in. Check your connection and try again.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  async function handleLogin(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword, remember }) });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) { setLoginError(signInError(response, body, "Something went wrong")); return; }
+      rememberEmail();
+      if (body?.twoFactor) { setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
+      // Straight to the landing page, once. The old push("/app") + refresh() rendered the landing page
+      // twice and bounced through /app's redirect — the slowest part of "11 seconds after login".
+      // Nothing above the shell reads the session, so no refresh is needed for the new cookie.
+      router.replace(body?.redirectTo ?? "/app/dashboard");
+    } catch {
+      setLoginError("Could not sign in. Check your connection and try again.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  async function handleTwoFactor(event: FormEvent<HTMLFormElement> | null, typed?: string) {
+    event?.preventDefault();
+    const code = typed ?? twoFactorCode;
+    if (loginLoading || !code.trim()) return;
+    setLoginError(null);
+    setLoginLoading(true);
+    try {
+      const payload = useRecoveryCode ? { recoveryCode: code.trim(), trust: trustDevice } : { code: code.replace(/\s/g, ""), trust: trustDevice };
+      const response = await fetch("/api/app/auth/verify-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const body = await response.json().catch(() => null);
+      if (response.status === 401 && /Sign in again/.test(body?.error ?? "")) { setTwoFactorStep(false); setLoginError(body.error); return; }
+      if (!response.ok) { setLoginError(signInError(response, body, "That code is not right.")); if (!useRecoveryCode) setTwoFactorCode(""); return; }
+      router.replace(body?.redirectTo ?? "/app/dashboard");
+    } catch {
+      setLoginError("Could not check the code. Check your connection and try again.");
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  const rememberBox = (
+    <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+      <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+      Keep me signed in on this device
+    </label>
+  );
+
+  const signIn = (
+    <>
+      {/* The sign-in page cannot know an agency from one agent, so it names neither (manager review, 2026-10-28). */}
+      <AuthHeading title="Welcome back">Sign in to your workspace.</AuthHeading>
+
+      <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
+        <AuthField label="Email" htmlFor="tenant-login-email">
+          <AuthInput
+            ref={emailRef}
+            id="tenant-login-email"
+            type="email"
+            inputMode="email"
+            autoComplete="username"
+            required
+            value={loginEmail}
+            onChange={(event) => {
+              setLoginEmail(event.target.value);
+              setLoginError(null);
+            }}
+          />
+        </AuthField>
+
+        <AuthField
+          label="Password"
+          htmlFor="tenant-login-password"
+          aside={
+            <button type="button" onClick={openReset} data-tap="" className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+              Forgot password?
+            </button>
+          }
+        >
+          <div className="relative">
+            <AuthInput
+              ref={passwordRef}
+              id="tenant-login-password"
+              type={showLoginPassword ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              value={loginPassword}
+              onChange={(event) => {
+                setLoginPassword(event.target.value);
+                setLoginError(null);
+              }}
+              className="pr-11"
+            />
+            <button
+              type="button"
+              className="portal-auth-visibility"
+              onClick={() => setShowLoginPassword((value) => !value)}
+              aria-label={showLoginPassword ? "Hide password" : "Show password"}
+              aria-pressed={showLoginPassword}
+            >
+              {showLoginPassword ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+            </button>
+          </div>
+        </AuthField>
+
+        {rememberBox}
+
+        {maintenance?.level === "locked" && <AuthAlert title="Sign in is temporarily unavailable">{maintenance.message}</AuthAlert>}
+        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+
+        <AuthSubmit className="mt-1" disabled={loginLoading || maintenance?.level === "locked"}>
+          {loginLoading ? "Signing in…" : "Sign in"}
+        </AuthSubmit>
+      </form>
+
+      {/* One other way in: Google, full width under the "or". "Email me a link" is gone from here
+          (manager review, 2026-10-28); a link already sent still opens the finish panel below. */}
+      {googleEnabled && (
+        <>
+          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
+            <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
+          </div>
+          <GoogleButton intent="sign-in" />
+        </>
+      )}
+
+      {/* Both "elsewhere" lines in one style, side by side where they fit (manager review, 2026-10-28:
+          the partner line had a different font and colour). */}
+      <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+        <p className="m-0">
+          New to Insurvas?{" "}
+          <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            Create an account
+          </Link>
+        </p>
+        <p className="m-0">
+          Partner or affiliate?{" "}
+          <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            Partner portal
+          </Link>
+        </p>
+      </div>
+    </>
+  );
+
+  const reset = (
+    <>
+      {resetState === "sent" ? (
+        <>
+          <AuthHeading title="Check your inbox">
+            If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to an agent account, a link to choose a new password is on its way. It works once.
+          </AuthHeading>
+          <p className="text-sm leading-normal text-[var(--body)]">Nothing arrived after a few minutes? Check spam, then write to <a href="mailto:support@insurvas.com?subject=Password%20help" className="font-semibold text-foreground">support@insurvas.com</a>.</p>
+        </>
+      ) : (
+        <>
+          <AuthHeading title="Reset your password">Enter the email you sign in with. We send a one-time link to choose a new password.</AuthHeading>
+          <form className="flex flex-col gap-4" onSubmit={handleReset} noValidate>
+            <AuthField label="Email" htmlFor="tenant-reset-email">
+              <AuthInput id="tenant-reset-email" type="email" inputMode="email" autoComplete="username" required value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
+            </AuthField>
+            {resetError && <AuthAlert>{resetError}</AuthAlert>}
+            <AuthSubmit className="mt-2" disabled={resetState === "sending" || maintenance?.level === "locked"}>
+              {resetState === "sending" ? "Sending…" : "Send the reset link"}
+            </AuthSubmit>
+          </form>
+        </>
+      )}
+      <div className="mt-[22px]">
+        <LinkArrow asChild>
+          <button type="button" onClick={() => setResetting(false)}>
+            Back to sign in
+          </button>
+        </LinkArrow>
+      </div>
+    </>
+  );
+
+  const twoFactor = (
+    <>
+      <AuthHeading title={useRecoveryCode ? "Enter a recovery code" : "Enter your 6-digit code"}>
+        {useRecoveryCode ? "Type one of the recovery codes you saved. Each one works once." : "From your authenticator app. You are signed in as soon as the sixth digit is in."}
+      </AuthHeading>
+      <form className="flex flex-col gap-4" onSubmit={(event) => void handleTwoFactor(event)} noValidate>
+        {useRecoveryCode ? (
+          <AuthField label="Recovery code" htmlFor="tenant-login-code">
+            <AuthInput
+              id="tenant-login-code"
+              autoComplete="off"
+              autoFocus
+              required
+              maxLength={20}
+              placeholder="xxxx-xxxx"
+              value={twoFactorCode}
+              onChange={(event) => { setTwoFactorCode(event.target.value); setLoginError(null); }}
+            />
+          </AuthField>
+        ) : (
+          <OtpInput
+            idPrefix="tenant-login-code"
+            value={twoFactorCode}
+            autoFocus
+            disabled={loginLoading}
+            onChange={(next) => { setTwoFactorCode(next); setLoginError(null); }}
+            onComplete={(code) => void handleTwoFactor(null, code)}
+          />
+        )}
+        <label className="flex min-h-[44px] cursor-pointer items-center gap-3 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]">
+          <input type="checkbox" checked={trustDevice} onChange={(event) => setTrustDevice(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
+          Trust this device for {TRUSTED_DEVICE_DAYS} days
+        </label>
+        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        <AuthSubmit className="mt-1" disabled={loginLoading || !twoFactorCode.trim()}>
+          {loginLoading ? "Checking…" : "Verify and sign in"}
+        </AuthSubmit>
+      </form>
+      <div className="mt-[22px] flex flex-wrap items-center justify-between gap-4">
+        <LinkArrow asChild>
+          <button type="button" onClick={() => { setUseRecoveryCode((value) => !value); setTwoFactorCode(""); setLoginError(null); }}>
+            {useRecoveryCode ? "Use the authenticator app" : "Use a recovery code"}
+          </button>
+        </LinkArrow>
+        <LinkArrow asChild>
+          <button type="button" onClick={() => { setTwoFactorStep(false); setLoginError(null); }}>
+            Back to sign in
+          </button>
+        </LinkArrow>
+      </div>
+    </>
+  );
+
+  const backToPassword = (
+    <div className="mt-[22px]">
+      <LinkArrow asChild>
+        <button type="button" onClick={() => { setLinkRequest("closed"); setLinkToken(null); setLoginError(null); }}>
+          Use my password instead
+        </button>
+      </LinkArrow>
+    </div>
+  );
+
+  const linkRequestPanel = (
+    <>
+      {linkRequest === "sent" ? (
+        <>
+          <AuthHeading title="Check your inbox">
+            If <strong className="font-semibold text-foreground">{linkEmail.trim()}</strong> belongs to an agent account, a sign-in link is on its way. It works once, for {SIGN_IN_LINK_MINUTES} minutes.
+          </AuthHeading>
+          <div className="flex flex-wrap gap-2.5">
+            <AuthSecondary asChild className="w-auto px-4">
+              <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
+            </AuthSecondary>
+            <AuthSecondary asChild className="w-auto px-4">
+              <a href="https://outlook.office.com/mail/" target="_blank" rel="noopener noreferrer">Open Outlook</a>
+            </AuthSecondary>
+          </div>
+          {linkError && <AuthAlert className="mt-4">{linkError}</AuthAlert>}
+          <p className="mt-5 text-sm leading-normal text-[var(--body)]">
+            Nothing arrived?{" "}
+            <button type="button" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline disabled:text-muted-foreground disabled:no-underline" disabled={linkCooldown > 0} onClick={() => void requestLink()}>
+              {linkCooldown > 0 ? `Send it again in ${linkCooldown}s` : "Send it again"}
+            </button>
+          </p>
+        </>
+      ) : (
+        <>
+          <AuthHeading title="Sign in with a link">We email you a link that signs you in once, within {SIGN_IN_LINK_MINUTES} minutes. No password needed.</AuthHeading>
+          <form className="flex flex-col gap-4" onSubmit={(event) => void requestLink(event)} noValidate>
+            <AuthField label="Email" htmlFor="tenant-link-email">
+              <AuthInput id="tenant-link-email" type="email" inputMode="email" autoComplete="username" autoFocus required value={linkEmail} onChange={(event) => { setLinkEmail(event.target.value); setLinkError(null); }} />
+            </AuthField>
+            {rememberBox}
+            {linkError && <AuthAlert>{linkError}</AuthAlert>}
+            <AuthSubmit className="mt-1" disabled={linkRequest === "sending" || maintenance?.level === "locked"}>
+              {linkRequest === "sending" ? "Sending…" : "Email me the link"}
+            </AuthSubmit>
+          </form>
+        </>
+      )}
+      {backToPassword}
+    </>
+  );
+
+  // Opened from the emailed link. Nothing happens until the button is pressed, so a mail scanner that
+  // opens the link does not use it up.
+  const linkFinishPanel = (
+    <>
+      <AuthHeading title="Finish signing in">You opened your sign-in link. Press the button to sign in on this device.</AuthHeading>
+      <div className="flex flex-col gap-4">
+        {rememberBox}
+        {loginError && <AuthAlert>{loginError}</AuthAlert>}
+        <AuthSubmit type="button" autoFocus disabled={loginLoading || maintenance?.level === "locked"} onClick={() => void submitSignIn({ link: linkToken })}>
+          {loginLoading ? "Signing in…" : "Sign in"}
+        </AuthSubmit>
+      </div>
+      {backToPassword}
+    </>
+  );
+
+  const form = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
+
+  return (
+    <AuthLayout plane="agent" story={<StoryPanel mode="sign-in" />}>
+      {form}
+    </AuthLayout>
+  );
+}
