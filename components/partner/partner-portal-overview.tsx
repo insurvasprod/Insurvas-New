@@ -2,21 +2,22 @@
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowUpRight, CheckCircle2, CircleAlert, Hand, Inbox, LineChart, MessageSquare, Send, Users, WalletCards } from "lucide-react";
+import { CheckCircle2, ChevronRight, Hand, Inbox, Lightbulb, Send, TriangleAlert } from "lucide-react";
 
 import { HomePanel, PanelFact } from "@/components/app/home/home-panel";
-import { HomeShortcuts, ShortcutLink } from "@/components/app/home/home-extras";
 import { Button } from "@/components/ui/button";
-import { BarSeries, ShareBar, type ChartTone, type ShareSegment } from "@/components/ui/chart";
+import { DonutChart, LineSeries, type ChartTone, type DonutSegment } from "@/components/ui/chart";
 import { toolbarControl } from "@/components/ui/data-toolbar";
+import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
 import { LiveStamp } from "@/components/ui/live-stamp";
 import { PageHeader } from "@/components/ui/page-header";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { DeltaChip } from "@/components/ui/stat";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { oldestOpenLabel } from "@/lib/format/age";
 import { formatCentsAsCurrency } from "@/lib/money";
 import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import type { PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
+import { buildInsights, isHeld, isSold } from "@/lib/partnerLeads/insights";
 import { laneShares } from "@/lib/partnerLeads/overview";
 import { bestBucket, compareTail, localDay, shiftDay, spanDays, trendSeries } from "@/lib/partnerLeads/trend";
 import { termLabel, type PartnerTerm } from "@/lib/partners/payout";
@@ -202,7 +203,6 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
   const ready = pipeline !== null;
   const figure = (value: number | null | undefined) => (!ready || value == null ? "—" : value);
   const pulse = extras?.pulse;
-  const team = extras?.team;
   const terms = pipeline?.terms ?? null;
 
   const trend = useMemo(
@@ -212,10 +212,39 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
   );
   const week = trend ? compareTail(trend.buckets, 7) : null;
   const best = trend ? bestBucket(trend.buckets) : null;
-  const shares = useMemo<ShareSegment[] | null>(
+  const shares = useMemo<DonutSegment[] | null>(
     () => (windowRows ? laneShares(windowRows).map((lane) => ({ key: lane.key, label: lane.label, value: lane.count, tone: LANE_TONES[lane.key] ?? "soft" })) : null),
     [windowRows],
   );
+  // The small line in each tile: the same day (or week) buckets as the trend, one series per figure.
+  const kpiSeries = useMemo(() => {
+    if (!windowRows) return null;
+    const perBucket = (match: (row: PartnerLeadRow) => boolean) =>
+      trendSeries(windowRows.filter(match).map((row) => row.submittedAt), { from: range.from, to: range.to, now }).buckets.map((bucket) => bucket.count);
+    return {
+      submitted: perBucket(() => true),
+      claimed: perBucket(isHeld),
+      converted: perBucket(isSold),
+      open: perBucket((row) => row.status === "unclaimed" || isHeld(row)),
+    };
+  }, [windowRows, range.from, range.to, now]);
+  // What needs the partner: the server's alerts first, then what the leads themselves say.
+  const attention = useMemo(() => {
+    const fromServer = (extras?.alerts ?? []).map((alert) => ({ key: alert.id, tone: "action" as const, text: `${alert.title}. ${alert.body}`, href: alert.link, hrefLabel: alert.actionLabel }));
+    const fromLeads = windowRows ? buildInsights(windowRows, now) : [];
+    return [...fromServer, ...fromLeads];
+  }, [extras, windowRows, now]);
+  const today = localDay(new Date(now))!;
+  const presetDays = [7, 30, 90].find((preset) => range.to === today && rangeDays === preset);
+  const [customPeriod, setCustomPeriod] = useState(false);
+  const customRange = customPeriod || presetDays === undefined;
+  function choosePeriod(value: string) {
+    if (value === "custom") { setCustomPeriod(true); return; }
+    const next = { from: shiftDay(today, -(Number(value) - 1)), to: today };
+    setCustomPeriod(false);
+    setDraftRange(next);
+    setRange(next);
+  }
 
   const latestStatement = statements?.[0] ?? null;
   const statementBars = (statements ?? []).slice(0, STATEMENT_BARS).reverse().map((run) => ({
@@ -223,70 +252,69 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
     label: shortPeriod(run.periodStart, run.periodEnd),
     value: run.netCents / 100,
   }));
-  const statementScaleMax = statementBars.length ? Math.max(...statementBars.map((bar) => bar.value)) * 1.4 : undefined;
-  const statementDetail = statements === undefined ? "Statements"
-    : statements === null ? "Statements unavailable"
-    : latestStatement === null ? "No statements yet"
-    : `${latestStatement.status === "paid" ? "Paid" : "Published"} · ${formatCentsAsCurrency(latestStatement.netCents)}`;
 
   const stats = [
-    { key: "today", icon: Send, label: "Submitted today", value: figure(counters?.submittedToday), fact: { label: "Since midnight, your time" }, href: `${PIPELINE}?date_from=${todayIso()}&view=table` },
-    { key: "claimed", icon: Hand, label: "With a closer", value: figure(counters?.claimed), fact: { label: "Claimed or on a call" }, href: PIPELINE },
-    { key: "converted", icon: CheckCircle2, label: "Converted · 30 days", value: figure(counters?.converted), fact: { label: "Won on the board" }, href: PIPELINE },
-    { key: "open", icon: Inbox, label: "Still open", value: figure(counters?.stillOpen), fact: { label: oldestOpenLabel(counters?.stillOpen ?? 0, pipeline?.oldestOpenAt, now) }, href: PIPELINE },
+    { key: "today", icon: Send, label: "Submitted today", value: figure(counters?.submittedToday), series: kpiSeries?.submitted, note: "Since midnight, your time", href: `${PIPELINE}?date_from=${todayIso()}&view=table` },
+    { key: "claimed", icon: Hand, label: "With a closer", value: figure(counters?.claimed), series: kpiSeries?.claimed, note: "Claimed or on a call", href: PIPELINE },
+    { key: "converted", icon: CheckCircle2, label: "Converted · 30 days", value: figure(counters?.converted), series: kpiSeries?.converted, note: "Won on the board", href: PIPELINE },
+    { key: "open", icon: Inbox, label: "Still open", value: figure(counters?.stillOpen), series: kpiSeries?.open, note: oldestOpenLabel(counters?.stillOpen ?? 0, pipeline?.oldestOpenAt, now), href: PIPELINE },
   ];
 
   const reviewHref = `${TEAM_REVIEW}?from=${range.from}&to=${range.to}`;
 
   return (
-    <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4">
+    <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-6">
       <PageHeader
         title="Overview"
         description="Your submissions and pipeline at a glance."
-        visible
-        infoDescription
+        hideTitle
+        breadcrumbs={[{ label: "Home" }, { label: "Overview" }]}
         actions={<>
           <form className="flex flex-wrap items-center gap-2" onSubmit={applyRange}>
-            <input type="date" aria-label="Report start date" className={toolbarControl} value={draftRange.from} max={draftRange.to || undefined} onChange={(event) => setDraftRange((current) => ({ ...current, from: event.target.value }))} />
-            <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>
-            <input type="date" aria-label="Report end date" className={toolbarControl} value={draftRange.to} min={draftRange.from || undefined} onChange={(event) => setDraftRange((current) => ({ ...current, to: event.target.value }))} />
-            <Button type="submit" variant="outline" disabled={rangeInvalid || (draftRange.from === range.from && draftRange.to === range.to)}>Apply</Button>
+            <SelectMenu
+              label="Period"
+              value={customRange ? "custom" : String(presetDays)}
+              onChange={choosePeriod}
+              className="w-40"
+              panelClassName="w-48"
+              panelAlign="end"
+              options={[
+                { value: "7", label: "Last 7 days" },
+                { value: "30", label: "Last 30 days" },
+                { value: "90", label: "Last 90 days" },
+                { value: "custom", label: "Custom range" },
+              ]}
+            />
+            {customRange && <>
+              <input type="date" aria-label="Report start date" className={toolbarControl} value={draftRange.from} max={draftRange.to || undefined} onChange={(event) => setDraftRange((current) => ({ ...current, from: event.target.value }))} />
+              <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>
+              <input type="date" aria-label="Report end date" className={toolbarControl} value={draftRange.to} min={draftRange.from || undefined} onChange={(event) => setDraftRange((current) => ({ ...current, to: event.target.value }))} />
+              <Button type="submit" variant="secondary" size="sm" disabled={rangeInvalid || (draftRange.from === range.from && draftRange.to === range.to)}>Apply</Button>
+            </>}
           </form>
           {updatedAt !== null && <LiveStamp updatedAt={updatedAt} staleAfterSeconds={stale ? 0 : 45} />}
-          {canSubmit && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a new lead</a></Button>}
+          {canSubmit && <Button asChild size="sm"><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
         </>}
       />
 
       {error && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">{error}</p>}
 
-      {(extras?.alerts.length ?? 0) > 0 && <section aria-label="Needs attention" className="flex flex-col gap-2">
-        {extras!.alerts.map((alert) => (
-          <Link key={alert.id} href={alert.link} className="flex min-w-0 items-center gap-3 rounded-lg border border-[var(--warning)]/35 bg-[var(--warning-surface)] px-3.5 py-2.5 text-sm text-[var(--warning-ink)] no-underline hover:border-[var(--warning)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
-            <CircleAlert className="size-4 shrink-0" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate"><strong className="font-semibold">{alert.title}</strong><span className="ml-2 text-[var(--muted-foreground)]">{alert.body}</span></span>
-            <span className="shrink-0 font-semibold">{alert.actionLabel}<ArrowUpRight className="ml-1 inline size-3.5" aria-hidden="true" /></span>
+      <KpiRow label="Partner activity">
+        {stats.map((stat) => (
+          <Link key={stat.key} href={stat.href} className="block min-w-0 rounded-lg text-inherit no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+            <KpiTile icon={stat.icon} label={stat.label} value={stat.value} series={stat.series} note={stat.note} className="h-full" />
           </Link>
         ))}
-      </section>}
+      </KpiRow>
 
       <div className="@container">
-        <StatRow label="Partner activity" className="grid-cols-1 @lg:grid-cols-2 @4xl:grid-cols-4">
-          {stats.map((stat) => (
-            <Link key={stat.key} href={stat.href} className="block min-w-0 rounded-lg text-inherit no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
-              <StatCard icon={stat.icon} label={stat.label} value={stat.value} fact={stat.fact} className="h-full min-h-[132px]" />
-            </Link>
-          ))}
-        </StatRow>
-      </div>
-
-      <div className="@container">
-        <div className="grid min-w-0 grid-cols-1 gap-3 @4xl:grid-cols-12">
+        <div className="grid min-w-0 grid-cols-1 gap-4 @4xl:grid-cols-12">
 
           <HomePanel
             title="Submissions"
             period={rangeText}
             link={{ label: "Team performance", href: reviewHref }}
-            className="min-h-[296px] @4xl:col-span-8"
+            className="min-h-[19rem] @4xl:col-span-8"
             bodyClassName="pt-1"
             footer={<>
               {best && <PanelFact label="Best day" value={`${best.label} · ${best.count}`} />}
@@ -316,8 +344,8 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
                     </span>
                   )}
                 </div>
-                <BarSeries
-                  bars={trend.buckets.map((bucket, index) => ({ key: bucket.key, label: bucket.label, value: bucket.count, partial: index === trend.buckets.length - 1 }))}
+                <LineSeries
+                  points={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
                   summary={`Leads submitted per ${trend.step === 1 ? "day" : "week"} from ${range.from} to ${range.to}: ${trend.total} in all`}
                   unit="leads"
                   className="flex-1"
@@ -327,40 +355,40 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
           </HomePanel>
 
           <HomePanel
-            title="Where they end up"
-            period={rangeText}
-            link={{ label: "View pipeline", href: PIPELINE }}
-            className="min-h-[296px] @4xl:col-span-4"
+            title="Lead status"
+            link={{ label: "Pipeline", href: PIPELINE }}
+            className="min-h-[19rem] @4xl:col-span-4"
             bodyClassName="pt-1"
-            // The conversion rate is the Converted row of the breakdown itself, so it is not repeated
-            // here: two roundings of one figure side by side is how a page contradicts itself.
             footer={<>
               <PanelFact label={`Submitted · ${rangeDays} ${rangeDays === 1 ? "day" : "days"}`} value={windowRows ? windowRows.length : "—"} />
               <PanelFact label="Stopped by screening" value={figure(extras?.rejectedCompliance)} />
             </>}
           >
             {windowRows === undefined ? (
-              <div className="flex flex-1 flex-col justify-center gap-3" aria-label="Loading outcomes" aria-busy="true">
-                <span className="m-skel h-3 w-full rounded" />
-                {Array.from({ length: 4 }, (unused, index) => <span key={index} className="m-skel h-4 w-full rounded" />)}
+              <div className="flex flex-1 flex-col items-center justify-center gap-3" aria-label="Loading outcomes" aria-busy="true">
+                <span className="m-skel size-32 rounded-full" />
               </div>
             ) : windowRows === null ? (
               <Unavailable what="outcomes" />
             ) : !windowRows.length ? (
               <Nothing title="Nothing to break down yet" detail="No submissions fall in this date range." />
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col justify-center gap-4 py-2">
-                <ShareBar segments={shares!} unit="leads" summary={`Where submissions from ${range.from} to ${range.to} stand: ${shares!.map((share) => `${share.label} ${share.value}`).join(", ")}`} />
-              </div>
+              <DonutChart
+                className="flex-1 justify-center"
+                centerValue={String(windowRows.length)}
+                centerLabel="leads"
+                segments={shares!}
+                unit="leads"
+                summary={`Where submissions from ${range.from} to ${range.to} stand: ${shares!.map((share) => `${share.label} ${share.value}`).join(", ")}`}
+              />
             )}
           </HomePanel>
 
           {isAdmin && (
             <HomePanel
               title="Your agency"
-              period="how fast they move"
               link={{ label: "Team performance", href: reviewHref }}
-              className="min-h-[220px] @4xl:col-span-4"
+              className="min-h-[19rem] @4xl:col-span-4"
               bodyClassName="pt-1"
             >
               <dl className="m-0 flex min-h-0 flex-1 flex-col justify-center divide-y divide-[var(--border)]">
@@ -388,8 +416,8 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
             <HomePanel
               title="Earnings"
               period={termLabel(terms) ?? "your statements"}
-              link={{ label: "Commission statements", href: "/partner/payouts" }}
-              className="min-h-[220px] @4xl:col-span-8"
+              link={{ label: "Commissions", href: "/partner/payouts" }}
+              className="min-h-[19rem] @4xl:col-span-4"
               bodyClassName="pt-1"
               footer={latestStatement ? <>
                 <PanelFact label={latestStatement.status === "paid" ? "Paid" : "Published"} value={formatCentsAsCurrency(latestStatement.netCents)} />
@@ -404,28 +432,48 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
                 <Unavailable what="statements" />
               ) : !statementBars.length ? (
                 <Nothing title="No published statements yet" detail="Your agency publishes these at the end of a period." />
+              ) : statementBars.length < 2 ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-1 py-6 text-center">
+                  <span className="font-[family-name:var(--font-display)] text-[2.5rem] font-semibold leading-none tracking-[-0.035em] tabular-nums text-foreground">{dollars(statementBars[0].value)}</span>
+                  <span className="text-sm text-[var(--body)]">{statementBars[0].label} · your first statement</span>
+                </div>
               ) : (
-                <BarSeries
-                  bars={statementBars}
+                <LineSeries
+                  points={statementBars}
                   summary={`Net payable by statement period: ${statementBars.map((bar) => `${bar.label} ${dollars(bar.value)}`).join(", ")}`}
                   format={dollars}
-                  max={statementScaleMax}
-                  barMaxWidth={48}
                   className="flex-1"
-                  minHeight={112}
+                  minHeight={150}
                 />
               )}
             </HomePanel>
           )}
+
+          <HomePanel title="Needs your attention" className={`min-h-[19rem] ${isAdmin ? "@4xl:col-span-4" : "@4xl:col-span-12"}`} bodyClassName="pt-1">
+            {windowRows === undefined && !(extras?.alerts.length) ? (
+              <div className="flex flex-col gap-3" aria-label="Reading your leads" aria-busy="true">
+                {Array.from({ length: 3 }, (unused, index) => <span key={index} className="m-skel h-4 w-full rounded" />)}
+              </div>
+            ) : !attention.length ? (
+              <p className="m-0 py-1 text-sm text-muted-foreground">{windowRows?.length ? "All clear: nothing is waiting on you in this period." : "No leads in this period yet. Insights appear as soon as your team submits."}</p>
+            ) : (
+              <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
+                {attention.map((item) => (
+                  <li key={item.key} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+                    <div className="flex items-start gap-2.5">
+                      {item.tone === "info"
+                        ? <Lightbulb className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                        : <TriangleAlert className={`mt-0.5 size-4 shrink-0 ${item.tone === "action" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]"}`} aria-hidden="true" />}
+                      <span className="min-w-0 flex-1 text-sm leading-normal text-foreground">{item.text}</span>
+                    </div>
+                    {item.href && <Link href={item.href} className="inline-flex items-center gap-0.5 self-start pl-[1.625rem] text-sm font-semibold text-[var(--accent-ink)] hover:underline">{item.hrefLabel}<ChevronRight className="size-4" aria-hidden="true" /></Link>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </HomePanel>
         </div>
       </div>
-
-      <HomeShortcuts>
-        <ShortcutLink icon={LineChart} label="Lead pipeline" href={PIPELINE} figure={ready ? String(counters?.stillOpen ?? 0) : undefined} caption="still open" />
-        <ShortcutLink icon={MessageSquare} label="Messages" href="/partner/messages" figure={pulse ? String(pulse.pendingFollowUps) : undefined} caption="waiting on your team" />
-        {isAdmin && <ShortcutLink icon={Users} label="Team" href="/partner/team" figure={team ? String(team.active) : undefined} caption="active members" />}
-        {isAdmin && <ShortcutLink icon={WalletCards} label="Commission statements" href="/partner/payouts" figure={latestStatement ? formatCentsAsCurrency(latestStatement.netCents) : undefined} caption={statementDetail} />}
-      </HomeShortcuts>
     </div>
   );
 }

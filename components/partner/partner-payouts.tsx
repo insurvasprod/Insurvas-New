@@ -2,18 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Building2, CheckCircle2, Clock3, WalletCards } from "lucide-react";
+import { Building2, CheckCircle2, Clock3, FileText, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
+import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import { Field } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/view-tabs";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerStatement } from "@/lib/accounting/payoutsCore";
@@ -164,7 +163,7 @@ export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; par
   const [periodFrom, setPeriodFrom] = useState("");
   const [periodTo, setPeriodTo] = useState("");
   // main's rule (30 Oct): the pager takes as many rows as the window has room for.
-  const pageSize = useFittingPageSize(380, 45);
+  const pageSize = useFittingPageSize(380, 57);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -189,6 +188,13 @@ export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; par
   const awaiting = runs?.filter((run) => run.status !== "paid") ?? [];
   const latest = runs?.[0] ?? null;
   const count = (rows: RunRow[]) => `${rows.length} statement${rows.length === 1 ? "" : "s"}`;
+  // The small line in each tile: the last twelve statements, oldest first, one point per statement.
+  const history = [...(runs ?? [])].reverse().slice(-12);
+  let paidSoFar = 0;
+  const paidSeries = history.map((run) => (paidSoFar += run.status === "paid" ? run.netCents : 0));
+  const latestChange = latest && runs?.[1] && runs[1].netCents > 0
+    ? { value: Math.round(((latest.netCents - runs[1].netCents) / runs[1].netCents) * 100), good: "up" as const }
+    : undefined;
   const searchTerm = search.trim().toLowerCase();
   const filteredRuns = (runs ?? []).filter((run) => {
     const matchesStatus = statusFilter === "all" || run.status === statusFilter;
@@ -219,75 +225,89 @@ export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; par
   return (
     <>
       <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
-      <StatRow label="Statement totals">
-        <StatCard
+      <KpiRow label="Statement totals" className="lg:grid-cols-3">
+        <KpiTile
           icon={WalletCards}
           label="Latest statement"
           value={runs === null ? "—" : latest ? money(latest.netCents) : "—"}
-          fact={{ label: latest ? period(latest.periodStart, latest.periodEnd) : runs === null ? "Reading" : "None published yet" }}
+          series={runs === null ? undefined : history.map((run) => run.netCents)}
+          change={latestChange}
+          note={runs === null ? undefined : latest ? period(latest.periodStart, latest.periodEnd) : "None published yet"}
         />
-        <StatCard
+        <KpiTile
           icon={CheckCircle2}
           label="Paid to date"
           value={runs === null ? "—" : money(total(paid))}
-          fact={{ label: runs === null ? "Reading" : count(paid) }}
+          series={runs === null ? undefined : paidSeries}
+          note={runs === null ? undefined : count(paid)}
         />
-        <StatCard
+        <KpiTile
           icon={Clock3}
           label="Awaiting payment"
           value={runs === null ? "—" : money(total(awaiting))}
           tone={awaiting.length ? "warn" : "default"}
-          fact={{ label: runs === null ? "Reading" : count(awaiting) }}
+          series={runs === null ? undefined : history.map((run) => (run.status === "paid" ? 0 : run.netCents))}
+          note={runs === null ? undefined : count(awaiting)}
         />
-      </StatRow>
+      </KpiRow>
 
       <TableCard
         className="flex min-h-[24rem] flex-1 flex-col md:min-h-0"
         bodyClassName="flex min-h-0 flex-1 flex-col"
-        toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} />}>
+        toolbar={<DataToolbar actions={<>
+          <FilterButton iconOnly open={filtersOpen} controls="partner-payout-filters" onClick={() => setFiltersOpen((value) => !value)} count={activeFilters.length} />
+          <RefreshButton onClick={() => void load()} refreshing={loading} labelClassName="sr-only" className="px-2.5" />
+        </>}>
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search statements" />
-          <FilterButton open={filtersOpen} controls="partner-payout-filters" onClick={() => setFiltersOpen((value) => !value)} count={activeFilters.length} />
         </DataToolbar>}
         filters={<>
-          <FilterPanel id="partner-payout-filters" open={filtersOpen}>
-            <Field label="Statement status">
-              <Segmented label="Statement status" value={statusFilter} onChange={setStatus} options={[
-                { key: "all", label: "All", count: runs?.length ?? 0 },
-                { key: "published", label: "Published", count: runs?.filter((run) => run.status === "published").length ?? 0 },
-                { key: "paid", label: "Paid", count: paid.length },
-              ]} />
-            </Field>
-            <Field label="From" htmlFor="partner-payout-period-from">
-              <input id="partner-payout-period-from" type="date" className={`${toolbarControl} mt-1.5 w-full`} value={periodFrom} onChange={(event) => setFrom(event.target.value)} />
-            </Field>
-            <Field label="Through" htmlFor="partner-payout-period-to">
-              <input id="partner-payout-period-to" type="date" className={`${toolbarControl} mt-1.5 w-full`} value={periodTo} onChange={(event) => setTo(event.target.value)} />
-            </Field>
-            <p className="m-0 self-end pb-2 text-xs text-muted-foreground">Matches statements whose period overlaps these dates.</p>
+          {/* One row: the status pick, then the two dates, each a quiet caption over a 36px control. A
+              statement matches when any part of its period falls between the dates. */}
+          <FilterPanel id="partner-payout-filters" open={filtersOpen} className="flex flex-wrap items-end gap-x-6 gap-y-3">
+            <FilterField label="Status" htmlFor="partner-payout-status">
+              <div id="partner-payout-status">
+                <Segmented label="Statement status" value={statusFilter} onChange={setStatus} options={[
+                  { key: "all", label: "All", count: runs?.length ?? 0 },
+                  { key: "published", label: "Published", count: runs?.filter((run) => run.status === "published").length ?? 0 },
+                  { key: "paid", label: "Paid", count: paid.length },
+                ]} />
+              </div>
+            </FilterField>
+            <FilterField label="Period from" htmlFor="partner-payout-period-from">
+              <input id="partner-payout-period-from" type="date" className={`${toolbarControl} w-44`} value={periodFrom} onChange={(event) => setFrom(event.target.value)} />
+            </FilterField>
+            <FilterField label="Period through" htmlFor="partner-payout-period-to">
+              <input id="partner-payout-period-to" type="date" className={`${toolbarControl} w-44`} value={periodTo} onChange={(event) => setTo(event.target.value)} />
+            </FilterField>
           </FilterPanel>
           <ActiveFilters filters={activeFilters} onClear={clearAll} />
         </>}
-        footer={filteredRuns.length ? <Pager page={paged.current} total={filteredRuns.length} noun={filteredRuns.length === 1 ? "statement" : "statements"} pageSize={pageSize} onPage={setPage} /> : undefined}
+        footer={filteredRuns.length > pageSize ? <Pager page={paged.current} total={filteredRuns.length} noun={filteredRuns.length === 1 ? "statement" : "statements"} pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         {error ? <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="Statements are not available" hint={error} /></div> : runs === null ? <SectionLoading rows={4} columns={4} /> : (
-          <Table className="min-h-full table-fixed">
+          <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[30%]">Statement period</TableHead>
-                <TableHead className="w-[19%] text-right">Net payable</TableHead>
-                <TableHead className="w-[17%]">Status</TableHead>
-                <TableHead className="w-[22%]">Paid on</TableHead>
-                <TableHead className="w-[12%] text-right"><span className="sr-only">Open</span></TableHead>
+                <TableHead>Statement</TableHead>
+                <TableHead className="text-right">Net payable</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Paid on</TableHead>
+                <TableHead className="text-right"><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {runs.length === 0 ? <TableRow><TableCell colSpan={5} className="h-64 text-center align-middle"><div className="mx-auto max-w-md"><p className="m-0 font-semibold text-foreground">No statements yet</p><p className="mb-0 mt-1 text-sm text-muted-foreground">When the agency publishes a payout statement for you, it appears here.</p></div></TableCell></TableRow> : filteredRuns.length === 0 ? <TableRow><TableCell colSpan={5} className="h-64 text-center align-middle"><div className="mx-auto max-w-md"><p className="m-0 font-semibold text-foreground">No statements match these filters</p><p className="mb-0 mt-1 text-sm text-muted-foreground">Try a different search or clear your filters.</p><Button type="button" variant="link" className="mt-1" onClick={clearAll}>Clear filters</Button></div></TableCell></TableRow> : paged.rows.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-medium text-foreground">{period(r.periodStart, r.periodEnd)}</TableCell>
+                  <TableCell className="max-w-[320px]">
+                    <strong className="block truncate font-semibold text-foreground">{period(r.periodStart, r.periodEnd)}</strong>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">Ref {r.id.slice(0, 8).toUpperCase()}</span>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.netCents)}</TableCell>
                   <TableCell><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? "Paid" : "Published"}</StatusChip></TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">{r.paidOn ? dayMonthYear(r.paidOn) : "Awaiting payment"}</TableCell>
-                  <TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => setOpen(r.id)}>Open</Button></TableCell>
+                  <TableCell className={r.paidOn ? "tabular-nums" : "text-muted-foreground"}>{r.paidOn ? dayMonthYear(r.paidOn) : "Awaiting payment"}</TableCell>
+                  <TableCell className="text-right">
+                    <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" onClick={() => setOpen(r.id)} title="Open the statement" aria-label={`Open the statement for ${period(r.periodStart, r.periodEnd)}`}><FileText aria-hidden="true" /></Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

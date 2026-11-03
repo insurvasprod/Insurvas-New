@@ -2,24 +2,26 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, FileCheck2, Hourglass, Send, Users } from "lucide-react";
+import { ArrowRight, ChevronRight, Download, FileCheck2, Hourglass, Lightbulb, Percent, Send, TriangleAlert } from "lucide-react";
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
-import { BarSeries } from "@/components/ui/chart";
+import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
+import { DonutChart, LineSeries } from "@/components/ui/chart";
 import { HomePanel } from "@/components/app/home/home-panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { activityLabel, dayMonth } from "@/lib/format/ago";
 import { dayMonthYear, viewerTimeZone } from "@/lib/format/dates";
-import { HELD_STATUSES, SALE_DISPOSITIONS } from "@/lib/partnerLeads/lanes";
+import { HELD_STATUSES } from "@/lib/partnerLeads/lanes";
+import { WEEKDAY_SHORT, buildInsights, isSold, productBreakdown, weekdayCounts, whereLeadsAre } from "@/lib/partnerLeads/insights";
 import { localDay, parseDay, shiftDay, spanDays, trendSeries } from "@/lib/partnerLeads/trend";
 import type { PartnerLeadRow } from "@/lib/partnerLeads/types";
 import { Sheet } from "@/components/ui/sheet";
@@ -46,9 +48,6 @@ function SelectedTeammateDrawer({ selected, leads, onClose }: { selected: Select
 /** Below this many leads a member's conversion rate is noise, and showing it would rank people on it. */
 const MIN_CONVERSION_SAMPLE = 10;
 
-function isSold(row: PartnerLeadRow) {
-  return row.status === "completed" && row.disposition !== null && (SALE_DISPOSITIONS as readonly string[]).includes(row.disposition);
-}
 function isOpen(row: PartnerLeadRow) {
   return row.status === "unclaimed" || (HELD_STATUSES as readonly string[]).includes(row.status);
 }
@@ -56,17 +55,15 @@ function figures(rows: PartnerLeadRow[]) {
   const applications = rows.filter(isSold).length;
   return { submitted: rows.length, progress: rows.filter(isOpen).length, applications, conversion: rows.length ? (applications / rows.length) * 100 : null };
 }
-/** The change pill's number. Nothing to compare against is no pill, not a rise from nothing. */
-function delta(current: number, previous: number | null | undefined) {
+/** The change next to a figure: a percent against the period before. Nothing to compare against is no change shown, not a rise from nothing. */
+function change(current: number, previous: number | null | undefined, good: "up" | "down" | "neither" = "up") {
   if (previous === null || previous === undefined || previous === 0) return undefined;
-  return { value: Math.round(((current - previous) / previous) * 100), goodWhen: "up" as const };
+  return { value: Math.round(((current - previous) / previous) * 100), good };
 }
 
-/** "+14% vs previous 30 days"; a previous period with nothing in it has no percentage to compare to. */
-function changeLabel(current: number, previous: number, days: number) {
-  if (previous === 0) return current === 0 ? `none in the previous ${days} days either` : `none in the previous ${days} days`;
-  const change = Math.round(((current - previous) / previous) * 100);
-  return `${change > 0 ? "+" : change < 0 ? "−" : "±"}${Math.abs(change)}% vs previous ${days} days`;
+/** "30 in the previous 30 days"; a previous period with nothing in it has nothing to say. */
+function beforeNote(previous: number, days: number) {
+  return previous === 0 ? undefined : `${previous} in the previous ${days} days`;
 }
 function rangeLabel(from: string, to: string, now: Date) {
   const start = parseDay(from);
@@ -119,6 +116,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [retryToken, setRetryToken] = useState(0);
+  const [custom, setCustom] = useState(false);
   const [now] = useState(() => Date.now());
   const days = spanDays(range.from, range.to);
 
@@ -165,13 +163,23 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     [rows, range.from, range.to, now],
   );
 
+  // The small line in each tile: the same day (or week) buckets as the trend, one series per figure.
+  const kpiSeries = useMemo(() => {
+    const bucketCounts = (predicate: (row: PartnerLeadRow) => boolean) =>
+      trendSeries(rows.filter(predicate).map((row) => row.submittedAt), { from: range.from, to: range.to, now }).buckets.map((bucket) => bucket.count);
+    const submitted = bucketCounts(() => true);
+    const progress = bucketCounts(isOpen);
+    const applications = bucketCounts(isSold);
+    const conversion = submitted.map((_, index) => {
+      const leadsSoFar = submitted.slice(0, index + 1).reduce((sum, count) => sum + count, 0);
+      const soldSoFar = applications.slice(0, index + 1).reduce((sum, count) => sum + count, 0);
+      return leadsSoFar ? (soldSoFar / leadsSoFar) * 100 : 0;
+    });
+    return { submitted, progress, applications, conversion };
+  }, [rows, range.from, range.to, now]);
+
   const selected = memberStats.find((item) => item.user.user_id === selectedUserId) ?? null;
   const selectedLeads = useMemo(() => !selected ? [] : rows.filter((row) => { const submitterId = row.submittedBy.id ?? row.submittedBy.name; return submitterId === selected.user.user_id || row.submittedBy.name === selected.user.name; }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [rows, selected]);
-  const members = users.filter((user) => user.status === "active" && user.accepted_at);
-  const activeInPeriod = members.filter((user) => (memberStats.find((item) => item.user.user_id === user.user_id)?.stats.submitted ?? 0) > 0).length;
-  const invitesOutstanding = users.filter((user) => user.status === "active" && !user.accepted_at).length;
-  const deactivated = users.filter((user) => user.status !== "active").length;
-  const rosterTotal = members.length + invitesOutstanding + deactivated;
   const rangeInvalid = !draftFrom || !draftTo || draftTo < draftFrom || spanDays(draftFrom, draftTo) > 366;
   function toggleDetail(userId: string) { if (detailOpen && selected?.user.user_id === userId) { setDetailOpen(false); setSelectedUserId(null); } else { setSelectedUserId(userId); setDetailOpen(true); } }
   function apply(event: FormEvent) {
@@ -183,6 +191,26 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
 
   const reload = () => { setError(null); setLoading(true); setRetryToken((value) => value + 1); };
   const visible = paginate(memberStats, page, pageSize);
+  const insights = useMemo(() => buildInsights(rows, now), [rows, now]);
+  const products = useMemo(() => productBreakdown(rows), [rows]);
+  const weekdays = useMemo(() => weekdayCounts(rows), [rows]);
+  const where = useMemo(() => whereLeadsAre(rows), [rows]);
+  const today = localDay(new Date(now))!;
+  const presetDays = [7, 30, 90].find((preset) => range.to === today && days === preset);
+  const customRange = custom || presetDays === undefined;
+  function choosePeriod(value: string) {
+    if (value === "custom") { setCustom(true); return; }
+    const count = Number(value);
+    setCustom(false);
+    const from = shiftDay(today, -(count - 1));
+    setDraftFrom(from);
+    setDraftTo(today);
+    if (from === range.from && today === range.to) return;
+    setLoading(true);
+    setRange({ from, to: today });
+  }
+  const conversionNow = metrics.conversion;
+  const conversionPrev = previous?.conversion ?? null;
 
   if (!loaded) return <PageLoading />;
 
@@ -190,121 +218,179 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     <PageHeader
       title="Team performance"
       description="Review submitted leads and member performance."
-      visible
-      infoDescription
+      hideTitle
+      breadcrumbs={[{ label: "Organization" }, { label: "Team Performance" }]}
       actions={<form className="flex flex-wrap items-center gap-2" onSubmit={apply}>
-        <input type="date" aria-label="Review start date" className={toolbarControl} value={draftFrom} max={draftTo || undefined} onChange={(event) => setDraftFrom(event.target.value)} />
-        <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>
-        <input type="date" aria-label="Review end date" className={toolbarControl} value={draftTo} min={draftFrom || undefined} onChange={(event) => setDraftTo(event.target.value)} />
-        <Button type="submit" variant="outline" disabled={rangeInvalid || (draftFrom === range.from && draftTo === range.to)}>Apply</Button>
-        <Button variant="outline" asChild><a href={`/api/partner/leads/export?${new URLSearchParams({ limit: "5000", date_from: range.from, date_to: range.to })}`}><Download aria-hidden="true" />Export report</a></Button>
+        <SelectMenu
+          label="Period"
+          value={customRange ? "custom" : String(presetDays)}
+          onChange={choosePeriod}
+          className="w-40"
+          panelClassName="w-48"
+          panelAlign="end"
+          options={[
+            { value: "7", label: "Last 7 days" },
+            { value: "30", label: "Last 30 days" },
+            { value: "90", label: "Last 90 days" },
+            { value: "custom", label: "Custom range" },
+          ]}
+        />
+        {customRange && <>
+          <input type="date" aria-label="Review start date" className={toolbarControl} value={draftFrom} max={draftTo || undefined} onChange={(event) => setDraftFrom(event.target.value)} />
+          <span className="text-sm text-muted-foreground" aria-hidden="true">–</span>
+          <input type="date" aria-label="Review end date" className={toolbarControl} value={draftTo} min={draftFrom || undefined} onChange={(event) => setDraftTo(event.target.value)} />
+          <Button type="submit" variant="secondary" size="sm" disabled={rangeInvalid || (draftFrom === range.from && draftTo === range.to)}>Apply</Button>
+        </>}
+        <RefreshButton onClick={reload} refreshing={loading} labelClassName="sr-only" className="px-2.5" />
+        <Button variant="outline" size="icon" asChild title="Export report"><a href={`/api/partner/leads/export?${new URLSearchParams({ limit: "5000", date_from: range.from, date_to: range.to })}`} aria-label="Export report"><Download aria-hidden="true" /></a></Button>
       </form>}
     />
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
-    {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" onClick={reload}>Try again</Button></p>}
-    {/* Six figures read as two rows of three, not five and a stray. */}
-    <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      <StatCard
+    {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" size="sm" onClick={reload}>Try again</Button></p>}
+
+    <KpiRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`}>
+      <KpiTile
         icon={Send}
         label="Leads submitted"
         value={loading ? "—" : metrics.submitted}
-        delta={delta(metrics.submitted, previous?.submitted)}
-        fact={loading || !previous ? undefined : { label: changeLabel(metrics.submitted, previous.submitted, days) }}
+        series={loading ? undefined : kpiSeries.submitted}
+        change={loading ? undefined : change(metrics.submitted, previous?.submitted)}
+        note={loading || !previous ? undefined : beforeNote(previous.submitted, days)}
       />
-      <StatCard
+      <KpiTile
         icon={Hourglass}
         label="In progress"
         value={loading ? "—" : metrics.progress}
-        fact={loading || !previous ? undefined : { label: changeLabel(metrics.progress, previous.progress, days) }}
+        series={loading ? undefined : kpiSeries.progress}
+        change={loading ? undefined : change(metrics.progress, previous?.progress, "neither")}
+        note={loading || !previous ? undefined : beforeNote(previous.progress, days)}
       />
-      <StatCard
+      <KpiTile
         icon={FileCheck2}
         label="Applications"
         value={loading ? "—" : metrics.applications}
-        delta={delta(metrics.applications, previous?.applications)}
-        fact={loading || !previous ? undefined : { label: changeLabel(metrics.applications, previous.applications, days) }}
+        series={loading ? undefined : kpiSeries.applications}
+        change={loading ? undefined : change(metrics.applications, previous?.applications)}
+        note={loading || !previous ? undefined : beforeNote(previous.applications, days)}
       />
-      <StatCard
-        icon={Users}
-        label="Active members"
-        value={loading ? "—" : activeInPeriod}
-        meter={loading ? undefined : { value: activeInPeriod, max: members.length || 1, tone: "good", label: `${activeInPeriod} of ${members.length} members active in this period` }}
-        fact={loading ? undefined : { label: `of ${members.length} · ${invitesOutstanding} invite${invitesOutstanding === 1 ? "" : "s"} outstanding` }}
+      <KpiTile
+        icon={Percent}
+        label="Conversion"
+        value={loading || conversionNow === null ? "—" : `${conversionNow.toFixed(1)}%`}
+        series={loading ? undefined : kpiSeries.conversion}
+        change={loading || metrics.submitted < MIN_CONVERSION_SAMPLE || !previous || previous.submitted < MIN_CONVERSION_SAMPLE ? undefined : change(conversionNow ?? 0, conversionPrev)}
+        note={loading ? undefined : metrics.submitted === 0 ? "No leads yet" : metrics.submitted < MIN_CONVERSION_SAMPLE ? undefined : `${metrics.applications} of ${metrics.submitted} became applications`}
       />
-    </StatRow>
-    <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(16rem,0.8fr)_minmax(0,1.7fr)]">
-      <HomePanel title="Team access" period="roster" link={{ label: "Manage access", href: "/partner/team" }} className="min-h-[19rem]">
-        <p className="mb-4 text-sm text-muted-foreground">People and invitations behind this performance report.</p>
-        {loading ? <SectionLoading rows={3} columns={1} label="Loading team access" />
-          : rosterTotal === 0 ? <div className="flex flex-1 items-center justify-center text-center text-sm text-muted-foreground">No team members or invitations yet.</div>
-          : <div className="flex flex-1 flex-col justify-center gap-4" aria-label={`${rosterTotal} total team members and invitations`}>
-            <div className="flex h-2.5 overflow-hidden rounded-full bg-[var(--surface-alt)]" role="img" aria-label={`Team access: ${members.length} active, ${invitesOutstanding} pending invitations, ${deactivated} deactivated`}>
-              {[
-                { label: "Active members", count: members.length, color: "bg-[var(--success-ink)]" },
-                { label: "Pending invitations", count: invitesOutstanding, color: "bg-[var(--warning-ink)]" },
-                { label: "Deactivated", count: deactivated, color: "bg-muted-foreground" },
-              ].map((item) => item.count > 0 ? <span key={item.label} className={item.color} style={{ width: `${(item.count / rosterTotal) * 100}%` }} /> : null)}
-            </div>
-            <dl className="m-0 flex flex-col divide-y divide-border">
-              {[
-                { label: "Active members", count: members.length, hint: `${activeInPeriod} active in this period`, color: "bg-[var(--success-ink)]" },
-                { label: "Pending invitations", count: invitesOutstanding, hint: "Waiting to join", color: "bg-[var(--warning-ink)]" },
-                { label: "Deactivated", count: deactivated, hint: "Access turned off", color: "bg-muted-foreground" },
-              ].map((item) => <div key={item.label} className="flex items-center gap-3 py-3 first:pt-1 last:pb-1">
-                <span className={`size-2 shrink-0 rounded-full ${item.color}`} aria-hidden="true" />
-                <dt className="min-w-0 flex-1 text-sm text-foreground">{item.label}<span className="ml-2 text-xs text-muted-foreground">{item.hint}</span></dt>
-                <dd className="m-0 shrink-0 font-[family-name:var(--font-display)] text-lg font-semibold tabular-nums text-foreground">{item.count}</dd>
-              </div>)}
-            </dl>
-          </div>}
-      </HomePanel>
-      <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"} · ${rangeLabel(range.from, range.to, new Date(now))}`} className="min-h-[19rem]">
+    </KpiRow>
+
+    <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
+      <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"}`} className="min-h-[19rem]">
         {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
           : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
-          : <BarSeries
-              bars={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
+          : <LineSeries
+              points={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
               summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
               unit="leads"
               className="flex-1"
               minHeight={180}
             />}
       </HomePanel>
+      <HomePanel title="Lead status" link={{ label: "Pipeline", href: "/partner/pipeline" }} className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={4} columns={1} label="Loading" />
+          : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Nothing submitted in this period.</p>
+          : <DonutChart
+              className="flex-1 justify-center"
+              centerValue={String(rows.length)}
+              centerLabel="leads"
+              summary={`Where ${rows.length} leads are now`}
+              unit="leads"
+              segments={[
+                { key: "waiting", label: "Waiting for an agent", value: where.waiting, tone: "warning" },
+                { key: "progress", label: "With a closer", value: where.inProgress, tone: "strong" },
+                { key: "closed", label: "Closed without a sale", value: where.closed, tone: "quiet" },
+                { key: "apps", label: "Became applications", value: where.applications, tone: "success" },
+              ]}
+            />}
+      </HomePanel>
     </div>
+
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <HomePanel title="By product" period="share of leads" className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={3} columns={1} label="Loading products" />
+          : !products.length ? <p className="m-auto text-sm text-muted-foreground">Products show once leads arrive.</p>
+          : <DonutChart
+              className="flex-1 justify-center"
+              centerValue={String(rows.length)}
+              centerLabel="leads"
+              summary={`Leads by product: ${products.map((line) => `${line.product} ${line.leads}`).join(", ")}`}
+              unit="leads"
+              segments={products.slice(0, 5).map((line, index) => ({ key: line.product, label: line.product, value: line.leads, tone: (["strong", "mid", "soft", "faint", "quiet"] as const)[index], detail: line.conversion === null ? undefined : `${line.conversion.toFixed(0)}% convert` }))}
+            />}
+      </HomePanel>
+      <HomePanel title="Leads by weekday" period="when they arrive" className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={3} columns={1} label="Loading weekdays" />
+          : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Weekday pattern shows once leads arrive.</p>
+          : <LineSeries
+              points={WEEKDAY_SHORT.map((label, index) => ({ key: label, label, value: weekdays[index] }))}
+              summary={`Leads by weekday: ${WEEKDAY_SHORT.map((label, index) => `${label} ${weekdays[index]}`).join(", ")}`}
+              unit="leads"
+              labels="all"
+              className="flex-1"
+              minHeight={160}
+            />}
+      </HomePanel>
+      <HomePanel title="Needs your attention" period={rangeLabel(range.from, range.to, new Date(now))} className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={3} columns={1} label="Reading your leads" />
+          : !insights.length ? <p className="m-0 py-1 text-sm text-muted-foreground">{rows.length ? "All clear: nothing is waiting on you in this period." : "No leads in this period yet. Insights appear as soon as your team submits."}</p>
+          : <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
+            {insights.map((insight) => <li key={insight.key} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+              <div className="flex items-start gap-2.5">
+                {insight.tone === "info"
+                  ? <Lightbulb className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  : <TriangleAlert className={`mt-0.5 size-4 shrink-0 ${insight.tone === "action" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]"}`} aria-hidden="true" />}
+                <span className="min-w-0 flex-1 text-sm leading-normal text-foreground">{insight.text}</span>
+              </div>
+              {insight.href && <Link href={insight.href} className="inline-flex items-center gap-0.5 self-start pl-[1.625rem] text-sm font-semibold text-[var(--accent-ink)] hover:underline">{insight.hrefLabel}<ChevronRight className="size-4" aria-hidden="true" /></Link>}
+            </li>)}
+          </ul>}
+      </HomePanel>
+    </div>
+
     <TableCard
-      className="flex min-h-[18rem] flex-1 flex-col"
-      bodyClassName="flex min-h-0 flex-1 flex-col"
-      title="Partner performance"
-      action={<RefreshButton onClick={reload} refreshing={loading} />}
-      footer={!loading && memberStats.length ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
-    >
-      {loading ? <SectionLoading rows={5} columns={6} />
-        : !memberStats.length ? <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="No partner users yet" hint="Invite teammates from Team access." action={<Button asChild variant="outline"><Link href="/partner/team">Team access</Link></Button>} /></div>
-        : <Table>
-          <TableHeader><TableRow>
-            <TableHead>Member</TableHead>
-            <TableHead className="w-[120px] text-right">Submitted</TableHead>
-            <TableHead className="w-[130px] text-right">In progress</TableHead>
-            <TableHead className="w-[130px] text-right">Applications</TableHead>
-            <TableHead className="w-[120px] text-right">Conversion</TableHead>
-            <TableHead className="w-[160px]">Last activity</TableHead>
-            <TableHead className="w-[100px] text-right"><span className="sr-only">Details</span></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {visible.rows.map(({ user, stats }) => {
-              const isSelected = detailOpen && selected?.user.user_id === user.user_id;
-              return <TableRow key={user.user_id} data-state={isSelected ? "selected" : undefined}>
-                <TableCell><strong className="font-semibold text-foreground">{user.name}</strong>{user.status !== "active" && <span className="block text-xs text-muted-foreground">Deactivated</span>}</TableCell>
-                <TableCell className="text-right tabular-nums">{stats.submitted}</TableCell>
-                <TableCell className="text-right tabular-nums">{stats.progress}</TableCell>
-                <TableCell className="text-right tabular-nums">{stats.applications}</TableCell>
-                <TableCell className="text-right tabular-nums" title={stats.submitted && stats.submitted < MIN_CONVERSION_SAMPLE ? `${stats.applications} of ${stats.submitted} — too few leads for a rate` : undefined}>{stats.submitted >= MIN_CONVERSION_SAMPLE ? `${((stats.applications / stats.submitted) * 100).toFixed(1)}%` : "—"}</TableCell>
-                <TableCell>{user.last_login_at ? activityLabel(Date.parse(user.last_login_at), now) : "Never"}</TableCell>
-                <TableCell className="text-right"><Button type="button" variant="outline" size="sm" aria-expanded={isSelected} onClick={() => toggleDetail(user.user_id)}>{isSelected ? "Close" : "View"}</Button></TableCell>
-              </TableRow>;
-            })}
-          </TableBody>
-        </Table>}
-    </TableCard>
+        className="flex min-h-[18rem] flex-1 flex-col"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
+        title="Members"
+        action={<Button asChild variant="ghost" size="sm"><Link href="/partner/team">Manage access<ChevronRight aria-hidden="true" /></Link></Button>}
+        footer={!loading && memberStats.length > pageSize ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
+      >
+        {loading ? <SectionLoading rows={5} columns={6} />
+          : !memberStats.length ? <div className="flex min-h-48 flex-1 items-center justify-center"><EmptyState title="No partner users yet" hint="Invite teammates from Team access." /></div>
+          : <Table>
+            <TableHeader><TableRow>
+              <TableHead>Member</TableHead>
+              <TableHead className="w-[110px] text-right">Submitted</TableHead>
+              <TableHead className="w-[110px] text-right">In progress</TableHead>
+              <TableHead className="w-[120px] text-right">Applications</TableHead>
+              <TableHead className="w-[110px] text-right">Conversion</TableHead>
+              <TableHead className="w-[140px]">Last activity</TableHead>
+              <TableHead className="w-[70px] text-right"><span className="sr-only">Details</span></TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {visible.rows.map(({ user, stats }) => {
+                const isSelected = detailOpen && selected?.user.user_id === user.user_id;
+                return <TableRow key={user.user_id} data-state={isSelected ? "selected" : undefined}>
+                  <TableCell><strong className="font-semibold text-foreground">{user.name}</strong>{user.status !== "active" && <span className="block text-xs text-muted-foreground">Deactivated</span>}</TableCell>
+                  <TableCell className="text-right tabular-nums">{stats.submitted}</TableCell>
+                  <TableCell className="text-right tabular-nums">{stats.progress}</TableCell>
+                  <TableCell className="text-right tabular-nums">{stats.applications}</TableCell>
+                  <TableCell className="text-right tabular-nums" title={stats.submitted && stats.submitted < MIN_CONVERSION_SAMPLE ? `${stats.applications} of ${stats.submitted} — too few leads for a rate` : undefined}>{stats.submitted >= MIN_CONVERSION_SAMPLE ? `${((stats.applications / stats.submitted) * 100).toFixed(1)}%` : "—"}</TableCell>
+                  <TableCell>{user.last_login_at ? activityLabel(Date.parse(user.last_login_at), now) : "Never"}</TableCell>
+                  <TableCell className="text-right"><Button type="button" variant="ghost" size="icon" title={isSelected ? "Close" : "View leads"} aria-label={isSelected ? `Close ${user.name}` : `View leads from ${user.name}`} aria-expanded={isSelected} onClick={() => toggleDetail(user.user_id)}><ArrowRight aria-hidden="true" /></Button></TableCell>
+                </TableRow>;
+              })}
+            </TableBody>
+          </Table>}
+      </TableCard>
     {detailOpen && selected && <SelectedTeammateDrawer selected={selected} leads={selectedLeads} onClose={() => { setDetailOpen(false); setSelectedUserId(null); }} />}
   </div>;
 }

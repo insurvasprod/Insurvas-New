@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { Play } from "lucide-react";
 
+import { Switch } from "@/components/ui/field";
+import { InfoTip } from "@/components/ui/info-tip";
+
 import { getSoundPreferences, previewTreatment, saveSoundPreferences } from "@/lib/notify/sound";
 import { AUDIBLE, AUDIBLE_BY_DEFAULT, TREATMENT_LABELS, type Treatment } from "@/lib/notify/treatments";
 import type { AgentAlertSettings, AudibleTreatment } from "@/lib/agentAlerts/presentation";
@@ -23,7 +26,6 @@ export function NotificationSoundSettings({
   settings,
   save,
   saving = false,
-  persisted,
 }: {
   /**
    * The server-stored settings this panel writes into, where there are any.
@@ -38,9 +40,6 @@ export function NotificationSoundSettings({
   /** Undefined until the first poll answers. Only an explicit `false` is worth saying out loud. */
   persisted?: boolean;
 }) {
-  // With no server settings there is nothing to persist to, which is the same story the pending
-  // migration tells, told through the same sentence.
-  const durable = settings && save ? persisted : false;
   // Read from the same place the sound layer reads from, never from the server response directly.
   // Anything else lets the panel show one answer while the product plays another — and while the
   // storage column is still pending, the server's answer is `{}` for everyone.
@@ -69,26 +68,20 @@ export function NotificationSoundSettings({
 
   return (
     <div className="portal-notify-sound-settings border-t border-[var(--color-border)] pt-3">
-      <p className="font-semibold">Which events make a sound</p>
-      <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">
-        Sound is always off while you are on a call, except for compliance blocks.
+      <p className="m-0 flex h-8 items-center gap-1.5 text-sm font-semibold">
+        Which events make a sound
+        <InfoTip label="About sounds">Sound is always off while you are on a call, except for compliance blocks. Routine saves and system faults never make a sound.</InfoTip>
       </p>
 
       {/* A control that silently forgets is worse than one that admits it cannot save yet. The
           storage for these choices is a pending migration; until it lands they apply to this
           browser only, and the toggles would otherwise snap back and simply look broken. */}
-      {durable === false && (
-        <p role="status" className="mb-2 rounded border border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--warning-surface)] px-2 py-1.5 text-xs text-[var(--warning-ink)]">
-          These choices apply to this browser only for now, and will not follow you to another machine.
-        </p>
-      )}
 
-      <div className="space-y-1">
+      <div className="mt-1 divide-y divide-border">
         {AUDIBLE.map((treatment) => (
-          <div key={treatment} className="flex items-center justify-between gap-2 rounded px-1 py-1">
-            <label className="min-w-0 flex-1 cursor-pointer">
-              <span className="block text-sm">{TREATMENT_LABELS[treatment].label}</span>
-              <span className="block text-xs text-[var(--color-muted-foreground)]">{TREATMENT_LABELS[treatment].hint}</span>
+          <div key={treatment} className="flex items-center justify-between gap-3 py-2.5 text-sm">
+            <label className="min-w-0 flex-1 cursor-pointer" title={TREATMENT_LABELS[treatment].hint}>
+              {TREATMENT_LABELS[treatment].label}
             </label>
             <button
               type="button"
@@ -97,27 +90,19 @@ export function NotificationSoundSettings({
               // distrust the whole panel.
               onClick={() => previewTreatment(treatment)}
               aria-label={`Play the ${TREATMENT_LABELS[treatment].label.toLowerCase()} sound`}
-              className="rounded border border-[var(--color-border)] p-1.5 hover:bg-[var(--color-muted)] focus-visible:outline-2 focus-visible:outline-[var(--brand-500)]"
+              className="inline-flex size-8 items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
             >
-              <Play className="size-3.5" aria-hidden="true" />
+              <Play className="size-4" aria-hidden="true" />
             </button>
-            <input
-              type="checkbox"
+            <Switch
               checked={isOn(treatment)}
               onChange={() => toggle(treatment)}
               disabled={saving}
-              aria-label={`Sound for ${TREATMENT_LABELS[treatment].label.toLowerCase()}`}
-              className="size-4 accent-[var(--brand-500)]"
+              label={`Sound for ${TREATMENT_LABELS[treatment].label.toLowerCase()}`}
             />
           </div>
         ))}
       </div>
-
-      {/* Stated rather than shown as two switches that cannot move. Somebody will eventually go
-          looking for why a save does not chime, and the answer belongs where they will look. */}
-      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-        Routine saves and system faults never make a sound.
-      </p>
     </div>
   );
 }

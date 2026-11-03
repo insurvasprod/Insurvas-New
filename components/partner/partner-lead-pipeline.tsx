@@ -486,13 +486,13 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
 
   return <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
     <PageHeader
-      title="Lead pipeline"
+      title="Lead Pipeline"
       description={role === "partner_admin" ? "Track leads submitted by you and your team." : "Track the leads you submitted."}
       visible
       infoDescription
       actions={<>
         {data && <LiveStamp updatedAt={data.generatedAt} staleAfterSeconds={45} />}
-        {partnerStatus === "active" && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a lead</a></Button>}
+        {partnerStatus === "active" && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
       </>}
     />
     {error && data && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}

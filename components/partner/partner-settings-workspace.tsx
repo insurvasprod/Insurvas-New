@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Bell, Building2, MessageSquare, PackageCheck } from "lucide-react";
+import { Bell, Building2, PackageCheck } from "lucide-react";
 
 import { PartnerNotificationPreferences } from "@/components/partner/partner-notification-preferences";
 import { NotificationSoundSettings } from "@/components/app/notification-sound-settings";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -35,6 +35,8 @@ type SettingsPayload = {
 function formatDate(value: string | null) {
   return value ? dateTime(value, viewerTimeZone(), { year: true, clock: "12h" }) : "Not available";
 }
+
+const SECTION_LABELS: Record<string, string> = { account: "Account", notifications: "Notifications", products: "Approved Products" };
 
 const noSubscription = () => () => {};
 
@@ -106,15 +108,15 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
 
   if (loading && !settings && !error) return <PageLoading strip={false} rows={4} />;
 
-  const detailRow = "grid grid-cols-[7.5rem_minmax(0,1fr)] items-baseline gap-3 border-b border-border py-2 last:border-0";
+  const detailRow = "grid grid-cols-[8.5rem_minmax(0,1fr)] items-center gap-3 border-b border-border py-3 text-sm last:border-0";
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]!.toUpperCase()).join("") || "P";
 
-  return <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6 lg:h-[calc(100dvh-var(--top-bar-h)-3.5rem)]">
+  return <div className="m-stagger flex w-full flex-1 flex-col gap-6 lg:min-h-[calc(100dvh-var(--top-bar-h,56px)-3.5rem)]">
     <PageHeader
       title="Settings"
       description="Manage your account, notifications, and security."
-      visible
-      infoDescription
-      actions={<Button asChild variant="outline"><a href="/partner/messages"><MessageSquare aria-hidden="true" />Message your agent</a></Button>}
+      hideTitle
+      breadcrumbs={[{ label: "Settings" }, { label: SECTION_LABELS[activeSettings] ?? "Account" }]}
     />
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void loadSettings()}>Retry</Button></p>}
 
@@ -134,46 +136,42 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
         { key: "products", label: "Approved products", icon: <PackageCheck className="size-4" aria-hidden="true" /> },
       ]}
     >
-      {activeSettings === "account" && <div className="grid h-full min-h-0 gap-4 lg:grid-cols-2">
-        <Card className="h-full min-h-0">
-          <CardHeader><CardTitle className="flex items-center justify-between gap-3"><span className="flex items-center gap-1.5">Partner account<InfoTip label="About the partner account">Your organisation as your agency has it on file. Ask them to change anything here.</InfoTip></span><StatusChip tone={status === "active" ? "good" : "neutral"}>{status[0].toUpperCase() + status.slice(1)}</StatusChip></CardTitle></CardHeader>
-          <CardContent>
-            <dl className="text-sm">
-              <div className={detailRow}><dt className="text-muted-foreground">Partner</dt><dd className="truncate font-medium">{name}</dd></div>
-              <div className={detailRow}><dt className="text-muted-foreground">Partner ID</dt><dd className="truncate font-mono text-xs">{id}</dd></div>
-              <div className={detailRow}><dt className="text-muted-foreground">Contact</dt><dd className="truncate">{contactName}</dd></div>
-              <div className={detailRow}><dt className="text-muted-foreground">Work email</dt><dd className="truncate">{contactEmail}</dd></div>
-              <div className={detailRow}><dt className="text-muted-foreground">Your role</dt><dd>{partnerRoleLabel(role)}</dd></div>
-            </dl>
-          </CardContent>
-        </Card>
-        <Card className="h-full min-h-0">
-          <CardHeader><CardTitle className="flex items-center gap-1.5">Security &amp; sessions<InfoTip label="About security and sessions">Signing out other sessions ends every signed-in browser except this one. Use it if you have signed in somewhere you no longer control.</InfoTip></CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <dl className="text-sm">
-              <div className={detailRow}><dt className="text-muted-foreground">This browser</dt><dd>{browserLabel}</dd></div>
-              <div className={detailRow}><dt className="text-muted-foreground">Last signed in</dt><dd className="tabular-nums">{formatDate(settings?.user.lastLoginAt ?? null)}</dd></div>
-            </dl>
-            <div><Button type="button" variant="outline" disabled={signingOut} onClick={() => void signOutOthers()}>{signingOut ? "Signing out…" : "Sign out other sessions"}</Button>{signOutResult && <p className="mt-2 text-xs text-muted-foreground" role="status">{signOutResult}</p>}</div>
-          </CardContent>
-        </Card>
-      </div>}
-      {activeSettings === "notifications" && <Card className="h-full min-h-0">
-        <CardHeader><CardTitle className="flex items-center gap-1.5">Notifications<InfoTip label="About notifications">What reaches you, and when. These settings are yours alone — they do not change what your teammates receive.</InfoTip></CardTitle></CardHeader>
-        <CardContent className="space-y-5">
+      {activeSettings === "account" && <Card className="h-full min-h-0">
+        <CardContent className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center gap-4">
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">{initials}</span>
+            <div className="min-w-0 flex-1">
+              <p className="flex items-center gap-1.5 truncate text-lg font-semibold tracking-[-0.02em] text-foreground">{name}<InfoTip label="About the partner account">Your organisation as your agency has it on file. Ask them to change anything here.</InfoTip></p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{partnerRoleLabel(role)}<StatusChip tone={status === "active" ? "good" : "neutral"}>{status[0].toUpperCase() + status.slice(1)}</StatusChip></p>
+            </div>
+          </div>
+          <dl className="max-w-3xl border-t border-border">
+            <div className={detailRow}><dt className="text-muted-foreground">Contact</dt><dd className="truncate">{contactName}</dd></div>
+            <div className={detailRow}><dt className="text-muted-foreground">Work email</dt><dd className="truncate">{contactEmail}</dd></div>
+            <div className={detailRow}><dt className="text-muted-foreground">Partner ID</dt><dd className="truncate font-mono text-xs">{id}</dd></div>
+            <div className={detailRow}><dt className="text-muted-foreground">Last signed in</dt><dd className="tabular-nums">{formatDate(settings?.user.lastLoginAt ?? null)}</dd></div>
+            <div className={detailRow}>
+              <dt className="flex items-center gap-1.5 text-muted-foreground">Sessions<InfoTip label="About sessions">Signing out other sessions ends every signed-in browser except this one. Use it if you have signed in somewhere you no longer control.</InfoTip></dt>
+              <dd className="flex flex-wrap items-center gap-3"><span>{browserLabel}</span><Button type="button" variant="secondary" size="sm" disabled={signingOut} onClick={() => void signOutOthers()}>{signingOut ? "Signing out…" : "Sign out other sessions"}</Button>{signOutResult && <span className="text-xs text-muted-foreground" role="status">{signOutResult}</span>}</dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>}
+      {activeSettings === "notifications" && <Card className="h-full min-h-0 overflow-y-auto">
+        <CardContent className="grid gap-x-10 gap-y-6 lg:grid-cols-2">
           <PartnerNotificationPreferences timezone={timezone} canEditTimezone={role === "partner_admin"} onTimezoneSaved={setSavedTimezone} />
-          <NotificationSoundSettings />
+          <div className="[&>.portal-notify-sound-settings]:border-t-0 [&>.portal-notify-sound-settings]:pt-0"><NotificationSoundSettings /></div>
         </CardContent>
       </Card>}
 
-    {activeSettings === "products" && <PagedTableCard className="flex h-full min-h-0 flex-col" bodyClassName="min-h-0 flex-1" total={settings?.products.length ?? 0} noun="products" title="Approved products" action={<StatusChip>Read-only</StatusChip>}>
-      {loading && !settings ? <SectionLoading rows={3} columns={5} />
-        : settings?.products.length ? <Table aria-label="Approved partner submission products">
-          <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Form</TableHead><TableHead>Daily cap</TableHead><TableHead>Monthly cap</TableHead><TableHead>Managed by</TableHead></TableRow></TableHeader>
-          <PagedBody className="m-seq [&_tr:last-child]:border-0">{settings.products.map((product) => <TableRow key={product.code}><TableCell className="font-medium">{product.name}</TableCell><TableCell>{product.formVersion ? `v${product.formVersion}` : "Not published"}</TableCell><TableCell className="text-muted-foreground">Not exposed</TableCell><TableCell className="text-muted-foreground">Not exposed</TableCell><TableCell className="text-muted-foreground">{product.managedBy}</TableCell></TableRow>)}</PagedBody>
-        </Table>
-        : <EmptyState title="No approved products yet" hint={`${settings?.agency?.name ?? "Your agent"} controls which products and forms this partner can submit.`} />}
-    </PagedTableCard>}
+      {activeSettings === "products" && <PagedTableCard className="flex h-full min-h-0 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col" total={settings?.products.length ?? 0} noun="products">
+        {loading && !settings ? <SectionLoading rows={3} columns={3} />
+          : settings?.products.length ? <Table aria-label="Approved partner submission products">
+            <TableHeader><TableRow><TableHead>Product</TableHead><TableHead>Form</TableHead><TableHead>Managed by</TableHead></TableRow></TableHeader>
+            <PagedBody className="m-seq [&_tr:last-child]:border-0">{settings.products.map((product) => <TableRow key={product.code}><TableCell className="font-medium">{product.name}</TableCell><TableCell>{product.formVersion ? `v${product.formVersion}` : "Not published"}</TableCell><TableCell className="text-muted-foreground">{product.managedBy}</TableCell></TableRow>)}</PagedBody>
+          </Table>
+          : <div className="flex flex-1 items-center justify-center"><EmptyState title="No approved products yet" hint={`${settings?.agency?.name ?? "Your agent"} controls which products and forms you can submit.`} /></div>}
+      </PagedTableCard>}
     </SettingsLayout>
   </div>;
 }
