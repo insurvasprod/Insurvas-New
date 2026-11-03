@@ -252,7 +252,7 @@ export function TenantAuthWorkspace({
     heading: (
       <div data-auth-line="" className="mb-6">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-          <div className="min-w-0"><AuthHeading title="Welcome back" /></div>
+          <div className="min-w-0"><AuthHeading title="Sign in to your workspace" /></div>
         </div>
       </div>
     ),
