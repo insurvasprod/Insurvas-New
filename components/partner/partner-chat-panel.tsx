@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { ArrowLeft, FileText, Info, ListFilter, Loader2, MessageCircle, Mic, MicOff, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Users, X } from "lucide-react";
+import { ArrowLeft, ListFilter, Loader2, MessageCircle, Mic, MicOff, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Plus, Search, Users, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { ComposerFiles } from "@/components/app/partner-chat/attachments";
@@ -13,20 +13,18 @@ import { MultiPicker } from "@/components/app/multi-picker";
 import { ChatThread } from "@/components/partner/chat-message";
 import { Button } from "@/components/ui/button";
 import { ChatComposer } from "@/components/ui/chat-composer";
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { control, Field } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
-import { StatusChip } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Segmented } from "@/components/ui/view-tabs";
 import { clockTime, viewerTimeZone } from "@/lib/format/dates";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import type { PartnerMessage } from "@/lib/partnerChat/cards";
 import { composerCountLabel, PARTNER_CHAT_MESSAGE_MAX } from "@/lib/partnerChat/composer";
-import { formatSupportPhone, type SupportContact } from "@/lib/partnerSupport/contact";
+import type { SupportContact } from "@/lib/partnerSupport/contact";
 import { cn } from "@/lib/utils";
 
 /**
@@ -61,16 +59,6 @@ function ChannelIcon({ channel, large = false }: { channel: Channel; large?: boo
   );
 }
 
-function Pair({ label, value, unset }: { label: string; value: string | null; unset?: string }) {
-  if (!value && !unset) return null;
-  return (
-    <div className="flex items-start justify-between gap-4 py-3 text-sm">
-      <dt className="min-w-0 shrink-0 text-muted-foreground">{label}</dt>
-      <dd className={cn("m-0 min-w-0 break-words text-right", value ? "font-medium text-foreground" : "text-muted-foreground")}>{value ?? unset}</dd>
-    </div>
-  );
-}
-
 function normalize(body: ChatResponse) {
   const channels = body.channels?.map((item) => ({ ...item.channel, messages: item.messages, unreadCount: item.unreadCount, realtimeTopic: item.realtimeTopic, othersReadAt: item.othersReadAt ?? null })) ?? (body.channel ? [{ ...body.channel, messages: body.messages ?? [], unreadCount: body.unreadCount ?? 0, realtimeTopic: body.realtimeTopic ?? `partner-chat:${body.channel.id}`, othersReadAt: null }] : []);
   const tenantUsers = (body.directory?.tenantUsers ?? []).map((item) => ({ id: item.users.id, name: item.users.name, email: item.users.email, label: `${item.users.name} · Licensed agent`, scope: "agent" as const, role: item.role }));
@@ -96,7 +84,6 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
   const [threadSearchOpen, setThreadSearchOpen] = useState(false);
   const [threadSearch, setThreadSearch] = useState("");
   const [newOpen, setNewOpen] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   // Phones show one pane at a time. Above md both are on screen and this is ignored.
   const [threadOnPhone, setThreadOnPhone] = useState(false);
   // The conversation list folds to a rail of faces so the thread gets the room; remembered per browser.
@@ -116,8 +103,6 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
   const [loading, setLoading] = useState(!sample);
   // Who "you" is in the thread. It comes from the session via the channels read, never a parameter.
   const [viewerId, setViewerId] = useState<string | null>(sample?.viewerId ?? null);
-  const [agencyName, setAgencyName] = useState<string | null>(sample?.agencyName ?? null);
-  const [agencySupport, setAgencySupport] = useState<SupportContact | null>(sample?.agencySupport ?? null);
   const [error, setError] = useState<string | null>(null);
   const lastReadMark = useRef("");
   const dictation = useDictation((text) => setDraft((current) => `${current}${current.trim() ? " " : ""}${text}`));
@@ -132,8 +117,6 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
       if (!response.ok) throw new Error(body && "error" in body ? body.error : "Could not load partner chat");
       const next = normalize(body as ChatResponse);
       setViewerId(typeof (body as { viewerId?: unknown }).viewerId === "string" ? (body as { viewerId: string }).viewerId : null);
-      setAgencyName(typeof (body as { agencyName?: unknown }).agencyName === "string" ? (body as { agencyName: string }).agencyName : null);
-      setAgencySupport((body as { agencySupport?: SupportContact }).agencySupport ?? null);
       setData(next);
       setSelectedId((current) => current && next.channels.some((channel) => channel.id === current) ? current : next.channels[0]?.id ?? null);
       setError(null);
@@ -204,8 +187,6 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
     const matchesView = threadView === "all" || (threadView === "updates") === (message.messageKind === "system_card");
     return matchesView && (!threadSearch.trim() || `${message.message} ${message.cardPayload.customer ?? ""}`.toLowerCase().includes(threadSearch.trim().toLowerCase()));
   }) ?? [], [selected, threadSearch, threadView]);
-  const sharedAttachments = selected?.messages.flatMap((item) => item.attachments) ?? [];
-  const relatedLeadCount = new Set(selected?.messages.map((item) => item.workItemId).filter(Boolean)).size;
   const directory = useMemo(() => data.directory.filter((item) => item.id !== undefined), [data.directory]);
 
   // The thread runs client-side after the channels land, so the viewer's own zone is readable here
@@ -218,7 +199,6 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
   function openConversation(id: string) {
     setSelectedId(id);
     setThreadOnPhone(true);
-    setDetailsOpen(false);
     setThreadSearchOpen(false);
     setThreadSearch("");
     setData((current) => ({
@@ -259,9 +239,7 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
         // controls on one line, as it does in Partner Chat.
         style={{
           "--partner-chat-cols-md": listFolded ? "3.5rem minmax(0, 1fr)" : "minmax(15rem, 20rem) minmax(0, 1fr)",
-          "--partner-chat-cols-xl": listFolded
-            ? (detailsOpen && selected ? "3.5rem minmax(0, 1fr) 20rem" : "3.5rem minmax(0, 1fr)")
-            : (detailsOpen && selected ? "minmax(15rem, 16rem) minmax(0, 1fr) 20rem" : "minmax(15rem, 20rem) minmax(0, 1fr)"),
+          "--partner-chat-cols-xl": listFolded ? "3.5rem minmax(0, 1fr)" : "minmax(15rem, 20rem) minmax(0, 1fr)",
         } as React.CSSProperties}
         className="grid min-h-0 min-w-0 flex-1 grid-cols-1 gap-3.5 md:[grid-template-columns:var(--partner-chat-cols-md)] xl:[grid-template-columns:var(--partner-chat-cols-xl)]"
       >
@@ -389,9 +367,6 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
                     <DropdownMenuItem asChild><Link href="/partner/pipeline">Open lead pipeline</Link></DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                <Button type="button" variant={detailsOpen ? "secondary" : "ghost"} size="icon" aria-expanded={detailsOpen} aria-controls="partner-chat-details" aria-label={detailsOpen ? "Hide conversation details" : "Show conversation details"} title="Details" onClick={() => setDetailsOpen((open) => !open)}>
-                  <Info aria-hidden="true" />
-                </Button>
               </header>
 
               {threadSearchOpen && <div className="shrink-0 border-b border-border px-3 py-2 sm:px-4"><label className="relative block"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><span className="sr-only">Search messages in this conversation</span><input type="search" autoFocus value={threadSearch} onChange={(event) => setThreadSearch(event.target.value)} placeholder="Search messages" className={cn(control, "mt-0 w-full pl-9")} /></label></div>}
@@ -426,16 +401,6 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
             </div>
           )}
         </section>
-        {detailsOpen && selected && (
-          <DetailPanel mode="split" splitFrom="xl" id="partner-chat-details" title="Conversation details" subtitle={selected.name} status={<StatusChip tone={selected.status === "active" ? "good" : "neutral"}>{selected.status === "active" ? "Active" : "Archived"}</StatusChip>} onClose={() => setDetailsOpen(false)} closeLabel="Close conversation details" footer={<Button asChild variant="secondary" className="w-full"><Link href="/partner/pipeline">Open pipeline</Link></Button>} bodyClassName="flex flex-col gap-5 p-4" className="xl:m-glass xl:w-auto xl:min-w-0 xl:rounded-xl xl:shadow-none">
-            <section aria-labelledby="partner-chat-details-conversation">
-              <h3 id="partner-chat-details-conversation" className="m-0 text-card-title font-semibold text-foreground">Conversation</h3>
-              <dl className="m-0 mt-2 divide-y divide-border rounded-lg border border-border px-3"><Pair label="Channel" value={channelTypeLabel(selected)} /><Pair label="Your agency" value={agencyName} /><Pair label="Related leads" value={String(relatedLeadCount)} /></dl>
-            </section>
-            {agencySupport?.schemaReady && <section aria-labelledby="partner-chat-details-support"><h3 id="partner-chat-details-support" className="m-0 text-card-title font-semibold text-foreground">Agency support</h3>{agencySupport.email || agencySupport.phone ? <dl className="m-0 mt-2 divide-y divide-border rounded-lg border border-border px-3"><Pair label="Email" value={agencySupport.email} /><Pair label="Phone" value={agencySupport.phone ? formatSupportPhone(agencySupport.phone) : null} /></dl> : <p className="m-0 mt-2 rounded-lg border border-dashed border-border px-3 py-3 text-sm text-muted-foreground">Your agency hasn&rsquo;t added support contact details yet.</p>}</section>}
-            <section className="min-w-0" aria-labelledby="partner-chat-details-files"><div className="flex items-center justify-between gap-3"><h3 id="partner-chat-details-files" className="m-0 text-card-title font-semibold text-foreground">Shared files</h3><StatusChip tone="neutral" dot={false}>{sharedAttachments.length}</StatusChip></div>{sharedAttachments.length ? <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0">{sharedAttachments.slice(0, 8).map((attachment) => <li key={attachment.id} className="flex min-w-0 items-center gap-2 rounded-md border border-border px-3 py-2 text-sm"><FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><span className="min-w-0 truncate text-foreground">{attachment.fileName}</span><span className="ml-auto shrink-0 text-xs tabular-nums text-muted-foreground">{Math.max(1, Math.round(attachment.sizeBytes / 1024))} KB</span></li>)}</ul> : <div className="mt-2 flex items-start gap-3 rounded-lg border border-dashed border-border px-3 py-3"><FileText className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" /><div><p className="m-0 text-sm font-medium text-foreground">No shared files yet</p><p className="m-0 mt-0.5 text-xs leading-relaxed text-muted-foreground">Files attached to messages in this conversation will appear here.</p></div></div>}</section>
-          </DetailPanel>
-        )}
       </div>
 
       <Dialog open={newOpen} onOpenChange={setNewOpen}>
