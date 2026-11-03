@@ -1,14 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Ban, Check, Eye, FileCheck2, Lock, ScrollText, ShieldCheck, Sigma, Users } from "lucide-react";
+import { ArrowRight, Check, Eye, ShieldCheck, Sigma, Users } from "lucide-react";
 
 import styles from "@/components/marketing/landing-audience.module.css";
 
 /**
  * "Who it's for" (2026-11-03, docs/design/landing-who-its-for-spec.md), in two parts:
  *
- * `LandingBuiltFor` — the band of businesses and guarantees, between the hero and the split
- * (owner, 3 Nov). `LandingAudience` — the full-bleed split, one half per audience. The product
+ * `LandingBuiltFor` — the trust band between the hero and the split (owner, 3–4 Nov). `LandingAudience` — the full-bleed split, one half per audience. The product
  * sells to exactly two, `individual` and `agency` in the plan catalog, so each half is a real
  * thing with a real pricing view behind it rather than a visual device.
  *
@@ -18,42 +17,28 @@ import styles from "@/components/marketing/landing-audience.module.css";
  * phone, by keyboard, and under reduced motion. Every claim here is one the product enforces.
  */
 
-/** The businesses it is built for. All of them live in the band; the halves do not repeat them. */
-const BUILT_FOR = [
-  "Independent agents",
-  "Final expense",
-  "Term & whole life",
-  "Medicare & health",
-  "Live-transfer floors",
-  "Outbound call centers",
-  "IMOs & FMOs",
-];
-
 /**
- * The guarantees. Four are shown, as they always have been; the rest are kept here so the list is
- * the whole truth and a later change can surface them without hunting for the wording again.
- * No customer logos, no testimonial, no certification we cannot show — only things the product does.
+ * The trust band (2026-11-04, owner): who built it, who runs on it, and three things the product
+ * enforces. No customer count, logo or quote until real ones are supplied; every line here is
+ * either the owner's own wording or something the product does.
  */
-const TRUTHS = [
-  { icon: ShieldCheck, text: "4 checks re-run by the server before every dial" },
-  { icon: Sigma, text: "True CPA computed from your own linked data" },
-  { icon: Ban, text: "A missing figure reads —, never $0.00" },
-  { icon: Eye, text: "Partners never see each other’s leads" },
-  { icon: Lock, text: "Subscription card payments are taken on the provider’s hosted page" },
-  { icon: FileCheck2, text: "Consent and disclosure evidence kept per attempt" },
-  { icon: ScrollText, text: "Changes to key records are kept in an audit log" },
+const PROOF = [
+  { icon: ShieldCheck, lead: "4 checks", text: "re-run by the server before every dial" },
+  { icon: Sigma, lead: "True CPA", text: "computed from your own linked data" },
+  { icon: Eye, lead: "Partners", text: "never see each other’s leads" },
 ];
 
 export function LandingBuiltFor() {
   return (
-    <section aria-label="Who Insurvas is built for, and what it does" className={styles.band}>
+    <section aria-labelledby="landing-trust-heading" className={styles.band}>
       <div className={styles.bandInner}>
-        <p className={styles.bandRow}>
-          <span className={styles.bandLabel}>Built for</span>
-          {BUILT_FOR.map((name) => <span key={name} className={styles.audienceItem}>{name}</span>)}
-        </p>
+        <div className={styles.trustCopy}>
+          <p className={styles.bandLabel}>Built by industry experts</p>
+          <h2 id="landing-trust-heading" className={styles.trustTitle}>Made by people who have run agencies and call floors.</h2>
+          <p className={styles.trustLine}>Trusted by independent agents, agencies and call centers that buy their leads.</p>
+        </div>
         <ul className={styles.truths}>
-          {TRUTHS.slice(0, 4).map(({ icon: Icon, text }) => <li key={text}><Icon aria-hidden="true" />{text}</li>)}
+          {PROOF.map(({ icon: Icon, lead, text }) => <li key={lead}><Icon aria-hidden="true" /><span><strong>{lead}</strong> {text}</span></li>)}
         </ul>
       </div>
     </section>
