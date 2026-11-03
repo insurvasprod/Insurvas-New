@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Play } from "lucide-react";
 
+import { Switch } from "@/components/ui/field";
 import { InfoTip } from "@/components/ui/info-tip";
 
 import { getSoundPreferences, previewTreatment, saveSoundPreferences } from "@/lib/notify/sound";
@@ -67,7 +68,7 @@ export function NotificationSoundSettings({
 
   return (
     <div className="portal-notify-sound-settings border-t border-[var(--color-border)] pt-3">
-      <p className="flex items-center gap-1.5 font-semibold">
+      <p className="m-0 flex h-8 items-center gap-1.5 text-sm font-semibold">
         Which events make a sound
         <InfoTip label="About sounds">Sound is always off while you are on a call, except for compliance blocks. Routine saves and system faults never make a sound.</InfoTip>
       </p>
@@ -76,11 +77,11 @@ export function NotificationSoundSettings({
           storage for these choices is a pending migration; until it lands they apply to this
           browser only, and the toggles would otherwise snap back and simply look broken. */}
 
-      <div className="space-y-1">
+      <div className="mt-1 divide-y divide-border">
         {AUDIBLE.map((treatment) => (
-          <div key={treatment} className="flex items-center justify-between gap-2 rounded px-1 py-1">
+          <div key={treatment} className="flex items-center justify-between gap-3 py-2.5 text-sm">
             <label className="min-w-0 flex-1 cursor-pointer" title={TREATMENT_LABELS[treatment].hint}>
-              <span className="block text-sm">{TREATMENT_LABELS[treatment].label}</span>
+              {TREATMENT_LABELS[treatment].label}
             </label>
             <button
               type="button"
@@ -89,17 +90,15 @@ export function NotificationSoundSettings({
               // distrust the whole panel.
               onClick={() => previewTreatment(treatment)}
               aria-label={`Play the ${TREATMENT_LABELS[treatment].label.toLowerCase()} sound`}
-              className="rounded border border-[var(--color-border)] p-1.5 hover:bg-[var(--color-muted)] focus-visible:outline-2 focus-visible:outline-[var(--brand-500)]"
+              className="inline-flex size-8 items-center justify-center rounded-md border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"
             >
-              <Play className="size-3.5" aria-hidden="true" />
+              <Play className="size-4" aria-hidden="true" />
             </button>
-            <input
-              type="checkbox"
+            <Switch
               checked={isOn(treatment)}
               onChange={() => toggle(treatment)}
               disabled={saving}
-              aria-label={`Sound for ${TREATMENT_LABELS[treatment].label.toLowerCase()}`}
-              className="size-4 accent-[var(--brand-500)]"
+              label={`Sound for ${TREATMENT_LABELS[treatment].label.toLowerCase()}`}
             />
           </div>
         ))}

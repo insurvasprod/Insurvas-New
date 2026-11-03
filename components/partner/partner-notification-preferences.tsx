@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { Field, Switch } from "@/components/ui/field";
+import { Switch } from "@/components/ui/field";
+import { InfoTip } from "@/components/ui/info-tip";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { SectionLoading } from "@/components/ui/page-states";
 import type { PartnerAlertEvent, PartnerAlertSettings } from "@/lib/partnerAlerts/presentation";
@@ -110,32 +111,38 @@ export function PartnerNotificationPreferences({
 
   const zones = TIMEZONES.some(([value]) => value === zone) ? TIMEZONES : [[zone, zone] as [string, string], ...TIMEZONES];
 
-  return <div className="flex flex-col items-start gap-5">
-    <div className="w-full">
-      <p className="font-semibold">What reaches you</p>
-      <div className="mt-1 divide-y divide-border">
-        {BOARD_EVENTS.map(([event, label]) => <label className="flex cursor-pointer items-center justify-between gap-3 py-2.5 text-sm text-[var(--body)]" key={event}>
-          {label}
-          <Switch label={label} checked={draft.enabled_events[event]} disabled={saving} onChange={(next) => setDraft({ ...draft, enabled_events: { ...draft.enabled_events, [event]: next } })} />
-        </label>)}
+  const dirty = eventsChanged || zoneChanged;
+
+  return <div className="w-full">
+    <div className="flex h-8 items-center justify-between gap-3">
+      <p className="m-0 flex items-center gap-1.5 text-sm font-semibold text-foreground">
+        What reaches you
+        <InfoTip label="About these alerts">Choose which updates reach you. The timezone is how your submission dates are read{canEditTimezone ? "." : "; your partner admin sets it."}</InfoTip>
+      </p>
+      {dirty && <Button type="button" variant="secondary" size="sm" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>}
+    </div>
+    <div className="mt-1 divide-y divide-border">
+      {BOARD_EVENTS.map(([event, label]) => <label className="flex cursor-pointer items-center justify-between gap-3 py-3 text-sm text-[var(--body)]" key={event}>
+        {label}
+        <Switch label={label} checked={draft.enabled_events[event]} disabled={saving} onChange={(next) => setDraft({ ...draft, enabled_events: { ...draft.enabled_events, [event]: next } })} />
+      </label>)}
+      <div className="flex items-center justify-between gap-3 py-3 text-sm text-[var(--body)]">
+        <span>Timezone</span>
+        {/* Nine curated zones rather than the IANA list, so the search is for consistency with the
+            rest of the portal rather than because the list is long. */}
+        <SelectMenu
+          label="Timezone"
+          value={zone}
+          onChange={(next) => setZoneDraft(next)}
+          disabled={!canEditTimezone || saving}
+          searchPlaceholder="Search timezones"
+          className="w-56"
+          panelClassName="w-80 max-w-[calc(100vw-2rem)]"
+          panelAlign="end"
+          options={zones.map(([value, label]) => ({ value, label }))}
+        />
       </div>
     </div>
-    <Field label="Timezone" info={canEditTimezone ? "The timezone your submission dates are read in." : "Your partner admin sets the timezone your submission dates are read in."} className="w-full">
-      {/* Nine curated zones rather than the IANA list, so the search is for consistency with the
-          rest of the portal rather than because the list is long. */}
-      <SelectMenu
-        label="Timezone"
-        value={zone}
-        onChange={(next) => setZoneDraft(next)}
-        disabled={!canEditTimezone || saving}
-        searchPlaceholder="Search timezones"
-        className="w-full"
-        panelClassName="w-80 max-w-[calc(100vw-2rem)]"
-        panelAlign="start"
-        options={zones.map(([value, label]) => ({ value, label }))}
-      />
-    </Field>
-    {error && <p className="text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
-    <Button type="button" variant="secondary" size="sm" onClick={() => void save()} disabled={saving || (!eventsChanged && !zoneChanged)}>{saving ? "Saving…" : "Save changes"}</Button>
+    {error && <p className="mt-3 text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
   </div>;
 }
