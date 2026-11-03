@@ -3,7 +3,7 @@ import "server-only";
 import { addressHash, addressSearch, nameSearch, normalizePhone } from "@/lib/contacts/normalization";
 import { findDuplicatesQuietly, queueDuplicateReviews } from "@/lib/contacts/service";
 import type { ContactInput } from "@/lib/contacts/types";
-import { switchedOffCarrierIds } from "@/lib/carriers/service";
+import { acceptsFilesFrom, fileCarrierChoices } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -11,7 +11,6 @@ import { annualisedPremiumCents } from "./policyCurrent";
 import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
 import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
-import { libraryCarriers } from "./registry";
 import { closeAnsweredItems, noRecordPolicy, openImportSummary, retireProvisional } from "./exceptionQueuesStore";
 import { chooseExistingClient, identityKey } from "./exceptionQueues";
 import { allRows } from "./pages";
@@ -521,6 +520,7 @@ export async function addAgentCode(scope: MatchingScope, carrierId: string, agen
   if (!code) throw new MatchingError("Type the agent code exactly as the carrier writes it.", 400);
   const { data: carrier } = await db().from("carriers").select("id, is_active").eq("id", carrierId).maybeSingle();
   if (!carrier || carrier.is_active === false) throw new MatchingError("Choose a carrier from the list.", 400);
+  if (!(await acceptsFilesFrom(scope.tenantId, carrierId))) throw new MatchingError("That carrier is not one of yours. Add it, or switch it on, in Settings › Carriers.", 400);
   const { data: existing, error } = await db().from("carrier_agent_map").select("user_id").eq("tenant_id", scope.tenantId).eq("carrier_id", carrierId).eq("agent_identifier", code).maybeSingle();
   if (error) fail(error, "Could not check the agent code");
   if (existing) {
@@ -566,8 +566,8 @@ export async function loadMatching(tenantId: string) {
     }
   }
   const carrierName = new Map<string, string>((carriers.data ?? []).map((row: Loose) => [row.id, row.name]));
-  // The carriers a code can be added for: the library the upload form offers, less the ones this agency switched off.
-  const [library, switchedOff] = await Promise.all([libraryCarriers().catch(() => []), switchedOffCarrierIds(tenantId)]);
+  // The carriers a code can be added for: the ones the upload form offers (LA-0.4, Settings › Carriers).
+  const codeCarriers = await fileCarrierChoices(tenantId).catch(() => []);
   const contactIds = [...new Set((links.data ?? []).map((row: Loose) => row.contact_id).filter(Boolean))];
   const userIds = [...new Set([...(members.data ?? []).map((row: Loose) => row.user_id), ...(maps.data ?? []).map((row: Loose) => row.user_id)])];
   const [contacts, users] = await Promise.all([
@@ -603,7 +603,7 @@ export async function loadMatching(tenantId: string) {
     unmapped: [...unmapped.values()].sort((a, b) => b.policies - a.policies || a.agentIdentifier.localeCompare(b.agentIdentifier)),
     mapped: (maps.data ?? []).map((row: Loose): MappedAgent => ({ id: row.id, carrierId: row.carrier_id, carrierName: carrierName.get(row.carrier_id) ?? "", agentIdentifier: row.agent_identifier, userId: row.user_id, userName: userName.get(row.user_id) ?? row.user_id, policies: policiesPerCode.get(`${row.carrier_id}|${row.agent_identifier}`) ?? 0 })),
     // The carriers a code can be added for, before its first file arrives.
-    carriers: library.filter((carrier) => !switchedOff.has(carrier.id)).map((carrier) => ({ id: carrier.id, name: carrier.name })).sort((a, b) => a.name.localeCompare(b.name)),
+    carriers: codeCarriers.map((carrier) => ({ id: carrier.id, name: carrier.name })),
     members: (members.data ?? []).filter((row: Loose) => row.accepted_at && WRITING_ROLES.includes(row.role)).map((row: Loose) => ({ userId: row.user_id as string, name: userName.get(row.user_id) ?? row.user_id, role: row.role as string })),
     ladder: ladderShare((ladder.data ?? []).map((row: Loose) => ({ alreadyLinked: row.already_linked, exactLinked: row.exact_linked, toReview: row.to_review }))),
     aiAccuracy: accuracy(aiRows.map((row) => ({ confirmed: Boolean(row.confirmed_at), correctedByHuman: Boolean(row.superseded_by_id && humanCorrection.has(row.superseded_by_id)) }))),

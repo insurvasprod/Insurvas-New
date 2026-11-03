@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -40,6 +40,9 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
   const atRisk = ledger.unearned?.atRiskCents ?? null;
   const reportedCents = totals ? totals.advancedCents + totals.earnedCents : null;
   const lines = ledger.entries;
+  // LA-4.13: "add your rate" only while there is no rate to price this policy; with a rate on the card, the
+  // button is offered only when a line was paid at another rate, and then it says check, not add.
+  const rateAction = !expected.available ? null : !first || noRate ? "Add the rate" : findings.items.some((f) => f.type === "mis_rated") ? "Check the rate" : null;
   const rows = [
     ...lines.map((entry) => ({ kind: "line" as const, key: entry.id, date: entry.transactionDate ?? entry.statementDate ?? entry.createdAt, entry })),
     ...findings.items.map((finding) => ({ kind: "finding" as const, key: finding.id, date: finding.lastSeenAt ?? "", finding })),
@@ -62,9 +65,9 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
         total={rows.length}
         noun="lines"
         title="Lines"
-        action={(canFix || (canLetter && findings.items.length > 0)) ? (
+        action={((canFix && rateAction) || (canLetter && findings.items.length > 0)) ? (
           <div className="flex flex-wrap items-center gap-2">
-            {canFix && <Button asChild variant="outline"><Link href="/app/rate-card">Add the rate</Link></Button>}
+            {canFix && rateAction && <Button asChild variant="outline"><Link href="/app/rate-card">{rateAction}</Link></Button>}
             {canLetter && findings.items.length > 0 && <Button asChild variant="outline"><Link href="/app/discrepancies">Draft a letter</Link></Button>}
           </div>
         ) : undefined}
@@ -107,9 +110,8 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
       {!findings.available && <p className="m-0 text-xs text-muted-foreground">{FINDINGS_PENDING_MESSAGE}</p>}
 
       {chargebackLikely && atRisk ? (
-        <Callout tone="warning" title={`Inside the clawback window: ${carrierName} will likely take back ${money(atRisk)}.`}>
-          Nothing to do yet; it shows here when it arrives.
-        </Callout>
+        // Round 3: one line, a title and no paragraph.
+        <Callout tone="warning" title={`Inside the clawback window: ${carrierName} will likely take back ${money(atRisk)}; nothing to do until it arrives.`} />
       ) : null}
     </>
   );

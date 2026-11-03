@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -211,9 +212,15 @@ export function StatTile({
   footnote,
   reserveFootnote,
   valueSize = "figure",
+  href,
   className,
 }: {
   label: string;
+  /**
+   * The rows behind the figure (round 3, owner 2026-11-02): the whole tile is the link, so a strip never
+   * needs a "See rows ›" under every figure. Put no other link inside a tile that has one.
+   */
+  href?: string;
   /** "text" for a strip of words (a name, a status) rather than numbers: 16px and truncated. */
   valueSize?: "figure" | "text";
   /**
@@ -243,15 +250,15 @@ export function StatTile({
   footnote?: ReactNode;
   className?: string;
 }) {
-  return (
-    <div
-      className={cn(
-        // m-stat-tile: inside a <StatStrip> the tile loses its own border, radius and shadow and
-        // becomes one cell of the strip (app/globals.css).
-        "m-stat-tile rounded-lg border border-border bg-card px-4 py-3 shadow-[var(--shadow-rest)]",
-        className
-      )}
-    >
+  const tileClass = cn(
+    // m-stat-tile: inside a <StatStrip> the tile loses its own border, radius and shadow and
+    // becomes one cell of the strip (app/globals.css).
+    "m-stat-tile rounded-lg border border-border bg-card px-4 py-3 shadow-[var(--shadow-rest)]",
+    href && "block outline-none transition-colors hover:bg-[var(--surface-alt)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+    className
+  );
+  const body = (
+    <>
       {/* The mockups' label (owner 2026-10-30, board LirS1): 12px/700, 0.06em, uppercase. */}
       <div className="flex items-center gap-1 text-xs font-bold leading-[1.33] uppercase tracking-[0.06em] text-muted-foreground">
         {label}
@@ -288,8 +295,9 @@ export function StatTile({
           {!delta && !footnote && !action && <span className="text-xs" aria-hidden="true">&nbsp;</span>}
         </div>
       )}
-    </div>
+    </>
   );
+  return href ? <Link href={href} className={tileClass}>{body}</Link> : <div className={tileClass}>{body}</div>;
 }
 
 /* ── StatStrip ──────────────────────────────────────────────────────────────────────────────── */

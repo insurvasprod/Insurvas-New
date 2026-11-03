@@ -2,14 +2,19 @@ import Link from "next/link";
 
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyBook } from "@/components/app/policy-book";
+import { PolicyChangesTable } from "@/components/app/policy-changes-table";
 import { PolicyEntryActions } from "@/components/app/policy-entry-actions";
+import { carrierPicker } from "@/lib/carriers/agency";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
-import { Button } from "@/components/ui/button";
-import { NextStepLine } from "@/components/app/next-step-line";
+import { Callout } from "@/components/app/settings/primitives";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { scopeFor } from "@/lib/agency/visibility";
-import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
+import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { loadBook, loadHandPolicies, loadIssuedAwaiting, POLICY_BOOK_PENDING_MESSAGE } from "@/lib/ingestion/policyBookStore";
+import { listPolicyChanges } from "@/lib/ingestion/snapshotStore";
+
+type PoliciesView = "book" | "changes";
 
 /**
  * Book of Business › Policies: one list (2026-10-08 overlap merge) of every policy the carriers'
@@ -18,6 +23,11 @@ import { loadBook, loadHandPolicies, loadIssuedAwaiting, POLICY_BOOK_PENDING_MES
  * as issued whose carrier file hasn't listed it yet (Module 4, Door 1), with a source filter.
  * Owner, producer and bookkeeper; a producer sees the policies credited to them or that they recorded.
  * Adding by hand is owner and producer, as the API.
+ *
+ * Round 3 (docs/la4/POLISH-ROUND3.md): a "Book · Recent changes" switch. Recent changes (?view=changes) is
+ * the old Carrier files › Policy changes view (LA-4.6), moved here because it is about policies; it keeps
+ * that view's gates (statement ingestion, statements.view), since it lists every policy's changes, so a
+ * producer sees only the Book. /app/carrier-files?view=changes redirects here.
  */
 export default async function PoliciesPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("book_of_business");
@@ -26,23 +36,50 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const readOnly = guard.entitlement.access === "read_only";
   const params = await searchParams;
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
+  // Recent changes: the gates Carrier files › Policy changes had.
+  const ingestion = await guardPage("statement_ingestion");
+  const canSeeChanges = ingestion.entitled && actAsPagePermission(ingestion, "statements.view");
+  const view: PoliciesView = params.view === "changes" && canSeeChanges ? "changes" : "book";
+  const canAdd = !readOnly && guard.role !== "bookkeeper";
+  const lead = canSeeChanges ? (
+    <ViewTabs
+      label="Policies views"
+      value={view}
+      tabs={[{ key: "book" as const, label: "Book", href: "/app/policies" }, { key: "changes" as const, label: "Recent changes", href: "/app/policies?view=changes" }]}
+    />
+  ) : undefined;
+  const carriers = canAdd ? (await carrierPicker(guard.context.tenantId).catch(() => [])).map((carrier) => carrier.name) : [];
+  const actions = <PolicyEntryActions canAdd={canAdd} carriers={carriers} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />;
+
+  if (view === "changes") {
+    // LA-4.6: what moved between the carriers' policy files.
+    const changes = await listPolicyChanges(guard.context.tenantId);
+    return (
+      <DataInPage step="policies" lead={lead} actions={actions}>
+        <PolicyChangesTable
+          changes={changes.changes}
+          emptyTitle={changes.available ? "No policy has changed yet" : "Policy changes are not available yet"}
+          emptyHint={changes.available ? "Changes appear when a carrier's next policy file differs from the one before it." : "They appear once the database update (20261008140000) is applied."}
+        />
+      </DataInPage>
+    );
+  }
+
   const [book, hand, issued] = await Promise.all([loadBook(viewer), loadHandPolicies(viewer), loadIssuedAwaiting(viewer).catch(() => [])]);
   // The old "Entered by hand" tab address lands on the same list, filtered to that source.
   const query = new URLSearchParams([...Object.entries(params).flatMap(([key, value]) => (typeof value === "string" && key !== "view" ? [[key, value]] : [])), ...(params.view === "entered" && !params.source ? [["source", "hand"]] : [])]).toString();
-  const canAdd = !readOnly && guard.role !== "bookkeeper";
   const rows = [...(book.available ? book.rows : []), ...hand, ...issued];
+  const unpriced = book.available ? book.unpriced : null;
 
   return (
-    <DataInPage step="policies" actions={<PolicyEntryActions canAdd={canAdd} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />}>
-      {/* LA-4.13: the share of the book no rate can check, and the one place to fix it. */}
-      {book.available && book.unpriced && (
-        <NextStepLine action={guard.role !== "producer" ? <Button asChild size="sm"><Link href="/app/rate-card">Add rates</Link></Button> : undefined}>
-          <strong className="font-semibold text-[var(--ink)]">{book.unpriced.top.policies.toLocaleString("en-US")} {book.unpriced.top.carrierName} {book.unpriced.top.policies === 1 ? "policy" : "policies"}, ${Math.round(book.unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate</strong>, so their commission can&apos;t be checked{book.unpriced.carriers > 1 ? ` (${book.unpriced.policies.toLocaleString("en-US")} policies across ${book.unpriced.carriers} carriers in all)` : ""}.
-        </NextStepLine>
+    <DataInPage step="policies" lead={lead} actions={actions}>
+      {/* LA-4.13: the share of the book no rate can check, and the one place to fix it — one line (round 3). */}
+      {unpriced && (
+        <Callout tone="warning" title={`${unpriced.top.policies.toLocaleString("en-US")} ${unpriced.top.carrierName} ${unpriced.top.policies === 1 ? "policy" : "policies"}, $${Math.round(unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate, so their commission can't be checked${unpriced.carriers > 1 ? ` (${unpriced.policies.toLocaleString("en-US")} policies across ${unpriced.carriers} carriers in all)` : ""}.`}>
+          {guard.role !== "producer" && <Link href="/app/rate-card" className="font-semibold underline">Add rates</Link>}
+        </Callout>
       )}
-      {!book.available && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{POLICY_BOOK_PENDING_MESSAGE}</div>
-      )}
+      {!book.available && <Callout tone="warning" title={POLICY_BOOK_PENDING_MESSAGE} />}
       {(book.available || hand.length > 0 || issued.length > 0) && (
         <PolicyBook rows={rows} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={guard.role === "producer"} readOnly={readOnly} />
       )}

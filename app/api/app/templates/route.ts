@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { applyTemplate, listAvailableTemplates, previewTemplateApplication, TemplateProductError } from "@/lib/agentTemplates/service";
+import { applyTemplate, listAvailableTemplates, NoSoldProductError, previewTemplateApplication, TemplateProductError } from "@/lib/agentTemplates/service";
 import { livePublication } from "@/lib/agentTemplates/publishedBy";
 
 const PRODUCT_CODE = /^[a-z][a-z0-9_]{0,79}$/;
@@ -31,6 +31,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ...templates, agencyName: tenant.data?.name ?? null, published, liveVersions }, { headers: { "Cache-Control": "no-store" } });
   }
   catch (error) {
+    if (error instanceof NoSoldProductError) return NextResponse.json({ error: error.message, code: "no_products" }, { status: 409 });
     if (error instanceof TemplateProductError) return NextResponse.json({ error: error.message }, { status: 403 });
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not load templates" }, { status: 500 });
   }

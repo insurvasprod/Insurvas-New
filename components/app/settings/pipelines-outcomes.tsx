@@ -22,12 +22,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import {
   Ban, CalendarClock, Check, CircleCheck, CircleX, Clock, DollarSign, FileCheck, GripVertical, Hash, MessageSquare,
-  Moon, PhoneCall, PhoneOff, Plus, Repeat, Settings2, Square, ThumbsDown, Voicemail, type LucideIcon,
+  Moon, PhoneCall, PhoneOff, Plus, Repeat, RotateCcw, Settings2, Square, ThumbsDown, Voicemail, type LucideIcon,
 } from "lucide-react";
 
+import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
 import { Callout, SettingsStack, control } from "@/components/app/settings/primitives";
 import { AgentQuestionsDialog } from "@/components/app/settings/agent-questions";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { HoverHint } from "@/components/ui/hover-hint";
 import { SectionLoading } from "@/components/ui/page-states";
@@ -39,7 +41,7 @@ import type { DispositionSettingsRow } from "@/lib/dispositions/types";
 import type { Pipeline } from "@/lib/pipelines/types";
 import type { PipelineViewContext } from "@/lib/pipelines/views";
 import {
-  draftProblems, destinations, iconFor, isTemp, keyFor, liveStages, NEW_PREFIX, NEW_STAGE_COLOR, planSave, reachedSomeone,
+  draftProblems, destinations, hasInsurvasRouting, iconFor, insurvasRouting, isTemp, keyFor, liveStages, NEW_PREFIX, NEW_STAGE_COLOR, planSave, reachedSomeone, routingIsDefault,
   REST_PRESETS, RETRY_PRESETS, shortDuration, STAGE_SWATCHES, TIME_ALLOWED_PRESETS, WHY_CLOSES, WHY_KIND, WHY_NEXT, WHY_WORKED,
   type BoardDoc, type BoardOutcome, type BoardPipeline, type BoardStage, type Destination, type OutcomeIcon, type SaveOp, type StageType,
 } from "@/lib/pipelines/outcomesBoard";
@@ -249,6 +251,14 @@ export function PipelinesOutcomesSettings() {
   const editOutcome = (key: string, fn: (o: BoardOutcome) => void) => edit((doc) => { const o = doc.outcomes.find((item) => item.key === key); if (o) fn(o); });
   const route = (key: string, stageId: string | null) => edit((doc) => { (doc.own[pipeline.id] ??= {})[key] = stageId; });
   const resetRoute = (key: string) => edit((doc) => { if (doc.own[pipeline.id]) delete doc.own[pipeline.id][key]; });
+  // The Insurvas default routing (docs/settings/DEFAULTS.md), for the all-in-one pipeline only.
+  const defaultRouting = hasInsurvasRouting(pipeline) ? insurvasRouting(pipeline, draft.outcomes) : null;
+  const onDefaultRouting = defaultRouting !== null && Object.keys(defaultRouting).length > 0 && routingIsDefault(draft.own[pipeline.id], defaultRouting);
+  async function resetRouting() {
+    if (!defaultRouting) return;
+    if (!(await confirmAction(resetConfirmOptions(`where ${pipeline.name}'s outcomes send a lead`, "Your stages and outcomes stay; only the routing changes, and nothing is saved until you save.")))) return;
+    edit((doc) => { doc.own[pipeline.id] = { ...defaultRouting }; });
+  }
 
   function addOutcome() {
     const key = `${NEW_PREFIX.replace(":", "_")}${Date.now().toString(36)}`;
@@ -421,6 +431,12 @@ export function PipelinesOutcomesSettings() {
         </span>
         <Button type="button" variant="outline" onClick={() => setCreating(true)} disabled={dirty} title={dirty ? "Save or discard your changes first" : "A new pipeline, from one you have or blank"}><Plus className="size-4" aria-hidden="true" />New pipeline</Button>
         <span className="ml-auto flex flex-wrap items-center gap-2">
+          {onDefaultRouting && <DefaultChip label="Insurvas default routing" />}
+          {defaultRouting && Object.keys(defaultRouting).length > 0 && !onDefaultRouting && (
+            <Button type="button" variant="ghost" onClick={() => void resetRouting()} disabled={saving} title="Send each standard outcome to the stage with its Insurvas name again">
+              <RotateCcw className="size-4" aria-hidden="true" />Reset to default
+            </Button>
+          )}
           <span role="status" className={cn("inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-bold", dirty ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--primary-soft)] text-[var(--accent-ink)]")}>
             {dirty ? <span className="size-2 rounded-full bg-[var(--warning)]" aria-hidden="true" /> : <span className="grid size-4 place-items-center rounded-full bg-[var(--primary)] text-[var(--on-primary)]"><Check className="size-3" aria-hidden="true" /></span>}
             {dirty ? `${ops.length} unsaved change${ops.length === 1 ? "" : "s"}` : savedNote ? "Saved" : "All saved"}

@@ -3,10 +3,15 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { Callout } from "@/components/app/settings/primitives";
+import { personName } from "@/lib/format/personName";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -48,10 +53,18 @@ const ACTION_LABELS: Record<ActionTaken, string> = {
 const field = `${toolbarControl} w-full`;
 const labelClass = "grid gap-1.5 text-sm font-medium text-foreground";
 
+/** What a card still needs before it can be worked well (owner 2026-11-02: "help the agent if there's things to fix"). */
+type Need = "failed" | "phone" | "income";
+const NEED_LABELS: Record<Need, string> = { failed: "Fix not in the file", phone: "No phone", income: "No income" };
+const needsOf = (card: SaveCard): Need[] => [...(card.failedFix ? ["failed" as const] : []), ...(card.phone ? [] : ["phone" as const]), ...(card.incomeKnown ? [] : ["income" as const])];
+
 /**
  * LA-5.3 (Notion sprint) · the save queue. A prediction, drawn as one: the risk sits in a dashed
- * outline marked "predicted" and always says how many signals it rests on, so it can never be taken
- * for Lapse risk's observed facts. Phone on the row; the reason is the opening line; at most two fixes.
+ * outline and always says how many signals it rests on, so it can never be taken for Lapse risk's
+ * observed facts. Phone on the row; the reason is the opening line; the first fix starts from the row.
+ *
+ * 2026-11-02 tidy (owner): one line per fact, the table fits its card, "Log call" is the row's button and
+ * the rest (snooze, income, the other fix) is in its ⋯ menu; chips find the cards that still need something.
  */
 export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: SaveQueue; sort: QueueSort; readOnly: boolean; canStartFix: boolean }) {
   const router = useRouter();
@@ -59,6 +72,8 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
   const [refreshing, startRefresh] = useTransition();
   const [band, setBand] = useState("");
   const [carrier, setCarrier] = useState("");
+  const [need, setNeed] = useState<Need | "">("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [logging, setLogging] = useState<SaveCard | null>(null);
   const [holding, setHolding] = useState<SaveCard | null>(null);
@@ -67,28 +82,46 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
 
   const cards = queue.cards;
   const carriers = useMemo(() => [...new Map(cards.map((c) => [c.carrierId, c.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [cards]);
-  const visible = useMemo(() => cards.filter((c) => (!band || c.band === band) && (!carrier || c.carrierId === carrier)), [cards, band, carrier]);
-  const pageSize = useFittingPageSize(480, 45);
+  const needCounts = useMemo(() => {
+    const counts: Record<Need, number> = { failed: 0, phone: 0, income: 0 };
+    for (const card of cards) for (const n of needsOf(card)) counts[n] += 1;
+    return counts;
+  }, [cards]);
+  const needle = search.trim().toLowerCase();
+  const visible = useMemo(() => cards.filter((c) => (!band || c.band === band) && (!carrier || c.carrierId === carrier) && (!need || needsOf(c).includes(need))
+    && (!needle || [c.clientName, c.policyNumber, c.phone, c.carrierName].some((v) => v?.toLowerCase().includes(needle)))), [cards, band, carrier, need, needle]);
+  const pageSize = useFittingPageSize(480, 57);
   const shown = paginate(visible, page, pageSize);
   const { stats } = queue;
-  const clear = () => { setBand(""); setCarrier(""); setPage(1); };
+  const filtered = Boolean(band || carrier || need || needle);
+  const clear = () => { setBand(""); setCarrier(""); setNeed(""); setSearch(""); setPage(1); };
+  const fixesOf = (card: SaveCard) => card.fixes.filter((f) => !(card.noBankAccount && f.action === "convert_to_draft"));
+  // A column every card leaves empty says nothing (owner 2026-11-02 critique): drawn only once one card has it.
+  const showWorth = cards.some((c) => c.atRiskCents !== null);
+  const showDraft = cards.some((c) => c.nextDraftDays !== null);
+  const cols = 4 + (showWorth ? 1 : 0) + (showDraft ? 1 : 0);
+  const startable = (card: SaveCard, action: string): RequestType | null => {
+    const type = (REQUEST_FOR_FIX as Record<string, RequestType | undefined>)[action];
+    return type && canStartFix && !readOnly && !card.openRequests.some((r) => r.type === type) ? type : null;
+  };
 
   return (
     <>
       {stats.scored > 0 && <StatStrip label="Save queue">
-        <StatTile label="In the queue" value={queue.total.toLocaleString("en-US")} footnote={queue.total > cards.length ? `showing the first ${cards.length}` : `of ${stats.scored.toLocaleString("en-US")} policies scored`} />
+        <StatTile label="In the queue" value={queue.total.toLocaleString("en-US")} footnote={queue.total > cards.length ? `first ${cards.length} shown` : `of ${stats.scored.toLocaleString("en-US")} scored`} />
         <StatTile label="Critical" value={stats.critical.toLocaleString("en-US")} valueTone={stats.critical ? "danger" : undefined} footnote={`${stats.highOrAbove.toLocaleString("en-US")} high or critical`} />
-        <StatTile label="Advance at risk" value={cards.length && stats.atRiskUnknown < cards.length ? money(stats.atRiskCents) : "Unknown"} footnote={stats.atRiskUnknown ? `${stats.atRiskUnknown} with no advance on file yet` : "unearned, on the cards in the queue"} />
-        <StatTile label="Too little known" value={queue.lowConfidence.toLocaleString("en-US")} labelTitle="High or critical, but scored on under half the signals. They stay off the queue until more is known: income, the carrier's grace rule, a second carrier file, the draft day." footnote={queue.lowConfidence ? "high risk on a thin score, kept off the queue" : "every high score rests on enough"} />
-        <StatTile label="Income known" value={`${stats.incomeKnown.toLocaleString("en-US")} of ${stats.scored.toLocaleString("en-US")}`} labelTitle={coverageText(stats.incomeKnown, stats.scored, stats.affordabilityWeight)} footnote={`the rest are scored without it · worth up to ${stats.affordabilityWeight} points`} />
+        <StatTile label="Advance at risk" value={cards.length && stats.atRiskUnknown < cards.length ? money(stats.atRiskCents) : "—"} footnote={!cards.length ? "nothing in the queue" : stats.atRiskUnknown === cards.length ? "no advance on file yet" : stats.atRiskUnknown ? `${stats.atRiskUnknown} with no advance on file` : "unearned, in the queue"} />
+        <StatTile label="Too little known" value={queue.lowConfidence.toLocaleString("en-US")} labelTitle="High or critical, but scored on under half the signals. They stay off the queue until more is known: income, the carrier's grace rule, a second carrier file, the draft day." footnote={queue.lowConfidence ? "kept off the queue" : "every score rests on enough"} />
+        <StatTile label="Income known" value={`${stats.incomeKnown.toLocaleString("en-US")} of ${stats.scored.toLocaleString("en-US")}`} labelTitle={coverageText(stats.incomeKnown, stats.scored, stats.affordabilityWeight)} footnote={`worth up to ${stats.affordabilityWeight} points`} />
       </StatStrip>}
 
       <TableCard
         toolbar={
           <DataToolbar actions={<>
-            {(band || carrier) && <ClearFiltersButton onClick={clear} />}
+            {filtered && <ClearFiltersButton onClick={clear} />}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Client, policy or phone" />
             <select aria-label="Sort the queue" className={toolbarControl} value={sort} onChange={(e) => router.push(e.target.value === queue.settings.queueDefaultSort ? pathname : `${pathname}?sort=${e.target.value}`)}>
               {SORTS.map((s) => <option key={s} value={s}>{SORT_LABELS[s]}</option>)}
             </select>
@@ -102,99 +135,125 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                 {carriers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
               </select>
             )}
-            <span className="text-sm text-muted-foreground">
-              {queue.usedMedium ? "Nothing is high risk: medium shown. " : ""}
-              {queue.heldOut ? `${queue.heldOut.toLocaleString("en-US")} held back for the holdout. ` : ""}
-              {queue.computedAt ? `Scored ${fileDay(queue.computedAt.slice(0, 10))} · weights v${queue.weightSetVersion}` : null}
-            </span>
+            {/* What still needs doing, as chips with their counts; only the ones that hold a card. */}
+            {(Object.keys(NEED_LABELS) as Need[]).filter((n) => needCounts[n] > 0).map((n) => (
+              <ToggleChip key={n} selected={need === n} count={needCounts[n]} countTone={n === "failed" ? "danger" : "warning"} onClick={() => { setNeed(need === n ? "" : n); setPage(1); }}>{NEED_LABELS[n]}</ToggleChip>
+            ))}
           </DataToolbar>
         }
-        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="policies" onPage={setPage} /> : undefined}
+        footer={visible.length ? (
+          <div className="flex w-full flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-muted-foreground">
+              {queue.usedMedium ? "Nothing is high risk: medium shown · " : ""}
+              {queue.heldOut ? `${queue.heldOut.toLocaleString("en-US")} held back for the holdout · ` : ""}
+              {queue.computedAt ? `Scored ${fileDay(queue.computedAt.slice(0, 10))}` : null}
+            </span>
+            <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="policies" onPage={setPage} />
+          </div>
+        ) : undefined}
       >
         {cards.length === 0 ? (
-          <EmptyState title="Nobody to call" hint={queue.lowConfidence ? `${queue.lowConfidence.toLocaleString("en-US")} ${queue.lowConfidence === 1 ? "policy scores" : "policies score"} high, but on too little to call: add incomes, set the carriers' grace rules, or wait for a second carrier file.` : stats.scored ? "No policy that is paying today scores high enough to call. Past-due policies are on Lapse risk." : "No in-force policy has been scored yet. Scores appear after your carrier policy files are in."} />
+          <EmptyState title="Nobody to call" hint={queue.lowConfidence ? `${queue.lowConfidence.toLocaleString("en-US")} ${queue.lowConfidence === 1 ? "policy scores" : "policies score"} high on too little: add incomes, set the carriers' grace rules, or wait for a second file.` : stats.scored ? "Nothing paying today scores high enough. Past-due policies are in Lapse risk." : "Scores appear once your carrier policy files are in."} />
         ) : visible.length === 0 ? (
           <NoMatches noun="policies" onClear={clear} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[1080px] text-left text-sm">
+          <table className="portal-lead-table w-full text-left text-sm">
             <thead>
               <tr>
-                <th className="w-[210px]">Client</th>
-                <th className="w-[150px]">Risk</th>
-                <th>Why</th>
-                <th className="w-[230px]">Do</th>
-                <th className="w-[110px] text-right" title="Unearned advance the carrier takes back if this policy dies (from the commission ledger)">Worth</th>
-                <th className="w-[100px] text-right">Next draft</th>
-                <th className="w-[150px] text-right"><span className="sr-only">Work the card</span></th>
+                <th>Client</th>
+                <th className="w-[130px]">Risk</th>
+                <th>Why, and the fix</th>
+                {showWorth && <th className="w-[96px] text-right" title="Unearned advance the carrier takes back if this policy dies (from the commission ledger)">Worth</th>}
+                {showDraft && <th className="w-[96px] text-right">Next draft</th>}
+                <th className="w-[148px] text-right"><span className="sr-only">Work the card</span></th>
               </tr>
             </thead>
-            <tbody>
-              {shown.rows.flatMap((card) => [
-                <tr key={card.key}>
-                  <td>
-                    <span className="block font-semibold text-foreground">{card.clientName ?? "No client linked"}</span>
-                    {card.phone ? <span className="block select-all font-medium tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(card.phone)}</span> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
-                    <Link href={`/app/policies/carrier/${card.carrierId}/${encodeURIComponent(card.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{card.carrierName} · {card.policyNumber}</Link>
-                    {card.agentName && <span className="block text-xs text-muted-foreground">{card.agentName}</span>}
-                    {queue.showOwners && card.owner && <span className="block text-xs text-muted-foreground">Owner: {card.owner.name}</span>}
-                  </td>
-                  <td>
-                    <span className={`inline-flex items-baseline gap-1 rounded-full border border-dashed border-current px-2.5 py-0.5 font-semibold tabular-nums ${BAND_INK[card.band]}`} title={breakdownText(card)}>
-                      {card.score} · {card.band}
-                    </span>
-                    <span className="mt-1 block text-xs text-muted-foreground" title={card.missing.length ? `Not known: ${card.missing.map((m) => MISSING_LABELS[m as Signal] ?? m).join(", ")}` : "Every signal is known"}>
-                      predicted · {card.confidence} confidence · based on {card.signalsAvailable} of 7 signals
-                    </span>
-                  </td>
-                  <td className="text-foreground">
-                    {card.failedFix && <span role="alert" className="mb-1 block font-semibold text-[var(--error-ink)]">Fix not in the file: {card.failedFix}</span>}
-                    {card.noBankAccount && <span className="mb-1 block text-xs text-muted-foreground">No bank account (from the paper-bill campaign): switching to bank payment isn&apos;t an option.</span>}
-                    {card.explanation}
-                    {card.openRequests.map((r) => <span key={r.type} className="mt-1 block text-xs text-muted-foreground">Fix in progress: {REQUEST_LABELS[r.type]} · {STATUS_LABELS[r.status].toLowerCase()}</span>)}
-                    {!card.incomeKnown && !readOnly && <button type="button" className="mt-1 block text-xs font-semibold text-[var(--accent-ink)] hover:underline" aria-expanded={incomeFor === card.key} onClick={() => setIncomeFor(incomeFor === card.key ? null : card.key)}>{incomeFor === card.key ? "Close income" : "Add income"}</button>}
-                  </td>
-                  <td>
-                    <ul className="m-0 grid list-none gap-1 p-0">
-                      {card.fixes.filter((f) => !(card.noBankAccount && f.action === "convert_to_draft")).map((f) => {
-                        const type = REQUEST_FOR_FIX[f.action];
-                        const busy = type ? card.openRequests.some((r) => r.type === type) : false;
-                        return (
-                          <li key={f.action} title={f.reason}>
-                            → {f.label}
-                            {type && canStartFix && !readOnly && !busy && <button type="button" className="ml-1 font-semibold text-[var(--accent-ink)] hover:underline" onClick={() => setFixing({ card, type })}>Start the fix</button>}
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </td>
-                  <td className="text-right tabular-nums">{money(card.atRiskCents) ?? <span className="text-muted-foreground" title="No advance from this carrier on file yet">Unknown</span>}</td>
-                  <td className="text-right tabular-nums">
-                    {card.nextDraftDays === null ? <span className="text-muted-foreground" title="The draft day is known only for sales written in the app">—</span> : card.nextDraftDays === 0 ? "today" : `${card.nextDraftDays} ${card.nextDraftDays === 1 ? "day" : "days"}`}
-                  </td>
-                  <td className="text-right">
-                    {!readOnly && (
-                      <span className="inline-flex flex-wrap justify-end gap-2">
-                        <Button type="button" onClick={() => setLogging(card)}>Log call</Button>
-                        <Button type="button" variant="ghost" onClick={() => setHolding(card)}>Snooze</Button>
+            <tbody className="m-seq">
+              {shown.rows.flatMap((card) => {
+                const fixes = fixesOf(card);
+                const first = fixes[0];
+                const firstType = first ? startable(card, first.action) : null;
+                const name = card.clientName ? personName(card.clientName) : "No client linked";
+                return [
+                  <tr key={card.key} className="m-row">
+                    <td>
+                      <span className="block max-w-[220px] truncate font-semibold text-foreground" title={queue.showOwners && card.owner ? `Owner: ${card.owner.name}` : undefined}>{name}</span>
+                      <span className="block max-w-[220px] truncate text-xs text-muted-foreground" title={`${card.carrierName} ${card.policyNumber}`}>
+                        {card.phone ? <span className="select-all tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(card.phone)}</span> : "No phone"}
+                        {" · "}
+                        <Link href={`/app/policies/carrier/${card.carrierId}/${encodeURIComponent(card.policyNumber)}`} className="hover:underline">{card.carrierName} {card.policyNumber}</Link>
                       </span>
-                    )}
-                  </td>
-                </tr>,
-                incomeFor === card.key ? (
-                  <tr key={`${card.key}-income`}>
-                    <td colSpan={7}>
-                      <div className="max-w-[520px] py-1">
-                        <IncomeCapture
-                          compact
-                          readUrl={`/api/app/retention/income?carrier_id=${card.carrierId}&policy_number=${encodeURIComponent(card.policyNumber)}`}
-                          save={(income) => fetch("/api/app/retention/income", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carrier_id: card.carrierId, policy_number: card.policyNumber, income }) })}
-                          onSaved={() => { setIncomeFor(null); router.refresh(); }}
-                        />
-                      </div>
                     </td>
-                  </tr>
-                ) : null,
-              ])}
+                    <td>
+                      <span className={`inline-flex items-baseline gap-1 rounded-full border border-dashed border-current px-2.5 py-0.5 text-xs font-semibold tabular-nums ${BAND_INK[card.band]}`} title={breakdownText(card)}>
+                        {card.score} · {card.band[0].toUpperCase() + card.band.slice(1)}
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground" title={`Predicted, ${card.confidence} confidence.${card.missing.length ? ` Not known: ${card.missing.map((m) => MISSING_LABELS[m as Signal] ?? m).join(", ")}.` : " Every signal is known."}`}>
+                        predicted · {card.signalsAvailable} of 7 signals
+                      </span>
+                    </td>
+                    <td className="text-foreground">
+                      <span className="line-clamp-2 whitespace-normal" title={card.explanation}>
+                        {card.failedFix && <span className="font-semibold text-[var(--error-ink)]">Fix not in the file: {card.failedFix}. </span>}
+                        {card.explanation}
+                      </span>
+                      {card.openRequests.length > 0 ? (
+                        <span className="mt-1 block truncate text-xs text-muted-foreground">In progress: {card.openRequests.map((r) => `${REQUEST_LABELS[r.type]} (${STATUS_LABELS[r.status].toLowerCase()})`).join(", ")}</span>
+                      ) : first ? (
+                        <span className="mt-1 flex min-w-0 items-baseline gap-2 text-xs">
+                          <span className="truncate text-[var(--accent-ink)]" title={first.reason}>→ {first.label}</span>
+                          {firstType && <button type="button" className="shrink-0 font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline" onClick={() => setFixing({ card, type: firstType })}>Start the fix</button>}
+                          {fixes.length > 1 && <span className="shrink-0 text-muted-foreground">+{fixes.length - 1} in ⋯</span>}
+                        </span>
+                      ) : null}
+                    </td>
+                    {showWorth && <td className="text-right tabular-nums">{money(card.atRiskCents) ?? <span className="text-muted-foreground" title="No advance from this carrier on file yet">—</span>}</td>}
+                    {showDraft && (
+                      <td className="text-right tabular-nums">
+                        {card.nextDraftDays === null ? <span className="text-muted-foreground" title="The draft day is known only for sales written in the app">—</span> : card.nextDraftDays === 0 ? "Today" : `${card.nextDraftDays} ${card.nextDraftDays === 1 ? "day" : "days"}`}
+                      </td>
+                    )}
+                    <td className="text-right">
+                      {!readOnly && (
+                        <span className="inline-flex items-center justify-end gap-1">
+                          <Button type="button" variant="outline" size="sm" onClick={() => setLogging(card)}>Log call</Button>
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${name}`} title="More"><MoreHorizontal aria-hidden="true" /></Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {fixes.slice(1).map((f) => {
+                                const type = startable(card, f.action);
+                                return type ? <DropdownMenuItem key={f.action} onSelect={() => setFixing({ card, type })}>Start: {f.label}</DropdownMenuItem> : null;
+                              })}
+                              {/* A known income can be corrected or removed too (live test 2026-11-02: there was no way back). */}
+                              <DropdownMenuItem onSelect={() => setIncomeFor(card.key)}>{card.incomeKnown ? "Change income" : "Add income"}</DropdownMenuItem>
+                              <DropdownMenuItem onSelect={() => setHolding(card)}>Snooze or dismiss</DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </span>
+                      )}
+                    </td>
+                  </tr>,
+                  incomeFor === card.key ? (
+                    <tr key={`${card.key}-income`}>
+                      <td colSpan={cols}>
+                        <div className="flex max-w-[640px] items-start gap-3 py-1">
+                          <div className="min-w-0 flex-1">
+                            <IncomeCapture
+                              compact
+                              readUrl={`/api/app/retention/income?carrier_id=${card.carrierId}&policy_number=${encodeURIComponent(card.policyNumber)}`}
+                              save={(income) => fetch("/api/app/retention/income", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carrier_id: card.carrierId, policy_number: card.policyNumber, income }) })}
+                              onSaved={() => { setIncomeFor(null); router.refresh(); }}
+                            />
+                          </div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => setIncomeFor(null)}>Close</Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null,
+                ];
+              })}
             </tbody>
           </table>
         )}
@@ -229,7 +288,7 @@ function LogDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => v
     setError(null);
     try {
       await post({ action: "log_attempt", carrier_id: card.carrierId, policy_number: card.policyNumber, outcome, action_taken: action, note: note.trim() || null, client_reason: outcome === "reached_refused" && clientReason ? clientReason : null });
-      notify.done("Logged. The card leaves the queue for the cooldown, and comes back sooner only if the risk rises.");
+      notify.done("Logged. It leaves the queue until the cooldown ends, or the risk rises.");
       onDone();
     } catch (e) {
       setError(e instanceof Error ? e.message : "That could not be saved.");
@@ -242,8 +301,8 @@ function LogDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => v
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Log the call to {card.clientName ?? card.policyNumber}</DialogTitle>
-          <DialogDescription>The risk ({card.score} · {card.band}) and the advance at risk are recorded as they are now.</DialogDescription>
+          <DialogTitle>Log the call to {card.clientName ? personName(card.clientName) : card.policyNumber}</DialogTitle>
+          <DialogDescription>Risk {card.score} · {card.band}, recorded as it is now.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <label htmlFor="save-outcome" className={labelClass}>
@@ -272,7 +331,7 @@ function LogDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => v
             Note
             <textarea id="save-note" className={`${field} min-h-20 py-2`} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
           </label>
-          {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+          {error && <Callout tone="error" title={error} />}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
@@ -308,8 +367,8 @@ function HoldDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => 
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
-          <DialogTitle>Take {card.clientName ?? card.policyNumber} off the queue</DialogTitle>
-          <DialogDescription>Say why: &quot;she gets paid in cash&quot; is worth knowing next time.</DialogDescription>
+          <DialogTitle>Take {card.clientName ? personName(card.clientName) : card.policyNumber} off the queue</DialogTitle>
+          <DialogDescription>Say why, so it is known next time.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <label htmlFor="hold-kind" className={labelClass}>
@@ -323,7 +382,7 @@ function HoldDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => 
             Reason
             <textarea id="hold-reason" className={`${field} min-h-20 py-2`} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
           </label>
-          {error && <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+          {error && <Callout tone="error" title={error} />}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

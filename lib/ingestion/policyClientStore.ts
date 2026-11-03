@@ -119,6 +119,16 @@ async function salesOf(tenantId: string, contactIds: string[], carrierId: string
   return out;
 }
 
+/** Close the policy's open "Policy with no sale" item as "It's an existing client", by this person, with their reason. */
+async function answerNoSaleItem(scope: { tenantId: string; userId: string }, carrierId: string, policyNumber: string, reason: string): Promise<void> {
+  const { data: open, error } = await db().from("queue_item").select("id").eq("tenant_id", scope.tenantId).eq("status", "open").eq("queue_type", "no_deal_flow").eq("subject_key", `policy:${carrierId}:${policyNumber}`);
+  if (error) { console.error("[policy-client] could not read the policy's open item", error.message); return; }
+  for (const item of (open ?? []) as Loose[]) {
+    const done = await db().rpc("resolve_queue_item", { p_tenant_id: scope.tenantId, p_item_id: item.id, p_user_id: scope.userId, p_status: "resolved", p_resolution: "link_existing_client", p_note: reason, p_ref: { via: "change_client" } });
+    if (done.error) console.error("[policy-client] could not close the answered item", item.id, done.error.message);
+  }
+}
+
 /**
  * Link the policy to another client. To the client's application with this carrier when there is one (so
  * the sale, its card and its money follow), else to the client. The old link is superseded, not removed.
@@ -156,6 +166,10 @@ export async function linkPolicyToClient(scope: { tenantId: string; userId: stri
   await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId: input.carrierId, policies: [input.policyNumber] });
   if (applicationId) await recordCarrierIssues(scope.tenantId, input.carrierId, [input.policyNumber]);
   await closeAnsweredItems(scope.tenantId, input.carrierId, [input.policyNumber]);
+  // With no sale to link to, the policy's "Policy with no sale" item asked which client it is; choosing one here
+  // is that item's "It's an existing client" answer, given by this person with a reason (E2E 2026-11-03: it
+  // stayed open after Change client).
+  if (!applicationId) await answerNoSaleItem(scope, input.carrierId, input.policyNumber, reason);
   // PIPELINE RULES EXTENSION SPOT: once lib/pipelineRules/ lands, undo the rule moves this policy made on the
   // old client's card and let the new client's card follow the rule once. Today no rule moves cards, and the
   // application's own stage sync moves the new client's card when recordCarrierIssues records the issue.

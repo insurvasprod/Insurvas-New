@@ -111,7 +111,8 @@ export async function getConsentEvidence(input: {
     applyEvidence(db.from("agent_leads").select(`id${embedSelect ? `, ${embedSelect}` : ""}`, { count: "exact", head: true }).eq("tenant_id", input.tenantId), filter);
 
   const [rows, leads, full, noIp, oldest, coverage] = await Promise.all([
-    list.order("created_at", { ascending: false }).range(page * pageSize, page * pageSize + pageSize - 1),
+    // id breaks ties (an imported list shares one created_at), so an export read page by page never repeats or skips a lead.
+    list.order("created_at", { ascending: false }).order("id", { ascending: false }).range(page * pageSize, page * pageSize + pageSize - 1),
     headCount("", "every"),
     headCount(artEmbed("full"), "full"),
     headCount(artEmbed("no_ip"), "no_ip"),

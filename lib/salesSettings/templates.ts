@@ -5,7 +5,8 @@ import { ApplicationError, SchemaPendingError, db, isMissingSchema, rows, type D
 import type { StoredDefinition } from "@/lib/applications/templates";
 
 import { auditSalesSetting } from "./audit";
-import { listedCarrierIds, namedCarriers, preferTenantCopies, productLines } from "./carriers";
+import { carrierIdsOn } from "@/lib/carriers/agency";
+import { namedCarriers, preferTenantCopies, productLines } from "./carriers";
 import { definitionProblem, definitionSchemaFor, type SalesTemplateKind, type SalesTemplateStatus } from "./templateSchemas";
 import type { TemplateRowView, TemplatesPayload } from "./views";
 
@@ -118,7 +119,8 @@ export async function listSalesTemplates(tenantId: string, kind: SalesTemplateKi
   const res = await client.from("sales_templates").select(COLUMNS).eq("kind", kind).or(`tenant_id.eq.${tenantId},and(tenant_id.is.null,status.eq.published)`).order("product_code").order("version", { ascending: false });
   if (res.error) fail(res.error, "Sales templates");
   const list = rows<Row>(res.data);
-  const carrierIds = await listedCarrierIds(tenantId);
+  // LA-0.4: the carriers switched on in Settings › Carriers, plus any a template already names.
+  const carrierIds = [...new Set([...await carrierIdsOn(tenantId), ...list.flatMap((r) => (r.carrier_id ? [r.carrier_id] : []))])];
   const productQuery = (columns: string) => client.from("carrier_products").select(columns).in("carrier_id", carrierIds).or(`tenant_id.is.null,tenant_id.eq.${tenantId}`).eq("is_active", true).order("name");
   const [names, carriers, first, lines] = await Promise.all([
     namesFor(list),

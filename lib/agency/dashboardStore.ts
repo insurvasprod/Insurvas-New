@@ -23,7 +23,7 @@ export type HealthAlert = { producerUserId: string; name: string; item: string; 
 export type AgencyDashboard = {
   period: { from: string; to: string };
   seats: { used: number; max: number | null };
-  producers: Array<ProducerScore & { balanceCents: number | null }>;
+  producers: Array<ProducerScore & { producerId: string | null; balanceCents: number | null }>;
   payableOutCents: number | null;
   negativeCount: number | null;
   overrideCents: number | null;
@@ -99,7 +99,9 @@ export async function readDashboard(context: { tenantId: string; userId: string;
   }
   alerts.sort((a, b) => a.daysLeft - b.daysLeft);
 
-  const rows = scores.rows.map((r) => ({ ...r, balanceCents: ledgerReady ? balance.get(r.producerUserId) ?? 0 : null }));
+  // The producer record's id rides along, so the dashboard's names open the record (2026-11-03).
+  const recordOf = new Map(visible.map((p) => [p.user_id, p.id]));
+  const rows = scores.rows.map((r) => ({ ...r, producerId: recordOf.get(r.producerUserId) ?? null, balanceCents: ledgerReady ? balance.get(r.producerUserId) ?? 0 : null }));
   return {
     period,
     seats: { used: Number(seatsUsed ?? 0), max: seatLimit ?? null },

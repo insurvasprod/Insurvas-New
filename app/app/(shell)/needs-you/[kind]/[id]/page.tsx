@@ -14,7 +14,24 @@ import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { ageLong, isItemId, isNeedsYouKind, isNeedsYouView, KIND_META, neighbours, viewItems, type NeedsYouView } from "@/lib/needsYou/kinds";
 import { needsYouScope } from "@/lib/needsYou/scope";
-import { loadItemPage, loadNeedsYou } from "@/lib/needsYou/store";
+import { loadItemPage, loadNeedsYou, type ItemDetail } from "@/lib/needsYou/store";
+
+const LINK = "font-medium text-[var(--accent-ink)] hover:underline";
+
+/**
+ * Round 3 (docs/la4/POLISH-ROUND3.md): what an item waits on that nobody here can save — a letter that is out,
+ * a word Insurvas maps — as one muted line under the title, not a card.
+ */
+function waitsLine(detail: ItemDetail) {
+  if (detail.kind === "money" && detail.finding.status === "disputed") {
+    return <>A letter is out: record what {detail.finding.carrierName} did in <Link href="/app/discrepancies" className={LINK}>Money › Discrepancies</Link>; it stays here until then.</>;
+  }
+  if (detail.kind === "status-word") {
+    const rows = detail.rows.toLocaleString("en-US");
+    return <>Waiting on Insurvas to map this word: its {rows} {detail.rows === 1 ? "row is" : "rows are"} held until then, and run once it is mapped.{detail.firstSeenFileId && <> <Link href={`/app/carrier-files/file/${detail.firstSeenFileId}`} className={LINK}>Open the file it first came in</Link>.</>}</>;
+  }
+  return null;
+}
 
 /**
  * Book of business › Needs you › one item (owner 2026-11-02, round 2; it was a side sheet): the same page for
@@ -59,6 +76,7 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
   const nextHref = place.next ? `${place.next.href}?from=${from}` : null;
   const meta = KIND_META[kind];
   const source = page.row ? `row ${page.row.rowNumber} of ${page.row.fileName}` : meta.source;
+  const waits = waitsLine(page.detail);
 
   return (
     <DataInPage
@@ -69,10 +87,11 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
     >
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
         <span>Waiting <strong className="font-semibold text-foreground">{ageLong(item.ageDays)}</strong></span>
-        <span>Owner <strong className="font-semibold text-foreground">{item.who}</strong></span>
+        <span className="inline-flex items-center gap-2">Owner <strong className="font-semibold text-foreground">{item.who}</strong>{item.escalated && <StatusChip tone="danger">Escalated</StatusChip>}</span>
         {place.index >= 0 && <span>Item <strong className="font-semibold tabular-nums text-foreground">{place.index + 1} of {place.total}</strong></span>}
         <span>{item.why}</span>
       </div>
+      {waits && <p className="m-0 text-sm text-muted-foreground">{waits}</p>}
       <ItemTabs
         decide={<ItemDecide detail={page.detail} nextHref={nextHref} listHref={listHref} readOnly={guard.entitlement.access === "read_only"} />}
         row={page.row ? <RowAsSentTable row={page.row} /> : null}

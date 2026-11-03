@@ -6,7 +6,7 @@ import { useTheme } from "@/components/theme-provider";
 import styles from "@/components/public/site-header.module.css";
 
 type ViewTransitionDocument = Document & {
-  startViewTransition?: (update: () => void) => { ready: Promise<void> };
+  startViewTransition?: (update: () => void) => { ready: Promise<void>; finished: Promise<void> };
 };
 
 /**
@@ -28,7 +28,10 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
   const toggle = (event: React.MouseEvent<HTMLButtonElement>) => {
     const root = document.documentElement;
     const next = root.classList.contains("dark") ? "light" : "dark";
+    // Every control carries a 120ms colour transition; without `theme-switching` each one fades from the
+    // old colours to the new inside the circle, so the colours jump as it lands (owner 2026-11-03).
     const apply = () => {
+      root.classList.add("theme-switching");
       root.classList.toggle("dark", next === "dark");
       root.style.colorScheme = next;
       setTheme(next);
@@ -38,6 +41,8 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (!doc.startViewTransition || reduced) {
       apply();
+      void root.offsetHeight; // commit the new colours before transitions come back
+      requestAnimationFrame(() => root.classList.remove("theme-switching"));
       return;
     }
 
@@ -47,16 +52,26 @@ export function ThemeSwitch({ compact = false }: { compact?: boolean }) {
     const radius = Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
     root.classList.add("theme-reveal");
     const transition = doc.startViewTransition(apply);
+    let circle: Animation | null = null;
     transition.ready
       .then(() => {
-        const animation = root.animate(
+        // `fill: both` holds the circle shut before it starts and open after it ends, for as long as the
+        // transition's pictures live.
+        circle = root.animate(
           { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${radius}px at ${x}px ${y}px)`] },
-          { duration: 650, easing: "cubic-bezier(.16, 1, .3, 1)", pseudoElement: "::view-transition-new(root)" },
+          { duration: 650, easing: "cubic-bezier(.16, 1, .3, 1)", fill: "both", pseudoElement: "::view-transition-new(root)" },
         );
-        return animation.finished;
       })
+      .catch(() => undefined);
+    // Only once the transition itself is over. Dropped when the circle's animation ended, the transition's
+    // last frame fell back to the default 380ms cross-fade of the old and new pictures — a dark-then-white
+    // blink as the reveal finished (owner 2026-11-03: "it flashes").
+    transition.finished
       .catch(() => undefined)
-      .finally(() => root.classList.remove("theme-reveal"));
+      .finally(() => {
+        circle?.cancel(); // its picture is gone; `fill: both` would otherwise keep it listed
+        root.classList.remove("theme-reveal", "theme-switching");
+      });
   };
 
   return (

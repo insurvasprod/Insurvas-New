@@ -1,5 +1,6 @@
 import "server-only";
 
+import { carrierFilter } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -50,7 +51,8 @@ export async function producersOverview(tenantId: string) {
     db().rpc("producer_balances", { p_tenant_id: tenantId, p_producer: null }),
     db().from("producer_split").select("*").eq("tenant_id", tenantId).order("effective_from", { ascending: false }),
     db().from("producer_payout_run").select("*").eq("tenant_id", tenantId).order("period_start", { ascending: false }).limit(500),
-    db().from("carriers").select("id, name").order("name"),
+    // LA-0.4: carriers switched on in Settings › Carriers, plus any a split already names.
+    db().from("producer_split").select("carrier_id").eq("tenant_id", tenantId).then((r: Loose) => carrierFilter(tenantId, ((r.data ?? []) as Loose[]).map((s) => s.carrier_id as string | null))),
     db().from("accounting_settings").select("producer_negative_policy, producer_recovery_cap_bp, producer_default_split_bp, producer_default_basis").eq("tenant_id", tenantId).maybeSingle(),
   ]);
   for (const r of [balances, splits, runs]) if (r.error) fail(r.error);
@@ -66,7 +68,7 @@ export async function producersOverview(tenantId: string) {
     people,
     splits: ((splits.data ?? []) as Loose[]).map((s) => ({ id: s.id as string, producerUserId: s.producer_user_id as string, carrierId: s.carrier_id as string | null, productCode: s.product_code as string | null, splitPctBp: Number(s.split_pct_bp), basis: s.basis as Basis, paysOn: s.pays_on as PaysOn, effectiveFrom: s.effective_from as string })),
     runs: ((runs.data ?? []) as Loose[]).map((r) => ({ ...toRun(r), producerUserId: r.producer_user_id as string })),
-    carriers: ((carriers.data ?? []) as Loose[]).map((c) => ({ id: c.id as string, name: c.name as string })),
+    carriers: (carriers as Array<{ id: string; name: string }>).map((c) => ({ id: c.id, name: c.name })),
     settings: (() => { const s = fromRow(settings.data); return { negativePolicy: s.producerNegativePolicy as string, recoveryCapBp: s.producerRecoveryCapBp, defaultSplitBp: s.producerDefaultSplitBp, defaultBasis: s.producerDefaultBasis as Basis }; })(),
   };
 }

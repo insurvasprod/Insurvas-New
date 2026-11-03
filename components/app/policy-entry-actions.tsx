@@ -22,8 +22,9 @@ const label = "text-sm font-semibold text-[var(--body)]";
  * for a carrier that sends no file. They were the header of the "Entered by hand" tab; since the
  * 2026-10-08 overlap merge there is one Policies list, and what is entered here joins it with the
  * source "Entered by hand". Owner and producer, as the API (POST /api/app/policies) admits.
+ * Add policy's carrier is one of the agency's, switched on in Settings › Carriers (LA-0.4).
  */
-export function PolicyEntryActions({ canAdd, blockedReason }: { canAdd: boolean; blockedReason?: string }) {
+export function PolicyEntryActions({ canAdd, blockedReason, carriers }: { canAdd: boolean; blockedReason?: string; carriers: string[] }) {
   const router = useRouter();
   const [mode, setMode] = useState<"manual" | "import" | null>(null);
   const [form, setForm] = useState<FormState>(blankForm);
@@ -74,7 +75,7 @@ export function PolicyEntryActions({ canAdd, blockedReason }: { canAdd: boolean;
 
   return (
     <>
-      <Button type="button" variant="outline" onClick={downloadTemplate}><Download aria-hidden="true" />Download CSV template</Button>
+      {/* Round 3: two header buttons; the CSV template lives where it is used, in the Import dialog. */}
       <Button type="button" variant="outline" disabled={!canAdd} title={canAdd ? undefined : blockedReason} onClick={() => { setForm(blankForm); setMode("manual"); }}><Plus aria-hidden="true" />Add policy</Button>
       <Button type="button" disabled={!canAdd} title={canAdd ? undefined : blockedReason} onClick={() => { setFile(null); setMode("import"); }}><Upload aria-hidden="true" />Import policies</Button>
 
@@ -91,6 +92,7 @@ export function PolicyEntryActions({ canAdd, blockedReason }: { canAdd: boolean;
               <span className="text-xs text-muted-foreground">Required: policy number, insured, carrier, product, effective date, annual premium.</span>
               <input type="file" accept=".csv,text/csv" onChange={(event) => void chooseFile(event)} className="text-sm" />
             </label>
+            <Button type="button" variant="outline" size="sm" className="justify-self-start" onClick={downloadTemplate}><Download aria-hidden="true" />Download the CSV template</Button>
             {file && <div className="flex flex-wrap gap-3 text-sm" role="status">
               <span className="inline-flex items-center gap-1.5 text-[var(--success-ink)]"><Check className="size-4" aria-hidden="true" />{file.rows.length} valid row{file.rows.length === 1 ? "" : "s"}</span>
               {file.errors.length > 0 && <span className="inline-flex items-center gap-1.5 text-[var(--error-ink)]"><AlertTriangle className="size-4" aria-hidden="true" />{file.errors.length} error{file.errors.length === 1 ? "" : "s"}</span>}
@@ -114,7 +116,7 @@ export function PolicyEntryActions({ canAdd, blockedReason }: { canAdd: boolean;
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="grid gap-1.5"><span className={label}>Policy number</span><input required className={field} value={form.policy_number} onChange={(event) => setForm({ ...form, policy_number: event.target.value })} /></label>
               <label className="grid gap-1.5"><span className={label}>Insured name</span><input required className={field} value={form.insured_name} onChange={(event) => setForm({ ...form, insured_name: event.target.value })} /></label>
-              <label className="grid gap-1.5"><span className={label}>Carrier</span><input required className={field} value={form.carrier} onChange={(event) => setForm({ ...form, carrier: event.target.value })} /></label>
+              <label className="grid gap-1.5"><span className={label}>Carrier</span><select required className={field} value={form.carrier} onChange={(event) => setForm({ ...form, carrier: event.target.value })}><option value="">{carriers.length ? "Choose a carrier" : "Add carriers in Settings › Carriers"}</option>{carriers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
               <label className="grid gap-1.5"><span className={label}>Product</span><input required placeholder="Term life" className={field} value={form.product} onChange={(event) => setForm({ ...form, product: event.target.value })} /></label>
               <label className="grid gap-1.5"><span className={label}>Effective date</span><input type="date" required className={field} value={form.effective_date} onChange={(event) => setForm({ ...form, effective_date: event.target.value })} /></label>
               <label className="grid gap-1.5"><span className={label}>Annual premium</span><input inputMode="decimal" required placeholder="1,200.00" className={`${field} tabular-nums`} value={form.annual_premium} onChange={(event) => setForm({ ...form, annual_premium: event.target.value })} /></label>

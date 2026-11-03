@@ -17,6 +17,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { DefaultChip, ResetToDefault } from "@/components/app/settings/defaults";
 import { Callout, Field, SettingsStack, control } from "@/components/app/settings/primitives";
 import { FieldDivider, FieldRow, FormSection, FormSections } from "@/components/app/settings/patterns";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,14 @@ const toDraft = (s: SalesSettings): Draft => ({
 });
 
 const DEFAULTS = toDraft(DEFAULT_SALES_SETTINGS);
+/** The keys this page owns, at their Insurvas defaults (Reset leaves the welcome pack and AI alone). */
+const DEFAULT_RULES = {
+  per1000Band: DEFAULT_SALES_SETTINGS.per1000Band,
+  appointmentBlocks: DEFAULT_SALES_SETTINGS.appointmentBlocks,
+  draftBufferDays: DEFAULT_SALES_SETTINGS.draftBufferDays,
+  requirementAgeingDays: DEFAULT_SALES_SETTINGS.requirementAgeingDays,
+  welcomePackAutoSend: DEFAULT_SALES_SETTINGS.welcomePackAutoSend,
+} satisfies Partial<SalesSettings>;
 const LABELS: Record<keyof Draft, string> = { min: "lowest per $1,000", max: "highest per $1,000", appointmentBlocks: "appointment check", buffer: "draft-date buffer", ageing: "requirement ageing", autoSend: "welcome pack" };
 
 const num = (text: string) => (text.trim() !== "" && Number.isFinite(Number(text)) ? Number(text) : NaN);
@@ -82,6 +91,7 @@ function Editor({ saved, canEdit, sample, save, reload }: {
   const changed = (Object.keys(original) as (keyof Draft)[]).filter((key) => draft[key] !== original[key]);
   const dirty = changed.length > 0;
   const atDefaults = (Object.keys(DEFAULTS) as (keyof Draft)[]).every((key) => draft[key] === DEFAULTS[key]);
+  const savedAtDefaults = (Object.keys(DEFAULTS) as (keyof Draft)[]).every((key) => original[key] === DEFAULTS[key]);
   const ro = !canEdit;
 
   async function onSave() {
@@ -135,10 +145,32 @@ function Editor({ saved, canEdit, sample, save, reload }: {
 
       {!sample && <div id="qa-product-bands" className="scroll-mt-24"><ProductBands agencyBand={band} /></div>}
 
-      {canEdit && !atDefaults && (
+      {/* Insurvas defaults (docs/settings/DEFAULTS.md): marked while every rule is the default;
+          otherwise the way back, which saves the defaults for these rules only. */}
+      {savedAtDefaults ? (atDefaults && (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="ghost" onClick={() => setDraft(DEFAULTS)}>Use Insurvas defaults</Button>
-          <span className="text-xs text-[var(--body)]">0.50–15.00, Warn, 3 days, 5 days, send automatically. Nothing changes until you save.</span>
+          <DefaultChip label="All Insurvas defaults" />
+          <span className="text-xs text-[var(--body)]">0.50–15.00, Warn, 3 days, 5 days, send automatically.</span>
+        </div>
+      )) : canEdit && (
+        <div className="flex flex-wrap items-center gap-3">
+          <ResetToDefault
+            what="the quote and QA rules"
+            kept="The welcome pack wording and the AI assistant switch are not touched."
+            disabled={saving || sample}
+            onReset={async () => {
+              try {
+                await save({ ...saved, ...DEFAULT_RULES });
+                setDraft(DEFAULTS);
+                notify.done("Quote and QA rules are back on the Insurvas defaults");
+                return true;
+              } catch (e) {
+                notify.block(e instanceof Error ? e.message : "That didn't save. Try again.");
+                return false;
+              }
+            }}
+          />
+          <span className="text-xs text-[var(--body)]">0.50–15.00, Warn, 3 days, 5 days, send automatically.</span>
         </div>
       )}
       </FormSections>

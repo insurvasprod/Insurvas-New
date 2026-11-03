@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, BookUser, BriefcaseBusiness, Calculator, Settings, ChevronsLeft, ChevronsRight, CircleAlert, CreditCard, FileChartColumn, Files, FileText, Import, Landmark, Link2, Receipt, ReceiptText, Scale, Split, UserRoundSearch, Wallet, ChartLine, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, BookUser, BriefcaseBusiness, Calculator, Settings, ChevronsLeft, ChevronsRight, CircleAlert, CreditCard, FileChartColumn, Files, FileText, Import, Landmark, Link2, Receipt, ReceiptText, Scale, Split, UserRoundSearch, Wallet, ChartLine, LifeBuoy, Wrench, HeartHandshake, ChartNoAxesCombined, ShieldCheck, PhoneOff, LockKeyhole, UserX, FileSearch, BadgeCheck, WalletCards, HandCoins, UserRoundCheck, Network, Banknote, type LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,15 @@ const ICONS: Record<string, LucideIcon> = {
   files: Files, import: Import, link: Link2, "circle-alert": CircleAlert, "book-user": BookUser, settings: Settings,
   "chart-line": ChartLine, landmark: Landmark, "receipt-text": ReceiptText, "credit-card": CreditCard, split: Split, wallet: Wallet, "file-chart-column": FileChartColumn,
   "file-text": FileText, receipt: Receipt, scale: Scale, "user-round-search": UserRoundSearch, "arrow-left-right": ArrowLeftRight, calculator: Calculator, "briefcase-business": BriefcaseBusiness,
+  "life-buoy": LifeBuoy, wrench: Wrench, "heart-handshake": HeartHandshake, "chart-no-axes-combined": ChartNoAxesCombined,
+  "shield-check": ShieldCheck, "phone-off": PhoneOff, "lock-keyhole": LockKeyhole, "user-x": UserX, "file-search": FileSearch, "badge-check": BadgeCheck,
+  // Team and the pages it handed on (2026-11-03): Producers, Hierarchy, Producer payouts, Commission splits.
+  "wallet-cards": WalletCards, "hand-coins": HandCoins, "user-round-check": UserRoundCheck, network: Network, banknote: Banknote,
 };
+
+/** Fired on window after something that waits on a person is decided where it is listed, so badges re-read. */
+export const STEP_COUNTS_EVENT = "step-rail:counts";
+export const refreshStepCounts = () => { if (typeof window !== "undefined") window.dispatchEvent(new Event(STEP_COUNTS_EVENT)); };
 
 /**
  * The menu of a merged page (Data in 2026-11-02, Accounting 2026-11-02), drawn as the Compliance and Reports
@@ -24,8 +32,10 @@ const ICONS: Record<string, LucideIcon> = {
  * an item takes the number down). On a phone it is one scrolling row of chips; on a wide screen it stands
  * the page's height and collapses to icons, remembered in `cookie`.
  */
-export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, initialCollapsed = false }: {
+export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, initialCollapsed = false, foot = null }: {
   label: string;
+  /** A page that is not a step but belongs to this menu (Compliance settings, for the owner), at the rail's foot. */
+  foot?: { label: string; href: string } | null;
   cookie: string;
   countsUrl?: string;
   waiting?: RailWaiting;
@@ -47,6 +57,13 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
     if (row && on && row.scrollWidth > row.clientWidth) row.scrollTo({ left: row.scrollLeft + on.getBoundingClientRect().left - row.getBoundingClientRect().left - 8 });
   }, [step]);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  // A decision made in place (no step change) asks for the counts again (STEP_COUNTS_EVENT).
+  const [asked, setAsked] = useState(0);
+  useEffect(() => {
+    const again = () => setAsked((n) => n + 1);
+    window.addEventListener(STEP_COUNTS_EVENT, again);
+    return () => window.removeEventListener(STEP_COUNTS_EVENT, again);
+  }, []);
   useEffect(() => {
     if (!countsUrl) return;
     const controller = new AbortController();
@@ -55,7 +72,7 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
       .then((body: { counts?: Record<string, number> } | null) => { if (body?.counts) setCounts(body.counts); })
       .catch(() => {});
     return () => controller.abort();
-  }, [step, countsUrl]);
+  }, [step, countsUrl, asked]);
 
   return (
     <nav aria-label={label} data-collapsed={collapsed ? "" : undefined} className={cn(
@@ -99,13 +116,26 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
           );
         })}
       </ul>
+      {foot && (
+        <Link
+          href={foot.href}
+          title={collapsed ? foot.label : undefined}
+          className={cn(
+            "mt-auto hidden items-center gap-3 rounded-xl bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] text-sm font-semibold text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:flex",
+            collapsed ? "justify-center p-2" : "px-3 py-2.5",
+          )}
+        >
+          <Settings className="size-4 shrink-0" aria-hidden="true" />
+          <span className={cn(collapsed && "sr-only")}>{foot.label}</span>
+        </Link>
+      )}
       <button
         type="button"
         onClick={toggle}
         aria-expanded={!collapsed}
         aria-label={collapsed ? `Show the ${label} menu` : `Collapse the ${label} menu`}
         title={collapsed ? "Show labels" : "Collapse"}
-        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:mt-auto lg:grid", collapsed ? "mx-auto" : "ml-auto")}
+        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", !foot && "lg:mt-auto", collapsed ? "mx-auto" : "ml-auto")}
       >
         {collapsed ? <ChevronsRight className="size-4" aria-hidden="true" /> : <ChevronsLeft className="size-4" aria-hidden="true" />}
       </button>

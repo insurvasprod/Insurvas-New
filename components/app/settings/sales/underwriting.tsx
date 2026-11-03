@@ -18,6 +18,7 @@
 import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, Check, Plus, Search } from "lucide-react";
 
+import { DefaultChip, ResetToDefault } from "@/components/app/settings/defaults";
 import { Callout, SettingsStack, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
@@ -72,7 +73,7 @@ function InUseLine({ use }: { use: ProductUse | undefined }) {
   if (use.general) {
     parts.push(
       <Fragment key="general">
-        {named(use.general)}{!use.general.tenantOwned && " (Insurvas default)"} for {use.carriers.length ? "every other carrier" : "every carrier"}
+        {named(use.general)}{!use.general.tenantOwned && <> <DefaultChip className="align-middle" /></>} for {use.carriers.length ? "every other carrier" : "every carrier"}
         {use.fallback && ` — ${use.productName} has none of its own`}
       </Fragment>,
     );
@@ -258,6 +259,10 @@ export function SalesUnderwritingTemplates() {
       return <Button type="button" variant="outline" size="sm" onClick={() => setDialog({ kind: "new", init: { ...newInit(), productCode: use.productCode } })}><Plus aria-hidden="true" />New {use.productName} template</Button>;
     }
     if (!use.general.tenantOwned) return <Button type="button" variant="outline" size="sm" onClick={() => { void copyPlatform(use.general!); }}>Make it yours</Button>;
+    // The agency's own general template is live and Insurvas has one for this line: the way back.
+    if (all.some((t) => !t.tenantOwned && t.status === "published" && t.productCode === use.productCode && !t.carrierId)) {
+      return <ResetToDefault variant="outline" what={`the ${use.productName} health questions`} kept={`Your versions are retired, not deleted: interviews already started keep theirs. Carrier-specific templates stay.`} onReset={() => api.resetToDefault(use.productCode, null)} />;
+    }
     return null;
   };
   /** A row's sub-line: what it is for, and for a draft that replaces a live version, which. */

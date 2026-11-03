@@ -22,7 +22,8 @@ export function PageAlertsProvider({ alerts, children }: { alerts: ReactNode; ch
   const value = useMemo(() => ({ alerts, claim }), [alerts, claim]);
   return (
     <AlertsContext.Provider value={value}>
-      {mounted && headers === 0 && alerts ? <div className="mb-4 flex flex-wrap gap-2">{alerts}</div> : null}
+      {/* The alerts raise bell notices and draw nothing (page-alert.tsx), so their slot takes no room. */}
+      {mounted && headers === 0 && alerts ? <div className="contents">{alerts}</div> : null}
       {children}
     </AlertsContext.Provider>
   );
@@ -34,5 +35,5 @@ export function PageAlertSlot() {
   const claim = context?.claim;
   useEffect(() => (claim ? claim() : undefined), [claim]);
   if (!context?.alerts) return null;
-  return <div className="flex min-w-[min(100%,20rem)] flex-1 flex-col gap-2">{context.alerts}</div>;
+  return <div className="contents">{context.alerts}</div>;
 }

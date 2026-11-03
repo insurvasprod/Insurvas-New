@@ -1,18 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
 
+import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { cardSurface } from "@/components/ui/card";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Field, control } from "@/components/ui/field";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { ViewTabs } from "@/components/ui/view-tabs";
 import {
   ACQUISITION_CONSEQUENCE,
   EXPENSE_CATEGORIES,
@@ -26,16 +31,20 @@ import type { ExpenseRow } from "@/lib/accounting/expenseStore";
 import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
-import { fieldLabel } from "@/components/ui/field";
 
 /**
  * LA-7.3 · everything spent that is not a lead. Recurring ones arrive each month unconfirmed and
  * book nothing until confirmed here — a cancelled subscription must not keep costing money in the
  * P&L because nobody said so. Each expense is acquisition or overhead, and the choice is shown.
+ *
+ * Foundation pass (2026-11-03): To confirm · Booked · Recurring are the step's tabs on the title line
+ * (`?view=`); adding an expense is its own page (/app/expenses/new); a row has one primary action and a
+ * menu, and every step that needs a reason or a date is a confirm pop-up.
  */
-type View = "confirm" | "booked" | "recurring";
+export type ExpenseView = "confirm" | "booked" | "recurring";
 const money = (cents: number) => formatCentsAsCurrency(cents);
 const today = () => new Date().toISOString().slice(0, 10);
+const plain = (cents: number) => formatCentsAsCurrency(cents).replace(/[$,]/g, "");
 
 async function send(url: string, init: RequestInit) {
   const res = await fetch(url, init);
@@ -44,16 +53,21 @@ async function send(url: string, init: RequestInit) {
   return body;
 }
 
-function NewExpense({ defaults, onClose, onSaved }: { defaults: Record<ExpenseCategory, boolean>; onClose: () => void; onSaved: () => void }) {
-  const [f, setF] = useState({ category: "software" as ExpenseCategory, vendor: "", description: "", amount: "", on: today(), recurrence: "one_off" as Recurrence, end: "", acq: "default", paidOn: "", method: "card" });
+/** /app/expenses/new: one form, Discard and Save, and a leave guard. */
+export function ExpenseForm({ defaults }: { defaults: Record<ExpenseCategory, boolean> }) {
+  const router = useRouter();
+  const blank = { category: "software" as ExpenseCategory, vendor: "", description: "", amount: "", on: today(), recurrence: "one_off" as Recurrence, end: "", acq: "default", paidOn: "", method: "card" };
+  const [f, setF] = useState(blank);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const scope = useRef<HTMLFormElement>(null);
   const set = (k: keyof typeof f, v: string) => setF((cur) => ({ ...cur, [k]: v }));
   const fallback = defaults[f.category];
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
+  const dirty = Boolean(f.vendor || f.amount || f.description);
+  const save = async (): Promise<boolean> => {
     const cents = parseDollarsToCents(f.amount);
-    if (cents === null || cents <= 0) { setError("Enter the amount in dollars and cents."); return; }
+    if (cents === null || cents <= 0) { setError("Enter the amount in dollars and cents."); return false; }
+    if (!f.vendor.trim()) { setError("Say who it was paid to."); return false; }
     setBusy(true);
     setError(null);
     try {
@@ -66,109 +80,116 @@ function NewExpense({ defaults, onClose, onSaved }: { defaults: Record<ExpenseCa
         }),
       });
       notify.done(f.recurrence === "one_off" ? "Expense booked" : `Recurring expense set${body.generated ? `: ${body.generated} month${body.generated === 1 ? "" : "s"} to confirm` : ""}`);
-      onSaved();
+      setF(blank);
+      router.push(f.recurrence === "one_off" ? "/app/expenses?view=booked" : body.generated ? "/app/expenses" : "/app/expenses?view=recurring");
+      router.refresh();
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "That didn't save");
+      return false;
     } finally {
       setBusy(false);
     }
   };
-  // The shared stacked label (foundation v3: 13/500 over the control).
-  const field = fieldLabel;
+  const submit = (e: FormEvent) => { e.preventDefault(); void save(); };
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="sm:max-w-[640px]">
-        <form onSubmit={submit} className="flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>Add an expense</DialogTitle>
-            <DialogDescription>A one-off is booked as you save it. A recurring one arrives each period for you to confirm.</DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className={field}>Category<select className={toolbarControl} value={f.category} onChange={(e) => set("category", e.target.value)}>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>)}</select></label>
-            <label className={field}>Paid to<input className={toolbarControl} required maxLength={120} value={f.vendor} onChange={(e) => set("vendor", e.target.value)} placeholder="e.g. the dialer company" /></label>
-            <label className={field}>Amount ($)<input className={toolbarControl} required inputMode="decimal" value={f.amount} onChange={(e) => set("amount", e.target.value)} /></label>
-            <label className={field}>{f.recurrence === "one_off" ? "For the period of" : "First period"}<input type="date" className={toolbarControl} required value={f.on} onChange={(e) => set("on", e.target.value)} /></label>
-            <label className={field}>Repeats<select className={toolbarControl} value={f.recurrence} onChange={(e) => set("recurrence", e.target.value)}>{RECURRENCES.map((r) => <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></label>
-            {f.recurrence !== "one_off" ? <label className={field}>Ends (optional)<input type="date" className={toolbarControl} value={f.end} onChange={(e) => set("end", e.target.value)} /></label> : <label className={field}>Paid on (optional)<input type="date" className={toolbarControl} value={f.paidOn} onChange={(e) => set("paidOn", e.target.value)} /></label>}
-            <label className={`${field} sm:col-span-2`}>Counts as
-              <select className={toolbarControl} value={f.acq} onChange={(e) => set("acq", e.target.value)}>
-                <option value="default">{fallback ? "Acquisition" : "Overhead"} — the default for {EXPENSE_CATEGORY_LABELS[f.category].toLowerCase()}</option>
-                <option value={fallback ? "no" : "yes"}>{fallback ? "Overhead" : "Acquisition"} — your choice for this one</option>
-              </select>
-              <span className="text-xs text-muted-foreground">{ACQUISITION_CONSEQUENCE}</span>
-            </label>
-            <label className={`${field} sm:col-span-2`}>Note<input className={toolbarControl} maxLength={500} value={f.description} onChange={(e) => set("description", e.target.value)} /></label>
-          </div>
-          {error ? <p role="alert" className="text-sm text-[var(--error-ink)]">{error}</p> : null}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={busy}>{busy ? "Saving…" : f.recurrence === "one_off" ? "Book expense" : "Set up"}</Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <form ref={scope} onSubmit={submit} className={`${cardSurface} flex flex-col gap-4 p-5`}>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <Field label="Category" htmlFor="exp-category"><select id="exp-category" className={control} value={f.category} onChange={(e) => set("category", e.target.value)}>{EXPENSE_CATEGORIES.map((c) => <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>)}</select></Field>
+        <Field label="Paid to" htmlFor="exp-vendor" required><input id="exp-vendor" className={control} required maxLength={120} value={f.vendor} onChange={(e) => set("vendor", e.target.value)} placeholder="e.g. the dialer company" /></Field>
+        <Field label="Amount ($)" htmlFor="exp-amount" required><input id="exp-amount" className={control} required inputMode="decimal" value={f.amount} onChange={(e) => set("amount", e.target.value)} /></Field>
+        <Field label="Repeats" htmlFor="exp-repeats" hint={f.recurrence === "one_off" ? "Booked as you save it." : "Each period arrives unconfirmed for you to confirm."}><select id="exp-repeats" className={control} value={f.recurrence} onChange={(e) => set("recurrence", e.target.value)}>{RECURRENCES.map((r) => <option key={r} value={r}>{RECURRENCE_LABELS[r]}</option>)}</select></Field>
+        <Field label={f.recurrence === "one_off" ? "For the period of" : "First period"} htmlFor="exp-on" required><input id="exp-on" type="date" className={control} required value={f.on} onChange={(e) => set("on", e.target.value)} /></Field>
+        {f.recurrence !== "one_off"
+          ? <Field label="Ends (optional)" htmlFor="exp-end"><input id="exp-end" type="date" className={control} value={f.end} onChange={(e) => set("end", e.target.value)} /></Field>
+          : <Field label="Paid on (optional)" htmlFor="exp-paid"><input id="exp-paid" type="date" className={control} value={f.paidOn} onChange={(e) => set("paidOn", e.target.value)} /></Field>}
+        <Field label="Counts as" htmlFor="exp-acq" hint={ACQUISITION_CONSEQUENCE} className="sm:col-span-2">
+          <select id="exp-acq" className={control} value={f.acq} onChange={(e) => set("acq", e.target.value)}>
+            <option value="default">{fallback ? "Acquisition" : "Overhead"} — the default for {EXPENSE_CATEGORY_LABELS[f.category].toLowerCase()}</option>
+            <option value={fallback ? "no" : "yes"}>{fallback ? "Overhead" : "Acquisition"} — your choice for this one</option>
+          </select>
+        </Field>
+        <Field label="Note" htmlFor="exp-note" className="xl:col-span-1 sm:col-span-2"><input id="exp-note" className={control} maxLength={500} value={f.description} onChange={(e) => set("description", e.target.value)} /></Field>
+      </div>
+      {error ? <Callout tone="error" title={error} /> : null}
+      <div className="flex justify-end gap-2">
+        <Button type="button" variant="outline" asChild><Link href="/app/expenses">Discard</Link></Button>
+        <Button type="submit" disabled={busy}>{busy ? "Saving…" : f.recurrence === "one_off" ? "Book expense" : "Set up"}</Button>
+      </div>
+      <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setF(blank)} what="this expense" />
+    </form>
   );
 }
 
-/** The view an expense is listed under. */
-const viewOf = (e: ExpenseRow): View => (e.status === "unconfirmed" ? "confirm" : e.status === "template" ? "recurring" : "booked");
-
-export function ExpensesBoard({ expenses, defaults, readOnly, openId = null }: { expenses: ExpenseRow[]; defaults: Record<ExpenseCategory, boolean>; readOnly: boolean; openId?: string | null }) {
+/** The step's header: Add an expense, and Confirm all on the To confirm tab. */
+export function ExpenseActions({ unconfirmedIds, view, readOnly }: { unconfirmedIds: string[]; view: ExpenseView; readOnly: boolean }) {
   const router = useRouter();
-  const unconfirmed = expenses.filter((e) => e.status === "unconfirmed");
-  // ?open={id} (a P&L drill-through) opens the view and page holding that expense, and marks its row.
-  const target = openId ? expenses.find((e) => e.id === openId) ?? null : null;
-  const [view, setView] = useState<View>(target ? viewOf(target) : unconfirmed.length ? "confirm" : "booked");
-  const [q, setQ] = useState("");
-  const pageSize = useFittingPageSize(480, 45);
-  // Until someone pages, the page follows the target row, so a re-fitted page size still shows it.
-  const [picked, setPage] = useState<number | null>(null);
-  const targetIndex = useMemo(() => {
-    if (!target) return 0;
-    const list = target.status === "unconfirmed" ? unconfirmed : target.status === "template" ? expenses.filter((e) => e.status === "template") : expenses.filter((e) => e.status === "confirmed" || e.status === "void");
-    return Math.max(list.findIndex((e) => e.id === target.id), 0);
-  }, [target, unconfirmed, expenses]);
-  const page = picked ?? Math.floor(targetIndex / pageSize) + 1;
-  useEffect(() => {
-    if (target) document.getElementById(`expense-${target.id}`)?.scrollIntoView({ block: "center" });
-  }, [target]);
-  const [creating, setCreating] = useState(false);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [voiding, setVoiding] = useState<{ id: string; reason: string } | null>(null);
-  const [paying, setPaying] = useState<{ id: string; on: string; method: string } | null>(null);
-  const [editing, setEditing] = useState<{ id: string; amount: string; end: string } | null>(null);
-  const [refreshing, startRefresh] = useTransition();
-  const refresh = () => startRefresh(() => router.refresh());
-
-  const act = async (id: string, payload: Record<string, unknown>, done: string, method = "POST") => {
-    setBusy(id);
-    try {
-      await send(`/api/app/accounting/expenses/${id}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      notify.done(done);
-      setVoiding(null);
-      setPaying(null);
-      setEditing(null);
-      refresh();
-    } catch (err) {
-      notify.fail(err instanceof Error ? err.message : "That didn't save");
-    } finally {
-      setBusy(null);
-    }
-  };
+  const [busy, setBusy] = useState(false);
+  if (readOnly) return null;
   const confirmAll = async () => {
-    setBusy("all");
+    setBusy(true);
     let n = 0;
     try {
-      for (const e of unconfirmed) {
-        await send(`/api/app/accounting/expenses/${e.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "confirm" }) });
+      for (const id of unconfirmedIds) {
+        await send(`/api/app/accounting/expenses/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "confirm" }) });
         n += 1;
       }
       notify.done(`${n} expense${n === 1 ? "" : "s"} confirmed`);
     } catch (err) {
       notify.fail(err instanceof Error ? `${n} confirmed, then: ${err.message}` : "That didn't save");
     } finally {
-      setBusy(null);
+      setBusy(false);
+      router.refresh();
+    }
+  };
+  return (
+    <>
+      {view === "confirm" && unconfirmedIds.length ? <Button variant="outline" disabled={busy} onClick={() => void confirmAll()}>Confirm all {unconfirmedIds.length}</Button> : null}
+      <Button asChild><Link href="/app/expenses/new">Add an expense</Link></Button>
+    </>
+  );
+}
+
+type Asking = { kind: "void" | "paid" | "edit"; row: ExpenseRow; reason: string; on: string; method: string; reference: string; amount: string; end: string };
+
+export function ExpensesBoard({ expenses, view, readOnly, openId = null }: { expenses: ExpenseRow[]; view: ExpenseView; readOnly: boolean; openId?: string | null }) {
+  const router = useRouter();
+  const unconfirmed = expenses.filter((e) => e.status === "unconfirmed");
+  // ?open={id} (a P&L drill-through) opens the view and page holding that expense, and marks its row.
+  const target = openId ? expenses.find((e) => e.id === openId) ?? null : null;
+  const [q, setQ] = useState("");
+  const pageSize = useFittingPageSize(480, 45);
+  const templates = expenses.filter((e) => e.status === "template");
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    const base = view === "confirm" ? expenses.filter((e) => e.status === "unconfirmed") : view === "recurring" ? expenses.filter((e) => e.status === "template") : expenses.filter((e) => e.status === "confirmed" || e.status === "void");
+    return base.filter((e) => !needle || e.vendorName.toLowerCase().includes(needle) || (e.description ?? "").toLowerCase().includes(needle));
+  }, [expenses, view, q]);
+  // Until someone pages, the page follows the target row, so a re-fitted page size still shows it.
+  const [picked, setPage] = useState<number | null>(null);
+  const targetIndex = target ? Math.max(rows.findIndex((e) => e.id === target.id), 0) : 0;
+  const page = picked ?? Math.floor(targetIndex / pageSize) + 1;
+  useEffect(() => {
+    if (target) document.getElementById(`expense-${target.id}`)?.scrollIntoView({ block: "center" });
+  }, [target]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [asking, setAsking] = useState<Asking | null>(null);
+  const [refreshing, startRefresh] = useTransition();
+  const refresh = () => startRefresh(() => router.refresh());
+  const fileFor = useRef<string | null>(null);
+  const picker = useRef<HTMLInputElement>(null);
+
+  const act = async (id: string, payload: Record<string, unknown>, done: string, method = "POST") => {
+    setBusy(id);
+    try {
+      await send(`/api/app/accounting/expenses/${id}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      notify.done(done);
+      setAsking(null);
       refresh();
+    } catch (err) {
+      notify.fail(err instanceof Error ? err.message : "That didn't save");
+    } finally {
+      setBusy(null);
     }
   };
   const upload = async (id: string, file: File) => {
@@ -185,97 +206,117 @@ export function ExpensesBoard({ expenses, defaults, readOnly, openId = null }: {
       setBusy(null);
     }
   };
+  const ask = (kind: Asking["kind"], row: ExpenseRow) => setAsking({ kind, row, reason: "", on: today(), method: "card", reference: "", amount: plain(row.amountCents), end: row.recurrenceEndOn ?? "" });
+  const confirmAsked = () => {
+    if (!asking) return;
+    const { row } = asking;
+    if (asking.kind === "void") void act(row.id, { action: "void", reason: asking.reason }, row.status === "confirmed" ? "Voided: the cost is reversed" : "Skipped");
+    else if (asking.kind === "paid") void act(row.id, { action: "paid", paid_on: asking.on, method: asking.method, reference: asking.reference.trim() || null }, "Marked paid");
+    else void act(row.id, { amount_cents: parseDollarsToCents(asking.amount), ...(row.status === "template" ? { recurrence_end_on: asking.end || null } : {}) }, row.status === "template" ? "Saved: future months only" : "Saved", "PATCH");
+  };
 
   const month = today().slice(0, 7);
   const bookedThisMonth = expenses.filter((e) => e.status === "confirmed" && e.incurredOn.startsWith(month));
   const acq = bookedThisMonth.filter((e) => e.isAcquisitionCost).reduce((s, e) => s + e.amountCents, 0);
   const over = bookedThisMonth.filter((e) => !e.isAcquisitionCost).reduce((s, e) => s + e.amountCents, 0);
-  const templates = expenses.filter((e) => e.status === "template");
-  const rows = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const base = view === "confirm" ? unconfirmed : view === "recurring" ? templates : expenses.filter((e) => e.status === "confirmed" || e.status === "void");
-    return base.filter((e) => !needle || e.vendorName.toLowerCase().includes(needle) || (e.description ?? "").toLowerCase().includes(needle));
-  }, [expenses, unconfirmed, templates, view, q]);
   const shown = paginate(rows, page, pageSize);
 
   return (
     <>
       <StatStrip label="Expense totals">
-        <StatTile label="To confirm" value={String(unconfirmed.length)} valueTone={unconfirmed.length ? "warning" : undefined} footnote={money(unconfirmed.reduce((s, e) => s + e.amountCents, 0))} />
-        <StatTile label="Acquisition this month" value={money(acq)} footnote="in cost per policy" />
-        <StatTile label="Overhead this month" value={money(over)} footnote="net profit only" />
-        <StatTile label="Recurring" value={String(templates.length)} footnote="templates" />
+        <StatTile label="To confirm" value={String(unconfirmed.length)} valueTone={unconfirmed.length ? "warning" : undefined} footnote={money(unconfirmed.reduce((s, e) => s + e.amountCents, 0))} href="/app/expenses" />
+        <StatTile label="Acquisition this month" value={money(acq)} footnote="in cost per policy" href="/app/expenses?view=booked" />
+        <StatTile label="Overhead this month" value={money(over)} footnote="net profit only" href="/app/expenses?view=booked" />
+        <StatTile label="Recurring" value={String(templates.length)} footnote="templates" href="/app/expenses?view=recurring" />
       </StatStrip>
-      <ViewTabs
-        label="Expense views"
-        value={view}
-        onChange={(k) => { setView(k); setPage(1); }}
-        tabs={[
-          { key: "confirm", label: "To confirm", count: unconfirmed.length, tone: "danger" },
-          { key: "booked", label: "Booked" },
-          { key: "recurring", label: "Recurring", count: templates.length },
-        ]}
-      />
       <TableCard
         toolbar={
-          <DataToolbar actions={<>{view === "confirm" && unconfirmed.length && !readOnly ? <Button variant="outline" disabled={busy !== null} onClick={() => void confirmAll()}>Confirm all {unconfirmed.length}</Button> : null}{!readOnly ? <Button onClick={() => setCreating(true)}>Add an expense</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>}>
+          <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
             <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search who it was paid to" />
           </DataToolbar>
         }
-        footer={rows.length ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="expenses" onPage={setPage} /> : undefined}
+        footer={rows.length > pageSize ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="expenses" onPage={setPage} /> : undefined}
       >
         {expenses.length === 0 ? (
-          <EmptyState title="No expenses yet" hint="Add the dialer, the CRM, the lead spend: without them cost per policy is too low." action={!readOnly ? <Button onClick={() => setCreating(true)}>Add an expense</Button> : undefined} />
+          <EmptyState title="No expenses yet" hint="Add the dialer, the CRM, the lead spend: without them cost per policy is too low." action={!readOnly ? <Button asChild><Link href="/app/expenses/new">Add an expense</Link></Button> : undefined} />
         ) : rows.length === 0 ? (
-          view === "confirm" && !q ? <EmptyState title="Nothing to confirm" hint="This period's recurring expenses are all confirmed." /> : <NoMatches noun="expenses" onClear={() => setQ("")} />
+          q ? <NoMatches noun="expenses" onClear={() => setQ("")} />
+            : view === "confirm" ? <EmptyState title="Nothing to confirm" hint="This period's recurring expenses are all confirmed." />
+            : view === "recurring" ? <EmptyState title="No recurring expenses" hint="Set one up and each period arrives here to confirm." action={!readOnly ? <Button asChild variant="outline"><Link href="/app/expenses/new">Add an expense</Link></Button> : undefined} />
+            : <EmptyState title="Nothing booked yet" hint="Confirmed and one-off expenses are listed here." />
         ) : (
-          <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
-            <thead><tr><th>Paid to</th><th className="w-[120px]">{view === "recurring" ? "From" : "Period"}</th><th className="w-[120px] text-right">Amount</th><th className="w-[200px]">Counts as</th><th className="w-[160px]">{view === "recurring" ? "Repeats" : "Status"}</th><th className="w-[260px] text-right" /></tr></thead>
+          <table className="portal-lead-table w-full min-w-190 text-left text-sm">
+            <thead><tr><th>Paid to</th><th className="w-26">{view === "recurring" ? "From" : "Period"}</th><th className="w-26 text-right">Amount</th><th className="w-36">Counts as</th><th className="w-36">{view === "recurring" ? "Repeats" : "Status"}</th><th className="w-32 text-right"><span className="sr-only">Actions</span></th></tr></thead>
             <tbody>
-              {shown.rows.map((e) => (
-                <tr key={e.id} id={`expense-${e.id}`} aria-current={e.id === target?.id ? "true" : undefined} className={e.id === target?.id ? "bg-[var(--surface-alt)]" : undefined}>
-                  <td><div className="font-medium">{e.vendorName}</div><div className="text-xs text-muted-foreground">{EXPENSE_CATEGORY_LABELS[e.category]}{e.description ? ` · ${e.description}` : ""}{e.hasReceipt ? "" : e.status === "confirmed" ? " · no receipt" : ""}</div></td>
-                  <td>{e.incurredOn}{e.status === "template" && e.recurrenceEndOn ? <div className="text-xs text-muted-foreground">until {e.recurrenceEndOn}</div> : null}</td>
-                  <td className="text-right">{money(e.amountCents)}</td>
-                  <td>
-                    <select aria-label="Acquisition or overhead" className={toolbarControl} disabled={readOnly || e.status === "void" || busy === e.id} value={e.isAcquisitionCost ? "yes" : "no"}
-                      onChange={(ev) => void act(e.id, { action: "classify", is_acquisition_cost: ev.target.value === "yes" }, "Saved")}>
-                      <option value="yes">Acquisition</option><option value="no">Overhead</option>
-                    </select>
-                    {e.acquisitionOverridden ? <div className="text-xs text-muted-foreground">Overrides the category default</div> : null}
-                  </td>
-                  <td>
-                    {e.status === "template" ? RECURRENCE_LABELS[e.recurrence]
-                      : e.status === "unconfirmed" ? <StatusChip tone="warning">Not booked</StatusChip>
-                      : e.status === "void" ? <StatusChip tone="neutral">Void</StatusChip>
-                      : <StatusChip tone={e.paidOn ? "good" : "info"}>{e.paidOn ? `Paid ${e.paidOn}` : "Booked, unpaid"}</StatusChip>}
-                  </td>
-                  <td className="text-right">
-                    {readOnly ? null : voiding?.id === e.id ? (
-                      <span className="inline-flex gap-1"><input aria-label="Why" className={`${toolbarControl} w-36`} placeholder="Why?" value={voiding.reason} onChange={(ev) => setVoiding({ id: e.id, reason: ev.target.value })} /><Button size="sm" disabled={!voiding.reason.trim() || busy === e.id} onClick={() => void act(e.id, { action: "void", reason: voiding.reason }, e.status === "confirmed" ? "Voided: the cost is reversed" : "Skipped")}>Void</Button><Button size="sm" variant="ghost" onClick={() => setVoiding(null)}>×</Button></span>
-                    ) : paying?.id === e.id ? (
-                      <span className="inline-flex gap-1"><input aria-label="Paid on" type="date" className={toolbarControl} value={paying.on} onChange={(ev) => setPaying({ ...paying, on: ev.target.value })} /><select aria-label="Method" className={toolbarControl} value={paying.method} onChange={(ev) => setPaying({ ...paying, method: ev.target.value })}>{PAID_METHODS.map((m) => <option key={m} value={m}>{PAID_METHOD_LABELS[m]}</option>)}</select><Button size="sm" disabled={busy === e.id} onClick={() => void act(e.id, { action: "paid", paid_on: paying.on, method: paying.method, reference: null }, "Marked paid")}>Save</Button><Button size="sm" variant="ghost" onClick={() => setPaying(null)}>×</Button></span>
-                    ) : editing?.id === e.id ? (
-                      <span className="inline-flex gap-1"><input aria-label="Amount" className={`${toolbarControl} w-24`} inputMode="decimal" value={editing.amount} onChange={(ev) => setEditing({ ...editing, amount: ev.target.value })} />{e.status === "template" ? <input aria-label="Ends" type="date" className={toolbarControl} value={editing.end} onChange={(ev) => setEditing({ ...editing, end: ev.target.value })} /> : null}<Button size="sm" disabled={busy === e.id || parseDollarsToCents(editing.amount) === null} onClick={() => void act(e.id, { amount_cents: parseDollarsToCents(editing.amount), ...(e.status === "template" ? { recurrence_end_on: editing.end || null } : {}) }, e.status === "template" ? "Saved: future months only" : "Saved", "PATCH")}>Save</Button><Button size="sm" variant="ghost" onClick={() => setEditing(null)}>×</Button></span>
-                    ) : (
-                      <span className="inline-flex flex-wrap justify-end gap-1">
-                        {e.status === "unconfirmed" ? <Button size="sm" disabled={busy === e.id} onClick={() => void act(e.id, { action: "confirm" }, "Booked")}>Confirm</Button> : null}
-                        {e.status === "confirmed" && !e.paidOn ? <Button size="sm" variant="outline" onClick={() => setPaying({ id: e.id, on: today(), method: "card" })}>Mark paid</Button> : null}
-                        {e.status === "template" || e.status === "unconfirmed" ? <Button size="sm" variant="outline" onClick={() => setEditing({ id: e.id, amount: formatCentsAsCurrency(e.amountCents).replace(/[$,]/g, ""), end: e.recurrenceEndOn ?? "" })}>Edit</Button> : null}
-                        {e.status === "confirmed" || e.status === "unconfirmed" ? <Button size="sm" variant="outline" onClick={() => setVoiding({ id: e.id, reason: "" })}>{e.status === "unconfirmed" ? "Skip" : "Void"}</Button> : null}
-                        {e.status === "confirmed" ? (e.hasReceipt
-                          ? <a className="inline-flex h-9 items-center px-2 text-sm underline" href={`/api/app/accounting/expenses/${e.id}`} target="_blank" rel="noreferrer">Receipt</a>
-                          : <label className="inline-flex h-9 cursor-pointer items-center px-2 text-sm underline">Receipt<input type="file" className="sr-only" accept=".pdf,.png,.jpg,.jpeg" onChange={(ev) => { const file = ev.target.files?.[0]; if (file) void upload(e.id, file); ev.target.value = ""; }} /></label>) : null}
+              {shown.rows.map((e) => {
+                const primary = e.status === "unconfirmed" ? <Button size="sm" disabled={busy === e.id} onClick={() => void act(e.id, { action: "confirm" }, "Booked")}>Confirm</Button>
+                  : e.status === "confirmed" && !e.paidOn ? <Button size="sm" variant="outline" onClick={() => ask("paid", e)}>Mark paid</Button>
+                  : null;
+                return (
+                  <tr key={e.id} id={`expense-${e.id}`} aria-current={e.id === target?.id ? "true" : undefined} className={e.id === target?.id ? "bg-[var(--surface-alt)]" : undefined}>
+                    <td className="min-w-[180px]"><div className="max-w-52 truncate font-medium">{e.vendorName}</div><div className="max-w-52 truncate text-xs text-muted-foreground" title={[EXPENSE_CATEGORY_LABELS[e.category], e.description].filter(Boolean).join(" · ")}>{EXPENSE_CATEGORY_LABELS[e.category]}{e.description ? ` · ${e.description}` : ""}{e.hasReceipt ? "" : e.status === "confirmed" ? " · no receipt" : ""}</div></td>
+                    <td>{e.incurredOn}{e.status === "template" && e.recurrenceEndOn ? <div className="text-xs text-muted-foreground">until {e.recurrenceEndOn}</div> : null}</td>
+                    <td className="text-right tabular-nums">{money(e.amountCents)}</td>
+                    <td>
+                      <select aria-label="Acquisition or overhead" className={toolbarControl} disabled={readOnly || e.status === "void" || busy === e.id} value={e.isAcquisitionCost ? "yes" : "no"}
+                        onChange={(ev) => void act(e.id, { action: "classify", is_acquisition_cost: ev.target.value === "yes" }, "Saved")}>
+                        <option value="yes">Acquisition</option><option value="no">Overhead</option>
+                      </select>
+                      {e.acquisitionOverridden ? <div className="text-xs text-muted-foreground">Overrides the category default</div> : null}
+                    </td>
+                    <td>
+                      {e.status === "template" ? RECURRENCE_LABELS[e.recurrence]
+                        : e.status === "unconfirmed" ? <StatusChip tone="warning">Not booked</StatusChip>
+                        : e.status === "void" ? <StatusChip tone="neutral">Void</StatusChip>
+                        : <StatusChip tone={e.paidOn ? "good" : "info"}>{e.paidOn ? `Paid ${e.paidOn}` : "Booked, unpaid"}</StatusChip>}
+                    </td>
+                    <td className="text-right">
+                      <span className="inline-flex items-center justify-end gap-1">
+                        {readOnly ? null : primary}
+                        <MoreMenu row label={`More for ${e.vendorName}`} items={[
+                          !readOnly && (e.status === "template" || e.status === "unconfirmed") && { label: "Edit the amount", onSelect: () => ask("edit", e) },
+                          !readOnly && (e.status === "confirmed" || e.status === "unconfirmed") && { label: e.status === "unconfirmed" ? "Skip this period" : "Void", onSelect: () => ask("void", e) },
+                          e.status === "confirmed" && e.hasReceipt && { label: "Open the receipt", href: `/api/app/accounting/expenses/${e.id}` },
+                          !readOnly && e.status === "confirmed" && { label: e.hasReceipt ? "Replace the receipt" : "Attach the receipt", onSelect: () => { fileFor.current = e.id; picker.current?.click(); } },
+                        ]} />
                       </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </TableCard>
-      {creating ? <NewExpense defaults={defaults} onClose={() => setCreating(false)} onSaved={() => { setCreating(false); refresh(); }} /> : null}
+      <input ref={picker} type="file" className="sr-only" tabIndex={-1} aria-hidden="true" accept=".pdf,.png,.jpg,.jpeg" onChange={(ev) => { const file = ev.target.files?.[0]; if (file && fileFor.current) void upload(fileFor.current, file); ev.target.value = ""; }} />
+      {asking ? (
+        <ConfirmDialog
+          open
+          onOpenChange={(next) => { if (!next) setAsking(null); }}
+          busy={busy === asking.row.id}
+          destructive={asking.kind === "void"}
+          title={asking.kind === "void" ? (asking.row.status === "unconfirmed" ? `Skip ${asking.row.vendorName} this period?` : `Void ${asking.row.vendorName}?`) : asking.kind === "paid" ? `Mark ${asking.row.vendorName} paid?` : `Change ${asking.row.vendorName}'s amount?`}
+          description={asking.kind === "void" ? (asking.row.status === "confirmed" ? "The cost is reversed; the original entry stays on record." : "Nothing is booked for this period.") : asking.kind === "paid" ? "Records when the money moved. Nothing is paid from here." : asking.row.status === "template" ? "Future periods only; what is already booked keeps its amount." : undefined}
+          confirmLabel={asking.kind === "void" ? (asking.row.status === "unconfirmed" ? "Skip" : "Void expense") : asking.kind === "paid" ? "Mark paid" : "Save"}
+          cancelLabel="Keep it"
+          confirmDisabled={asking.kind === "void" ? !asking.reason.trim() : asking.kind === "edit" ? parseDollarsToCents(asking.amount) === null : !asking.on}
+          onConfirm={confirmAsked}
+          fields={asking.kind === "void" ? (
+            <Field label="Why?" htmlFor="exp-why"><input id="exp-why" className={control} autoFocus maxLength={500} value={asking.reason} onChange={(ev) => setAsking({ ...asking, reason: ev.target.value })} /></Field>
+          ) : asking.kind === "paid" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Paid on" htmlFor="exp-paid-on"><input id="exp-paid-on" type="date" className={control} value={asking.on} onChange={(ev) => setAsking({ ...asking, on: ev.target.value })} /></Field>
+              <Field label="Method" htmlFor="exp-method"><select id="exp-method" className={control} value={asking.method} onChange={(ev) => setAsking({ ...asking, method: ev.target.value })}>{PAID_METHODS.map((m) => <option key={m} value={m}>{PAID_METHOD_LABELS[m]}</option>)}</select></Field>
+              <Field label="Reference (optional)" htmlFor="exp-ref" className="col-span-2"><input id="exp-ref" className={control} maxLength={200} value={asking.reference} onChange={(ev) => setAsking({ ...asking, reference: ev.target.value })} /></Field>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Amount ($)" htmlFor="exp-edit-amount"><input id="exp-edit-amount" className={control} inputMode="decimal" autoFocus value={asking.amount} onChange={(ev) => setAsking({ ...asking, amount: ev.target.value })} /></Field>
+              {asking.row.status === "template" ? <Field label="Ends" htmlFor="exp-edit-end"><input id="exp-edit-end" type="date" className={control} value={asking.end} onChange={(ev) => setAsking({ ...asking, end: ev.target.value })} /></Field> : null}
+            </div>
+          )}
+        />
+      ) : null}
     </>
   );
 }

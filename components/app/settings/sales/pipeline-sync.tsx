@@ -29,6 +29,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowRight, ChevronLeft, Hand, Layers, Lock } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
 import { Callout, SettingsStack } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
@@ -204,12 +205,12 @@ export function SalesPipelineSync() {
   }
 
   async function clearPipeline(p: PipelineOption) {
-    const ok = await confirmAction({
-      title: `Clear ${p.name}?`,
-      description: "Once you save, its cards stop following their applications. Cards stay where they are now.",
-      confirmLabel: "Clear the map",
-      cancelLabel: "Keep the map",
-    });
+    // With nothing saved, the sync follows the Insurvas default: each state goes to the stage with its
+    // name (lib/applications/stageSyncService.ts). So clearing the map is the way back to it.
+    const ok = await confirmAction(resetConfirmOptions(
+      `${p.name}'s application stages`,
+      "Once you save, each state moves the card to the stage with its name (Quoted, Submitted, Issued…), when the board has one. Cards stay where they are now.",
+    ));
     if (ok) setDraft(p.id, { ...EMPTY });
   }
 
@@ -355,6 +356,8 @@ function PipelineCard({ pipeline, map, saved, checks, ro, legacy, dirty, tab, on
         <span className="ml-auto flex flex-wrap items-center gap-2">
           {dirty && <StatusChip tone="info">Unsaved{mappedCount(saved) !== count ? ` · ${mappedCount(saved)} → ${count}` : ""}</StatusChip>}
           {checks.length > 0 && <StatusChip tone="warning">{checks.length} to check</StatusChip>}
+          {/* Nothing saved: the sync runs on the Insurvas default (stage names). */}
+          {!legacy && mappedCount(saved) === 0 && <DefaultChip />}
           {count ? <StatusChip tone="good" title={`${count} of ${STATES} application states move a card`}>{count} of {STATES} states</StatusChip> : <StatusChip>Moves nothing</StatusChip>}
         </span>
       </div>

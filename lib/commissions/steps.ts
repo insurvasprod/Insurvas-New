@@ -1,24 +1,23 @@
 /**
- * Commissions, one page (owner 2026-11-02, "the same thing for commissions"): six steps in the order money
- * moves — Statements arrive, lines post to the Commission ledger, Discrepancies show what a carrier paid
- * against what it owed, the Attribution queue gives each row to a producer, Reconciliation checks each
- * producer's pay, and the Rate card (what every carrier should pay) closes the rail. My pay folds in: it is
- * the Reconciliation step as a producer sees it. A plain module so the server frame, the sidebar and the
- * page trail read one list.
+ * Commissions, one page (owner 2026-11-02, "the same thing for commissions"): the Commission ledger, then
+ * Discrepancies (what a carrier paid against what it owed), then Reconciliation (each producer's pay; My pay is
+ * that step as a producer sees it). Statements moved to Book of business › Files, the Attribution queue into
+ * Needs you and the Rate card into Setup, the same day. A plain module so the server frame, the sidebar and
+ * the page trail read one list.
  */
 /** The Commissions menu collapsed or open, remembered for a year; read on the server so the page draws at the right width. */
 export const COMMISSIONS_RAIL_COOKIE = "insurvas_commissions_rail";
 
-export type CommissionsStep = "statements" | "ledger" | "discrepancies" | "attribution" | "reconciliation" | "rates";
+export type CommissionsStep = "ledger" | "discrepancies" | "reconciliation" | "hierarchy";
 
 /** `icon`: the sidebar's own icon for the page. Reconciliation opens as My pay for a producer (commissions-page.tsx). */
 export const COMMISSIONS_STEPS: { key: CommissionsStep; label: string; href: string; icon: string }[] = [
-  { key: "statements", label: "Statements", href: "/app/statements", icon: "file-text" },
   { key: "ledger", label: "Commission ledger", href: "/app/ledger", icon: "receipt" },
-  { key: "discrepancies", label: "Discrepancies", href: "/app/discrepancies", icon: "scale" },
-  { key: "attribution", label: "Attribution queue", href: "/app/attribution", icon: "user-round-search" },
-  { key: "reconciliation", label: "Reconciliation", href: "/app/producer-reconciliation", icon: "arrow-left-right" },
-  { key: "rates", label: "Rate card", href: "/app/rate-card", icon: "calculator" },
+  { key: "discrepancies", label: "Pay issues", href: "/app/discrepancies", icon: "scale" },
+  { key: "reconciliation", label: "Producer pay", href: "/app/producer-reconciliation", icon: "arrow-left-right" },
+  // AG-1.2 · who reports to whom and what the agency keeps on each producer: the rule override money comes from.
+  // Here since the Team group went (owner 2026-11-03); its address, gate and manager scope kept.
+  { key: "hierarchy", label: "Hierarchy & overrides", href: "/app/hierarchy", icon: "network" },
 ];
 
 /** A producer's Reconciliation step: their own pay, at its own address. */
@@ -26,12 +25,10 @@ export const MY_PAY = { label: "My pay", href: "/app/my-pay", icon: "briefcase-b
 
 /** Each step's addresses. A statement's own page (/app/statements/<id>) is a record, not a step. */
 const STEP_PATHS: [RegExp, CommissionsStep][] = [
-  [/^\/app\/statements\/?$/, "statements"],
   [/^\/app\/ledger\/?$/, "ledger"],
   [/^\/app\/discrepancies\/?$/, "discrepancies"],
-  [/^\/app\/attribution\/?$/, "attribution"],
   [/^\/app\/(producer-reconciliation|my-pay)\/?$/, "reconciliation"],
-  [/^\/app\/rate-card\/?$/, "rates"],
+  [/^\/app\/hierarchy\/?$/, "hierarchy"],
 ];
 
 export function commissionsStepOf(pathname: string): CommissionsStep | null {
@@ -49,7 +46,6 @@ export type CommissionsStepCounts = Partial<Record<CommissionsStep, number>>;
 
 /** What each badge counts, one and many. The ledger, Reconciliation and the Rate card have no queue. */
 export const COMMISSIONS_WAITING: Record<string, [string, string]> = {
-  statements: ["statement line waiting for a person", "statement lines waiting for a person"],
-  discrepancies: ["open discrepancy", "open discrepancies"],
-  attribution: ["row to give to a producer", "rows to give to a producer"],
+  discrepancies: ["open pay issue", "open pay issues"],
+  hierarchy: ["contract level to fix", "contract levels to fix"],
 };

@@ -64,24 +64,23 @@ export async function LeadsInPage({ step, actions, ownContinue = false, children
     // The step's own row (its tabs, its actions) is the first line of the step's column, level with the
     // rail's top (owner 2026-10-30: "same thing as the Source page, for all of the pages"), not a row above it.
     // One column under lg: minmax(0,1fr), or the rail's row of chips would stretch it past the phone's width.
-    <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
-      <PageHeader title={leadsInStepLabel(step)} className="lg:col-span-2 lg:pb-6" />
+    <div data-step-frame className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
+      {/* The step's tabs and actions are on the title's line (owner 2026-11-02), so its first card starts
+          level with the rail's top. No Back / "Continue to …" (manager 2026-10-29): the corner holds the
+          page's own actions only. */}
+      <PageHeader
+        title={leadsInStepLabel(step)}
+        lead={<div id="leads-in-lead" className="flex min-w-0 flex-wrap items-center gap-2 empty:hidden" />}
+        actions={<>{actions}{ownContinue && <span id="leads-in-continue" className="contents" />}</>}
+        className="lg:col-span-2 lg:pb-6"
+      />
       <div className="lg:col-start-1 lg:row-start-2 lg:min-h-0">
         <LeadsInRail steps={steps} step={step} initialCollapsed={collapsed} />
       </div>
       <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-2 lg:min-h-0">
-        <div className={`flex flex-none flex-wrap items-center gap-3 pb-4 ${actions ? "" : "[&:not(:has(#leads-in-lead>*)):not(:has(#leads-in-continue>*))]:hidden"}`}>
-          <div id="leads-in-lead" className="flex min-h-[2.25rem] min-w-0 flex-1 flex-wrap items-center gap-2" />
-          <div className="ml-auto flex items-center gap-2">
-            {actions}
-            {/* No Back / "Continue to …" (manager 2026-10-29): each page stands alone, so the corner holds
-                the page's own actions only — never a step to take next. */}
-            {ownContinue && <span id="leads-in-continue" className="contents" />}
-          </div>
-        </div>
         {/* The step scrolls inside its own column under its row; the rail stays put (owner 2026-10-28: no outer scroll). */}
         {/* [&>*]:shrink-0: a step's own wrapper never gives up height to the scroll box (a StatStrip squeezed to a line). */}
-        <div key={step} className="flex min-w-0 flex-col gap-6 [&>*]:shrink-0 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+        <div key={step} className="flex min-w-0 flex-col gap-4 [&>*]:shrink-0 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
           {children}
         </div>
       </div>

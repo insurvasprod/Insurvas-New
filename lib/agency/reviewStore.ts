@@ -27,6 +27,8 @@ export type ReviewRow = {
   reviewedAt: string | null;
   clientName: string | null;
   carrierName: string | null;
+  /** The application's case, so the review opens it (2026-11-03). */
+  caseId: string | null;
 };
 
 export async function readReviews(context: { tenantId: string; userId: string }): Promise<ReviewRow[]> {
@@ -42,7 +44,7 @@ export async function readReviews(context: { tenantId: string; userId: string })
   const { data, error } = await query;
   if (error) throw new Error(`readReviews: ${error.message}`);
   return ((data ?? []) as Array<Record<string, unknown>>).map((r) => {
-    const app = (r.tenant_applications ?? {}) as { carriers?: { name?: string } | null };
+    const app = (r.tenant_applications ?? {}) as { case_id?: string | null; carriers?: { name?: string } | null };
     return {
       id: r.id as string,
       applicationId: r.application_id as string,
@@ -55,6 +57,7 @@ export async function readReviews(context: { tenantId: string; userId: string })
       reviewedAt: (r.reviewed_at as string | null) ?? null,
       clientName: null,
       carrierName: app.carriers?.name ?? null,
+      caseId: app.case_id ?? null,
     };
   });
 }

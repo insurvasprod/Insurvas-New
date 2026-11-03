@@ -33,6 +33,7 @@ import {
   FileText,
   FolderInput,
   Landmark,
+  Building2,
   LayoutDashboard,
   ListChecks,
   ListPlus,
@@ -99,6 +100,8 @@ import { reportsViewOf } from "@/lib/reports/views";
 import { bookAreaOf, dataInStepOf } from "@/lib/dataIn/steps";
 import { accountingStepOf } from "@/lib/accounting/steps";
 import { commissionsStepOf } from "@/lib/commissions/steps";
+import { agencyStepOf } from "@/lib/agency/steps";
+import { retentionStepOf } from "@/lib/retention/steps";
 
 /** Which acquisition modules the effective tenant entitlement includes (inbound, outbound). */
 export type AgentModuleAccess = ModuleAccess;
@@ -121,10 +124,18 @@ function isActivePath(pathname: string, href: string) {
   if (reportsViewOf(href) && reportsViewOf(pathname)) return true;
   // Every Data in step is the one Data in entry (2026-11-02), whichever page it opens on.
   if (dataInStepOf(href) && bookAreaOf(pathname)) return true;
+  // Lapse risk is a Needs you view (owner 2026-11-02), so it lights Book of business too.
+  if (dataInStepOf(href) && /^\/app\/lapse-risk\/?$/.test(pathname)) return true;
+  // Every Retention step is the one Retention entry (2026-11-02).
+  if (retentionStepOf(href) && retentionStepOf(pathname)) return true;
   // Every Accounting step is the one Accounting entry (2026-11-02).
   if (accountingStepOf(href) && accountingStepOf(pathname)) return true;
   // Every Commissions step is the one Commissions entry (2026-11-02).
   if (commissionsStepOf(href) && commissionsStepOf(pathname)) return true;
+  // The agency dashboard, Producers and a producer's record are the one Agency entry (Team rearranged, 2026-11-03).
+  if (agencyStepOf(href) && agencyStepOf(pathname)) return true;
+  // Application review is a tab of Applications (2026-11-03), a review a record under it.
+  if (href === "/app/applications" && /^\/app\/application-review(\/|$)/.test(pathname)) return true;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -434,6 +445,8 @@ function NavList({
 
 const ICONS = {
   "layout-dashboard": LayoutDashboard,
+  // The agency dashboard (2026-11-03): its own icon, not Home's.
+  building: Building2,
   "book-open": BookOpen,
   "file-text": FileText,
   "folder-input": FolderInput,

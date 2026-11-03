@@ -4,7 +4,25 @@
  * The lead page's door into LA-3: "Open application" when the lead already has one, "Start
  * application" when the agent is holding its work item. Renders nothing for a tenant without the
  * Applications feature (the lookup answers 403) — the rest of the lead page is unchanged.
+ *
+ * Start is offered only when it can work: start_outbound_application wants the work item held by this
+ * agent (claimed, buffer active or LA active). Otherwise one line says what to do instead — claim it
+ * (the Claim button sits above), or wait for its callback, which puts a closed work item back in the
+ * queue when it comes due (E2E 2026-11-02: a completed item showed Start, then "Claim this lead first",
+ * with no Claim anywhere).
  */
+const STARTABLE = new Set(["claimed", "buffer_active", "la_active"]);
+
+export type EntryWorkItem = { id: string; status: string; ownerUserId: string | null; disposition: string | null };
+
+function whyNotStart(item: EntryWorkItem | null, currentUserId: string): string | null {
+  if (!item) return "This lead has no work item, so an application can't start here.";
+  if (STARTABLE.has(item.status) && item.ownerUserId === currentUserId) return null;
+  if (item.status === "unclaimed") return "Claim this lead to start an application.";
+  if (STARTABLE.has(item.status)) return "Someone else is working this lead; they start its application.";
+  if (item.disposition === "callback_scheduled") return "A callback is booked. When it comes due the lead is back in the queue; claim it then to start the application.";
+  return "This lead's work is closed, so an application can't start here.";
+}
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -13,7 +31,8 @@ import { FileCheck, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { withFrom } from "@/lib/applications/backLink";
 
-export function LeadApplicationEntry({ leadId, workItemId, canStart, className }: { leadId: string; workItemId: string | null; canStart: boolean; className?: string }) {
+export function LeadApplicationEntry({ leadId, workItem, currentUserId, canStart, className }: { leadId: string; workItem: EntryWorkItem | null; currentUserId: string; canStart: boolean; className?: string }) {
+  const workItemId = workItem?.id ?? null;
   const [state, setState] = useState<{ loaded: boolean; allowed: boolean; caseId: string | null }>({ loaded: false, allowed: false, caseId: null });
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +54,9 @@ export function LeadApplicationEntry({ leadId, workItemId, canStart, className }
       </Button>
     );
   }
-  if (!canStart || !workItemId) return null;
+  if (!canStart) return null;
+  const blocked = whyNotStart(workItem, currentUserId);
+  if (blocked || !workItemId) return <p className="text-xs text-muted-foreground">{blocked}</p>;
   return (
     <>
       <Button

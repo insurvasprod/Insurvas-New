@@ -1,5 +1,6 @@
 import "server-only";
 
+import { carrierIdsOn } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -76,7 +77,7 @@ export async function loadCarrierRules(scope: RulesScope): Promise<{ available: 
   const asOf = await today(scope);
   const tenantId = scope.plane === "agency" ? scope.tenantId : null;
   const scoped = (query: Loose) => (tenantId ? query.or(`tenant_id.eq.${tenantId},tenant_id.is.null`) : query.is("tenant_id", null));
-  const [carriers, rules, settings, counts, contacts, assignments, overrides, guidance] = await Promise.all([
+  const [carriers, rules, settings, counts, contacts, assignments, overrides, guidance, agencyOn] = await Promise.all([
     db().from("carriers").select("id, code, name, portal_origin, reference_pattern").eq("is_active", true).order("name"),
     scoped(db().from("carrier_retention_rule").select("*")).limit(5000),
     scoped(db().from("carrier_operating_settings").select("*")).limit(2000),
@@ -85,6 +86,7 @@ export async function loadCarrierRules(scope: RulesScope): Promise<{ available: 
     scoped(db().from("carrier_layout_assignment").select("tenant_id, carrier_id, layout_key")),
     tenantId ? db().from("tenant_carrier_settings").select("carrier_id, portal_origin, reference_pattern").eq("tenant_id", tenantId) : Promise.resolve({ data: [], error: null }),
     db().from("carrier_portal_guidance").select("carrier_id, where_in_portal, report_name, format_hint, notes"),
+    tenantId ? carrierIdsOn(tenantId) : Promise.resolve(null),
   ]);
   for (const read of [rules, settings]) {
     if (read.error) {
@@ -104,7 +106,9 @@ export async function loadCarrierRules(scope: RulesScope): Promise<{ available: 
   return {
     available: true,
     asOf,
-    carriers: ((carriers.data ?? []) as Loose[]).map((carrier) => {
+    // LA-0.4: an agency sees its carriers from Settings › Carriers, plus any still holding in-force
+    // policies (a carrier switched off keeps its book, so its windows still matter). Admins see all.
+    carriers: ((carriers.data ?? []) as Loose[]).filter((carrier) => !agencyOn || agencyOn.has(carrier.id) || (inForce.get(carrier.id) ?? 0) > 0).map((carrier) => {
       const resolved = Object.fromEntries(RULE_TYPES.map((type) => [type, resolveRule(ruleRows, { tenantId, carrierId: carrier.id, ruleType: type, asOf })])) as Record<RuleType, ResolvedRule | null>;
       const count = tenantId ? inForce.get(carrier.id) ?? 0 : null;
       const layout = layouts.find((row) => row.carrier_id === carrier.id && row.tenant_id === tenantId) ?? layouts.find((row) => row.carrier_id === carrier.id && row.tenant_id === null);

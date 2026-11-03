@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
-import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -13,8 +12,11 @@ import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { Pager, paginate } from "@/components/ui/pager";
+import { refreshStepCounts } from "@/components/app/step-frame/step-rail";
 import { dollars } from "@/lib/agency/constants";
-import { BasisChip, Level, Money } from "./money";
+import { InfoTip } from "@/components/ui/info-tip";
+import { MoreMenu } from "@/components/ui/more-menu";
+import { Level, Money } from "./money";
 import { ManagerDialog } from "./producer-dialogs";
 import { useAgencyData } from "./use-agency-data";
 
@@ -28,12 +30,15 @@ type Row = {
  * his, the spread and what the agency kept on his business this month. The override is COMPUTED — nobody types
  * one; splits are a different screen. A missing level is "—" and a Set level button; a negative spread (he is paid
  * more than the agency receives) is a red row.
+ *
+ * Commissions › Hierarchy & overrides (out of Team, 2026-11-03): no header of its own; the strip's
+ * figures open their rows (`?issues=1`), Set level opens the producer's Carriers tab, Change manager asks once.
  */
-export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
+export function HierarchyBoard({ canEdit, initialIssues = false }: { canEdit: boolean; initialIssues?: boolean }) {
   const { data, error, loading, refreshing, reload } = useAgencyData<{ rows: Row[] }>("/api/app/agency/overrides");
   const [search, setSearch] = useState("");
   const [carrier, setCarrier] = useState("");
-  const [issuesOnly, setIssuesOnly] = useState(false);
+  const [issuesOnly, setIssuesOnly] = useState(initialIssues);
   const [moving, setMoving] = useState<Row | null>(null);
   const [page, setPage] = useState(1);
   const rows = useMemo(() => data?.rows ?? [], [data]);
@@ -42,7 +47,7 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
     (!carrier || r.carrierId === carrier) &&
     (!issuesOnly || r.producerLevelBps === null || (r.spreadBps !== null && r.spreadBps < 0)) &&
     (!search.trim() || `${r.producerName} ${r.carrierName}`.toLowerCase().includes(search.trim().toLowerCase())));
-  const pageSize = useFittingPageSize(480, 45);
+  const pageSize = useFittingPageSize(400, 45);
   const { rows: pageRows, current } = paginate(filtered, page, pageSize);
   const total = rows.reduce((s, r) => s + (r.overrideCents ?? 0), 0);
   const missing = rows.filter((r) => r.producerLevelBps === null).length;
@@ -50,17 +55,17 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
   const people = [...new Map(rows.map((r) => [r.producerId, r.producerName])).entries()].map(([id, name]) => ({ id, name }));
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Hierarchy & Overrides" description="Who reports to whom, and what the agency keeps on each producer's business." />
+    <>
       {data && (
         <StatStrip label="Overrides">
           <StatTile label="Override this month · reported" value={dollars(total)} valueTone={total < 0 ? "danger" : undefined} />
-          <StatTile label="Missing levels" value={String(missing)} valueTone={missing ? "warning" : undefined} footnote={missing ? "No override until each is set" : undefined} reserveFootnote />
-          <StatTile label="Negative spreads" value={String(negative)} valueTone={negative ? "danger" : undefined} footnote={negative ? "Paying out more than received" : undefined} reserveFootnote />
+          <StatTile label="Missing levels" value={String(missing)} valueTone={missing ? "warning" : undefined} footnote={missing ? "No override until each is set" : undefined} reserveFootnote href="/app/hierarchy?issues=1" />
+          <StatTile label="Negative spreads" value={String(negative)} valueTone={negative ? "danger" : undefined} footnote={negative ? "Paying out more than received" : undefined} reserveFootnote href="/app/hierarchy?issues=1" />
+          <StatTile label="Producers" value={String(people.length)} footnote={`${carriers.length} carrier${carriers.length === 1 ? "" : "s"}`} />
         </StatStrip>
       )}
       <TableCard toolbar={
-        <DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />}>
+        <DataToolbar actions={<RefreshButton onClick={() => { reload(); refreshStepCounts(); }} refreshing={refreshing} />}>
           <ToolbarSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search producer or carrier" label="Search" />
           <select aria-label="Carrier" className={toolbarControl} value={carrier} onChange={(e) => { setCarrier(e.target.value); setPage(1); }}>
             <option value="">All carriers</option>
@@ -70,7 +75,7 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
         </DataToolbar>
       } footer={filtered.length ? <Pager page={current} total={filtered.length} noun="rows" onPage={setPage} pageSize={pageSize} /> : undefined}>
         {error ? <ErrorState detail={error} /> : loading ? <SectionLoading rows={5} columns={8} label="Loading overrides" /> : rows.length === 0 ? (
-          <EmptyState title="Nothing to show yet" hint="Add your carrier contracts on the rate card and your producers' levels on each producer's Carriers tab." />
+          <EmptyState title="Nothing to show yet" hint="Add your carrier contracts on the rate card and your producers' levels on each producer's Carriers tab." action={<Button asChild variant="outline"><Link href="/app/rate-card">Open the rate card</Link></Button>} />
         ) : filtered.length === 0 ? <NoMatches noun="rows" onClear={() => { setSearch(""); setCarrier(""); setIssuesOnly(false); }} /> : (
           <Table>
             <TableHeader>
@@ -81,8 +86,8 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
                 <TableHead className="text-right">Agency</TableHead>
                 <TableHead className="text-right">Producer</TableHead>
                 <TableHead className="text-right">Spread</TableHead>
-                <TableHead className="text-right">Override this month <BasisChip basis="reported" /></TableHead>
-                <TableHead className="text-right" />
+                <TableHead className="text-right">Override <InfoTip label="About the override">What the agency kept on his business this month, on the reported basis: agency level minus his level, on what the carriers&apos; statements said.</InfoTip></TableHead>
+                <TableHead className="text-right"><span className="sr-only">Action</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -98,9 +103,9 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
                     <TableCell className="text-right"><Level bps={r.spreadBps} /></TableCell>
                     <TableCell className="text-right"><Money cents={r.overrideCents} /></TableCell>
                     <TableCell className="text-right">
-                      {negativeSpread ? <StatusChip tone="danger">Pays out more than received</StatusChip>
-                        : r.producerLevelBps === null && canEdit ? <Button asChild size="sm" variant="outline"><Link href={`/app/producers/${r.producerId}`}>Set level</Link></Button>
-                        : canEdit ? <Button size="sm" variant="outline" onClick={() => setMoving(r)}>Change manager</Button> : null}
+                      {negativeSpread ? <StatusChip tone="danger" title="Pays out more than the agency receives">Negative</StatusChip>
+                        : r.producerLevelBps === null && canEdit ? <Button asChild size="sm" variant="outline"><Link href={`/app/producers/${r.producerId}/carrier/${r.carrierId}`}>Set level</Link></Button>
+                        : canEdit ? <MoreMenu row label={`More for ${r.producerName}, ${r.carrierName}`} items={[{ label: "Change manager", onSelect: () => setMoving(r) }, { label: "Change level", href: `/app/producers/${r.producerId}/carrier/${r.carrierId}` }]} /> : null}
                     </TableCell>
                   </TableRow>
                 );
@@ -109,7 +114,7 @@ export function HierarchyBoard({ canEdit }: { canEdit: boolean }) {
           </Table>
         )}
       </TableCard>
-      {moving && <ManagerDialog producerId={moving.producerId} name={moving.producerName} managers={people} open onOpenChange={(o) => { if (!o) setMoving(null); }} onDone={reload} />}
-    </div>
+      {moving && <ManagerDialog producerId={moving.producerId} name={moving.producerName} managers={people} open onOpenChange={(o) => { if (!o) setMoving(null); }} onDone={() => { reload(); refreshStepCounts(); }} />}
+    </>
   );
 }

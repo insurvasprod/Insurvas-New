@@ -7,7 +7,7 @@ import { StatementImportButton } from "@/components/app/statement-import";
 import { StatementsTable } from "@/components/app/statements-table";
 import { UnmatchedLinesTable } from "@/components/app/unmatched-lines-table";
 import { Button } from "@/components/ui/button";
-import { CommissionsPage } from "@/components/app/commissions/commissions-page";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { InfoTip } from "@/components/ui/info-tip";
 import { STATEMENT_EXPLAINER } from "@/lib/dashboard/checklist";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -55,7 +55,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   const blocked = !available ? STATEMENT_SCHEMA_PENDING_MESSAGE : readOnly ? "Importing is paused while the account is read-only." : null;
   const [carriers, savedMappings]: [StatementCarrierOption[], Record<string, StatementMapping>] = blocked
     ? [[], {}]
-    : await Promise.all([listStatementCarriers(), getSavedStatementMappings(guard.context.tenantId)]);
+    : await Promise.all([listStatementCarriers(guard.context.tenantId), getSavedStatementMappings(guard.context.tenantId)]);
   const importControl = blocked ? (
     <Button type="button" disabled title={blocked}>Import statement</Button>
   ) : (
@@ -74,9 +74,12 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   const actions = importControl;
 
   return (
-    <CommissionsPage
-      step="statements"
-      titleInfo={<InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip>}
+    // Book of business › Files › Statements (owner 2026-11-02: out of Commissions). A statement is a carrier
+    // file of its own kind, with its own import, review and voiding, so the page moved whole.
+    <DataInPage
+      step="files"
+      title="Statements"
+      chip={<InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip>}
       actions={actions}
       lead={statements.length > 0 ? (
         <ViewTabs
@@ -115,6 +118,6 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
           emptyHint={available ? "Import a carrier's commission statement as CSV, Excel or PDF to review its lines." : STATEMENT_SCHEMA_PENDING_MESSAGE}
         />
       )}
-    </CommissionsPage>
+    </DataInPage>
   );
 }

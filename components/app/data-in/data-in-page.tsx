@@ -25,13 +25,25 @@ async function openSteps(): Promise<Set<DataInStep>> {
 }
 
 /** The frame: the shared StepFrame, with this area's steps, rail and badges. */
-export async function DataInPage({ step, title, lead, actions, children }: { step: DataInStep; title?: string; lead?: ReactNode; actions?: ReactNode; children: ReactNode }) {
+export async function DataInPage({ step, title, chip, facts, lead, actions, children }: {
+  step: DataInStep;
+  title?: string;
+  /** A record's status chip, beside its title (round 3, owner 2026-11-02). */
+  chip?: ReactNode;
+  /** A record's one muted line of facts, under its title. */
+  facts?: ReactNode;
+  lead?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   const [open, jar] = await Promise.all([openSteps(), cookies()]);
   // The step on screen is always offered: its route already let this person in.
   open.add(step);
   return (
     <StepFrame
       title={title ?? dataInStepLabel(step)}
+      titleInfo={chip}
+      meta={facts}
       lead={lead}
       actions={actions}
       rail={{ label: BOOK_AREA_LABEL, cookie: DATA_IN_RAIL_COOKIE, countsUrl: "/api/app/data-in/steps", waiting: DATA_IN_WAITING, steps: DATA_IN_STEPS.filter((item) => open.has(item.key)), step, collapsed: jar.get(DATA_IN_RAIL_COOKIE)?.value === "collapsed" }}

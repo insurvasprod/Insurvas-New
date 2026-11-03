@@ -25,6 +25,23 @@ import { buildSalesReport, defaultWindow, type ReportFilters, type ReportInput, 
  */
 
 const LIMIT = 20_000;
+/** The API answers at most 1,000 rows a request, so `.limit(LIMIT)` alone stopped at 1,000 (QA 2026-11-03). */
+const PAGE = 1_000;
+
+type PagedQuery = { order(column: string, options?: { ascending?: boolean }): PagedQuery; range(from: number, to: number): PromiseLike<{ data: unknown; error: { message: string; code?: string } | null }> };
+
+/** Every row of one read up to LIMIT, a page at a time in id order so no row repeats or goes missing. */
+async function everyRow(make: () => PagedQuery): Promise<{ data: unknown[] | null; error: { message: string; code?: string } | null }> {
+  const all: unknown[] = [];
+  for (let from = 0; from < LIMIT; from += PAGE) {
+    const page = await make().order("id", { ascending: true }).range(from, Math.min(from + PAGE, LIMIT) - 1);
+    if (page.error) return { data: null, error: page.error };
+    const got = Array.isArray(page.data) ? page.data : [];
+    all.push(...got);
+    if (got.length < PAGE) break;
+  }
+  return { data: all, error: null };
+}
 
 export async function loadSalesReport(tenantId: string, filters: Partial<ReportFilters> = {}, now = Date.now(), scope: ProducerScope = null): Promise<{ report: SalesReport; timeZone: string }> {
   const client = db();
@@ -34,9 +51,9 @@ export async function loadSalesReport(tenantId: string, filters: Partial<ReportF
   if (resolved.from > resolved.to) throw new ApplicationError("SALES_REPORT_RANGE_INVALID", "The start date is after the end date.", 400);
 
   const [attemptsQ, quotesQ, casesQ] = await Promise.all([
-    scopeByCase(client.from("tenant_applications").select(caseScopedColumns("id, case_id, lead_id, insured_role, attempt_no, carrier_id, product_code, quote_id, status, outcome, outcome_reason_code, created_by, created_at, updated_at, submitted_at, outcome_recorded_at", scope)).eq("tenant_id", tenantId), scope).limit(LIMIT),
-    scopeByCase(client.from("tenant_quotes").select(caseScopedColumns("id, case_id, lead_id, insured_role, carrier_id, product_code, monthly_premium_cents, created_by, created_at", scope)).eq("tenant_id", tenantId), scope).limit(LIMIT),
-    scopeQuery(client.from("tenant_application_cases").select("id, source, campaign_id").eq("tenant_id", tenantId), "opened_by", scope).limit(LIMIT),
+    everyRow(() => scopeByCase(client.from("tenant_applications").select(caseScopedColumns("id, case_id, lead_id, insured_role, attempt_no, carrier_id, product_code, quote_id, status, outcome, outcome_reason_code, created_by, created_at, updated_at, submitted_at, outcome_recorded_at", scope)).eq("tenant_id", tenantId), scope)),
+    everyRow(() => scopeByCase(client.from("tenant_quotes").select(caseScopedColumns("id, case_id, lead_id, insured_role, carrier_id, product_code, monthly_premium_cents, created_by, created_at", scope)).eq("tenant_id", tenantId), scope)),
+    everyRow(() => scopeQuery(client.from("tenant_application_cases").select("id, source, campaign_id").eq("tenant_id", tenantId), "opened_by", scope)),
   ]);
   if (isMissingSchema(attemptsQ.error)) throw new SchemaPendingError("The application record");
   for (const q of [attemptsQ, quotesQ, casesQ]) if (q.error && !isMissingSchema(q.error)) throw new ApplicationError("APPLICATION_UNAVAILABLE", q.error.message, 500);
@@ -58,8 +75,8 @@ export async function loadSalesReport(tenantId: string, filters: Partial<ReportF
     // users has no tenant_id; the ids come from this tenant's own rows.
     inChunks<{ id: string; name: string | null }>(producerIds, (chunk) => client.from("users").select("id, name").in("id", chunk)),
     inChunks<{ id: string; name: string }>(campaignIds, (chunk) => client.from("tenant_campaigns").select("id, name").eq("tenant_id", tenantId).in("id", chunk)),
-    optional<{ id: string; application_id: string; status: ReportInput["counteroffers"][number]["status"]; received_at: string; reason_code: string | null }>(scopeByCase(client.from("tenant_application_counteroffers").select(caseScopedColumns("id, application_id, status, received_at, reason_code", scope, "application_id")).eq("tenant_id", tenantId), scope, "application_id").limit(LIMIT)),
-    optional<{ application_id: string; kind: ReportInput["requirements"][number]["kind"]; raised_at: string; satisfied_at: string | null }>(scopeByCase(client.from("tenant_application_requirements").select(caseScopedColumns("application_id, kind, raised_at, satisfied_at", scope, "application_id")).eq("tenant_id", tenantId), scope, "application_id").limit(LIMIT)),
+    optional<{ id: string; application_id: string; status: ReportInput["counteroffers"][number]["status"]; received_at: string; reason_code: string | null }>(everyRow(() => scopeByCase(client.from("tenant_application_counteroffers").select(caseScopedColumns("id, application_id, status, received_at, reason_code", scope, "application_id")).eq("tenant_id", tenantId), scope, "application_id"))),
+    optional<{ application_id: string; kind: ReportInput["requirements"][number]["kind"]; raised_at: string; satisfied_at: string | null }>(everyRow(() => scopeByCase(client.from("tenant_application_requirements").select(caseScopedColumns("application_id, kind, raised_at, satisfied_at", scope, "application_id")).eq("tenant_id", tenantId), scope, "application_id"))),
     carrierIds.length ? optional<{ carrier_id: string; contract_level_bp: number; effective_from: string; is_active: boolean }>(client.from("tenant_carriers").select("carrier_id, contract_level_bp, effective_from, is_active").eq("tenant_id", tenantId).in("carrier_id", carrierIds)) : Promise.resolve([]),
     carrierIds.length ? optional<{ carrier_id: string; product_code: string; contract_level_bp: number; rate_bp: number; effective_from: string }>(client.from("commission_schedules").select("carrier_id, product_code, contract_level_bp, rate_bp, effective_from").eq("tenant_id", tenantId).eq("policy_year", 1).in("carrier_id", carrierIds)) : Promise.resolve([]),
     optional<{ code: string; label: string; tenant_id: string | null }>(client.from("application_outcome_reasons").select("code, label, tenant_id").or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)),

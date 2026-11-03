@@ -5,13 +5,15 @@ import { ViewTabs } from "@/components/ui/view-tabs";
  * tab is its own address under /app/book-setup, so a link, an alert or an email lands on the right one;
  * "Bring your existing book" is the onboarding import at /app/book-import, which already opens in Setup.
  */
-export type SetupTab = "rate-card" | "carrier-rules" | "pipeline-rules" | "agent-codes" | "existing-book";
+export type SetupTab = "rate-card" | "carrier-rules" | "pipeline-rules" | "agent-codes" | "how-files-arrive" | "existing-book";
 
 export const SETUP_TABS: ReadonlyArray<{ key: SetupTab; label: string; href: string }> = [
   { key: "rate-card", label: "Rate card", href: "/app/book-setup" },
   { key: "carrier-rules", label: "Carrier rules", href: "/app/book-setup/carrier-rules" },
   { key: "pipeline-rules", label: "Pipeline rules", href: "/app/book-setup/pipeline-rules" },
   { key: "agent-codes", label: "Agent codes", href: "/app/book-setup/agent-codes" },
+  // Round 3: upload, email and bucket, moved from Carrier files (how files arrive is setup, not work).
+  { key: "how-files-arrive", label: "How files arrive", href: "/app/book-setup/how-files-arrive" },
   { key: "existing-book", label: "Bring your existing book", href: "/app/book-import" },
 ];
 

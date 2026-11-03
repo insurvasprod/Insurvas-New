@@ -55,6 +55,8 @@ export const TRACE_SCREENS: Record<string, { label: string; sources: TracedSourc
   "app/app/(shell)/book-setup/page.tsx": { label: "Setup › Rate card", sources: ["expected_commission"] },
   "app/app/(shell)/book-setup/carrier-rules/page.tsx": { label: "Setup › Carrier rules", sources: ["policy_current"] },
   "app/app/(shell)/book-setup/agent-codes/page.tsx": { label: "Setup › Agent codes", sources: ["policy_current"] },
+  // Round 3: Setup › How files arrive (the upload, email and bucket doors, moved from Carrier files).
+  "app/app/(shell)/book-setup/how-files-arrive/page.tsx": { label: "Setup › How files arrive", sources: ["policy_current"] },
 };
 
 /** A store module that reads carrier-derived figures: a page importing one must be registered above. */

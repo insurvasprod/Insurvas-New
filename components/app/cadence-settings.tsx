@@ -18,6 +18,7 @@ import { LAST_DIALLED_ATTEMPT, builtInRule, effectiveLadder, ladderSummary } fro
 import { cn } from "@/lib/utils";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { confirmAction } from "@/components/ui/confirm-dialog";
+import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
 
 /**
  * LA-2.7 · the cadence editor.
@@ -259,7 +260,7 @@ export function CadenceSettings() {
       <StatStrip label="Cadence in force">
         <StatTile
           label="In force"
-          value={loaded.usingDefaults ? "Built-in" : "Yours"}
+          value={loaded.usingDefaults ? "Insurvas default" : "Yours"}
           footnote={loaded.usingDefaults && campaignId && fallback.length > 0 ? "tenant default for this campaign" : `${runningSummary.total} attempts running`}
         />
         <StatTile label="Planned attempts" value={plannedSummary.total} footnote={`over ${plannedSummary.days} ${plannedSummary.days === 1 ? "day" : "days"}`} />
@@ -283,9 +284,10 @@ export function CadenceSettings() {
             actions={
               !readOnly ? (
                 <>
+                  {draft.length === 0 && loaded.usingDefaults && <DefaultChip />}
                   {draft.length === 0 && (
                     <Button type="button" variant="outline" disabled={busy} onClick={startFromDefaults}>
-                      Start from the built-in cadence
+                      Start from the Insurvas default
                     </Button>
                   )}
                   <Button type="button" disabled={busy} onClick={() => addRow()}>
@@ -421,8 +423,15 @@ export function CadenceSettings() {
               <span />
             )}
             {!readOnly && draft.length > 0 && (
-              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => { setDraft([]); setOpenKey(null); }}>
-                Clear and use the built-in cadence
+              <Button
+                type="button" variant="outline" size="sm" disabled={busy}
+                onClick={async () => {
+                  if (!(await confirmAction(resetConfirmOptions(campaignName ? `${campaignName}'s cadence` : "the cadence", "Nothing changes until you save, and you can discard instead.")))) return;
+                  setDraft([]);
+                  setOpenKey(null);
+                }}
+              >
+                Reset to default
               </Button>
             )}
           </div>

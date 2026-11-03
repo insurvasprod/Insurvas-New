@@ -147,6 +147,8 @@ export function AgentSettingsTabs({
   const contentRef = useRef<HTMLDivElement>(null);
   // The page header's action slot: a section's Save / Add buttons are drawn there, on the title's line.
   const [actionsSlot, setActionsSlot] = useState<HTMLElement | null>(null);
+  // A routed section's tabs (Accounting, Retention, Compliance, 2026-11-03): on the title's line too.
+  const [leadSlot, setLeadSlot] = useState<HTMLElement | null>(null);
   const active = useMemo(
     () => (routeSection ? visible.find((tab) => tab.id === routeSection) : undefined)
       ?? inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
@@ -407,7 +409,9 @@ export function AgentSettingsTabs({
     // Manager review 29 Oct (02:48): the title, the menu and the tabs stay put; only the content
     // scrolls, inside. On a desktop the frame is exactly the window under the top bar (the shell pads
     // 24px above and 32px below), so the page has no scroll of its own.
-    <div className="flex min-w-0 flex-col gap-6 lg:h-[calc(100dvh-var(--top-bar-h)-3.5rem)] lg:min-h-0" data-settings-frame="">
+    // A routed section's tabs start on the cards' left edge: the title column is the menu's width plus
+    // the gap to the cards, less the header's own 16px column gap (PageHeader `lead`, §8a).
+    <div className={cn("flex min-w-0 flex-col gap-6 lg:h-[calc(100dvh-var(--top-bar-h)-3.5rem)] lg:min-h-0", routeSection && (iconsOnly ? "[--frame-rail-w:60px]" : "[--frame-rail-w:232px] 2xl:[--frame-rail-w:264px]"))} data-settings-frame="">
       {active && !guiding && !hashRead && (
         <div aria-hidden="true" className="flex flex-col gap-2">
           <div className="h-3.5 w-36 m-skel rounded-full" />
@@ -423,7 +427,10 @@ export function AgentSettingsTabs({
           infoDescription
           breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: titleCase(active.label) }]}
           // Who last changed something here (LA-8.8), under the purpose line; owners only, like the log.
-          meta={role === "owner" ? <SectionLastChanged key={active.id} sectionKey={active.id} /> : undefined}
+          // With tabs on the title line the note wraps inside the title column instead of widening it,
+          // so the tabs still start on the cards' edge.
+          meta={role === "owner" ? <div className={routeSection ? "lg:[contain:inline-size]" : undefined}><SectionLastChanged key={active.id} sectionKey={active.id} /></div> : undefined}
+          lead={routeSection ? <div ref={setLeadSlot} data-settings-lead="" className="flex min-w-0 items-center empty:hidden" /> : undefined}
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
         />
       )}
@@ -574,7 +581,7 @@ export function AgentSettingsTabs({
             tabIndex={-1}
             key={active.id}
           >
-            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner", framed: !guiding, actionsSlot }}>
+            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner", framed: !guiding, actionsSlot, leadSlot }}>
               {/* A routed section's board handles its own read-only state. */}
               {readOnly && !routeSection && !READ_ONLY_EXEMPT.has(active.id) ? (
                 <>

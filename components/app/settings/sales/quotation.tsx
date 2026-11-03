@@ -23,6 +23,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Copy, Plus } from "lucide-react";
 
+import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
 import { Callout, Field, SettingsCard, SettingsStack, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
@@ -300,7 +301,7 @@ export function SalesQuotationTemplates() {
       );
     }
     const t = v.own;
-    const chip = t ? <LifecyclePill state={statusOf(t)} /> : <span className="text-xs font-semibold text-[var(--warning-ink)]">On the default</span>;
+    const chip = t ? <LifecyclePill state={statusOf(t)} /> : v.uses && !v.uses.tenantOwned ? <DefaultChip /> : <span className="text-xs font-semibold text-[var(--body)]">On your default</span>;
     const line = t
       ? `${t.tenantOwned ? "Own" : "Insurvas"} v${t.version} · ${askedCount(t.definition)} inputs · ${AGE_BASIS_LABEL[ageBasisOf(t.definition)].toLowerCase()}`
       : v.uses ? `Uses ${shortName(v.uses)}` : "Uses the standard inputs";
@@ -335,12 +336,20 @@ export function SalesQuotationTemplates() {
   const pairTitle = cell ? `${cell.carrierId ? carriers.find((c) => c.id === cell.carrierId)?.name ?? selected?.carrierName ?? "Carrier" : "Every carrier"} · ${productName(cell.productCode)}` : "";
   // On the pair page, its one action: publish, copy, or give a pair on the default its own.
   // The pair's other actions behind ⋯: copy it to another carrier, stop using it, delete the draft.
+  const hasPlatform = (productCode: string) => all.some((t) => !t.tenantOwned && !t.carrierId && t.status === "published" && t.productCode === productCode);
+  const resetLine = async (productCode: string) => {
+    if (!(await confirmAction(resetConfirmOptions(`the ${productName(productCode)} quote inputs for every carrier`, "Your versions are retired, not deleted: quotes already made keep theirs. Carrier-specific templates stay.")))) return;
+    if (await api.resetToDefault(productCode, null)) show(cell);
+  };
   const pairMenu = selected?.tenantOwned && (
     <RowMenu
       label={pairTitle}
       items={[
         { label: "Copy to another carrier", onSelect: () => setDialog({ kind: "copyTo", template: selected }), disabled: !canEdit, reason: ownerOnly },
-        live && { label: `Stop using it (retire v${live.version})`, onSelect: () => setDialog({ kind: "retire", template: live }), disabled: !canEdit, reason: ownerOnly, danger: true },
+        // The defaults row with an Insurvas template behind it: the way back is Reset to default.
+        live && !selected.carrierId && hasPlatform(selected.productCode)
+          ? { label: "Reset to default", onSelect: () => { void resetLine(selected.productCode); }, disabled: !canEdit, reason: ownerOnly, danger: true }
+          : live && { label: `Stop using it (retire v${live.version})`, onSelect: () => setDialog({ kind: "retire", template: live }), disabled: !canEdit, reason: ownerOnly, danger: true },
         selected.status === "draft" && { label: `Delete draft v${selected.version}`, onSelect: () => { void removeDraft(selected); }, disabled: !canEdit, reason: ownerOnly, danger: true },
       ]}
     />
@@ -367,7 +376,7 @@ export function SalesQuotationTemplates() {
               <ArrowLeft aria-hidden="true" />
             </Button>
             <span className="min-w-0 truncate text-title-sm font-semibold text-[var(--ink)]">{pairTitle}</span>
-            {selected ? <LifecyclePill state={statusOf(selected)} /> : <StatusChip dot={false} tone="warning">{current?.sold === false ? "Not in Contracting" : "On the default"}</StatusChip>}
+            {selected ? <LifecyclePill state={statusOf(selected)} /> : current?.sold === false ? <StatusChip dot={false} tone="warning">Not in Contracting</StatusChip> : current?.uses && !current.uses.tenantOwned ? <DefaultChip /> : <StatusChip dot={false} tone="neutral">On your default</StatusChip>}
           </>
         ) : undefined}
         actions={cell ? pairAction : (

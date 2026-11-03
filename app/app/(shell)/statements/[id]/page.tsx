@@ -36,7 +36,7 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
   if (!isRecordId(id)) notFound();
   const { available, detail } = await getStatementDetail(guard.context.tenantId, id);
   // A detail page's way back is the trail above its title (owner 2026-10-30).
-  const trail = (current: string) => [{ label: "Commissions" }, { label: "Statements", href: "/app/statements" }, { label: current }];
+  const trail = (current: string) => [{ label: "Book of business" }, { label: "Files", href: "/app/carrier-files" }, { label: "Statements", href: "/app/statements" }, { label: current }];
 
   if (!available) {
     return (

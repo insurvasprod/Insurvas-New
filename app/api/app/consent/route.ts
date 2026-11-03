@@ -22,6 +22,8 @@ const FILTERS: EvidenceFilter[] = ["every", "full", "no_ip", "no_text", "none"];
 const SOURCES: EvidenceSource[] = ["partner", "vendor", "direct"];
 /** The most one export carries. A locker bigger than this is exported a filter at a time. */
 const EXPORT_CAP = 10_000;
+/** The API answers at most 1,000 rows a read, so an export reads page by page (QA 2026-11-03: it stopped at 1,000). */
+const EXPORT_PAGE = 1_000;
 
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("consent_locker", ROLES, { prefetchScope: true });
@@ -56,15 +58,15 @@ export async function GET(request: NextRequest) {
     if (sources.some((source) => !SOURCES.includes(source))) return NextResponse.json({ error: "That is not a lead source", code: "invalid_source" }, { status: 400 });
     const csv = params.get("format") === "csv";
     try {
-      const view = await getConsentEvidence({
-        tenantId: auth.context.tenantId,
-        filter,
-        sources,
-        search: params.get("search"),
-        page: csv ? 0 : Math.max(0, Number(params.get("page")) || 0),
-        pageSize: csv ? EXPORT_CAP : 50,
-      });
-      if (!csv) return NextResponse.json(view, { headers: { "Cache-Control": "no-store" } });
+      const read = (page: number, pageSize: number) => getConsentEvidence({ tenantId: auth.context.tenantId, filter, sources, search: params.get("search"), page, pageSize });
+      // `pageSize`: the rows that fit the screen (foundation pass 2026-11-03), 5 to 50.
+      if (!csv) return NextResponse.json(await read(Math.max(0, Number(params.get("page")) || 0), Math.min(50, Math.max(5, Number(params.get("pageSize")) || 50))), { headers: { "Cache-Control": "no-store" } });
+      const view = await read(0, EXPORT_PAGE);
+      for (let page = 1; view.rows.length < Math.min(view.total, EXPORT_CAP); page += 1) {
+        const next = await read(page, EXPORT_PAGE);
+        if (!next.rows.length) break;
+        view.rows.push(...next.rows.slice(0, EXPORT_CAP - view.rows.length));
+      }
       // Evidence leaving the product is recorded: who took it, which slice, and how many rows.
       await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.consent_evidence_exported", targetType: "tenant", targetId: auth.context.tenantId, metadata: { filter, sources, search: params.get("search") ?? null, rows: view.rows.length, capped: view.total > view.rows.length }, request });
       return new NextResponse(evidenceCsv(view.rows, (level) => EVIDENCE_LABEL[level]), {

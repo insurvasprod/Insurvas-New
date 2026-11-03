@@ -8,7 +8,8 @@ import { AuthAlert } from "@/components/portal/auth-controls";
 import { Button } from "@/components/ui/button";
 import { owedToYou } from "@/lib/discrepancies/service";
 import { guardPage } from "@/lib/entitlements/guardPage";
-import { getInboundAddress, libraryCarriers, listCarrierFiles } from "@/lib/ingestion/registry";
+import { getInboundAddress, listCarrierFiles } from "@/lib/ingestion/registry";
+import { fileCarrierChoices } from "@/lib/carriers/agency";
 import { resolveSignupContext, signupDestination } from "@/lib/signup/context";
 import { hasTenantPermission } from "@/lib/tenantAuth/permissions";
 
@@ -40,7 +41,7 @@ export default async function WelcomePage() {
   const [owed, files, carriers, inbound] = await Promise.all([
     owedToYou(tenantId).catch(() => null),
     listCarrierFiles(tenantId, 5).catch(() => null),
-    libraryCarriers().catch(() => []),
+    fileCarrierChoices(tenantId).catch(() => []),
     getInboundAddress(tenantId).catch(() => null),
   ]);
   const recent = files?.files ?? [];

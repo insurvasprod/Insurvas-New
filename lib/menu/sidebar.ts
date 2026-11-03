@@ -18,12 +18,12 @@ export type ModuleAccess = { inbound: boolean; outbound: boolean };
 // 2026-10-15 (owner decision): eleven short groups instead of eight long ones — no dropdown past eight.
 export const NAV_GROUPS: readonly { section: string; icon: string }[] = [
   { section: "Today", icon: "calendar-check" },
-  // Agency Module 0: only an agency plan has anything in it.
-  { section: "Team", icon: "users" },
+  // No Team group since 2026-11-03: Producers is Home › Agency's second step, Hierarchy a Commissions step.
   { section: "Leads", icon: "contact-round" },
   { section: "Sales", icon: "file-check" },
-  { section: "Book of business", icon: "folder-input" },
-  { section: "Book", icon: "book-open" },
+  // An open book: the agency's book of policies (owner 2026-11-02; it kept Data in's folder icon).
+  { section: "Book of business", icon: "book-open" },
+  { section: "Retention", icon: "life-buoy" },
   { section: "Commissions", icon: "receipt" },
   { section: "Accounting", icon: "landmark" },
   // Its own icon (2026-10-25): on the icon rail two groups cannot share one.
@@ -82,7 +82,7 @@ export const NAV_AREAS: readonly { label: string; icon: string; sections: readon
   { label: "Partners", icon: "handshake", sections: ["Partners"] },
   { label: "Book", icon: "book-open", sections: ["Book of business", "Book"] },
   { label: "Money", icon: "dollar-sign", sections: ["Commissions", "Accounting"] },
-  { label: "Team", icon: "building", sections: ["Team", "Reports"] },
+  { label: "Reports", icon: "building", sections: ["Reports"] },
   { label: "Compliance", icon: "shield-check", sections: ["Compliance"] },
 ];
 

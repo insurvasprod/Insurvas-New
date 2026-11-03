@@ -3,6 +3,7 @@ import "server-only";
 import { createHash, randomBytes } from "node:crypto";
 
 import { readXlsxAsCsv } from "@/lib/agentTemplates/xlsx";
+import { acceptsFilesFrom } from "@/lib/carriers/agency";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { canWrite, hasFeature } from "@/lib/entitlements/types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -544,7 +545,9 @@ export function normaliseSender(value: string): string | null {
 export async function addSender(tenantId: string, userId: string, carrierId: string, value: string): Promise<SenderRow> {
   const sender = normaliseSender(value);
   if (!sender) throw new CarrierFileError("Enter the carrier's sending address, like commissions@carrier.com, or a whole domain, like @carrier.com.", 400, "invalid_sender");
+  // LA-0.4: a sender is mapped only to one of the agency's carriers (Settings › Carriers).
   if (!(await libraryCarriers()).some((carrier) => carrier.id === carrierId)) throw new CarrierFileError("Choose a carrier from the library.", 400, "unknown_carrier");
+  if (!(await acceptsFilesFrom(tenantId, carrierId))) throw new CarrierFileError("That carrier is not one of yours. Add it, or switch it on, in Settings › Carriers.", 400, "not_agency_carrier");
   const { data, error } = await db().from("carrier_inbound_senders").insert({ tenant_id: tenantId, carrier_id: carrierId, sender, created_by: userId }).select("id, carrier_id, sender, tenant_id, carriers(name)").single();
   if (error) {
     if (pending(error)) throw new CarrierFileError(CARRIER_FILES_PENDING_MESSAGE, 503, "schema_pending");

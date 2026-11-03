@@ -8,6 +8,7 @@ import { FEDERAL_MINUTES, minuteLabel, type MinuteWindow } from "@/lib/callingWi
 import { recordSettingsChanges, type SettingsChange } from "@/lib/settingsAudit/record";
 import {
   getCallingWindows,
+  resetCallingWindowDefaults,
   saveCallingWindowOptions,
   saveCampaignCallingWindow,
   saveTenantCallingWindow,
@@ -49,7 +50,8 @@ const optionsSchema = z
 
 const saveSchema = z
   .object({
-    scope: z.enum(["tenant", "campaign", "options"]),
+    // `reset`: back to the Insurvas default hours and switches (docs/settings/DEFAULTS.md).
+    scope: z.enum(["tenant", "campaign", "options", "reset"]),
     campaignId: z.string().uuid().nullable().optional(),
     window: windowSchema.nullable().optional(),
     reason: z.string().trim().max(200).nullable().optional(),
@@ -95,6 +97,24 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter a valid calling window" }, { status: 400 });
 
   const { scope } = parsed.data;
+  if (scope === "reset") {
+    try {
+      const before = await getCallingWindows(auth.context.tenantId);
+      await resetCallingWindowDefaults(auth.context.tenantId);
+      await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.calling_window_updated", targetType: "tenant_calling_windows", targetId: auth.context.tenantId, metadata: { scope, reset: true }, request });
+      const saved = await getCallingWindows(auth.context.tenantId);
+      const hours = (w: typeof saved.tenant) => (w ? `${minuteLabel(w.startMinute ?? w.startHour * 60)}–${minuteLabel(w.endMinute ?? w.endHour * 60)}` : null);
+      const labels = { noSunday: "No calls on Sundays", noFederalHolidays: "No calls on federal holidays", campaignOverrides: "Campaigns may narrow the hours" } as const;
+      const changes: SettingsChange[] = [
+        { key: "agency_hours", label: "Agency calling hours", from: hours(before.tenant), to: hours(saved.tenant) },
+        ...(Object.keys(labels) as (keyof typeof labels)[]).map((key) => ({ key, label: labels[key], from: before.options[key], to: saved.options[key] })),
+      ];
+      await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "calling-windows", changes, reason: "Reset to the Insurvas default" });
+      return NextResponse.json(saved);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not reset your calling windows" }, { status: 500 });
+    }
+  }
   if (scope !== "options" && parsed.data.window === undefined)
     return NextResponse.json({ error: "Send a window, or null to clear it", code: "window_required" }, { status: 400 });
   if (scope === "options" && !parsed.data.options)

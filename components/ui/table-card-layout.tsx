@@ -39,12 +39,26 @@ export function isLast(card: HTMLElement, stop: Element): boolean {
   return true;
 }
 
-/** The line a last card reaches: its scroll box's foot (a merged page's rail foot), or the window's. Null when the card is not last. */
+/** A footnote under the card (a legend, a "showing" line) up to this tall still lets the card fill. */
+const FOOTNOTE_MAX = 120;
+
+/**
+ * The line a last card reaches: its scroll box's foot (a merged page's rail foot), or the window's. A card
+ * with only a footnote under it in a merged page's column (Files' stage legend) reaches that foot less the
+ * footnote, so card and footnote end on the rail's foot together and the column never scrolls (owner
+ * 2026-11-02: "remove that scroll"). Null when a real block follows the card.
+ */
 export function fillLine(card: HTMLElement): number | null {
   const box = scroller(card);
   const stop = box ?? document.querySelector("main") ?? document.body;
-  if (!isLast(card, stop)) return null;
-  return box ? box.getBoundingClientRect().bottom - parseFloat(getComputedStyle(box).paddingBottom || "0") : window.innerHeight - bottomGap();
+  if (!box) return isLast(card, stop) ? window.innerHeight - bottomGap() : null;
+  const foot = box.getBoundingClientRect().bottom - parseFloat(getComputedStyle(box).paddingBottom || "0");
+  if (isLast(card, stop)) return foot;
+  // What follows the card, down to the end of the column's content (its last block's foot: scrollHeight
+  // would be the column's own height whenever the content is shorter).
+  const end = Math.max(...[...box.children].map((child) => child.getBoundingClientRect().bottom));
+  const after = end - card.getBoundingClientRect().bottom;
+  return after > 0 && after <= FOOTNOTE_MAX ? foot - after : null;
 }
 
 function fillHeight(card: HTMLElement) {

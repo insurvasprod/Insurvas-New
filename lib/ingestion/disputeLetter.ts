@@ -89,7 +89,11 @@ export function letterText(party: LetterParty, items: LetterItem[]): { body: str
     const why = basis(item);
     if (why) table.push(`    ${why}`);
   }
-  table.push("-".repeat(81), `${pad("Total owed", 68)}${pad(money(total), 13, true)}`);
+  // An owed item with no amount yet (a missing commission with no rate to price it) is not $0 owed: the total says
+  // so, and asks the carrier for the figure, rather than closing a letter on "Total owed $0.00" (E2E 2026-11-03).
+  const unpriced = argued.filter((i) => OWED_TYPES.has(i.type) && i.differenceCents === null).length;
+  table.push("-".repeat(81), `${pad("Total owed", 68)}${pad(unpriced && !total ? "To confirm" : money(total), 13, true)}`);
+  if (unpriced) table.push(`    ${total ? "Plus " : ""}${unpriced === 1 ? "one item" : `${unpriced} items`} we can't price yet: please tell us what is owed on ${unpriced === 1 ? "it" : "them"}.`);
   const footer = ["", "Thank you,", "", party.signer.name ?? party.agencyName, [party.agencyName, party.signer.phone, party.signer.email].filter(Boolean).join(" · ")];
   return { body: [...header, ...table, ...footer].join("\n"), totalCents: total };
 }

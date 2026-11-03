@@ -11,7 +11,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { DraftDateCalculator } from "@/components/app/applications/draft-dates/draft-date-calculator";
 
-export type ApplicationsView = "cases" | "waiting" | "quotes";
+export type ApplicationsView = "cases" | "waiting" | "quotes" | "review";
 export type ApplicationsTab = { key: ApplicationsView; label: string; href: string };
 
 /**
@@ -19,6 +19,9 @@ export type ApplicationsTab = { key: ApplicationsView; label: string; href: stri
  * page. Cases (/app/applications), Waiting on the carrier (/app/pending) and Quotes (/app/quoting) are its
  * tabs — each keeps its own address and its own gate, so the dashboard's links still land — and the
  * draft-date calculator (/app/draft-dates) opens from the header as a side panel, since it saves nothing.
+ *
+ * 2026-11-03: Application review (AG-1.11, /app/application-review) is its fourth tab, out of Team; and the tabs sit
+ * on the title line (UI-CONSISTENCY §8a), so the list starts right under the header.
  */
 export function ApplicationsHub({ view, tabs, calculator, calculatorOpen = false, readOnly = false, children }: {
   view: ApplicationsView;
@@ -44,19 +47,19 @@ export function ApplicationsHub({ view, tabs, calculator, calculatorOpen = false
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Applications"
+        lead={tabs.length > 1 ? (
+          <ViewTabs
+            label="Application views"
+            value={view}
+            onChange={(key) => { const next = tabs.find((tab) => tab.key === key); if (next) router.push(next.href); }}
+            tabs={tabs.map((tab) => ({ key: tab.key, label: tab.label }))}
+          />
+        ) : undefined}
         actions={<>
           {calculator && <Button type="button" variant="outline" onClick={() => setOpen(true)}><Calculator aria-hidden="true" />Draft-date calculator</Button>}
           {!readOnly && <Button asChild title="An application starts from the lead: open it and choose Start application"><Link href="/app/leads"><Plus aria-hidden="true" />New application</Link></Button>}
         </>}
       />
-      {tabs.length > 1 && (
-        <ViewTabs
-          label="Application views"
-          value={view}
-          onChange={(key) => { const next = tabs.find((tab) => tab.key === key); if (next) router.push(next.href); }}
-          tabs={tabs.map((tab) => ({ key: tab.key, label: tab.label }))}
-        />
-      )}
       <div className="flex min-w-0 flex-col gap-6" style={{ animation: "none" }}>{children}</div>
       {mounted && open && createPortal(
         <Sheet title="Draft-date calculator" subtitle="The safest day to draft the premium. Nothing here is saved." onClose={() => setOpen(false)} className="lg:w-[min(100%,620px)]">

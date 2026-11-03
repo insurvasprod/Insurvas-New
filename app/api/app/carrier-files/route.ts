@@ -2,6 +2,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { acceptsFilesFrom } from "@/lib/carriers/agency";
 import { FILE_TYPES, MAX_UPLOAD_BYTES, carrierFileBytesMatch, carrierFileKind } from "@/lib/ingestion/constants";
 import { isRecordUuid, isoDate } from "@/lib/ingestion/path";
 import { runArrival } from "@/lib/ingestion/dailyRunStore";
@@ -72,6 +73,11 @@ export async function POST(request: NextRequest) {
   // bucket and email doors register such a file as failed instead, since nobody is there to tell.
   if (!carrierFileBytesMatch(kind, bytes.subarray(0, 1024))) {
     return NextResponse.json({ error: kind === "csv" ? "That file is not plain text, so it cannot be read as a CSV." : `That file is not the ${kind === "pdf" ? "PDF" : "Excel workbook"} its name says it is.` }, { status: 400 });
+  }
+
+  // LA-0.4: only a carrier from Settings › Carriers (or one whose files the agency already holds).
+  if (!(await acceptsFilesFrom(auth.context.tenantId, fields.data.carrier_id))) {
+    return NextResponse.json({ error: "That carrier is not one of yours. Add it, or switch it on, in Settings › Carriers." }, { status: 400 });
   }
 
   try {

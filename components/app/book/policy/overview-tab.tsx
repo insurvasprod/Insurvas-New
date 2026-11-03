@@ -1,6 +1,5 @@
 import Link from "next/link";
 
-import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { cardSurface } from "@/components/ui/card";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
@@ -8,7 +7,7 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { RISK_LABELS, statusLabel } from "@/lib/ingestion/policyBook";
 import type { loadPolicy } from "@/lib/ingestion/policyBookStore";
 import { riskFootnote } from "@/lib/ingestion/policyCurrent";
-import { carrierPolicyHref, changeClientHref, nextDateThatMatters } from "@/lib/ingestion/policyPage";
+import { carrierPolicyHref, nextDateThatMatters } from "@/lib/ingestion/policyPage";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 
 import { FactGrid } from "./policy-head";
@@ -20,21 +19,16 @@ const METHOD: Record<string, string> = { bank_draft: "Bank draft", direct_expres
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 /**
- * Policy › Overview: today's facts, the risk and the next date that matters, with the notices the page
- * already gave (a client built from the file, the linked application, no client yet), where each value was
- * read from, the client's other policies and the lead source.
+ * Policy › Overview: today's facts, the risk and the next date that matters, where each value was read from,
+ * the client's other policies and the lead source. The notices it used to open with (a client built from the
+ * file, the linked application, no client yet) are chips and links on the page header's facts line (round 3).
  */
-export function PolicyOverviewTab({ view, canLink }: { view: PolicyView; canLink: boolean }) {
-  const { policy, client, sale, lead, source, others, household } = view;
-  const saleState = sale ? (sale.outcome ? sale.outcome.replaceAll("_", " ") : sale.status ? sale.status.replaceAll("_", " ") : null) : null;
+export function PolicyOverviewTab({ view }: { view: PolicyView }) {
+  const { policy, client, lead, source, others, household } = view;
   const next = nextDateThatMatters(policy);
 
   return (
     <>
-      {client?.provisional && <p role="status" className="m-0 text-sm"><ProvisionalBadge /> <span className="text-muted-foreground">This client was built from the carrier&apos;s file. <Link href="/app/duplicates" className="font-medium text-[var(--accent-ink)] hover:underline">Check it in the contact directory</Link>.</span></p>}
-      {sale && <p role="status" className="m-0 text-sm text-muted-foreground">Linked to {sale.name ? `${sale.name}'s` : "an"} application{saleState ? ` (${saleState})` : ""}. <Link href={`/app/applications/${sale.caseId}`} className="font-medium text-[var(--accent-ink)] hover:underline">Open the application</Link></p>}
-      {!client && !sale && <p role="status" className="m-0 text-sm text-[var(--warning-ink)]">No client is linked to this policy yet. {canLink ? <Link href={changeClientHref(policy.carrierId, policy.policyNumber)} className="font-medium underline">Link a client</Link> : <Link href={carrierPolicyHref(policy.carrierId, policy.policyNumber, "client")} className="font-medium underline">See the Client tab</Link>}.</p>}
-
       <TableCard title="Today">
         <FactGrid items={[
           ["Status", `${statusLabel(policy.status)}${policy.statusRaw ? ` · carrier says “${policy.statusRaw}”` : ""}`],

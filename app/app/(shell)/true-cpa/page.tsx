@@ -19,5 +19,5 @@ export default async function TrueCpaPage({ searchParams }: { searchParams: Prom
   // The Reports views' shared period (?from&to), when another view set one.
   const period = sharedPeriod(await searchParams);
   const initialReport = await getVendorScorecard(guard.context.tenantId, period ?? {}, guard.entitlement.access === "read_only").catch(() => null);
-  return <ReportsPage view="cpa"><TrueCpaWorkspace initialReport={initialReport} framed /></ReportsPage>;
+  return <ReportsPage view="cpa" info="What an issued policy really cost, by vendor and campaign: net spend divided by issued policies. A dash means no issued policy yet, never $0. Undialable rate and claim acceptance answer different questions and are never combined into one score."><TrueCpaWorkspace initialReport={initialReport} framed /></ReportsPage>;
 }

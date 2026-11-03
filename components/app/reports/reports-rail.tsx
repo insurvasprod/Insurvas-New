@@ -3,21 +3,13 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Award, BadgeDollarSign, Brain, ChartColumn, ChevronsLeft, ChevronsRight, Gauge, type LucideIcon } from "lucide-react";
+import { Activity, Award, BadgeDollarSign, Brain, ChartColumn, ChartLine, ChartNoAxesCombined, ChevronsLeft, ChevronsRight, Gauge, UserRoundCheck, type LucideIcon } from "lucide-react";
 
 import { useMenuSections } from "@/components/ui/page-trail";
 import { REPORTS_RAIL_COOKIE, REPORTS_VIEWS, sharedPeriod, type ReportsView } from "@/lib/reports/views";
 import { cn } from "@/lib/utils";
 
-const ICONS: Record<ReportsView, LucideIcon> = { sales: ChartColumn, activity: Activity, scoring: Brain, book: Gauge, cpa: BadgeDollarSign, partner: Award };
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** "1 Aug – 29 Oct" for the rail's period line. Hand-built: the server's ICU prints "Sept", the browser "Sep". */
-function periodText(period: { from: string; to: string }) {
-  const day = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1]}`;
-  return `${day(period.from)} – ${day(period.to)}`;
-}
+const ICONS: Record<ReportsView, LucideIcon> = { sales: ChartColumn, activity: Activity, scoring: Brain, book: Gauge, cpa: BadgeDollarSign, partner: Award, retention: ChartNoAxesCombined, retentionResults: ChartLine, producers: UserRoundCheck };
 
 /**
  * The Reports menu (owner 2026-10-30, canvas "Reports in one page", board RpS1), the Leads in menu's
@@ -99,20 +91,15 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
           );
         })}
       </ul>
-      {/* The shared period, said once: only once a view has set one. */}
-      {period && (
-        <div className={cn("mt-auto hidden flex-col gap-1 rounded-xl bg-[color-mix(in_srgb,var(--ink)_3%,transparent)] p-3", !collapsed && "lg:flex")}>
-          <span className="text-xs font-semibold text-[var(--ink)]">Period kept as you switch</span>
-          <span className="text-xs tabular-nums text-[var(--ink)]">{periodText(period)}</span>
-        </div>
-      )}
+      {/* No period box at the foot (foundation pass 2026-11-03: no info cards). The period rides in the
+          address and each view shows it in its own toolbar. */}
       <button
         type="button"
         onClick={toggle}
         aria-expanded={!collapsed}
         aria-label={collapsed ? "Show the Reports menu" : "Collapse the Reports menu"}
         title={collapsed ? "Show labels" : "Collapse"}
-        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto", !period && "lg:mt-auto")}
+        className={cn("mt-2 hidden size-8 shrink-0 place-items-center rounded-lg text-[var(--ink)] outline-none transition-colors hover:bg-[color-mix(in_srgb,var(--ink)_6%,transparent)] focus-visible:ring-2 focus-visible:ring-[var(--primary)] lg:grid", collapsed ? "mx-auto" : "ml-auto", "lg:mt-auto")}
       >
         {collapsed ? <ChevronsRight className="size-4" aria-hidden="true" /> : <ChevronsLeft className="size-4" aria-hidden="true" />}
       </button>

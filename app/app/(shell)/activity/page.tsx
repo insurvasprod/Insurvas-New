@@ -39,9 +39,11 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   // /app/scorecard route redirects here with it — integrity → To review, log → Call log.
   const query = await searchParams;
   const view = Array.isArray(query.view) ? query.view[0] : query.view;
-  const initialView = view === "integrity" ? "review" : view === "log" || view === "activity" ? "log" : view === "setters" ? "setters" : "agents";
+  const initialView = view === "integrity" || view === "review" ? "review" : view === "log" || view === "activity" ? "log" : view === "setters" ? "setters" : view === "closeout" ? "closeout" : "agents";
+  // ?agent= narrows the log to one agent (an agent's page links back here with it).
+  const agent = Array.isArray(query.agent) ? query.agent[0] : query.agent;
   // The role decides only what the page offers (the zero-click review is owners' and producers');
   // /api/app/activity enforces the same rule on its own.
   // Inside the Reports page, on the Reports views' shared period when another view set one.
-  return <ReportsPage view="activity"><ActivityLogWorkspace initialView={initialView} role={guard.role} framed initialPeriod={sharedPeriod(query)} /></ReportsPage>;
+  return <ReportsPage view="activity" info="What each agent did, and how it turned out. Served, dialled and logged are separate counts; nothing here is talk time, because click-to-call hands the call to the handset."><ActivityLogWorkspace initialView={initialView} role={guard.role} framed initialPeriod={sharedPeriod(query)} initialAgent={agent && /^[0-9a-f-]{36}$/i.test(agent) ? agent : ""} /></ReportsPage>;
 }

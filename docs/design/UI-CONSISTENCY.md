@@ -107,6 +107,24 @@ Keep only messages a user must act on right now: errors, a blocked state ("Scrub
 dialing is blocked"), a read-only notice. Those use the existing alert styling, one line, no essay.
 Helper text belongs in a field's `hint`, a tooltip, or nowhere.
 
+**No notices on the page, ever: they go to the bell (owner 2026-11-02: "make it mandatory to never
+show this kind of cards, no matter what", then "not even like this, do not show anything; if there is
+anything to show put it as an alert in the notification").** `<Callout>` and `<PageAlert>` draw
+nothing on the page. They raise a notice (`components/ui/page-notices.tsx`) that the top bar lists
+first under the bell's Alerts and counts on its badge while the page is open.
+- The one exception is inside a dialog, where the bell is behind the overlay. There a Callout stays as
+  one line: a tone icon, the title, then the detail inline. It is never a box, border, ground, padding
+  or shadow.
+- Never hand-build a notice on the page instead (`hand-callout` ratchet).
+- `lib/design/noNoticeCards.test.mjs` enforces this.
+
+**No "Next step" strip (owner 2026-11-02: "never show this thing ever in the pages").** No page opens
+on a tinted line saying what to do next with a button beside it ("Next step", "Next up", "26 policies
+have no rate… Add rates"). A page's one action sits in its header or toolbar; a count that waits on
+someone is a rail badge or a bell item. `NextStepLine` renders nothing; `NextUp` keeps only its button
+(right-aligned, for pages where it is the only way to do the thing) and turns a "cannot run" sentence
+into the one-line alert above. The `next-step-strip` ratchet stops new ones.
+
 ## 4. Figures: one compact strip — `StatStrip` + `StatTile` from `components/ui/stat.tsx`
 ```tsx
 <StatStrip label="Partner totals">
@@ -388,6 +406,18 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   Compliance and legal wording is never moved into a tip: it stays on the screen, in full.
 - **An empty list offers the action that fills it** (`EmptyState`'s `action`), linking only to a page
   or flow that exists. A filtered list with nothing in it is `NoMatches` with its clear action.
+
+### 8a. Merged pages: the title line (v3)
+**Status:** Live.
+
+A page with a rail of steps (StepFrame, Compliance, Reports, Leads in) puts everything above the step on
+the title line, so the step's first card starts level with the rail's top (owner 2026-11-02):
+
+- The title, with its (i) right beside it; never out by the actions.
+- The step's tabs (`PageHeader lead`). From lg up the title sits in a column as wide as the rail
+  (`--frame-rail-w`, set on `[data-step-frame]`), so the tabs start on the cards' left edge. A collapsed
+  rail is narrower than any title: the tabs then follow it, set off by a hairline.
+- The step's buttons, on the right.
 
 ## 9. CSS
 - New screens use Tailwind and the shared components; do not add page-specific `.portal-*` rules to

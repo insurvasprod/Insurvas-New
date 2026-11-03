@@ -120,7 +120,9 @@ export function pct(r: Ratio, digits = 0): number | null {
 
 /** A cross-tab cell: a percentage only from MIN_CASES cases up, else the greyed count. */
 export function crossCell(n: number, d: number): { kind: "count"; text: string } | { kind: "rate"; text: string; detail: string } {
-  if (n < MIN_CASES) return { kind: "count", text: `n=${n}` };
+  // Readable at a glance (QA 2026-11-03): an empty cell is a dash, not "n=0"; a small one is "1 of 2", not "n=1".
+  if (n === 0) return { kind: "count", text: "—" };
+  if (n < MIN_CASES) return { kind: "count", text: `${n} of ${d}` };
   return { kind: "rate", text: `${pct({ n, d })}%`, detail: `(${n}/${d})` };
 }
 

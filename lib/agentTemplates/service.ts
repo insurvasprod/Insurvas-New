@@ -948,6 +948,8 @@ export async function getPartnerTenantTemplateForProductVersion(
 }
 
 export class TemplateProductError extends Error {}
+/** The agency sells no product yet, so there is no form to show (Settings › Products first). */
+export class NoSoldProductError extends TemplateProductError {}
 
 /**
  * The form-templates settings screen. Each product the tenant's plan includes has its own copy;
@@ -983,6 +985,10 @@ export async function listAvailableTemplates(tenantId: string, userId: string, p
     throw new TemplateProductError("Your plan does not include a form for that product");
   // A plan without term life used to fail here; it now opens on the first product it does include.
   const fallback = productCodes.includes(PRODUCT_CODE) || productCodes.length === 0 ? PRODUCT_CODE : productCodes[0];
+  // Nothing sold (docs/settings/DEFAULTS.md): opening this screen used to copy the Term Life form into
+  // the agency although it had not switched Term Life on. It now only shows a copy that already exists.
+  if (productCodes.length === 0 && !productCode && !(await loadCopy(tenantId, PRODUCT_CODE)))
+    throw new NoSoldProductError("Switch on a product in Settings › Products first. Each product you sell starts with the Insurvas form for it.");
   const current = await getAgentTemplateForProduct(tenantId, userId, productCode || fallback);
   return {
     current,
@@ -1079,6 +1085,17 @@ export async function applyTemplate(
       source.version,
     ),
   };
+}
+
+/**
+ * Reset to default (docs/settings/DEFAULTS.md): the Insurvas form a product's copy started from — the
+ * platform default, else the most recently published — for the screen to load into its draft. Null
+ * when Insurvas has none for the product. Nothing is written: the owner publishes it as usual.
+ */
+export async function insurvasFormFor(tenantId: string, productCode: string): Promise<TemplateRow | null> {
+  await assertAllowedProduct(tenantId, productCode);
+  const source = chooseProductTemplate(await loadProductTemplates(productCode));
+  return source ? resolveSource(source.id, source.version) : null;
 }
 
 export async function updateAgentTemplate(tenantId: string, userId: string) {

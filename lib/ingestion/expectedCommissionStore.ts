@@ -1,5 +1,6 @@
 import "server-only";
 
+import { carrierIdsOn } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -160,17 +161,16 @@ export async function loadRateCard(tenantId: string) {
     everyRow(() => db().from("expected_commission").select("carrier_id, confidence, expected_amount_cents, overdue_from").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").order("policy_year")),
     db().from("tenant_carriers").select("carrier_id, writing_number, effective_from").eq("tenant_id", tenantId).eq("is_active", true),
     db().from("advance_rules").select("carrier_id, product_code, advance_months, advance_pct_bp, clawback_months, clawback_type, effective_from").eq("tenant_id", tenantId).order("effective_from", { ascending: false }),
-    // Carriers added in Settings › Carrier library before any level is set (2026-10-26): the card is where
-    // that level is set, so they are listed too. Unreadable (an older schema) lists none of them.
-    (db() as unknown as { from(table: string): { select(columns: string): { eq(column: string, value: unknown): { eq(column: string, value: unknown): PromiseLike<{ data: Loose[] | null; error: unknown }> } } } })
-      .from("tenant_carrier_requirements").select("carrier_id").eq("tenant_id", tenantId).eq("contracted", true),
+    // LA-0.4: the carriers switched on in Settings › Carriers, contract or not (the card is where a
+    // level is set), are on the card before their first file.
+    carrierIdsOn(tenantId),
   ]);
   const dayRead = agencyToday(tenantId);
   screen.catch(() => undefined);
   dayRead.catch(() => undefined);
   const data = await inputs(tenantId);
   if (!data) return { available: false as const };
-  const [carriers, products, ownFamilies, expected, contracts, rules, added] = await screen;
+  const [carriers, products, ownFamilies, expected, contracts, rules, on] = await screen;
   const writing = new Map<string, string>();
   for (const row of [...(contracts.data ?? [])].sort((a: Loose, b: Loose) => String(a.effective_from).localeCompare(String(b.effective_from)))) writing.set(row.carrier_id, row.writing_number);
   // Only the dates of birth are used here (the first-draft days are the writer's, computeExpected).
@@ -210,11 +210,9 @@ export async function loadRateCard(tenantId: string) {
     byCarrier.set(p.carrier_id, entry);
     priced.push({ carrierId: p.carrier_id, monthlyCents: monthly, priced: ok });
   }
-  // A carrier you're contracted with is on the card before its first file, so its rates and advance
-  // rule can be set ahead (they used to live only in Settings › Carrier library). So is one added to the
-  // library with no level yet: its level and writing number are set here.
-  const withoutLevel = (added.error ? [] : added.data ?? []).filter((row: Loose) => !(contracts.data ?? []).some((contract: Loose) => contract.carrier_id === row.carrier_id));
-  for (const contract of [...(contracts.data ?? []), ...withoutLevel] as Loose[]) {
+  // A carrier switched on in Settings › Carriers is on the card before its first file, so its rates and
+  // advance rule can be set ahead; one switched off shows only while it has policies (its history).
+  for (const contract of [...on].map((carrier_id) => ({ carrier_id }))) {
     if (byCarrier.has(contract.carrier_id)) continue;
     byCarrier.set(contract.carrier_id, {
       carrierId: contract.carrier_id, carrierName: carrierName.get(contract.carrier_id) ?? "Carrier not known", policies: 0, monthlyCents: 0, pricedMonthlyCents: 0, pricedPolicies: 0,

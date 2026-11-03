@@ -247,6 +247,15 @@ export type CallingWindowSettings = {
   stateCheckReadsFederalHolidays?: boolean;
   /** The agency's three switches (20260924121000); defaults until that is applied. */
   options: CallingWindowOptions;
+  /**
+   * The Insurvas default (20261103100000): true when `tenant` / `options` above are the default the
+   * dial check applies because the agency has no row of its own. Absent or false before that
+   * migration, when no row means federal and state limits only.
+   */
+  tenantIsDefault?: boolean;
+  optionsAreDefault?: boolean;
+  /** True once 20261103100000 is live, so "no row" means the Insurvas default. */
+  insurvasDefaultLive?: boolean;
   /** False until 20260924121000 is applied: minutes, switches and reasons cannot be saved yet. */
   schemaReady: boolean;
   /** Upcoming dates in the federal holiday calendar, or null when it could not be read. */
@@ -357,6 +366,16 @@ export type CallingWindowOptions = {
 };
 
 export const DEFAULT_OPTIONS: CallingWindowOptions = { noSunday: false, noFederalHolidays: false, campaignOverrides: true };
+
+/**
+ * The Insurvas default narrowing (docs/settings/DEFAULTS.md, owner pick 2026-11-03), applied by
+ * `tenant_can_dial_now` while an agency has no row of its own once 20261103100000 is live:
+ * 9:00 am–8:00 pm in the customer's zone, no Sundays, no federal holidays. Narrower than the federal
+ * 8–9 on both ends, to stay clear of stricter state rules. NOT legal advice: marked for the owner's
+ * or counsel's review on the screen. Its SQL twin is `calling_window_insurvas_default()`.
+ */
+export const INSURVAS_DEFAULT_WINDOW: MinuteWindow = { start: 9 * 60, end: 20 * 60 };
+export const INSURVAS_DEFAULT_OPTIONS: CallingWindowOptions = { noSunday: true, noFederalHolidays: true, campaignOverrides: true };
 
 export type CampaignWindow = {
   id: string;
