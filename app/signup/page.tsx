@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { cookies } from "next/headers";
 
-import { FunnelFrame } from "@/components/app/funnel-frame";
+import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
 import { FunnelReview } from "@/components/app/funnel-review";
 import { GoogleFinishForm } from "@/components/public/google-finish-form";
 import { SignupForm } from "@/components/public/signup-form";
@@ -58,7 +58,7 @@ export default async function SignupPage({
     <>Have an account? <Link href="/app/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Sign in</Link></>
   );
   return (
-    <FunnelFrame step={1} stepsAside={signIn}>
+    <FunnelFrame step={1} stepsAside={signIn} heading={<FunnelHeading title="Create your account" />}>
       <SignupForm
         initialPlanCode={query.plan}
         initialCycle={query.cycle}

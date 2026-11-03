@@ -1,8 +1,6 @@
-import type { ReactNode } from "react";
+import { Children, isValidElement, type ReactNode } from "react";
 
 import { AuthHeading, AuthLayout, AuthSteps } from "@/components/portal/auth-layout";
-import { StoryPanel } from "@/components/app/tenant-auth-workspace";
-import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
 
 /**
  * The five sign-up steps (owner, 2026-10-26): account, email, agency, plan, payment. The plan has its
@@ -33,11 +31,13 @@ export function FunnelStepper({ step }: { step: FunnelStep }) {
 
 /**
  * The sign-up journey's frame: the one auth layout (components/portal/auth-layout.tsx) with the
- * sign-up stepper. The brand panel is the one sign-in and sign-up already show (owner, 2026-10-24:
- * "the right side leave it as it is") — the trial story for the steps before the plan starts, the
- * floor story once it has.
+ * sign-up stepper. Owner, 2026-11-03: the showcase panel is gone from sign-up, as from sign-in: the
+ * journey is one centred card on the brand field, its heading above the card. A step with real
+ * content for a panel (the plan summary, the receipt) still passes it as `aside` and keeps the split.
  */
-export function FunnelFrame({ step, children, wide = false, aside, back, stepsAside, legal = true }: {
+export function FunnelFrame({ step, children, wide = false, aside, back, stepsAside, legal = true, heading }: {
+  /** The step's heading, drawn above the card on the brand field. Without it, a leading FunnelHeading child is lifted. */
+  heading?: ReactNode;
   /** The Privacy · Terms · Support line under the form; Payment shows it in its summary instead. */
   legal?: boolean;
   step: FunnelStep;
@@ -51,6 +51,11 @@ export function FunnelFrame({ step, children, wide = false, aside, back, stepsAs
   /** On the right of the step line: "Have an account? Sign in" on step 1. */
   stepsAside?: ReactNode;
 }) {
+  // The step's own heading is its first child; drawn above the card, not inside it (single layout only).
+  const nodes = Children.toArray(children);
+  const first = nodes[0];
+  const liftHeading = !aside && isValidElement(first) && (first.type === FunnelHeading || first.type === AuthHeading);
+
   return (
     <AuthLayout
       plane="agent"
@@ -59,9 +64,10 @@ export function FunnelFrame({ step, children, wide = false, aside, back, stepsAs
       steps={{ current: funnelStepOf(step), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(step) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: stepsAside }}
       back={back}
       legal={legal}
-      story={aside ?? <StoryPanel mode={step === 6 ? "sign-in" : "sign-up"} step={step} noPayment={checkoutPaymentMode() === "none"} />}
+      heading={heading ?? (liftHeading ? first : undefined)}
+      story={aside}
     >
-      {children}
+      {liftHeading ? nodes.slice(1) : children}
     </AuthLayout>
   );
 }

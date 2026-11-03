@@ -8,7 +8,6 @@ import { LoaderCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { AuthAlert, AuthSubmit, authLabel } from "@/components/portal/auth-controls";
 import { GoogleButton } from "@/components/portal/google-button";
-import { FunnelHeading } from "@/components/app/funnel-frame";
 import { NewPasswordField, passwordLongEnough } from "@/components/app/password-field";
 import { BILLING_CYCLES, type BillingCycle } from "@/lib/money";
 
@@ -99,9 +98,8 @@ export function SignupForm({ initialPlanCode, initialCycle, googleEnabled = fals
 
   return (
     <div>
-      {/* "Have an account? Sign in" sits on the step line (app/signup/page.tsx), so the heading stands
-          alone. With Google on, it comes first, the fast path (owner, 2026-10-27). */}
-      <FunnelHeading title="Create your account" />
+      {/* The heading is drawn above the card by the page (app/signup/page.tsx). With Google on, the
+          button comes first, the fast path (owner, 2026-10-27). */}
       {googleEnabled && (
         <>
           <GoogleButton intent="sign-up" plan={initialPlanCode} cycle={initialCycle} className="w-full" />
