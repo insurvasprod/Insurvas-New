@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { ChevronDown, FileText, Languages, MessageSquare, Phone, UserRound } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileText, Languages, MessageSquare, Phone, UserRound } from "lucide-react";
 
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -9,17 +9,17 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { productLineLabel } from "@/lib/format/productLine";
+import { cn } from "@/lib/utils";
 import type { PartnerLeadDetail } from "@/lib/partnerLeads/types";
 import type { SnapshotGroup } from "@/lib/partnerLeads/view";
 
+const groupId = (key: string) => `partner-lead-group-${key}`;
+
 function InformationGroup({ group }: { group: SnapshotGroup }) {
   return (
-    <details open className="group min-w-0">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 outline-none transition-colors hover:bg-[var(--surface-alt)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform group-[&:not([open])]:-rotate-90" />
-        <span className="min-w-0 truncate text-sm font-semibold text-foreground">{group.label}</span>
-      </summary>
-      <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 px-4 pb-4 pl-10 sm:grid-cols-2 xl:grid-cols-4">
+    <section id={groupId(group.key)} aria-labelledby={`${groupId(group.key)}-heading`} className="min-w-0 scroll-mt-24 px-5 py-4">
+      <h3 id={`${groupId(group.key)}-heading`} className="m-0 text-sm font-semibold text-foreground">{group.label}</h3>
+      <dl className="m-0 mt-3 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
         {group.fields.map((field) => (
           <div key={field.key} className="min-w-0">
             <dt className="text-xs font-medium leading-4 text-muted-foreground">{field.label}</dt>
@@ -27,7 +27,7 @@ function InformationGroup({ group }: { group: SnapshotGroup }) {
           </div>
         ))}
       </dl>
-    </details>
+    </section>
   );
 }
 
@@ -43,14 +43,49 @@ function Submission({ detail }: { detail: PartnerLeadDetail }) {
     ],
   };
   const groups = [...detail.groups, recordGroup];
+  const [active, setActive] = useState(groups[0]?.key ?? "");
+
+  // The side navigation follows the reader: the group nearest the top of the page is the lit one.
+  useEffect(() => {
+    const targets = groups.map((group) => document.getElementById(groupId(group.key))).filter((node): node is HTMLElement => Boolean(node));
+    if (!targets.length || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (visible) setActive(visible.target.id.replace("partner-lead-group-", ""));
+    }, { rootMargin: "-20% 0px -65% 0px" });
+    targets.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+    // The group keys are the dependency; the array is rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groups.map((group) => group.key).join("|")]);
+
   return (
-    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="min-w-0 overflow-hidden rounded-lg border border-border bg-card outline-none">
-      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <h2 className="m-0 flex items-center gap-1.5 text-base font-semibold text-foreground">Application<InfoTip label="About this application">The form as it was submitted. It is view only; your agency works the lead from here.</InfoTip></h2>
-      </div>
-      {!detail.groups.length && <p className="m-0 border-b border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
-      <div className="divide-y divide-border">
-        {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
+    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="grid min-w-0 gap-4 outline-none lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start">
+      <nav aria-label="Application sections" className="flex gap-1 overflow-x-auto lg:sticky lg:top-[calc(var(--top-bar-h,56px)+1rem)] lg:flex-col lg:overflow-visible">
+        {groups.map((group) => (
+          <button
+            key={group.key}
+            type="button"
+            aria-current={active === group.key ? "true" : undefined}
+            onClick={() => { setActive(group.key); document.getElementById(groupId(group.key))?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+            className={cn(
+              "flex min-h-9 shrink-0 items-center rounded-md border-0 px-3 text-left text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              active === group.key ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]" : "bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground",
+            )}
+          >
+            {group.label}
+          </button>
+        ))}
+      </nav>
+      <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
+        <div className="flex items-center gap-1.5 border-b border-border px-5 py-3">
+          <h2 className="m-0 text-base font-semibold text-foreground">Application</h2>
+          <InfoTip label="About this application">The form as it was submitted. It is view only; your agency works the lead from here.</InfoTip>
+        </div>
+        {!detail.groups.length && <p className="m-0 border-b border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
+        <div className="divide-y divide-border">
+          {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
+        </div>
       </div>
     </div>
   );
@@ -118,16 +153,14 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
           <StatusChip tone="neutral" className="border border-border">{productLineLabel(detail.product)}</StatusChip>
           {detail.language && <StatusChip tone="neutral" className="border border-border"><span className="inline-flex items-center gap-1.5" aria-label={`Customer language: ${detail.language}`}><Languages aria-hidden="true" className="size-3.5" />{detail.language}</span></StatusChip>}
         </div>}
-        actions={<div className="flex max-w-full flex-wrap items-center justify-end gap-2">
-          <ViewTabs
-            label="Lead information"
-            tabs={tabs}
-            value={tab}
-            onChange={setTab}
-            idPrefix="partner-lead-tab"
-            controls={activePanel}
-          />
-        </div>}
+      />
+      <ViewTabs
+        label="Lead information"
+        tabs={tabs}
+        value={tab}
+        onChange={setTab}
+        idPrefix="partner-lead-tab"
+        controls={activePanel}
       />
       {tab === "overview" ? <Submission detail={detail} /> : tab === "call-updates" ? <CallUpdates detail={detail} /> : <SharedNotes detail={detail} />}
     </div>
