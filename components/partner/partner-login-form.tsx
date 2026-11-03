@@ -120,7 +120,6 @@ export function PartnerLoginForm() {
     <PartnerAuthFrame
       footer={
         <div className="flex flex-col gap-1.5 text-sm leading-normal tracking-[-0.02em]">
-          <p className="m-0">Invited by an agency? Use the link in your invitation email to choose your password.</p>
           <p className="m-0">
             An agent or agency?{" "}
             <Link href="/app/login" className="font-semibold">Use the agent sign in</Link>
