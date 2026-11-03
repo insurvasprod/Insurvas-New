@@ -1,8 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { useState, type ReactNode } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useState } from "react";
 
 import styles from "@/components/marketing/landing-audience-slider.module.css";
 
@@ -31,11 +29,9 @@ const STEADY = [0.5, 0.56, 0.52, 0.6, 0.58, 0.66, 0.62, 0.7, 0.68, 0.74, 0.72, 0
 const FLAT = [0.16, 0.17, 0.16, 0.18, 0.17, 0.19, 0.18, 0.2, 0.19, 0.21, 0.2, 0.22, 0.21, 0.23];
 const STEPS = [0.2, 0.2, 0.34, 0.34, 0.34, 0.5, 0.5, 0.5, 0.64, 0.64, 0.78, 0.78, 0.78, 0.9];
 
-const PERSONAS: Record<"agent" | "agency", { label: string; cta: string; href: string; slides: readonly Slide[] }> = {
+const PERSONAS: Record<"agent" | "agency", { label: string; slides: readonly Slide[] }> = {
   agent: {
     label: "Insurvas for Independent Agent",
-    cta: "See agent plans",
-    href: "/pricing",
     slides: [
       {
         problem: "I can’t tell which vendor actually paid me back.",
@@ -53,8 +49,6 @@ const PERSONAS: Record<"agent" | "agency", { label: string; cta: string; href: s
   },
   agency: {
     label: "Insurvas for Agencies",
-    cta: "See agency pricing",
-    href: "/pricing?for=agency",
     slides: [
       {
         problem: "My producers cherry-pick the best leads.",
@@ -74,7 +68,7 @@ const PERSONAS: Record<"agent" | "agency", { label: string; cta: string; href: s
 
 type Who = keyof typeof PERSONAS;
 
-export function LandingAudienceSlider({ header }: { header: ReactNode }) {
+export function LandingAudienceSlider() {
   const [who, setWho] = useState<Who>("agent");
   const [index, setIndex] = useState(0);
   const persona = PERSONAS[who];
@@ -82,7 +76,6 @@ export function LandingAudienceSlider({ header }: { header: ReactNode }) {
   const slide = slides[index];
 
   const choose = (next: Who) => { setWho(next); setIndex(0); };
-  const step = (by: number) => setIndex((current) => (current + by + slides.length) % slides.length);
 
   return (
     <div className={styles.slider}>
@@ -91,10 +84,14 @@ export function LandingAudienceSlider({ header }: { header: ReactNode }) {
           <button key={key} type="button" aria-pressed={who === key} onClick={() => choose(key)} className={styles.switchButton}>{PERSONAS[key].label}</button>
         ))}
       </div>
-      {header}
       <div className={styles.stage}>
         <div className={styles.slide} key={`${who}-${index}`} aria-live="polite">
-          <p className={styles.count}>Problem {index + 1} of {slides.length}</p>
+          <div className={styles.count}>
+            <span>Problem</span>
+            {slides.map((item, i) => (
+              <button key={item.problem} type="button" aria-label={`Problem ${i + 1} of ${slides.length}`} aria-current={i === index ? "true" : undefined} onClick={() => setIndex(i)}>{i + 1}</button>
+            ))}
+          </div>
           <p className={styles.problem}>{slide.problem}</p>
         </div>
         <figure className={styles.chart} key={`chart-${who}-${index}`}>
@@ -108,13 +105,6 @@ export function LandingAudienceSlider({ header }: { header: ReactNode }) {
             <i aria-hidden="true" /><b>{slide.chart.note}</b>
           </span>
         </figure>
-      </div>
-      <div className={styles.controls}>
-        <Link href={persona.href} className={styles.cta}>{persona.cta}<ArrowRight aria-hidden="true" /></Link>
-        <div className={styles.arrows}>
-          <button type="button" onClick={() => step(-1)} aria-label="Previous problem"><ArrowLeft aria-hidden="true" /></button>
-          <button type="button" onClick={() => step(1)} aria-label="Next problem"><ArrowRight aria-hidden="true" /></button>
-        </div>
       </div>
     </div>
   );
