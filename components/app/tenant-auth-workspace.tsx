@@ -248,9 +248,27 @@ export function TenantAuthWorkspace({
 
   const signIn: AuthView = {
     // The sign-in page cannot know an agency from one agent, so it names neither (manager review, 2026-10-28).
-    heading: <AuthHeading title="Welcome back">Sign in to your workspace.</AuthHeading>,
+    // Same header as sign-up: the title on the left, a short note on the right, one bar under (owner, 2026-11-03).
+    heading: (
+      <div data-auth-line="" className="mb-6">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+          <div className="min-w-0"><AuthHeading title="Welcome back" /></div>
+          <p className="m-0 shrink-0 pb-1 text-sm font-semibold leading-normal tracking-[-0.02em]"><Link href="/partner/login" className="hover:underline">Partner portal</Link></p>
+        </div>
+        <div className="mt-3 h-1 rounded-full bg-[var(--primary)]" aria-hidden="true" />
+      </div>
+    ),
     body: (
       <>
+      {/* Google first, like sign-up: the fast path, then the email form. */}
+      {googleEnabled && (
+        <>
+          <GoogleButton intent="sign-in" className="w-full" />
+          <div data-auth-divider="" className="my-4 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
+            <span className="h-px flex-1 bg-border" />or use your email<span className="h-px flex-1 bg-border" />
+          </div>
+        </>
+      )}
         <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
         <AuthField label="Email" htmlFor="tenant-login-email">
           <AuthInput
@@ -312,17 +330,6 @@ export function TenantAuthWorkspace({
           {loginLoading ? "Signing in…" : "Sign in"}
         </AuthSubmit>
       </form>
-
-      {/* One other way in: Google, full width under the "or". "Email me a link" is gone from here
-          (manager review, 2026-10-28); a link already sent still opens the finish panel below. */}
-      {googleEnabled && (
-        <>
-          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
-            <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
-          </div>
-          <GoogleButton intent="sign-in" />
-        </>
-      )}
     </>
     ),
     // Both "elsewhere" lines in one style, side by side where they fit (manager review, 2026-10-28:
@@ -333,12 +340,6 @@ export function TenantAuthWorkspace({
           New to Insurvas?{" "}
           <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
             Create an account
-          </Link>
-        </p>
-        <p className="m-0">
-          Partner or affiliate?{" "}
-          <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
-            Partner portal
           </Link>
         </p>
       </div>
@@ -526,7 +527,7 @@ export function TenantAuthWorkspace({
   const view = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
 
   return (
-    <AuthLayout plane="agent" heading={view.heading} footer={view.footer}>
+    <AuthLayout plane="agent" heading={view.heading} footer={view.footer} footerInline>
       {view.body}
     </AuthLayout>
   );

@@ -1993,12 +1993,12 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) body { background: tra
 /* Everything else sits on the field, inset by the card's padding so its text shares the fields' edge. */
 .portal-tenant-auth-shell[data-layout="single"] :is([data-auth-logo], [data-auth-steps], [data-auth-heading-slot], [data-auth-footer], .portal-login-footer) { padding-inline: 40px; }
 /* The step line (sign-up) stands on the field above the heading: light text, the other way in as a link. */
-.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] :is(p, span) { color: var(--nav-muted); }
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-steps], [data-auth-line]) :is(p, span) { color: var(--nav-muted); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] p > span:first-child { color: var(--on-dark); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] a { color: var(--on-dark); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
 /* Compact step line: the title on the left, "Step n of N" on the right, a smaller title (owner, 2026-11-03). */
-.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] { margin-bottom: 0; }
-.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] h1 { font-size: 1.75rem; line-height: 1.15; color: var(--on-dark); }
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-steps][data-compact], [data-auth-line]) [data-auth-heading] { margin-bottom: 0; }
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-steps][data-compact], [data-auth-line]) [data-auth-heading] h1 { font-size: 1.75rem; line-height: 1.15; color: var(--on-dark); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] p { color: var(--nav-muted); }
 /* "Have an account? Sign in" on the legal links' line. */
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.75rem; margin-top: 1rem; padding-inline: 40px; }
