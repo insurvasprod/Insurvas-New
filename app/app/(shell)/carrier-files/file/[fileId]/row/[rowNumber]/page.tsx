@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -11,6 +10,7 @@ import { isRecordUuid } from "@/lib/ingestion/path";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { loadRowTrace } from "@/lib/ingestion/traceStore";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
+import { MoreMenu } from "@/components/app/book/files/more-menu";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,10 @@ import { ViewTabs } from "@/components/ui/view-tabs";
  * sent: every original column, the layout map version that read it and the field each became — the
  * screen that answers "did we read this right?" without a database client. Owner and bookkeeper.
  * Opening it writes nothing.
+ *
+ * Round 3 (owner 2026-11-02, docs/la4/POLISH-ROUND3.md): the file page's compact header — the outcome chip
+ * beside the title, one muted line of facts under it, "Open the policy" with the previous and next rows and
+ * the file in More.
  */
 const cents = (n: number) => `${n < 0 ? "−" : ""}$${(Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const link = "font-semibold text-[var(--accent-ink)] hover:underline";
@@ -104,23 +108,26 @@ export default async function RawRowPage({ params, searchParams }: { params: Pro
     <DataInPage
       step="files"
       title={`Row ${row.rowNumber}${policy ? ` · ${policy}` : ""}`}
-      actions={<>
-        {prev ? <Button asChild variant="outline"><Link href={prev}><ChevronLeft aria-hidden="true" />Row {row.prevRow}</Link></Button> : <Button type="button" variant="outline" disabled><ChevronLeft aria-hidden="true" />First row</Button>}
-        {next ? <Button asChild variant="outline"><Link href={next}>Row {row.nextRow}<ChevronRight aria-hidden="true" /></Link></Button> : <Button type="button" variant="outline" disabled>Last row<ChevronRight aria-hidden="true" /></Button>}
-        {policyLink() ? <Button asChild><Link href={policyLink()!}>Open the policy</Link></Button> : <Button type="button" disabled title="This row made no policy">Open the policy</Button>}
-      </>}
-      lead={
-        <div className="flex w-full min-w-0 flex-col gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1 text-sm text-muted-foreground">
-            {outcome && <StatusChip tone={ROW_OUTCOME_TONES[outcome.outcome]}>{ROW_OUTCOME_LABELS[outcome.outcome]}</StatusChip>}
-            <Link href={fileHref(row.file.id)} className={link}>{row.file.name}</Link>
-            <span>{row.file.carrierName ?? "Carrier not known"} · file of {fileDay(row.file.fileDate)}</span>
-            {row.position && row.rowCount ? <span>Line <span className="font-semibold text-foreground">{row.position.toLocaleString("en-US")} of {row.rowCount.toLocaleString("en-US")}</span></span> : null}
-          </div>
-          <ViewTabs label="This row" value={tab} tabs={[{ key: "story", label: "What happened", href: here }, { key: "sent", label: "As sent", count: row.columns.length, href: `${here}?tab=sent` }]} />
-        </div>
+      chip={outcome ? <StatusChip tone={ROW_OUTCOME_TONES[outcome.outcome]}>{ROW_OUTCOME_LABELS[outcome.outcome]}</StatusChip> : undefined}
+      facts={
+        <p className="m-0 mt-1 flex min-w-0 flex-wrap gap-x-1.5 text-sm leading-normal text-muted-foreground">
+          <span><Link href={fileHref(row.file.id)} className="text-[var(--accent-ink)] hover:underline">{row.file.name}</Link> ·</span>
+          <span>{row.file.carrierName ?? "Carrier not known"} · file of {fileDay(row.file.fileDate)}{row.position && row.rowCount ? " ·" : ""}</span>
+          {row.position && row.rowCount ? <span>line {row.position.toLocaleString("en-US")} of {row.rowCount.toLocaleString("en-US")}</span> : null}
+        </p>
       }
+      actions={<>
+        {policyLink() ? <Button asChild><Link href={policyLink()!}>Open the policy</Link></Button> : <Button type="button" disabled title="This row made no policy">Open the policy</Button>}
+        <MoreMenu
+          items={[
+            ...(prev ? [{ label: `Previous row (${row.prevRow})`, href: prev }] : []),
+            ...(next ? [{ label: `Next row (${row.nextRow})`, href: next }] : []),
+            { label: "Open the file", href: fileHref(row.file.id) },
+          ]}
+        />
+      </>}
     >
+      <ViewTabs label="This row" value={tab} tabs={[{ key: "story", label: "What happened", href: here }, { key: "sent", label: "As sent", count: row.columns.length, href: `${here}?tab=sent` }]} />
       {tab === "story" ? (
         <TableCard>
           <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">

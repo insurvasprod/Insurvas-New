@@ -22,9 +22,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import {
   Ban, CalendarClock, Check, CircleCheck, CircleX, Clock, DollarSign, FileCheck, GripVertical, Hash, MessageSquare,
-  ChevronLeft, Moon, PhoneCall, PhoneOff, Plus, Repeat, Settings2, Square, ThumbsDown, Trash2, Voicemail, type LucideIcon,
+  ChevronLeft, Moon, PhoneCall, PhoneOff, Plus, Repeat, RotateCcw, Settings2, Square, ThumbsDown, Trash2, Voicemail, type LucideIcon,
 } from "lucide-react";
 
+import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
 import { Callout, SettingsStack, control, st } from "@/components/app/settings/primitives";
 import { AgentQuestionsDialog } from "@/components/app/settings/agent-questions";
 import { Button } from "@/components/ui/button";
@@ -41,7 +42,7 @@ import type { DispositionSettingsRow } from "@/lib/dispositions/types";
 import type { Pipeline } from "@/lib/pipelines/types";
 import type { PipelineViewContext } from "@/lib/pipelines/views";
 import {
-  draftProblems, destinations, iconFor, isTemp, keyFor, liveStages, NEW_PREFIX, NEW_STAGE_COLOR, planSave, reachedSomeone,
+  draftProblems, destinations, hasInsurvasRouting, iconFor, insurvasRouting, isTemp, keyFor, liveStages, NEW_PREFIX, NEW_STAGE_COLOR, planSave, reachedSomeone, routingIsDefault,
   REST_PRESETS, RETRY_PRESETS, shortDuration, STAGE_SWATCHES, TIME_ALLOWED_PRESETS, WHY_CLOSES, WHY_KIND, WHY_NEXT, WHY_WORKED,
   type BoardDoc, type BoardOutcome, type BoardPipeline, type BoardStage, type Destination, type OutcomeIcon, type SaveOp, type StageType,
 } from "@/lib/pipelines/outcomesBoard";
@@ -228,6 +229,14 @@ export function PipelinesOutcomesSettings() {
   const editOutcome = (key: string, fn: (o: BoardOutcome) => void) => edit((doc) => { const o = doc.outcomes.find((item) => item.key === key); if (o) fn(o); });
   const route = (key: string, stageId: string | null) => edit((doc) => { (doc.own[pipeline.id] ??= {})[key] = stageId; });
   const resetRoute = (key: string) => edit((doc) => { if (doc.own[pipeline.id]) delete doc.own[pipeline.id][key]; });
+  // The Insurvas default routing (docs/settings/DEFAULTS.md), for the all-in-one pipeline only.
+  const defaultRouting = hasInsurvasRouting(pipeline) ? insurvasRouting(pipeline, draft.outcomes) : null;
+  const onDefaultRouting = defaultRouting !== null && Object.keys(defaultRouting).length > 0 && routingIsDefault(draft.own[pipeline.id], defaultRouting);
+  async function resetRouting() {
+    if (!defaultRouting) return;
+    if (!(await confirmAction(resetConfirmOptions(`where ${pipeline.name}'s outcomes send a lead`, "Your stages and outcomes stay; only the routing changes, and nothing is saved until you save.")))) return;
+    edit((doc) => { doc.own[pipeline.id] = { ...defaultRouting }; });
+  }
 
   function addOutcome() {
     const key = `${NEW_PREFIX.replace(":", "_")}${Date.now().toString(36)}`;
@@ -452,6 +461,12 @@ export function PipelinesOutcomesSettings() {
           <Settings2 className="size-4" aria-hidden="true" />
         </Button>
         <span className="ml-auto flex flex-wrap items-center gap-2">
+          {onDefaultRouting && <DefaultChip label="Insurvas default routing" />}
+          {defaultRouting && Object.keys(defaultRouting).length > 0 && !onDefaultRouting && (
+            <Button type="button" variant="ghost" onClick={() => void resetRouting()} disabled={saving} title="Send each standard outcome to the stage with its Insurvas name again">
+              <RotateCcw className="size-4" aria-hidden="true" />Reset to default
+            </Button>
+          )}
           <span role="status" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)]">
             {dirty ? <span className="size-2 rounded-full bg-[var(--ink)]" aria-hidden="true" /> : <Check className="size-3.5 text-[var(--accent-ink)]" aria-hidden="true" />}
             {dirty ? `${ops.length} unsaved change${ops.length === 1 ? "" : "s"}` : savedNote ? "Saved" : "All saved"}

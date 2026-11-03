@@ -6,6 +6,7 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { InlineNotices } from "@/components/ui/page-notices"
 
 function Dialog({
   ...props
@@ -82,7 +83,8 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        {/* A notice raised in a dialog stays in it: the bell is behind the overlay (page-notices.tsx). */}
+        <InlineNotices>{children}</InlineNotices>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"

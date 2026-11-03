@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 
+import { fillLine, scroller } from "./table-card-layout";
+
 /**
  * The most rows a page ever shows. The owner's 10-row cap (2026-10-13) gave way on 2026-10-30: "make
  * sure that the table lines are dynamic for how much the height left there is available".
@@ -53,9 +55,15 @@ export function useFittingPageSize(reserved: number, rowHeight: number, { fallba
       if (!rows.length) return current;
       const each = rows.reduce((sum, height) => sum + height, 0) / rows.length;
       const footer = card.lastElementChild !== body.closest(".overflow-x-auto") ? (card.lastElementChild as HTMLElement | null)?.offsetHeight ?? 0 : 0;
-      const top = body.getBoundingClientRect().top + window.scrollY;
+      // The line the card may reach (table foundation §6b): a merged page's column foot, less a footnote
+      // under the card (Files' stage legend, owner 2026-11-02: "remove that scroll"); else the window's.
+      // Both the line and the body's top are measured as if the box were scrolled to its top.
+      const box = scroller(card);
+      const offset = box ? box.scrollTop : window.scrollY;
+      const line = fillLine(card) ?? window.innerHeight - bottomGap();
+      const top = body.getBoundingClientRect().top + offset;
       // The card's own border at the foot, and a pixel so rounding never adds a scrollbar.
-      const room = window.innerHeight - top - footer - bottomGap() - 2;
+      const room = line - top - footer - 2;
       const used = rows.reduce((sum, height) => sum + height, 0);
       if (used > room) return clamp(rows.length - Math.ceil((used - room) / each));
       // A short last page leaves room on purpose: grow only from a full page.

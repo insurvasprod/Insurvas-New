@@ -16,11 +16,13 @@
  *   agent                 policy_current rows whose agent code maps to nobody POST /api/app/policy-matching   map_agent
  *   status-word           unmapped_status_queue (not resolved)                nothing here: Insurvas maps the word
  *   rules                 pipeline_rule_hold (live, open): two rules disagree POST /api/app/pipeline-rules  resolve_hold
+ *   file                  file_registry failed (not superseded): LA-4.9's    the file page: Read again, or upload a
+ *                         file_failed queue, read straight from the file      corrected copy (it then supersedes)
  *
  * Pure; relative imports only (lib/needsYou/needsYou.test.mjs runs it under node).
  */
 
-export const NEEDS_YOU_KINDS = ["pick-client", "no-sale", "no-carrier", "same-person", "existing-book", "commission-no-policy", "money", "credit", "agent", "status-word", "rules"] as const;
+export const NEEDS_YOU_KINDS = ["pick-client", "no-sale", "no-carrier", "same-person", "existing-book", "commission-no-policy", "money", "credit", "agent", "status-word", "rules", "file"] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 
 /** The chip groups over the list, in the mockup's order. */
@@ -55,6 +57,8 @@ export const KIND_META: Record<NeedsYouKind, KindMeta> = {
   agent: { label: "Who’s the agent", tone: "neutral", group: "credit", keeperOnly: true, verb: "Map the code", source: "Policy matching › Agent codes" },
   "status-word": { label: "Status word", tone: "neutral", group: "files", keeperOnly: true, verb: "Open the next", source: "Waiting on Insurvas" },
   rules: { label: "Two rules disagree", tone: "warning", group: "rules", keeperOnly: true, verb: "Move the card", source: "Pipeline rules" },
+  // LA-4.9's file_failed queue (owner: operations, i.e. the owner and bookkeepers, who receive carrier files).
+  file: { label: "File didn’t read", tone: "danger", group: "files", keeperOnly: true, verb: "Open the next", source: "Files" },
 };
 
 /** The exception queues' types, as Needs you kinds (lib/ingestion/exceptionQueues.ts QUEUE_TYPES). */
@@ -90,21 +94,62 @@ export type NeedsYouItem = {
   /** Closed items: how it ended, and when. */
   closedAs?: string | null;
   closedAt?: string | null;
+  /** A queue item a person escalated (queue_item.escalated_at): a chip beside its owner. */
+  escalated?: boolean;
   /** What ties it to a carrier file (Files › "Open all in Needs you" filters by these). */
-  ref?: { carrierId?: string | null; policyNumber?: string | null; fileId?: string | null; agentCode?: string | null; word?: string | null };
+  ref?: { carrierId?: string | null; policyNumber?: string | null; fileId?: string | null; fileDate?: string | null; agentCode?: string | null; word?: string | null };
 };
 
-/** What one carrier file touched: its policies (carrier|policy), agent codes (carrier|code) and held status words. */
-export type FileFilter = { fileId: string; name: string; carrierId: string | null; policies: ReadonlySet<string>; codes: ReadonlySet<string>; words: ReadonlySet<string> };
+/**
+ * What one carrier file touched, as its own page counts it (lib/ingestion/fileOutcomeStore.ts): its id (its
+ * match reviews, its attribution items, its existing-book item), the file date its "policy with no sale" items
+ * carry (null when this file isn't the one they are tied to: ROW_QUEUE_TYPE), the policies its snapshots list
+ * (carrier|policy) and its commission lines list, the agent codes on them (carrier|code), and the status words
+ * it was held on.
+ */
+export type FileFilter = {
+  fileId: string;
+  name: string;
+  carrierId: string | null;
+  rowItemsDate: string | null;
+  policies: ReadonlySet<string>;
+  commissionPolicies: ReadonlySet<string>;
+  codes: ReadonlySet<string>;
+  words: ReadonlySet<string>;
+};
 
-/** Whether an item came from that file: by its file id, or by a policy, agent code or status word the file carries. */
-export function fromFile(item: Pick<NeedsYouItem, "ref">, file: FileFilter): boolean {
+/**
+ * Whether an item came from that file, by the file page's rule: a review of that file; a "policy with no sale"
+ * item tied by carrier and file date (never by policy number alone, which would hand it to every daily file);
+ * a status word it was held on; an agent code or commission line it carries. "Same person?" (a client) and
+ * "Sale no carrier has" (a sale with no carrier policy at all) never belong to a file.
+ */
+export function fromFile(item: Pick<NeedsYouItem, "kind" | "ref">, file: FileFilter): boolean {
   const ref = item.ref;
   if (!ref) return false;
-  if (ref.fileId && ref.fileId === file.fileId) return true;
-  if (ref.carrierId && ref.policyNumber && file.policies.has(`${ref.carrierId}|${ref.policyNumber}`)) return true;
-  if (ref.carrierId && ref.agentCode && file.codes.has(`${ref.carrierId}|${ref.agentCode}`)) return true;
-  return Boolean(ref.word && ref.carrierId && ref.carrierId === file.carrierId && file.words.has(ref.word));
+  const policy = ref.carrierId && ref.policyNumber ? `${ref.carrierId}|${ref.policyNumber}` : null;
+  switch (item.kind) {
+    case "same-person":
+    case "no-carrier":
+      return false;
+    case "pick-client":
+    case "existing-book":
+    case "credit":
+      return Boolean(ref.fileId && ref.fileId === file.fileId);
+    case "no-sale":
+      return Boolean(file.rowItemsDate && ref.carrierId && ref.carrierId === file.carrierId && ref.fileDate === file.rowItemsDate);
+    case "status-word":
+      return Boolean((ref.fileId && ref.fileId === file.fileId) || (ref.word && ref.carrierId && ref.carrierId === file.carrierId && file.words.has(ref.word)));
+    case "agent":
+      return Boolean(ref.carrierId && ref.agentCode && file.codes.has(`${ref.carrierId}|${ref.agentCode}`));
+    case "money":
+    case "commission-no-policy":
+      return Boolean(policy && file.commissionPolicies.has(policy));
+    case "rules":
+      return Boolean(policy && file.policies.has(policy));
+    case "file":
+      return Boolean(ref.fileId && ref.fileId === file.fileId);
+  }
 }
 
 export const NEEDS_YOU_VIEWS = ["mine", "agency", "insurvas", "closed"] as const;

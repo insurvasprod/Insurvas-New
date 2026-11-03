@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Copy, Download, Undo2, Unlink } from "lucide-react";
+import { Copy, Download, MoreHorizontal, Undo2, Unlink } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { UnderlineTabs, type ViewTab } from "@/components/ui/view-tabs";
 import { notify } from "@/lib/notify";
 import { historyCsv, type PolicyHistoryRow, type PolicyTab } from "@/lib/ingestion/policyPage";
@@ -21,20 +23,40 @@ export function PolicyTabs({ tabs, value, hrefs }: { tabs: ReadonlyArray<ViewTab
   return <UnderlineTabs label="This policy" tabs={tabs} value={value} onChange={(key) => router.push(hrefs[key], { scroll: false })} />;
 }
 
+function copyPolicyNumber(policyNumber: string) {
+  void navigator.clipboard?.writeText(policyNumber).then(
+    () => notify.done(`Copied ${policyNumber}`),
+    () => notify.warn("Couldn't copy", { detail: `Select the number and copy it: ${policyNumber}` }),
+  );
+}
+
 export function CopyPolicyNumber({ policyNumber }: { policyNumber: string }) {
   return (
-    <Button
-      type="button"
-      variant="outline"
-      onClick={() => {
-        void navigator.clipboard?.writeText(policyNumber).then(
-          () => notify.done(`Copied ${policyNumber}`),
-          () => notify.warn("Couldn't copy", { detail: `Select the number and copy it: ${policyNumber}` }),
-        );
-      }}
-    >
+    <Button type="button" variant="outline" onClick={() => copyPolicyNumber(policyNumber)}>
       <Copy aria-hidden="true" />Copy policy number
     </Button>
+  );
+}
+
+export type MoreLink = { label: string; href: string };
+
+/**
+ * Round 3 (docs/la4/POLISH-ROUND3.md): a detail page shows at most two buttons; the rest sit in this "More"
+ * menu — the links that didn't fit, and Copy policy number.
+ */
+export function PolicyMoreMenu({ links, policyNumber }: { links: MoreLink[]; policyNumber: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="outline"><MoreHorizontal aria-hidden="true" />More</Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {links.map((link) => (
+          <DropdownMenuItem key={link.href} asChild><Link href={link.href}>{link.label}</Link></DropdownMenuItem>
+        ))}
+        <DropdownMenuItem onSelect={() => copyPolicyNumber(policyNumber)}><Copy aria-hidden="true" />Copy policy number</DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

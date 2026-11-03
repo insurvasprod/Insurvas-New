@@ -2,6 +2,7 @@ import { NextResponse, after, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
+import { acceptsFilesFrom } from "@/lib/carriers/agency";
 import { FILE_TYPES, carrierFileBytesMatch, carrierFileKind } from "@/lib/ingestion/constants";
 import { runArrival } from "@/lib/ingestion/dailyRunStore";
 import { processFileQuietly } from "@/lib/ingestion/parser";
@@ -40,6 +41,11 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
   const fields = bodySchema.safeParse(await request.json().catch(() => ({})));
   if (!fields.success) return NextResponse.json({ error: fields.error.issues[0]?.message ?? "Check the form and try again." }, { status: 400 });
+
+  // LA-0.4: only a carrier from Settings › Carriers (or one whose files the agency already holds).
+  if (!(await acceptsFilesFrom(auth.context.tenantId, fields.data.carrier_id))) {
+    return NextResponse.json({ error: "That carrier is not one of yours. Add it, or switch it on, in Settings › Carriers, then give the file its carrier." }, { status: 400 });
+  }
 
   try {
     const file = await readCarrierFileOriginal(auth.context.tenantId, id);

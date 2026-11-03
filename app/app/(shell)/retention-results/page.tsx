@@ -5,12 +5,12 @@ import { loadRadarConfig } from "@/lib/retention/radarStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionResultsBoard } from "@/components/app/retention/retention-results-board";
-import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { ReportsPage } from "@/components/app/reports/reports-page";
 
 /**
- * Book › Does it work? (LA-5.9, Notion sprint). From the agency's own book: did the radar's bands come
+ * Reports › Retention results (LA-5.9, Notion sprint). From the agency's own book: did the radar's bands come
  * true on the policies nobody worked, and did working the queue beat the holdout? Sample sizes and the
  * period are always stated, and a difference that is not yet meaningful says so. Owner only: it is the
  * whole agency's numbers, and the answer to "is this worth the extra money?".
@@ -18,10 +18,10 @@ import { TableCard } from "@/components/ui/table-card";
 export default async function RetentionResultsPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
   const guard = await guardPage("chargeback_radar");
   if (!guard.entitled) {
-    return <FeatureGateNotice guard={guard} featureLabel="Does it work?" description="Whether the risk bands came true, and what working the queue saved." />;
+    return <FeatureGateNotice guard={guard} featureLabel="Retention results" description="Whether the risk bands came true, and what working the queue saved." />;
   }
   if (guard.role !== "owner") {
-    return <RoleGateNotice featureLabel="Does it work?" detail="Only the owner sees whether the retention module is earning its price." />;
+    return <RoleGateNotice featureLabel="Retention results" detail="Only the owner sees whether the retention module is earning its price." />;
   }
   const { period: periodParam } = await searchParams;
   const period: Period = periodParam && periodParam in PERIODS ? (periodParam as Period) : "quarter";
@@ -33,8 +33,8 @@ export default async function RetentionResultsPage({ searchParams }: { searchPar
   const data = config ? await loadEffectiveness(guard.context.tenantId, period, config.settings, reads) : null;
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Does it work?" description="Whether the radar's predictions came true, and whether working the queue saved policies, from your own book." />
+    <ReportsPage view="retentionResults" info="From your own book: did the radar's bands come true on the policies nobody worked, and did working the queue beat the holdout? Under 20 policies a cell shows the count, never a percentage, and a difference that is not yet meaningful says so.">
+    <>
       {data ? (
         <RetentionResultsBoard data={data} />
       ) : (
@@ -42,6 +42,7 @@ export default async function RetentionResultsPage({ searchParams }: { searchPar
           <EmptyState title="Not switched on yet" hint="Measuring the radar needs a database update (20261016210000)." />
         </TableCard>
       )}
-    </div>
+    </>
+    </ReportsPage>
   );
 }

@@ -63,7 +63,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const applyTheme = () => applyThemeToRoot(theme, media.matches);
+    // The saved choice, never `theme`: during hydration `theme` is the server's "system" snapshot, so a
+    // light choice on a dark-mode computer flipped the page to dark and back once loading finished (owner
+    // 2026-11-03: "it flashes"). setTheme saves before it announces, so the saved value is always current.
+    const applyTheme = () => applyThemeToRoot(getStoredTheme(), media.matches);
 
     applyTheme();
     media.addEventListener("change", applyTheme);

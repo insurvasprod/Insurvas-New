@@ -16,6 +16,10 @@ import { SCREENING_OUTCOME_LABELS, type ScreeningAuditRow } from "@/lib/suppress
  * TTL; metered." Every screening wrote a screening_audit row, and nothing showed them. This tab on
  * /app/tcpa lists them newest first: who asked, when, which vendor answered, the outcome, whether it
  * was the 24-hour cache, and the raw vendor response on demand.
+ *
+ * Foundation pass (2026-11-03): seven columns, so the table keeps to the card at 1280 (the vendor is the line
+ * under where the answer came from, the origin the line under who asked). The raw response still opens under
+ * its row: read in place, as Book of business decides in place.
  */
 
 const OUTCOME_TONE: Record<string, StatusTone> = {
@@ -96,33 +100,29 @@ export function TcpaScreeningAudit({ className, pageSize = 10 }: { className?: s
         : rows.length === 0 ? (filtered
           ? <NoMatches noun="checks" onClear={clear} />
           : <EmptyState title="No number has been screened yet" hint="Each DNC and litigator check is listed here once it runs." />)
-        : <table className="w-full min-w-[1180px] border-collapse text-left">
+        : <table className="w-full min-w-[820px] border-collapse text-left">
           <thead><tr>
             <th className={th}>When</th>
             <th className={th}>Number</th>
             <th className={th}>Outcome</th>
-            <th className={th}>Answered from</th>
-            <th className={th}>Vendor</th>
+            <th className={th}>Answered by</th>
             <th className={th}>Who</th>
-            <th className={th}>Origin</th>
             <th className={th}>Lead</th>
-            <th className={`${th} text-right`}>Response</th>
+            <th className={`${th} text-right`}><span className="sr-only">Raw response</span></th>
           </tr></thead>
           <tbody>{rows.map((row) => <Fragment key={row.id}>
             <tr className="m-row">
               <td className={`${td} whitespace-nowrap tabular-nums`}>{stamp(row.at)}</td>
               <td className={`${td} whitespace-nowrap font-semibold tabular-nums text-foreground`}>{row.phoneDigits ? formatPhone(row.phoneDigits) : "Not a number"}</td>
               <td className={td}><StatusChip tone={OUTCOME_TONE[row.outcome] ?? "neutral"}>{SCREENING_OUTCOME_LABELS[row.outcome] ?? row.outcome}</StatusChip></td>
-              <td className={`${td} whitespace-nowrap`}>{row.cached ? "The 24-hour cache" : "A live check"}</td>
-              <td className={`${td} max-w-[240px] truncate`} title={vendorLabel(row.vendor)}>{vendorLabel(row.vendor)}</td>
-              <td className={`${td} max-w-[180px] truncate`} title={row.who}>{row.who}</td>
-              <td className={`${td} max-w-[160px] truncate text-muted-foreground`} title={row.origin}>{row.origin}</td>
+              <td className={td}>{row.cached ? "The 24-hour cache" : "A live check"}<span className="block max-w-[150px] truncate text-xs text-muted-foreground" title={vendorLabel(row.vendor)}>{vendorLabel(row.vendor)}</span></td>
+              <td className={td}><span className="block max-w-[136px] truncate" title={row.who}>{row.who}</span><span className="block max-w-[136px] truncate text-xs text-muted-foreground" title={row.origin}>{row.origin}</span></td>
               <td className={`${td} max-w-[180px] truncate`}>{row.leadId ? <a className="text-[var(--accent-ink)] hover:underline" href={`/app/leads/${row.leadId}`} title={row.leadName ?? undefined}>{row.leadName ?? "Open lead"}</a> : "—"}</td>
               <td className={`${td} text-right`}>
                 <Button type="button" variant="outline" size="sm" aria-expanded={open === row.id} onClick={() => setOpen(open === row.id ? null : row.id)}>{open === row.id ? "Hide" : "Raw"}</Button>
               </td>
             </tr>
-            {open === row.id && <tr><td colSpan={9} className="border-t border-border bg-[var(--canvas)] px-3 py-2">
+            {open === row.id && <tr><td colSpan={7} className="border-t border-border bg-[var(--canvas)] px-3 py-2">
               <pre className="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs leading-normal text-[var(--body)]">{JSON.stringify(row.rawResponse, null, 2)}</pre>
             </td></tr>}
           </Fragment>)}</tbody>

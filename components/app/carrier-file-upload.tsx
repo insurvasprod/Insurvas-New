@@ -31,7 +31,7 @@ export type UploadPreset = { carrierId?: string | null; fileType?: CarrierFileTy
  * corrected file: the same carrier, type and day, so the new file supersedes the old one; Missing › Upload
  * it: the carrier). When the file is in, "Open the file" opens its page.
  */
-export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "Upload a file", variant, size, preset, title, openWhenDone = false }: {
+export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "Upload a file", variant, size, preset, title, openWhenDone = false, open: shown, onOpenChange }: {
   carriers: CarrierChoice[];
   autoOpen?: boolean;
   label?: string;
@@ -41,9 +41,18 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
   title?: string;
   /** End on "Open the file" (the Files area) instead of "Done". */
   openWhenDone?: boolean;
+  /**
+   * Opened from somewhere else (round 3: a "More" menu item): the caller holds the open state and the
+   * button itself is not drawn.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(autoOpen);
+  const [ownOpen, setOwnOpen] = useState(autoOpen);
+  const controlled = shown !== undefined;
+  const open = controlled ? shown : ownOpen;
+  const setOpen = (next: boolean) => { if (controlled) onOpenChange?.(next); else setOwnOpen(next); };
   const [file, setFile] = useState<File | null>(null);
   const [carrierId, setCarrierId] = useState(preset?.carrierId ?? "");
   const [fileType, setFileType] = useState<CarrierFileType | "">(preset?.fileType ?? "");
@@ -113,12 +122,13 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
 
   return (
     <>
-      <Button type="button" variant={variant} size={size} title={title} onClick={() => setOpen(true)}>{label}</Button>
+      {!controlled && <Button type="button" variant={variant} size={size} title={title} onClick={() => setOpen(true)}>{label}</Button>}
       <Dialog open={open} onOpenChange={(next) => { if (busy) return; setOpen(next); if (!next) reset(); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-base">Upload a carrier file</DialogTitle>
-            <DialogDescription>A policy file or a commission file, as the carrier&apos;s portal gave it: CSV, Excel or PDF.</DialogDescription>
+            {/* The title is for screen readers only (owner 2026-11-02); the one short line says what to drop. */}
+            <DialogTitle className="sr-only">Upload a carrier file</DialogTitle>
+            <DialogDescription>Policy or commission file: CSV, Excel or PDF.</DialogDescription>
           </DialogHeader>
 
           {done ? (
@@ -155,14 +165,10 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
                 <div className="grid gap-1.5">
                   <Label htmlFor="carrier-file-date">File date</Label>
                   <Input id="carrier-file-date" type="date" className="h-9" value={fileDate} onChange={(event) => setFileDate(event.target.value)} />
-                  <p className="text-xs text-muted-foreground">The day the carrier ran the report.</p>
                 </div>
               </div>
-              <div className="grid gap-1.5">
-                <Label htmlFor="carrier-file-agency">Agency (optional)</Label>
-                <Input id="carrier-file-agency" className="h-9" maxLength={120} value={agency} onChange={(event) => setAgency(event.target.value)} />
-                <p className="text-xs text-muted-foreground">Only if the carrier sends a separate file for each agency or downline.</p>
-              </div>
+              {/* No Agency field (owner 2026-11-02): a corrected or missing file's preset agency is still sent, so it
+                  replaces the right file; a new upload has none. */}
               {problem && <p role="alert" className="text-sm font-medium text-[var(--error-ink)]">{problem}</p>}
             </div>
           )}

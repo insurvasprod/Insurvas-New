@@ -234,7 +234,7 @@ export function FillMenu({ matches, canCopy, canClear, canReset, onMatch, onCopy
         <DropdownMenuItem disabled={!canCopy} onSelect={onCopy} title={canCopy ? undefined : "No other pipeline has a map yet"}>Copy from another pipeline…</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem disabled={!canReset} onSelect={onReset} title={canReset ? undefined : "Nothing here has changed since it was saved"}>Undo this pipeline&apos;s changes</DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" disabled={!canClear} onSelect={onClear}>Clear this pipeline</DropdownMenuItem>
+        <DropdownMenuItem variant="destructive" disabled={!canClear} onSelect={onClear}>Reset to default</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

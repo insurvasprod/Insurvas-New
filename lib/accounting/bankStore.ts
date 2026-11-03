@@ -86,13 +86,13 @@ export async function suggest(tenantId: string): Promise<number> {
 }
 
 export type QueueRow = {
-  id: string; accountId: string; postedOn: string; amountCents: number; descriptionRaw: string; status: MatchStatus; ignoredReason: string | null;
+  id: string; accountId: string; postedOn: string; amountCents: number; descriptionRaw: string; reference: string | null; status: MatchStatus; ignoredReason: string | null;
   matches: { id: string; statementId: string; carrierName: string; statementDate: string; amountAppliedCents: number; confidence: string; confirmed: boolean; reason: string | null }[];
 };
 
 /** Deposits to review: suggestions to confirm, partial matches, and lines nothing explains. */
 export async function matchQueue(tenantId: string, view: "open" | "all" = "open"): Promise<QueueRow[]> {
-  let q = db().from("bank_transaction").select("id, bank_account_id, posted_on, amount_cents, description_raw, match_status, ignored_reason").eq("tenant_id", tenantId).gt("amount_cents", 0);
+  let q = db().from("bank_transaction").select("id, bank_account_id, posted_on, amount_cents, description_raw, reference, match_status, ignored_reason").eq("tenant_id", tenantId).gt("amount_cents", 0);
   if (view === "open") q = q.in("match_status", ["unmatched", "suggested", "partially_matched"]);
   const { data, error } = await q.order("posted_on", { ascending: false }).order("id").limit(500);
   if (error) fail(error);
@@ -109,7 +109,7 @@ export async function matchQueue(tenantId: string, view: "open" | "all" = "open"
     list.push({ id: m.id, statementId: m.carrier_account_statement_id, carrierName: name.get(m.carrier_account_statement?.carrier_id) ?? "Carrier", statementDate: m.carrier_account_statement?.statement_date, amountAppliedCents: Number(m.amount_applied_cents), confidence: m.confidence, confirmed: !!m.confirmed_by, reason: m.reason });
     byTxn.set(m.bank_transaction_id, list);
   }
-  return txns.map((t) => ({ id: t.id, accountId: t.bank_account_id, postedOn: t.posted_on, amountCents: Number(t.amount_cents), descriptionRaw: t.description_raw, status: t.match_status, ignoredReason: t.ignored_reason, matches: byTxn.get(t.id) ?? [] }));
+  return txns.map((t) => ({ id: t.id, accountId: t.bank_account_id, postedOn: t.posted_on, amountCents: Number(t.amount_cents), descriptionRaw: t.description_raw, reference: (t.reference as string | null) ?? null, status: t.match_status, ignoredReason: t.ignored_reason, matches: byTxn.get(t.id) ?? [] }));
 }
 
 /** Statements a deposit could still be matched to by hand: paid, and not fully accounted for. */
@@ -144,7 +144,10 @@ export async function findings(tenantId: string) {
 export async function confirmMatches(tenantId: string, by: string, matchIds: string[]) {
   const { data, error } = await db().rpc("confirm_deposit_matches", { p_tenant_id: tenantId, p_match_ids: matchIds, p_by: by });
   if (error) fail(error);
-  return Number(data ?? 0);
+  // Nothing confirmed: the ids are not this agency's suggestions (or were confirmed already) — say so, not "ok".
+  const confirmed = Number(data ?? 0);
+  if (confirmed === 0) throw new BankError("Nothing to confirm: those matches are not open suggestions in this agency.", 404);
+  return confirmed;
 }
 
 export async function manualMatch(tenantId: string, by: string, transactionId: string, statementId: string, amountCents: number) {
@@ -168,7 +171,8 @@ export async function removeMatch(tenantId: string, by: string, matchId: string)
 }
 
 export async function setIgnored(tenantId: string, transactionId: string, reason: string | null) {
-  const { error } = await db().from("bank_transaction").update(reason ? { match_status: "ignored", ignored_reason: reason } : { match_status: "unmatched", ignored_reason: null }).eq("tenant_id", tenantId).eq("id", transactionId);
+  const { data, error } = await db().from("bank_transaction").update(reason ? { match_status: "ignored", ignored_reason: reason } : { match_status: "unmatched", ignored_reason: null }).eq("tenant_id", tenantId).eq("id", transactionId).select("id");
   if (error) fail(error);
+  if (!(data as Loose[] | null)?.length) throw new BankError("That deposit isn't in this agency.", 404);
   if (!reason) await db().rpc("refresh_bank_match_status", { p_transaction_id: transactionId });
 }

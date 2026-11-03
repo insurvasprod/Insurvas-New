@@ -1,19 +1,12 @@
 import type { ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
 
 /**
- * The page's one "Next step" line (2026-10-26 redesign): what to do next, in a sentence, with the one
- * button that does it. Pages render it only when there is something to do.
+ * Retired (owner 2026-11-02: "never show this thing ever in the pages"). The "Next step" strip is
+ * gone from the design system: a page's one action lives in its header or toolbar, and what waits on
+ * someone lives in the bell. Kept as a no-op so old callers compile; the ui ratchet
+ * `next-step-strip` stops new ones (UI-CONSISTENCY §6d).
  */
-export function NextStepLine({ children, action, label = "Next step" }: { children: ReactNode; action?: ReactNode; label?: string }) {
-  return (
-    <section aria-label={label} className="m-glass flex flex-wrap items-center gap-4 rounded-xl border border-border px-4 py-3">
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-[var(--accent-ink)]"><ArrowRight className="size-4" aria-hidden="true" /></span>
-      <span className="min-w-0 flex-1 text-sm text-[var(--body)]">
-        <span className="block text-xs font-semibold text-[var(--accent-ink)]">{label}</span>
-        {children}
-      </span>
-      {action}
-    </section>
-  );
+export function NextStepLine(props: { children: ReactNode; action?: ReactNode; label?: string }) {
+  void props;
+  return null;
 }

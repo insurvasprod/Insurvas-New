@@ -3,6 +3,7 @@ import "server-only";
 import { db, isMissingSchema, rows, type DbError } from "./db";
 import { attemptForTarget, currentSyncKey, HUMAN_STAGE_SOURCES, shouldMove, SYNC_KEY_LABEL, SYNC_KEYS, targetSyncKey, type SyncAttempt, type SyncKey } from "./stageSync";
 import type { ApplicationOutcome, ApplicationStatus, InsuredRole } from "./constants";
+import { DEFAULT_STAGE_NAME } from "../salesSettings/stageMapChecks";
 
 /**
  * Pipeline stage sync (LA-3.23). The lead's card follows its case's most advanced live attempt,
@@ -82,6 +83,20 @@ async function evaluate(tenantId: string, kase: CaseRow): Promise<(LeadStageStat
     if (!(SYNC_KEYS as readonly string[]).includes(row.sync_key)) continue;
     if (mapQ.perPipeline && row.pipeline_id !== base.boardPipelineId) continue;
     map[row.sync_key] = row.stage_id;
+  }
+  // The Insurvas default (docs/settings/DEFAULTS.md): a pipeline with no map of its own moves the card
+  // to the stage carrying the state's default name ("Quoted", "Submitted", "Issued"…), the same match
+  // the Settings page pre-fills. A name the board lacks still moves nothing.
+  if (mapQ.perPipeline && base.boardPipelineId && Object.keys(map).length === 0) {
+    const named = await client.from("tenant_pipeline_stages").select("id, name").eq("pipeline_id", base.boardPipelineId).eq("is_archived", false);
+    if (!named.error) {
+      const stages = rows<{ id: string; name: string }>(named.data);
+      for (const key of SYNC_KEYS) {
+        const want = DEFAULT_STAGE_NAME[key].trim().toLowerCase();
+        const hit = stages.find((s) => s.name.trim().toLowerCase() === want);
+        if (hit) map[key] = hit.id;
+      }
+    }
   }
   const targetStageId = target ? map[target] ?? null : null;
 

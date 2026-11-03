@@ -7,12 +7,15 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
  * and the one line of facts ("AM-88120 · Americo · Eagle Premier"), then a quiet line of figures (the
  * mockups' stat line: label over value, no tiles, so the Commissions tab's tiles stay the page's one strip).
  */
-export function PolicyLead({ status, tone, facts }: { status: string; tone: StatusTone; facts: Array<string | null | undefined> }) {
+export function PolicyLead({ status, tone, facts, notices }: { status: string; tone: StatusTone; facts: Array<string | null | undefined>; notices?: ReactNode }) {
   const line = facts.filter(Boolean).join(" · ");
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-3">
       <StatusChip tone={tone}>{status}</StatusChip>
       <span className="min-w-0 truncate text-sm text-muted-foreground" title={line}>{line}</span>
+      {/* Round 3: what used to be the Overview's status lines (a provisional client, the linked application,
+          no client yet), as chips and links on the facts line. */}
+      {notices && <span className="flex shrink-0 flex-wrap items-center gap-3 text-sm">{notices}</span>}
     </div>
   );
 }

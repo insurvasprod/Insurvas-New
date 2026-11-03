@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyAnnotationForm } from "@/components/app/policy-annotation-form";
 import { PolicyAwaitingFile } from "@/components/app/policy-awaiting-file";
+import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PolicyClientTab } from "@/components/app/book/policy/client-tab";
 import { PolicyCommissionsTab } from "@/components/app/book/policy/commissions-tab";
@@ -13,10 +13,11 @@ import { PolicyFilesTab } from "@/components/app/book/policy/files-tab";
 import { PolicyHistoryTab } from "@/components/app/book/policy/history-tab";
 import { PolicyOverviewTab } from "@/components/app/book/policy/overview-tab";
 import { FactLine, PolicyLead, type Fact } from "@/components/app/book/policy/policy-head";
-import { CopyPolicyNumber, PolicyTabs } from "@/components/app/book/policy/policy-islands";
+import { PolicyMoreMenu, PolicyTabs, type MoreLink } from "@/components/app/book/policy/policy-islands";
 import { PolicyPipelineTab } from "@/components/app/book/policy/pipeline-tab";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { scopeFor } from "@/lib/agency/visibility";
 import { leadStageState } from "@/lib/applications/stageSyncService";
@@ -27,11 +28,12 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { inForce, statusLabel } from "@/lib/ingestion/policyBook";
 import { loadIssuedAwaitingOne, loadPolicy, PolicyBookError } from "@/lib/ingestion/policyBookStore";
 import { MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
-import { carrierPolicyHref, POLICY_TABS, policyTabOf, statusTone, type PolicyTab } from "@/lib/ingestion/policyPage";
+import { carrierPolicyHref, changeClientHref, POLICY_TABS, policyTabOf, statusTone, type PolicyTab } from "@/lib/ingestion/policyPage";
 import { loadPolicyFiles, loadPolicyFindings, loadPolicyHistory, loadPolicyLink, loadPolicyPipeline, policyKeys, policyTabCounts, STAGE_HISTORY_PENDING_MESSAGE, type PolicyPipeline } from "@/lib/ingestion/policyPageStore";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { loadPolicyRuleEvents, type EvaluationRow } from "@/lib/pipelineRules/store";
 
+const LINK = "font-medium text-[var(--accent-ink)] hover:underline";
 const money = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 /**
@@ -93,12 +95,26 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
     ...(atRiskCents ? [{ label: "Advance at risk", value: money(atRiskCents), tone: "danger" as const }] : []),
   ];
   const saveQueue = inForce(policy.status) && (late || policy.riskBand === "at_risk" || policy.riskBand === "critical") && holdsAnyRole(guard.roles, ["owner", "producer"]);
+  // Round 3: at most two buttons, most useful first; the rest (and Copy policy number) in "More".
+  const links: MoreLink[] = [
+    ...(saveQueue ? [{ label: "Open in Save queue", href: "/app/save-queue" }] : []),
+    ...(keys?.leadId ? [{ label: "Open the lead", href: `/app/leads/${keys.leadId}` }] : []),
+    ...(sale ? [{ label: "Open the application", href: `/app/applications/${sale.caseId}` }] : []),
+  ];
   const actions = (
     <>
-      {keys?.leadId && <Button asChild variant="outline"><Link href={`/app/leads/${keys.leadId}`}>Open the lead</Link></Button>}
-      {sale && <Button asChild variant="outline"><Link href={`/app/applications/${sale.caseId}`}>Open the application</Link></Button>}
-      {saveQueue && <Button asChild variant="outline"><Link href="/app/save-queue"><ExternalLink aria-hidden="true" />Open in Save queue</Link></Button>}
-      <CopyPolicyNumber policyNumber={policy.policyNumber} />
+      {links.slice(0, 2).map((link) => <Button key={link.href} asChild variant="outline"><Link href={link.href}>{link.label}</Link></Button>)}
+      <PolicyMoreMenu links={links.slice(2)} policyNumber={policy.policyNumber} />
+    </>
+  );
+  // Round 3: the Overview's three status lines, as chips and links on the header's facts line.
+  const canLink = canEditLink && !readOnly;
+  const saleState = sale ? (sale.outcome ? sale.outcome.replaceAll("_", " ") : sale.status ? sale.status.replaceAll("_", " ") : null) : null;
+  const notices = (
+    <>
+      {client?.provisional && <span className="inline-flex items-center gap-1.5"><ProvisionalBadge /><Link href="/app/duplicates" className={LINK} title="This client was built from the carrier's file">Check the client</Link></span>}
+      {sale && <Link href={`/app/applications/${sale.caseId}`} className={LINK} title={`Linked to ${sale.name ? `${sale.name}'s` : "an"} application`}>Application{saleState ? ` · ${saleState}` : ""}</Link>}
+      {!client && !sale && <span className="inline-flex items-center gap-1.5"><StatusChip tone="warning">No client linked</StatusChip>{canLink ? <Link href={changeClientHref(policy.carrierId, policy.policyNumber)} className={LINK}>Link a client</Link> : <Link href={carrierPolicyHref(policy.carrierId, policy.policyNumber, "client")} className={LINK}>See the Client tab</Link>}</span>}
     </>
   );
 
@@ -114,7 +130,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
     <DataInPage
       step="policies"
       title={title}
-      lead={<PolicyLead status={statusLabel(policy.status)} tone={statusTone(policy.status)} facts={[policy.policyNumber, policy.carrierName, policy.product]} />}
+      lead={<PolicyLead status={statusLabel(policy.status)} tone={statusTone(policy.status)} facts={[policy.policyNumber, policy.carrierName, policy.product]} notices={notices} />}
       actions={actions}
     >
       <FactLine label="This policy" facts={facts} />
@@ -192,7 +208,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
         </TableCard>
       );
     }
-    return <PolicyOverviewTab view={view} canLink={canEditLink && !readOnly} />;
+    return <PolicyOverviewTab view={view} />;
   }
 }
 

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { carrierIdsOn } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isPendingSchema } from "@/lib/appointments/pendingSchema";
 import { spreadBps } from "./overrideCore";
@@ -35,11 +36,12 @@ const today = () => new Date().toISOString().slice(0, 10);
 const inForce = (r: { effective_from: string; effective_to: string | null }, d: string) => r.effective_from <= d && (!r.effective_to || d <= r.effective_to);
 
 export async function readProducerCarriers(tenantId: string, producerId: string): Promise<{ schemaPending: boolean; rows: ProducerCarrierRow[] }> {
-  const [agencyRows, levels, numbers, appts] = await Promise.all([
+  const [agencyRows, levels, numbers, appts, on] = await Promise.all([
     db().from("tenant_carriers").select("carrier_id, contract_level_bp, effective_from, carriers(name)").eq("tenant_id", tenantId),
     db().from("producer_contract_level").select("carrier_id, level_bps, effective_from, effective_to").eq("tenant_id", tenantId).eq("producer_id", producerId),
     db().from("producer_writing_number").select("carrier_id, writing_number, effective_from, effective_to").eq("tenant_id", tenantId).eq("producer_id", producerId),
     db().from("producer_appointment").select("carrier_id, state, status, expires_on").eq("tenant_id", tenantId).eq("producer_id", producerId),
+    carrierIdsOn(tenantId),
   ]);
   if ([levels.error, numbers.error, appts.error].some((e) => e && isPendingSchema(e))) return { schemaPending: true, rows: [] };
   const d = today();
@@ -50,7 +52,9 @@ export async function readProducerCarriers(tenantId: string, producerId: string)
     .sort((a, b) => a.effective_from.localeCompare(b.effective_from))) {
     agency.set(r.carrier_id, { bps: r.contract_level_bp, name: r.carriers?.name ?? "Carrier" });
   }
-  const carrierIds = new Set<string>([...agency.keys()]);
+  // LA-0.4: the agency's carriers switched on in Settings › Carriers; a producer's own level or
+  // writing number keeps its carrier listed after the carrier is switched off.
+  const carrierIds = new Set<string>([...on]);
   for (const r of (levels.data ?? []) as Array<{ carrier_id: string }>) carrierIds.add(r.carrier_id);
   for (const r of (numbers.data ?? []) as Array<{ carrier_id: string }>) carrierIds.add(r.carrier_id);
   const missingNames = [...carrierIds].filter((id) => !agency.has(id));

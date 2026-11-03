@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -30,12 +31,12 @@ const TONE = { muted: "text-muted-foreground", ok: "font-semibold text-foregroun
 /**
  * LA-4.10 (Notion sprint) · import the book one carrier at a time. Each upload is read straight away
  * and its result shown on its row before the next; skipping is allowed and can be taken back.
+ * The carriers are the agency's own from Settings › Carriers (LA-0.4): another one is added there, not here.
  */
-export function BookImport({ carriers, others, processing, readOnly }: { carriers: CarrierImport[]; others: Array<{ id: string; name: string }>; processing: boolean; readOnly: boolean }) {
+export function BookImport({ carriers, processing, readOnly }: { carriers: CarrierImport[]; processing: boolean; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [busy, setBusy] = useState<string | null>(null);
-  const [extra, setExtra] = useState<Array<{ id: string; name: string }>>([]);
   const [dates, setDates] = useState<Record<string, string>>({});
   const [over, setOver] = useState<string | null>(null);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
@@ -48,10 +49,7 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
     return () => clearInterval(timer);
   }, [processing, router]);
 
-  const rows: CarrierImport[] = [
-    ...carriers,
-    ...extra.filter((e) => !carriers.some((c) => c.carrierId === e.id)).map((e): CarrierImport => ({ carrierId: e.id, carrierName: e.name, writes: false, status: "pending", guidance: null, file: null, result: null, summary: null })),
-  ];
+  const rows = carriers;
 
   async function upload(carrierId: string, file: File) {
     setBusy(carrierId);
@@ -100,15 +98,12 @@ export function BookImport({ carriers, others, processing, readOnly }: { carrier
       noun="carriers"
       toolbar={
         <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
-          <select aria-label="Add another carrier" className={`${toolbarControl} w-[240px]`} value="" disabled={readOnly} onChange={(e) => { const pick = others.find((o) => o.id === e.target.value); if (pick) setExtra((all) => [...all, pick]); }}>
-            <option value="">Add another carrier…</option>
-            {others.filter((o) => !extra.some((e) => e.id === o.id)).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
+          <Button asChild variant="outline" size="sm"><Link href="/app/settings#carriers">Add a carrier in Settings</Link></Button>
         </DataToolbar>
       }
     >
       {rows.length === 0 ? (
-        <EmptyState title="No carriers yet" hint="Add the carriers you write, then upload each one's latest policy file." />
+        <EmptyState title="No carriers yet" hint="Add the carriers you write in Settings › Carriers, then upload each one's latest policy file." />
       ) : (
         <table className="portal-lead-table w-full min-w-[880px] text-left text-sm">
           <thead><tr><th className="w-[180px]">Carrier</th><th>Where to find the file</th><th className="w-[250px]">Result</th><th className="w-[150px]">Date on the file</th><th className="w-[190px] text-right"><span className="sr-only">Actions</span></th></tr></thead>

@@ -328,17 +328,26 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, [load]);
 
-  async function action(name: string, path: string, init: RequestInit, success: string) { setSaving(name); const response = await fetch(path, init); const body = await response.json().catch(() => null); setSaving(null); if (!response.ok) { notify.block(body?.error ?? "The action could not be completed"); return; } notify.done(success); await load(); }
+  // The button stays busy until the lead is read again: clearing it first showed the old state, with the
+  // same button live again, for as long as the reload took (E2E 2026-11-02, after Claim).
+  async function action(name: string, path: string, init: RequestInit, success: string) { setSaving(name); const response = await fetch(path, init); const body = await response.json().catch(() => null); if (!response.ok) { setSaving(null); notify.block(body?.error ?? "The action could not be completed"); return; } notify.done(success); await load(); setSaving(null); }
   // The claim says whether it resumed the verification the transfer had when it was given back (LA-1.11-6).
   async function claim() {
     if (!data?.queue) return;
     setSaving("claim");
     const response = await fetch("/api/app/inbound/claim", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ work_item_id: data.queue.id }) });
     const body = await response.json().catch(() => null);
-    setSaving(null);
-    if (!response.ok) { notify.block(body?.error ?? "The action could not be completed"); return; }
+    if (!response.ok) { setSaving(null); notify.block(body?.error ?? "The action could not be completed"); return; }
     notify.done(claimedMessage(body));
+    // Shown as claimed at once (owner, work item, no Claim button); the reload below then brings the rest.
+    setData((current) => current?.queue ? {
+      ...current,
+      queue: { ...current.queue, status: "claimed", owner_user_id: current.currentUserId, claimed_at: new Date().toISOString() },
+      owner: { name: current.teammates.find((t) => t.id === current.currentUserId)?.name ?? "You" },
+      actions: { ...current.actions, canClaim: false },
+    } : current);
     await load();
+    setSaving(null);
   }
   function moveStage(event: React.ChangeEvent<HTMLSelectElement>) { if (!data) return; void action("stage", `/api/app/leads/${data.lead.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ values: data.lead.values, stage_id: event.target.value }) }, "Stage changed"); }
   function handoff() { if (!data?.queue) return; const target = handoffTarget || data.licensedAgents[0]?.id || ""; if (!target) { notify.block("Choose a licensed agent before offering the handoff"); return; } void action("handoff", "/api/app/inbound/handoff", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "offer", work_item_id: data.queue.id, target_user_id: target }) }, "Handoff offered"); }
@@ -505,7 +514,7 @@ export function LeadDetailWorkspace({ leadId }: { leadId: string }) {
               {data.queue && <Button variant="outline" className={outline} disabled={readOnly || saving === "nudge"} onClick={nudge}>Nudge team</Button>}
               {expired && <Button variant="outline" className={outline} disabled={readOnly || saving === "reopen"} onClick={reopen}>{saving === "reopen" && <Loader2 className="size-4 animate-spin" />}Reopen in queue</Button>}
               {canVerify && data.queue && <Button asChild variant="outline" className={outline}><Link href={`/app/inbound/call/${data.queue.id}?phase=verify`}>Verification</Link></Button>}
-              <LeadApplicationEntry leadId={data.lead.id} workItemId={data.queue?.id ?? null} canStart={!readOnly && (data.role === "owner" || data.role === "producer")} className={outline} />
+              <LeadApplicationEntry leadId={data.lead.id} workItem={data.queue ? { id: data.queue.id, status: data.queue.status, ownerUserId: data.queue.owner_user_id, disposition: data.queue.disposition } : null} currentUserId={data.currentUserId} canStart={!readOnly && (data.role === "owner" || data.role === "producer")} className={outline} />
               {data.stage && data.actions.canChangeStage && (
                 <div className="mt-1">
                   <Label htmlFor="lead-stage" className="text-xs font-semibold text-muted-foreground">Stage</Label>

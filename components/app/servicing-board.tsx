@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { DetailPanel } from "@/components/ui/detail-panel";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Callout } from "@/components/app/settings/primitives";
+import { personName } from "@/lib/format/personName";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -25,51 +31,60 @@ import { notify } from "@/lib/notify";
 const TONE: Record<RequestStatus, StatusTone> = {
   draft: "neutral", submitted: "info", awaiting_carrier: "info", confirmed_by_carrier: "warning", verified_in_file: "good", failed: "danger", cancelled: "neutral",
 };
-const VIEWS = { open: "Open", failed: "Not in the file", verified: "Verified", all: "Everything" } as const;
+const VIEWS = { open: "Open", failed: "Not in the file", verified: "Verified", all: "All" } as const;
 type View = keyof typeof VIEWS;
 const field = `${toolbarControl} w-full`;
 const labelClass = "grid gap-1.5 text-sm font-medium text-foreground";
-const alertClass = "rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]";
-const STEP_LABEL: Partial<Record<RequestStatus, string>> = { submitted: "Mark sent", awaiting_carrier: "Carrier is on it", confirmed_by_carrier: "Carrier says done", cancelled: "Cancel" };
+// "Cancel the request", not "Cancel": its dialog also has a button that only closes it (live test 2026-11-02).
+const STEP_LABEL: Partial<Record<RequestStatus, string>> = { submitted: "Mark sent", awaiting_carrier: "Carrier is on it", confirmed_by_carrier: "Carrier says done", cancelled: "Cancel the request" };
 const day = (iso: string | null) => (iso ? fileDay(iso.slice(0, 10)) : null);
+const phoneText = (raw: string) => {
+  const d = raw.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+  return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : raw;
+};
 
 /**
  * LA-5.4 (Notion sprint) · servicing requests. Open by default; "Carrier says done" is still open —
  * only a carrier file closes it. A change the file can't show waits and says why; one the file
  * contradicts past its date is "Not in the file", with the reason, and is back on the save queue.
+ *
+ * 2026-11-02 tidy (owner): views are chips with their counts, each row is one line per fact and fits the
+ * card, the next step is the row's one button, and a search finds a client or policy.
  */
 export function ServicingBoard({ rows, carriers, verifiedLast30, initialStatus, readOnly }: { rows: ServicingRow[]; carriers: Array<{ id: string; name: string }>; verifiedLast30: number; initialStatus: View; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [view, setView] = useState<View>(initialStatus);
   const [type, setType] = useState("");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [stepping, setStepping] = useState<{ row: ServicingRow; to: RequestStatus } | null>(null);
   const [starting, setStarting] = useState(false);
   const [creating, setCreating] = useState<{ carrierId: string; policyNumber: string; type: RequestType } | null>(null);
+  // The whole request, beside the list (owner 2026-11-02 critique: every fact, without crowding the row).
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const detail = detailId ? rows.find((r) => r.id === detailId) ?? null : null;
 
-  const visible = useMemo(() => rows.filter((r) => {
-    if (type && r.type !== type) return false;
-    if (view === "open") return OPEN_STATUSES.includes(r.status);
-    if (view === "failed") return r.status === "failed";
-    if (view === "verified") return r.status === "verified_in_file";
-    return true;
-  }), [rows, view, type]);
-  const pageSize = useFittingPageSize(480, 45);
+  const inView = (r: ServicingRow, v: View) => v === "all" || (v === "open" ? OPEN_STATUSES.includes(r.status) : v === "failed" ? r.status === "failed" : r.status === "verified_in_file");
+  const counts = useMemo(() => Object.fromEntries((Object.keys(VIEWS) as View[]).map((v) => [v, rows.filter((r) => inView(r, v)).length])) as Record<View, number>, [rows]);
+  const needle = search.trim().toLowerCase();
+  const visible = useMemo(() => rows.filter((r) => (!type || r.type === type) && inView(r, view)
+    && (!needle || [r.clientName, r.policyNumber, r.carrierName, r.carrierReference].some((v) => v?.toLowerCase().includes(needle)))), [rows, view, type, needle]);
+  const pageSize = useFittingPageSize(480, 57);
   const shown = paginate(visible, page, pageSize);
   const waiting = rows.filter((r) => WAITING_STATUSES.includes(r.status));
   const unprovable = waiting.filter((r) => r.unprovable.length > 0).length;
   const failed = rows.filter((r) => r.status === "failed").length;
   const verified30 = verifiedLast30;
   const drafts = rows.filter((r) => r.status === "draft").length;
-  const clear = () => { setType(""); setView("open"); setPage(1); };
+  const clear = () => { setType(""); setView("open"); setSearch(""); setPage(1); };
 
   return (
     <>
       {rows.length > 0 && (
         <StatStrip label="Servicing">
-          <StatTile label="Waiting on the file" value={waiting.length.toLocaleString("en-US")} footnote={drafts ? `${drafts} more not sent yet` : "sent, not yet shown by a carrier file"} />
-          <StatTile label="Can't be proven" value={unprovable.toLocaleString("en-US")} valueTone={unprovable ? "warning" : undefined} labelTitle="The carrier's file doesn't carry the field that changed (most files have no draft day). These wait; map the column in the carrier's layout if the file has one." footnote={unprovable ? "the file doesn't show the field" : "every open change can be checked"} />
+          <StatTile label="Waiting on the file" value={waiting.length.toLocaleString("en-US")} footnote={drafts ? `${drafts} not sent yet` : "sent, not in a file yet"} />
+          <StatTile label="Can't be proven" value={unprovable.toLocaleString("en-US")} valueTone={unprovable ? "warning" : undefined} labelTitle="The carrier's file doesn't carry the field that changed (most files have no draft day). These wait; map the column in the carrier's layout if the file has one." footnote={unprovable ? "the file has no such field" : "every change can be checked"} />
           <StatTile label="Not in the file" value={failed.toLocaleString("en-US")} valueTone={failed ? "danger" : undefined} footnote={failed ? "back on the save queue" : "no change has failed"} />
           <StatTile label="Verified" value={verified30.toLocaleString("en-US")} valueTone={verified30 ? "good" : undefined} footnote="by a carrier file, last 30 days" />
         </StatStrip>
@@ -78,13 +93,14 @@ export function ServicingBoard({ rows, carriers, verifiedLast30, initialStatus, 
       <TableCard
         toolbar={
           <DataToolbar actions={<>
-            {(type || view !== "open") && <ClearFiltersButton onClick={clear} />}
+            {(type || needle || view !== "open") && <ClearFiltersButton onClick={clear} />}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
             {!readOnly && <Button type="button" onClick={() => setStarting(true)}>New request</Button>}
           </>}>
-            <select aria-label="Which requests" className={toolbarControl} value={view} onChange={(e) => { setView(e.target.value as View); setPage(1); }}>
-              {(Object.keys(VIEWS) as View[]).map((v) => <option key={v} value={v}>{VIEWS[v]}</option>)}
-            </select>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Client, policy or reference" />
+            {(Object.keys(VIEWS) as View[]).map((v) => (
+              <ToggleChip key={v} role="radio" selected={view === v} count={counts[v]} countTone={v === "failed" && counts.failed ? "danger" : undefined} onClick={() => { setView(v); setPage(1); }}>{VIEWS[v]}</ToggleChip>
+            ))}
             <select aria-label="Kind of change" className={toolbarControl} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
               <option value="">Every change</option>
               {REQUEST_TYPES.map((t) => <option key={t} value={t}>{REQUEST_LABELS[t]}</option>)}
@@ -98,58 +114,108 @@ export function ServicingBoard({ rows, carriers, verifiedLast30, initialStatus, 
         ) : visible.length === 0 ? (
           <NoMatches noun="requests" onClear={clear} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[1000px] text-left text-sm">
+          <table className="portal-lead-table w-full text-left text-sm">
             <thead>
               <tr>
-                <th className="w-[210px]">Client</th>
+                <th>Client</th>
                 <th>Change</th>
-                <th className="w-[260px]">Where it stands</th>
-                <th className="w-[160px]">With the carrier</th>
+                <th>Where it stands</th>
                 <th className="w-[200px] text-right"><span className="sr-only">Next step</span></th>
               </tr>
             </thead>
-            <tbody>
-              {shown.rows.map((r) => (
-                <tr key={r.id}>
-                  <td>
-                    <span className="block font-semibold text-foreground">{r.clientName ?? "No client linked"}</span>
-                    <Link href={`/app/policies/carrier/${r.carrierId}/${encodeURIComponent(r.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{r.carrierName} · {r.policyNumber}</Link>
-                    {r.requestedBy && <span className="block text-xs text-muted-foreground">Asked by {r.requestedBy}, {day(r.createdAt)}</span>}
-                  </td>
-                  <td>
-                    <span className="block font-medium text-foreground">{REQUEST_LABELS[r.type]}</span>
-                    {r.changes.map((c) => <span key={c.field} className="block text-xs text-muted-foreground">{describeChange(c)}</span>)}
-                    {r.targetDraftReason && <span className="mt-1 block text-xs text-muted-foreground">&ldquo;{r.targetDraftReason}&rdquo;</span>}
-                  </td>
-                  <td>
-                    <StatusChip tone={TONE[r.status]}>{STATUS_LABELS[r.status]}</StatusChip>
-                    {r.status === "failed" && r.failureReason && <span className="mt-1 block text-xs text-[var(--error-ink)]">{r.failureReason}</span>}
-                    {r.status === "verified_in_file" && <span className="mt-1 block text-xs text-muted-foreground">Shown by the carrier file of {day(r.verifiedSnapshotDate)}</span>}
-                    {WAITING_STATUSES.includes(r.status) && r.unprovable.length > 0 && <span className="mt-1 block text-xs text-[var(--warning-ink)]">{unprovableText(r.unprovable, r.carrierName)}</span>}
-                    {WAITING_STATUSES.includes(r.status) && !r.unprovable.length && <span className="mt-1 block text-xs text-muted-foreground">{r.checkedSnapshotDate ? `The file of ${day(r.checkedSnapshotDate)} doesn't show it yet` : "No carrier file since it was sent"}{r.expectedEffectiveDate ? ` · due by ${day(r.expectedEffectiveDate)}` : ""}</span>}
-                    {r.status === "confirmed_by_carrier" && r.confirmedAt && <span className="block text-xs text-muted-foreground">Carrier said done {day(r.confirmedAt)}</span>}
-                  </td>
-                  <td className="text-xs">
-                    {r.carrierMethod ? <span className="block text-foreground">{CARRIER_METHOD_LABELS[r.carrierMethod]}</span> : <span className="block text-muted-foreground">Not sent</span>}
-                    {r.carrierReference && <span className="block text-muted-foreground">Ref {r.carrierReference}</span>}
-                    {r.submittedAt && <span className="block text-muted-foreground">Sent {day(r.submittedAt)}</span>}
-                  </td>
-                  <td className="text-right">
-                    {!readOnly && (
-                      <span className="inline-flex flex-wrap justify-end gap-2">
-                        {NEXT_STEPS[r.status].filter((s) => s !== "cancelled").slice(0, 1).map((to) => <Button key={to} type="button" onClick={() => setStepping({ row: r, to })}>{STEP_LABEL[to]}</Button>)}
-                        {NEXT_STEPS[r.status].includes("cancelled") && <Button type="button" variant="ghost" onClick={() => setStepping({ row: r, to: "cancelled" })}>Cancel</Button>}
-                        {r.status === "failed" && <Button type="button" onClick={() => setCreating({ carrierId: r.carrierId, policyNumber: r.policyNumber, type: r.type })}>Try again</Button>}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+            <tbody className="m-seq">
+              {shown.rows.map((r) => {
+                // The one line under the status: why it failed, what proved it, why it can't be proven, or what it waits on.
+                const standing = r.status === "failed" ? r.failureReason
+                  : r.status === "verified_in_file" ? `In the file of ${day(r.verifiedSnapshotDate)}`
+                    : WAITING_STATUSES.includes(r.status) && r.unprovable.length ? unprovableText(r.unprovable, r.carrierName)
+                      : WAITING_STATUSES.includes(r.status) ? `${r.checkedSnapshotDate ? `Not in the file of ${day(r.checkedSnapshotDate)} yet` : "No carrier file since"}${r.expectedEffectiveDate ? ` · due ${day(r.expectedEffectiveDate)}` : ""}`
+                        : r.status === "confirmed_by_carrier" && r.confirmedAt ? `Carrier said done ${day(r.confirmedAt)}` : null;
+                const standingTone = r.status === "failed" ? "text-[var(--error-ink)]" : WAITING_STATUSES.includes(r.status) && r.unprovable.length ? "text-[var(--warning-ink)]" : "text-muted-foreground";
+                const changes = r.changes.map((c) => describeChange(c)).join(" · ");
+                const carrier = r.status === "draft" ? "" : [r.carrierMethod ? CARRIER_METHOD_LABELS[r.carrierMethod] : null, r.carrierReference ? `Ref ${r.carrierReference}` : null, r.submittedAt ? `Sent ${day(r.submittedAt)}` : null].filter(Boolean).join(" · ");
+                const next = NEXT_STEPS[r.status].filter((st) => st !== "cancelled")[0];
+                return (
+                  <tr key={r.id} className="m-row">
+                    <td>
+                      <button type="button" className="block max-w-[220px] truncate text-left font-semibold text-foreground underline-offset-2 hover:underline" onClick={() => setDetailId(r.id)}>{r.clientName ? personName(r.clientName) : "No client linked"}</button>
+                      <Link href={`/app/policies/carrier/${r.carrierId}/${encodeURIComponent(r.policyNumber)}`} className="block truncate text-xs text-muted-foreground hover:underline" title={r.requestedBy ? `Asked by ${r.requestedBy}, ${day(r.createdAt)}` : undefined}>{r.carrierName} {r.policyNumber}</Link>
+                    </td>
+                    <td>
+                      <span className="block font-medium text-foreground">{REQUEST_LABELS[r.type]}</span>
+                      {changes && <span className="block max-w-[220px] truncate text-xs text-muted-foreground" title={r.targetDraftReason ? `${changes} · "${r.targetDraftReason}"` : changes}>{changes}</span>}
+                    </td>
+                    <td>
+                      <StatusChip tone={TONE[r.status]}>{STATUS_LABELS[r.status]}</StatusChip>
+                      {/* What it waits on, then how it went to the carrier (both in the title). */}
+                      {(standing || carrier) && <span className={`mt-1 block max-w-[300px] truncate text-xs ${standing ? standingTone : "text-muted-foreground"}`} title={[standing, carrier].filter(Boolean).join(" · ")}>{standing ?? carrier}</span>}
+                    </td>
+                    <td className="text-right">
+                      {!readOnly && (
+                        <span className="inline-flex items-center justify-end gap-1 whitespace-nowrap">
+                          {next && <Button type="button" variant="outline" size="sm" onClick={() => setStepping({ row: r, to: next })}>{STEP_LABEL[next]}</Button>}
+                          {r.status === "failed" && <Button type="button" variant="outline" size="sm" onClick={() => setCreating({ carrierId: r.carrierId, policyNumber: r.policyNumber, type: r.type })}>Try again</Button>}
+                          {NEXT_STEPS[r.status].includes("cancelled") && (
+                            <DropdownMenu modal={false}>
+                              <DropdownMenuTrigger asChild>
+                                <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${r.clientName ? personName(r.clientName) : r.policyNumber}`} title="More"><MoreHorizontal aria-hidden="true" /></Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onSelect={() => setStepping({ row: r, to: "cancelled" })}>Cancel the request</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </TableCard>
 
+      {detail && (
+        <DetailPanel
+          mode="overlay"
+          title={detail.clientName ? personName(detail.clientName) : "No client linked"}
+          subtitle={`${REQUEST_LABELS[detail.type]} · ${detail.carrierName} ${detail.policyNumber}`}
+          status={<StatusChip tone={TONE[detail.status]}>{STATUS_LABELS[detail.status]}</StatusChip>}
+          onClose={() => setDetailId(null)}
+          footer={!readOnly && (() => {
+            const next = NEXT_STEPS[detail.status].filter((st) => st !== "cancelled")[0];
+            return (
+              <div className="flex flex-wrap justify-end gap-2">
+                {NEXT_STEPS[detail.status].includes("cancelled") && <Button type="button" variant="ghost" onClick={() => { setDetailId(null); setStepping({ row: detail, to: "cancelled" }); }}>Cancel the request</Button>}
+                {detail.status === "failed" && <Button type="button" variant="outline" onClick={() => { setDetailId(null); setCreating({ carrierId: detail.carrierId, policyNumber: detail.policyNumber, type: detail.type }); }}>Try again</Button>}
+                {next && <Button type="button" onClick={() => { setDetailId(null); setStepping({ row: detail, to: next }); }}>{STEP_LABEL[next]}</Button>}
+              </div>
+            );
+          })()}
+        >
+          <dl className="m-0 grid gap-4 text-sm">
+            {([
+              ["Phone", detail.phone ? <span className="select-all tabular-nums" title="Check the calling window and do-not-call list before dialling">{phoneText(detail.phone)}</span> : "None on file"],
+              ["Policy", <Link key="p" href={`/app/policies/carrier/${detail.carrierId}/${encodeURIComponent(detail.policyNumber)}`} className="font-semibold text-[var(--accent-ink)] hover:underline">{detail.carrierName} {detail.policyNumber}</Link>],
+              ["What changes", detail.changes.length ? <ul className="m-0 grid list-none gap-1 p-0">{detail.changes.map((c) => <li key={c.field}>{describeChange(c)}</li>)}</ul> : "—"],
+              ["Why", detail.targetDraftReason ?? null],
+              ["Where it stands", detail.status === "failed" ? detail.failureReason : detail.status === "verified_in_file" ? `Shown by the carrier file of ${day(detail.verifiedSnapshotDate)}` : WAITING_STATUSES.includes(detail.status) && detail.unprovable.length ? unprovableText(detail.unprovable, detail.carrierName) : WAITING_STATUSES.includes(detail.status) ? (detail.checkedSnapshotDate ? `The file of ${day(detail.checkedSnapshotDate)} doesn't show it yet` : "No carrier file since it was sent") : null],
+              ["Due by", detail.expectedEffectiveDate ? day(detail.expectedEffectiveDate) : null],
+              ["Sent to the carrier", detail.submittedAt ? [detail.carrierMethod ? CARRIER_METHOD_LABELS[detail.carrierMethod] : null, `on ${day(detail.submittedAt)}`].filter(Boolean).join(" ") : "Not yet"],
+              ["Carrier reference", detail.carrierReference],
+              ["Carrier said done", detail.confirmedAt ? day(detail.confirmedAt) : null],
+              ["Asked by", detail.requestedBy ? `${detail.requestedBy}, ${day(detail.createdAt)}` : day(detail.createdAt)],
+              ["Note", detail.note],
+            ] as Array<[string, React.ReactNode]>).filter(([, v]) => v !== null && v !== undefined && v !== "").map(([label, value]) => (
+              <div key={label} className="grid gap-0.5">
+                <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
+                <dd className="m-0 text-foreground">{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </DetailPanel>
+      )}
       {stepping && <StepDialog row={stepping.row} to={stepping.to} onClose={() => setStepping(null)} onDone={() => { setStepping(null); router.refresh(); }} />}
       {starting && <StartDialog carriers={carriers} onClose={() => setStarting(false)} onPick={(pick) => { setStarting(false); setCreating(pick); }} />}
       {creating && <ServicingRequestDialog carrierId={creating.carrierId} policyNumber={creating.policyNumber} type={creating.type} origin="client_request" fromQueue={false} onClose={() => setCreating(null)} onDone={() => { setCreating(null); router.refresh(); }} />}
@@ -264,7 +330,7 @@ function StepDialog({ row, to, onClose, onDone }: { row: ServicingRow; to: Reque
           {to === "cancelled" && (
             <label htmlFor="step-note" className={labelClass}>Why<textarea id="step-note" className={`${field} min-h-16 py-2`} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} /></label>
           )}
-          {error && <p role="alert" className={alertClass}>{error}</p>}
+          {error && <Callout tone="error" title={error} />}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Back</Button>

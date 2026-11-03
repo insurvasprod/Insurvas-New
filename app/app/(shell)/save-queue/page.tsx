@@ -8,9 +8,10 @@ import Link from "next/link";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { SaveQueueBoard } from "@/components/app/save-queue-board";
-import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { RetentionPage } from "@/components/app/retention/retention-page";
+import { Callout } from "@/components/app/settings/primitives";
 
 /**
  * Book › Save queue (LA-5.3, Notion sprint). Policies paying perfectly well right now that the
@@ -40,13 +41,10 @@ export default async function SaveQueuePage({ searchParams }: { searchParams: Pr
   const [queue, closing] = await Promise.all([loadSaveQueue(viewer, asked), reinstatement.entitled ? closingSoon(viewer).catch(() => null) : Promise.resolve(null)]);
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Save queue" description="Policies paying fine today that the radar says will stop." />
-      {closing ? (
-        <p role="alert" className="rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">
-          {closing === 1 ? "1 reinstatement window closes" : `${closing} reinstatement windows close`} within days, and then the policy is gone for good. <Link href="/app/reinstatement" className="font-semibold underline">Work it now</Link>
-        </p>
-      ) : null}
+    <RetentionPage step="save">
+    <>
+      {/* A closing reinstatement window is urgent, so it goes to the bell (no notice on the page, owner 2026-11-02). */}
+      {closing ? <Callout tone="error" title={<>{closing === 1 ? "1 reinstatement window closes" : `${closing} reinstatement windows close`} within days. <Link href="/app/reinstatement" className="font-semibold underline">Work it now</Link></>} /> : null}
       {queue.available ? (
         <SaveQueueBoard queue={queue} sort={asked ?? queue.settings.queueDefaultSort} readOnly={guard.entitlement.access === "read_only"} canStartFix={servicing.entitled && servicing.entitlement.access !== "read_only"} />
       ) : (
@@ -54,6 +52,7 @@ export default async function SaveQueuePage({ searchParams }: { searchParams: Pr
           <EmptyState title="Not switched on yet" hint={RADAR_PENDING_MESSAGE} />
         </TableCard>
       )}
-    </div>
+    </>
+    </RetentionPage>
   );
 }

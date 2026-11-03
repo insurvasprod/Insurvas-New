@@ -132,6 +132,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // The Compliance rail's counts (2026-10-30): complaints and deletions waiting on a person, under their steps' gate.
   { sourceFile: "app/api/app/compliance/steps/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/data-in/steps/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  // Book of business, round 4 (2026-11-02): one Needs you item's Decide part, read for deciding it in place.
+  { sourceFile: "app/api/app/needs-you/item/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper", "producer"] },
   { sourceFile: "app/api/app/accounting/steps/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/commissions/steps/route.ts", featureKey: "statement_ingestion", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/compliance/complaints/[id]/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer"] },
@@ -171,6 +173,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // LA-7.8: tax figures and the export. Owner and bookkeeper; revealing a tax ID is further limited inside the route.
   { sourceFile: "app/api/app/accounting/tax/route.ts", featureKey: "tax_summaries", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/accounting/tax/export/route.ts", featureKey: "tax_summaries", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/tax/w9/route.ts", featureKey: "tax_summaries", allowedRoles: ["owner", "bookkeeper"] },
   // LA-7.9: accounting settings — read by owner and bookkeeper, changed by the owner (checked inside the route).
   { sourceFile: "app/api/app/accounting/settings/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/deal-flow/route.ts", featureKey: "daily_deal_flow", allowedRoles: ["owner", "producer"] },
@@ -462,6 +465,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/signup/route.ts", featureKey: null },
   { sourceFile: "app/api/app/templates/[id]/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/templates/assignment/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/default/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/templates/preview/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/templates/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/route.ts", featureKey: null, allowedRoles: ["owner"] },
@@ -495,6 +499,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/agency/dashboard/route.ts", featureKey: "agency_dashboard", allowedRoles: ["owner", "bookkeeper", "producer"] },
   { sourceFile: "app/api/app/agency/scorecards/route.ts", featureKey: "producer_scorecards", allowedRoles: ["owner", "bookkeeper", "producer"] },
   { sourceFile: "app/api/app/agency/overrides/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner", "bookkeeper", "producer"] },
+  // Team, one page (2026-11-03): the rail's counts, through the same scoped stores; a producer without a title is refused.
+  { sourceFile: "app/api/app/agency/steps/route.ts", featureKey: "team_hierarchy", allowedRoles: ["owner", "bookkeeper", "producer"] },
   { sourceFile: "app/api/app/agency/statements/[runId]/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper", "producer"] },
   { sourceFile: "app/api/app/agency/my-pay/route.ts", featureKey: "producer_payouts", allowedRoles: ["producer"] },
   { sourceFile: "app/api/app/agency/payouts/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },

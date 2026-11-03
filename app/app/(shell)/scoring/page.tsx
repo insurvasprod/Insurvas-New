@@ -16,5 +16,5 @@ export default async function ScoringPage() {
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Queue scoring" detail="In an agency, the owner and admins decide how the queue is ordered." />;
   // A read-only plan sees the order and cannot save it (the PUT refuses it too).
-  return <ReportsPage view="scoring"><ScoringWorkspace readOnly={guard.entitlement.access === "read_only"} framed /></ReportsPage>;
+  return <ReportsPage view="scoring" info="How the dialer picks the next lead, and whether the scored order beats the plain order. A share of serves goes in plain order (the holdout) so the difference can be measured; looking at the preview claims nothing."><ScoringWorkspace readOnly={guard.entitlement.access === "read_only"} framed /></ReportsPage>;
 }

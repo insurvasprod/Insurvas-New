@@ -239,8 +239,21 @@ export async function runArrival(tenantId: string, fileId: string, fallback: () 
 export type StageRow = { stage: string; status: string; fileId: string | null; rowsIn: number | null; rowsOut: number | null; error: string | null; note: string | null; findings: number; ms: number | null };
 export type RunRow = { id: string; trigger: string; status: string; startedAt: string; finishedAt: string | null; total: number; succeeded: number; failed: number; error: string | null; files: Array<{ fileId: string; name: string; stages: StageRow[] }>; analyse: StageRow | null };
 
-export async function listRuns(tenantId: string, limit = 15): Promise<{ available: boolean; runs: RunRow[] }> {
-  const { data: runs, error } = await db().from("pipeline_run").select("id, trigger, status, started_at, finished_at, files_total, files_succeeded, files_failed, error_detail").eq("tenant_id", tenantId).order("started_at", { ascending: false }).limit(limit);
+/** The latest runs; with `fileId`, only the runs that took that file (a file's Run history tab, owner 2026-11-02). */
+export async function listRuns(tenantId: string, limit = 15, options: { fileId?: string } = {}): Promise<{ available: boolean; runs: RunRow[] }> {
+  let runIds: string[] | null = null;
+  if (options.fileId) {
+    const { data: took, error: tookError } = await db().from("pipeline_stage_run").select("run_id").eq("tenant_id", tenantId).eq("file_id", options.fileId).limit(500);
+    if (tookError) {
+      if (isSchemaGap(tookError)) return { available: false, runs: [] };
+      throw new Error(`Could not load the runs: ${tookError.message}`);
+    }
+    runIds = [...new Set(((took ?? []) as Loose[]).map((s) => s.run_id))];
+    if (!runIds.length) return { available: true, runs: [] };
+  }
+  let query = db().from("pipeline_run").select("id, trigger, status, started_at, finished_at, files_total, files_succeeded, files_failed, error_detail").eq("tenant_id", tenantId);
+  if (runIds) query = query.in("id", runIds);
+  const { data: runs, error } = await query.order("started_at", { ascending: false }).limit(limit);
   if (error) {
     if (isSchemaGap(error)) return { available: false, runs: [] };
     throw new Error(`Could not load the runs: ${error.message}`);
@@ -256,7 +269,7 @@ export async function listRuns(tenantId: string, limit = 15): Promise<{ availabl
     runs: ((runs ?? []) as Loose[]).map((r) => {
       const own = ((stages ?? []) as Loose[]).filter((s) => s.run_id === r.id);
       const byFile = new Map<string, StageRow[]>();
-      for (const s of own) if (s.file_id) byFile.set(s.file_id, [...(byFile.get(s.file_id) ?? []), toStage(s)]);
+      for (const s of own) if (s.file_id && (!options.fileId || s.file_id === options.fileId)) byFile.set(s.file_id, [...(byFile.get(s.file_id) ?? []), toStage(s)]);
       const analyse = own.find((s) => s.stage === "analyse");
       return {
         id: r.id, trigger: r.trigger, status: r.status, startedAt: r.started_at, finishedAt: r.finished_at, total: r.files_total, succeeded: r.files_succeeded, failed: r.files_failed, error: r.error_detail,

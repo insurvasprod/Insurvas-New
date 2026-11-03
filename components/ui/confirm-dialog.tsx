@@ -40,6 +40,8 @@ export function ConfirmDialog({
   cancelLabel = "Cancel",
   destructive = true,
   children,
+  fields,
+  confirmDisabled = false,
 }: ConfirmOptions & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +49,13 @@ export function ConfirmDialog({
   busy?: boolean;
   /** A summary of what is affected, drawn in a bordered box under the description. */
   children?: ReactNode;
+  /**
+   * What the step needs to be confirmed (a reason, the day it was paid): `Field`s drawn plainly under the
+   * description, no box (Accounting 2026-11-03: pop-ups only to confirm, so the confirm holds its fields).
+   */
+  fields?: ReactNode;
+  /** Holds the action until its fields are filled in. */
+  confirmDisabled?: boolean;
 }) {
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next); }}>
@@ -61,9 +70,10 @@ export function ConfirmDialog({
           {description ? <DialogDescription className="text-[var(--body)]">{description}</DialogDescription> : <DialogDescription className="sr-only">{title}</DialogDescription>}
         </DialogHeader>
         {children && <div className="rounded-md border border-[var(--border)] px-3 py-2.5 text-sm text-[var(--body)]">{children}</div>}
+        {fields && <div className="flex flex-col gap-3">{fields}</div>}
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>{cancelLabel}</Button>
-          <Button type="button" variant={destructive ? "destructive" : "default"} disabled={busy} onClick={onConfirm}>
+          <Button type="button" variant={destructive ? "destructive" : "default"} disabled={busy || confirmDisabled} onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </DialogFooter>

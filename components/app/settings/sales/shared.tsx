@@ -17,6 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { notify } from "@/lib/notify";
 
 import { SampleDataNotice } from "@/components/app/applications/parts";
+import { DEFAULT_LABEL } from "@/components/app/settings/defaults";
 import { Callout, SettingsSectionHeader, type PillTone, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -169,8 +170,9 @@ export function DiscardSave({ saving, problem, onDiscard, onSave, saveLabel = "S
 
 /* ── pills ──────────────────────────────────────────────────────────────── */
 
+/** An Insurvas (platform) row: the one default chip every Settings page uses (settings/defaults.tsx). */
 export function PlatformPill() {
-  return <StatusChip dot={false} tone="neutral">Platform default</StatusChip>;
+  return <StatusChip dot={false} tone="info">{DEFAULT_LABEL}</StatusChip>;
 }
 
 /** The one lifecycle vocabulary for every versioned thing in these panels. */
@@ -179,9 +181,10 @@ const LIFECYCLE: Record<Lifecycle, { tone: PillTone; label: string }> = {
   live: { tone: "success", label: "Live" },
   draft: { tone: "info", label: "Draft" },
   retired: { tone: "neutral", label: "Retired" },
-  platform: { tone: "neutral", label: "Platform default" },
+  platform: { tone: "neutral", label: DEFAULT_LABEL },
 };
 export function LifecyclePill({ state }: { state: Lifecycle }) {
+  if (state === "platform") return <StatusChip dot={false} tone="info">{DEFAULT_LABEL}</StatusChip>;
   return <StatusChip dot={false} tone={pillTone(LIFECYCLE[state].tone)}>{LIFECYCLE[state].label}</StatusChip>;
 }
 

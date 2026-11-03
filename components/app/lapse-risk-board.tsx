@@ -180,11 +180,14 @@ export function LapseRiskBoard({
   totals,
   readOnly,
   tabs,
+  framed = false,
 }: {
   policies: AtRiskPolicy[];
   totals: AtRiskTotals;
   readOnly: boolean;
   tabs?: React.ReactNode;
+  /** Inside Book of business (owner 2026-11-02): the frame draws the title, the tabs and Record a signal. */
+  framed?: boolean;
 }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -209,12 +212,9 @@ export function LapseRiskBoard({
   const { current, rows: pageRows } = paginate(visible, page, pageSize);
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader
-        title="Lapse risk"
-        actions={readOnly ? undefined : <RecordLapseSignal />}
-      />
-      {tabs}
+    <div className={framed ? "m-stagger flex flex-col gap-6" : "m-stagger flex min-h-0 flex-grow flex-col gap-6"}>
+      {!framed && <PageHeader title="Lapse risk" actions={readOnly ? undefined : <RecordLapseSignal />} />}
+      {!framed && tabs}
 
       {readOnly && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">Your account is read-only. Recording and resolving lapse signals is unavailable.</div>}
 

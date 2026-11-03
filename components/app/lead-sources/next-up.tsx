@@ -1,52 +1,33 @@
 import type { ReactNode } from "react";
-import { AlertTriangle, ArrowRight, CheckCircle2, CircleAlert } from "lucide-react";
 
-import { cardSurface } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Callout } from "@/components/app/settings/primitives";
 
 /**
- * The one "next up" line at the top of every Lead sources page (owner /ui-taste critique,
- * 2026-10-30: "make it easier for the user to understand what he needs to do"). One plain sentence
- * worked out from the page's own data, and the one button that does it — the page's single primary.
- * Everything else on the page stays outline. Nothing waiting is said too, quietly, so an empty line
- * never reads as "still loading".
+ * Was the "Next up" strip at the top of a page (2026-10-30). Retired by the owner 2026-11-02: "never
+ * show this thing ever in the pages" (UI-CONSISTENCY §3). No tinted line, icon or sentence any more.
+ * What the strip held that the page still needs:
  *
- *   danger   something cannot run at all (a campaign nobody can dial)
- *   warning  something waits on a person (duplicates to confirm, leads with nobody to call them)
- *   action   the normal next step (hand out, bring back, import)
- *   done     nothing waiting here
+ *   action   the button, on its own at the right; on some pages (import review, contacts' Save, the
+ *            import's Continue) it is the only way to do the thing, so it stays
+ *   danger   something cannot run at all: the one-line alert §3 keeps for blocked states
+ *
+ * Everything else (the "warning" / "action" / "done" sentences) is dropped. The `next-step-strip`
+ * ratchet counts the old call sites down and stops new ones.
  */
 export type NextUpTone = "danger" | "warning" | "action" | "done";
 
-const ICON = { danger: CircleAlert, warning: AlertTriangle, action: ArrowRight, done: CheckCircle2 } as const;
-const TINT: Record<NextUpTone, string> = {
-  danger: "bg-[var(--error-surface)] text-[var(--error-ink)]",
-  warning: "bg-[var(--warning-surface)] text-[var(--warning-ink)]",
-  action: "bg-[var(--primary-soft)] text-[var(--accent-ink)]",
-  done: "bg-[var(--primary-soft)] text-[var(--accent-ink)]",
-};
-
-export function NextUp({ tone, children, action = null, more = null }: {
+export function NextUp({ tone, children, action = null }: {
   tone: NextUpTone;
-  /** One sentence. Put the count in <strong>. */
   children: ReactNode;
-  /** The one button (primary). Leave null when nothing is waiting. */
   action?: ReactNode;
-  /** A quiet extra, e.g. "and 2 more" as a link. */
+  /** Ignored: kept so old callers compile. */
   more?: ReactNode;
 }) {
-  const Icon = ICON[tone];
+  if (tone !== "danger" && !action) return null;
   return (
-    <section
-      aria-label="Next up"
-      className={cn(cardSurface, "flex min-w-0 flex-wrap items-center gap-3 px-4 py-3 motion-safe:animate-[m-rise_.3s_cubic-bezier(.2,.8,.2,1)_both]")}
-    >
-      <span aria-hidden="true" className={cn("grid size-8 shrink-0 place-items-center rounded-lg", TINT[tone])}><Icon className="size-4" /></span>
-      <p className="m-0 min-w-0 flex-1 text-sm leading-[1.5] text-[var(--ink)] [&_strong]:font-semibold">
-        {children}
-        {more && <span className="ml-2">{more}</span>}
-      </p>
-      {action && <span className="flex shrink-0 items-center gap-2">{action}</span>}
-    </section>
+    <div className="flex min-w-0 flex-col gap-3">
+      {tone === "danger" && <Callout tone="error" title={children} />}
+      {action && <div className="flex flex-wrap items-center justify-end gap-2">{action}</div>}
+    </div>
   );
 }

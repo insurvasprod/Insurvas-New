@@ -1,10 +1,10 @@
 "use client";
+import { BasisChip } from "@/components/app/agency/money";
 
-import { useState, type ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Field, textareaControl } from "@/components/ui/field";
@@ -17,17 +17,27 @@ import { MATCH_FIELDS, type FieldOutcome } from "@/lib/ingestion/policyMatching"
 import { dollars, KIND_META, type NeedsYouKind } from "@/lib/needsYou/kinds";
 import type { ItemDetail } from "@/lib/needsYou/store";
 import { notify } from "@/lib/notify";
+import { refreshStepCounts } from "@/components/app/step-frame/step-rail";
 import { rowHref } from "@/lib/ingestion/trace";
 
 import { ChoiceList, type Choice } from "./choice-list";
 
-type Nav = { nextHref: string | null; listHref: string; readOnly: boolean };
+/**
+ * Where a decision goes once saved. On the item page: the next item's page (or the list). In place (round 4,
+ * owner 2026-11-02: a row of a file's page or the Needs you list opens under itself): the caller's `onDone`,
+ * which closes the row and opens the next waiting one, and the page refreshes behind it.
+ */
+export type InlineNav = { hasNext: boolean; onDone: (how: "save" | "next") => void; onSkip?: () => void };
+type Nav = { nextHref: string | null; listHref: string; readOnly: boolean; inline?: InlineNav };
+
+/** In place the parts drop their cards: the row it opens under is the container (fewer containers). */
+const Flat = createContext(false);
 
 const OUTCOME_CLASS: Record<FieldOutcome, string> = { match: "text-[var(--success-ink)]", partial: "text-[var(--warning-ink)]", mismatch: "text-[var(--error-ink)]", missing: "text-muted-foreground" };
 const OUTCOME_MARK: Record<FieldOutcome, string> = { match: " ✓", partial: " ~", mismatch: " ✕", missing: "" };
 
 /** Sends a decision to the API its own screen uses, then opens the next item (or the list). */
-function useDecision({ nextHref, listHref }: Nav) {
+function useDecision({ nextHref, listHref, inline }: Nav) {
   const router = useRouter();
   const [busy, setBusy] = useState<"save" | "next" | null>(null);
   async function send(how: "save" | "next", url: string, method: "POST" | "PATCH", body: unknown, done: string) {
@@ -36,6 +46,14 @@ function useDecision({ nextHref, listHref }: Nav) {
       const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "That did not save.");
+      if (inline) {
+        notify.done(done);
+        refreshStepCounts();
+        setBusy(null);
+        inline.onDone(how);
+        router.refresh();
+        return;
+      }
       notify.done(how === "next" && nextHref ? `${done} Opening the next.` : done);
       router.push(how === "next" && nextHref ? nextHref : listHref);
       router.refresh();
@@ -51,6 +69,16 @@ function useDecision({ nextHref, listHref }: Nav) {
 function DecideButtons({ kind, nav, busy, ready, onSave }: { kind: NeedsYouKind; nav: Nav; busy: "save" | "next" | null; ready: boolean; onSave: (how: "save" | "next") => void }) {
   if (nav.readOnly) return <p className="m-0 text-sm text-muted-foreground">Your plan is read-only, so this can be looked at but not decided.</p>;
   const verb = KIND_META[kind].verb;
+  if (nav.inline) {
+    // In place: Skip, then one primary that saves and opens the next waiting row.
+    const next = nav.inline.hasNext;
+    return (
+      <div className="flex flex-wrap justify-end gap-2">
+        {next && nav.inline.onSkip && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={nav.inline.onSkip}>Skip</Button>}
+        <Button type="button" size="sm" disabled={!ready || busy !== null} onClick={() => onSave(next ? "next" : "save")}>{busy ? "Saving" : next ? `${verb} and next` : verb}</Button>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-wrap justify-end gap-2">
       {nav.nextHref && <Button type="button" variant="outline" disabled={!ready || busy !== null} onClick={() => onSave("save")}>{busy === "save" ? "Saving" : "Save"}</Button>}
@@ -61,6 +89,7 @@ function DecideButtons({ kind, nav, busy, ready, onSave }: { kind: NeedsYouKind;
 
 /** "When you save": what this choice does to the card and the money, in plain words. */
 function WhenYouSave({ children }: { children: ReactNode }) {
+  if (useContext(Flat)) return <p className="m-0 text-xs leading-[1.5] text-muted-foreground">{children}</p>;
   return (
     <Card>
       <CardHeader><CardTitle>When you save</CardTitle></CardHeader>
@@ -70,6 +99,7 @@ function WhenYouSave({ children }: { children: ReactNode }) {
 }
 
 function ChoicesCard({ title, children }: { title: string; children: ReactNode }) {
+  if (useContext(Flat)) return <section className="flex min-w-0 flex-col gap-2"><h3 className="m-0 text-sm font-semibold text-foreground">{title}</h3>{children}</section>;
   return (
     <Card>
       <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
@@ -80,6 +110,7 @@ function ChoicesCard({ title, children }: { title: string; children: ReactNode }
 
 /** A short list of facts about the item, as label and value. */
 function Facts({ title, facts }: { title: string; facts: Array<[string, ReactNode]> }) {
+  if (useContext(Flat)) return <FactList facts={facts} label={title} />;
   return (
     <Card>
       <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
@@ -97,12 +128,37 @@ function Facts({ title, facts }: { title: string; facts: Array<[string, ReactNod
   );
 }
 
+function FactList({ facts, label }: { facts: Array<[string, ReactNode]>; label: string }) {
+  return (
+    <dl aria-label={label} className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
+      {facts.map(([name, value]) => (
+        <div key={name} className="contents">
+          <dt className="text-muted-foreground">{name}</dt>
+          <dd className="m-0 text-foreground">{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The evidence table: a TableCard on the item page, the bare table in place. */
+function Evidence({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  if (useContext(Flat)) return <div role="group" aria-label={title} className="min-w-0 overflow-x-auto">{children}</div>;
+  return <TableCard title={title} description={description}>{children}</TableCard>;
+}
+
 const Grid = ({ children }: { children: ReactNode }) => <div className="grid gap-4 lg:grid-cols-2">{children}</div>;
 const Reason = ({ id, label, value, onChange, required, placeholder, disabled }: { id: string; label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string; disabled?: boolean }) => (
   <Field label={label} htmlFor={id} required={required}>
     <textarea id={id} className={textareaControl} value={value} maxLength={2000} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
   </Field>
 );
+
+/** Nothing to save here (a letter is out, a word Insurvas maps): only the way on. */
+function NextOnly({ nav }: { nav: Nav }) {
+  if (nav.inline) return nav.inline.hasNext && nav.inline.onSkip ? <div className="flex justify-end"><Button type="button" size="sm" variant="outline" onClick={nav.inline.onSkip}>Next</Button></div> : null;
+  return nav.nextHref ? <div className="flex justify-end"><Button asChild><Link href={nav.nextHref}>Open the next</Link></Button></div> : null;
+}
 
 // ─── Pick the client ─────────────────────────────────────────────────────────────────────────────────────
 
@@ -123,7 +179,7 @@ function PickClient({ detail, nav }: { detail: Extract<ItemDetail, { kind: "pick
 
   return (
     <>
-      <TableCard title="The carrier’s file against each sale" description="No single field decides: a matching name alone is not enough.">
+      <Evidence title="The carrier’s file against each sale" description="No single field decides: a matching name alone is not enough.">
         {detail.candidates.length === 0 ? (
           <p className="m-0 px-4 pb-4 text-sm text-muted-foreground">No sale or application for this carrier in the 14 days before the file looks like this policy.</p>
         ) : (
@@ -140,7 +196,7 @@ function PickClient({ detail, nav }: { detail: Extract<ItemDetail, { kind: "pick
             </tbody>
           </table>
         )}
-      </TableCard>
+      </Evidence>
       <Grid>
         <ChoicesCard title="Who is it?">
           <ChoiceList name="pick-client" label="Who is it?" choices={choices} value={choice} onChange={setChoice} disabled={nav.readOnly || busy !== null} />
@@ -278,7 +334,7 @@ function MoneyDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "mon
   const disputed = f.status === "disputed";
 
   const evidence = (
-    <TableCard title="Expected against reported" description={f.explanation}>
+    <Evidence title="Expected against reported" description={f.explanation}>
       <table className="portal-lead-table w-full min-w-[560px] text-left text-sm">
         <thead><tr><th className="w-[160px]" /><th className="text-right">Expected</th><th className="text-right">Reported</th><th className="text-right">Difference</th></tr></thead>
         <tbody>
@@ -298,17 +354,15 @@ function MoneyDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "mon
           ))}
         </tbody>
       </table>
-    </TableCard>
+    </Evidence>
   );
 
   if (disputed) {
     return (
       <>
+        {/* Round 3: "A letter is out" is the muted line under the item page title (waitsLine), not a card. */}
         {evidence}
-        <Callout tone="info" title="A letter is out for this one.">
-          Record what {f.carrierName} did — sent, acknowledged, credited or refused — in <Link href="/app/discrepancies" className="font-medium text-[var(--accent-ink)] hover:underline">Money › Discrepancies</Link>. The item stays here until then.
-        </Callout>
-        {nav.nextHref && <div className="flex justify-end"><Button asChild><Link href={nav.nextHref}>Open the next</Link></Button></div>}
+        <NextOnly nav={nav} />
       </>
     );
   }
@@ -373,7 +427,8 @@ function CreditDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "cr
       <Facts title="The statement row" facts={[
         ["Policy", detail.policyNumber ? <span key="p" className="font-mono">{detail.policyNumber}</span> : "No policy number"],
         ["Carrier", detail.carrierName ?? "—"],
-        ["Amount", dollars(detail.amountCents)],
+        // AG-1.12: a producer money figure carries its basis (the carrier reported it); was the Attribution queue's.
+        ["Amount", <span key="a" className="inline-flex items-center gap-2">{dollars(detail.amountCents)} <BasisChip basis="reported" /></span>],
         ["Writing number", detail.agentCode ? `${detail.agentCode}${detail.writingNumber ? ` → ${detail.writingNumber.name}` : " — not mapped"}` : "None on the row"],
         ["Submitted by", detail.application?.name ?? "No application"],
       ]} />
@@ -423,11 +478,8 @@ function StatusWordDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind:
   return (
     <>
       <Facts title="The word" facts={[["Word", <span key="w" className="font-mono">{detail.word}</span>], ["Carrier", detail.carrierName], ["File type", detail.fileType === "commissions" ? "Commissions" : "Policies"], ["Rows held", detail.rows.toLocaleString("en-US")]]} />
-      <Callout tone="info" title="Waiting on Insurvas">
-        Insurvas maps status words no carrier has used before. These {detail.rows.toLocaleString("en-US")} rows are held until then; once the word is mapped they run once, and nothing else in the file waits.
-        {detail.firstSeenFileId && <> <Link href={`/app/carrier-files/file/${detail.firstSeenFileId}`} className="font-medium text-[var(--accent-ink)] hover:underline">Open the file it first came in</Link>.</>}
-      </Callout>
-      {nav.nextHref && <div className="flex justify-end"><Button asChild><Link href={nav.nextHref}>Open the next</Link></Button></div>}
+      {/* Round 3: "Waiting on Insurvas" is the muted line under the item page title (waitsLine), not a card. */}
+      <NextOnly nav={nav} />
     </>
   );
 }
@@ -461,9 +513,29 @@ function RulesDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "rul
   );
 }
 
+// ─── File didn't read (LA-4.9 file_failed) ───────────────────────────────────────────────────────────────
+
+function FileDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "file" }>; nav: Nav }) {
+  return (
+    <>
+      <Facts title="The file" facts={[["File", detail.fileName], ["Carrier", detail.carrierName], ["Type", detail.fileType === "commissions" ? "Commissions" : "Policies"], ["File of", detail.fileDate ? fileDay(detail.fileDate) : "—"], ["Why", detail.reason]]} />
+      {/* Nothing to save here. One way on: the file page holds the balance check, Read again, and in More "Replace with
+          a corrected file", preset to this file's carrier, type and day so the copy supersedes it. */}
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button asChild size={nav.inline ? "sm" : "default"}><Link href={`/app/carrier-files/file/${detail.fileId}`}>Open the file</Link></Button>
+      </div>
+      <NextOnly nav={nav} />
+    </>
+  );
+}
+
 /** The Decide tab of a Needs you item: the evidence, the choices its own API accepts, and what saving does. */
-export function ItemDecide({ detail, nextHref, listHref, readOnly }: { detail: ItemDetail; nextHref: string | null; listHref: string; readOnly: boolean }) {
-  const nav: Nav = { nextHref, listHref, readOnly };
+export function ItemDecide({ detail, nextHref, listHref, readOnly, inline }: { detail: ItemDetail; nextHref: string | null; listHref: string; readOnly: boolean; inline?: InlineNav }) {
+  const nav: Nav = { nextHref, listHref, readOnly, inline };
+  return <Flat.Provider value={Boolean(inline)}><DecideBody detail={detail} nav={nav} /></Flat.Provider>;
+}
+
+function DecideBody({ detail, nav }: { detail: ItemDetail; nav: Nav }) {
   switch (detail.kind) {
     case "pick-client": return <PickClient detail={detail} nav={nav} />;
     case "money": return <MoneyDecide detail={detail} nav={nav} />;
@@ -471,6 +543,7 @@ export function ItemDecide({ detail, nextHref, listHref, readOnly }: { detail: I
     case "agent": return <AgentDecide detail={detail} nav={nav} />;
     case "status-word": return <StatusWordDecide detail={detail} nav={nav} />;
     case "rules": return <RulesDecide detail={detail} nav={nav} />;
+    case "file": return <FileDecide detail={detail} nav={nav} />;
     default: return <QueueDecide kind={detail.kind} queue={detail.queue} nav={nav} />;
   }
 }

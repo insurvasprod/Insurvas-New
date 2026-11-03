@@ -22,6 +22,7 @@ import { KBD_ITEM_ATTRIBUTE, KBD_LIST_ATTRIBUTE, isTypingTarget, listKeyDirectio
 import { notify } from "@/lib/notify";
 import { OPEN_WORKSPACES_EVENT } from "@/lib/menu/navEvents";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { usePageNotices } from "@/components/ui/page-notices";
 import type { MenuSection } from "@/lib/menu/definition";
 import { TopBarNew } from "@/components/app/nav/top-bar-nav";
 
@@ -324,6 +325,9 @@ export function TopBarShell({
 
   const notifications = feed?.notifications ?? [];
   const alerts = feed?.alerts ?? [];
+  // What the page on screen raised (Callout, PageAlert): listed first under Alerts, never on the page.
+  const pageNotices = usePageNotices();
+  const alertCount = alerts.length + pageNotices.length;
 
   const trimmed = query.trim();
   // The panel opens on the first keystroke, as drawn. The query waits for a second character: one
@@ -553,10 +557,10 @@ export function TopBarShell({
   // The Inbox (Navigation A): one button, the two lists as tabs. It opens on alerts only when there
   // is nothing addressed to you and something is wrong with the queue.
   const urgent = feed?.urgent ?? [];
-  const inboxCount = notifications.length + alerts.length + urgent.length;
+  const inboxCount = notifications.length + alertCount + urgent.length;
   function toggleInbox() {
     if (bellOpen || alertsOpen) { close(); return; }
-    toggle(urgent.length || (!notifications.length && alerts.length) ? "alerts" : "notifications");
+    toggle(urgent.length || (!notifications.length && alertCount) ? "alerts" : "notifications");
   }
   const urgentText = urgent.map((item) => item.text).join(" ");
   // Pinned above either list, never scrolled away, never marked read.
@@ -579,7 +583,7 @@ export function TopBarShell({
         onChange={(key) => { setQuery(""); setMenu(key); }}
         tabs={[
           { key: "notifications", label: "Notifications", count: notifications.length || null },
-          { key: "alerts", label: "Alerts", count: alerts.length + urgent.length || null, tone: "danger" },
+          { key: "alerts", label: "Alerts", count: alertCount + urgent.length || null, tone: "danger" },
         ]}
       />
     </div>
@@ -687,12 +691,12 @@ export function TopBarShell({
             count and opens first in the Inbox; no second button beside it. */}
         {feed && inbox && <button
           type="button"
-          aria-label={`Inbox${urgent.length ? `, needs action now: ${urgentText}` : ""}${notifications.length ? `, ${notifications.length} unread` : ""}${alerts.length ? `, ${alerts.length} ${alerts.length === 1 ? "alert" : "alerts"} open` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
+          aria-label={`Inbox${urgent.length ? `, needs action now: ${urgentText}` : ""}${notifications.length ? `, ${notifications.length} unread` : ""}${alertCount ? `, ${alertCount} ${alertCount === 1 ? "alert" : "alerts"} open` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
           aria-haspopup="true"
           aria-expanded={bellOpen || alertsOpen}
           onClick={toggleInbox}
           className="portal-top-icon"
-          data-alert={alerts.length > 0 || undefined}
+          data-alert={alertCount > 0 || undefined}
         >
           {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
           {inboxCount > 0 && <span className="portal-top-badge">{inboxCount > 99 ? "99+" : inboxCount}</span>}
@@ -712,14 +716,14 @@ export function TopBarShell({
 
         {feed && !inbox && <button
           type="button"
-          aria-label={`Alerts${alerts.length ? `, ${alerts.length} open` : ""}`}
+          aria-label={`Alerts${alertCount ? `, ${alertCount} open` : ""}`}
           aria-haspopup="true"
           aria-expanded={alertsOpen}
           onClick={() => toggle("alerts")}
           className="portal-top-icon portal-top-icon-alert"
         >
           <TriangleAlert className="size-4" aria-hidden="true" />
-          {alerts.length > 0 && <span className="portal-top-badge">{alerts.length}</span>}
+          {alertCount > 0 && <span className="portal-top-badge">{alertCount}</span>}
         </button>}
 
         {feed && <span className="portal-top-divider" aria-hidden="true" />}
@@ -805,6 +809,16 @@ export function TopBarShell({
               <span>Clears when fixed, not when read</span>
             </header>
             <div className="portal-top-panel-scroll" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
+              {/* This page's own notices first: they hold while the page is open. */}
+              {pageNotices.map((notice) => (
+                <div key={notice.id} className="portal-top-alert" data-severity={notice.tone === "error" ? "critical" : notice.tone === "warning" ? "warning" : "info"}>
+                  <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
+                  <span>
+                    <span className="portal-top-alert-title">{notice.title}</span>
+                    {notice.detail ? <span className="portal-top-alert-body">{notice.detail}</span> : null}
+                  </span>
+                </div>
+              ))}
               {alerts.map((alert) => (
                 <div key={alert.id} className="portal-top-alert" data-severity={alert.severity}>
                   <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
@@ -818,7 +832,7 @@ export function TopBarShell({
                   </span>
                 </div>
               ))}
-              {!alerts.length && (
+              {!alertCount && (
                 <div className="portal-top-empty">
                   <p className="portal-top-empty-head">{feed.alertsEmpty.head}</p>
                   <p className="portal-top-empty-body">{feed.alertsEmpty.body}</p>

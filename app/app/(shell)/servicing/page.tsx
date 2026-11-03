@@ -7,9 +7,9 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PaperBillCampaign } from "@/components/app/paper-bill-campaign";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ServicingBoard } from "@/components/app/servicing-board";
-import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { RetentionPage } from "@/components/app/retention/retention-page";
 
 /**
  * Book › Servicing (the `payment_repair` feature). Two views:
@@ -34,19 +34,15 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
   const [campaign, list] = campaignView ? [await loadCampaign(viewer), null] : [null, await loadServicing(viewer)];
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader
-        title="Servicing"
-        description={campaignView ? "Every policy paid by mailed bill, biggest premium first, switched to bank payment before it fails." : "Changes asked of the carrier, open until the next carrier file shows them."}
-      />
-      <ViewTabs
+    <RetentionPage step="servicing" lead={<ViewTabs
         label="Servicing views"
         active={campaignView ? "campaign" : "requests"}
         tabs={[
           { key: "requests", label: "Requests", href: "/app/servicing" },
           { key: "campaign", label: "Paper bill → bank", href: "/app/servicing?view=campaign" },
         ]}
-      />
+      />}>
+    <>
       {campaign ? (
         campaign.available ? <PaperBillCampaign campaign={campaign} isOwner={guard.role === "owner"} readOnly={readOnly} /> : <TableCard><EmptyState title="Not switched on yet" hint={CAMPAIGN_PENDING_MESSAGE} /></TableCard>
       ) : list && list.available ? (
@@ -56,6 +52,7 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
           <EmptyState title="Not switched on yet" hint={SERVICING_PENDING_MESSAGE} />
         </TableCard>
       )}
-    </div>
+    </>
+    </RetentionPage>
   );
 }

@@ -22,7 +22,8 @@ import { ViewTabs } from "@/components/ui/view-tabs";
  * included, one column per spreadsheet column (A, B, C…). A PDF shows the original itself and every
  * line of its text. Ten lines a page. Owner and bookkeeper. Opening it writes nothing.
  *
- * Round 2 (owner 2026-11-02): the file page's Whole file tab, in the same frame as its other tabs.
+ * Round 2 (owner 2026-11-02): the file page's Whole file tab, in the same frame as its other tabs. Round 3:
+ * the Rows tab's "As sent" action, so the Rows tab stays lit here; the address is unchanged.
  */
 const LINES_PER_PAGE = 10;
 
@@ -36,7 +37,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
   const [file, head] = await Promise.all([loadWholeFile(guard.context.tenantId, fileId), loadFileHead(guard.context.tenantId, fileId)]);
   if (!file || !head) notFound();
   const readOnly = guard.entitlement.access === "read_only";
-  const frame = (children: ReactNode) => <FileFrame head={head} tab="whole" readOnly={readOnly}>{children}</FileFrame>;
+  const frame = (children: ReactNode) => <FileFrame head={head} tab="rows" tenantId={guard.context.tenantId} readOnly={readOnly}>{children}</FileFrame>;
 
   if (file.problem) {
     return (

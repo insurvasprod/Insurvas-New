@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { advanceAtRiskByPolicy } from "@/lib/ingestion/commissionLedgerStore";
 import { loadScorecards } from "@/lib/ingestion/scorecardsStore";
 import { historyStart, issued as isIssued, persistency, placed as isPlaced, type Bucket, type ScorePolicy } from "@/lib/ingestion/scorecards";
 import { perPolicy, persisting, chargebackTax, type PerPolicy, type Persisting } from "@/lib/accounting/pnlCore";
@@ -53,7 +54,8 @@ export async function producerScores(context: { tenantId: string; userId: string
     // tenant-leading index with a unique tail (a .limit() above 1,000 used to stop at 1,000 without saying so).
     readAll(() => db().from("cost_entry").select("campaign_id, amount_cents").eq("tenant_id", context.tenantId).eq("entry_type", "lead_cost").gte("incurred_on", period.from).lte("incurred_on", period.to).order("incurred_on").order("id")),
     readAll(() => db().from("lead_queue").select("owner_user_id, agent_leads(campaign_id)").eq("tenant_id", context.tenantId).not("owner_user_id", "is", null).gte("created_at", `${period.from}T00:00:00Z`).lte("created_at", `${period.to}T23:59:59Z`).order("status").order("queued_at").order("lead_id")),
-    readAll(() => db().from("policy_current").select("agent_user_id, unearned_advance_cents").eq("tenant_id", context.tenantId).eq("in_clawback_window", true).order("carrier_id").order("policy_number")),
+    // LA-4.12: the unearned advance is worked out from the ledger (policy_current's money columns are never filled).
+    advanceAtRiskByPolicy(context.tenantId).then((rows) => ({ data: rows ? rows.filter((r) => r.inClawbackWindow) : null })),
     readAll(() => db().from("tenant_application_submissions").select("application_id, tenant_applications(case_id, tenant_application_cases(opened_by))").eq("tenant_id", context.tenantId).gte("submitted_at", `${period.from}T00:00:00Z`).lte("submitted_at", `${period.to}T23:59:59Z`).order("submitted_at").order("application_id")),
   ]);
   if (!("policies" in data)) return { available: false, rows: [], minSample: 0 };
@@ -70,7 +72,7 @@ export async function producerScores(context: { tenantId: string; userId: string
     .map((q) => ({ campaignId: q.agent_leads!.campaign_id as string, producerUserId: q.owner_user_id }));
   const leadSpend = allocateLeadCost(spend, assignments);
   const atRisk = new Map<string, number>();
-  for (const r of (risk ?? []) as Array<{ agent_user_id: string | null; unearned_advance_cents: number | null }>) if (r.agent_user_id) atRisk.set(r.agent_user_id, (atRisk.get(r.agent_user_id) ?? 0) + Number(r.unearned_advance_cents ?? 0));
+  for (const r of risk ?? []) if (r.agentUserId) atRisk.set(r.agentUserId, (atRisk.get(r.agentUserId) ?? 0) + Number(r.atRiskCents ?? 0));
   const submittedBy = new Map<string, number>();
   for (const s of (subs ?? []) as Array<Record<string, unknown>>) {
     const opener = ((s.tenant_applications as { tenant_application_cases?: { opened_by?: string } } | null)?.tenant_application_cases?.opened_by) ?? null;

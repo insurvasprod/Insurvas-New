@@ -7,26 +7,26 @@ import type { RailStep } from "@/components/app/step-frame/step-rail";
 import { COMMISSIONS_RAIL_COOKIE, COMMISSIONS_STEPS, COMMISSIONS_WAITING, MY_PAY, commissionsStepLabel, type CommissionsStep } from "@/lib/commissions/steps";
 
 /**
- * Commissions, one page (owner 2026-11-02, the Data in and Accounting treatment): Statements, Commission
- * ledger, Discrepancies, Attribution queue, Reconciliation and Rate card are six steps down a rail on the
+ * Commissions, one page (owner 2026-11-02, the Data in and Accounting treatment): the Commission ledger,
+ * Discrepancies and Reconciliation are steps down a rail on the
  * left, the step on the right. My pay is the Reconciliation step for a producer.
  *
- * Each step keeps its own address and its own route's gate (`/app/statements`, `/app/ledger`,
- * `/app/discrepancies`, `/app/attribution`, `/app/producer-reconciliation`, `/app/my-pay`, `/app/rate-card`),
+ * Each step keeps its own address and its own route's gate (`/app/ledger`, `/app/discrepancies`,
+ * `/app/producer-reconciliation`, `/app/my-pay`),
  * so every old link still lands on the right screen. The rail offers only the steps this person may open,
  * by the same rules those routes apply.
  */
 async function openSteps(): Promise<RailStep[]> {
-  const [ingestion, ledger, discrepancies, payouts] = await Promise.all([guardPage("statement_ingestion"), guardPage("commission_ledger"), guardPage("discrepancy_report"), guardPage("producer_payouts")]);
+  const [ledger, discrepancies, payouts, team] = await Promise.all([guardPage("commission_ledger"), guardPage("discrepancy_report"), guardPage("producer_payouts"), guardPage("team_hierarchy")]);
   const open = new Set<CommissionsStep>();
-  if (ingestion.entitled && actAsPagePermission(ingestion, "statements.view")) open.add("statements");
   if (ledger.entitled && actAsPage(ledger, ["owner", "producer", "bookkeeper"])) open.add("ledger");
   if (discrepancies.entitled && actAsPagePermission(discrepancies, "statements.view")) open.add("discrepancies");
   const payKeeper = payouts.entitled && actAsPage(payouts, ["owner", "bookkeeper"]);
   const payProducer = payouts.entitled && actAsPage(payouts, ["producer"]);
-  if (payKeeper) { open.add("attribution"); open.add("reconciliation"); }
+  if (payKeeper) open.add("reconciliation");
   if (payProducer) open.add("reconciliation");
-  if (ingestion.entitled && actAsPage(ingestion, ["owner", "bookkeeper"])) open.add("rates");
+  // Hierarchy & overrides (from Team, 2026-11-03): /app/hierarchy's own rule — owner, admin, bookkeeper, a manager.
+  if (team.entitled && (actAsPage(team, ["owner", "bookkeeper"]) || team.context.memberRole === "manager")) open.add("hierarchy");
   return COMMISSIONS_STEPS.filter((item) => open.has(item.key)).map((item) => (item.key === "reconciliation" && !payKeeper ? { ...item, ...MY_PAY } : item));
 }
 

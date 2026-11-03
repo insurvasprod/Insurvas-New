@@ -9,7 +9,9 @@ import { DISPUTABLE } from "@/lib/ingestion/disputeLetter";
 import { DISCREPANCIES_PENDING_MESSAGE, loadDiscrepancies, type DiscrepancyRow } from "@/lib/ingestion/discrepancyStore";
 import { QUEUE_TYPES, RESOLUTION_LABELS, type QueueType, type Resolution } from "@/lib/ingestion/exceptionQueues";
 import { QUEUES_PENDING_MESSAGE, type QueueItemRow } from "@/lib/ingestion/exceptionQueuesStore";
+import { loadFileHead, ROW_QUEUE_TYPE } from "@/lib/ingestion/fileOutcomeStore";
 import { allRows, chunks } from "@/lib/ingestion/pages";
+import { isRecordUuid } from "@/lib/ingestion/path";
 import { WRITING_ROLES, type FieldOutcome, type MatchField } from "@/lib/ingestion/policyMatching";
 import { MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
 import { loadRowTrace, untraceableDiscrepancies } from "@/lib/ingestion/traceStore";
@@ -97,7 +99,7 @@ function item(kind: NeedsYouKind, id: string, fields: Omit<NeedsYouItem, "kind" 
 const CLOSED_HREF: Partial<Record<NeedsYouKind, string>> = {
   "pick-client": "/app/policy-matching?tab=links",
   money: "/app/discrepancies",
-  credit: "/app/attribution",
+  credit: "/app/needs-you?view=closed&group=credit",
   "status-word": "/app/carrier-files",
 };
 const closedHref = (kind: NeedsYouKind) => CLOSED_HREF[kind] ?? "/app/exceptions";
@@ -172,7 +174,9 @@ async function queue(scope: NeedsYouScope, names: Names, today: string): Promise
   const make = (r: Loose) => {
     const kind = QUEUE_KIND[r.queue_type as QueueType];
     const text = queueText(r, names, contact, deal);
-    return item(kind, r.id, { ...text, who: users.get(r.assigned_to_user_id) ?? "Someone", ownerUserId: r.assigned_to_user_id, since: r.age_from, tone: r.escalated_at ? "danger" : undefined, ref: { carrierId: r.carrier_id, policyNumber: r.policy_number, fileId: r.queue_type === "initial_import" ? r.subject_id : null } }, today);
+    // A "policy with no sale" item belongs to the file of its carrier and the file date it carries (ROW_QUEUE_TYPE).
+    const fileDate = r.queue_type === ROW_QUEUE_TYPE ? (r.payload?.file_date ?? null) : null;
+    return item(kind, r.id, { ...text, who: users.get(r.assigned_to_user_id) ?? "Someone", ownerUserId: r.assigned_to_user_id, since: r.age_from, tone: r.escalated_at ? "danger" : undefined, escalated: Boolean(r.escalated_at), ref: { carrierId: r.carrier_id, policyNumber: r.policy_number, fileId: r.queue_type === "initial_import" ? r.subject_id : null, fileDate } }, today);
   };
   return {
     open: rows(openRes).map(make),
@@ -287,6 +291,29 @@ async function statusWords(scope: NeedsYouScope, names: Names, today: string): P
   };
 }
 
+// ─── File didn't read · file_registry (failed, not superseded) ──────────────────────────────────────────
+// LA-4.9's file_failed queue, read straight from the file: it is open while the file is failed, and closes by
+// itself when the file is read again or a corrected copy supersedes it. Owner and bookkeepers (operations).
+
+const FAILED_FILE_COLUMNS = "id, carrier_id, file_type, file_date, storage_path, error_detail, received_at";
+const fileNameOf = (f: Loose) => String(f.storage_path ?? "").split("/").pop()?.replace(/^[0-9a-f]{12}__/, "") || "A carrier file";
+const failedReason = (f: Loose) => (typeof f.error_detail === "string" && f.error_detail.trim() ? f.error_detail.trim() : "It could not be read.");
+
+async function failedFiles(scope: NeedsYouScope, names: Names, today: string): Promise<Part> {
+  if (!scope.keeper) return EMPTY;
+  const { data, error } = await db().from("file_registry").select(FAILED_FILE_COLUMNS).eq("tenant_id", scope.tenantId).eq("status", "failed").is("superseded_by_file_id", null).order("received_at").limit(500);
+  if (error) throw new Error(error.message);
+  return {
+    open: ((data ?? []) as Loose[]).map((f) => item("file", f.id, {
+      about: `${fileNameOf(f)} · ${f.carrier_id ? names.carrier.get(f.carrier_id) ?? "Carrier not known" : "Carrier not known"}`,
+      why: failedReason(f).length > 120 ? `${failedReason(f).slice(0, 117)}…` : failedReason(f),
+      who: KEEPERS, ownerUserId: null, since: f.received_at, ref: { carrierId: f.carrier_id, fileId: f.id, fileDate: f.file_date },
+    }, today)),
+    closed: [],
+    notes: [],
+  };
+}
+
 // ─── Two rules disagree · pipeline_rule_hold (live, open) ────────────────────────────────────────────────
 
 const leadName = (values: Loose): string | null => {
@@ -341,6 +368,7 @@ export async function loadNeedsYou(scope: NeedsYouScope): Promise<NeedsYouList> 
     guarded("Agent codes", MATCHING_PENDING_MESSAGE, () => agents(scope, names, today)),
     guarded("Status words", STATUS_WORDS_PENDING_MESSAGE, () => statusWords(scope, names, today)),
     guarded("Two rules disagree", PIPELINE_RULES_PENDING_MESSAGE, () => ruleHolds(scope, names, today)),
+    guarded("Files that didn’t read", QUEUES_PENDING_MESSAGE, () => failedFiles(scope, names, today)),
   ]);
   return {
     open: parts.flatMap((p) => p.open).sort(byOldest),
@@ -351,13 +379,15 @@ export async function loadNeedsYou(scope: NeedsYouScope): Promise<NeedsYouList> 
 }
 
 /**
- * Files › "Open all in Needs you" (?file=): what that one file touched — its policies (from its snapshots and its
- * commission lines), the agent codes on them, and the status words it was held on — so the list can show only
- * the items that came from it. Null when the file isn't this agency's.
+ * Files › "Open all in Needs you" (?file=): what that one file touched, read by the file page's own rule
+ * (lib/ingestion/fileOutcomeStore.ts) — its head (loadFileHead) says whether it is the file its "policy with no
+ * sale" items are tied to (by carrier and file date), then its policies (snapshots and commission lines), the
+ * agent codes on them, and the status words it was held on — so the list shows only the items that came from
+ * it (kinds.ts fromFile). Null when the file isn't this agency's.
  */
 export async function loadFileFilter(tenantId: string, fileId: string): Promise<FileFilter | null> {
-  const { data: file } = await db().from("file_registry").select("id, original_filename, carrier_id").eq("tenant_id", tenantId).eq("id", fileId).maybeSingle();
-  if (!file) return null;
+  const head = await loadFileHead(tenantId, fileId).catch(() => null);
+  if (!head) return null;
   const [snapshots, lines, finding] = await Promise.all([
     allRows(() => db().from("policy_snapshot").select("carrier_id, policy_number, agent_identifier").eq("tenant_id", tenantId).eq("file_id", fileId).order("policy_number"), 50_000),
     allRows(() => db().from("commission_entry").select("carrier_id, policy_number").eq("tenant_id", tenantId).eq("file_id", fileId).order("policy_number"), 50_000),
@@ -369,9 +399,12 @@ export async function loadFileFilter(tenantId: string, fileId: string): Promise<
     if (s.policy_number) policies.add(`${s.carrier_id}|${s.policy_number}`);
     if (s.agent_identifier) codes.add(`${s.carrier_id}|${s.agent_identifier}`);
   }
-  for (const l of (lines.rows ?? []) as Loose[]) if (l.policy_number) policies.add(`${l.carrier_id}|${l.policy_number}`);
+  const commissionPolicies = new Set<string>();
+  for (const l of (lines.rows ?? []) as Loose[]) if (l.policy_number) commissionPolicies.add(`${l.carrier_id}|${l.policy_number}`);
   const words = new Set<string>(((finding.data?.payload?.held ?? []) as Array<{ raw: string }>).map((h) => h.raw).filter(Boolean));
-  return { fileId: file.id, name: file.original_filename ?? "this file", carrierId: file.carrier_id ?? null, policies, codes, words };
+  // The head counts the row items only for the file they are tied to (a current, read policy file with a date).
+  const rowItemsDate = (head.facts.noSaleItems ?? 0) > 0 ? head.fileDate : null;
+  return { fileId: head.id, name: head.name ?? "this file", carrierId: head.carrierId, rowItemsDate, policies, commissionPolicies, codes, words };
 }
 
 // ─── One item's page ─────────────────────────────────────────────────────────────────────────────────────
@@ -425,7 +458,8 @@ export type ItemDetail =
   | { kind: "credit"; id: string; kindOfRow: "disagreement" | "unattributed"; policyNumber: string | null; agentCode: string | null; amountCents: number; carrierName: string | null; writingNumber: Person | null; application: Person | null; producers: Person[] }
   | { kind: "agent"; carrierId: string; carrierName: string; code: string; policies: number; members: Person[] }
   | { kind: "status-word"; word: string; carrierName: string; fileType: string; rows: number; firstSeenFileId: string | null }
-  | { kind: "rules"; holdId: string; leadId: string | null; leadName: string | null; carrierName: string; policyNumber: string; options: Array<{ ruleId: string; ruleName: string; version: number; stage: string }> };
+  | { kind: "rules"; holdId: string; leadId: string | null; leadName: string | null; carrierName: string; policyNumber: string; options: Array<{ ruleId: string; ruleName: string; version: number; stage: string }> }
+  | { kind: "file"; fileId: string; fileName: string; carrierName: string; fileType: string | null; fileDate: string | null; reason: string };
 
 export type ItemPage = { detail: ItemDetail; row: RowAsSent | null };
 
@@ -574,6 +608,13 @@ export async function loadItemPage(scope: NeedsYouScope, kind: NeedsYouKind, id:
       detail: { kind, holdId: hold.id, leadId: hold.leadId, leadName: words.lead(hold.leadId), carrierName: await carrierName(hold.carrierId), policyNumber: hold.policyNumber, options: hold.options.map((o) => ({ ruleId: o.ruleId, ruleName: o.ruleName, version: o.version, stage: words.stage(o.toStageId) })) },
       row: await rowAsSent(t, await policyRow(t, hold.carrierId, { policyNumber: hold.policyNumber })),
     };
+  }
+
+  if (kind === "file") {
+    if (!scope.keeper || !isRecordUuid(id)) return null;
+    const { data: f } = await db().from("file_registry").select(FAILED_FILE_COLUMNS).eq("tenant_id", t).eq("id", id).eq("status", "failed").is("superseded_by_file_id", null).maybeSingle();
+    if (!f) return null;
+    return { detail: { kind, fileId: f.id, fileName: fileNameOf(f), carrierName: f.carrier_id ? await carrierName(f.carrier_id) : "Carrier not known", fileType: f.file_type, fileDate: f.file_date, reason: failedReason(f) }, row: null };
   }
   return null;
 }

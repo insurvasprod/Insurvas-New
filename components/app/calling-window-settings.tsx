@@ -15,8 +15,10 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, Field, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, ToggleRow, control, st } from "@/components/app/settings/primitives";
+import { DefaultChip, ResetToDefault, ReviewChip } from "@/components/app/settings/defaults";
 import {
   FEDERAL_MINUTES,
+  INSURVAS_DEFAULT_WINDOW,
   campaignMinutes,
   effectiveMinutes,
   inputToMinute,
@@ -179,6 +181,8 @@ export function CallingWindowSettingsPanel() {
 
   const readOnly = !loaded.canEdit;
   const tenantWindow = loaded.tenant ? toMinutes(loaded.tenant) : null;
+  // 20261103100000 is live: with no row of its own the agency is on the Insurvas default.
+  const defaultLive = loaded.insurvasDefaultLive === true;
 
   // Only the states whose statute actually bites, given what the agency has set. Fifty-two rows
   // that mostly repeat the federal hours bury the six that do not.
@@ -229,7 +233,17 @@ export function CallingWindowSettingsPanel() {
       {readOnly && <Callout tone="info" title="Only an owner can change calling windows. You are seeing what is in force." />}
 
       <SettingsGrid>
-        <SettingsCard title="Your agency’s hours" info={`In the customer’s timezone. Narrowing only: federal law allows ${compact(FEDERAL_MINUTES.start)}–${compact(FEDERAL_MINUTES.end)}.`}>
+        <SettingsCard
+          title="Your agency’s hours"
+          info={`In the customer’s timezone. Narrowing only: federal law allows ${compact(FEDERAL_MINUTES.start)}–${compact(FEDERAL_MINUTES.end)}.`}
+          // The Insurvas default (docs/settings/DEFAULTS.md): compliance-sensitive, so never shown as final.
+          action={defaultLive ? (
+            <span className="flex flex-wrap items-center justify-end gap-2">
+              {(loaded.tenantIsDefault || loaded.optionsAreDefault) && <DefaultChip />}
+              <ReviewChip />
+            </span>
+          ) : undefined}
+        >
           <div className="grid grid-cols-2 gap-4">
             <Field label="Earliest" htmlFor="window-start">
               <input
@@ -260,11 +274,32 @@ export function CallingWindowSettingsPanel() {
             <p className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--muted)]">
               Set both hours, or neither.
               {tenantWindow
-                ? ` In force now: ${minuteLabel(tenantWindow.start)}–${minuteLabel(tenantWindow.end)}.`
+                ? ` In force now: ${minuteLabel(tenantWindow.start)}–${minuteLabel(tenantWindow.end)}${loaded.tenantIsDefault ? ", the Insurvas default" : ""}.`
                 : " Empty: only the federal and state limits apply."}
             </p>
           )}
-          {!readOnly && loaded.tenant && (
+          {!readOnly && defaultLive && !(loaded.tenantIsDefault && loaded.optionsAreDefault) && (
+            <div className="mt-3">
+              <ResetToDefault
+                variant="outline"
+                what="your agency’s calling hours and switches"
+                kept={`Back to ${compact(INSURVAS_DEFAULT_WINDOW.start)}–${compact(INSURVAS_DEFAULT_WINDOW.end)}, no Sundays, no federal holidays. Campaign narrowing stays.`}
+                disabled={busy}
+                onReset={async () => {
+                  try {
+                    const next = await put({ scope: "reset" });
+                    if (next) { setLoaded(next); setDraft(draftFrom(next)); }
+                    notify.done("Calling windows are back on the Insurvas default");
+                    return true;
+                  } catch (cause) {
+                    notify.block(cause instanceof Error ? cause.message : "Could not reset the calling window");
+                    return false;
+                  }
+                }}
+              />
+            </div>
+          )}
+          {!readOnly && !defaultLive && loaded.tenant && (
             <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void saveAgency(true)}>
               Clear my narrowing
             </Button>

@@ -6,8 +6,11 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { EmptyState } from "@/components/ui/page-states";
+import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { Callout } from "@/components/app/settings/primitives";
+import { personName } from "@/lib/format/personName";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -37,21 +40,25 @@ const TONE: Record<CaseStatus, StatusTone> = {
 const NEXT_LABEL: Partial<Record<CaseStatus, string>> = { contacted: "Called them", client_agreed: "Client agreed", submitted: "Sent to the carrier" };
 const field = `${toolbarControl} w-full`;
 const labelClass = "grid gap-1.5 text-sm font-medium text-foreground";
-const alertClass = "rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]";
 
 /**
  * LA-5.6 (Notion sprint) · reinstatement. Fewest days first; red inside a week, pinned inside the
  * pin threshold; a carrier with no window sits in its own labelled group with no countdown — never a
  * guessed one. "Reinstated" comes from the carrier file, "Window closed" from the calendar.
+ *
+ * 2026-11-02 tidy (owner): Open and Closed are chips with their counts, a search finds a client, each fact is
+ * one line, the table fits its card, and a window about to close goes to the bell rather than the page.
  */
 export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [view, setView] = useState<"open" | "closed">("open");
+  const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [working, setWorking] = useState<CaseRow | null>(null);
-  const rows = view === "open" ? data.open : data.closed;
-  const pageSize = useFittingPageSize(480, 45);
+  const needle = search.trim().toLowerCase();
+  const rows = useMemo(() => (view === "open" ? data.open : data.closed).filter((r) => !needle || [r.clientName, r.policyNumber, r.phone, r.carrierName].some((v) => v?.toLowerCase().includes(needle))), [data, view, needle]);
+  const pageSize = useFittingPageSize(480, 57);
   const shown = paginate(rows, page, pageSize);
   const { counts } = data;
   const advance = money(counts.advanceOpenCents);
@@ -59,45 +66,43 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
 
   return (
     <>
-      {pinned.length > 0 && (
-        <p role="alert" className={alertClass}>
-          {pinned.length === 1 ? "1 reinstatement window closes" : `${pinned.length} reinstatement windows close`} within {data.settings.reinstatementPinDays} days. After that the policy is gone for good.
-        </p>
-      )}
+      {pinned.length > 0 && <Callout tone="error" title={`${pinned.length === 1 ? "1 reinstatement window closes" : `${pinned.length} reinstatement windows close`} within ${data.settings.reinstatementPinDays} days. After that the policy is gone for good.`} />}
       {(data.open.length > 0 || data.closed.length > 0) && (
         <StatStrip label="Reinstatement">
-          <StatTile label="Open cases" value={counts.open.toLocaleString("en-US")} footnote={counts.noWindow ? `${counts.noWindow} with no carrier window set` : "every one has a deadline"} />
+          <StatTile label="Open cases" value={counts.open.toLocaleString("en-US")} footnote={counts.noWindow ? `${counts.noWindow} with no carrier window` : "every one has a deadline"} />
           <StatTile label={`Within ${data.settings.reinstatementRedDays} days`} value={data.open.filter((r) => r.urgency === "pinned" || r.urgency === "red").length.toLocaleString("en-US")} valueTone={pinned.length ? "danger" : undefined} footnote={`${pinned.length} within ${data.settings.reinstatementPinDays}`} />
-          <StatTile label="Advance that revives" value={counts.advanceOpenCents > 0 ? advance : "Unknown"} footnote={counts.advanceUnknown ? `${counts.advanceUnknown} with no advance on file` : "if every open case is reinstated"} />
+          <StatTile label="Advance that revives" value={counts.advanceOpenCents > 0 ? advance : "Unknown"} footnote={counts.advanceUnknown ? `${counts.advanceUnknown} with no advance on file` : "if every case comes back"} />
           <StatTile label="Last 90 days" value={`${counts.reinstated90} back`} footnote={`${counts.expired90} window closed · ${counts.declined90} declined`} />
         </StatStrip>
       )}
 
       <TableCard
         toolbar={
-          <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
-            <select aria-label="Which cases" className={toolbarControl} value={view} onChange={(e) => { setView(e.target.value as "open" | "closed"); setPage(1); }}>
-              <option value="open">Open, fewest days first</option>
-              <option value="closed">Closed in the last 90 days</option>
-            </select>
+          <DataToolbar actions={<>
+            {needle && <ClearFiltersButton onClick={() => { setSearch(""); setPage(1); }} />}
+            <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
+          </>}>
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Client, policy or phone" />
+            <ToggleChip role="radio" selected={view === "open"} count={data.open.length} countTone={pinned.length ? "danger" : undefined} onClick={() => { setView("open"); setPage(1); }}>Open</ToggleChip>
+            <ToggleChip role="radio" selected={view === "closed"} count={data.closed.length} onClick={() => { setView("closed"); setPage(1); }}>Closed, 90 days</ToggleChip>
           </DataToolbar>
         }
         footer={rows.length ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="cases" onPage={setPage} /> : undefined}
       >
         {rows.length === 0 ? (
-          <EmptyState title={view === "open" ? "Nothing to reinstate" : "Nothing closed lately"} hint={view === "open" ? "A case opens when a carrier file shows a lapse the carrier will still take back. Set each carrier's reinstatement window in Carrier rules." : "Reinstated, declined and expired cases show here for 90 days."} />
+          needle ? <NoMatches noun="cases" onClear={() => { setSearch(""); setPage(1); }} /> : <EmptyState title={view === "open" ? "Nothing to reinstate" : "Nothing closed lately"} hint={view === "open" ? "A case opens when a carrier file shows a lapse the carrier still takes back." : "Closed cases show here for 90 days."} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[1000px] text-left text-sm">
+          <table className="portal-lead-table w-full text-left text-sm">
             <thead>
               <tr>
-                <th className="w-[220px]">Client</th>
+                <th>Client</th>
                 <th className="w-[120px] text-right">{view === "open" ? "Days left" : "Closed"}</th>
                 <th>Reinstate</th>
-                <th className="w-[200px]">Where it stands</th>
-                <th className="w-[200px] text-right"><span className="sr-only">Work it</span></th>
+                <th>Where it stands</th>
+                <th className="w-[150px] text-right"><span className="sr-only">Work it</span></th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="m-seq">
               {shown.rows.flatMap((r, i) => {
                 const out = [];
                 // The labelled group starts at the first case with no carrier window (they sort last).
@@ -107,11 +112,14 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
                 const c = r.comparison.reinstate;
                 const next = FORWARD.find((s) => canMove(r.status, s));
                 out.push(
-                  <tr key={r.id}>
+                  <tr key={r.id} className="m-row">
                     <td>
-                      <span className="block font-semibold text-foreground">{r.clientName ?? "No client linked"}</span>
-                      {r.phone ? <span className="block select-all font-medium tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(r.phone)}</span> : <span className="block text-xs text-muted-foreground">No phone on file</span>}
-                      <Link href={`/app/policies/carrier/${r.carrierId}/${encodeURIComponent(r.policyNumber)}`} className="block text-xs text-muted-foreground hover:underline">{r.carrierName} · {r.policyNumber}</Link>
+                      <span className="block truncate font-semibold text-foreground" title={data.showOwners && r.owner ? `Owner: ${r.owner.name}${r.owner.escalated ? " · moved to the writing agent" : ""}` : undefined}>{r.clientName ? personName(r.clientName) : "No client linked"}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {r.phone ? <span className="select-all tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(r.phone)}</span> : "No phone"}
+                        {" · "}
+                        <Link href={`/app/policies/carrier/${r.carrierId}/${encodeURIComponent(r.policyNumber)}`} className="hover:underline">{r.carrierName} {r.policyNumber}</Link>
+                      </span>
                     </td>
                     <td className="text-right">
                       {view === "open" ? (
@@ -119,27 +127,26 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
                           <span className={`block text-base font-semibold tabular-nums ${DAYS_CLASS[r.urgency]}`}>{r.daysRemaining <= 0 ? "Today" : r.daysRemaining}</span>
                         )
                       ) : <span className="tabular-nums">{r.resolvedAt ? fileDay(r.resolvedAt.slice(0, 10)) : "—"}</span>}
-                      <span className="block text-xs text-muted-foreground">lapsed {fileDay(r.lapsedOn)}</span>
-                      {r.deadline && view === "open" && <span className="block text-xs text-muted-foreground">closes {fileDay(r.deadline)}</span>}
+                      <span className="block whitespace-nowrap text-xs text-muted-foreground" title={`Lapsed ${fileDay(r.lapsedOn)}`}>{r.deadline && view === "open" ? `closes ${fileDay(r.deadline)}` : `lapsed ${fileDay(r.lapsedOn)}`}</span>
                     </td>
-                    <td className="text-xs">
-                      <span className="block text-sm text-foreground">{c.owedCents === null ? "Owed: ask the carrier" : `Owes ${c.owedIsEstimate ? "about " : ""}${money(c.owedCents)}${c.months ? ` (${c.months} ${c.months === 1 ? "month" : "months"})` : ""}`}{c.owedIsEstimate && c.owedCents !== null && <span className="text-xs text-muted-foreground"> · estimate</span>}</span>
-                      {c.advanceRevivesCents !== null && <span className="block text-muted-foreground">Advance revives: {money(c.advanceRevivesCents)}</span>}
-                      {r.comparison.sellNew.olderNow && <span className="block text-muted-foreground">A new policy prices at {r.comparison.sellNew.ageNow}, not {r.comparison.sellNew.ageThen}</span>}
+                    <td>
+                      <span className="block truncate text-foreground">{c.owedCents === null ? "Ask the carrier what is owed" : `Owes ${c.owedIsEstimate ? "about " : ""}${money(c.owedCents)}${c.months ? ` · ${c.months} ${c.months === 1 ? "month" : "months"}` : ""}`}</span>
+                      {(c.advanceRevivesCents !== null || r.comparison.sellNew.olderNow) && (
+                        <span className="block truncate text-xs text-muted-foreground" title={r.comparison.sellNew.olderNow ? `A new policy prices at ${r.comparison.sellNew.ageNow}, not ${r.comparison.sellNew.ageThen}` : undefined}>
+                          {[c.advanceRevivesCents !== null ? `${money(c.advanceRevivesCents)} advance revives` : null, r.comparison.sellNew.olderNow ? `new policy at age ${r.comparison.sellNew.ageNow}` : null].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
                     </td>
                     <td>
                       <StatusChip tone={TONE[r.status]}>{CASE_STATUS_LABELS[r.status]}</StatusChip>
-                      {r.requiresHealthQuestions && <span className="mt-1 block text-xs text-muted-foreground">Health questions</span>}
-                      {r.requiresSignedForm && <span className="block text-xs text-muted-foreground">Signed form</span>}
-                      {r.declineReason && <span className="mt-1 block text-xs text-muted-foreground">{r.declineReason}</span>}
-                      {r.workedBy && <span className="block text-xs text-muted-foreground">{r.workedBy}</span>}
-                      {data.showOwners && r.owner && <span className="block text-xs text-muted-foreground">Owner: {r.owner.name}{r.owner.escalated ? " · moved to the writing agent" : ""}</span>}
+                      {(() => {
+                        const line = [r.requiresHealthQuestions ? "Health questions" : null, r.requiresSignedForm ? "Signed form" : null, r.declineReason, r.workedBy].filter(Boolean).join(" · ");
+                        return line ? <span className="mt-1 block truncate text-xs text-muted-foreground" title={line}>{line}</span> : null;
+                      })()}
                     </td>
                     <td className="text-right">
                       {!readOnly && view === "open" && (
-                        <span className="inline-flex flex-wrap justify-end gap-2">
-                          <Button type="button" onClick={() => setWorking(r)}>{next && NEXT_LABEL[next] ? "Work the case" : "Update"}</Button>
-                        </span>
+                        <Button type="button" variant="outline" size="sm" onClick={() => setWorking(r)}>{next && NEXT_LABEL[next] ? "Work the case" : "Update"}</Button>
                       )}
                     </td>
                   </tr>,
@@ -257,7 +264,7 @@ function CaseDialog({ row, onClose, onDone }: { row: CaseRow; onClose: () => voi
             <label htmlFor="case-req" className={labelClass}>What else they need<input id="case-req" autoComplete="off" maxLength={1000} className={field} value={requirements} onChange={(e) => setRequirements(e.target.value)} /></label>
           </div>
           <label htmlFor="case-note" className={labelClass}>Note<textarea id="case-note" className={`${field} min-h-16 py-2`} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-          {error && <p role="alert" className={alertClass}>{error}</p>}
+          {error && <Callout tone="error" title={error} />}
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>

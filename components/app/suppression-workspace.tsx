@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { Loader2, PhoneOff, Search, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -31,10 +31,10 @@ import { DNC_EXEMPTION_BASIS_LABELS, type DncExemption } from "@/lib/suppression
 import { TcpaDncExemptions } from "@/components/app/tcpa-dnc-exemptions";
 import { TcpaScreeningAudit } from "@/components/app/tcpa-screening-audit";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { inputControl } from "@/components/ui/field";
+import { Field, checkboxControl, control } from "@/components/ui/field";
 import { Callout } from "@/components/app/settings/primitives";
-import { NextUp } from "@/components/app/lead-sources/next-up";
 import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
+import { useUrlTab } from "@/components/app/reports/reports-slot";
 
 type Loaded = {
   entries: SuppressionEntry[];
@@ -56,17 +56,12 @@ const SOURCE_LABELS: Record<string, string> = {
   import: "Found during an import",
 };
 
-// The shared control (foundation v3), without the gap a stacked Field puts above it.
-const field = inputControl;
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold leading-[1.33] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
-/** The tab's one card fills the rest of the step's column, so a short list never leaves half a page empty. */
-const FILL = "flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:flex-1";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 /** "2 Aug 2026", as the board dates a suppression. */
 const dayMonthYear = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; };
 const stamp = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "—" : `${d.getDate()} ${MONTHS[d.getMonth()]} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
-
 
 /**
  * TCPA / DNC (p-app-tcpa): whether a number can be called right now, why, and the lists that
@@ -75,15 +70,16 @@ const stamp = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.
  * The verdict is `is_phone_suppressed`, the dialer's own function; the per-list rows under it only
  * say where a "no" came from. "Clear" means clear of the lists stored here — the federal registry
  * itself is asked by the DNC vendor at the moment of each dial, which is why feed health is one tab
- * away and a failing feed is a line above the tabs: a feed that is down refuses the dial rather
- * than guessing.
+ * away: a feed that is down refuses the dial rather than guessing.
  *
- * 2026-10-06 redesign: the check sits on the tab row (the question the screen is opened to answer),
- * its answer stays on screen above whichever tab is open, and the four lists are tabs.
+ * Compliance in one page (2026-10-30): the TCPA / DNC step. Its tabs sit on the title line and the check and
+ * Suppress a number in its corner, so both are one click from every tab.
  *
- * Compliance in one page (2026-10-30): the TCPA / DNC step. Its tabs sit in the frame's top row and the
- * check and Suppress a number in its corner, so both are one click from every tab; the feed state is the
- * step's one next-up line, whose button opens Feed health; `?tab=` opens a tab directly.
+ * Foundation pass (2026-11-03, docs/compliance/FOUNDATION-PASS.md): each tab is its own address (`?tab=`), so
+ * the figures are links to them; a feed problem goes to the bell (Callout), never a line on the page; the
+ * check's answer is the result asked for, not a notice — a card of its own, titled with the number and its
+ * verdict (a Callout there went to the bell and left the Yes/No off the page); Suppress a number is a confirm
+ * with its fields, because it cannot be undone. The cards fill to the rail's foot by themselves (§6b).
  */
 export function SuppressionWorkspace() {
   const [loaded, setLoaded] = useState<Loaded | null>(null);
@@ -94,8 +90,9 @@ export function SuppressionWorkspace() {
   const [listType, setListType] = useState<string>("");
   const [page, setPage] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const asked = useSearchParams().get("tab");
-  const [tab, setTab] = useState<Tab>(TABS.includes(asked as Tab) ? (asked as Tab) : "list");
+  const pathname = usePathname();
+  // The tab is kept in the address in place (no server round trip), so a reload or a shared link opens it.
+  const { tab, setTab } = useUrlTab<Tab>(TABS, "list");
   const pageSize = useFittingPageSize(480, 41);
 
   const [lookup, setLookup] = useState("");
@@ -160,8 +157,7 @@ export function SuppressionWorkspace() {
     }
   }
 
-  async function add(event: React.FormEvent) {
-    event.preventDefault();
+  async function add() {
     setBusy(true);
     try {
       const response = await fetch("/api/app/suppression", {
@@ -198,15 +194,15 @@ export function SuppressionWorkspace() {
   const filtered = Boolean(search || listType);
   const clearFilters = () => { setSearch(""); setListType(""); };
 
-  const showFeeds = <Button variant="outline" onClick={() => setTab("feeds")}>Feed health</Button>;
-  // One line for the state someone must act on: dialing refused, a feed down, demo screening — or all clear.
-  const nextUp = !overview ? null
+  // A state someone must act on goes to the bell (owner 2026-11-02): dialing refused, a feed down, demo screening.
+  const feedNotice = !overview ? null
     : overview.feeds.length === 0
-      ? <NextUp tone={overview.demo ? "warning" : "danger"}>{overview.demo ? "Demo screening is on here: DNC and litigator lookups are answered locally." : "No scrub vendor is enabled — dialing is refused until the Insurvas team enables one."}</NextUp>
-      : overview.dialingBlocked ? <NextUp tone="danger" action={showFeeds}>Dialing is refused until a DNC feed recovers.</NextUp>
-      : failing.length > 0 ? <NextUp tone="warning" action={showFeeds}><strong>{failing[0].name}</strong> is failing{failing[0].lastSuccessAt ? ` — last good answer ${agoLabel(Date.parse(failing[0].lastSuccessAt), overviewAt)}` : ""}. Dials continue only while another DNC vendor answers.</NextUp>
-      : overview.demo ? <NextUp tone="warning" action={showFeeds}>Demo screening is on here: the feeds are listed but do not gate dialing.</NextUp>
-      : <NextUp tone="done">{loaded ? <><strong>{total.toLocaleString()}</strong> {total === 1 ? "number" : "numbers"} will never be called. </> : null}Every DNC and litigator feed is answering.</NextUp>;
+      ? <Callout tone={overview.demo ? "warning" : "error"} title={overview.demo ? "Demo screening is on here" : "No scrub vendor is enabled"}>{overview.demo ? "DNC and litigator lookups are answered locally." : "Dialing is refused until the Insurvas team enables one."}</Callout>
+      : overview.dialingBlocked ? <Callout tone="error" title="Dialing is refused until a DNC feed recovers">See Feed health on TCPA / DNC.</Callout>
+      : failing.length > 0 ? <Callout tone="warning" title={`${failing[0].name} is failing`}>{failing[0].lastSuccessAt ? `Last good answer ${agoLabel(Date.parse(failing[0].lastSuccessAt), overviewAt)}. ` : ""}Dials continue only while another DNC vendor answers.</Callout>
+      : overview.demo ? <Callout tone="warning" title="Demo screening is on here">The feeds are listed but do not gate dialing.</Callout>
+      : null;
+  const listed = check?.suppressed ? (LIST_TYPE_LABELS[check.listType as SuppressionListType] ?? check.listType ?? "a list") : null;
 
   return (
     <>
@@ -238,47 +234,48 @@ export function SuppressionWorkspace() {
         </form>
         {loaded?.canEdit ? <Button onClick={() => setOpen(true)}><PhoneOff aria-hidden="true" />Suppress a number</Button> : null}
       </ComplianceSlot>
+      {feedNotice}
 
       {/* The first read only; a search or filter change keeps the page drawn and swaps the rows. */}
-      {!loaded && !error ? <TableCard className={FILL}><SectionLoading rows={6} columns={5} label="Loading the suppression list" /></TableCard> : <>
+      {!loaded && !error ? <TableCard><SectionLoading rows={6} columns={5} label="Loading the suppression list" /></TableCard> : <>
 
-      {/* The answer stands in for the next-up line, above whichever tab is open, until it is closed; recording an exemption re-runs it. */}
+      {/* The answer to "Can we call this number?": the number, its verdict and the lists that decided it, until it
+          is closed. Recording an exemption re-runs it. */}
       {check ? (
-        <section aria-label="Can we call this number?" className="rounded-lg border border-border bg-card">
-          <div className="flex items-start gap-3 px-4 py-3">
-            <div className="min-w-0 flex-1">
-              {check.suppressed ? (
-                <Callout tone="error" title={<>No — {formatPhone(check.phoneDigits)} is on {LIST_TYPE_LABELS[check.listType as SuppressionListType] ?? check.listType}{check.reason ? <> &mdash; &ldquo;{check.reason.replace(/[.s]+$/, "")}&rdquo;</> : null}</>} />
-              ) : (
-                <Callout tone="success" title={<>Yes — no list here blocks {formatPhone(check.phoneDigits)}{check.exemption && <>. Federal and state DNC are cleared by a recorded {DNC_EXEMPTION_BASIS_LABELS[check.exemption.basis].toLowerCase()}{check.exemption.expiresAt ? `, until ${dayMonthYear(check.exemption.expiresAt)}` : ", until revoked"}</>}.</>} />
-              )}
-            </div>
+        <TableCard
+          title={formatPhone(check.phoneDigits)}
+          description={check.suppressed
+            ? `No — on ${listed}${check.reason ? `: “${check.reason.replace(/[.\s]+$/, "")}”` : ""}. The dialer refuses it.`
+            : check.exemption
+              ? `Yes — no list here blocks it. Federal and state DNC are cleared by a recorded ${DNC_EXEMPTION_BASIS_LABELS[check.exemption.basis].toLowerCase()}${check.exemption.expiresAt ? `, until ${dayMonthYear(check.exemption.expiresAt)}` : ", until revoked"}.`
+              : "Yes — no list here blocks it. The DNC vendor is asked again at the moment of each dial."}
+          action={<span className="flex items-center gap-2" aria-live="polite">
+            {check.suppressed ? <StatusChip tone="danger">Do not call</StatusChip> : <StatusChip tone="good">Can call</StatusChip>}
             <Button type="button" variant="ghost" size="icon" aria-label="Close the answer" onClick={() => setCheck(null)}><X aria-hidden="true" /></Button>
-          </div>
-          {check.lists && check.lists.length > 0 && (
-            <div className="overflow-x-auto"><table className="w-full min-w-[520px] border-collapse text-left">
+          </span>}
+        >
+          {check.lists && check.lists.length > 0 ? (
+            <table className="w-full border-collapse text-left">
               <thead><tr><th className={th}>List</th><th className={th}>Result</th><th className={`${th} text-right`}>Checked</th></tr></thead>
               <tbody>{check.lists.map((row) => <tr key={row.list} className="m-row">
                 <td className={td}>{LIST_TYPE_LABELS[row.list]}</td>
                 <td className={td}>{row.listed && check.exemption && EXEMPTED_LISTS.has(row.list) ? <StatusChip tone="info" dot={false}>Listed · exempt</StatusChip> : row.listed ? <StatusChip tone="danger" dot={false}>Listed</StatusChip> : <StatusChip tone="good" dot={false}>Clear</StatusChip>}</td>
                 <td className={`${td} text-right tabular-nums`} title={row.since ? `On this list since ${dayMonthYear(row.since)}` : undefined}>{row.listed && row.since ? `since ${dayMonthYear(row.since)}` : "just now"}</td>
               </tr>)}</tbody>
-            </table></div>
-          )}
-        </section>
-      ) : nextUp}
+            </table>
+          ) : null}
+        </TableCard>
+      ) : null}
 
       <StatStrip label="Suppression totals">
-        <StatTile label="Suppressed" value={loaded ? total.toLocaleString() : "—"} footnote={loaded ? `${loaded.counts.internal.toLocaleString()} on your own list` : undefined} reserveFootnote />
-        <StatTile label="Refused today" value={overview?.refusedLast24h == null ? "—" : overview.refusedLast24h.toLocaleString()} valueTone={overview?.refusedLast24h ? "warning" : undefined} footnote="dials screening refused · 24 h" />
-        <StatTile label="Feeds answering" value={overview ? `${answering} of ${overview.feeds.length}` : "—"} valueTone={failing.length > 0 ? "danger" : undefined} footnote={failing.length > 0 ? `${failing.length} failing` : overview?.demo ? "demo screening" : "DNC and litigator feeds"} />
+        <StatTile label="Suppressed" value={loaded ? total.toLocaleString() : "—"} footnote={loaded ? `${loaded.counts.internal.toLocaleString()} on your own list` : undefined} reserveFootnote href={pathname} />
+        <StatTile label="Refused today" value={overview?.refusedLast24h == null ? "—" : overview.refusedLast24h.toLocaleString()} valueTone={overview?.refusedLast24h ? "warning" : undefined} footnote="dials screening refused · 24 h" href={`${pathname}?tab=audit`} />
+        <StatTile label="Feeds answering" value={overview ? `${answering} of ${overview.feeds.length}` : "—"} valueTone={failing.length > 0 ? "danger" : undefined} footnote={failing.length > 0 ? `${failing.length} failing` : overview?.demo ? "demo screening" : "DNC and litigator feeds"} href={`${pathname}?tab=feeds`} />
       </StatStrip>
 
-
-      <div role="tabpanel" aria-labelledby={`tcpa-view-${tab}`} className="flex min-w-0 flex-1 flex-col">
+      <div role="tabpanel" aria-labelledby={`tcpa-view-${tab}`} className="flex min-w-0 flex-col">
       {tab === "list" && (
         <TableCard
-          className={FILL}
           toolbar={
             <DataToolbar actions={<>
               {filtered && <ClearFiltersButton onClick={clearFilters} />}
@@ -300,13 +297,12 @@ export function SuppressionWorkspace() {
                 ? <NoMatches noun="suppressed numbers" onClear={clearFilters} />
                 : <EmptyState title="Nothing is suppressed yet" hint="DNC dispositions, screening hits and complaints land here." action={loaded.canEdit ? <Button onClick={() => setOpen(true)}><PhoneOff aria-hidden="true" />Suppress a number</Button> : undefined} />
             ) : (
-              <table className="w-full min-w-[1040px] border-collapse text-left">
+              <table className="w-full min-w-[820px] border-collapse text-left">
                 <thead><tr>
                   <th className={th}>Phone number</th>
                   <th className={th}>Name</th>
                   <th className={th}>List</th>
                   <th className={th}>Source</th>
-                  <th className={th}>Added by</th>
                   <th className={th}>How you learned</th>
                   <th className={`${th} text-right`}>Added</th>
                 </tr></thead>
@@ -315,11 +311,13 @@ export function SuppressionWorkspace() {
                   <td className={`${td} max-w-[200px] truncate`}>{entry.leadId && entry.leadName ? <a className="text-[var(--accent-ink)] hover:underline" href={`/app/leads/${entry.leadId}`} title={entry.leadName}>{entry.leadName}</a> : "—"}</td>
                   <td className={`${td} whitespace-nowrap`}>{LIST_TYPE_LABELS[entry.listType] ?? entry.listType}</td>
                   {/* The internal list predates the source column, so it has none. "Not recorded" is
-                      the truth; labelling it "manual" would invent provenance. */}
-                  <td className={`${td} whitespace-nowrap`}>{entry.source ? (SOURCE_LABELS[entry.source] ?? entry.source) : <span className="text-muted-foreground">Source not recorded</span>}</td>
-                  <td className={`${td} max-w-[160px] truncate`} title={entry.addedByName ?? undefined}>{entry.addedByName ?? "—"}</td>
+                      the truth; labelling it "manual" would invent provenance. Who added it is the line under. */}
+                  <td className={`${td} whitespace-nowrap`}>
+                    {entry.source ? (SOURCE_LABELS[entry.source] ?? entry.source) : <span className="text-muted-foreground">Source not recorded</span>}
+                    {entry.addedByName ? <span className="block max-w-[180px] truncate text-xs text-muted-foreground" title={entry.addedByName}>by {entry.addedByName}</span> : null}
+                  </td>
                   {/* The reason is the record of why this number may never be called: it wraps rather than truncates. */}
-                  <td className={`${td} min-w-[240px]`}><span className="line-clamp-2" title={entry.reason || undefined}>{entry.reason || "—"}</span></td>
+                  <td className={`${td} min-w-[200px]`}><span className="line-clamp-2" title={entry.reason || undefined}>{entry.reason || "—"}</span></td>
                   <td className={`${td} whitespace-nowrap text-right tabular-nums`}>{entry.addedAt ? dayMonthYear(entry.addedAt) : "—"}</td>
                 </tr>)}</tbody>
               </table>
@@ -328,12 +326,11 @@ export function SuppressionWorkspace() {
       )}
 
       {/* LA-2.3-3 and LA-2.3-9: the exemptions that clear federal/state DNC, and every screening check. */}
-      {tab === "exemptions" && <TcpaDncExemptions className={FILL} pageSize={pageSize} onChanged={() => { if (lookup.trim() && check) void runCheck(); }} />}
-      {tab === "audit" && <TcpaScreeningAudit className={FILL} pageSize={pageSize} />}
+      {tab === "exemptions" && <TcpaDncExemptions pageSize={pageSize} onChanged={() => { if (lookup.trim() && check) void runCheck(); }} />}
+      {tab === "audit" && <TcpaScreeningAudit pageSize={pageSize} />}
 
       {tab === "feeds" && (
         <TableCard
-          className={FILL}
           toolbar={<DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />} />}
           footer={overview && overview.feeds.length > 0 ? <span>{answering} of {overview.feeds.length} {overview.feeds.length === 1 ? "feed" : "feeds"} answering{failing.length ? ` · ${failing.length} failing` : ""}</span> : undefined}
         >
@@ -355,49 +352,42 @@ export function SuppressionWorkspace() {
       </div>
       </>}
 
-      <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setConfirmed(false); }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Suppress a number</DialogTitle>
-            <DialogDescription>
-              This cannot be undone from the product, so check the digits before you save.
-            </DialogDescription>
-          </DialogHeader>
-          <form onSubmit={add} className="grid gap-4">
-            <label className="grid gap-1.5">
-              <span className="text-sm font-semibold text-[var(--body)]">Phone number</span>
-              <input required placeholder="(555) 123-4567" inputMode="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} className={field} />
-            </label>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <label className="grid gap-1.5">
-                <span className="text-sm font-semibold text-[var(--body)]">List</span>
-                <select className={field} value={form.listType} onChange={(event) => setForm({ ...form, listType: event.target.value as SuppressionListType })}>
-                  {LIST_TYPES.map((type) => <option key={type} value={type}>{LIST_TYPE_LABELS[type]}</option>)}
-                </select>
-              </label>
-              <label className="grid gap-1.5">
-                <span className="text-sm font-semibold text-[var(--body)]">How you learned</span>
-                <select className={field} value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value as SuppressionSource })}>
-                  {MANUAL_SOURCES.map((source) => <option key={source} value={source}>{SOURCE_LABELS[source] ?? source}</option>)}
-                </select>
-              </label>
-            </div>
-            <label className="grid gap-1.5">
-              <span className="text-sm font-semibold text-[var(--body)]">Reason</span>
-              <input required maxLength={500} placeholder="Called our office and asked to be removed, 23 Sep" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} className={field} />
-              <span className="text-xs text-muted-foreground">Write what happened, not &ldquo;DNC&rdquo;.</span>
-            </label>
-            <label className="flex items-start gap-2 text-sm text-[var(--body)]">
-              <input type="checkbox" className="mt-1 size-4 accent-primary" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
-              <span>I have checked the number. I understand {typedDigits ? formatPhone(typedDigits) : "this number"} can never be called again.</span>
-            </label>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button type="submit" disabled={busy || !confirmed || !typedDigits}>{busy ? "Saving…" : "Suppress permanently"}</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+      {/* A suppression cannot be undone from the product: a confirm with its fields (foundation pass 2026-11-03). */}
+      <ConfirmDialog
+        open={open}
+        onOpenChange={(next) => { setOpen(next); if (!next) setConfirmed(false); }}
+        onConfirm={() => void add()}
+        busy={busy}
+        title="Suppress a number"
+        description="This cannot be undone from the product, so check the digits before you save."
+        confirmLabel={busy ? "Saving…" : "Suppress permanently"}
+        cancelLabel="Keep calling it"
+        confirmDisabled={!confirmed || !typedDigits || !form.reason.trim()}
+        fields={<>
+          <Field label="Phone number" htmlFor="suppress-phone" required>
+            <input id="suppress-phone" required placeholder="(555) 123-4567" inputMode="tel" value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} className={control} />
+          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="List" htmlFor="suppress-list">
+              <select id="suppress-list" className={control} value={form.listType} onChange={(event) => setForm({ ...form, listType: event.target.value as SuppressionListType })}>
+                {LIST_TYPES.map((type) => <option key={type} value={type}>{LIST_TYPE_LABELS[type]}</option>)}
+              </select>
+            </Field>
+            <Field label="How you learned" htmlFor="suppress-source">
+              <select id="suppress-source" className={control} value={form.source} onChange={(event) => setForm({ ...form, source: event.target.value as SuppressionSource })}>
+                {MANUAL_SOURCES.map((source) => <option key={source} value={source}>{SOURCE_LABELS[source] ?? source}</option>)}
+              </select>
+            </Field>
+          </div>
+          <Field label="Reason" htmlFor="suppress-reason" required hint={<>Write what happened, not &ldquo;DNC&rdquo;.</>}>
+            <input id="suppress-reason" required maxLength={500} placeholder="Called our office and asked to be removed, 23 Sep" value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} className={control} />
+          </Field>
+          <label className="flex items-start gap-2 text-sm text-[var(--body)]">
+            <input type="checkbox" className={cn(checkboxControl, "mt-0.5")} checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />
+            <span>I have checked the number. I understand {typedDigits ? formatPhone(typedDigits) : "this number"} can never be called again.</span>
+          </label>
+        </>}
+      />
     </>
   );
 }

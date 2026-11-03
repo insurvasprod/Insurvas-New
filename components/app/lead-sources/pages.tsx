@@ -1,22 +1,22 @@
+import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { scopeFor } from "@/lib/agency/visibility";
 import { isAgencyTenant } from "@/lib/agency/audience";
-import { invoiceSources, InvoiceError, listInvoices, listTemplates } from "@/lib/accounting/invoiceStore";
+import { InvoiceError, listInvoices, listTemplates } from "@/lib/accounting/invoiceStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { LeadListWorkspace } from "@/components/app/lead-list-workspace";
-import { InvoicesBoard } from "@/components/app/accounting/invoices-board";
+import { InvoiceListActions, InvoicesBoard } from "@/components/app/accounting/invoices-board";
 import { VendorReturnsWorkspace } from "@/components/app/vendor-returns-workspace";
-import { NeedsYou } from "@/components/app/lead-sources/needs-you";
-import { SourceTabs, type SourceTab } from "@/components/app/lead-sources/source-tabs";
 import { LeadsInPage } from "@/components/app/lead-sources/leads-in";
 import { Callout } from "@/components/app/settings/primitives";
 import { AccountingPage } from "@/components/app/accounting/accounting-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
 /**
  * Five pages become two (owner pick 2026-10-26, canvas M2 Â· Vendors, "split by job"):
@@ -86,7 +86,7 @@ export type VendorBillsTab = "invoices" | "returns";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export async function VendorBillsPage({ tab, open, vendor, guards }: { tab: VendorBillsTab; open?: string; vendor?: string; guards?: { money: Guard; returns: Guard } }) {
+export async function VendorBillsPage({ tab, open, vendor, status, guards }: { tab: VendorBillsTab; open?: string; vendor?: string; status?: string; guards?: { money: Guard; returns: Guard } }) {
   const [money, returns] = guards ? [guards.money, guards.returns] : await Promise.all([guardPage("profit_and_loss"), guardPage("true_cpa")]);
   const canInvoices = money.entitled && actAsPage(money, ["owner", "bookkeeper"]);
   const returnsContext = returns.entitled ? returns.context : null;
@@ -100,33 +100,41 @@ export async function VendorBillsPage({ tab, open, vendor, guards }: { tab: Vend
     return <RoleGateNotice featureLabel="Vendor bills" detail="Owners and bookkeepers see invoices; owners, producers and bookkeepers see vendor returns." />;
   }
 
-  const tabs: SourceTab[] = [];
-  if (canInvoices) {
-    const tenantId = money.context.tenantId;
-    const loaded = await Promise.all([listInvoices(tenantId), invoiceSources(tenantId), listTemplates(tenantId)]).then(
-      ([invoices, sources, templates]) => ({ invoices, sources, templates, problem: null }),
-      (error: unknown) => {
-        if (!(error instanceof InvoiceError)) throw error;
-        return { invoices: null, sources: null, templates: null, problem: error.message };
-      },
-    );
-    tabs.push({
-      key: "invoices",
-      label: "Invoices",
-      panel: loaded.invoices && loaded.sources && loaded.templates
-        ? <InvoicesBoard invoices={loaded.invoices} sources={loaded.sources} templates={loaded.templates} readOnly={money.entitlement.access === "read_only"} openId={open ?? null} />
-        : <TableCard><EmptyState title="Not switched on yet" hint={loaded.problem ?? ""} /></TableCard>,
-    });
-  }
-  if (canReturns) tabs.push({ key: "returns", label: "Returns", panel: <VendorReturnsWorkspace embedded initialVendorId={vendor && UUID.test(vendor) ? vendor : undefined} /> });
+  // Foundation pass (2026-11-03): an invoice is a detail page; `?open=` (the P&L's links) lands on it.
+  if (canInvoices && open && UUID.test(open)) redirect(`/app/vendor-bills/${open}`);
+  const shown: VendorBillsTab = tab === "returns" && canReturns ? "returns" : canInvoices ? "invoices" : "returns";
   const readOnly = (canInvoices ? money : returns).entitlement.access === "read_only";
 
+  let panel: ReactNode = null;
+  let actions: ReactNode = undefined;
+  if (shown === "invoices") {
+    const tenantId = money.context.tenantId;
+    const loaded = await Promise.all([listInvoices(tenantId), listTemplates(tenantId)]).then(
+      ([invoices, templates]) => ({ invoices, templates, problem: null }),
+      (error: unknown) => {
+        if (!(error instanceof InvoiceError)) throw error;
+        return { invoices: null, templates: null, problem: error.message };
+      },
+    );
+    panel = loaded.invoices
+      ? <InvoicesBoard invoices={loaded.invoices} readOnly={money.entitlement.access === "read_only"} status={status} />
+      : <TableCard><EmptyState title="Not switched on yet" hint={loaded.problem ?? ""} /></TableCard>;
+    if (loaded.invoices && money.entitlement.access !== "read_only") actions = <InvoiceListActions templates={loaded.templates?.length ?? 0} />;
+  } else {
+    panel = <VendorReturnsWorkspace embedded initialVendorId={vendor && UUID.test(vendor) ? vendor : undefined} />;
+  }
+
   return (
-    // Accounting › Vendor bills (owner 2026-11-02): a step of the one Accounting page; Returns stays its tab.
-    <AccountingPage step="bills">
+    // Accounting › Vendor bills (owner 2026-11-02): a step of the one Accounting page. Foundation pass
+    // (2026-11-03): Invoices · Returns are its tabs on the title line, each at its own address.
+    <AccountingPage
+      step="bills"
+      info={shown === "invoices" ? "Each lead invoice, line by line with its campaign. Approving books the cost; marking paid records when the money moved; voiding reverses it. Nothing is deleted." : "Return claims against vendors, and what each vendor credited."}
+      lead={canInvoices && canReturns ? <ViewTabs label="Vendor bills" value={shown} tabs={[{ key: "invoices", label: "Invoices", href: "/app/vendor-bills" }, { key: "returns", label: "Returns", href: "/app/vendor-bills?tab=returns" }]} /> : undefined}
+      actions={actions}
+    >
       {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}
-      {canInvoices && <NeedsYou access={{ lists: false, claims: false, invoices: true, invoicesHref: "/app/vendor-bills?tab=invoices", campaignsHref: null }} only={["invoices"]} />}
-      <SourceTabs label="Vendor bills" tabs={tabs} initialTab={tab} />
+      {panel}
     </AccountingPage>
   );
 }

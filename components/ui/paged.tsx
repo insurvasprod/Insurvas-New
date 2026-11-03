@@ -28,11 +28,13 @@ export function PagedProvider({ pageSize = PAGE, children }: { pageSize?: number
 }
 
 /** The rows of the current page. Renders a `<tbody>` unless `as` says otherwise (`ul`, `ol`, `div`). */
-export function PagedBody({ as: Tag = "tbody", className, children }: { as?: "tbody" | "ul" | "ol" | "div"; className?: string; children: ReactNode }) {
+export function PagedBody({ as: Tag = "tbody", className, label, children }: { as?: "tbody" | "ul" | "ol" | "div"; className?: string; label?: string; children: ReactNode }) {
   const paged = useContext(PagedContext);
   const rows = Children.toArray(children);
   const shown = paged ? paginate(rows, paged.page, paged.pageSize).rows : rows;
-  return <Tag className={className}>{shown}</Tag>;
+  // data-paged-body: what useCardPageSize measures when the rows are not a <tbody> (it looked for it, and nothing
+  // set it, so a list stayed at 10 rows; Compliance foundation pass 2026-11-03).
+  return <Tag className={className} aria-label={label} data-paged-body={Tag === "tbody" ? undefined : ""}>{shown}</Tag>;
 }
 
 /** The Pager for the surrounding PagedProvider; draws nothing when every row fits one page. */
@@ -64,8 +66,12 @@ function useCardPageSize(holder: React.RefObject<HTMLDivElement | null>, total: 
       if (!rows.length) return current;
       const each = rows.reduce((sum, height) => sum + height, 0) / rows.length;
       const footer = card.lastElementChild && !card.lastElementChild.contains(body) ? (card.lastElementChild as HTMLElement).offsetHeight : 0;
-      // The pager's row is there whenever there is more than one page.
-      const room = line - body.getBoundingClientRect().top - Math.max(footer, total > rows.length ? PAGER_ROW : 0) - 2;
+      // The pager's row is there whenever there is more than one page — including the page this measure is about
+      // to make: with every row showing and no pager yet, a size smaller than the total brings the pager in, so
+      // its row is kept too (Compliance's Needs you ran 4px past the rail's foot, 2026-11-03).
+      const top = body.getBoundingClientRect().top;
+      const paging = total > rows.length || Math.floor((line - top - footer - 2) / each) < total;
+      const room = line - top - Math.max(footer, paging ? PAGER_ROW : 0) - 2;
       const fits = Math.max(3, Math.min(MAX_ROWS, Math.floor(room / each)));
       if (rows.length < current && fits >= rows.length) return current; // a short last page leaves room on purpose
       return fits;

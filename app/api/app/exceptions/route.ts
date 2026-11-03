@@ -56,6 +56,23 @@ export async function POST(request: NextRequest) {
       await audit({ actorType: "tenant", actorId: auth.context.userId, action: "queue_rule.saved", targetType: "queue_assignment_rule", targetId: auth.context.tenantId, metadata: { tenantId: scope.tenantId, queueType: body.queue_type, ownerRole: body.owner_role, openAfterDays: body.open_after_days, escalateAfterDays: body.escalate_after_days, escalateToRole: body.escalate_to_role }, request });
       return NextResponse.json({ ok: true });
     }
+    if (body.action === "resolve_many") {
+      // Round 4: a batch with one answer. Each item is resolved and audited as if it were saved alone; one that
+      // fails (already decided, not this person's) is reported and the rest carry on.
+      const done: string[] = [];
+      const failed: Array<{ id: string; error: string }> = [];
+      for (const id of body.item_ids) {
+        try {
+          const result = await resolveItem(scope, id, { resolution: body.resolution });
+          await audit({ actorType: "tenant", actorId: auth.context.userId, action: result.resolution === "not_mine" ? "queue_item.handed_on" : "queue_item.resolved", targetType: "queue_item", targetId: id, metadata: { tenantId: scope.tenantId, queueType: result.queueType, resolution: result.resolution, ref: result.ref, batch: true }, request });
+          done.push(id);
+        } catch (error) {
+          if (!(error instanceof QueueError)) console.error("[exceptions] batch", error);
+          failed.push({ id, error: error instanceof QueueError ? error.message : "That could not be saved." });
+        }
+      }
+      return NextResponse.json({ ok: failed.length === 0, done, failed });
+    }
     const input = body.resolution === "link_existing_client" ? { resolution: body.resolution, contactId: body.contact_id }
       : body.resolution === "found_the_sale" ? { resolution: body.resolution, dealId: body.deal_id }
       : body.resolution === "found_the_policy" ? { resolution: body.resolution, carrierId: body.carrier_id, policyNumber: body.policy_number }

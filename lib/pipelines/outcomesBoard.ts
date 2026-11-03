@@ -41,6 +41,49 @@ export type Destination = { kind: "stage"; stageId: string } | { kind: "elsewher
 export const STAGE_SWATCHES = ["#0a8769", "#4457c7", "#e04e00", "#0091a8", "#b02a9b", "#59606b", "#c62828", "#b35c00"] as const;
 export const NEW_STAGE_COLOR: Record<StageType, string> = { open: "#4457c7", won: "#0a8769", lost: "#c62828" };
 
+/**
+ * The Insurvas default routing of the all-in-one Sales pipeline (docs/settings/DEFAULTS.md): where each
+ * standard outcome takes a lead, by stage name. The TS twin of `seed_general_pipeline`'s `defaults`
+ * (20261027300000, restated in 20261103110000); lib/pipelines/outcomeDefaults.test.mjs keeps them equal.
+ */
+export const INSURVAS_OUTCOME_STAGES: Readonly<Record<string, string>> = {
+  no_answer: "Trying to reach",
+  voicemail: "Trying to reach",
+  busy: "Trying to reach",
+  call_dropped: "Trying to reach",
+  callback_scheduled: "Callback scheduled",
+  inbound_return_call: "Callback scheduled",
+  no_payment_method: "Qualified",
+  sent_to_underwriting: "Sent to underwriting",
+  application_submitted: "Submitted",
+  not_interested: "Not interested",
+  did_not_qualify: "Did not qualify",
+  wrong_number: "Bad number",
+  disconnected: "Bad number",
+  do_not_call: "Do not call",
+};
+
+/** The all-in-one pipeline (no partner type) is the one the Insurvas routing is for. */
+export const hasInsurvasRouting = (pipeline: BoardPipeline) => pipeline.partner_type === null;
+
+/** The default routing on this board: each default outcome to the live stage with its name, when there is one. */
+export function insurvasRouting(pipeline: BoardPipeline, outcomes: readonly BoardOutcome[]): Record<string, string> {
+  const byName = new Map(liveStages(pipeline).map((s) => [s.name.trim().toLowerCase(), s.id]));
+  const keys = new Set(outcomes.map((o) => o.key));
+  const out: Record<string, string> = {};
+  for (const [key, name] of Object.entries(INSURVAS_OUTCOME_STAGES)) {
+    const id = byName.get(name.toLowerCase());
+    if (id && keys.has(key)) out[key] = id;
+  }
+  return out;
+}
+
+/** True when the pipeline's own rows are exactly the Insurvas routing. */
+export function routingIsDefault(own: Readonly<Record<string, string | null>> | undefined, routing: Readonly<Record<string, string>>): boolean {
+  const mine = Object.entries(own ?? {});
+  return mine.length === Object.keys(routing).length && mine.every(([key, stage]) => routing[key] === stage);
+}
+
 export const NEW_PREFIX = "new:";
 export const isTemp = (id: string) => id.startsWith(NEW_PREFIX);
 

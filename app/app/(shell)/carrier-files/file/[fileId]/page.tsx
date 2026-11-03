@@ -1,27 +1,33 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { listRuns } from "@/lib/ingestion/dailyRunStore";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { fileDay, type CarrierFileType } from "@/lib/ingestion/constants";
 import { clearlyBetter } from "@/lib/ingestion/fileCheck";
 import { checkCarrierFile } from "@/lib/ingestion/fileCheckStore";
 import { loadFileCommissions, loadFileHead, loadFileNeeds, loadFileRows, loadNotInFile, type FileHead, type FileRows, type RowView } from "@/lib/ingestion/fileOutcomeStore";
-import { CHANGE_FIELD_LABELS, ROW_OUTCOME_LABELS, ROW_OUTCOME_TONES, changeValue, linkMethodLabel, needsCount, policyHref } from "@/lib/ingestion/fileStages";
+import { CHANGE_FIELD_LABELS, ROW_OUTCOME_LABELS, ROW_OUTCOME_TONES, changeValue, needsCount, policyHref } from "@/lib/ingestion/fileStages";
+import { isNeedsYouKind, KIND_META, QUEUE_KIND, type NeedsYouKind } from "@/lib/needsYou/kinds";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { libraryCarriers } from "@/lib/ingestion/registry";
+import { fileCarrierChoices } from "@/lib/carriers/agency";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 import { pdfBalanceReview } from "@/lib/ingestion/rawLayer";
 import { loadFileTrace } from "@/lib/ingestion/traceStore";
-import { FileFrame, type FileTab } from "@/components/app/book/files/file-frame";
-import { OutcomeFilter } from "@/components/app/book/files/outcome-filter";
-import { StageStripLarge } from "@/components/app/book/files/stage-strip";
+import { FileFrame, fileTabsOf, type FileTab } from "@/components/app/book/files/file-frame";
+import { FileRowsTable, type FileRowLine } from "@/components/app/book/files/file-rows";
+import { FileRuns } from "@/components/app/book/files/file-runs";
+import { FileWork, type WorkGroup } from "@/components/app/book/files/file-work";
+import { OutcomeFilter, RemoveChip } from "@/components/app/book/files/outcome-filter";
+import { StageRow } from "@/components/app/book/files/stage-strip";
 import { CarrierFileAttribute } from "@/components/app/carrier-file-attribute";
+import { CarrierFileReread } from "@/components/app/carrier-file-reread";
+import { CarrierFileUploadButton } from "@/components/app/carrier-file-upload";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PdfBalanceReview } from "@/components/app/pdf-balance-review";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager } from "@/components/ui/pager";
@@ -33,18 +39,24 @@ import { TableCard } from "@/components/ui/table-card";
  * Book of business › Files › a file (LA-4.20, Notion sprint; round 2, owner 2026-11-02): one carrier file
  * as a detail page. Overview (the eight stages, what happened in numbers, what it left for a person; a
  * file that stopped shows why, the PDF's balance and "Who sent this?") · Rows (every row with its outcome,
- * filtered, exported; "as sent" one click away) · Changes (each field it changed, and the policies the
- * previous file had and this one doesn't) · Commissions (the balance and every line against what was
- * expected) · Whole file (its own address). Owner and bookkeeper. Opening it writes nothing.
+ * filtered, exported; the whole file "As sent" one click away, at its own address) · Changes on a policy
+ * file (the policies the previous file had and this one doesn't, and each field it changed) · Commissions
+ * on a commission file (the balance and every line against what was expected). Owner and bookkeeper.
+ * Opening it writes nothing.
+ *
+ * Round 4 (owner 2026-11-02): Overview and Rows are one page — stages, what the file waits on grouped by kind
+ * (each with its way through, decided in place), then the rows — so an agent fixes a row where it is listed.
+ *
+ * Round 3 (owner 2026-11-02, docs/la4/POLISH-ROUND3.md), compact: the stages are one slim row with no card
+ * and no sentence, the figures one StatStrip whose tiles are the links, what the file needs is 10 rows then
+ * "See all N", and no explainer card — a stopped file is one line with its one action.
  */
 const PAGE_SIZE = 25;
-/** The Overview lists the first few of what a file waits on; the rest are one link away in Needs you. */
-const NEEDS_SHOWN = 10;
 const cents = (n: number) => `${n < 0 ? "−" : ""}$${(Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const n = (value: number) => value.toLocaleString("en-US");
 const link = "font-semibold text-[var(--accent-ink)] hover:underline";
 
-type Search = { tab?: string; page?: string; outcome?: string; view?: string; q?: string; show?: string };
+type Search = { tab?: string; page?: string; outcome?: string; view?: string; q?: string; show?: string; kind?: string; open?: string };
 
 export default async function CarrierFilePage({ params, searchParams }: { params: Promise<{ fileId: string }>; searchParams: Promise<Search> }) {
   const guard = await guardPage("statement_ingestion");
@@ -55,51 +67,99 @@ export default async function CarrierFilePage({ params, searchParams }: { params
   const search = await searchParams;
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const [head, carriers] = await Promise.all([loadFileHead(tenantId, fileId), libraryCarriers()]);
+  const [head, carriers] = await Promise.all([loadFileHead(tenantId, fileId), fileCarrierChoices(tenantId)]);
   if (!head) notFound();
-  const tab: FileTab = search.tab === "rows" || search.tab === "changes" || search.tab === "commissions" ? search.tab : "overview";
-  const rows = tab === "commissions" && head.fileType === "commissions" ? null : await loadFileRows(tenantId, fileId);
-  const changed = rows ? rows.rows.reduce((sum, row) => sum + row.changes.length, 0) : null;
+  // Only the tabs this file has: Changes on a policy file, Commissions on a commission file. Round 4: the
+  // Overview is the Rows page (?tab=overview and ?tab=rows land on it).
+  const tab: FileTab = fileTabsOf(head).find((key) => key === search.tab) ?? "rows";
+  const rows = (tab === "commissions" && head.fileType === "commissions") || tab === "history" ? null : await loadFileRows(tenantId, fileId);
+  // Run history (owner 2026-11-02): the runs that took this file, each with its stages.
+  const runs = tab === "history" ? await listRuns(tenantId, 50, { fileId }) : null;
+  // The Changes tab holds what the previous file had and this one lacks, the field changes and the new
+  // policies: its count is all three, so a tab with rows never says 0 (walk 2026-11-02).
+  // A new-business file lists only the applications the carrier just took, so nothing is "missing" from it: it is
+  // never compared with the full policy file before it (E2E 2026-11-02: a 2-row file read "Changes 71").
+  const notIn = head.fileType === "commissions" ? null : head.fileType === "new_business" ? { comparedWith: null, policies: [] } : await loadNotInFile(tenantId, head);
+  // The Changes tab's count is what this file changed: each field change and each new policy. "Not in this file"
+  // is shown on the tab but watched, not changed, so it isn't counted (owner 2026-11-03).
+  const changed = rows && notIn ? rows.rows.reduce((sum, row) => sum + row.changes.length + (row.outcome === "new" ? 1 : 0), 0) : null;
 
-  const body = tab === "rows" ? await RowsTab({ tenantId, head, rows, search })
-    : tab === "changes" ? await ChangesTab({ tenantId, head, rows, search })
+  // Round 4: the file's own runs, one row per step in the stage bar's words (the Files list keeps PipelineRuns).
+  const body = tab === "history" && runs ? <FileRuns runs={runs.runs} available={runs.available} fileId={head.id} fileType={head.fileType} />
+    : tab === "changes" && notIn ? ChangesTab({ head, rows, notIn, search })
       : tab === "commissions" ? await CommissionsTab({ tenantId, head, search })
-        : await OverviewTab({ tenantId, head, rows, carriers, readOnly });
+        : await FileBody({ tenantId, head, rows, notIn, carriers, readOnly, search });
 
   return (
-    <FileFrame head={head} tab={tab} counts={{ rows: head.rowCount, changes: head.status === "parsed" && head.fileType !== "commissions" ? changed : null }} readOnly={readOnly}>
+    <FileFrame head={head} tenantId={tenantId} tab={tab} more={tab === "rows" && head.rowCount !== null ? rowsMore(head, search) : []} counts={{ rows: head.rowCount, changes: head.status === "parsed" && head.fileType !== "commissions" ? changed : null, history: runs?.available ? runs.runs.length : null }} readOnly={readOnly}>
       {body}
     </FileFrame>
   );
 }
 
-// ─── Overview ───────────────────────────────────────────────────────────────────────────────────
+// ─── Rows: the file's one page of work (round 4) ────────────────────────────────────────────────
 
-function sentence(head: FileHead, rows: FileRows | null): string {
-  const failed = head.stages.find((s) => s.state === "failed");
-  if (failed) return `It stopped at ${failed.name}: ${failed.note}`;
-  const layout = head.stages[1];
-  if (layout.state === "needs") return layout.note + ".";
-  if (head.rowCount === null || !rows) return head.status === "parsing" ? "Reading it now." : "Waiting to be read.";
-  const total = head.rowCount;
-  const waiting = rows.counts.needs_you + rows.counts.held;
-  if (head.fileType === "commissions") {
-    const posted = rows.counts.commission;
-    return `${n(posted)} of ${n(total)} rows posted to the ledger.${waiting ? ` ${n(waiting)} wait for you; the rest are done.` : ""}`;
-  }
-  const still = head.stages.some((s) => s.state === "pending") ? " The later steps are still going." : "";
-  const linkedStage = head.stages[4];
-  const why = linkedStage.state === "needs" ? ` (${linkedStage.note.replace(/^Waiting for you: /, "")})` : "";
-  return `${n(rows.linked)} of ${n(total)} linked${rows.linked ? `: ${methods(rows.linkMethods)}` : ""}. ${waiting ? `${n(waiting)} ${waiting === 1 ? "row waits" : "rows wait"} for you${why}; the other ${n(total - waiting)} are done.` : "Nothing waits for you."}${still}`;
+type NotIn = Awaited<ReturnType<typeof loadNotInFile>>;
+
+const ROW_FILTERS: Array<{ key: string; label: string; warn?: boolean; test: (row: RowView) => boolean }> = [
+  { key: "all", label: "All", test: () => true },
+  { key: "needs_you", label: "Need you", warn: true, test: (row) => row.outcome === "needs_you" || row.outcome === "held" },
+  { key: "changed", label: "Changed", test: (row) => row.outcome === "changed" },
+  { key: "new", label: "New", test: (row) => row.outcome === "new" },
+  { key: "no_change", label: "No change", test: (row) => row.outcome === "no_change" },
+  { key: "held", label: "Held", warn: true, test: (row) => row.outcome === "held" },
+  { key: "moved", label: "Moved a card", test: (row) => row.card !== null },
+  { key: "linked", label: "Linked", test: (row) => row.linkedBy !== null && row.linkedBy !== "Waits for you" },
+  { key: "commission", label: "Posted", test: (row) => row.outcome === "commission" },
+  { key: "not_read", label: "Not read", test: (row) => row.outcome === "not_read" || row.outcome === "held" },
+];
+
+/** The Linked column's short words; the method's full name is the tooltip (MATCH_METHOD_LABELS). */
+const LINK_SHORT: Record<string, string> = {
+  "By policy number": "By number",
+  "By submission number": "By submission",
+  "Suggested, then confirmed": "Suggested",
+  "Picked by a person": "By a person",
+  "From your existing book": "Existing book",
+  "To a new client from the row": "New client",
+  "Waits for you": "Waits",
+};
+
+/** A group's words on the Needs you card: the short line and the full sentence behind it. */
+const GROUP_WORDS: Partial<Record<NeedsYouKind, { label: string; why: string; whyFull: string }>> = {
+  "no-sale": { label: "No sale yet", why: "A new client was made from each row", whyFull: "No sale has this policy yet: a new client was made from the row. The writing agent confirms it, links an existing client, or links the sale." },
+  "pick-client": { label: "Pick the client", why: "More than one sale could be each one", whyFull: "Several sales or applications look like this policy; no single field decides, so a person picks." },
+  money: { label: "Money doesn’t match", why: "Paid differs from what was expected", whyFull: "The statement paid a different amount from what the rate card expects for this policy." },
+  "status-word": { label: "Status words", why: "Waiting on Insurvas to map them", whyFull: "A status word no carrier has used before holds its rows until Insurvas maps it; they run once it is." },
+};
+
+function whatChanged(row: RowView): string {
+  if (row.outcome === "changed") return row.changes.map((c) => `${CHANGE_FIELD_LABELS[c.field] ?? c.field} ${changeValue(c.field, c.from)} → ${changeValue(c.field, c.to)}`).join(" · ");
+  if (row.outcome === "commission") return row.lines.map((l) => `${l.type.replaceAll("_", " ")} ${cents(l.amountCents)}`).join(" · ");
+  if (row.outcome === "new") return row.what.replace(/^New policy( · )?/, "").replace(/^./, (c) => c.toUpperCase()) || "—";
+  if (row.outcome === "held" || row.outcome === "not_read") return row.what;
+  // Needs you and No change: the chip already says it.
+  return "—";
 }
 
-/** "1 by submission number, 395 to a new client from the row": how the rows got their client. */
-function methods(byMethod: Record<string, number>): string {
-  return Object.entries(byMethod).sort((a, b) => b[1] - a[1]).map(([method, count]) => `${n(count)} ${linkMethodLabel(method).replace(/^./, (c) => c.toLowerCase())}`).join(", ");
+/** The Needs you item a row waits on: its match review, or the "policy with no sale" item it raised. */
+function itemOf(row: RowView, queueBy: Map<string, { id: string; queueType: string }>): { kind: NeedsYouKind; id: string } | null {
+  if (row.reviewId) return { kind: "pick-client", id: row.reviewId };
+  const queue = row.outcome === "needs_you" && row.policyNumber ? queueBy.get(row.policyNumber) : undefined;
+  const kind = queue ? QUEUE_KIND[queue.queueType as keyof typeof QUEUE_KIND] : undefined;
+  return queue && kind ? { kind, id: queue.id } : null;
 }
 
-async function OverviewTab({ tenantId, head, rows, carriers, readOnly }: { tenantId: string; head: FileHead; rows: FileRows | null; carriers: Awaited<ReturnType<typeof libraryCarriers>>; readOnly: boolean }) {
+/**
+ * A file's page (round 4, owner 2026-11-02: "overview and rows kind of show the same thing … in overview it
+ * shouldn't be shown as a table"): one page, no Overview tab. Its stages (the file type's own), what stopped it
+ * (to the bell) and "Who sent this?", what it waits on grouped by kind with each group's way through (FileWork),
+ * then every row with its outcome — the chips' counts are the figures the Overview had — each waiting row
+ * decided under itself. Opening it writes nothing.
+ */
+async function FileBody({ tenantId, head, rows, notIn, carriers, readOnly, search }: { tenantId: string; head: FileHead; rows: FileRows | null; notIn: NotIn | null; carriers: Awaited<ReturnType<typeof fileCarrierChoices>>; readOnly: boolean; search: Search }) {
   const base = fileHref(head.id);
+  if (search.view === "sent") return SentRows({ tenantId, head, page: Number(search.page) || 1 });
   const failed = head.status === "failed";
   // LA-4.4: a PDF statement the balance gate refused, read again for review (writes nothing).
   const balance = head.fileKind === "pdf" && failed ? await pdfBalanceReview(tenantId, head.id) : null;
@@ -109,33 +169,117 @@ async function OverviewTab({ tenantId, head, rows, carriers, readOnly }: { tenan
   const missedColumn = failed && Boolean(head.carrierId) && /required column/i.test(head.errorDetail ?? "");
   const check = needsCarrier || missedColumn ? await checkCarrierFile(tenantId, head.id).catch(() => null) : null;
   const better = missedColumn && check ? clearlyBetter(check, check.currentLayoutKey) : null;
-  const [notIn, commissions] = await Promise.all([
-    head.fileType !== "commissions" ? loadNotInFile(tenantId, head) : null,
-    head.fileType === "commissions" ? loadFileCommissions(tenantId, head.id) : null,
-  ]);
+  const commissions = head.fileType === "commissions" ? await loadFileCommissions(tenantId, head.id) : null;
   const needs = await loadFileNeeds(tenantId, head, rows, commissions);
-  const rowsHref = (outcome: string) => `${base}?tab=rows&outcome=${outcome}`;
-  const tile = (label: string, value: number, href: string, warn = false) => (
-    <StatTile key={label} label={label} value={n(value)} valueTone={warn && value > 0 ? "warning" : undefined} footnote={<Link href={href} className={link}>See rows ›</Link>} />
-  );
+  // One line for what stopped the file, the most urgent first, with its one action (it goes to the bell).
+  const stopped = failed && head.errorDetail && !needsCarrier;
+  const replace = !readOnly && head.carrierId && head.fileType ? (
+    <CarrierFileUploadButton
+      carriers={carriers}
+      openWhenDone
+      size="sm"
+      label="Replace with a corrected file"
+      preset={{ carrierId: head.carrierId, fileType: head.fileType as CarrierFileType, fileDate: head.fileDate, agency: head.agency }}
+    />
+  ) : null;
+
+  // ── what it waits on, grouped ──
+  const all = rows?.rows ?? [];
+  const queueBy = new Map((rows?.queueItems ?? []).filter((q) => q.policyNumber).map((q) => [q.policyNumber as string, q]));
+  const lines = all.map((row) => ({ row, item: itemOf(row, queueBy) }));
+  const needsTotal = needsCount(head.stages) || needs.length;
+  const byKind = new Map<NeedsYouKind, string[]>();
+  for (const { item } of lines) if (item) byKind.set(item.kind, [...(byKind.get(item.kind) ?? []), item.id]);
+  const most = Math.max(0, ...all.map((row) => row.reviewChoices ?? 0));
+  const groups: WorkGroup[] = [...byKind.entries()].sort((a, b) => b[1].length - a[1].length).map(([kind, ids]) => {
+    const words = GROUP_WORDS[kind] ?? { label: KIND_META[kind].label, why: KIND_META[kind].source, whyFull: KIND_META[kind].source };
+    return {
+      key: kind,
+      count: ids.length,
+      label: words.label,
+      why: kind === "pick-client" && most > 1 ? `Up to ${most} sales could be each one` : words.why,
+      whyFull: words.whyFull,
+      startHref: `${base}?outcome=needs_you&kind=${kind}&open=first`,
+      // The one kind whose every item takes the same answer: the client made from the row is right.
+      bulk: kind === "no-sale" ? { ids, resolution: "confirm_client" as const, noun: ids.length === 1 ? "client" : "clients" } : undefined,
+    };
+  });
+  // What isn't a row of this file: a commission file's money, the status words it was held on.
+  for (const kind of ["money", "status-word"] as const) {
+    const label = KIND_META[kind].label;
+    const these = needs.filter((item) => item.kind === label && item.href);
+    if (!these.length) continue;
+    const words = GROUP_WORDS[kind]!;
+    groups.push({
+      key: kind, count: these.length, label: words.label, why: words.why, whyFull: words.whyFull,
+      waitsOnInsurvas: kind === "status-word",
+      items: kind === "money" ? these.map((item) => ({ kind, id: item.key.slice(kind.length + 1), about: item.about, why: item.why })) : undefined,
+    });
+  }
+
+  // ── the rows ──
+  const kindFilter = search.kind && isNeedsYouKind(search.kind) ? search.kind : null;
+  const filters = ROW_FILTERS.filter((f) => f.key === "all" || f.key === search.outcome || all.some(f.test))
+    .filter((f) => head.fileType === "commissions" ? !["changed", "new", "no_change", "moved", "linked"].includes(f.key) : f.key !== "commission");
+  const active = filters.find((f) => f.key === search.outcome) ?? filters[0];
+  const needle = (search.q ?? "").trim().toLowerCase();
+  const shown = lines.filter(({ row, item }) => active.test(row) && (!kindFilter || item?.kind === kindFilter) && (!needle || `${row.policyNumber ?? ""} ${row.clientName ?? ""} ${row.rowNumber}`.toLowerCase().includes(needle)));
+  const query = (outcome: string, kind: string | null = kindFilter) => {
+    const params = new URLSearchParams();
+    if (outcome !== "all") params.set("outcome", outcome);
+    if (kind) params.set("kind", kind);
+    if (needle) params.set("q", needle);
+    const text = params.toString();
+    return text ? `${base}?${text}` : base;
+  };
+  // Every row of the filter goes to the table, which pages it to the window's height (UI-CONSISTENCY §6b).
+  const table: FileRowLine[] = shown.map(({ row, item }) => ({
+    rowNumber: row.rowNumber,
+    policyNumber: row.policyNumber,
+    policyHref: row.policyNumber && head.carrierId && row.outcome !== "commission" ? policyHref(head.carrierId, row.policyNumber) : null,
+    clientName: row.clientName,
+    chip: item?.kind === "pick-client" ? `Pick client${row.reviewChoices ? ` · ${row.reviewChoices}` : ""}` : item?.kind === "no-sale" ? "No sale yet" : ROW_OUTCOME_LABELS[row.outcome],
+    chipTitle: row.what,
+    tone: ROW_OUTCOME_TONES[row.outcome],
+    detail: whatChanged(row),
+    linked: row.linkedBy ? LINK_SHORT[row.linkedBy] ?? row.linkedBy : "—",
+    linkedTitle: row.linkedBy ?? "Not linked",
+    card: row.card ? `${row.card.from ?? "—"} → ${row.card.to}` : row.outcome === "needs_you" || row.outcome === "held" ? "Waits" : "—",
+    rowHref: rowHref(head.id, row.rowNumber),
+    item,
+  }));
+  const notInCount = notIn?.policies.length ?? 0;
 
   return (
     <>
-      <Card>
-        <CardContent className="flex flex-col gap-3">
-          <StageStripLarge stages={head.stages} focus={head.stages.find((s) => s.state === "failed" || s.state === "needs")?.name ?? null} />
-          <p className="m-0 px-1 text-sm text-foreground">{sentence(head, rows)}</p>
-        </CardContent>
-      </Card>
+      {/* The file type's own stages, one slim track (round 4). */}
+      <StageRow stages={head.stages} fileType={head.fileType} focus={head.stages.find((s) => s.state === "failed" || s.state === "needs")?.name ?? null} />
 
-      {failed && head.errorDetail && !needsCarrier && (
-        <Callout tone="error" title={head.fileType === "commissions" ? "The statement stopped here. Nothing from it was posted." : "This file stopped here. Nothing from it was read into your book."}>
-          {head.errorDetail}{" "}
-          {better && <>These columns match {better.name}{better.carriers.length ? ` (used by ${better.carriers.map((carrier) => carrier.name).join(", ")})` : ""}. Check the file&apos;s carrier and type. </>}
-          {!readOnly && head.carrierId && "Replace it with a corrected file, or read it again once its layout is fixed."}
-        </Callout>
-      )}
-      {head.unfinished && <Callout tone="warning" title={`Not finished: the ${head.unfinished.stage} step failed.`}>{head.unfinished.error ? `${head.unfinished.error} ` : ""}Read again finishes it.</Callout>}
+      {stopped ? (
+        <Callout
+          tone="error"
+          title={
+            <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {head.fileType === "commissions" ? "Nothing from this statement was posted: " : "Nothing from this file was read into your book: "}{head.errorDetail}
+                {better ? ` These columns match ${better.name}${better.carriers.length ? ` (used by ${better.carriers.map((carrier) => carrier.name).join(", ")})` : ""}.` : ""}
+                {head.unfinished ? ` The ${head.unfinished.stage} step didn't finish either.` : ""}
+              </span>
+              {replace}
+            </span>
+          }
+        />
+      ) : head.unfinished ? (
+        <Callout
+          tone="warning"
+          title={
+            <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>Not finished: the {head.unfinished.stage} step failed{head.unfinished.error ? ` (${head.unfinished.error})` : ""}.</span>
+              {!readOnly && <CarrierFileReread fileId={head.id} />}
+            </span>
+          }
+        />
+      ) : null}
 
       {needsCarrier && (
         <CarrierFileAttribute
@@ -153,144 +297,44 @@ async function OverviewTab({ tenantId, head, rows, carriers, readOnly }: { tenan
 
       {balance && <PdfBalanceReview check={balance} />}
 
-      {rows && head.rowCount !== null && head.status !== "failed" && (
-        head.fileType === "commissions" && commissions ? (
-          <StatStrip label="What this file did">
-            {tile("Lines posted", rows.counts.commission, rowsHref("commission"))}
-            <StatTile label="Need you" value={n(commissions.needsYou)} valueTone={commissions.needsYou ? "warning" : undefined} footnote={<Link href={`${base}?tab=commissions&show=needs`} className={link}>See lines ›</Link>} />
-            <StatTile label="Waiting for the policy" value={n(commissions.waiting)} footnote={<Link href={`${base}?tab=commissions&show=waiting`} className={link}>See lines ›</Link>} />
-            <StatTile label="Account lines" value={n(commissions.groups.filter((g) => g.account).length)} footnote={<Link href={`${base}?tab=commissions&show=account`} className={link}>See lines ›</Link>} />
-            {tile("Not read", rows.counts.not_read + rows.counts.held, rowsHref("not_read"))}
-          </StatStrip>
-        ) : (
-          <StatStrip label="What this file did">
-            <StatTile label="Linked" value={n(rows.linked)} footnote={<>{rows.linked ? `${methods(rows.linkMethods)} · ` : ""}<Link href={rowsHref("linked")} className={link}>See rows ›</Link></>} />
-            {tile("New policies", rows.counts.new, rowsHref("new"))}
-            {tile("Changed", rows.counts.changed, rowsHref("changed"))}
-            {tile("No change", rows.counts.no_change, rowsHref("no_change"))}
-            {tile("Cards moved", rows.cardsMoved, rowsHref("moved"))}
-            {tile("Need you", rows.counts.needs_you + rows.counts.held, rowsHref("needs_you"), true)}
-            <StatTile label="Not in this file" value={n(notIn?.policies.length ?? 0)} valueTone={notIn?.policies.length ? "warning" : undefined} footnote={<Link href={`${base}?tab=changes`} className={link}>{notIn?.comparedWith ? "See policies ›" : "No earlier file"}</Link>} />
-          </StatStrip>
-        )
-      )}
+      <FileWork total={needsTotal} groups={groups} needsHref={`/app/needs-you?file=${head.id}`} canDecide={!readOnly} />
 
-      {needs.length > 0 && (
-        // One figure for what this file waits on: the strip's (the chip's) count; a commission file's money items.
-        <TableCard title={`This file needs you for ${n(needsCount(head.stages) || needs.length)}`} action={<Button asChild variant="outline" size="sm"><Link href={`/app/needs-you?file=${head.id}`}>Open all in Needs you ›</Link></Button>}>
-          <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-            <thead><tr><th className="w-[200px]">Kind</th><th>About</th><th className="w-[120px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>
-              {needs.slice(0, NEEDS_SHOWN).map((item) => (
-                <tr key={item.key}>
-                  <td><StatusChip tone={item.tone}>{item.kind}</StatusChip></td>
-                  <td><span className="block font-semibold text-foreground">{item.about}</span><span className="block text-xs text-muted-foreground">{item.why}</span></td>
-                  <td className="text-right">{item.href ? <Button asChild variant="outline" size="sm"><Link href={item.href}>Open</Link></Button> : <span className="text-xs text-muted-foreground">Waiting on {item.waitingOn}</span>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {needs.length > NEEDS_SHOWN && <p className="m-0 border-t border-border px-4 py-3 text-sm"><Link href={`/app/needs-you?file=${head.id}`} className={link}>See all {n(needs.length)} in Needs you ›</Link></p>}
-        </TableCard>
-      )}
+      <FileRowsTable
+        key={`${active.key}:${kindFilter ?? ""}:${needle}`}
+        rows={table}
+        canDecide={!readOnly}
+        openFirst={search.open === "first"}
+        toolbar={head.rowCount !== null ? (
+          <div className="flex w-full flex-wrap items-center gap-2">
+            {/* One toolbar row: the search and the outcomes (the figures the Overview had); As sent and Export are in More. */}
+            <form method="get" action={base} className="flex items-center gap-2">
+              {active.key !== "all" && <input type="hidden" name="outcome" value={active.key} />}
+              {kindFilter && <input type="hidden" name="kind" value={kindFilter} />}
+              <label className="sr-only" htmlFor="row-search">Policy or client</label>
+              <input id="row-search" name="q" defaultValue={search.q ?? ""} placeholder="Policy or client" className={`${toolbarControl} w-40`} />
+            </form>
+            <OutcomeFilter value={active.key} options={filters.map((f) => ({ key: f.key, label: f.label, warn: f.warn, count: all.filter(f.test).length, href: query(f.key) }))} />
+            {kindFilter && <RemoveChip label={GROUP_WORDS[kindFilter]?.label ?? KIND_META[kindFilter].label} href={query(active.key, null)} />}
+            {notInCount > 0 && <Button asChild variant="outline"><Link href={`${base}?tab=changes`} title="The policies the previous file had and this one doesn't: watched, never lapsed">Not in file<span className="tabular-nums text-[var(--warning-ink)]">{n(notInCount)}</span></Link></Button>}
+          </div>
+        ) : undefined}
+        empty={head.rowCount === null ? <EmptyState title="No rows kept yet" hint={head.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} />
+          : shown.length === 0 ? <EmptyState title="No row matches" hint="Choose another outcome, or clear the search." /> : undefined}
+      />
     </>
   );
 }
 
-// ─── Rows ───────────────────────────────────────────────────────────────────────────────────────
-
-const ROW_FILTERS: Array<{ key: string; label: string; warn?: boolean; test: (row: RowView) => boolean }> = [
-  { key: "all", label: "All", test: () => true },
-  { key: "needs_you", label: "Need you", warn: true, test: (row) => row.outcome === "needs_you" || row.outcome === "held" },
-  { key: "changed", label: "Changed", test: (row) => row.outcome === "changed" },
-  { key: "new", label: "New", test: (row) => row.outcome === "new" },
-  { key: "no_change", label: "No change", test: (row) => row.outcome === "no_change" },
-  { key: "held", label: "Held", warn: true, test: (row) => row.outcome === "held" },
-  { key: "moved", label: "Moved a card", test: (row) => row.card !== null },
-  { key: "linked", label: "Linked", test: (row) => row.linkedBy !== null && row.linkedBy !== "Waits for you" },
-  { key: "commission", label: "Posted", test: (row) => row.outcome === "commission" },
-  { key: "not_read", label: "Not read", test: (row) => row.outcome === "not_read" || row.outcome === "held" },
-];
-
-function whatChanged(row: RowView): string {
-  if (row.outcome === "changed") return row.changes.map((c) => `${CHANGE_FIELD_LABELS[c.field] ?? c.field} ${changeValue(c.field, c.from)} → ${changeValue(c.field, c.to)}`).join(" · ");
-  if (row.outcome === "commission") return row.lines.map((l) => `${l.type.replaceAll("_", " ")} ${cents(l.amountCents)}`).join(" · ");
-  return row.what;
-}
-
-async function RowsTab({ tenantId, head, rows, search }: { tenantId: string; head: FileHead; rows: FileRows | null; search: Search }) {
-  const base = fileHref(head.id);
-  if (search.view === "sent") return SentRows({ tenantId, head, page: Number(search.page) || 1 });
-  const all = rows?.rows ?? [];
-  const filters = ROW_FILTERS.filter((f) => f.key === "all" || f.key === search.outcome || all.some(f.test))
-    .filter((f) => head.fileType === "commissions" ? !["changed", "new", "no_change", "moved", "linked"].includes(f.key) : f.key !== "commission");
-  const active = filters.find((f) => f.key === search.outcome) ?? filters[0];
-  const needle = (search.q ?? "").trim().toLowerCase();
-  const shown = all.filter((row) => active.test(row) && (!needle || `${row.policyNumber ?? ""} ${row.clientName ?? ""} ${row.rowNumber}`.toLowerCase().includes(needle)));
-  const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));
-  const page = Math.min(Math.max(1, Number(search.page) || 1), pages);
-  const slice = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const query = (outcome: string) => `${base}?tab=rows${outcome !== "all" ? `&outcome=${outcome}` : ""}${needle ? `&q=${encodeURIComponent(needle)}` : ""}`;
-  const exportHref = `/api/app/carrier-files/rows-export?file=${head.id}${active.key !== "all" && active.key !== "moved" && active.key !== "linked" ? `&outcome=${active.key}` : ""}`;
-
-  return (
-    <TableCard
-      toolbar={head.rowCount !== null ? (
-        <div className="flex w-full flex-col gap-3">
-          <OutcomeFilter value={active.key} options={filters.map((f) => ({ key: f.key, label: f.label, warn: f.warn, count: all.filter(f.test).length, href: query(f.key) }))} />
-          <div className="flex w-full flex-wrap items-center gap-2">
-            <form method="get" action={base} className="flex items-center gap-2">
-              <input type="hidden" name="tab" value="rows" />
-              {active.key !== "all" && <input type="hidden" name="outcome" value={active.key} />}
-              <label className="sr-only" htmlFor="row-search">Policy or client</label>
-              <input id="row-search" name="q" defaultValue={search.q ?? ""} placeholder="Policy or client" className={`${toolbarControl} w-56`} />
-              <Button type="submit" variant="outline">Search</Button>
-            </form>
-            <span className="ml-auto flex items-center gap-2">
-              <Button asChild variant="outline"><Link href={`${base}?tab=rows&view=sent`}>See rows as sent</Link></Button>
-              <Button asChild variant="outline"><a href={exportHref} download>Export rows</a></Button>
-            </span>
-          </div>
-        </div>
-      ) : undefined}
-      footer={shown.length ? <Pager page={page} pageSize={PAGE_SIZE} total={shown.length} noun="rows" pageHref={query(active.key)} /> : undefined}
-    >
-      {head.rowCount === null ? <EmptyState title="No rows kept yet" hint={head.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} />
-        : shown.length === 0 ? <EmptyState title="No row matches" hint="Choose another outcome, or clear the search." /> : (
-          <table className="portal-lead-table w-full min-w-[1000px] text-left text-sm">
-            <thead>
-              <tr>
-                <th className="w-[72px] text-right">Row</th>
-                <th className="w-[190px]">Policy</th>
-                <th className="w-[120px]">Outcome</th>
-                <th>What changed</th>
-                <th className="w-[170px]">Linked</th>
-                <th className="w-[190px]">Card</th>
-                <th className="w-[80px] text-right"><span className="sr-only">Actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {slice.map((row) => (
-                <tr key={row.rowNumber}>
-                  <td className="text-right tabular-nums text-muted-foreground">{row.rowNumber}</td>
-                  <td>
-                    {row.policyNumber && head.carrierId && row.outcome !== "commission"
-                      ? <Link href={policyHref(head.carrierId, row.policyNumber)} className="block truncate font-semibold text-foreground hover:underline">{row.policyNumber}</Link>
-                      : <span className="block truncate font-semibold text-foreground">{row.policyNumber ?? "—"}</span>}
-                    <span className="block truncate text-xs text-muted-foreground">{row.clientName ?? (row.policyNumber ? "No client yet" : "")}</span>
-                  </td>
-                  <td><StatusChip tone={ROW_OUTCOME_TONES[row.outcome]}>{ROW_OUTCOME_LABELS[row.outcome]}</StatusChip></td>
-                  <td><span className="block whitespace-normal break-words leading-snug">{whatChanged(row)}</span></td>
-                  <td className={row.reviewId ? "text-[var(--warning-ink)]" : "text-muted-foreground"}>{row.reviewId ? row.what : row.linkedBy ?? "—"}</td>
-                  <td className="text-muted-foreground">{row.card ? `${row.card.from ?? "—"} → ${row.card.to}` : row.outcome === "needs_you" || row.outcome === "held" ? "Waits" : "—"}</td>
-                  <td className="text-right"><Button asChild variant="outline" size="sm"><Link href={rowHref(head.id, row.rowNumber)} aria-label={`Open row ${row.rowNumber}`}>Open</Link></Button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-    </TableCard>
-  );
+/**
+ * The Rows tab's extras, in the header's More (round 4: the toolbar stays one row): the whole file as the carrier
+ * sent it (round 3: was the Whole file tab) and the rows exported, cut to the outcome shown.
+ */
+function rowsMore(head: FileHead, search: Search): Array<{ label: string; href: string }> {
+  const outcome = ROW_FILTERS.find((f) => f.key === search.outcome)?.key ?? "all";
+  return [
+    { label: "The file as sent", href: `${fileHref(head.id)}/whole` },
+    { label: outcome === "all" ? "Export rows" : "Export these rows", href: `/api/app/carrier-files/rows-export?file=${head.id}${outcome !== "all" && outcome !== "moved" && outcome !== "linked" ? `&outcome=${outcome}` : ""}` },
+  ];
 }
 
 /** The rows exactly as the carrier sent them: every column, scrolled sideways (the page before round 2). */
@@ -302,8 +346,8 @@ async function SentRows({ tenantId, head, page }: { tenantId: string; head: File
     <TableCard
       title="Rows as sent"
       description={file.rowCount ? `Every column as the carrier sent it (${file.columnCount}), scroll sideways for more.` : undefined}
-      action={<Button asChild variant="outline" size="sm"><Link href={`${base}?tab=rows`}>Back to outcomes</Link></Button>}
-      footer={file.rowCount ? <Pager page={file.page} pageSize={file.pageSize} total={file.rowCount} noun="rows" pageHref={`${base}?tab=rows&view=sent`} /> : undefined}
+      action={<Button asChild variant="outline" size="sm"><Link href={base}>Back to outcomes</Link></Button>}
+      footer={file.rowCount ? <Pager page={file.page} pageSize={file.pageSize} total={file.rowCount} noun="rows" pageHref={`${base}?view=sent`} /> : undefined}
     >
       {file.rows.length === 0 ? <EmptyState title="No rows kept" hint={file.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} /> : (
         <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
@@ -333,10 +377,9 @@ async function SentRows({ tenantId, head, page }: { tenantId: string; head: File
 
 // ─── Changes ────────────────────────────────────────────────────────────────────────────────────
 
-async function ChangesTab({ tenantId, head, rows, search }: { tenantId: string; head: FileHead; rows: FileRows | null; search: Search }) {
+function ChangesTab({ head, rows, notIn, search }: { head: FileHead; rows: FileRows | null; notIn: NotIn; search: Search }) {
   const base = fileHref(head.id);
   if (head.fileType === "commissions") return <TableCard><EmptyState title="A commission file changes no policy" hint="Its lines are on the Commissions tab." /></TableCard>;
-  const notIn = await loadNotInFile(tenantId, head);
   const changes = (rows?.rows ?? []).flatMap((row) => row.changes.map((c, i) => ({ key: `${row.rowNumber}-${i}`, row, ...c })));
   const news = (rows?.rows ?? []).filter((row) => row.outcome === "new");
   const list = [...changes.map((c) => ({ key: c.key, row: c.row, field: CHANGE_FIELD_LABELS[c.field] ?? c.field, from: changeValue(c.field, c.from), to: changeValue(c.field, c.to), isNew: false })), ...news.map((row) => ({ key: `new-${row.rowNumber}`, row, field: "—", from: "", to: "New", isNew: true }))];
@@ -346,10 +389,10 @@ async function ChangesTab({ tenantId, head, rows, search }: { tenantId: string; 
 
   return (
     <>
-      <Callout tone="info" title="A policy left out of a newer file is never lapsed on its own.">It is watched: the carrier&apos;s next file, or a person, says what happened to it.</Callout>
       <TableCard
         title={`Not in this file · ${n(notIn.policies.length)}`}
-        description={notIn.comparedWith ? `Compared with the previous file, ${notIn.comparedWith.name} of ${fileDay(notIn.comparedWith.fileDate)}.` : "There is no earlier file of this carrier and type to compare with."}
+        // Round 3: no explainer card. A policy left out of a newer file is never lapsed on its own: it is watched.
+        description={notIn.comparedWith ? `compared with ${notIn.comparedWith.name} of ${fileDay(notIn.comparedWith.fileDate)} · watched, never lapsed` : head.fileType === "new_business" ? "a new-business file lists only new applications, so none is missing from it" : "no earlier file of this carrier and type to compare with"}
         action={notIn.comparedWith ? <Button asChild variant="outline" size="sm"><Link href={fileHref(notIn.comparedWith.id)}>Open the previous file</Link></Button> : undefined}
       >
         {notIn.policies.length === 0 ? <EmptyState title={notIn.comparedWith ? "Every policy is still here" : "Nothing to compare with"} hint={notIn.comparedWith ? "Each policy in the previous file is in this one too." : "The next file of this carrier and type is compared with this one."} /> : (
@@ -371,7 +414,8 @@ async function ChangesTab({ tenantId, head, rows, search }: { tenantId: string; 
       </TableCard>
 
       <TableCard
-        title={`Changed · ${n(changes.length)}${news.length ? ` · ${n(news.length)} new` : ""}`}
+        title={`Changed · ${n(changes.length)}`}
+        description={news.length ? `and ${n(news.length)} new` : undefined}
         action={list.length ? <Button asChild variant="outline" size="sm"><a href={`/api/app/carrier-files/rows-export?file=${head.id}&outcome=changed`} download>Export</a></Button> : undefined}
         footer={list.length > PAGE_SIZE ? <Pager page={page} pageSize={PAGE_SIZE} total={list.length} noun="changes" pageHref={`${base}?tab=changes`} /> : undefined}
       >
@@ -409,7 +453,7 @@ async function CommissionsTab({ tenantId, head, search }: { tenantId: string; he
   const base = fileHref(head.id);
   if (head.fileType !== "commissions") return <TableCard><EmptyState title="A policy file carries no commission lines" hint="Commission lines arrive in the carrier's commission files; each policy's are on its own page." /></TableCard>;
   const money = await loadFileCommissions(tenantId, head.id);
-  if (!money || head.status !== "parsed") return <TableCard><EmptyState title="Nothing posted from this file" hint={head.status === "failed" ? "It stopped before its lines were read: see the Overview." : "Its lines post once it is read."} /></TableCard>;
+  if (!money || head.status !== "parsed") return <TableCard><EmptyState title="Nothing posted from this file" hint={head.status === "failed" ? "It stopped before its lines were read: see the Rows tab." : "Its lines post once it is read."} /></TableCard>;
   const key = search.show && SHOW[search.show] ? search.show : "all";
   const shown = money.groups.filter(SHOW[key].test);
   const pages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE));

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { carrierIdsOn } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { agencyToday } from "@/lib/ingestion/agencyDay";
@@ -37,11 +38,12 @@ const COLUMN: Record<SettingField, string> = { commissionTrigger: "commission_tr
 
 export async function loadCarrierRuleSides(tenantId: string): Promise<{ available: boolean; asOf: string; carriers: CarrierRuleSides[] }> {
   const asOf = await agencyToday(tenantId);
-  const [carriers, rules, settings, counts] = await Promise.all([
+  const [carriers, rules, settings, counts, on] = await Promise.all([
     db().from("carriers").select("id, name").eq("is_active", true).order("name"),
     db().from("carrier_retention_rule").select("*").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(5000),
     db().from("carrier_operating_settings").select("*").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(2000),
     db().rpc("in_force_policy_counts", { p_tenant_id: tenantId }),
+    carrierIdsOn(tenantId),
   ]);
   for (const read of [rules, settings]) {
     if (read.error) {
@@ -54,7 +56,8 @@ export async function loadCarrierRuleSides(tenantId: string): Promise<{ availabl
   const inForce = new Map<string, number>(((counts.error ? [] : counts.data ?? []) as Loose[]).map((row) => [row.carrier_id, Number(row.policies)]));
   const settingRows = (settings.data ?? []) as Loose[];
 
-  const result = ((carriers.data ?? []) as Loose[]).map((carrier) => {
+  // LA-0.4: the carriers switched on in Settings › Carriers, plus any still holding in-force policies.
+  const result = ((carriers.data ?? []) as Loose[]).filter((carrier) => on.has(carrier.id) || (inForce.get(carrier.id) ?? 0) > 0).map((carrier) => {
     const mine = rows.filter((r) => r.carrierId === carrier.id);
     const ruleSides = Object.fromEntries(RULE_TYPES.map((type) => {
       const platform = resolveRule(mine.filter((r) => r.tenantId === null), { tenantId: null, carrierId: carrier.id, ruleType: type, asOf });

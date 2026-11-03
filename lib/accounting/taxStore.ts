@@ -8,6 +8,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { BusinessIdentityMissingError, requireBusinessIdentity } from "@/lib/agencyProfile/identity";
 import { maskTaxId } from "@/lib/agencyProfile/types";
 
+import { ACCOUNTING_BUCKET } from "./invoiceStore";
 import { fromRow } from "./settingsCore";
 import { commissionTaxKey, contractorReport, normaliseTaxId, TAX_CATEGORY_LABELS, TAX_NOTICE, type ExemptReason, type Payee, type TaxCategory } from "./taxCore";
 
@@ -241,4 +242,51 @@ export async function taxExport(tenantId: string, year: number, format: "xlsx" |
   const wb = new ExcelJS.Workbook();
   for (const [name, rows] of Object.entries(sheets)) wb.addWorksheet(name).addRows(rows);
   return { filename: `tax-${year}.xlsx`, contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", body: Buffer.from(await wb.xlsx.writeBuffer()) };
+}
+
+// ─── the W-9 file (LA-7.8: "W-9 upload" on the tax profile; 2026-11-03) ─────────────────────────────
+// The file lives in the accounting bucket under the tenant's own folder, one folder per profile; the newest
+// upload is the W-9 on file. No column holds it, so attaching one needs no database change: storage is the
+// record, and attaching also ticks "W-9 on file".
+const W9_TYPES = ["application/pdf", "image/png", "image/jpeg"];
+const W9_MAX_BYTES = 10 * 1024 * 1024;
+const w9Folder = (tenantId: string, profileId: string) => `${tenantId}/w9/${profileId}`;
+
+async function ownProfile(tenantId: string, profileId: string) {
+  const { data, error } = await db().from("payee_tax_profile").select("id").eq("tenant_id", tenantId).eq("id", profileId).maybeSingle();
+  if (error) fail(error);
+  if (!data) throw new TaxError("That payee isn't in this agency.", 404);
+}
+
+export async function attachW9(tenantId: string, profileId: string, file: File): Promise<void> {
+  if (!file.size) throw new TaxError("That file is empty.");
+  if (file.size > W9_MAX_BYTES) throw new TaxError("Files up to 10 MB.");
+  if (!W9_TYPES.includes(file.type)) throw new TaxError("PDF, PNG or JPEG only.");
+  await ownProfile(tenantId, profileId);
+  const safeName = file.name.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-120) || "w9.pdf";
+  const path = `${w9Folder(tenantId, profileId)}/${new Date().toISOString().replace(/[:.]/g, "-")}-${safeName}`;
+  const { error } = await db().storage.from(ACCOUNTING_BUCKET).upload(path, Buffer.from(await file.arrayBuffer()), { contentType: file.type, upsert: false });
+  if (error) throw new TaxError(`Could not store the file: ${error.message}`, 500);
+  const { error: ue } = await db().from("payee_tax_profile").update({ w9_on_file: true }).eq("tenant_id", tenantId).eq("id", profileId);
+  if (ue) fail(ue);
+}
+
+/** The newest W-9 on file for a profile: its name and when it arrived, or null. */
+export async function latestW9(tenantId: string, profileId: string): Promise<{ path: string; name: string; uploadedAt: string } | null> {
+  const folder = w9Folder(tenantId, profileId);
+  const { data, error } = await db().storage.from(ACCOUNTING_BUCKET).list(folder, { limit: 100, sortBy: { column: "name", order: "desc" } });
+  if (error || !data?.length) return null;
+  const newest = (data as Array<{ name: string; created_at?: string }>).filter((f) => f.name && !f.name.startsWith("."))[0];
+  if (!newest) return null;
+  return { path: `${folder}/${newest.name}`, name: newest.name.replace(/^[0-9TZ-]+-/, ""), uploadedAt: (newest.created_at ?? "").slice(0, 10) };
+}
+
+/** A 60-second link to the newest W-9. */
+export async function w9Url(tenantId: string, profileId: string): Promise<string> {
+  await ownProfile(tenantId, profileId);
+  const file = await latestW9(tenantId, profileId);
+  if (!file || !file.path.startsWith(`${w9Folder(tenantId, profileId)}/`)) throw new TaxError("No W-9 is attached.", 404);
+  const { data, error } = await db().storage.from(ACCOUNTING_BUCKET).createSignedUrl(file.path, 60);
+  if (error || !data?.signedUrl) throw new TaxError("The W-9 could not be opened.", 500);
+  return data.signedUrl;
 }

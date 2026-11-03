@@ -34,7 +34,7 @@ export default async function PipelineRulePage({ params, searchParams }: { param
   if (!isRecordUuid(ruleId)) notFound();
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const [view, board, carriers] = await Promise.all([loadRule(tenantId, ruleId), loadBoard(tenantId), loadCarrierChoices()]);
+  const [view, board, carriers] = await Promise.all([loadRule(tenantId, ruleId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
   if (!view.available) {
     return <DataInPage step="setup" title="Pipeline rule"><Callout tone="warning" title={PIPELINE_RULES_PENDING_MESSAGE} /></DataInPage>;
   }
@@ -74,20 +74,16 @@ export default async function PipelineRulePage({ params, searchParams }: { param
         <>
           <PreviewTable lines={preview.lines} asOf={preview.asOf} title="Would move, or skipped and why" />
           {preview.carriersWithoutGrace.length > 0 && (v.event === "first_payment_missed" || v.event === "later_payment_missed") && (
-            <Callout tone="warning" title={`${preview.carriersWithoutGrace.length} ${preview.carriersWithoutGrace.length === 1 ? "carrier has" : "carriers have"} policies behind but no grace set.`}>
-              No missed payment is counted for them until a grace is set. <Link href="/app/book-setup/carrier-rules" className="font-semibold underline">Open Carrier rules</Link>
-            </Callout>
+            <Callout tone="warning" title={`${preview.carriersWithoutGrace.length} ${preview.carriersWithoutGrace.length === 1 ? "carrier has" : "carriers have"} policies behind but no grace set: no missed payment is counted for them until one is.`}><Link href="/app/book-setup/carrier-rules" className="font-semibold underline">Open Carrier rules</Link></Callout>
           )}
         </>
       ) : <Callout tone="warning" title={PIPELINE_RULES_PENDING_MESSAGE} />)}
       {tab === "forecast" && (
         <>
-          {rule.mode === "live" && <Callout tone="info" title="This rule is live: it moves cards. The forecast below is from before it went live." />}
+          {/* Round 3: no card saying the rule is live; the mode chip in the header already says it. */}
           <ForecastTable lines={view.forecast} readOnly={readOnly} />
           {wrong.length > 0 && (
-            <Callout tone="warning" title={`${wrong.length} marked wrong.`}>
-              {wrong[0].checkedNote ? `${wrong[0].leadName ?? "A lead"}: ${wrong[0].checkedNote}. ` : ""}A different carrier grace or a narrower from-stage may fix it. <Link href="/app/book-setup/carrier-rules" className="font-semibold underline">Open Carrier rules</Link>
-            </Callout>
+            <Callout tone="warning" title={`${wrong.length} marked wrong${wrong[0].checkedNote ? ` · ${wrong[0].leadName ?? "A lead"}: ${wrong[0].checkedNote}` : ""} · a different carrier grace or a narrower from-stage may fix it.`}><Link href="/app/book-setup/carrier-rules" className="font-semibold underline">Open Carrier rules</Link></Callout>
           )}
         </>
       )}

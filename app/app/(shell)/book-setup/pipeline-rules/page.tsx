@@ -23,7 +23,7 @@ export default async function SetupPipelineRulesPage() {
   if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Pipeline rules" detail="Setup is for the account owner and bookkeepers." />;
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const [view, board, carriers] = await Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices()]);
+  const [view, board, carriers] = await Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
   const on = view.rules.filter((r) => r.enabled && r.mode !== "draft");
   const forecast = on.filter((r) => r.mode === "forecast");
   const live = on.filter((r) => r.mode === "live");
@@ -32,33 +32,37 @@ export default async function SetupPipelineRulesPage() {
     ? <Button type="button" disabled title={readOnly ? "Book of business is read-only while the account is suspended." : PIPELINE_RULES_PENDING_MESSAGE}>New rule</Button>
     : <Link href="/app/book-setup/pipeline-rules/new" className={buttonVariants()}>New rule</Link>;
 
+  // Round 3 (docs/la4/POLISH-ROUND3.md): what used to be up to five stacked callouts, as one summary line,
+  // most urgent first — capped, held, switched off, read-only, in forecast, none on — each part a link
+  // where there is a page to open.
+  const rulePage = (id: string, tab?: string) => `/app/book-setup/pipeline-rules/${id}${tab ? `?tab=${tab}` : ""}`;
+  const parts: Array<{ key: string; text: string; href?: string }> = [
+    ...(capped ? [{ key: "capped", text: `${capped.moved + capped.cappedLive} moves in one run stopped at ${view.settings.capPerRun}: look before the rest move`, href: live[0] ? rulePage(live[0].id) : undefined }] : []),
+    ...(view.openHolds > 0 ? [{ key: "held", text: `${view.openHolds} ${view.openHolds === 1 ? "card" : "cards"} held: two rules disagree`, href: "/app/needs-you?view=agency" }] : []),
+    ...(!view.settings.engineOn ? [{ key: "off", text: "Pipeline rules are switched off for this agency" }] : []),
+    ...(readOnly ? [{ key: "read-only", text: "Read-only while the account is suspended" }] : []),
+    ...(forecast.length > 0 ? [{ key: "forecast", text: `${forecast.length} ${forecast.length === 1 ? "rule" : "rules"} in forecast, moving nothing until switched to live`, href: rulePage(forecast[0].id, "forecast") }] : []),
+    ...(view.rules.length > 0 && live.length === 0 && forecast.length === 0 ? [{ key: "none-on", text: "No rule is on, so no card moves", href: rulePage(view.rules[0].id) }] : []),
+  ];
+  const summary = parts.length > 0 && (
+    <Callout
+      tone={capped ? "error" : "warning"}
+      title={parts.map((part, index) => (
+        <span key={part.key}>
+          {index > 0 && " · "}
+          {part.href ? <Link href={part.href} className="underline underline-offset-2">{part.text}</Link> : part.text}
+        </span>
+      ))}
+    />
+  );
+
   return (
     <DataInPage step="setup" lead={<SetupTabs active="pipeline-rules" />} actions={newRule}>
       {!view.available ? (
-        <Callout tone="warning" title={PIPELINE_RULES_PENDING_MESSAGE}>The rules can be written once the database update is in; nothing moves before then.</Callout>
+        <Callout tone="warning" title={`${PIPELINE_RULES_PENDING_MESSAGE} Nothing moves before then.`} />
       ) : (
         <>
-          {readOnly && <Callout tone="warning" title="Book of business is read-only while the account is suspended." />}
-          {capped && (
-            <Callout tone="error" title={`${capped.moved + capped.cappedLive} moves in one run stopped at ${view.settings.capPerRun}.`}>
-              Look before the rest move: open each live rule&apos;s page. The rest move in the next run.
-            </Callout>
-          )}
-          {view.openHolds > 0 && (
-            <Callout tone="warning" title={`${view.openHolds} ${view.openHolds === 1 ? "card is" : "cards are"} held: two rules disagree.`}>
-              Nothing moves until a person picks. <Link href="/app/needs-you" className="font-semibold underline">Open Needs you</Link>
-            </Callout>
-          )}
-          {forecast.length > 0 && (
-            <Callout tone="warning" title={`${forecast.length} ${forecast.length === 1 ? "rule is" : "rules are"} in forecast.`}>
-              They record what they would do, and move nothing until you switch each one to live.{" "}
-              <Link href={`/app/book-setup/pipeline-rules/${forecast[0].id}?tab=forecast`} className="font-semibold underline">See the forecast</Link>
-            </Callout>
-          )}
-          {view.rules.length > 0 && live.length === 0 && forecast.length === 0 && (
-            <Callout tone="info" title="No rule is on, so no card moves." />
-          )}
-          {!view.settings.engineOn && <Callout tone="warning" title="Pipeline rules are switched off for this agency." />}
+          {summary}
           <RulesList rules={view.rules} board={board} carriers={carriers} />
         </>
       )}

@@ -1,364 +1,367 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
+import { Advanced, FormSection, FormSections } from "@/components/app/settings/patterns";
+import { DraftActions } from "@/components/app/settings/primitives";
+import { LockedNote, SectionTabs, SettingRow, useAnchorTab } from "@/components/app/settings/setting-row";
 import { Button } from "@/components/ui/button";
-import { toolbarControl } from "@/components/ui/data-toolbar";
-import { InfoTip } from "@/components/ui/info-tip";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { checkboxControl, inputControl, Switch, textareaControl } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { TableCard } from "@/components/ui/table-card";
+import { MoreMenu } from "@/components/ui/more-menu";
+import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { Segmented } from "@/components/ui/view-tabs";
 import { LA5_OWNER_ROLE_LABELS, LA5_OWNER_ROLES, LA5_QUEUE_LABELS, LA5_QUEUES, type La5OwnerRole, type La5Queue } from "@/lib/retention/assignment";
 import { PLATFORM_TALK_TRACK } from "@/lib/retention/campaign";
-import { ASSIGNMENT_STRATEGIES, ASSIGNMENT_STRATEGY_LABELS, PLATFORM_CAPS, PLATFORM_DEFAULT_SETTINGS, SIGNAL_LABELS, SIGNALS, WINBACK_REASONS, type RetentionSettings, type Weights } from "@/lib/retention/constants";
+import { PLATFORM_CAPS, PLATFORM_DEFAULT_SETTINGS, WINBACK_REASONS, type RetentionSettings } from "@/lib/retention/constants";
 import { SORT_LABELS, SORTS } from "@/lib/retention/queue";
-import { AFFORDABILITY_CONFIRMATION, FIELDS, HOLDOUT_EXPLANATION, HUB_SECTION_LABELS, thresholdConsequence, WINBACK_LABELS, WINBACK_LIMITS, weightTotal, type HubSection } from "@/lib/retention/settingsHub";
+import { AFFORDABILITY_CONFIRMATION, FIELDS, HOLDOUT_EXPLANATION, resetSection, thresholdConsequence, WINBACK_LABELS, WINBACK_LIMITS, type HubSection } from "@/lib/retention/settingsHub";
 import type { Hub } from "@/lib/retention/settingsHubStore";
 import { notify } from "@/lib/notify";
-import { fieldLabel } from "@/components/ui/field";
+import { cn } from "@/lib/utils";
 
-type Preview = { moved: number; up: number; down: number; intoCritical: number; total: number };
+/**
+ * LA-5.11 (Notion sprint) · every LA-5 setting in one place. Caps are shown, locked, beside the
+ * setting they guard. Weights have their own page (/app/retention-settings/weights): previewed before
+ * they are saved, and a save is a new version. The holdout's explanation sits above its switch and
+ * cannot be edited; switching it on needs the explanation acknowledged.
+ *
+ * Money & compliance redesign A (owner pick 2026-11-03, docs/settings/MONEY-COMPLIANCE-SETTINGS.md):
+ * tabs on the title line, Start here first (who reaches the save queue, with today's count), a line
+ * under every setting saying what it changes, Insurvas's value shown only where yours differs, rarely
+ * changed values under Advanced, and one save bar for the page (it replaced a Save and a Reset in
+ * every card). Reset goes back to Insurvas's values one tab at a time, from More.
+ */
+type Tab = "start" | "who" | "campaigns" | "holdout";
+const TABS: { key: Tab; label: string }[] = [
+  { key: "start", label: "Start here" },
+  { key: "who", label: "Who works it" },
+  { key: "campaigns", label: "Campaigns & win-back" },
+  { key: "holdout", label: "Holdout" },
+];
+/** Every anchor Settings search links to (#holdout), and the tab that holds it. */
+export const SECTION_TAB = {
+  weights: "start",
+  thresholds: "start",
+  queue: "start",
+  signals: "start",
+  assignment: "who",
+  campaigns: "campaigns",
+  reinstatement: "campaigns",
+  servicing: "campaigns",
+  winback: "campaigns",
+  holdout: "holdout",
+} as const satisfies Record<string, Tab>;
+/** The hub sections a tab's reset puts back (weights reset on their own page). */
+const TAB_SECTIONS: Record<Tab, HubSection[]> = {
+  start: ["thresholds", "queue", "signals"],
+  who: ["assignment"],
+  campaigns: ["campaigns", "reinstatement", "servicing", "winback"],
+  holdout: ["holdout"],
+};
 
 async function post(body: Record<string, unknown>) {
   const res = await fetch("/api/app/retention/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const json = await res.json().catch(() => null);
   if (!res.ok) throw new Error(json?.error ?? "That didn't save");
-  return json;
+  return json as { changes?: unknown[] };
 }
 
-// The shared stacked label (foundation v3: 13/500 over the control).
-  const field = fieldLabel;
 const n = (v: string) => (v.trim() === "" ? NaN : Number(v));
 const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-
-/** The settings keys a section saves (the rest of the draft is left as saved). */
-function keysOf(section: HubSection): Array<keyof RetentionSettings> {
-  const keys = (Object.keys(FIELDS) as Array<keyof typeof FIELDS>).filter((k) => FIELDS[k].section === section) as Array<keyof RetentionSettings>;
-  if (section === "winback") keys.push("winbackDays");
-  if (section === "assignment") keys.push("assignmentCarrierReps", "assignmentRepOrder");
-  return keys;
-}
-
-/**
- * LA-5.11 (Notion sprint) · every LA-5 setting in one place. Each section saves on its own and resets
- * to the platform's values on its own. Caps are shown, locked. Weights are previewed before they are
- * saved, and a save is a new version. The holdout's explanation sits above its switch and cannot be
- * edited; switching it on needs the explanation acknowledged.
- */
-/**
- * Settings redesign R9 (2026-10-29): twelve cards on one 3,650px page became four tabs, each one job.
- * Every section keeps its anchor (#holdout opens Holdout) and its own Save. The safety limits sit with
- * the holdout they mostly guard; the in-page change list went (the header's History has it).
- */
-const RETENTION_TABS = {
-  scoring: { label: "Scoring", sections: ["weights", "thresholds", "signals"] },
-  queue: { label: "Save queue", sections: ["queue", "assignment"] },
-  campaigns: { label: "Campaigns & win-back", sections: ["campaigns", "servicing", "reinstatement", "winback"] },
-  holdout: { label: "Holdout", sections: ["holdout", "locked"] },
-} as const;
-type RetentionTab = keyof typeof RETENTION_TABS;
-const tabOfSection = (id: string): RetentionTab | null =>
-  (Object.keys(RETENTION_TABS) as RetentionTab[]).find((tab) => (RETENTION_TABS[tab].sections as readonly string[]).includes(id)) ?? null;
+const count = (v: number) => v.toLocaleString("en-US");
 
 export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: boolean }) {
   const router = useRouter();
-  const [tab, setTab] = useState<RetentionTab>("scoring");
-  // A link to one section (Settings search: #holdout) opens the tab that holds it.
-  useEffect(() => {
-    const follow = () => { const next = tabOfSection(window.location.hash.replace(/^#/, "").split("/").pop() ?? ""); if (next) setTab(next); };
-    follow();
-    window.addEventListener("hashchange", follow);
-    return () => window.removeEventListener("hashchange", follow);
-  }, []);
+  const [tab, setTab] = useState<Tab>("start");
+  useAnchorTab(SECTION_TAB, setTab);
   const [saved, setSaved] = useState<RetentionSettings>(hub.settings);
   const [draft, setDraft] = useState<RetentionSettings>(hub.settings);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState("");
-  const [acknowledged, setAcknowledged] = useState(false);
+  const [savedRules, setSavedRules] = useState(hub.rules);
   const [rules, setRules] = useState(hub.rules);
-  const [weights, setWeights] = useState<Weights>(hub.weights);
-  const [preview, setPreview] = useState<{ for: string; result: Preview } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [acknowledged, setAcknowledged] = useState(false);
+  // The typed word for a shorter affordability wait is asked for on Save, in the confirm.
+  const [asking, setAsking] = useState(false);
+  const [confirmation, setConfirmation] = useState("");
+  const [resetting, setResetting] = useState(false);
   const set = <K extends keyof RetentionSettings>(k: K, v: RetentionSettings[K]) => setDraft((cur) => ({ ...cur, [k]: v }));
   const dis = !canEdit;
-  const total = weightTotal(weights);
-  const weightsKey = JSON.stringify(weights);
   const consequence = useMemo(() => (hub.distribution ? thresholdConsequence(hub.distribution, draft) : null), [hub.distribution, draft]);
 
-  const run = async (label: string, body: Record<string, unknown>, done: (json: { changes?: unknown[] }) => void) => {
-    setBusy(label);
+  const settingsDirty = !sameJson(draft, saved);
+  const rulesDirty = !sameJson(rules, savedRules);
+  const pending = (Object.keys(draft) as (keyof RetentionSettings)[]).filter((k) => !sameJson(draft[k], saved[k])).length + LA5_QUEUES.filter((q) => rules[q] !== savedRules[q]).length;
+  const dirty = settingsDirty || rulesDirty;
+  const shortening = draft.winbackDays.affordability < saved.winbackDays.affordability;
+  const turningHoldoutOn = draft.holdoutEnabled && !saved.holdoutEnabled;
+
+  /** True when it saved; the leave guard keeps the owner on the page otherwise. */
+  const save = async (typed?: string): Promise<boolean> => {
+    if (shortening && typed === undefined) { setAsking(true); return false; }
+    setBusy(true);
     try {
-      const json = await post(body);
-      done(json);
-      notify.done(json.changes?.length ? `Saved ${json.changes.length} change${json.changes.length === 1 ? "" : "s"}` : "Nothing changed");
+      let changed = 0;
+      if (settingsDirty) {
+        const json = await post({ action: "save_settings", settings: draft, confirmation: typed ?? null, holdout_acknowledged: acknowledged });
+        changed += json.changes?.length ?? 0;
+        setSaved(draft);
+      }
+      if (rulesDirty) {
+        const json = await post({ action: "save_rules", rules });
+        changed += json.changes?.length ?? 0;
+        setSavedRules(rules);
+      }
+      notify.done(changed ? `Saved ${changed} change${changed === 1 ? "" : "s"}` : "Nothing changed");
+      setAsking(false);
+      setConfirmation("");
       router.refresh();
+      return true;
     } catch (e) {
       notify.fail(e instanceof Error ? e.message : "That didn't save");
+      return false;
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
-  const saveSection = (section: HubSection) => {
-    const next = { ...saved } as RetentionSettings;
-    for (const k of keysOf(section)) (next as Record<string, unknown>)[k] = draft[k];
-    void run(section, { action: "save_settings", settings: next, confirmation: confirmation || null, holdout_acknowledged: acknowledged }, () => { setSaved(next); setConfirmation(""); });
-  };
-  const resetSection = (section: HubSection) => {
-    void run(`reset-${section}`, { action: "reset", section, confirmation: confirmation || null }, () => {
-      if (section === "weights") { setWeights({ ...hub.platformWeights }); return; }
-      const next = { ...saved, winbackDays: { ...saved.winbackDays } } as RetentionSettings;
-      for (const k of keysOf(section)) (next as Record<string, unknown>)[k] = (PLATFORM_DEFAULT_SETTINGS as Record<string, unknown>)[k];
-      if (section === "assignment") { next.assignmentCarrierReps = {}; next.assignmentRepOrder = []; }
+  const discard = () => { setDraft(saved); setRules(savedRules); setAcknowledged(false); };
+  const resetTab = async () => {
+    setBusy(true);
+    try {
+      let changed = 0;
+      let next = saved;
+      for (const section of TAB_SECTIONS[tab]) {
+        changed += (await post({ action: "reset", section, confirmation: null })).changes?.length ?? 0;
+        next = resetSection(next, section as Exclude<HubSection, "weights">);
+      }
       setSaved(next);
-      setDraft((cur) => ({ ...cur, ...Object.fromEntries(keysOf(section).map((k) => [k, next[k]])) }));
-    });
+      setDraft(next);
+      notify.done(changed ? `${changed} value${changed === 1 ? "" : "s"} back to Insurvas's` : "Already on Insurvas's values");
+      setResetting(false);
+      router.refresh();
+    } catch (e) {
+      notify.fail(e instanceof Error ? e.message : "That didn't reset");
+    } finally {
+      setBusy(false);
+    }
   };
-  const dirty = (section: HubSection) => keysOf(section).some((k) => !sameJson(draft[k], saved[k]));
 
-  const section = (id: HubSection | "locked" | "recent-changes", title: string, children: ReactNode, opts: { save?: boolean; note?: ReactNode } = {}) => !(RETENTION_TABS[tab].sections as readonly string[]).includes(id) ? null : (
-    <TableCard>
-      <div id={id} className="flex scroll-mt-24 flex-col gap-4 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold">{title}</h2>
-          {canEdit && opts.save && id !== "locked" && id !== "recent-changes" ? (
-            <span className="flex gap-2">
-              <Button variant="outline" disabled={busy !== null} onClick={() => resetSection(id as HubSection)}>Reset to defaults</Button>
-              {id !== "weights" && <Button disabled={busy !== null || !dirty(id as HubSection)} onClick={() => saveSection(id as HubSection)}>{busy === id ? "Saving…" : "Save"}</Button>}
-            </span>
-          ) : null}
-        </div>
-        {children}
-        {opts.note ? <div className="text-xs text-muted-foreground">{opts.note}</div> : null}
-      </div>
-    </TableCard>
-  );
-  const num = (k: keyof RetentionSettings, label: string, opts: { suffix?: string; scale?: number; tip?: string } = {}) => {
+  /** A number setting. `scale` turns stored units into shown ones (basis points → %, cents → $). */
+  const num = (k: keyof RetentionSettings, label: string, opts: { scale?: number; unit?: string; prefix?: string } = {}) => {
     const scale = opts.scale ?? 1;
     const spec = FIELDS[k as keyof typeof FIELDS];
     return (
-      <label className={field}>
-        <span className="inline-flex items-center gap-1">{label}{opts.tip ? <InfoTip label={`About ${label}`}>{opts.tip}</InfoTip> : null}</span>
-        <input className={toolbarControl} disabled={dis} type="number" step={scale === 1 ? 1 : 0.01} min={spec?.min !== undefined ? spec.min / scale : undefined} max={spec?.max !== undefined ? spec.max / scale : undefined}
+      <span className="flex items-center gap-2 text-sm text-[var(--muted)]">
+        {opts.prefix}
+        <input aria-label={label} className={cn(inputControl, "w-28 tabular-nums")} disabled={dis} type="number" step={scale === 1 ? 1 : 0.01}
+          min={spec?.min !== undefined ? spec.min / scale : undefined} max={spec?.max !== undefined ? spec.max / scale : undefined}
           value={Number.isFinite(draft[k] as number) ? (draft[k] as number) / scale : ""} onChange={(e) => set(k, Math.round(n(e.target.value) * scale) as never)} />
-        <span className="text-xs text-muted-foreground">Platform: {(PLATFORM_DEFAULT_SETTINGS[k] as number) / scale}{opts.suffix ?? ""}</span>
-      </label>
+        {opts.unit}
+      </span>
     );
   };
-
-  const affordabilityShorter = draft.winbackDays.affordability < saved.winbackDays.affordability;
-  const turningHoldoutOn = draft.holdoutEnabled && !saved.holdoutEnabled;
-
-  // Each section saves on its own, so the guard offers Discard or Stay, not one Save for all.
-  const unsaved = !sameJson(draft, saved);
+  /** Insurvas's value, only where yours differs. */
+  const platform = (k: keyof RetentionSettings, show: (v: never) => ReactNode = (v) => String(v)) => (sameJson(draft[k], PLATFORM_DEFAULT_SETTINGS[k]) ? undefined : show(PLATFORM_DEFAULT_SETTINGS[k] as never));
+  const inline = (label: string, control: ReactNode) => <span className="flex flex-col gap-1.5 text-label text-[var(--body)]">{label}{control}</span>;
 
   return (
     <div className="flex flex-col gap-6">
-      <LeaveGuard dirty={unsaved} onDiscard={() => setDraft(saved)} what="the retention settings" />
-      {!canEdit ? <p className="text-sm text-muted-foreground">Read only: your plan is paused.</p> : null}
-      <ViewTabs label="Retention settings" value={tab} onChange={setTab} tabs={(Object.keys(RETENTION_TABS) as RetentionTab[]).map((key) => ({ key, label: RETENTION_TABS[key].label }))} />
+      <SectionTabs label="Retention settings" tabs={TABS} value={tab} onChange={setTab}
+        actions={<MoreMenu items={[
+          canEdit && { label: "Reset this tab to Insurvas values", onSelect: () => setResetting(true), disabled: dirty },
+          { label: "History", href: "/app/settings?history=retention#settings-history" },
+          { label: "Retention results", href: "/app/retention-results" },
+        ]} />} />
+      <LeaveGuard dirty={dirty} onSave={() => save()} onDiscard={discard} what="the retention settings" />
+      {!canEdit ? <p className="m-0 text-sm text-[var(--muted)]">Read only: your plan is paused.</p> : null}
 
-      {section("weights", HUB_SECTION_LABELS.weights, (
-        <>
-          <table className="portal-lead-table w-full min-w-[560px] text-left text-sm">
-            <thead><tr><th>Signal</th><th className="w-[140px] text-right">Weight</th><th className="w-[140px] text-right">Platform</th></tr></thead>
-            <tbody>
-              {SIGNALS.map((s) => (
-                <tr key={s}>
-                  <td>{SIGNAL_LABELS[s]}</td>
-                  <td className="text-right"><input aria-label={`${SIGNAL_LABELS[s]} weight`} className={`${toolbarControl} w-24 text-right`} disabled={dis} type="number" min={0} max={100} value={weights[s]} onChange={(e) => setWeights({ ...weights, [s]: Math.round(n(e.target.value)) || 0 })} /></td>
-                  <td className="text-right tabular-nums text-muted-foreground">{hub.platformWeights[s]}</td>
-                </tr>
-              ))}
-              <tr className="font-semibold"><td>Total</td><td className={`text-right tabular-nums ${total === 100 ? "" : "text-[var(--error-ink)]"}`}>{total}</td><td className="text-right tabular-nums text-muted-foreground">100</td></tr>
-            </tbody>
-          </table>
-          {total !== 100 && <p role="alert" className="text-sm text-[var(--error-ink)]">The weights add up to {total}. They must add up to 100 to be saved.</p>}
-          {preview && preview.for === weightsKey && (
-            <p className="text-sm">Against today&apos;s book: <strong>{preview.result.moved.toLocaleString("en-US")}</strong> of {preview.result.total.toLocaleString("en-US")} policies change band ({preview.result.up.toLocaleString("en-US")} up, {preview.result.down.toLocaleString("en-US")} down; {preview.result.intoCritical.toLocaleString("en-US")} newly critical).</p>
-          )}
-          {canEdit && (
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button variant="outline" disabled={busy !== null || total !== 100} onClick={() => { setBusy("preview"); post({ action: "preview_weights", weights }).then((j) => setPreview({ for: weightsKey, result: j.preview })).catch((e) => notify.fail(e.message)).finally(() => setBusy(null)); }}>{busy === "preview" ? "Previewing…" : "Preview"}</Button>
-              <Button disabled={busy !== null || total !== 100 || preview?.for !== weightsKey || sameJson(weights, hub.weights)} onClick={() => void run("weights", { action: "save_weights", weights }, () => setPreview(null))}>{busy === "weights" ? "Saving…" : `Save as version ${hub.weightVersion + 1}`}</Button>
-            </div>
-          )}
-        </>
-      ), { save: true, note: <>Now scoring with version {hub.weightVersion}{hub.weightIsPlatform ? " (the platform's)" : ""}. Saving makes a new version; scores already made keep theirs, so Does it work? can compare them. Preview before saving.</> })}
-
-      {section("thresholds", HUB_SECTION_LABELS.thresholds, (
-        <>
-          <div className="grid gap-3 sm:grid-cols-4">
-            {num("mediumFrom", "Medium from")}
-            {num("highFrom", "High from")}
-            {num("criticalFrom", "Critical from")}
-            <label className={field}>Save queue takes
-              <select className={toolbarControl} disabled={dis} value={draft.queueMinBand} onChange={(e) => set("queueMinBand", e.target.value as RetentionSettings["queueMinBand"])}>
-                <option value="medium">Medium and above</option><option value="high">High and above</option><option value="critical">Critical only</option>
-              </select>
-              <span className="text-xs text-muted-foreground">Platform: high and above</span>
-            </label>
-          </div>
-          {consequence ? (
-            <p className="text-sm">At these thresholds, <strong>{consequence.bands.critical.toLocaleString("en-US")}</strong> policies are critical and <strong>{consequence.bands.high.toLocaleString("en-US")}</strong> high ({consequence.bands.medium.toLocaleString("en-US")} medium, {consequence.bands.low.toLocaleString("en-US")} low) — your queue would hold <strong>{consequence.queue.toLocaleString("en-US")}</strong> cards{consequence.queue > consequence.shown ? `, showing ${consequence.shown}` : ""}.</p>
-          ) : <p className="text-sm text-muted-foreground">No policy is scored yet, so there is no volume to show.</p>}
-        </>
-      ), { save: true })}
-
-      {section("queue", HUB_SECTION_LABELS.queue, (
-        <div className="grid gap-3 sm:grid-cols-4">
-          {num("workedCooldownDays", "Worked-card cooldown (days)")}
-          {num("maxCards", "Most cards shown")}
-          <label className={field}>Default sort
-            <select className={toolbarControl} disabled={dis} value={draft.queueDefaultSort} onChange={(e) => set("queueDefaultSort", e.target.value as RetentionSettings["queueDefaultSort"])}>
-              {SORTS.map((s) => <option key={s} value={s}>{SORT_LABELS[s]}</option>)}
-            </select>
-            <span className="text-xs text-muted-foreground">Platform: risk × money</span>
-          </label>
-          <label className={field}>With nothing high risk
-            <select className={toolbarControl} disabled={dis} value={draft.includeMediumWhenEmpty ? "yes" : "no"} onChange={(e) => set("includeMediumWhenEmpty", e.target.value === "yes")}>
-              <option value="no">Show an empty queue</option><option value="yes">Show medium instead</option>
-            </select>
-            <span className="text-xs text-muted-foreground">Platform: an empty queue</span>
-          </label>
-        </div>
-      ), { save: true })}
-
-      {section("signals", HUB_SECTION_LABELS.signals, (
-        <div className="grid gap-3 sm:grid-cols-3">
-          {num("sampleFloor", "Lead-source sample floor", { tip: "Below this many policies from a lead source, its survival rate is unavailable rather than weak." })}
-          {num("carrierSampleFloor", "Carrier sample floor", { tip: "Below this many policies with a carrier, its lapse rate is unavailable rather than weak." })}
-          <span />
-          {num("affordabilityLowBp", "Affordable below (% of income)", { scale: 100, suffix: "%" })}
-          {num("affordabilityHighBp", "Unaffordable above (% of income)", { scale: 100, suffix: "%" })}
-          <span />
-          {num("dangerMonthFrom", "Danger window from month")}
-          {num("dangerMonthTo", "Danger window to month")}
-        </div>
-      ), { save: true })}
-
-      {section("campaigns", HUB_SECTION_LABELS.campaigns, (
-        <div className="grid gap-3">
-          <div className="grid gap-3 sm:grid-cols-3">{num("billDeclineCooloffDays", "Paper-bill decline cooling-off (days)")}</div>
-          <label className={field}>Talk track
-            <textarea className={`${toolbarControl} min-h-28 py-2`} disabled={dis} maxLength={4000} placeholder={PLATFORM_TALK_TRACK} value={draft.billTalkTrack ?? ""} onChange={(e) => set("billTalkTrack", e.target.value.trim() ? e.target.value : null)} />
-            <span className="text-xs text-muted-foreground">Empty uses the platform&apos;s.</span>
-          </label>
-        </div>
-      ), { save: true })}
-
-      {section("servicing", HUB_SECTION_LABELS.servicing, (
-        <div className="grid gap-3 sm:grid-cols-3">{num("servicingGraceDays", "Days after the expected date before a request fails", { tip: "A carrier file that still disagrees this many days after a change was due fails the request." })}</div>
-      ), { save: true })}
-
-      {section("reinstatement", HUB_SECTION_LABELS.reinstatement, (
-        <div className="grid gap-3 sm:grid-cols-4">
-          {num("reinstatementAmberDays", "Amber inside (days)")}
-          {num("reinstatementRedDays", "Red inside (days)")}
-          {num("reinstatementPinDays", "Pinned inside (days)")}
-          {num("reinstatementEscalateDays", "To the writing agent inside (days)", { tip: "Inside this many days of the deadline a case moves from the retention rep to the agent who sold it." })}
-        </div>
-      ), { save: true, note: <>Insurvas keeps each carrier&apos;s reinstatement window.</> })}
-
-      {section("winback", HUB_SECTION_LABELS.winback, (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {WINBACK_REASONS.map((r) => (
-              <label key={r} className={field}>{WINBACK_LABELS[r]} (days)
-                <input className={toolbarControl} disabled={dis} type="number" min={WINBACK_LIMITS[r].min} max={WINBACK_LIMITS[r].max} value={draft.winbackDays[r]} onChange={(e) => set("winbackDays", { ...draft.winbackDays, [r]: Math.round(n(e.target.value)) })} />
-                <span className="text-xs text-muted-foreground">Platform: {PLATFORM_DEFAULT_SETTINGS.winbackDays[r]}{r === "affordability" ? ` · never under ${PLATFORM_CAPS.winbackAffordabilityFloorDays}` : ""}</span>
-              </label>
-            ))}
-          </div>
-          {affordabilityShorter && (
-            <label className={`${field} max-w-sm`}>
-              <span className="text-[var(--error-ink)]">Shortening the cooling-off for someone who said they could not afford it. Type {AFFORDABILITY_CONFIRMATION} to confirm.</span>
-              <input className={toolbarControl} value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" />
-            </label>
-          )}
-        </>
-      ), { save: true })}
-
-      {section("holdout", HUB_SECTION_LABELS.holdout, (
-        <>
-          <div className="flex flex-col gap-2 text-sm text-foreground">
-            {HOLDOUT_EXPLANATION.map((p, i) => <p key={i}>{p}</p>)}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-4">
-            <label className={field}>Holdout
-              <select className={toolbarControl} disabled={dis || (!saved.holdoutEnabled && !acknowledged)} value={draft.holdoutEnabled ? "on" : "off"} onChange={(e) => set("holdoutEnabled", e.target.value === "on")}>
-                <option value="off">Off</option><option value="on">On</option>
-              </select>
-              <span className="text-xs text-muted-foreground">Platform: off</span>
-            </label>
-            {num("holdoutShareBp", "Share held back (%)", { scale: 100, suffix: "%" })}
-            {num("holdoutMaxExposureCents", "Never hold back above ($ at risk)", { scale: 100 })}
-            {num("predictionHorizonDays", "Look after (days)", { tip: "Days between a prediction and the look at what happened, for both the predictions and the holdout." })}
-          </div>
-          {!saved.holdoutEnabled && canEdit && (
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={acknowledged} onChange={(e) => { setAcknowledged(e.target.checked); if (!e.target.checked) set("holdoutEnabled", false); }} />
-              I have read what the holdout does.
-            </label>
-          )}
-          {turningHoldoutOn && !acknowledged ? <p role="alert" className="text-sm text-[var(--error-ink)]">Read what the holdout does before switching it on.</p> : null}
-        </>
-      ), { save: true, note: <>The share can never be more than {PLATFORM_CAPS.holdoutCeilingBp / 100}%. Results are on <Link className="underline" href="/app/retention-results">Does it work?</Link>.</> })}
-
-      {section("assignment", HUB_SECTION_LABELS.assignment, (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {LA5_QUEUES.map((q: La5Queue) => (
-              <label key={q} className={field}>{LA5_QUEUE_LABELS[q]}
-                <select className={toolbarControl} disabled={dis} value={rules[q]} onChange={(e) => setRules({ ...rules, [q]: e.target.value as La5OwnerRole })}>
-                  {LA5_OWNER_ROLES.map((r) => <option key={r} value={r}>{LA5_OWNER_ROLE_LABELS[r]}</option>)}
-                </select>
-              </label>
-            ))}
-          </div>
-          {canEdit && <div className="flex justify-end"><Button variant="outline" disabled={busy !== null || sameJson(rules, hub.rules)} onClick={() => void run("rules", { action: "save_rules", rules }, () => undefined)}>{busy === "rules" ? "Saving…" : "Save queue owners"}</Button></div>}
-          <div className="grid gap-3 sm:grid-cols-3">
-            <label className={field}>Among retention reps
-              <select className={toolbarControl} disabled={dis} value={draft.assignmentStrategy} onChange={(e) => set("assignmentStrategy", e.target.value as RetentionSettings["assignmentStrategy"])}>
-                {ASSIGNMENT_STRATEGIES.map((s) => <option key={s} value={s}>{ASSIGNMENT_STRATEGY_LABELS[s]}</option>)}
-              </select>
-            </label>
-          </div>
-          {hub.reps.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Nobody holds the retention role, so the save queue goes to each policy&apos;s writing agent and the other queues to you. Add a retention rep in <Link className="underline" href="/app/settings#team-access">Team &amp; access</Link>.</p>
-          ) : draft.assignmentStrategy === "by_carrier" ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {hub.carriers.map((c) => (
-                <label key={c.id} className="flex items-center justify-between gap-3 text-sm">{c.name}
-                  <select className={toolbarControl} disabled={dis} value={draft.assignmentCarrierReps[c.id] ?? ""} onChange={(e) => { const next = { ...draft.assignmentCarrierReps }; if (e.target.value) next[c.id] = e.target.value; else delete next[c.id]; set("assignmentCarrierReps", next); }}>
-                    <option value="">Round-robin</option>
-                    {hub.reps.map((r) => <option key={r.userId} value={r.userId}>{r.name}</option>)}
+      {tab === "start" && (
+        <FormSections>
+          <FormSection id="thresholds" title="Which policies your team works" info="Every in-force policy gets a risk score out of 100. These decide which ones reach the save queue.">
+            <SettingRow label="The save queue takes" platform={platform("queueMinBand", (v: string) => `${v} and above`)}>
+              <Segmented label="The save queue takes" disabled={dis} value={draft.queueMinBand} onChange={(v) => set("queueMinBand", v)} options={[{ key: "medium", label: "Medium and above" }, { key: "high", label: "High and above" }, { key: "critical", label: "Critical only" }]} />
+              {consequence ? (
+                <p className="m-0 text-sm text-[var(--ink)]" aria-live="polite">Today your queue would hold <strong className="tabular-nums">{count(consequence.queue)}</strong> card{consequence.queue === 1 ? "" : "s"}{consequence.queue > consequence.shown ? `, showing ${count(consequence.shown)} at a time` : ""}. Across the book, <strong className="tabular-nums">{count(consequence.bands.critical)}</strong> policies are critical, <strong className="tabular-nums">{count(consequence.bands.high)}</strong> high, {count(consequence.bands.medium)} medium and {count(consequence.bands.low)} low; policies Insurvas knows too little about stay off the queue.</p>
+              ) : <p className="m-0 text-sm text-[var(--muted)]">No policy is scored yet, so there is no count to show.</p>}
+            </SettingRow>
+            <SettingRow label="Risk bands" sub="Score out of 100" change="Where a score turns medium, high and critical. The count above follows as you type.">
+              <div className="flex flex-wrap gap-4">
+                {inline("Medium from", num("mediumFrom", "Medium from"))}
+                {inline("High from", num("highFrom", "High from"))}
+                {inline("Critical from", num("criticalFrom", "Critical from"))}
+              </div>
+              {(["mediumFrom", "highFrom", "criticalFrom"] as const).some((k) => draft[k] !== PLATFORM_DEFAULT_SETTINGS[k]) && <p className="m-0 text-xs text-[var(--muted)]">Insurvas: {PLATFORM_DEFAULT_SETTINGS.mediumFrom} / {PLATFORM_DEFAULT_SETTINGS.highFrom} / {PLATFORM_DEFAULT_SETTINGS.criticalFrom}</p>}
+            </SettingRow>
+            <SettingRow id="weights" label="How a policy is scored" change="Its own page: you see how many policies change band before a new version is saved.">
+              <span className="flex flex-wrap items-center gap-3 text-sm text-[var(--ink)]">Version {hub.weightVersion}{hub.weightIsPlatform ? ", Insurvas's" : ", yours"} · 7 signals adding to 100<Button asChild variant="outline" size="sm"><Link href="/app/retention-settings/weights">Edit weights</Link></Button></span>
+            </SettingRow>
+            <Advanced summary="Advanced" hint={`Queue: rest ${draft.workedCooldownDays} days · ${draft.maxCards} cards · ${SORT_LABELS[draft.queueDefaultSort].replace(" (default)", "").toLowerCase()}. Signals: floors ${draft.sampleFloor} and ${draft.carrierSampleFloor} · danger months ${draft.dangerMonthFrom}–${draft.dangerMonthTo}`}>
+              <div id="queue" className="flex scroll-mt-24 flex-col gap-4">
+                <SettingRow label="Rest a worked card for" platform={platform("workedCooldownDays")} change="A card someone worked leaves the queue for this long.">{num("workedCooldownDays", "Worked-card cooldown", { unit: "days" })}</SettingRow>
+                <SettingRow label="Show at most" platform={platform("maxCards")} change="A queue of 400 is not a queue. The rest wait their turn by sort order.">{num("maxCards", "Most cards shown", { unit: "cards" })}</SettingRow>
+                <SettingRow label="Sort the queue by" platform={platform("queueDefaultSort", (v: keyof typeof SORT_LABELS) => SORT_LABELS[v])} change="The order a rep sees until they pick another.">
+                  <select aria-label="Default sort" className={cn(inputControl, "w-64")} disabled={dis} value={draft.queueDefaultSort} onChange={(e) => set("queueDefaultSort", e.target.value as RetentionSettings["queueDefaultSort"])}>
+                    {SORTS.map((s) => <option key={s} value={s}>{SORT_LABELS[s]}</option>)}
                   </select>
-                </label>
+                </SettingRow>
+                <SettingRow label="With nothing high risk" platform={platform("includeMediumWhenEmpty", (v: boolean) => (v ? "show medium" : "an empty queue"))} change="What the queue shows when no policy reaches its band.">
+                  <Segmented label="With nothing high risk" disabled={dis} value={draft.includeMediumWhenEmpty ? "yes" : "no"} onChange={(v) => set("includeMediumWhenEmpty", v === "yes")} options={[{ key: "no", label: "Show an empty queue" }, { key: "yes", label: "Show medium instead" }]} />
+                </SettingRow>
+              </div>
+              <div id="signals" className="flex scroll-mt-24 flex-col gap-4">
+                <SettingRow label="Too few policies to judge" change="Below this many policies from a lead source or a carrier, its signal is left out rather than counted as weak.">
+                  <div className="flex flex-wrap gap-4">{inline("Lead source", num("sampleFloor", "Lead-source sample floor", { unit: "policies" }))}{inline("Carrier", num("carrierSampleFloor", "Carrier sample floor", { unit: "policies" }))}</div>
+                </SettingRow>
+                <SettingRow label="Premium against income" change="Premium below the first share of income is affordable; above the second it is unaffordable.">
+                  <div className="flex flex-wrap gap-4">{inline("Affordable below", num("affordabilityLowBp", "Affordable below (% of income)", { scale: 100, unit: "%" }))}{inline("Unaffordable above", num("affordabilityHighBp", "Unaffordable above (% of income)", { scale: 100, unit: "%" }))}</div>
+                </SettingRow>
+                <SettingRow label="Danger window" change="Months since issue when a policy is most likely to lapse.">
+                  <div className="flex flex-wrap gap-4">{inline("From month", num("dangerMonthFrom", "Danger window from month"))}{inline("To month", num("dangerMonthTo", "Danger window to month"))}</div>
+                </SettingRow>
+              </div>
+            </Advanced>
+          </FormSection>
+        </FormSections>
+      )}
+
+      {tab === "who" && (
+        <FormSections>
+          <FormSection id="assignment" title="Who works retention" info="Which role owns each retention queue, and how retention reps share it.">
+            <SettingRow label="Who owns each queue" change="A role with nobody in it falls back: the save queue to each policy's writing agent, the others to you.">
+              <div className="grid max-w-[640px] gap-3">
+                {LA5_QUEUES.map((q: La5Queue) => (
+                  <label key={q} className="grid items-center gap-2 text-sm text-[var(--ink)] @xl:grid-cols-[14rem_minmax(0,1fr)]">{LA5_QUEUE_LABELS[q]}
+                    <select className={cn(inputControl, "w-60")} disabled={dis} value={rules[q]} onChange={(e) => setRules({ ...rules, [q]: e.target.value as La5OwnerRole })}>
+                      {LA5_OWNER_ROLES.map((r) => <option key={r} value={r}>{LA5_OWNER_ROLE_LABELS[r]}</option>)}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </SettingRow>
+            <SettingRow label="Share work between retention reps" sub={hub.reps.length ? `${hub.reps.length} rep${hub.reps.length === 1 ? "" : "s"}: ${hub.reps.map((r) => r.name).join(", ")}` : "Nobody holds the retention role yet"} change="Round-robin takes turns. By carrier gives each carrier to one rep. By exposure gives the largest advance at risk to your first rep.">
+              <Segmented label="Share work between retention reps" disabled={dis} value={draft.assignmentStrategy} onChange={(v) => set("assignmentStrategy", v)} options={[{ key: "round_robin", label: "Round-robin" }, { key: "by_carrier", label: "By carrier" }, { key: "by_exposure", label: "By exposure" }]} />
+              {hub.reps.length > 0 && draft.assignmentStrategy === "by_carrier" && (
+                <div className="grid max-w-[640px] gap-2">
+                  {hub.carriers.map((c) => (
+                    <label key={c.id} className="grid items-center gap-2 text-sm text-[var(--ink)] @xl:grid-cols-[14rem_minmax(0,1fr)]">{c.name}
+                      <select className={cn(inputControl, "w-60")} disabled={dis} value={draft.assignmentCarrierReps[c.id] ?? ""} onChange={(e) => { const next = { ...draft.assignmentCarrierReps }; if (e.target.value) next[c.id] = e.target.value; else delete next[c.id]; set("assignmentCarrierReps", next); }}>
+                        <option value="">Round-robin</option>
+                        {hub.reps.map((r) => <option key={r.userId} value={r.userId}>{r.name}</option>)}
+                      </select>
+                    </label>
+                  ))}
+                </div>
+              )}
+              {hub.reps.length > 0 && draft.assignmentStrategy === "by_exposure" && (
+                <ol className="m-0 flex max-w-[480px] list-none flex-col gap-2 p-0 text-sm">
+                  {[...hub.reps].sort((a, b) => ((draft.assignmentRepOrder.indexOf(a.userId) + 1) || 999) - ((draft.assignmentRepOrder.indexOf(b.userId) + 1) || 999)).map((r, i, list) => (
+                    <li key={r.userId} className="flex items-center gap-2">
+                      <span className="w-6 tabular-nums text-[var(--muted)]">{i + 1}.</span>
+                      <span className="flex-1 text-[var(--ink)]">{r.name}</span>
+                      <Button size="sm" variant="outline" disabled={dis || i === 0} onClick={() => { const ids = list.map((x) => x.userId); [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; set("assignmentRepOrder", ids); }}>Move up</Button>
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </SettingRow>
+            <SettingRow label="Hand a reinstatement to the writing agent" platform={platform("reinstatementEscalateDays")} change="Inside this many days of the carrier's deadline, the agent who sold the policy takes the case over.">
+              {num("reinstatementEscalateDays", "To the writing agent inside (days)", { unit: "days before its deadline" })}
+            </SettingRow>
+            <p className="m-0 text-sm text-[var(--muted)]">Who holds the retention role is set in <Link className="underline" href="/app/settings#team-access">Team &amp; access</Link>.</p>
+          </FormSection>
+        </FormSections>
+      )}
+
+      {tab === "campaigns" && (
+        <FormSections>
+          <FormSection id="campaigns" title="Paper bill to bank draft" info="The campaign that moves clients billed by mail onto a bank draft.">
+            <SettingRow label="After a client says no, ask again in" platform={platform("billDeclineCooloffDays")} change="They leave the campaign list until then.">
+              {num("billDeclineCooloffDays", "Paper-bill decline cooling-off (days)", { unit: "days" })}
+            </SettingRow>
+            <SettingRow label="Talk track" sub="Empty uses Insurvas's" change="What the rep reads on the campaign card.">
+              <textarea aria-label="Talk track" className={cn(textareaControl, "mt-0 min-h-28 max-w-[640px]")} disabled={dis} maxLength={4000} placeholder={PLATFORM_TALK_TRACK} value={draft.billTalkTrack ?? ""} onChange={(e) => set("billTalkTrack", e.target.value.trim() ? e.target.value : null)} />
+            </SettingRow>
+          </FormSection>
+
+          <FormSection id="reinstatement" title="Reinstatement countdown" info="How a lapsed policy's reinstatement case is marked as its deadline nears.">
+            <SettingRow label="Turn a case" change="Days left before the carrier's reinstatement deadline. Each carrier's window is kept by Insurvas.">
+              <div className="flex flex-wrap gap-4">
+                {inline("Amber with", num("reinstatementAmberDays", "Amber inside (days)", { unit: "days" }))}
+                {inline("Red with", num("reinstatementRedDays", "Red inside (days)", { unit: "days" }))}
+                {inline("Pinned to the top with", num("reinstatementPinDays", "Pinned inside (days)", { unit: "days" }))}
+              </div>
+            </SettingRow>
+            <Advanced summary="Advanced" hint={`Fail a servicing request ${draft.servicingGraceDays} days after its expected date`}>
+              <SettingRow id="servicing" label="Fail a servicing request" platform={platform("servicingGraceDays")} change="A carrier file that still disagrees this many days after a change was due fails the request.">
+                {num("servicingGraceDays", "Days after the expected date before a request fails", { unit: "days after its expected date" })}
+              </SettingRow>
+            </Advanced>
+          </FormSection>
+
+          <FormSection id="winback" title="Win-back: wait before calling a lapsed client" info="How long a lapsed client rests before they come back as a lead, by why the policy lapsed.">
+            <div className="grid max-w-[720px] gap-3">
+              {WINBACK_REASONS.map((r) => (
+                <div key={r} className="grid items-center gap-2 text-sm text-[var(--ink)] @xl:grid-cols-[minmax(0,20rem)_auto_minmax(0,1fr)]">
+                  {WINBACK_LABELS[r]}
+                  <span className="flex items-center gap-2 text-[var(--muted)]"><input aria-label={`${WINBACK_LABELS[r]} (days)`} className={cn(inputControl, "w-24 tabular-nums")} disabled={dis} type="number" min={WINBACK_LIMITS[r].min} max={WINBACK_LIMITS[r].max} value={draft.winbackDays[r]} onChange={(e) => set("winbackDays", { ...draft.winbackDays, [r]: Math.round(n(e.target.value)) })} />days</span>
+                  <span className="text-xs text-[var(--muted)]">{draft.winbackDays[r] !== PLATFORM_DEFAULT_SETTINGS.winbackDays[r] ? `Insurvas: ${PLATFORM_DEFAULT_SETTINGS.winbackDays[r]}` : ""}</span>
+                </div>
               ))}
             </div>
-          ) : draft.assignmentStrategy === "by_exposure" ? (
-            <ol className="flex flex-col gap-2 text-sm">
-              {[...hub.reps].sort((a, b) => ((draft.assignmentRepOrder.indexOf(a.userId) + 1) || 999) - ((draft.assignmentRepOrder.indexOf(b.userId) + 1) || 999)).map((r, i, list) => (
-                <li key={r.userId} className="flex items-center gap-2">
-                  <span className="w-6 tabular-nums text-muted-foreground">{i + 1}.</span>
-                  <span className="flex-1">{r.name}</span>
-                  <Button size="sm" variant="outline" disabled={dis || i === 0} onClick={() => { const ids = list.map((x) => x.userId); [ids[i - 1], ids[i]] = [ids[i], ids[i - 1]]; set("assignmentRepOrder", ids); }}>Up</Button>
-                </li>
-              ))}
-            </ol>
-          ) : null}
-        </>
-      ), { save: true, note: <>Who holds the retention role is set in <Link className="underline" href="/app/settings#team-access">Team &amp; access</Link>.</> })}
+            <LockedNote>Someone who said they could not afford it is never called back sooner than {PLATFORM_CAPS.winbackAffordabilityFloorDays} days. Shortening their wait asks you to type a word to confirm.</LockedNote>
+          </FormSection>
+        </FormSections>
+      )}
 
-      {section("locked", "Locked", (
-        <ul className="flex flex-col gap-2 text-sm">
-          <li><strong>Holdout ceiling: {PLATFORM_CAPS.holdoutCeilingBp / 100}%.</strong> <span className="text-muted-foreground">A misconfiguration must never withhold most of the queue.</span></li>
-          <li><strong>Win-back affordability floor: {PLATFORM_CAPS.winbackAffordabilityFloorDays} days.</strong> <span className="text-muted-foreground">Someone who could not afford it is never called back sooner.</span></li>
-          <li><strong>Draft day cap: the {PLATFORM_CAPS.draftDayCap}th.</strong> <span className="text-muted-foreground">Carriers reject the 29th to the 31st.</span></li>
-        </ul>
-      ), { note: <>Insurvas keeps each carrier&apos;s retention windows, grace periods and chargeback rules, never here.</> })}
+      {tab === "holdout" && (
+        <FormSections>
+          <FormSection id="holdout" title="Holdout" info="A measured way to know whether working the save queue saves policies.">
+            <div className="flex max-w-[78ch] flex-col gap-2 text-sm text-[var(--ink)]">
+              {HOLDOUT_EXPLANATION.map((p, i) => <p key={i} className="m-0">{p}</p>)}
+            </div>
+            {!saved.holdoutEnabled && canEdit && (
+              <label className="flex items-center gap-2 text-sm text-[var(--ink)]">
+                <input type="checkbox" className={checkboxControl} checked={acknowledged} onChange={(e) => { setAcknowledged(e.target.checked); if (!e.target.checked) set("holdoutEnabled", false); }} />
+                I have read what the holdout does
+              </label>
+            )}
+            <SettingRow label="Holdout" sub={!saved.holdoutEnabled && !acknowledged ? "Read the text above first" : undefined} change={turningHoldoutOn ? "Saving switches it on. Policies start being held back in the next radar run." : undefined}>
+              <span className="flex items-center gap-3 text-sm text-[var(--ink)]">
+                <Switch label="Holdout" checked={draft.holdoutEnabled} disabled={dis || (!saved.holdoutEnabled && !acknowledged)} onChange={(on) => set("holdoutEnabled", on)} />
+                {draft.holdoutEnabled ? "On" : "Off"}
+              </span>
+            </SettingRow>
+            <SettingRow label="Hold back" change="How much of the queue is held back, the advance at risk above which a policy never is, and how long after a prediction the outcome is read on Retention results.">
+              <div className="flex flex-wrap gap-4">
+                {inline("Share", num("holdoutShareBp", "Share held back (%)", { scale: 100, unit: "%" }))}
+                {inline("Never hold back above", num("holdoutMaxExposureCents", "Never hold back above ($ at risk)", { scale: 100, prefix: "$", unit: "at risk" }))}
+                {inline("Look after", num("predictionHorizonDays", "Look after (days)", { unit: "days" }))}
+              </div>
+            </SettingRow>
+            <LockedNote>The share can never be more than {PLATFORM_CAPS.holdoutCeilingBp / 100}%. <Link className="underline" href="/app/retention-results">Retention results</Link></LockedNote>
+          </FormSection>
+          <p className="m-0 text-sm text-[var(--muted)]">Insurvas keeps each carrier&apos;s retention windows, grace periods and chargeback rules. Draft days are capped at the {PLATFORM_CAPS.draftDayCap}th: carriers reject the 29th to the 31st.</p>
+        </FormSections>
+      )}
 
+      <SettingsSaveBar visible={canEdit && dirty} note={`${pending} unsaved change${pending === 1 ? "" : "s"} to the retention settings`}>
+        <DraftActions dirty={dirty} saving={busy} disabled={turningHoldoutOn && !acknowledged} onDiscard={discard} onSave={() => void save()} />
+      </SettingsSaveBar>
+
+      <ConfirmDialog open={asking} onOpenChange={(open) => { if (!open) { setAsking(false); setConfirmation(""); } }} busy={busy}
+        title="Call people who could not afford it sooner?"
+        description={`You are shortening the wait from ${saved.winbackDays.affordability} to ${draft.winbackDays.affordability} days for clients who said they could not afford their policy.`}
+        confirmLabel={`Shorten to ${draft.winbackDays.affordability} days`} cancelLabel={`Keep ${saved.winbackDays.affordability} days`}
+        confirmDisabled={confirmation.trim() !== AFFORDABILITY_CONFIRMATION}
+        fields={<label className="flex flex-col gap-1.5 text-label text-[var(--body)]">Type {AFFORDABILITY_CONFIRMATION} to confirm<input className={inputControl} value={confirmation} onChange={(e) => setConfirmation(e.target.value)} autoComplete="off" /></label>}
+        onConfirm={() => void save(confirmation)} />
+      <ConfirmDialog open={resetting} onOpenChange={setResetting} busy={busy} destructive={false}
+        title={`Reset ${TABS.find((t) => t.key === tab)?.label} to Insurvas values?`}
+        description={`Every value on this tab goes back to Insurvas's.${tab === "who" ? " Queue owners are not touched." : ""} The change is recorded in History.`}
+        confirmLabel="Reset to Insurvas values" cancelLabel="Keep my values" onConfirm={() => void resetTab()} />
     </div>
   );
 }

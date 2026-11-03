@@ -85,7 +85,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "" }: { entries
             <Button type="button" variant="outline" disabled={!visible.length} onClick={exportCsv} title="The lines shown, in the order shown"><Download aria-hidden="true" />Export CSV</Button>
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
-            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search policy, agent code or file" />
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Policy, agent code or file" />
             <select aria-label="Filter by carrier" className={toolbarControl} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }}>
               <option value="">All carriers</option>
               {carriers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}

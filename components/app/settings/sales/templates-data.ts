@@ -147,6 +147,22 @@ export function useSalesTemplates(kind: SalesTemplateKind) {
       if (sample) return local((list) => list.map((t) => (t.id === id ? { ...t, status: "retired" } : t)));
       await write<Created>(`${base}/${id}/retire`, "POST", undefined, `Retired — ${RETIRED_KEEPS[kind]}`);
     },
+    /**
+     * Reset to default (docs/settings/DEFAULTS.md): retire every live version the agency has for one
+     * product and carrier (null = every carrier), so the Insurvas default is loaded again. Drafts and
+     * retired versions stay. Resolves true when every retire went through.
+     */
+    async resetToDefault(productCode: string, carrierId: string | null) {
+      const own = (payload?.templates ?? []).filter((t) => t.tenantOwned && t.status === "published" && t.productCode === productCode && (t.carrierId ?? null) === carrierId);
+      if (sample) { local((list) => list.map((t) => (own.some((o) => o.id === t.id) ? { ...t, status: "retired" } : t))); return true; }
+      for (const t of own) {
+        const res = await salesApi<Created>(`${base}/${t.id}/retire`, { method: "POST" });
+        if (!res.ok) { notify.block(res.error); await reload(); return false; }
+      }
+      notify.done("Back on the Insurvas default", { detail: `Your own versions are retired — ${RETIRED_KEEPS[kind]}` });
+      await reload();
+      return true;
+    },
     /** True when the version is gone; a version already used by interviews is refused and kept. */
     async remove(id: string) {
       if (sample) { local((list) => list.filter((t) => t.id !== id)); return true; }
