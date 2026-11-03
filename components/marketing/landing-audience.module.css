@@ -135,7 +135,7 @@
 .bandInner { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 32px 48px; width: min(100% - 64px, 1320px); margin: 0 auto; padding: 48px 0 52px; }
 .trustCopy { display: grid; gap: 12px; }
 .bandLabel { margin: 0; color: var(--accent-ink); font-size: 13px; font-weight: 600; }
-.trustTitle { max-width: 20ch; margin: 0; color: var(--ink); font-size: clamp(24px, 2.8vw, 36px); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; }
+.trustTitle { max-width: 30ch; margin: 0; color: var(--ink); font-size: clamp(24px, 2.8vw, 36px); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; }
 .trustRow { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
 .avatars { display: flex; }
 .avatars i { width: 30px; height: 30px; border: 2px solid var(--canvas); border-radius: 50%; }
