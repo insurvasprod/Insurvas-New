@@ -93,12 +93,12 @@ export function PartnerLoginForm() {
     return (
       <PartnerAuthFrame animated>
         {resetState === "sent" ? (
-          <AuthHeading title="Check your inbox">
+          <AuthHeading title="Check Your Inbox">
             If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to a partner account, a link to choose a new password is on its way. It works once.
           </AuthHeading>
         ) : (
           <>
-            <AuthHeading title="Reset your password">Enter the email you sign in with. We send a one-time link to choose a new password.</AuthHeading>
+            <AuthHeading title="Reset Your Password">Enter the email you sign in with. We send a one-time link to choose a new password.</AuthHeading>
             <form className="flex flex-col gap-4" onSubmit={requestReset} noValidate>
               <div className="space-y-1.5">
                 <label htmlFor="partner-reset-email" className={authLabel}>Email</label>
@@ -117,8 +117,18 @@ export function PartnerLoginForm() {
   }
 
   return (
-    <PartnerAuthFrame animated>
-      <AuthHeading title="Partner sign in">Submit leads and follow every one to its outcome.</AuthHeading>
+    <PartnerAuthFrame
+      footer={
+        <div className="flex flex-col gap-1.5 text-sm leading-normal tracking-[-0.02em]">
+          <p className="m-0">Invited by an agency? Use the link in your invitation email to choose your password.</p>
+          <p className="m-0">
+            An agent or agency?{" "}
+            <Link href="/app/login" className="font-semibold">Use the agent sign in</Link>
+          </p>
+        </div>
+      }
+    >
+      <AuthHeading title="Partner Sign In">Submit leads and follow every one to its outcome.</AuthHeading>
 
       <form className="flex flex-col gap-4" onSubmit={submit} noValidate>
         <div className="space-y-1.5">
@@ -146,7 +156,7 @@ export function PartnerLoginForm() {
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-baseline justify-between gap-3">
+          <div className="flex h-3.5 items-baseline justify-between gap-3">
             <label htmlFor="partner-password" className={authLabel}>Password</label>
             <button type="button" onClick={() => { setResetEmail(email); setResetState("idle"); setResetError(null); setResetting(true); }} className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
               Forgot password?
@@ -205,14 +215,6 @@ export function PartnerLoginForm() {
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-
-      <p className="mt-6 text-sm leading-normal text-muted-foreground">
-        Invited by an agency? Use the link in your invitation email to choose your password.
-      </p>
-      <p className="mt-3 text-xs leading-normal tracking-[-0.01em] text-muted-foreground">
-        An agent or agency?{" "}
-        <Link href="/app/login" className="font-semibold text-foreground">Use the agent sign in instead</Link>.
-      </p>
     </PartnerAuthFrame>
   );
 }
