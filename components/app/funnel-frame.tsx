@@ -61,7 +61,10 @@ export function FunnelFrame({ step, children, wide = false, aside, back, stepsAs
       plane="agent"
       mode="sign-up"
       width={wide ? "wide" : "default"}
-      steps={{ current: funnelStepOf(step), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(step) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: stepsAside }}
+      // On the centred card the other way in ("Have an account? Sign in") sits under the card, like the sign-in's;
+      // beside a panel it stays on the step line.
+      steps={{ current: funnelStepOf(step), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(step) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: aside ? stepsAside : undefined }}
+      footer={!aside && stepsAside ? <div className="text-sm leading-normal tracking-[-0.02em]">{stepsAside}</div> : undefined}
       back={back}
       legal={legal}
       heading={heading ?? (liftHeading ? first : undefined)}
