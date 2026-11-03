@@ -59,8 +59,8 @@ export function KpiTile({
         <div className={cn("shrink-0 font-[family-name:var(--font-display)] text-[2rem] font-semibold leading-none tracking-[-0.035em] tabular-nums", figureTone === "warn" ? "text-[var(--warning-ink)]" : "text-foreground")}>{value}</div>
         {series && series.length > 1 ? <SparkLine className="h-7 flex-1" values={series} summary={seriesSummary ?? `${label} through the period`} /> : <div className="h-7 flex-1" aria-hidden="true" />}
       </div>
-      {(change || note) && (
-        <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-1.5 text-sm leading-normal text-[var(--body)]">
+      {/* Always one line, filled or not, so a row of tiles is one height and the figures sit on one line. */}
+      <p className="m-0 mt-1.5 flex min-h-[1.3125rem] flex-wrap items-center gap-x-1.5 text-sm leading-normal text-[var(--body)]">
           {change && (
             <span className={cn("inline-flex items-center gap-0.5 font-semibold tabular-nums", tone)}>
               {!flat && (up ? <ArrowUp className="size-3.5" aria-hidden="true" /> : <ArrowDown className="size-3.5" aria-hidden="true" />)}
@@ -70,7 +70,6 @@ export function KpiTile({
           )}
           {note}
         </p>
-      )}
     </div>
   );
 }
