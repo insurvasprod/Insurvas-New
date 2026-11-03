@@ -177,9 +177,6 @@ export function PartnerDealFlow({
   const extraFilters = [filters.stage_type, filters.product, filters.submitted_by, filters.carrier, premiumNarrowing, draftDateNarrowing].filter(Boolean).length;
   const hasNarrowing = extraFilters > 0 || Boolean(search.trim()) || !isToday;
 
-  const periodText = isToday
-    ? "today"
-    : range.from === range.to ? dayLabel(range.from) : `${dayLabel(range.from)} – ${dayLabel(range.to)}`;
   const oldest = figures?.oldestInProgressDays ?? null;
 
   const chips: ActiveFilter[] = [
@@ -259,7 +256,6 @@ export function PartnerDealFlow({
           label="Deals worked"
           value={figures ? figures.worked : "—"}
           series={perDay(() => true)}
-          note={figures ? `${isAdmin ? "Across your team" : "Submitted by you"} · ${periodText}` : undefined}
         />
         <KpiTile
           icon={BadgeCheck}
