@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { Bell, Building2, MessageSquare, PackageCheck } from "lucide-react";
+import { Bell, Building2, PackageCheck } from "lucide-react";
 
 import { PartnerNotificationPreferences } from "@/components/partner/partner-notification-preferences";
 import { NotificationSoundSettings } from "@/components/app/notification-sound-settings";
@@ -111,13 +111,12 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
   const detailRow = "grid grid-cols-[8.5rem_minmax(0,1fr)] items-center gap-3 border-b border-border py-3 text-sm last:border-0";
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((word) => word[0]!.toUpperCase()).join("") || "P";
 
-  return <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6 lg:h-[calc(100dvh-var(--top-bar-h)-3.5rem)]">
+  return <div className="m-stagger flex w-full flex-1 flex-col gap-6 lg:min-h-[calc(100dvh-var(--top-bar-h,56px)-3.5rem)]">
     <PageHeader
       title="Settings"
       description="Manage your account, notifications, and security."
       hideTitle
       breadcrumbs={[{ label: "Settings" }, { label: SECTION_LABELS[activeSettings] ?? "Account" }]}
-      actions={<Button asChild variant="secondary" size="sm"><a href="/partner/messages"><MessageSquare aria-hidden="true" />Message your agent</a></Button>}
     />
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void loadSettings()}>Retry</Button></p>}
 

@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { Play } from "lucide-react";
 
+import { InfoTip } from "@/components/ui/info-tip";
+
 import { getSoundPreferences, previewTreatment, saveSoundPreferences } from "@/lib/notify/sound";
 import { AUDIBLE, AUDIBLE_BY_DEFAULT, TREATMENT_LABELS, type Treatment } from "@/lib/notify/treatments";
 import type { AgentAlertSettings, AudibleTreatment } from "@/lib/agentAlerts/presentation";
@@ -23,7 +25,6 @@ export function NotificationSoundSettings({
   settings,
   save,
   saving = false,
-  persisted,
 }: {
   /**
    * The server-stored settings this panel writes into, where there are any.
@@ -38,9 +39,6 @@ export function NotificationSoundSettings({
   /** Undefined until the first poll answers. Only an explicit `false` is worth saying out loud. */
   persisted?: boolean;
 }) {
-  // With no server settings there is nothing to persist to, which is the same story the pending
-  // migration tells, told through the same sentence.
-  const durable = settings && save ? persisted : false;
   // Read from the same place the sound layer reads from, never from the server response directly.
   // Anything else lets the panel show one answer while the product plays another — and while the
   // storage column is still pending, the server's answer is `{}` for everyone.
@@ -69,26 +67,20 @@ export function NotificationSoundSettings({
 
   return (
     <div className="portal-notify-sound-settings border-t border-[var(--color-border)] pt-3">
-      <p className="font-semibold">Which events make a sound</p>
-      <p className="mb-2 text-xs text-[var(--color-muted-foreground)]">
-        Sound is always off while you are on a call, except for compliance blocks.
+      <p className="flex items-center gap-1.5 font-semibold">
+        Which events make a sound
+        <InfoTip label="About sounds">Sound is always off while you are on a call, except for compliance blocks. Routine saves and system faults never make a sound.</InfoTip>
       </p>
 
       {/* A control that silently forgets is worse than one that admits it cannot save yet. The
           storage for these choices is a pending migration; until it lands they apply to this
           browser only, and the toggles would otherwise snap back and simply look broken. */}
-      {durable === false && (
-        <p role="status" className="mb-2 text-xs text-[var(--color-muted-foreground)]">
-          These choices apply to this browser only for now, and will not follow you to another machine.
-        </p>
-      )}
 
       <div className="space-y-1">
         {AUDIBLE.map((treatment) => (
           <div key={treatment} className="flex items-center justify-between gap-2 rounded px-1 py-1">
-            <label className="min-w-0 flex-1 cursor-pointer">
+            <label className="min-w-0 flex-1 cursor-pointer" title={TREATMENT_LABELS[treatment].hint}>
               <span className="block text-sm">{TREATMENT_LABELS[treatment].label}</span>
-              <span className="block text-xs text-[var(--color-muted-foreground)]">{TREATMENT_LABELS[treatment].hint}</span>
             </label>
             <button
               type="button"
@@ -112,12 +104,6 @@ export function NotificationSoundSettings({
           </div>
         ))}
       </div>
-
-      {/* Stated rather than shown as two switches that cannot move. Somebody will eventually go
-          looking for why a save does not chime, and the answer belongs where they will look. */}
-      <p className="mt-2 text-xs text-[var(--color-muted-foreground)]">
-        Routine saves and system faults never make a sound.
-      </p>
     </div>
   );
 }
