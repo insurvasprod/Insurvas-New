@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Download } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronRight, Download, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -47,6 +47,26 @@ function query(filters: Filters, mine: boolean, format?: "csv") {
   return `/api/app/settings-audit?${params.toString()}`;
 }
 
+/**
+ * Entries by the same person, in the same section, in the same minute are one save (owner 2026-11-03):
+ * a pipeline save that edits fourteen call outcomes is one row, opened to see each. Anything alone stays a row.
+ */
+type HistoryItem = { kind: "one"; entry: SettingsAuditEntry } | { kind: "save"; id: string; entries: SettingsAuditEntry[] };
+function groupBySave(entries: SettingsAuditEntry[]): HistoryItem[] {
+  const order: Array<{ id: string; entries: SettingsAuditEntry[] }> = [];
+  const byKey = new Map<string, { id: string; entries: SettingsAuditEntry[] }>();
+  for (const entry of entries) {
+    const minute = Math.floor(new Date(entry.occurredAt).getTime() / 60_000);
+    const key = `${actorLine(entry)}|${entry.sectionKey}|${minute}`;
+    const hit = byKey.get(key);
+    if (hit) { hit.entries.push(entry); continue; }
+    const group = { id: key, entries: [entry] };
+    byKey.set(key, group);
+    order.push(group);
+  }
+  return order.map((group): HistoryItem => (group.entries.length > 1 ? { kind: "save", id: group.id, entries: group.entries } : { kind: "one", entry: group.entries[0] }));
+}
+
 export function SettingsHistory({ mine = false }: { mine?: boolean }) {
   // A "History" link from a section's "last changed" line opens this filtered to that section. The
   // panel mounts in the browser (its tab is chosen from the hash), so the URL is there to read.
@@ -59,6 +79,8 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const zone = useMemo(() => viewerTimeZone(), []);
+  const [openSaves, setOpenSaves] = useState<ReadonlySet<string>>(new Set());
+  const items = useMemo(() => groupBySave(entries ?? []), [entries]);
 
   const load = useCallback(
     () =>
@@ -101,8 +123,8 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
       <PagedTableCard
         // An empty list centres its one message in the card instead of leaving a blank block under it.
         bodyClassName={entries.length === 0 && !filtered ? "flex flex-col" : undefined}
-        total={entries.length}
-        noun="changes"
+        total={items.length}
+        noun={items.length === entries.length ? "changes" : "changes and saves"}
         // No title: in My profile the History tab and its switch already name this list, and on the
         // Settings history page the section header does.
         // Nothing to filter, export or refresh until there is a change to look at.
@@ -110,11 +132,12 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
           <DataToolbar
             actions={
               <>
-                <Button type="button" variant="outline" disabled={entries.length === 0} onClick={() => { window.location.href = query(filters, mine, "csv"); }}>
+                <Button type="button" variant="outline" size="icon" disabled={entries.length === 0} aria-label="Export CSV" title="Export CSV" onClick={() => { window.location.href = query(filters, mine, "csv"); }}>
                   <Download aria-hidden="true" />
-                  Export CSV
                 </Button>
-                <RefreshButton onClick={() => void reload()} refreshing={refreshing} />
+                <Button type="button" variant="outline" size="icon" aria-label="Refresh" title="Refresh" disabled={refreshing} onClick={() => void reload()}>
+                  <RefreshCw aria-hidden="true" className={cn(refreshing && "animate-spin")} />
+                </Button>
               </>
             }
           >
@@ -153,23 +176,52 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
               </tr>
             </thead>
             <PagedBody>
-              {entries.map((entry) => {
-                const href = hrefFor(entry.sectionKey);
+              {items.map((item) => {
+                const entryRow = (entry: SettingsAuditEntry, nested: boolean) => {
+                  const href = hrefFor(entry.sectionKey);
+                  return (
+                    <tr key={entry.id} className={cn(nested && "bg-[var(--surface-alt)]/50")}>
+                      <td className={cn(st.td, "whitespace-nowrap")}>{nested ? "" : dateTime(entry.occurredAt, zone)}</td>
+                      <td className={st.td}>{nested ? "" : actorLine(entry)}{!nested && entry.source === "migration" && <span className={st.sub}>recorded before this log</span>}</td>
+                      <td className={cn(st.td, nested && "pl-8")}>
+                        {!nested && <span className="text-[var(--muted)]">{sectionLabel(entry.sectionKey)} → </span>}{entry.settingLabel}
+                        {entry.reason && <span className={st.sub}>{entry.reason}</span>}
+                      </td>
+                      <td className={cn(st.td, "break-words")}>
+                        <StatusChip tone="neutral" dot={false}>{CHANGE_TYPE_LABEL[entry.changeType]}</StatusChip> <span className="font-mono text-xs">{changeLine(entry)}</span>
+                      </td>
+                      <td className={cn(st.td, "whitespace-nowrap text-right")}>
+                        {href && <Button asChild variant="outline" size="sm"><a href={href}>Open</a></Button>}
+                      </td>
+                    </tr>
+                  );
+                };
+                if (item.kind === "one") return entryRow(item.entry, false);
+                const first = item.entries[0];
+                const open = openSaves.has(item.id);
+                const types = new Set(item.entries.map((entry) => entry.changeType));
+                const summary = types.size === 1 ? `${item.entries.length} ${CHANGE_TYPE_LABEL[first.changeType].toLowerCase()}` : `${item.entries.length} changes`;
                 return (
-                  <tr key={entry.id}>
-                    <td className={cn(st.td, "whitespace-nowrap")}>{dateTime(entry.occurredAt, zone)}</td>
-                    <td className={st.td}>{actorLine(entry)}{entry.source === "migration" && <span className={st.sub}>recorded before this log</span>}</td>
-                    <td className={st.td}>
-                      <span className="text-[var(--muted)]">{sectionLabel(entry.sectionKey)} →</span> {entry.settingLabel}
-                      {entry.reason && <span className={st.sub}>{entry.reason}</span>}
-                    </td>
-                    <td className={cn(st.td, "break-words")}>
-                      <StatusChip tone="neutral" dot={false}>{CHANGE_TYPE_LABEL[entry.changeType]}</StatusChip> <span className="font-mono text-xs">{changeLine(entry)}</span>
-                    </td>
-                    <td className={cn(st.td, "whitespace-nowrap text-right")}>
-                      {href && <Button asChild variant="outline" size="sm"><a href={href}>Open</a></Button>}
-                    </td>
-                  </tr>
+                  <Fragment key={item.id}>
+                    <tr>
+                      <td className={cn(st.td, "whitespace-nowrap")}>{dateTime(first.occurredAt, zone)}</td>
+                      <td className={st.td}>{actorLine(first)}</td>
+                      <td className={st.td}>
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          onClick={() => setOpenSaves((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}
+                          className="flex items-center gap-1.5 text-left font-semibold text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                        >
+                          <ChevronRight aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform duration-150", open && "rotate-90")} />
+                          <span><span className="font-normal text-[var(--muted)]">{sectionLabel(first.sectionKey)} → </span>{item.entries.length} changes in one save</span>
+                        </button>
+                      </td>
+                      <td className={st.td}><StatusChip tone="neutral" dot={false}>{summary}</StatusChip></td>
+                      <td className={st.td} />
+                    </tr>
+                    {open && item.entries.map((entry) => entryRow(entry, true))}
+                  </Fragment>
                 );
               })}
             </PagedBody>
