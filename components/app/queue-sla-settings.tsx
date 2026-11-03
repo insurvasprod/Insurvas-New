@@ -183,13 +183,6 @@ export function QueueSlaSettings() {
   // One line when the rungs fire but what they cause is not being delivered (20260925709910).
   const jobNotice = jobState ? slaJobNotice(jobState) : null;
   const states = ladderStepStates(shown, oldestWaiting);
-  const steps = [
-    { label: "Claimable" },
-    { label: `Warn · ${short(shown.warn)}` },
-    { label: `Escalate · ${short(shown.escalate)}` },
-    { label: `Partner told · ${short(shown.partner)}` },
-    { label: `Expired · ${short(shown.expire)}` },
-  ];
 
   return (
     <SettingsStack>
@@ -210,84 +203,72 @@ export function QueueSlaSettings() {
       {error && <Callout tone="error" title={error} />}
 
       <SettingsCard title="The ladder" info="Counted from the moment a lead becomes claimable. Each rung must be later than the one before.">
-        <div className="grid gap-[18px] sm:grid-cols-2 lg:grid-cols-4">
-          {FIELDS.map((field) => {
-            const invalid = parsed?.[field.key] === null;
-            const help = field.key === "expire" && nurtureReady ? "It leaves the active queue and becomes a nurture lead" : field.help;
-            return (
-              <label key={field.key} htmlFor={`sla-${field.key}`} className="block min-w-0">
-                <span className="text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--body)]">{field.label}</span>
-                <input
-                  id={`sla-${field.key}`}
-                  type="text"
-                  inputMode="text"
-                  autoComplete="off"
-                  spellCheck={false}
-                  value={texts[field.key]}
-                  disabled={saving}
-                  aria-invalid={invalid || undefined}
-                  aria-describedby={`sla-${field.key}-help`}
-                  onChange={(event) => setTexts((current) => (current ? { ...current, [field.key]: event.target.value } : current))}
-                  onBlur={() => {
-                    // Tidy "2m" into "120 seconds" once the person leaves the field, the board's own form.
-                    const seconds = parsed?.[field.key];
-                    if (seconds) setTexts((current) => (current ? { ...current, [field.key]: formatDuration(seconds) } : current));
-                  }}
-                  className={cn(
-                    "mt-1.5 box-border h-9 w-full rounded-[8px] border bg-[var(--surface)] px-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60",
-                    invalid ? "border-[var(--error)]" : "border-[var(--border-strong)]",
-                  )}
-                />
-                <span id={`sla-${field.key}-help`} className={cn("mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em]", invalid ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>
-                  {invalid ? "Not a duration — try “45 seconds” or “4 hours”." : help}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-        {problem && complete && (
-          <p role="alert" className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--error-ink)]">{problem}</p>
-        )}
-
-        <div className="mt-5">
+        <div className="mb-3">
           <WaitingBar values={values && !problem ? values : saved} />
         </div>
 
-        <div className="mt-5 border-t border-[var(--border)] pt-4">
-          <ol
-            aria-label={oldestWaiting === null ? "The ladder, in order. Nothing is waiting right now." : `The ladder, in order. The longest-waiting transfer has waited ${short(oldestWaiting)}.`}
-            className="m-0 flex list-none flex-wrap items-center gap-y-3 p-0"
-          >
-            {steps.map((step, index) => {
-              const state = states[index];
-              const nextDone = states[index + 1] === "done" || states[index + 1] === "current";
-              return (
-                <li key={step.label} className={cn("flex items-center", index < steps.length - 1 && "flex-1")}>
-                  <span className="flex items-center gap-2.5">
-                    <span
-                      aria-hidden
-                      className={cn(
-                        "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs leading-[1.5] font-semibold tracking-[-0.01em]",
-                        state === "done" && "bg-[var(--success)] text-[var(--on-primary)]",
-                        state === "current" && "bg-[var(--primary)] text-[var(--ink)]",
-                        state === "upcoming" && "bg-[var(--surface-alt)] text-[var(--muted)]",
-                      )}
-                    >
-                      {state === "done" ? <CheckIcon /> : index + 1}
-                    </span>
-                    <span className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em] whitespace-nowrap", state === "upcoming" ? "text-[var(--muted)]" : "text-[var(--ink)]")}>
-                      {step.label}
-                      <span className="sr-only">{state === "done" ? ", passed" : state === "current" ? ", next" : ""}</span>
-                    </span>
-                  </span>
-                  {index < steps.length - 1 && (
-                    <span aria-hidden className={cn("m-track mx-3 h-0.5 min-w-4 flex-1", state === "done" && nextDone ? "bg-[var(--success)]" : "bg-[var(--border)]")} />
+        {/* One row per rung (owner 2026-11-03): its number says how far the longest-waiting transfer has
+            climbed, its time is the setting, and its effect is the line that used to sit under the box. */}
+        <ol
+          aria-label={oldestWaiting === null ? "The ladder, in order. Nothing is waiting right now." : `The ladder, in order. The longest-waiting transfer has waited ${short(oldestWaiting)}.`}
+          className="m-0 flex list-none flex-col p-0"
+        >
+          {[{ key: null, label: "Claimable", effect: "Any agent can claim it." }, ...FIELDS.map((field) => ({ key: field.key, label: field.label, effect: field.key === "expire" && nurtureReady ? "It leaves the active queue and becomes a nurture lead" : field.help }))].map((rung, index) => {
+            const state = states[index];
+            const field = rung.key;
+            const invalid = field ? parsed?.[field] === null : false;
+            return (
+              <li key={rung.label} className="grid items-center gap-x-4 gap-y-1.5 border-t border-[var(--border)] py-3 first:border-t-0 first:pt-0 last:pb-0 sm:grid-cols-[28px_minmax(0,1fr)_170px_minmax(0,2fr)]">
+                <span
+                  aria-hidden
+                  className={cn(
+                    "inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold",
+                    state === "done" && "bg-[var(--success)] text-[var(--on-primary)]",
+                    state === "current" && "bg-[var(--primary)] text-[var(--ink)]",
+                    state === "upcoming" && "bg-[var(--surface-alt)] text-[var(--muted)]",
                   )}
-                </li>
-              );
-            })}
-          </ol>
-        </div>
+                >
+                  {state === "done" ? <CheckIcon /> : index + 1}
+                </span>
+                <span className={cn("text-sm font-semibold tracking-[-0.02em]", state === "upcoming" ? "text-[var(--body)]" : "text-[var(--ink)]")}>
+                  {field ? <label htmlFor={`sla-${field}`}>{rung.label}</label> : rung.label}
+                  <span className="sr-only">{state === "done" ? ", passed" : state === "current" ? ", next" : ""}</span>
+                </span>
+                {field ? (
+                  <input
+                    id={`sla-${field}`}
+                    type="text"
+                    inputMode="text"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={texts[field]}
+                    disabled={saving}
+                    aria-invalid={invalid || undefined}
+                    aria-describedby={`sla-${field}-help`}
+                    onChange={(event) => setTexts((current) => (current ? { ...current, [field]: event.target.value } : current))}
+                    onBlur={() => {
+                      // Tidy "2m" into "120 seconds" once the person leaves the field, the board's own form.
+                      const seconds = parsed?.[field];
+                      if (seconds) setTexts((current) => (current ? { ...current, [field]: formatDuration(seconds) } : current));
+                    }}
+                    className={cn(
+                      "box-border h-9 w-full rounded-[8px] border bg-[var(--surface)] px-3 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--ink)] outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-60",
+                      invalid ? "border-[var(--error)]" : "border-[var(--border-strong)]",
+                    )}
+                  />
+                ) : (
+                  <span className="text-sm text-[var(--muted)]">From the start</span>
+                )}
+                <span id={field ? `sla-${field}-help` : undefined} className={cn("text-xs leading-[1.5] tracking-[-0.01em]", invalid ? "text-[var(--error-ink)]" : "text-[var(--muted)]")}>
+                  {invalid ? "Not a duration — try “45 seconds” or “4 hours”." : rung.effect}
+                </span>
+              </li>
+            );
+          })}
+        </ol>
+        {problem && complete && (
+          <p role="alert" className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--error-ink)]">{problem}</p>
+        )}
       </SettingsCard>
 
       <InboundSettingsCards inbound={inbound} disabled={saving} />
