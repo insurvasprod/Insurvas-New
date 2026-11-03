@@ -14,13 +14,13 @@ const groupId = (key: string) => `partner-lead-group-${key}`;
 
 function InformationGroup({ group }: { group: SnapshotGroup }) {
   return (
-    <section id={groupId(group.key)} aria-labelledby={`${groupId(group.key)}-heading`} className="min-w-0 scroll-mt-24 px-5 py-4">
-      <h3 id={`${groupId(group.key)}-heading`} className="m-0 text-sm font-semibold text-foreground">{group.label}</h3>
-      <dl className="m-0 mt-3 grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2 xl:grid-cols-3">
+    <section id={groupId(group.key)} aria-labelledby={`${groupId(group.key)}-heading`} className="grid min-w-0 gap-x-6 gap-y-2 px-5 py-3 md:grid-cols-[8rem_minmax(0,1fr)]">
+      <h3 id={`${groupId(group.key)}-heading`} className="m-0 pt-0.5 text-sm font-semibold text-foreground">{group.label}</h3>
+      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-2.5 lg:grid-cols-3">
         {group.fields.map((field) => (
           <div key={field.key} className="min-w-0">
-            <dt className="text-xs font-medium leading-4 text-muted-foreground">{field.label}</dt>
-            <dd className="m-0 mt-1 break-words text-sm font-medium leading-5 text-foreground">{field.value}</dd>
+            <dt className="text-xs leading-4 text-muted-foreground">{field.label}</dt>
+            <dd className="m-0 break-words text-sm font-medium leading-5 text-foreground">{field.value}</dd>
           </div>
         ))}
       </dl>
@@ -45,8 +45,8 @@ function applicationGroups(detail: PartnerLeadDetail): SnapshotGroup[] {
 
 function Submission({ detail, groups }: { detail: PartnerLeadDetail; groups: SnapshotGroup[] }) {
   return (
-    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="min-w-0 overflow-hidden rounded-lg border border-border bg-card outline-none">
-      <div className="flex items-center gap-1.5 border-b border-border px-5 py-3">
+    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="min-h-full min-w-0 overflow-hidden rounded-lg border border-border bg-card outline-none">
+      <div className="flex items-center gap-1.5 border-b border-border px-5 py-2.5">
         <h2 className="m-0 text-base font-semibold text-foreground">Application</h2>
         <InfoTip label="About this application">The form as it was submitted. It is view only; your agency works the lead from here.</InfoTip>
       </div>
@@ -60,7 +60,7 @@ function Submission({ detail, groups }: { detail: PartnerLeadDetail; groups: Sna
 
 function CallUpdates({ detail }: { detail: PartnerLeadDetail }) {
   return (
-    <div id="partner-lead-call-updates" role="tabpanel" aria-labelledby="partner-lead-tab-call-updates" className="min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
+    <div id="partner-lead-call-updates" role="tabpanel" aria-labelledby="partner-lead-tab-call-updates" className="min-h-full min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
       {!detail.timeline.length ? <p className="m-0 py-8 text-center text-sm text-muted-foreground">No call or status updates yet.</p> : (
         <ol className="m-0 flex list-none flex-col p-0">
           {detail.timeline.map((event, index) => (
@@ -86,7 +86,7 @@ function CallUpdates({ detail }: { detail: PartnerLeadDetail }) {
 
 function SharedNotes({ detail }: { detail: PartnerLeadDetail }) {
   return (
-    <div id="partner-lead-notes" role="tabpanel" aria-labelledby="partner-lead-tab-notes" className="min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
+    <div id="partner-lead-notes" role="tabpanel" aria-labelledby="partner-lead-tab-notes" className="min-h-full min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
       {!detail.notes.length ? <p className="m-0 py-8 text-center text-sm text-muted-foreground">No notes have been shared with you yet.</p> : (
         <ol className="m-0 list-none divide-y divide-border p-0">
           {detail.notes.map((note, index) => (
@@ -107,7 +107,7 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
   const [tab, setTab] = useState<"overview" | "call-updates" | "notes">("overview");
 
   return (
-    <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4">
+    <div className="m-stagger flex w-full min-w-0 flex-1 flex-col gap-4 lg:min-h-[calc(100dvh_-_var(--top-bar-h,56px)_-_3.5rem)]">
       <PageHeader
         title={detail.customer}
         description={`Submitted by ${detail.submittedBy.name}`}
@@ -118,6 +118,7 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
         onSelect={(key) => setTab(key as typeof tab)}
         searchable
         collapsible
+        fitHeight
         searchNoun="this lead"
         groups={[{ key: "lead", label: "This Lead", sections: ["overview", "call-updates", "notes"] }]}
         sections={[
