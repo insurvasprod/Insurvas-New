@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ChevronDown, FileText, Languages, Lock, MessageSquare, Phone, UserRound } from "lucide-react";
+import { ChevronDown, FileText, Languages, MessageSquare, Phone, UserRound } from "lucide-react";
 
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ViewTabs } from "@/components/ui/view-tabs";
@@ -15,18 +16,12 @@ import type { SnapshotGroup } from "@/lib/partnerLeads/view";
 
 function InformationGroup({ group }: { group: SnapshotGroup }) {
   return (
-    <details open className="group min-w-0 break-inside-avoid rounded-lg border border-border bg-card">
-      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg px-4 py-3 outline-none transition-colors hover:bg-[var(--surface-alt)] focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[var(--primary-soft)] text-[var(--accent-ink)]">
-          <FileText aria-hidden="true" className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-foreground">{group.label}</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">{group.fields.length} {group.fields.length === 1 ? "field" : "fields"}</span>
-        </span>
-        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
+    <details open className="group min-w-0">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 outline-none transition-colors hover:bg-[var(--surface-alt)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform group-[&:not([open])]:-rotate-90" />
+        <span className="min-w-0 truncate text-sm font-semibold text-foreground">{group.label}</span>
       </summary>
-      <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 border-t border-border px-4 py-3 sm:grid-cols-2 xl:grid-cols-4">
+      <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 px-4 pb-4 pl-10 sm:grid-cols-2 xl:grid-cols-4">
         {group.fields.map((field) => (
           <div key={field.key} className="min-w-0">
             <dt className="text-xs font-medium leading-4 text-muted-foreground">{field.label}</dt>
@@ -51,13 +46,14 @@ function Submission({ detail }: { detail: PartnerLeadDetail }) {
   };
   const groups = [...detail.groups, recordGroup];
   return (
-    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="grid min-w-0 gap-3 outline-none">
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Lock className="size-3.5 shrink-0" aria-hidden="true" />
-        Form as submitted · view only
-      </p>
-      {!detail.groups.length && <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
-      {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
+    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="min-w-0 overflow-hidden rounded-lg border border-border bg-card outline-none">
+      <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <h2 className="m-0 flex items-center gap-1.5 text-base font-semibold text-foreground">Application<InfoTip label="About this application">The form as it was submitted. It is view only; your agency works the lead from here.</InfoTip></h2>
+      </div>
+      {!detail.groups.length && <p className="m-0 border-b border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
+      <div className="divide-y divide-border">
+        {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
+      </div>
     </div>
   );
 }
@@ -118,8 +114,6 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
       <PageHeader
         title={detail.customer}
         description={`Submitted by ${detail.submittedBy.name}`}
-        visible
-        infoDescription
         breadcrumbs={[{ label: "Lead Pipeline", href: backHref }, { label: detail.customer }]}
         meta={<div className="mt-1.5 flex flex-wrap items-center gap-2">
           <StatusChip tone={stageTone(detail)}>{stageLabel(detail)}</StatusChip>
@@ -135,7 +129,7 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
             idPrefix="partner-lead-tab"
             controls={activePanel}
           />
-          <Button asChild><Link href="/partner/messages"><MessageSquare aria-hidden="true" />Message your agent</Link></Button>
+          <Button asChild variant="outline" size="icon" title="Message your agent"><Link href="/partner/messages" aria-label="Message your agent"><MessageSquare aria-hidden="true" /></Link></Button>
         </div>}
       />
       {tab === "overview" ? <Submission detail={detail} /> : tab === "call-updates" ? <CallUpdates detail={detail} /> : <SharedNotes detail={detail} />}

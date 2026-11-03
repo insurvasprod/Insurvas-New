@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, CircleAlert, Clock3, Hand, Inbox, Languages, Send } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Hand, Inbox, Languages, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
@@ -24,6 +24,8 @@ import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
 import { productLineLabel } from "@/lib/format/productLine";
 import { oldestOpenLabel } from "@/lib/format/age";
+import { isHeld, isSold } from "@/lib/partnerLeads/insights";
+import { localDay, shiftDay, trendSeries } from "@/lib/partnerLeads/trend";
 import { expectedEarningsFact, termLabel } from "@/lib/partners/payout";
 import { countersFromLanes } from "@/lib/partnerLeads/counters";
 import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
@@ -226,6 +228,14 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const earningsHelp = rate
     ? `Your rate is ${rate}. The figure here is that rate on the conversions above; your agency's published statement is what is actually paid.`
     : "Conversions in the last 30 days. Your agency's published statement is what is actually paid.";
+  // The small line in each tile: the last 14 days of the leads loaded, one point a day.
+  const tileSeries = useMemo(() => {
+    if (now === null) return null;
+    const to = localDay(new Date(now))!;
+    const window = { from: shiftDay(to, -13), to, now };
+    const perDay = (match: (row: PartnerLeadRow) => boolean) => trendSeries(allRows.filter(match).map((row) => row.submittedAt), window).buckets.map((bucket) => bucket.count);
+    return { submitted: perDay(() => true), claimed: perDay(isHeld), converted: perDay(isSold), open: perDay((row) => laneOf(row) !== "closed" && laneOf(row) !== "converted") };
+  }, [allRows, now]);
   const stuck = now !== null && oldestOpenIsStuck(data?.oldestOpenAt, now, data?.ageThresholds);
 
   /** Where a lead's record lives, carrying the view so Back returns to the list as it was. */
@@ -271,10 +281,10 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const toolbar = <DataToolbar
     actions={<>
       <IconViewSwitch label="Pipeline view" options={[{ key: "board", label: "Board view", icon: "grid" }, { key: "table", label: "Table view", icon: "list" }]} value={view} onChange={setView} />
-      <FilterButton open={moreFilters} controls="partner-lead-filters" onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
+      <FilterButton iconOnly open={moreFilters} controls="partner-lead-filters" onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
       {/* The label is for the room it has: on a phone the icon carries it, with the name still on
           the control for anyone listening rather than looking. */}
-      <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} labelClassName="hidden sm:inline" />
+      <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} labelClassName="sr-only" className="px-2.5" />
     </>}
   >
     <SelectMenu
@@ -402,7 +412,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const empty = <div className="flex min-h-[24rem] flex-1 items-center justify-center">
     {search.trim() || hasFilters
       ? <NoMatches noun="leads" onClear={clearAll} />
-      : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline"><a href="/partner/submit-lead">Submit a lead</a></Button>} />}
+      : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline" size="sm"><a href="/partner/submit-lead">Submit New Lead</a></Button>} />}
   </div>;
 
   const loadMore = canLoadMore && data
@@ -465,7 +475,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
         {role === "partner_admin" && <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>}
         <TableCell><Age row={row} now={now} thresholds={data?.ageThresholds} /></TableCell>
         <TableCell className="tabular-nums text-muted-foreground">{when(row.submittedAt)}</TableCell>
-        <TableCell className="text-right"><Button asChild variant="outline" size="sm"><Link href={recordHref(row.id)}>View</Link></Button></TableCell>
+        <TableCell className="text-right"><Button asChild variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground"><Link href={recordHref(row.id)} title="Open the lead" aria-label={`Open the lead for ${row.customer}`}><ArrowUpRight aria-hidden="true" /></Link></Button></TableCell>
       </TableRow>)}
     </TableBody>
   </Table>;
@@ -488,54 +498,48 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
     <PageHeader
       title="Lead Pipeline"
       description={role === "partner_admin" ? "Track leads submitted by you and your team." : "Track the leads you submitted."}
-      visible
-      infoDescription
+      hideTitle
+      breadcrumbs={[{ label: "Leads" }, { label: "Lead Pipeline" }]}
       actions={<>
         {data && <LiveStamp updatedAt={data.generatedAt} staleAfterSeconds={45} />}
-        {partnerStatus === "active" && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
+        {partnerStatus === "active" && <Button asChild size="sm"><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
       </>}
     />
     {error && data && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
-    {/*
-      The counters in the board's own lanes (lib/partnerLeads/counters.ts), as the v3 stat cards
-      (UI-CONSISTENCY §4a) the partner home already uses — the same four figures, one click apart,
-      had two different looks. The row's label says whose leads are being counted, which the page
-      used to say only inside the header's (i).
-    */}
-    {/* Two across on a phone, not four stacked: four full-width cards put the first lead 1.9
-        screens down (measured at 375 before this change). */}
-    <StatRow label={scopeLabel} className="grid-cols-2 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-      <StatCard
+    {/* The counters in the board's own lanes (lib/partnerLeads/counters.ts), as the dashboard tiles the other
+        partner pages use: a round icon, the figure, the last two weeks as a line, one plain sentence. */}
+    <KpiRow label={scopeLabel}>
+      <KpiTile
         icon={Send}
         label="Submitted today"
-        period="today"
         value={figure(counters?.submittedToday)}
-        fact={{ label: "Since midnight, your time" }}
+        series={tileSeries?.submitted}
+        note="Since midnight, your time"
       />
-      <StatCard
+      <KpiTile
         icon={Hand}
         label="With a closer"
         value={figure(counters?.claimed)}
-        fact={{ label: "Claimed, or on a call now" }}
+        series={tileSeries?.claimed}
+        note="Claimed, or on a call now"
       />
-      <StatCard
+      <KpiTile
         icon={CheckCircle2}
-        label="Converted"
-        period="30 days"
-        labelTitle={earningsHelp}
+        label="Converted · 30 days"
+        info={earningsHelp}
         value={figure(counters?.converted)}
-        /* The fact carries a label and a value, so it takes the footer alone: a third item clipped
-           the label at 1536 (measured). Statements is in the sidebar under Organisation. */
-        fact={earningsFact ?? { label: "Became business" }}
+        series={tileSeries?.converted}
+        note={earningsFact ? <>{earningsFact.label}{earningsFact.value !== undefined && <> · <span className="font-semibold text-foreground">{earningsFact.value}</span></>}</> : "Became business"}
       />
-      <StatCard
+      <KpiTile
         icon={Inbox}
         label="Still open"
         value={figure(counters?.stillOpen)}
         tone={stuck ? "warn" : "default"}
-        fact={{ label: now === null ? "Not yet finished" : oldestOpenLabel(counters?.stillOpen ?? 0, data?.oldestOpenAt, now) }}
+        series={tileSeries?.open}
+        note={now === null ? "Not yet finished" : oldestOpenLabel(counters?.stillOpen ?? 0, data?.oldestOpenAt, now)}
       />
-    </StatRow>
+    </KpiRow>
     <TableCard className="flex min-h-[28rem] min-w-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
   </div>;
 }
