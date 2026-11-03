@@ -1974,7 +1974,7 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) {
 }
 /* The one card: 472px of content inside 40px of padding. */
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-card] {
-  padding: 40px;
+  padding: 28px 40px 32px;
   border-radius: var(--radius-xl);
   background: var(--surface);
   box-shadow: 0 2px 4px rgba(0, 0, 0, .12), 0 40px 80px -40px rgba(0, 0, 0, .55);
@@ -1990,8 +1990,8 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) {
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] h1 { font-size: 1.75rem; line-height: 1.15; color: var(--on-dark); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] p { color: var(--nav-muted); }
 /* "Have an account? Sign in" on the legal links' line. */
-.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.75rem; margin-top: 1.5rem; padding-inline: 40px; }
-.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > * { margin: 0; padding-inline: 0; }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.75rem; margin-top: 1rem; padding-inline: 40px; }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > [data-auth-footer], .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > * { margin: 0; padding-inline: 0; }
 @media (max-width: 560px) { .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { padding-inline: 20px; } }
 /* A heading that still sits inside the card (a screen that did not lift it) keeps card colours. */
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-card] [data-auth-heading] h1 { color: var(--ink); }
