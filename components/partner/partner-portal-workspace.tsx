@@ -21,7 +21,7 @@ import {
   CardTitle,
   cardSurface,
 } from "@/components/ui/card";
-import { CheckCircle2, FileText, Send, Users } from "lucide-react";
+import { Check, CheckCircle2, FileText, PanelLeftClose, PanelLeftOpen, Send, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
 import { confirmAction } from "@/components/ui/confirm-dialog";
@@ -343,6 +343,16 @@ export function PartnerLeadForm({
   // The rest of the form opens once the number has been screened (and a DNC warning acknowledged).
   // After that it stays open: changing the number re-screens it in place, as the board draws it.
   const [formOpened, setFormOpened] = useState(false);
+  // The side navigation folds to numbered dots so the form gets the room; remembered per browser.
+  const [railFolded, setRailFolded] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
+    try { setRailFolded(window.localStorage.getItem("insurvas.partner.submitRailFolded") === "1"); } catch { /* storage blocked: start open */ }
+  }, []);
+  function foldRail(next: boolean) {
+    setRailFolded(next);
+    try { window.localStorage.setItem("insurvas.partner.submitRailFolded", next ? "1" : "0"); } catch { /* storage blocked: it still folds */ }
+  }
   const [consentGiven, setConsentGiven] = useState(false);
   const consentRef = useRef<HTMLInputElement>(null);
   const [screenedAt, setScreenedAt] = useState<number | null>(null);
@@ -1200,6 +1210,8 @@ export function PartnerLeadForm({
             : "Needs acknowledgement"
           : "Internal warning"
         : "DNC/TCPA clear";
+  const duplicateLine = duplicateMatches.length ? "Review match" : duplicateState === "match" ? "Possible match" : duplicateState === "clear" ? "No match" : "Not yet";
+  const screened = screening?.outcome === "clear";
   const warningBlock = screening?.warning && (
     <div className="portal-partner-submit-callout is-warning">
       <p className="font-medium">Compliance warning</p>
@@ -1308,6 +1320,19 @@ export function PartnerLeadForm({
   return (
     <>
       <LeaveGuard dirty={!preview && formOpened && Boolean(screening) && hasDraftAnswers} mode="autosaved-draft" onPause={saveAndPause} onDiscard={() => undefined} what="this lead" />
+      {/* The process, along the top: where this lead is and what is next. */}
+      <ol className="portal-partner-submit-topsteps" aria-label="Lead submission steps">
+        {([
+          ["Screen phone", screened ? "done" : "current"],
+          ["Application", !screened ? "next" : canSubmit ? "done" : "current"],
+          ["Review and submit", canSubmit ? "current" : "next"],
+        ] as const).map(([label, state], index) => (
+          <li key={label} data-state={state} aria-current={state === "current" ? "step" : undefined}>
+            <span className="portal-partner-submit-topstep-dot" aria-hidden="true">{state === "done" ? <Check /> : index + 1}</span>
+            <span>{label}</span>
+          </li>
+        ))}
+      </ol>
       <div className="portal-partner-submit-product-bar" role="group" aria-labelledby="partner-lead-details-label">
         <h2 id="partner-lead-details-label" className="sr-only">Lead setup</h2>
         <div className="portal-partner-submit-product-row has-markets">
@@ -1333,8 +1358,42 @@ export function PartnerLeadForm({
           </div>
         </div>
       </div>
-      {/* Nothing to show under the setup row until the number is screened, or the screen says something. */}
-      <div className="portal-partner-submit-body" hidden={!formOpened && !(screeningError || rejectionNotice || dncPending)}>
+      <div className="portal-partner-submit-body" data-folded={railFolded ? "" : undefined}>
+        <nav className="portal-partner-submit-rail" aria-label="Application sections and checks">
+          <div className="portal-partner-submit-rail-head">
+            {!railFolded && <span>Sections</span>}
+            <Button type="button" variant="ghost" size="icon" aria-label={railFolded ? "Show the sections" : "Fold the sections"} title={railFolded ? "Show the sections" : "Fold the sections"} onClick={() => foldRail(!railFolded)}>
+              {railFolded ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+            </Button>
+          </div>
+          <ol className="portal-partner-submit-rail-list">
+            {sections.map((item, index) => {
+              const left = formOpened ? requiredLeft(item) : 0;
+              const done = formOpened && left === 0;
+              return (
+                <li key={item.section_key}>
+                  <button
+                    type="button"
+                    disabled={!formOpened}
+                    title={railFolded ? item.label : undefined}
+                    aria-label={railFolded ? item.label : undefined}
+                    onClick={() => document.getElementById(`partner-section-${productCode}-${item.section_key}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  >
+                    <span className="portal-partner-submit-topstep-dot" data-state={done ? "done" : "next"} aria-hidden="true">{done ? <Check /> : index + 1}</span>
+                    {!railFolded && <><span className="portal-partner-submit-rail-label">{item.label}</span>{formOpened && left > 0 && <span className="portal-partner-submit-rail-left">{left} left</span>}</>}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+          {!railFolded && (
+            <dl className="portal-partner-submit-rail-checks">
+              <div><dt>Phone</dt><dd data-ok={screened ? "" : undefined}>{screening || screeningBusy ? phoneLabel : "Not yet"}</dd></div>
+              <div><dt>Duplicate</dt><dd data-ok={duplicateState === "clear" ? "" : undefined}>{duplicateLine}</dd></div>
+              <div><dt>Consent</dt><dd data-ok={consentGiven ? "" : undefined}>{consentGiven ? "Yes" : "Not yet"}</dd></div>
+            </dl>
+          )}
+        </nav>
         <form
           id={`partner-form-${productCode}`}
           className="portal-partner-submit-main"

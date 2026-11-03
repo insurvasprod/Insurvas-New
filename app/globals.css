@@ -4010,9 +4010,36 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .portal-partner-submit-save-status { flex-basis: 100%; }
 }
 
-/* Submit a lead (owner pick A, 2026-11-04): the setup row, then one centred column. The hero, the steps,
-   the sections preview and the checks panel are gone, so the body has nothing beside it. */
-.portal-partner-submit-page .portal-partner-submit-body { display: block; }
-.portal-partner-submit-page .portal-partner-submit-main { max-width: 52rem; margin-inline: auto; }
-
-.portal-partner-submit-page .portal-partner-submit-body[hidden] { display: none; }
+/* Submit a lead (owner, 2026-11-04): the process runs along the top, the details live in a side
+   navigation that folds, and the form fills the rest of the card. */
+.portal-partner-submit-page .portal-partner-submit-workspace { min-height: calc(100dvh - var(--top-bar-h, 56px) - 8.5rem); }
+.portal-partner-submit-page .portal-partner-submit-flow { flex: 1 1 auto; min-height: 100%; }
+.portal-partner-submit-page .portal-partner-submit-topsteps { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 28px; margin: 0; padding: 14px 22px; list-style: none; border-bottom: 1px solid var(--border); }
+.portal-partner-submit-page .portal-partner-submit-topsteps > li { display: flex; align-items: center; gap: 9px; color: var(--muted); font-size: 14px; font-weight: 600; letter-spacing: -.02em; }
+.portal-partner-submit-page .portal-partner-submit-topsteps > li[data-state="current"], .portal-partner-submit-page .portal-partner-submit-topsteps > li[data-state="done"] { color: var(--ink); }
+.portal-partner-submit-page .portal-partner-submit-topstep-dot { display: inline-flex; width: 24px; height: 24px; flex: none; align-items: center; justify-content: center; border-radius: 9999px; background: var(--surface-alt); color: var(--muted); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.portal-partner-submit-page .portal-partner-submit-topstep-dot svg { width: 13px; height: 13px; }
+.portal-partner-submit-page li[data-state="current"] > .portal-partner-submit-topstep-dot { background: var(--primary); color: var(--on-primary); }
+.portal-partner-submit-page li[data-state="done"] > .portal-partner-submit-topstep-dot, .portal-partner-submit-page .portal-partner-submit-topstep-dot[data-state="done"] { background: var(--success); color: #fff; }
+.portal-partner-submit-page .portal-partner-submit-body { display: grid; grid-template-columns: 15rem minmax(0, 1fr); flex: 1 1 auto; align-items: stretch; border-top: 1px solid var(--border); }
+.portal-partner-submit-page .portal-partner-submit-body[data-folded] { grid-template-columns: 3.5rem minmax(0, 1fr); }
+.portal-partner-submit-page .portal-partner-submit-main { max-width: none; margin: 0; padding: 24px 26px; }
+.portal-partner-submit-page .portal-partner-submit-rail { display: flex; flex-direction: column; gap: 14px; padding: 12px 10px 16px; border-right: 1px solid var(--border); min-width: 0; }
+.portal-partner-submit-page .portal-partner-submit-rail-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-left: 8px; color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; }
+.portal-partner-submit-page .portal-partner-submit-body[data-folded] .portal-partner-submit-rail-head { justify-content: center; padding-left: 0; }
+.portal-partner-submit-page .portal-partner-submit-rail-list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.portal-partner-submit-page .portal-partner-submit-rail-list button { display: flex; width: 100%; align-items: center; gap: 10px; min-height: 40px; padding: 6px 8px; border: 0; border-radius: 8px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; font-weight: 500; letter-spacing: -.02em; text-align: left; cursor: pointer; }
+.portal-partner-submit-page .portal-partner-submit-body[data-folded] .portal-partner-submit-rail-list button { justify-content: center; padding-inline: 0; }
+.portal-partner-submit-page .portal-partner-submit-rail-list button:not(:disabled):hover { background: var(--surface-alt); }
+.portal-partner-submit-page .portal-partner-submit-rail-list button:disabled { color: var(--muted); cursor: default; }
+.portal-partner-submit-page .portal-partner-submit-rail-label { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-partner-submit-page .portal-partner-submit-rail-left { flex: none; color: var(--warning-ink); font-size: 12px; font-weight: 500; }
+.portal-partner-submit-page .portal-partner-submit-rail-checks { margin: auto 0 0; padding: 12px 8px 0; border-top: 1px solid var(--border); display: grid; gap: 8px; font-size: 13px; }
+.portal-partner-submit-page .portal-partner-submit-rail-checks > div { display: flex; justify-content: space-between; gap: 10px; }
+.portal-partner-submit-page .portal-partner-submit-rail-checks dt { color: var(--muted); }
+.portal-partner-submit-page .portal-partner-submit-rail-checks dd { margin: 0; color: var(--body); font-weight: 500; }
+.portal-partner-submit-page .portal-partner-submit-rail-checks dd[data-ok] { color: var(--success-ink); }
+@media (max-width: 860px) {
+  .portal-partner-submit-page .portal-partner-submit-body, .portal-partner-submit-page .portal-partner-submit-body[data-folded] { grid-template-columns: minmax(0, 1fr); }
+  .portal-partner-submit-page .portal-partner-submit-rail { border-right: 0; border-bottom: 1px solid var(--border); }
+}
