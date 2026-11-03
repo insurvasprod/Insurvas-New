@@ -14,9 +14,7 @@
   "eyebrow": {},
   "loading-text": {},
   "hand-pager": {},
-  "legacy-chip": {
-    "components/marketing/landing-mocks.tsx": 2
-  },
+  "legacy-chip": {},
   "btn-helper": {},
   "pill-button": {},
   "hand-filter-panel": {},
@@ -30,8 +28,7 @@
   "local-chip": {
     "components/app/confirm-email-panel.tsx": 1,
     "components/app/pipeline-views.tsx": 1,
-    "components/app/settings/sales/underwriting.tsx": 1,
-    "components/marketing/landing-mocks.tsx": 1
+    "components/app/settings/sales/underwriting.tsx": 1
   },
   "raw-h1": {},
   "hand-popover": {

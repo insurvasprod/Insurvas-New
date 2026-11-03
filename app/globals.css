@@ -2169,6 +2169,43 @@ body {
   font-family: var(--font-brand);
 }
 
+/* The landing page (owner decision 2026-11-03, BRAND.md): Inter Tight for display, Inter for body,
+   and an italic serif accent for a single emphasised word. Montserrat stays in the wordmark. Comes
+   after .type-brand so it wins on the landing root, which carries both classes. */
+.landing-type {
+  --font-brand: var(--font-inter-tight), var(--font-inter), 'Inter', system-ui, sans-serif;
+  --font-display: var(--font-brand);
+  --font-accent-serif: var(--font-accent), 'Instrument Serif', Georgia, serif;
+  font-family: var(--font-sans);
+}
+
+/* The landing palette (owner, 2026-11-03): the marketing site runs on two grounds — white, and the
+   deep olive already under the hero, the features band and the footer — so the page reads as green
+   and white instead of grey and white. The cause was hue, not count: the app's neutrals are blue
+   (--canvas #f1f3f7 is ~220°, --muted #59606b ~218°) while the brand is green (~165°), so body text
+   and every hairline quietly fought the brand. Re-tinted to the brand's hue here.
+
+   Scoped to the landing root on purpose: --muted alone is read by 220 files, so :root stays exactly
+   as it is and the apps are untouched. Light only — the dark theme has no grey/white problem and
+   keeps the app's values. Every text pair below clears 4.5:1 on its own ground. */
+:root:not(.dark) .landing-type {
+  --canvas:         #ffffff;
+  --surface:        #ffffff;
+  --surface-alt:    #eaf4f0;
+  --surface-sunken: #e0ebe6;
+  --border:         #cddcd5;
+  --border-strong:  #76857e;
+  --body:           #2b3630;
+  --muted:          #51625b;
+  /* "Informational" keeps its own meaning next to success green and warning amber — teal, not blue. */
+  --info-surface:   #dff3ef;
+  --info-ink:       #0f6b63;
+}
+
+/* <body> sits outside the landing root, so it kept the app's blue-grey while the page above it went
+   white — visible on overscroll and under a short page. The ground follows the page. */
+:root:not(.dark) body:has(> .landing-type) { background: #ffffff; }
+
 /* Wide data grids scroll inside their own frame; they must never widen the app shell itself.
    `clip`, not `hidden`: hidden made <body> a scroll container that never scrolls (the document
    does), and every position:sticky inside it — the top bar first — stuck to that instead of the

@@ -1,0 +1,100 @@
+/* The hero: deep olive in both themes, the promise centred above the product preview. */
+/* /pricing borrows the same ground for its own hero (2026-11-03). */
+.pricingHero { background: color-mix(in srgb, var(--footer-bg) 62%, black); color: var(--nav-ink); }
+.hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  padding-bottom: 0;
+  background: color-mix(in srgb, var(--footer-bg) 62%, black);
+  color: var(--nav-ink);
+}
+.backdrop {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background:
+    radial-gradient(60% 55% at 50% 0%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%),
+    radial-gradient(70% 60% at 85% 85%, color-mix(in srgb, var(--primary) 7%, transparent), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--footer-bg) 85%, black) 0%, transparent 60%);
+}
+/* A fine survey grid, fading out towards the edges: the ledger the product sits on. */
+.backdrop::after {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(234 246 242 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(234 246 242 / 4%) 1px, transparent 1px);
+  background-size: 56px 56px;
+  content: "";
+  -webkit-mask-image: radial-gradient(70% 60% at 50% 35%, rgb(0 0 0) 30%, transparent 100%);
+  mask-image: radial-gradient(70% 60% at 50% 35%, rgb(0 0 0) 30%, transparent 100%);
+}
+
+.copy { display: flex; width: min(100% - 48px, 1000px); flex-direction: column; align-items: center; margin: 0 auto; padding: clamp(100px, 13vh, 132px) 0 0; text-align: center; }
+.audience {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 22px;
+  border: 1px solid rgb(234 246 242 / 14%);
+  border-radius: 999px;
+  background: rgb(234 246 242 / 5%);
+  padding: 7px 16px 7px 12px;
+  color: var(--nav-ink);
+  font-size: 13.5px;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+}
+.dot { position: relative; width: 8px; height: 8px; border-radius: 50%; background: var(--primary); }
+.dot::after { position: absolute; inset: -4px; border: 1px solid var(--primary); border-radius: 50%; content: ""; animation: ping 2.4s cubic-bezier(0, 0, .2, 1) infinite; }
+@keyframes ping { 0% { opacity: .8; transform: scale(.6); } 80%, 100% { opacity: 0; transform: scale(1.8); } }
+
+.title { margin: 0; font: 600 clamp(44px, min(6.3vw, 8.6vh), 88px)/1 var(--font-brand); letter-spacing: -.032em; text-wrap: balance; }
+.wordWrap { display: inline-block; overflow: hidden; padding: 0 .06em .12em; margin: 0 -.06em -.12em; vertical-align: top; }
+.word { display: inline-block; transform-origin: 0 100%; }
+/* The one accent word: an italic serif, a touch larger to match the sans x-height. It starts in the
+   brand green and dissolves to the right into --nav-ink — the exact colour of the words around it —
+   so the accent hands the line back to the headline instead of stopping dead (owner, 2026-11-03;
+   the underline it replaces is gone). The flat colour below is the fallback: without background-clip
+   a transparent fill would render the word invisible. */
+.really { color: var(--primary); font-family: var(--font-accent-serif); font-size: 1.1em; font-style: italic; font-weight: 400; letter-spacing: -.01em; line-height: .9; }
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+  .really {
+    background: linear-gradient(to right, var(--primary) 6%, var(--nav-ink) 96%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+}
+/* Forced-colours mode paints no backgrounds, so clipped text would disappear. */
+@media (forced-colors: active) {
+  .really { background: none; color: CanvasText; forced-color-adjust: none; }
+}
+
+.description { max-width: 700px; margin: 18px 0 0; color: var(--nav-muted); font-size: clamp(16px, 1.25vw, 18px); line-height: 1.6; }
+.actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 26px; }
+.proof { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin: 18px 0 0; padding: 0; color: var(--nav-muted); font-size: 13.5px; list-style: none; }
+.proof li { display: inline-flex; align-items: center; gap: 7px; }
+.proof svg { width: 15px; height: 15px; color: var(--primary); stroke-width: 2.5; }
+
+/* The device sits under the copy and runs off the bottom of the hero into the next section. */
+.deviceWrap { position: relative; max-height: clamp(380px, 46vw, 640px); overflow: hidden; }
+.deviceWrap::after { position: absolute; z-index: 3; right: 0; bottom: 0; left: 0; height: 160px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--footer-bg) 62%, black) 90%); content: ""; pointer-events: none; }
+
+/* Hidden start state for the entrance, only when a script will animate it. A late fallback makes
+   sure nothing can stay hidden if the script never runs. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .word { opacity: 0; transform: translateY(105%); animation: reveal-fallback 1ms linear 2.6s forwards; }
+  .hero [data-enter] { opacity: 0; animation: reveal-fallback 1ms linear 2.6s forwards; }
+}
+@keyframes reveal-fallback { to { opacity: 1; transform: none; } }
+
+@media (max-width: 760px) {
+  .copy { width: calc(100% - 32px); padding-top: 104px; }
+  .audience { font-size: 12px; text-align: left; }
+  .proof { flex-direction: column; align-items: center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot::after { animation: none; }
+}

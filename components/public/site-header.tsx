@@ -25,12 +25,21 @@ import { ThemeSwitch } from "@/components/public/theme-switch";
  * button and menu fit a 320px screen; below that (fold covers) the trial button moves into the
  * menu. The menu also carries the light/dark switch the bar drops below sm.
  */
+/**
+ * The order follows the page (owner, 2026-11-03): Home, then each section in the order a visitor
+ * scrolls past it — "Who it's for" really is the band directly under the hero, then the features,
+ * then the price, then the questions. "Product" pointed at the True CPA section and told a
+ * first-time visitor nothing; it is Home now, and that section was removed on 3 Nov. Pricing stays
+ * the full page, not the teaser, because it is a destination people expect to land on and `key`
+ * marks it current there.
+ * One list, both layouts — the bar and the popover menu below xl both render it.
+ */
 const NAV: Array<{ href: string; label: string; key?: "home" | "pricing" }> = [
-  { href: "/#product", label: "Product" },
-  { href: "/#features", label: "Features" },
+  { href: "/", label: "Home", key: "home" },
   { href: "/#industries", label: "Who it's for" },
-  { href: "/#faq", label: "FAQ" },
+  { href: "/#features", label: "Features" },
   { href: "/pricing", label: "Pricing", key: "pricing" },
+  { href: "/#faq", label: "FAQ" },
 ];
 
 export function SiteHeader({ current, floating = false }: { current?: "home" | "pricing"; floating?: boolean }) {
@@ -50,12 +59,18 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
         // Borderless frosted glass: mostly transparent, with a strong blur and a little extra
         // saturation so whatever scrolls underneath shows through softened, like a reflection.
         className={`relative mx-auto flex items-center gap-2 overflow-visible rounded-full border-0 py-2.5 pl-4 pr-2 backdrop-blur-2xl sm:gap-3 sm:py-3 sm:pl-6 sm:pr-3 backdrop-saturate-150 transition-[max-width,background-color,box-shadow] duration-500 ease-[cubic-bezier(.16,1,.3,1)] md:gap-8 ${
-          scrolled
-            ? "max-w-6xl bg-[color-mix(in_srgb,var(--color-card)_38%,transparent)] shadow-[0_12px_40px_-24px_rgba(13,64,55,.35)]"
-            : "max-w-7xl bg-[color-mix(in_srgb,var(--color-card)_18%,transparent)] shadow-none"
+          // The landing page's hero is deep olive in both themes, so its floating pill is a solid
+          // frosted surface (2026-11-03); a near-clear pill left the links unreadable on it.
+          floating
+            ? `bg-[color-mix(in_srgb,var(--color-card)_86%,transparent)] shadow-[0_12px_40px_-20px_rgba(0,0,0,.45)] ${scrolled ? "max-w-6xl" : "max-w-7xl"}`
+            : scrolled
+              ? "max-w-6xl bg-[color-mix(in_srgb,var(--color-card)_38%,transparent)] shadow-[0_12px_40px_-24px_rgba(13,64,55,.35)]"
+              : "max-w-7xl bg-[color-mix(in_srgb,var(--color-card)_18%,transparent)] shadow-none"
         }`}
       >
-        <Link href="/" aria-current={current === "home" ? "page" : undefined} className="flex shrink-0 items-center no-underline">
+        {/* No aria-current here since 2026-11-03: the nav carries an explicit Home item, and marking
+            both it and the logo would announce the current page twice. */}
+        <Link href="/" className="flex shrink-0 items-center no-underline">
           {/* Named, so it glides into the sign-in form's logo (AuthBrand). */}
           <ViewTransition name="brand-logo" share="ribbon-morph" default="none">
             <InsurvasLogo size="public" alt="Insurvas" className={styles.introLogo} />

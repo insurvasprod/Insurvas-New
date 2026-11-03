@@ -1,0 +1,191 @@
+/* Questions: a sticky intro with the question mark, and an accordion that slides open. */
+.section { position: relative; isolation: isolate; scroll-margin-top: 80px; border-top: 1px solid var(--border); background: var(--canvas); }
+.section::before {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: radial-gradient(40% 50% at 8% 30%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 70%);
+  content: "";
+  pointer-events: none;
+}
+.inner { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); align-items: start; gap: clamp(40px, 6vw, 96px); width: min(100% - 64px, 1240px); margin: 0 auto; padding: clamp(88px, 10vw, 128px) 0; }
+.side { position: sticky; top: 112px; }
+.eyebrow { margin: 0 0 14px; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
+.title { margin: 0; color: var(--ink); font: 600 clamp(34px, 4vw, 54px)/1.04 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
+
+.list { margin: 0; padding: 0; list-style: none; }
+.item { border-bottom: 1px solid var(--border); }
+.item:first-child { border-top: 1px solid var(--border); }
+.item h3 { margin: 0; }
+.item button {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 40px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 14px;
+  border: 0;
+  background: transparent;
+  padding: 24px 0;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+.item button:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 4px; border-radius: 8px; }
+.num { color: var(--muted); font: 600 13px var(--font-sans); font-variant-numeric: tabular-nums; transition: color 200ms ease; }
+.q { font: 600 clamp(17px, 1.5vw, 20px)/1.35 var(--font-brand); letter-spacing: -.015em; }
+.icon { display: grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--border); border-radius: 50%; color: var(--ink); transition: transform 320ms cubic-bezier(.2, .8, .2, 1), background-color 200ms ease, border-color 200ms ease, color 200ms ease; }
+.icon svg { width: 17px; height: 17px; }
+@media (hover: hover) {
+  .item button:hover .icon { border-color: var(--ink); }
+}
+.item[data-open="true"] .num { color: var(--accent-ink); }
+.item[data-open="true"] .icon { border-color: var(--primary); background: var(--primary); color: var(--on-primary); transform: rotate(45deg); }
+
+.answer { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 380ms cubic-bezier(.2, .8, .2, 1); }
+.answer > div { min-height: 0; overflow: hidden; }
+.answer p { max-width: 64ch; margin: 0; padding: 0 50px 26px 54px; color: var(--body); font-size: 15.5px; line-height: 1.7; opacity: 0; transform: translateY(-4px); transition: opacity 260ms ease, transform 320ms cubic-bezier(.2, .8, .2, 1); }
+.item[data-open="true"] .answer { grid-template-rows: 1fr; }
+.item[data-open="true"] .answer p { opacity: 1; transform: none; transition-delay: 80ms; }
+
+@media (max-width: 1000px) {
+  .inner { grid-template-columns: minmax(0, 1fr); }
+  .side { position: static; }
+}
+@media (max-width: 640px) {
+  .inner { width: calc(100% - 32px); }
+  .item button { grid-template-columns: 30px minmax(0, 1fr) 32px; gap: 10px; }
+  .answer p { padding: 0 0 22px 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .answer, .answer p, .icon { transition: none; }
+}
+
+
+/* ── The questions mark ──────────────────────────────────────────────────────────────────────
+   The owner's reference is the FAQ illustration on zabalmedia.co: an isometric puzzle piece
+   carrying its own label, a "?" badge standing above it, flat tiles settled around, and the whole
+   thing assembling in on a loop. Theirs is a Lottie (61cb3955…_faq.json) — their asset — so the
+   composition and the motion are rebuilt here in our palette, with no Lottie runtime and no new
+   dependency (the manager's "study, then adapt").
+
+   Same projection as the bento's scenes (rotateX(56deg) rotateZ(-40deg)), so the page keeps one
+   illustration language. Transform and opacity only; the loop runs solely while the section is on
+   screen (data-run, set by an IntersectionObserver). Hidden below 1000px, where the column stacks. */
+.scene { position: relative; height: 292px; margin-top: 26px; perspective: 1200px; }
+.plane {
+  --px: 0deg;
+  --py: 0deg;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 320px;
+  height: 264px;
+  margin: -132px 0 0 -160px;
+  transform-style: preserve-3d;
+  transform: scale(.98) rotateX(calc(56deg + var(--py))) rotateZ(calc(-40deg + var(--px)));
+  transition: transform 650ms cubic-bezier(.2, .8, .2, 1);
+}
+.tile {
+  position: absolute;
+  transform-style: preserve-3d;
+  border-radius: 13px;
+  transform: translateZ(var(--z));
+}
+/* The plain records the piece settles onto. A touch more border than a card gets: at this size and
+   angle a 1px hairline on white all but vanishes. */
+.tile[data-tone="flat"] {
+  border: 1px solid color-mix(in srgb, var(--border) 85%, var(--ink));
+  background: var(--surface);
+  box-shadow: 0 14px 26px -18px color-mix(in srgb, var(--ink) 55%, transparent);
+}
+.tile[data-tone="soft"] {
+  border: 1px solid color-mix(in srgb, var(--primary) 38%, transparent);
+  background: var(--primary-soft);
+  box-shadow: 0 14px 26px -20px color-mix(in srgb, var(--ink) 45%, transparent);
+}
+.tile[data-tone="flat"]::before,
+.tile[data-tone="flat"]::after,
+.tile[data-tone="soft"]::before {
+  position: absolute;
+  left: 13px;
+  height: 5px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--border) 70%, var(--ink));
+  content: "";
+}
+.tile[data-tone="flat"]::before, .tile[data-tone="soft"]::before { top: 16px; width: 54%; }
+.tile[data-tone="flat"]::after { top: 29px; width: 32%; }
+.tile[data-tone="soft"]::before { background: color-mix(in srgb, var(--primary) 45%, transparent); }
+
+/* The piece itself. Solid green, not a gradient, so the tab below joins it without a seam. */
+.tile[data-tone="mark"] {
+  border-radius: 16px;
+  background: var(--primary);
+  box-shadow: 0 1px 0 color-mix(in srgb, white 45%, transparent) inset, 0 36px 54px -26px color-mix(in srgb, var(--ink) 70%, transparent);
+}
+/* The puzzle tab, so the piece reads as a piece. Same fill, half tucked under the edge. */
+.tile[data-tone="mark"]::after {
+  position: absolute;
+  top: 50%;
+  right: -19px;
+  width: 38px;
+  height: 38px;
+  margin-top: -19px;
+  border-radius: 50%;
+  background: var(--primary);
+  content: "";
+}
+/* The label lies in the isometric plane, exactly as the reference's does — it is a label on an
+   object, not a second heading, so it does not compete with the title beside it. */
+.label {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  padding: 0 20px;
+  color: var(--on-primary);
+  font: 650 20px/1.16 var(--font-brand);
+  letter-spacing: -.016em;
+}
+
+/* The question, standing off the pile. Counter-rotated to face the reader: a "?" left lying in the
+   plane reads as a squiggle at this size, and legibility wins over mimicry. */
+.badge {
+  position: absolute;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 22px 34px -18px color-mix(in srgb, var(--ink) 75%, transparent);
+  color: var(--primary-soft);
+  font: 700 27px/1 var(--font-brand);
+  transform: translateZ(var(--z)) rotateZ(40deg) rotateX(-56deg);
+}
+
+/* The assembly: each piece slides up into place along the ground, the composition holds for most of
+   the cycle, then it clears and replays. Long hold on purpose — a mark that re-forms every second
+   is noise, not craft. */
+@keyframes markIn {
+  0%        { opacity: 0; transform: translateZ(var(--z)) translate3d(-26px, 32px, 0) scale(.9); }
+  11%, 72%  { opacity: 1; transform: translateZ(var(--z)) translate3d(0, 0, 0) scale(1); }
+  85%, 100% { opacity: 0; transform: translateZ(var(--z)) translate3d(0, -14px, 0) scale(.97); }
+}
+@keyframes badgeIn {
+  0%        { opacity: 0; transform: translateZ(var(--z)) rotateZ(40deg) rotateX(-56deg) translate3d(0, 24px, 0) scale(.78); }
+  11%, 72%  { opacity: 1; transform: translateZ(var(--z)) rotateZ(40deg) rotateX(-56deg) translate3d(0, 0, 0) scale(1); }
+  85%, 100% { opacity: 0; transform: translateZ(var(--z)) rotateZ(40deg) rotateX(-56deg) translate3d(0, -12px, 0) scale(.94); }
+}
+.scene[data-run="true"] .tile { animation: markIn 6.4s cubic-bezier(.2, .8, .2, 1) var(--d, 0ms) infinite both; }
+.scene[data-run="true"] .badge { animation: badgeIn 6.4s cubic-bezier(.2, .8, .2, 1) var(--d, 0ms) infinite both; }
+
+/* The column stacks below 1000px and the mark would only push the questions down. */
+@media (max-width: 1000px) { .scene { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .plane { transition: none; }
+  /* The finished composition, held still — no assembly, no loop. */
+  .scene[data-run="true"] .tile, .scene[data-run="true"] .badge { animation: none; }
+}

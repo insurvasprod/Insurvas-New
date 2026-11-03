@@ -137,6 +137,7 @@
     "@supabase/supabase-js": "^2.99.0",
     "@whop/elements": "1.9.0",
     "@whop/elements-react": "1.9.0",
+    "animejs": "4.5.0",
     "bcryptjs": "^3.0.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

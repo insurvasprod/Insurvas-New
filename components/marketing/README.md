@@ -10,3 +10,6 @@ Montserrat when the apps move to Inter (v3). Numbers and money follow
 Marketing may use the eyebrow label style and larger display type; app pages may not.
 
 Do not: hard-code trial length or prices, or reuse marketing motion inside the apps.
+
+**Calls to action:** use `MarketingCta` (`cta.tsx`): primary, secondary and onDark pills in
+sentence case. The app's shared Button title-cases its label and is for the apps, not this site.

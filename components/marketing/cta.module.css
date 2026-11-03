@@ -1,0 +1,82 @@
+.cta {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  height: 52px;
+  align-items: center;
+  gap: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  padding: 0 7px 0 24px;
+  font-family: var(--font-brand);
+  font-size: 15.5px;
+  font-weight: 650;
+  letter-spacing: -.01em;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: transform 180ms cubic-bezier(.2, .8, .2, 1), box-shadow 220ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.cta:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
+.cta:active { transform: translateY(0) scale(.975); transition-duration: 80ms; }
+.label { position: relative; z-index: 1; }
+.icon { position: relative; z-index: 1; display: grid; width: 38px; height: 38px; place-items: center; border-radius: 50%; transition: transform 260ms cubic-bezier(.2, .8, .2, 1), background-color 180ms ease; }
+.icon svg { width: 17px; height: 17px; stroke-width: 2.25; transition: transform 260ms cubic-bezier(.2, .8, .2, 1); }
+
+/* Primary: brand green, ink text, ink disc. */
+.primary {
+  background: var(--primary);
+  color: var(--on-primary);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 38%),
+    inset 0 -1px 0 rgb(13 64 55 / 12%),
+    0 1px 2px rgb(13 64 55 / 18%),
+    0 10px 28px -10px color-mix(in srgb, var(--primary) 80%, transparent);
+}
+.primary .icon { background: var(--on-primary); color: var(--primary); }
+/* One band of light, sweeping across on hover. */
+.primary::after {
+  position: absolute;
+  z-index: 0;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 34%;
+  background: linear-gradient(100deg, transparent, rgb(255 255 255 / 45%), transparent);
+  content: "";
+  transform: translateX(0) skewX(-18deg);
+  opacity: 0;
+}
+
+/* Secondary: outline on light grounds; the disc is a quiet tint. */
+.secondary { border: 1px solid var(--border); background: var(--surface); color: var(--ink); box-shadow: 0 1px 2px rgb(13 64 55 / 6%); }
+.secondary .icon { width: 34px; height: 34px; background: var(--surface-alt); color: var(--ink); }
+
+/* On the deep-olive closing band. */
+.onDark { border: 1px solid var(--nav-line); background: rgb(255 255 255 / 4%); color: var(--nav-ink); }
+.onDark .icon { width: 34px; height: 34px; background: rgb(255 255 255 / 8%); color: var(--nav-ink); }
+
+@media (hover: hover) {
+  .cta:hover { transform: translateY(-1px); }
+  .cta:hover .icon svg { transform: translateX(2px); }
+  .primary:hover { box-shadow: inset 0 1px 0 rgb(255 255 255 / 45%), inset 0 -1px 0 rgb(13 64 55 / 12%), 0 2px 4px rgb(13 64 55 / 16%), 0 16px 36px -12px color-mix(in srgb, var(--primary) 90%, transparent); }
+  .primary:hover::after { animation: sweep 900ms cubic-bezier(.2, .8, .2, 1) both; }
+  .secondary:hover { border-color: var(--ink); }
+  .secondary:hover .icon { background: var(--primary-soft); color: var(--accent-ink); }
+  .onDark:hover { border-color: var(--nav-muted); background: rgb(255 255 255 / 8%); }
+}
+/* "See how it works" points down the page: its arrow moves down, not sideways. */
+@media (hover: hover) {
+  .cta:hover .icon svg:global(.lucide-arrow-down) { transform: translateY(2px); }
+}
+@keyframes sweep { from { opacity: 1; transform: translateX(0) skewX(-18deg); } to { opacity: 1; transform: translateX(480%) skewX(-18deg); } }
+
+:global(.dark) .secondary { background: color-mix(in srgb, var(--surface) 70%, transparent); }
+
+@media (max-width: 420px) {
+  .cta { height: 50px; padding-left: 20px; font-size: 15px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cta, .icon, .icon svg { transition: none; }
+  .primary:hover::after { animation: none; }
+}
