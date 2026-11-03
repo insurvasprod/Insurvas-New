@@ -56,7 +56,7 @@ export function PartnerSubmitDrafts() {
       <PageHeader
         title="Saved drafts"
         description="Pick up a lead application where you left off. Your changes save automatically."
-        breadcrumbs={[{ label: "Submit a lead", href: "/partner/submit-lead" }, { label: "Drafts" }]}
+        breadcrumbs={[{ label: "Submit New Lead", href: "/partner/submit-lead" }, { label: "Drafts" }]}
         actions={<Button asChild variant="outline"><Link href="/partner/submit-lead"><ArrowLeft aria-hidden="true" />Back to form</Link></Button>}
       />
       {!data && !error ? <div className={`${cardSurface} flex-1`}><SectionLoading rows={6} columns={5} label="Loading saved drafts" /></div> : error ? (

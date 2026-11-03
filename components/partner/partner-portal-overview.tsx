@@ -293,7 +293,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
             </>}
           </form>
           {updatedAt !== null && <LiveStamp updatedAt={updatedAt} staleAfterSeconds={stale ? 0 : 45} />}
-          {canSubmit && <Button asChild size="sm"><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit a lead</a></Button>}
+          {canSubmit && <Button asChild size="sm"><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
         </>}
       />
 
@@ -416,7 +416,7 @@ export function PartnerPortalOverview({ role, partnerStatus, sample }: { role: P
             <HomePanel
               title="Earnings"
               period={termLabel(terms) ?? "your statements"}
-              link={{ label: "Commission statements", href: "/partner/payouts" }}
+              link={{ label: "Commissions", href: "/partner/payouts" }}
               className="min-h-[19rem] @4xl:col-span-4"
               bodyClassName="pt-1"
               footer={latestStatement ? <>

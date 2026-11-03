@@ -1763,7 +1763,7 @@ function LegacyPartnerPortalWorkspace({
         <section id="submit" className="portal-partner-submit-shell scroll-mt-6">
           {/* A paused or draft partner is told once, by the portal layout's banner. */}
           <PageHeader
-            title="Submit a lead"
+            title="Submit New Lead"
             description="Start a new application for your customer."
             visible
             infoDescription
