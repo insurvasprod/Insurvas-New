@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { ChevronDown, Plus, RotateCcw, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -102,7 +102,7 @@ function NumberPair({ id, lead, between = "to", low, high, onLow, onHigh, prefix
  * they have to, a hint, the limits that answer type has, its choices, and when it is asked. Every
  * edit goes into the page's one draft. "Put back how it was" undoes this question's own changes.
  */
-export function QuestionPanel({ field, fields, form, sectionKey, placement, changed, setField, setValidation, setPlacement, onRequired, onMoveTo, onReset, onDelete, onBack, onClose }: {
+export function QuestionPanel({ field, fields, form, sectionKey, placement, changed, setField, setValidation, setPlacement, onRequired, onMoveTo, onReset, onDelete, onClose }: {
   field: TemplateField;
   fields: TemplateField[];
   form: TemplateFormDefinition;
@@ -120,7 +120,6 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
   onReset: (() => void) | null;
   onDelete: () => void;
   /** Back to the form's own settings, in the same panel. */
-  onBack: () => void;
   onClose: () => void;
 }) {
   const key = field.field_key;
@@ -144,15 +143,11 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
 
   return (
     <DetailPanel
-      mode="split"
-      splitFrom="xl"
+      mode="overlay"
       title={field.label || "Untitled question"}
       status={<StatusChip>{where}</StatusChip>}
-      actions={<Button onClick={onBack} type="button" variant="ghost"><ChevronLeft aria-hidden="true" />This form</Button>}
       onClose={onClose}
       closeLabel="Close the question"
-      // Beside the form the panel is always there (board FtA): "This form" goes back, so no ×.
-      className="xl:min-h-0 xl:self-stretch xl:[&>div:first-child>button:last-child]:hidden"
       footer={
         <>
           {onReset && <Button onClick={onReset} type="button" variant="ghost"><RotateCcw aria-hidden="true" />Put back how it was</Button>}

@@ -2,14 +2,12 @@
 
 import { InfoTip } from "@/components/ui/info-tip";
 import { useEffect, useState, type ReactNode } from "react";
-import { ArrowRight, ChevronDown, Plus } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DetailPanel } from "@/components/ui/detail-panel";
 import { SectionLoading } from "@/components/ui/page-states";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Callout, Field, ToggleRow, control } from "@/components/app/settings/primitives";
-import { SETTINGS_TABS, type SettingsTab } from "@/components/app/form-templates/status-line";
 import { PARTNER_TYPE_LABELS } from "@/lib/partners/constants";
 import type { Pipeline } from "@/lib/pipelines/types";
 import { TEMPLATE_SECTION_GROUPS, type TemplateField, type TemplateFormDefinition, type TemplateSectionGroup } from "@/lib/templates/constants";
@@ -208,37 +206,11 @@ function Section({ id, title, info, children }: { id: string; title: string; inf
   );
 }
 
-/** One setting on a 48px row: its name and value closed, its controls open in place. */
-function Row({ id: anchor, tab, label, value, tone, open, onToggle, children }: { /** The settings-search anchor, written out at each call. */ id: string; tab: SettingsTab; label: string; value: string; tone?: "warn" | "info"; open: boolean; onToggle: (tab: SettingsTab) => void; children: ReactNode }) {
-  return (
-    <section id={anchor} className="scroll-mt-24 border-t border-[var(--border)]">
-      <button
-        type="button"
-        onClick={() => onToggle(tab)}
-        aria-expanded={open}
-        aria-controls={`${anchor}-body`}
-        className="flex min-h-12 w-full cursor-pointer items-center gap-3 border-0 bg-transparent px-1 text-left hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--ring-color)]"
-      >
-        <span className="shrink-0 text-sm font-semibold text-[var(--ink)]">{label}</span>
-        <span className={`ml-auto min-w-0 truncate text-sm ${tone === "warn" ? "text-[var(--warning-ink)]" : tone === "info" ? "text-[var(--info-ink)]" : "text-[var(--body)]"}`}>{value}</span>
-        <ChevronDown aria-hidden="true" className={`size-4 shrink-0 text-[var(--body)] transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && <div id={`${anchor}-body`} className="px-1 pb-4">{children}</div>}
-    </section>
-  );
-}
-
 /**
- * Form templates, layout A: the side panel when no question is picked. The form's settings as rows
- * that say their value and open in place: who can apply, topics, lead steps, the version and the
- * questions kept for agents only. Beside the form from 1280px; a sheet below that.
+ * Form settings, a section of its own (owner 2026-11-03): the form's name, who can apply, its topics and
+ * the questions kept for agents only on the left; the version and the lead steps on the right.
  */
-export function FormSettingsPanel({ open, onOpen, onClose, values, eligibility, onAges, form, fields, onGroup, versions, agents }: {
-  /** The row that is open; null when every row is closed. */
-  open: SettingsTab | null;
-  onOpen: (tab: SettingsTab | null) => void;
-  onClose: () => void;
-  values: Record<SettingsTab, { text: string; tone?: "warn" | "info" }>;
+export function FormSettingsCard({ eligibility, onAges, form, fields, onGroup, versions, agents }: {
   eligibility: TemplateField | null;
   onAges: (patch: { age_min?: number; age_max?: number }) => void;
   form: TemplateFormDefinition;
@@ -247,36 +219,27 @@ export function FormSettingsPanel({ open, onOpen, onClose, values, eligibility, 
   versions: VersionsProps;
   agents: Parameters<typeof AgentsOnly>[0];
 }) {
-  const toggle = (tab: SettingsTab) => onOpen(open === tab ? null : tab);
-  const rowProps = (tab: SettingsTab) => ({ tab, label: SETTINGS_TABS.find((entry) => entry.key === tab)!.label, value: values[tab].text, tone: values[tab].tone, open: open === tab, onToggle: toggle });
   return (
-    <DetailPanel
-      mode="split"
-      splitFrom="xl"
-      title={<span className="inline-flex items-center gap-1">Form settings<InfoTip label="About the form settings" side="bottom">Click a question on the form to change it here.</InfoTip></span>}
-      onClose={onClose}
-      closeLabel="Close the form’s settings"
-      // Beside the form it is always there (board FtA), so the × shows only on the sheet below 1280px.
-      className="xl:min-h-0 xl:self-stretch xl:[&>div:first-child>button:last-child]:hidden"
-      bodyClassName="flex flex-col gap-4 px-4 pt-3 pb-4"
-    >
-      <Field label="Name of this form" htmlFor="copy-name" info="Only you and your team see it.">
-        <input id="copy-name" className={control} maxLength={120} value={versions.name} onChange={(event) => versions.onName(event.target.value)} />
-      </Field>
+    <section aria-label="Form settings" className="m-glass flex min-w-0 flex-col gap-5 rounded-[12px] border border-[var(--border)] p-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8 sm:p-5">
       {/* Each id is a settings-search anchor (lib/settings/sections.ts, SETTINGS_TABS). */}
-      <Section id="form-who-can-apply" title="Who can apply" info={eligibility ? `Read from “${eligibility.label}”. Checked when a partner sends a lead, and again when leads are imported.` : undefined}>
-        <WhoCanApply field={eligibility} onAges={onAges} />
-      </Section>
-      <Section id="form-parts" title="Topics" info="Turn a topic off and partners skip its parts of the form for this product.">
-        <PartsOfTheForm form={form} fields={fields} onChange={onGroup} />
-      </Section>
-      <Section id="form-agents-only" title="For your agents only" info="Saved on every lead, but partners never see these. Your agents fill them in.">
-        <AgentsOnly {...agents} />
-      </Section>
-      <div className="border-b border-[var(--border)]">
-        <Row id="form-versions" {...rowProps("versions")}><Versions {...versions} /></Row>
-        <Row id="form-lead-steps" {...rowProps("steps")}><LeadSteps /></Row>
+      <div className="flex min-w-0 flex-col gap-4">
+        <Field label="Name of this form" htmlFor="copy-name" info="Only you and your team see it.">
+          <input id="copy-name" className={control} maxLength={120} value={versions.name} onChange={(event) => versions.onName(event.target.value)} />
+        </Field>
+        <Section id="form-who-can-apply" title="Who can apply" info={eligibility ? `Read from “${eligibility.label}”. Checked when a partner sends a lead, and again when leads are imported.` : undefined}>
+          <WhoCanApply field={eligibility} onAges={onAges} />
+        </Section>
+        <Section id="form-parts" title="Topics" info="Turn a topic off and partners skip its parts of the form for this product.">
+          <PartsOfTheForm form={form} fields={fields} onChange={onGroup} />
+        </Section>
+        <Section id="form-agents-only" title="For your agents only" info="Saved on every lead, but partners never see these. Your agents fill them in.">
+          <AgentsOnly {...agents} />
+        </Section>
       </div>
-    </DetailPanel>
+      <div className="flex min-w-0 flex-col gap-4">
+        <Section id="form-versions" title="Version"><Versions {...versions} /></Section>
+        <Section id="form-lead-steps" title="Lead steps" info="Steps are edited in one place, Pipelines & outcomes."><LeadSteps /></Section>
+      </div>
+    </section>
   );
 }

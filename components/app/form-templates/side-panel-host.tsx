@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 /** From this width the side panel sits in the row beside the form (DetailPanel splitFrom="xl"). */
@@ -21,4 +21,14 @@ export function SidePanelHost({ children }: { children: ReactNode }) {
     return () => query.removeEventListener("change", sync);
   }, []);
   return inRow ? <>{children}</> : createPortal(children, document.body);
+}
+
+/**
+ * The question editor is an overlay sheet at every width (owner 2026-11-03). The settings frame is an
+ * @container, which pins a fixed child to the frame, so the sheet is always drawn on <body>.
+ */
+export function OverlayHost({ children }: { children: ReactNode }) {
+  // false while rendering on the server, true in the browser: no effect needed.
+  const mounted = useSyncExternalStore(() => () => {}, () => true, () => false);
+  return mounted ? createPortal(children, document.body) : null;
 }
