@@ -61,9 +61,9 @@ function change(current: number, previous: number | null | undefined, good: "up"
   return { value: Math.round(((current - previous) / previous) * 100), good };
 }
 
-/** "30 in the previous 30 days"; a previous period with nothing in it says so. */
-function beforeNote(previous: number, days: number, noun: string) {
-  return previous === 0 ? `None in the previous ${days} days` : `${previous} ${noun} in the previous ${days} days`;
+/** "30 in the previous 30 days"; a previous period with nothing in it has nothing to say. */
+function beforeNote(previous: number, days: number) {
+  return previous === 0 ? undefined : `${previous} in the previous ${days} days`;
 }
 function rangeLabel(from: string, to: string, now: Date) {
   const start = parseDay(from);
@@ -170,11 +170,9 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     const submitted = bucketCounts(() => true);
     const progress = bucketCounts(isOpen);
     const applications = bucketCounts(isSold);
-    let leadsSoFar = 0;
-    let soldSoFar = 0;
-    const conversion = submitted.map((count, index) => {
-      leadsSoFar += count;
-      soldSoFar += applications[index] ?? 0;
+    const conversion = submitted.map((_, index) => {
+      const leadsSoFar = submitted.slice(0, index + 1).reduce((sum, count) => sum + count, 0);
+      const soldSoFar = applications.slice(0, index + 1).reduce((sum, count) => sum + count, 0);
       return leadsSoFar ? (soldSoFar / leadsSoFar) * 100 : 0;
     });
     return { submitted, progress, applications, conversion };
@@ -257,7 +255,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         value={loading ? "—" : metrics.submitted}
         series={loading ? undefined : kpiSeries.submitted}
         change={loading ? undefined : change(metrics.submitted, previous?.submitted)}
-        note={loading || !previous ? undefined : beforeNote(previous.submitted, days, "leads")}
+        note={loading || !previous ? undefined : beforeNote(previous.submitted, days)}
       />
       <KpiTile
         icon={Hourglass}
@@ -265,7 +263,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         value={loading ? "—" : metrics.progress}
         series={loading ? undefined : kpiSeries.progress}
         change={loading ? undefined : change(metrics.progress, previous?.progress, "neither")}
-        note={loading || !previous ? undefined : beforeNote(previous.progress, days, "leads")}
+        note={loading || !previous ? undefined : beforeNote(previous.progress, days)}
       />
       <KpiTile
         icon={FileCheck2}
@@ -273,7 +271,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         value={loading ? "—" : metrics.applications}
         series={loading ? undefined : kpiSeries.applications}
         change={loading ? undefined : change(metrics.applications, previous?.applications)}
-        note={loading || !previous ? undefined : beforeNote(previous.applications, days, "applications")}
+        note={loading || !previous ? undefined : beforeNote(previous.applications, days)}
       />
       <KpiTile
         icon={Percent}
@@ -281,7 +279,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         value={loading || conversionNow === null ? "—" : `${conversionNow.toFixed(1)}%`}
         series={loading ? undefined : kpiSeries.conversion}
         change={loading || metrics.submitted < MIN_CONVERSION_SAMPLE || !previous || previous.submitted < MIN_CONVERSION_SAMPLE ? undefined : change(conversionNow ?? 0, conversionPrev)}
-        note={loading ? undefined : metrics.submitted === 0 ? "No leads yet" : metrics.submitted < MIN_CONVERSION_SAMPLE ? `${metrics.applications} of ${metrics.submitted} leads: too few for a trend` : `${metrics.applications} of ${metrics.submitted} leads became applications`}
+        note={loading ? undefined : metrics.submitted === 0 ? "No leads yet" : metrics.submitted < MIN_CONVERSION_SAMPLE ? undefined : `${metrics.applications} of ${metrics.submitted} became applications`}
       />
     </KpiRow>
 
