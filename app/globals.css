@@ -2003,6 +2003,9 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) body { background: tra
 /* "Have an account? Sign in" on the legal links' line. */
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.75rem; margin-top: 1rem; padding-inline: 40px; }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > [data-auth-footer], .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > * { margin: 0; padding-inline: 0; }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-note] { margin-top: .5rem; padding-inline: 40px; color: var(--nav-muted); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-note] a { color: var(--on-dark); }
+@media (max-width: 560px) { .portal-tenant-auth-shell[data-layout="single"] [data-auth-note] { padding-inline: 20px; } }
 @media (max-width: 560px) { .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { padding-inline: 20px; } }
 /* A heading that still sits inside the card (a screen that did not lift it) keeps card colours. */
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-card] [data-auth-heading] h1 { color: var(--ink); }

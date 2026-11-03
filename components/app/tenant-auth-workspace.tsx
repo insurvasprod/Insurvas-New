@@ -253,9 +253,7 @@ export function TenantAuthWorkspace({
       <div data-auth-line="" className="mb-6">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
           <div className="min-w-0"><AuthHeading title="Welcome back" /></div>
-          <p className="m-0 shrink-0 pb-1 text-sm font-semibold leading-normal tracking-[-0.02em]"><Link href="/partner/login" className="hover:underline">Partner portal</Link></p>
         </div>
-        <div className="mt-3 h-1 rounded-full bg-[var(--primary)]" aria-hidden="true" />
       </div>
     ),
     body: (
@@ -345,6 +343,15 @@ export function TenantAuthWorkspace({
       </div>
     ),
   };
+
+  const partnerNote = (
+    <p className="m-0 text-sm leading-normal tracking-[-0.02em]">
+      Partner or affiliate?{" "}
+      <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+        Partner portal
+      </Link>
+    </p>
+  );
 
   const reset: AuthView = {
     heading: <>
@@ -527,7 +534,7 @@ export function TenantAuthWorkspace({
   const view = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
 
   return (
-    <AuthLayout plane="agent" heading={view.heading} footer={view.footer} footerInline>
+    <AuthLayout plane="agent" heading={view.heading} footer={view.footer} footerInline note={view === signIn ? partnerNote : undefined}>
       {view.body}
     </AuthLayout>
   );

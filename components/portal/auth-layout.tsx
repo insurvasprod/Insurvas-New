@@ -38,6 +38,7 @@ export function AuthLayout({
   story,
   footer,
   footerInline = false,
+  note,
   align,
   legal = true,
   children,
@@ -60,6 +61,8 @@ export function AuthLayout({
   footer?: ReactNode;
   /** Put the footer on the legal links' own line (sign-up: "Have an account? Sign in · Privacy · Terms · Support"). */
   footerInline?: boolean;
+  /** One more quiet line under the footer row (sign-in: "Partner or affiliate? Partner portal"). */
+  note?: ReactNode;
   /**
    * The brand panel: an <AuthStory>, or real content such as the plan summary or the receipt.
    * Omit it for a door that is one centred column with no panel (the agent sign-in); the shell is
@@ -126,6 +129,7 @@ export function AuthLayout({
             ) : (
               <AuthLegalLinks onDark={single} />
             ))}
+            {note && <div data-auth-note="">{note}</div>}
           </div>
         </div>
       }
