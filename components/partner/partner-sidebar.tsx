@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
-  Building2,
   ChevronDown,
   ClipboardList,
   Home,
@@ -166,7 +165,6 @@ export function PartnerSidebar({ role, partnerStatus, partnerName, footer }: { r
         homeHref="/partner"
         items={railItems}
         foot={[{ key: "/partner/settings", label: "Settings", href: "/partner/settings", icon: Settings }]}
-        card={{ label: "Partner organisation", icon: Building2, body: <><PartnerCard role={role} partnerStatus={partnerStatus} partnerName={partnerName} />{footer && <div className="portal-agent-sidebar-footer">{footer}</div>}</> }}
         isActive={(href, pathname) => isActivePath(pathname, href)}
         sidebarPresentation
       />
