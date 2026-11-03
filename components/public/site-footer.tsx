@@ -1,4 +1,5 @@
 import Link from "next/link";
+import styles from "@/components/public/site-footer.module.css";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
@@ -26,12 +27,13 @@ import { fetchCurrentDocuments } from "@/lib/legal/queries";
 const COLUMNS: Array<{ title: string; links: Array<{ href: string; label: string }> }> = [
   {
     title: "Product",
+    // Page order, like the header nav (2026-11-03). The True CPA link went with the section it
+    // pointed at, which the owner removed on 3 Nov.
     links: [
-      { href: "/#product", label: "Inside one call" },
-      { href: "/#features", label: "Features" },
       { href: "/#industries", label: "Who it's for" },
-      { href: "/#faq", label: "Questions" },
+      { href: "/#features", label: "Features" },
       { href: "/pricing", label: "Pricing" },
+      { href: "/#faq", label: "Questions" },
     ],
   },
   {
@@ -68,8 +70,8 @@ export async function SiteFooter() {
   const legalLinks = await publishedLegalLinks();
   const columns = legalLinks.length > 0 ? [...COLUMNS, { title: "Legal", links: legalLinks }] : COLUMNS;
   return (
-    <footer className="bg-[var(--footer-bg)] px-4 pb-10 pt-20 sm:px-6 lg:px-16">
-      <div className="mx-auto max-w-7xl">
+    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-8 pt-24 sm:px-6 lg:px-16">
+      <div className="relative mx-auto max-w-7xl">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
           <div>
             <Link href="/" className="inline-flex no-underline">
@@ -98,7 +100,9 @@ export async function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-14 flex flex-wrap items-center justify-between gap-6 border-t border-[var(--nav-line)] pt-6">
+        {/* The full logo, wide and faded, above the bottom bar (2026-11-03). */}
+        <div aria-hidden="true" className={styles.watermark} />
+        <div className="flex flex-wrap items-center justify-between gap-6 border-t border-[var(--nav-line)] pt-6">
           <span className="text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
             © {new Date().getFullYear()} Insurvas Inc. All rights reserved.
           </span>

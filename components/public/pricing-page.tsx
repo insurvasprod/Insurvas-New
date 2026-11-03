@@ -1,14 +1,13 @@
 "use client";
 
-import { useMemo, useState, ViewTransition } from "react";
-import Link from "next/link";
+import { useMemo, useState } from "react";
 import { Check, ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/page-states";
 import { Reveal, usePrefersReducedMotion } from "@/components/marketing/motion";
-import { LandingObject } from "@/components/marketing/three/landing-object";
-import landingStyles from "@/components/marketing/landing.module.css";
+import heroStyles from "@/components/marketing/landing-hero.module.css";
+import { MarketingCta } from "@/components/marketing/cta";
 import { PricingCompareTable } from "@/components/public/pricing-compare-table";
 import { PricingExplorer } from "@/components/public/pricing-explorer";
 import { Collapse, PRICING_CSS, SegmentedControl } from "@/components/public/pricing-motion";
@@ -209,19 +208,15 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
     <main className="overflow-x-clip">
       <style>{PRICING_CSS}</style>
 
-      {/* The landing hero's living ribbon (owner, 2026-10-24: "like the hero section on the landing
-          page"), the same named object, so going from the landing page to pricing reads as one scene. */}
-      <section className="relative isolate overflow-hidden bg-background px-4 pb-[132px] pt-20 text-center sm:px-6 sm:pt-24 lg:px-16">
-        <ViewTransition name="brand-ribbon" share="ribbon-morph" default="none">
-          <LandingObject kind="ribbon" className={`pointer-events-none absolute -right-[12%] top-[-6%] -z-10 h-[112%] w-[100%] [mask-image:linear-gradient(90deg,transparent_0%,black_35%,black_85%,transparent_100%)] lg:w-[78%] ${landingStyles.ribbonIn}`} />
-        </ViewTransition>
-        {/* Keeps the centred headline legible where the ribbon passes behind it. */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(ellipse_60%_62%_at_50%_42%,var(--background)_40%,color-mix(in_srgb,var(--background)_60%,transparent)_72%,transparent_100%)]" />
+      {/* The landing page's deep-olive hero (2026-11-03), so going from the landing page to pricing
+          reads as one site; the plan cards rise out of it. */}
+      <section className={`relative isolate overflow-hidden px-4 pb-[132px] pt-[128px] text-center sm:px-6 sm:pt-[144px] lg:px-16 ${heroStyles.pricingHero}`}>
+        <div aria-hidden="true" className={heroStyles.backdrop} />
         <Reveal>
-          <h1 key={audience} className="pz-fade mx-auto max-w-[860px] text-balance text-headline-lg font-semibold leading-[1.0] tracking-[-0.045em] text-[var(--ink)] sm:text-hero lg:text-[clamp(3.25rem,5.4vw,4.5rem)]">
+          <h1 key={audience} className="pz-fade mx-auto max-w-[860px] text-balance text-headline-lg font-semibold leading-[1.0] tracking-[-0.035em] text-[var(--nav-ink)] sm:text-hero lg:text-[clamp(3.25rem,5.4vw,4.5rem)]">
             {AUDIENCE_COPY[audience].title}
           </h1>
-          <p key={`${audience}-lede`} className="pz-fade mx-auto mt-5 max-w-[600px] text-base leading-[1.65] tracking-[-0.02em] text-muted-foreground sm:text-lg">
+          <p key={`${audience}-lede`} className="pz-fade mx-auto mt-5 max-w-[600px] text-base leading-[1.65] tracking-[-0.01em] text-[var(--nav-muted)] sm:text-lg">
             {AUDIENCE_COPY[audience].lede}
           </p>
         </Reveal>
@@ -410,9 +405,7 @@ export function PricingPage({ plans: catalog, addons, loadError, initialAudience
         <Reveal>
           <h2 className="text-title-lg font-semibold leading-[1.08] tracking-[-0.03em] text-foreground sm:text-headline-lg">{closingLine}</h2>
           <div className="mt-7 flex justify-center gap-3.5">
-            <Button asChild className="h-12 rounded-full px-7 text-base shadow-[var(--shadow-brand)]">
-              <Link href={leadPlan ? `/signup?plan=${encodeURIComponent(leadPlan.code)}&cycle=${cycle}` : "/signup"}>Start your trial</Link>
-            </Button>
+            <MarketingCta href={leadPlan ? `/signup?plan=${encodeURIComponent(leadPlan.code)}&cycle=${cycle}` : "/signup"}>Start your free trial</MarketingCta>
           </div>
         </Reveal>
       </section>

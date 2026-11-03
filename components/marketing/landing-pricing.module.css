@@ -1,0 +1,98 @@
+/* The pricing teaser (2026-11-03): the owner's reference layout (21st.dev "adaptive pricing section")
+   in the Insurvas palette. Light and airy, thin type, the middle plan lifted above the other two. */
+.section { position: relative; scroll-margin-top: 80px; background: var(--canvas); color: var(--ink); }
+.inner { width: min(100% - 48px, 1200px); margin: 0 auto; padding: clamp(88px, 10vw, 120px) 0; }
+
+.head { max-width: 760px; margin: 0 auto; text-align: center; }
+.eyebrow { margin: 0 0 14px; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
+/* Same heading and lede as every other section on the page. */
+.title { margin: 0; color: var(--ink); font: 600 clamp(34px, 4vw, 56px)/1.04 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
+.lede { max-width: 620px; margin: 18px auto 0; color: var(--body); font-size: 17px; line-height: 1.6; }
+.lede b { color: var(--ink); font-weight: 500; }
+
+.ladder { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: stretch; max-width: 1150px; margin: clamp(56px, 6vw, 72px) auto 0; }
+.ladder[data-count="2"] { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 780px; gap: 24px; }
+.ladder[data-count="1"] { grid-template-columns: minmax(0, 420px); justify-content: center; }
+.cell { height: 100%; }
+.card {
+  position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  /* Full-strength hairline since 2026-11-03: the cards are white on a white ground now, so the
+     border is the only thing separating them. At 70% it all but disappeared. */
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(13 64 55 / 5%);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  outline: none;
+  transform: translateY(0) scale(1);
+  transition: transform 600ms cubic-bezier(.2, .9, .25, 1), box-shadow 500ms ease, border-color 400ms ease, background 400ms ease, opacity 400ms ease;
+}
+.card:focus-visible { box-shadow: 0 0 0 2px var(--accent-ink); }
+/* Plans behind the lifted one recede a little. */
+.ladder:has(.featured) .card:not(.featured) { opacity: .82; }
+.ladder:has(.featured) .card:not(.featured):hover { opacity: 1; }
+@media (hover: hover) { .card:not(.featured):hover { border-color: var(--border); box-shadow: 0 12px 30px -18px rgb(13 64 55 / 25%); } }
+
+.cardHead { padding: 48px 32px 28px; text-align: center; }
+.tier { margin: 0 0 16px; color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; }
+.price { display: flex; align-items: baseline; justify-content: center; gap: 8px; }
+.whole { color: var(--ink); font: 600 48px/1 var(--font-display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.per { color: var(--muted); font-size: 16px; }
+.blurb { max-width: 30ch; margin: 22px auto 0; color: var(--body); font-size: 15px; line-height: 1.6; }
+
+.highlights { flex: 1; padding: 0 32px 32px; }
+.includes { margin: 0 0 22px; color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: .2em; text-transform: uppercase; }
+.modules { display: grid; gap: 16px; margin: 0; padding: 0; list-style: none; }
+.modules li { display: flex; align-items: flex-start; gap: 12px; color: var(--body); font-size: 14.5px; line-height: 1.5; }
+.modules svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--accent-ink); stroke-width: 2.5; }
+
+.cardFoot { padding: 0 32px 32px; }
+.planCta { display: flex; height: 44px; position: relative; z-index: 1; align-items: center; justify-content: center; border-radius: 8px; background: var(--surface-alt); color: var(--ink); font-size: 14px; font-weight: 500; text-decoration: none; transition: background-color 200ms ease, box-shadow 250ms ease, transform 160ms ease; }
+.planCta:hover { background: var(--surface-sunken); }
+.planCta:active { transform: scale(.98); }
+.planCta:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 3px; }
+.planCtaFeatured { background: linear-gradient(90deg, var(--accent-ink), var(--primary)); color: var(--surface); box-shadow: 0 10px 24px -10px color-mix(in srgb, var(--primary) 80%, transparent); }
+.planCtaFeatured:hover { background: linear-gradient(90deg, color-mix(in srgb, var(--accent-ink) 85%, white), color-mix(in srgb, var(--primary) 85%, white)); box-shadow: 0 14px 32px -12px color-mix(in srgb, var(--primary) 90%, transparent); }
+.footNote { margin: 22px 0 0; opacity: 0; transition: opacity 300ms ease; }
+.featured .footNote { opacity: 1; transition-delay: 200ms; }
+.footNote { color: var(--muted); font-size: 12.5px; text-align: center; }
+.footNote :global(a) { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+
+/* The lifted plan, in the middle: raised, a touch larger, a deep soft shadow. */
+.featured {
+  z-index: 2;
+  border-color: var(--border);
+  background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface-alt) 35%, var(--surface)));
+  box-shadow: 0 30px 70px -24px rgb(13 64 55 / 30%), 0 2px 6px rgb(13 64 55 / 6%);
+  transform: translateY(-16px) scale(1.05);
+}
+.badge { position: absolute; top: -13px; left: 50%; opacity: 0; pointer-events: none; transition: opacity 300ms ease, transform 450ms cubic-bezier(.2, .9, .25, 1); border-radius: 999px; background: linear-gradient(90deg, var(--accent-ink), var(--primary)); padding: 6px 16px; color: var(--surface); font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: uppercase; white-space: nowrap; transform: translate(-50%, 8px) scale(.9); }
+.featured .badge { opacity: 1; transform: translate(-50%, 0) scale(1); transition-delay: 150ms; }
+
+.foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px 24px; margin-top: 48px; }
+.agency { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 10px 14px; margin: 0; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); padding: 8px 10px 8px 8px; color: var(--muted); font-size: 14.5px; }
+.agency b { color: var(--ink); font-weight: 600; }
+.agencyIcon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 50%; background: var(--primary-soft); color: var(--accent-ink); }
+.agencyIcon svg { width: 16px; height: 16px; }
+.agency a { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: var(--surface-alt); padding: 7px 14px; color: var(--ink); font-weight: 600; text-decoration: none; box-shadow: var(--shadow-rest); }
+.agency a svg { width: 15px; height: 15px; }
+.agency a:focus-visible { outline: 2px solid var(--accent-ink); outline-offset: 2px; }
+
+:global(.dark) .featured { background: linear-gradient(180deg, var(--surface-alt), var(--surface)); box-shadow: 0 30px 70px -24px rgb(0 0 0 / 70%); }
+:global(.dark) .planCtaFeatured, :global(.dark) .badge { color: var(--on-primary); }
+
+@media (max-width: 1000px) {
+  .ladder, .ladder[data-count="2"] { grid-template-columns: minmax(0, 1fr); gap: 28px; max-width: 460px; }
+  .featured { transform: none; }
+  .agency { border-radius: 18px; }
+}
+@media (max-width: 640px) {
+  .inner { width: calc(100% - 32px); }
+  .cardHead { padding: 40px 22px 22px; }
+  .highlights, .cardFoot { padding-inline: 22px; }
+}
+@media (prefers-reduced-motion: reduce) { .card, .planCta, .badge, .footNote { transition: none; } }

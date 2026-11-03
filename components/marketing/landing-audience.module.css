@@ -1,0 +1,147 @@
+/* "Who it's for" (rebuilt 2026-11-03): two framed worlds side by side. The agent's card is light —
+   one person's workspace, a few tiles on a desk. The agency's card is the deep-olive floor — a grid
+   of producer seats with live status, a lead being routed across. Each half is one link; hovering or
+   focusing a half grows it. Nothing is hidden at rest, so it reads whole on touch and by keyboard. */
+.section { scroll-margin-top: 80px; border-bottom: 1px solid var(--border); background: var(--canvas); }
+.inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(80px, 9vw, 120px) 0; }
+/* Header: label and headline. Hierarchy comes from weight and colour, not a shouting size. */
+.head { margin-bottom: clamp(32px, 4vw, 44px); }
+.eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; color: var(--accent-ink); font-size: 15px; font-weight: 650; letter-spacing: -.005em; }
+.eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
+.heading { margin: 0; color: var(--ink); font: 600 clamp(30px, 3.2vw, 44px)/1.08 var(--font-brand); letter-spacing: -.025em; text-wrap: balance; }
+
+.split { display: flex; gap: 20px; }
+.panel {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  text-decoration: none;
+}
+.panel[data-side="agent"] {
+  background:
+    radial-gradient(70% 60% at 70% 20%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 70%),
+    var(--surface);
+  color: var(--ink);
+}
+.panel[data-side="agency"] {
+  border-color: transparent;
+  background:
+    radial-gradient(70% 60% at 30% 15%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--footer-bg), color-mix(in srgb, var(--footer-bg) 65%, black));
+  color: var(--nav-ink);
+}
+:global(.dark) .panel[data-side="agency"] { border-color: color-mix(in srgb, var(--primary) 25%, transparent); }
+
+/* ── Copy ── */
+.copy { display: flex; flex-direction: column; gap: 10px; padding: 0 clamp(26px, 3vw, 44px) clamp(28px, 3vw, 40px); }
+.label { color: var(--accent-ink); font-size: 13.5px; font-weight: 600; }
+.panel[data-side="agency"] .label { color: var(--primary); }
+.word { display: block; font: 600 clamp(40px, 4.4vw, 64px)/1 var(--font-brand); letter-spacing: -.035em; }
+.body { max-width: 46ch; color: var(--body); font-size: 15.5px; line-height: 1.6; }
+.panel[data-side="agency"] .body { color: var(--nav-muted); }
+.points { display: grid; gap: 8px; margin-top: 4px; }
+.points > span { display: flex; align-items: center; gap: 9px; font-size: 14.5px; font-weight: 500; }
+.points svg { width: 16px; height: 16px; flex: none; color: var(--accent-ink); stroke-width: 2.6; }
+.panel[data-side="agency"] .points svg { color: var(--primary); }
+.cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; color: var(--accent-ink); font-size: 15px; font-weight: 650; }
+.panel[data-side="agency"] .cta { color: var(--primary); }
+.cta svg { width: 16px; height: 16px; transition: transform 320ms cubic-bezier(.2, .8, .2, 1); }
+
+/* ── Photo cards (2026-11-03): each card is a photograph graded into the brand's deep olive, the
+   copy set in white over a gradient at the bottom, and one small product detail floating on it. ── */
+.panel { isolation: isolate; min-height: 620px; justify-content: flex-end; border-color: transparent; background: color-mix(in srgb, var(--footer-bg) 70%, black); color: var(--nav-ink); }
+.panel[data-side="agent"], .panel[data-side="agency"] { background: color-mix(in srgb, var(--footer-bg) 70%, black); color: var(--nav-ink); }
+.scene { position: absolute; z-index: -1; inset: 0; overflow: hidden; }
+.photo { object-fit: cover; transform: scale(1.02); transition: transform 1200ms cubic-bezier(.2, .8, .2, 1); }
+/* The grade: a brand-green wash over the photo, then the olive gradient the copy sits on. */
+.scene::before, .scene::after { position: absolute; inset: 0; content: ""; pointer-events: none; }
+.scene::before { z-index: 1; background: color-mix(in srgb, var(--footer-bg) 55%, transparent); mix-blend-mode: multiply; }
+.scene::after {
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgb(4 20 17 / 10%) 0%, rgb(4 20 17 / 25%) 35%, color-mix(in srgb, var(--footer-bg) 70%, black) 78%),
+    radial-gradient(60% 50% at 80% 10%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 70%);
+}
+.panel[data-side="agency"] .scene::before { background: color-mix(in srgb, var(--primary) 30%, var(--footer-bg)); mix-blend-mode: color; }
+
+.copy { position: relative; z-index: 2; }
+.label, .panel[data-side="agency"] .label { color: var(--primary); }
+.body, .panel[data-side="agency"] .body { color: rgb(234 246 242 / 78%); }
+.points svg, .panel[data-side="agency"] .points svg { color: var(--primary); }
+.cta, .panel[data-side="agency"] .cta { color: var(--primary); }
+
+/* The floating detail: frosted glass with an inner edge. */
+.float {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 16px;
+  background: rgb(9 30 26 / 55%);
+  padding: 12px 16px 12px 12px;
+  color: var(--nav-ink);
+  font-family: var(--font-sans);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 10%), 0 20px 40px -20px rgb(0 0 0 / 60%);
+  backdrop-filter: blur(14px) saturate(140%);
+  transition: transform 700ms cubic-bezier(.2, .8, .2, 1);
+}
+.float[data-pos="agent"] { top: 36px; right: 32px; }
+.float[data-pos="agency"] { top: 36px; left: 32px; }
+.float b { display: block; font-size: 14px; font-weight: 650; }
+.float small { display: block; color: var(--nav-muted); font-size: 12px; }
+.floatIcon { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 10px; background: var(--primary); color: var(--on-primary); }
+.floatIcon svg { width: 17px; height: 17px; stroke-width: 2.4; }
+.live { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; color: var(--primary); font-size: 12px; font-weight: 650; }
+.live i { width: 7px; height: 7px; border-radius: 50%; background: var(--primary); animation: blink 1.8s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .3; } }
+
+/* ── Hover and focus: the card lifts, the photo eases in, the detail drifts. Transform only. ── */
+.panel { transition: transform 450ms cubic-bezier(.2, .8, .2, 1), box-shadow 450ms ease; }
+.panel:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.panel:focus-visible .photo { transform: scale(1.07); }
+.panel:focus-visible .cta svg { transform: translateX(4px); }
+@media (hover: hover) {
+  .panel:hover { box-shadow: 0 40px 80px -40px rgb(13 64 55 / 60%); transform: translateY(-4px); }
+  .panel:hover .photo { transform: scale(1.07); }
+  .panel:hover .float { transform: translateY(-6px); }
+  .panel:hover .cta svg { transform: translateX(4px); }
+}
+
+@media (max-width: 960px) {
+  .split { flex-direction: column; }
+  .panel { flex: none; min-height: 560px; }
+}
+@media (max-width: 640px) {
+  .inner { width: calc(100% - 32px); }
+  .panel { min-height: 540px; border-radius: 22px; }
+  .float { right: 16px !important; left: 16px !important; top: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel, .photo, .float, .cta svg { transition: none; }
+  .panel:hover { transform: none; }
+  .panel:hover .photo { transform: scale(1.02); }
+  .live i { animation: none; }
+}
+
+/* ── "Built for" band ─────────────────────────────────────────────────────────────────────────
+   The original strip's styling, verbatim (owner, 3 Nov: it was good as it was). It only moved —
+   it sits between the hero and the split now — and it carries all seven businesses again. The
+   chips-and-tiles treatment it briefly had is gone. */
+.band { border-bottom: 1px solid var(--border); background: var(--canvas); }
+.bandInner { display: grid; gap: 18px; width: min(100% - 64px, 1320px); margin: 0 auto; padding: 34px 0 38px; }
+.bandRow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 0; margin: 0; padding: 0; list-style: none; }
+.bandLabel { margin-right: 22px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.bandRow .audienceItem { margin: 0; color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
+.bandRow .audienceItem + .audienceItem::before { margin: 0 14px; color: var(--border-strong); content: "/"; font-weight: 400; }
+.truths { display: flex; flex-wrap: wrap; gap: 10px 28px; margin: 0; padding: 0; list-style: none; }
+.truths li { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13.5px; }
+.truths svg { width: 15px; height: 15px; flex: none; color: var(--accent-ink); }
+
+@media (max-width: 640px) { .bandInner { width: calc(100% - 32px); } }

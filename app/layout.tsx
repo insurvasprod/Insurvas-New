@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist_Mono, Inter, Inter_Tight, Montserrat } from "next/font/google";
+import { Geist_Mono, Instrument_Serif, Inter, Inter_Tight, Montserrat } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { ConfirmHost } from "@/components/ui/confirm-dialog";
@@ -14,7 +14,9 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "sw
 const interTight = Inter_Tight({ subsets: ["latin"], variable: "--font-inter-tight", display: "swap" });
 const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono", display: "swap" });
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat", display: "swap" });
-const fontVariables = [inter.variable, interTight.variable, geistMono.variable, montserrat.variable].join(" ");
+// The landing page's accent (owner decision 2026-11-03): one italic serif word inside a headline.
+const instrumentSerif = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["italic"], variable: "--font-accent", display: "swap" });
+const fontVariables = [inter.variable, interTight.variable, geistMono.variable, montserrat.variable, instrumentSerif.variable].join(" ");
 
 export const metadata: Metadata = {
   title: "Insurvas",

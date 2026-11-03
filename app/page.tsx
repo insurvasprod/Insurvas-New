@@ -3,10 +3,10 @@ import type { Metadata } from "next";
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
 import { LandingHero } from "@/components/marketing/landing-hero";
-import { LandingIntro } from "@/components/marketing/landing-intro";
-import { LandingExploded } from "@/components/marketing/landing-exploded";
 import { LandingBento } from "@/components/marketing/landing-bento";
-import { LandingCta, LandingFaq, LandingPricingTeaser, LandingTruths } from "@/components/marketing/landing-sections";
+import { LandingAudience, LandingBuiltFor } from "@/components/marketing/landing-audience";
+import { LandingPricingTeaser } from "@/components/marketing/landing-pricing";
+import { LandingFaq } from "@/components/marketing/landing-faq";
 import { fetchPublicPlans } from "@/lib/publicPlans/queries";
 import type { PublicPlan } from "@/lib/publicPlans/types";
 
@@ -27,21 +27,20 @@ export const metadata: Metadata = {
 export default async function Home() {
   const plans: PublicPlan[] = await fetchPublicPlans().catch(() => []);
   return (
-    <div className="type-brand min-h-screen bg-background">
-      {/* First visit of a session: the mark is drawn out of the hero's lines, then the page opens. */}
-      <LandingIntro />
+    <div className="type-brand landing-type min-h-screen bg-background">
       <SiteHeader current="home" floating />
       <main>
-        {/* The story (2026-10-13, after the research pass): the promise, light and editorial, with a
-            living WebGL ribbon → who it is for → inside one call (the product comes apart in 3D) →
-            what it does (tiles with live 3D objects) → price → questions → the close. */}
+        {/* The story (2026-11-03 redesign, docs/design/landing-page-redesign-spec.md): the promise over
+            the product itself → who it is for → the answer (True CPA) → the workspace, feature by
+            feature → price → questions. The closing "Try it free" band was dropped on the owner's
+            instruction (3 Nov); the header's trial button rides the whole page, so the page is never
+            without a call to action. */}
         <LandingHero />
-        <LandingTruths />
-        <LandingExploded />
+        <LandingBuiltFor />
+        <LandingAudience />
         <LandingBento />
         <LandingPricingTeaser plans={plans} />
         <LandingFaq />
-        <LandingCta />
       </main>
       <SiteFooter />
     </div>

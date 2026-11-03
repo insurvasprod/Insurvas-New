@@ -79,3 +79,18 @@ and proportions are untouched.
    the apps; the marketing pages use Montserrat until the files are added with `next/font/local`.
 8. **Eyebrows.** The guide styles uppercase "eyebrow" labels. App pages keep the no-eyebrow rule
    (UI-CONSISTENCY §2). Marketing and sign-in panels may use the label style.
+9. **Landing page type (owner decision 2026-11-03).** The landing page (`/`) sets headlines in
+   Inter Tight and body copy in Inter, with one italic word per headline in Instrument Serif
+   (`--font-accent`) as the accent. Montserrat stays in the wordmark and on `/pricing`. Wired through
+   `.landing-type` in `app/globals.css`.
+10. **Public-site ground (owner decision 2026-11-03).** The public pages run on **two** grounds:
+    white, and the deep olive already under the hero, the features band and the footer. There is no
+    grey canvas. The app's neutrals are blue (`--canvas` `#f1f3f7` is ~220°) while the brand is green
+    (~165°), so the public pages re-tint `--canvas`, `--surface-alt`, `--surface-sunken`, `--border`,
+    `--border-strong`, `--body`, `--muted` and `--info-*` to the brand's hue. These live in the
+    `:root:not(.dark) .landing-type` block in `app/globals.css` and are **light-only and
+    landing-scoped**: `--muted` alone is read by 220 files, so `:root` must never be edited for a
+    marketing change. Separation inside a white section comes from hairlines, spacing and
+    `--primary-soft` — never a second grey. The bright green stays a fill (rule 3); green text on a
+    light ground is `--accent-ink`, enforced for CSS modules too by
+    `lib/design/brandContrast.test.mjs`.
