@@ -174,7 +174,7 @@ export function PartnerDealFlow({
     || (filters.annualised_premium_min && filters.annualised_premium_max && Number(filters.annualised_premium_min) > Number(filters.annualised_premium_max)),
   );
   const draftDateRangeInvalid = Boolean(filters.draft_date_from && filters.draft_date_to && filters.draft_date_from > filters.draft_date_to);
-  const extraFilters = [filters.stage_type, filters.product, filters.submitted_by, filters.customer, filters.carrier, premiumNarrowing, draftDateNarrowing].filter(Boolean).length;
+  const extraFilters = [filters.stage_type, filters.product, filters.submitted_by, filters.carrier, premiumNarrowing, draftDateNarrowing].filter(Boolean).length;
   const hasNarrowing = extraFilters > 0 || Boolean(search.trim()) || !isToday;
 
   const periodText = isToday
@@ -185,7 +185,6 @@ export function PartnerDealFlow({
   const chips: ActiveFilter[] = [
     filters.stage_type && { key: "status", label: "Status", value: STAGE_TYPE_LABEL[filters.stage_type as DealFlowStageType] ?? filters.stage_type, onRemove: () => applyFilter({ stage_type: "" }) },
     filters.product && { key: "product", label: "Product", value: productLineLabel(filters.product), onRemove: () => applyFilter({ product: "" }) },
-    filters.customer && { key: "customer", label: "Customer", value: filters.customer, onRemove: () => applyFilter({ customer: "" }) },
     filters.carrier && { key: "carrier", label: "Carrier", value: filters.carrier === NO_CARRIER_FILTER ? "No carrier" : filters.carrier, onRemove: () => applyFilter({ carrier: "" }) },
     premiumNarrowing && { key: "premium", label: "Annualised premium", value: filters.annualised_premium_min && filters.annualised_premium_max ? `${currencyFilterLabel(filters.annualised_premium_min)} – ${currencyFilterLabel(filters.annualised_premium_max)}` : filters.annualised_premium_min ? `At least ${currencyFilterLabel(filters.annualised_premium_min)}` : `Up to ${currencyFilterLabel(filters.annualised_premium_max)}`, onRemove: () => applyFilter({ annualised_premium_min: "", annualised_premium_max: "" }) },
     draftDateNarrowing && { key: "draft-date", label: "Draft date", value: `${filters.draft_date_from ? dayLabel(filters.draft_date_from) : "any date"} – ${filters.draft_date_to ? dayLabel(filters.draft_date_to) : "any date"}`, onRemove: () => applyFilter({ draft_date_from: "", draft_date_to: "" }) },
@@ -301,9 +300,6 @@ export function PartnerDealFlow({
         }
         filters={<>
           <FilterPanel id="partner-deal-flow-filters" open={showFilters} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-            <FilterField label="Customer" htmlFor="partner-deal-customer">
-              <input id="partner-deal-customer" type="search" className={cn(toolbarControl, "w-full")} value={filters.customer} onChange={(event) => applyFilter({ customer: event.target.value })} placeholder="Any customer" />
-            </FilterField>
             <FilterField label="Status" htmlFor="partner-deal-status">
               <SelectMenu
                 id="partner-deal-status"
