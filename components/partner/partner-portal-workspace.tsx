@@ -21,7 +21,7 @@ import {
   CardTitle,
   cardSurface,
 } from "@/components/ui/card";
-import { Check, CheckCircle2, FileText, PanelLeftClose, PanelLeftOpen, Send, Users } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, FileText, PanelLeftClose, PanelLeftOpen, Send, Users } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionLoading } from "@/components/ui/page-states";
 import { confirmAction } from "@/components/ui/confirm-dialog";
@@ -345,6 +345,14 @@ export function PartnerLeadForm({
   const [formOpened, setFormOpened] = useState(false);
   // The side navigation folds to numbered dots so the form gets the room; remembered per browser.
   const [railFolded, setRailFolded] = useState(false);
+  // Sections fold to their heading; the side navigation opens one before it jumps there.
+  const [foldedSections, setFoldedSections] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleSection = (key: string, open?: boolean) => setFoldedSections((current) => {
+    const next = new Set(current);
+    const fold = open === undefined ? !next.has(key) : !open;
+    if (fold) next.add(key); else next.delete(key);
+    return next;
+  });
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
     try { setRailFolded(window.localStorage.getItem("insurvas.partner.submitRailFolded") === "1"); } catch { /* storage blocked: start open */ }
@@ -1353,7 +1361,10 @@ export function PartnerLeadForm({
                     disabled={!formOpened}
                     title={railFolded ? item.label : undefined}
                     aria-label={railFolded ? item.label : undefined}
-                    onClick={() => document.getElementById(`partner-section-${productCode}-${item.section_key}`)?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                    onClick={() => {
+                      toggleSection(item.section_key, true);
+                      window.requestAnimationFrame(() => document.getElementById(`partner-section-${productCode}-${item.section_key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+                    }}
                   >
                     <span className="portal-partner-submit-topstep-dot" data-state={done ? "done" : "next"} aria-hidden="true">{done ? <Check /> : index + 1}</span>
                     {!railFolded && <><span className="portal-partner-submit-rail-label">{item.label}</span>{formOpened && left > 0 && <span className="portal-partner-submit-rail-left">{left} left</span>}</>}
@@ -1420,13 +1431,18 @@ export function PartnerLeadForm({
           {formOpened && sections.map((section) => (
             <section key={section.section_key} className="portal-partner-submit-active-section" aria-labelledby={`partner-section-${productCode}-${section.section_key}`}>
               <div className="portal-partner-submit-panel-head">
-                <h2 id={`partner-section-${productCode}-${section.section_key}`}>{section.label}</h2>
+                <h2 id={`partner-section-${productCode}-${section.section_key}`}>
+                  <button type="button" className="portal-partner-submit-section-toggle" aria-expanded={!foldedSections.has(section.section_key)} aria-controls={`partner-fields-${productCode}-${section.section_key}`} onClick={() => toggleSection(section.section_key)}>
+                    {section.label}
+                    <ChevronDown aria-hidden="true" />
+                  </button>
+                </h2>
                 {(() => {
                   const left = requiredLeft(section);
                   return left ? <p>{left} required {left === 1 ? "field" : "fields"} left</p> : null;
                 })()}
               </div>
-              <div className="portal-partner-submit-fields">{section.fields.map(renderField)}</div>
+              <div id={`partner-fields-${productCode}-${section.section_key}`} className="portal-partner-submit-fields" hidden={foldedSections.has(section.section_key)}>{section.fields.map(renderField)}</div>
             </section>
           ))}
           {formOpened && duplicateFlagged && (

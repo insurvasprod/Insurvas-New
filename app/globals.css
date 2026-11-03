@@ -4071,3 +4071,13 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-product-row.has-markets { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-screening-control { grid-column: 1 / -1; }
 }
+
+/* Sections fold to their heading (owner, 2026-11-04), with no rule under each one. */
+.portal-partner-submit-page .portal-partner-submit-active-section { border-bottom: 0; padding: 18px 0 8px; }
+.portal-partner-submit-page .portal-partner-submit-panel-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.portal-partner-submit-page .portal-partner-submit-panel-head > p { margin: 0; font-size: 13px; color: var(--warning-ink); }
+.portal-partner-submit-page .portal-partner-submit-section-toggle { display: inline-flex; align-items: center; gap: 8px; margin: 0; padding: 2px 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; cursor: pointer; }
+.portal-partner-submit-page .portal-partner-submit-section-toggle svg { width: 18px; height: 18px; color: var(--muted); transition: transform .15s ease; }
+.portal-partner-submit-page .portal-partner-submit-section-toggle[aria-expanded="false"] svg { transform: rotate(-90deg); }
+.portal-partner-submit-page .portal-partner-submit-fields[hidden] { display: none; }
+.portal-partner-submit-page .portal-partner-submit-body > .portal-partner-submit-main .portal-partner-submit-actions { border-top: 0; }
