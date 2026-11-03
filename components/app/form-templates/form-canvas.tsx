@@ -87,7 +87,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
       <div
         key={field.field_key}
         className={cn(
-          "relative min-w-0 rounded-[10px] px-2.5 py-2 transition-colors",
+          "relative min-w-0 rounded-[10px] px-2 py-1 transition-colors",
           twoColumns && full && "col-span-2",
           isPicked ? "bg-[var(--primary-soft)] outline-2 outline-[var(--ink)]" : "hover:bg-[var(--surface-alt)]",
         )}
@@ -143,7 +143,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
 
       {/* The header above stays put; the questions scroll in here. */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-      <div className={cn("mx-auto flex w-full flex-col gap-5 p-4 transition-[max-width] duration-200 sm:p-6", width === "phone" ? "max-w-[390px]" : "max-w-[760px]")}>
+      <div className={cn("mx-auto flex w-full flex-col gap-3 p-3 transition-[max-width] duration-200 sm:p-4", width === "phone" ? "max-w-[390px]" : "max-w-[760px]")}>
         <p className="m-0 text-base font-semibold text-[var(--ink)]">Send us a {productName} lead</p>
 
         {form.sections.map((section, index) => {
@@ -154,7 +154,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
           const topicLabel = topic ? TEMPLATE_SECTION_GROUP_LABELS[topic] : "";
           const topicOn = topic ? availability[topic] : true;
           return (
-            <section key={section.section_key} aria-label={`Part ${index + 1}: ${section.label}`} className="flex flex-col gap-1.5 border-t border-[var(--border)] pt-3 first-of-type:border-t-0 first-of-type:pt-0">
+            <section key={section.section_key} aria-label={`Part ${index + 1}: ${section.label}`} className="flex flex-col gap-1 border-t border-[var(--border)] pt-2 first-of-type:border-t-0 first-of-type:pt-0">
               <div className="flex items-center gap-1.5">
                 <Button onClick={() => toggleFold(section.section_key)} type="button" variant="ghost" size="icon" aria-expanded={open} aria-controls={`part-body-${section.section_key}`} aria-label={open ? `Fold part “${section.label}”` : `Open part “${section.label}”`}>
                   <ChevronDown aria-hidden="true" className={cn("transition-transform duration-150", !open && "-rotate-90")} />
@@ -186,10 +186,10 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
                 </DropdownMenu>
               </div>
               {open && (
-              <div id={`part-body-${section.section_key}`} className={cn("grid gap-x-3 gap-y-1", twoColumns ? "grid-cols-2" : "grid-cols-1")}>
+              <div id={`part-body-${section.section_key}`} className={cn("grid gap-x-3 gap-y-0", twoColumns ? "grid-cols-2" : "grid-cols-1")}>
               {count === 0 && <p className="col-span-full m-0 px-3 py-1 text-sm text-[var(--body)]">No questions in this part yet. Add the first one below.</p>}
               {section.fields.map((formField) => question(section.section_key, formField))}
-              <div className="col-span-full mt-1">
+              <div className="col-span-full mt-0.5">
               {addIn === section.section_key ? (
                 <AddQuestion
                   sectionLabel={section.label}
@@ -202,7 +202,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
                 <button
                   onClick={() => setAddIn(section.section_key)}
                   type="button"
-                  className="flex h-9 items-center gap-1.5 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-transparent px-3 text-sm font-semibold text-[var(--body)] transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                  className="flex h-8 items-center gap-1.5 rounded-[10px] border border-dashed border-[var(--border-strong)] bg-transparent px-3 text-sm font-semibold text-[var(--body)] transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                 >
                   <Plus aria-hidden="true" className="size-4" />Add a question to {section.label || `part ${index + 1}`}
                 </button>
@@ -215,7 +215,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
         })}
 
         <Button onClick={onAddSection} type="button" variant="outline" className="self-start"><Plus aria-hidden="true" />Add a part</Button>
-        <p className="m-0 border-t border-[var(--border)] pt-3 text-xs text-[var(--body)]">Partners press <strong className="font-semibold text-[var(--ink)]">Send lead</strong> here. It’s off while you edit.</p>
+        <p className="m-0 border-t border-[var(--border)] pt-2 text-xs text-[var(--body)]">Partners press <strong className="font-semibold text-[var(--ink)]">Send lead</strong> here. It’s off while you edit.</p>
       </div>
       </div>
     </section>
