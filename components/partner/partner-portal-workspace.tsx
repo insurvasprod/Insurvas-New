@@ -1211,7 +1211,8 @@ export function PartnerLeadForm({
           : "Internal warning"
         : "DNC/TCPA clear";
   const duplicateLine = duplicateMatches.length ? "Review match" : duplicateState === "match" ? "Possible match" : duplicateState === "clear" ? "No match" : "Not yet";
-  const screened = screening?.outcome === "clear";
+  // Screened and let through: a result that is not blocked and has no warning still waiting on an acknowledgement.
+  const screened = Boolean(screening) && !screening?.blocked && !dncPending;
   const warningBlock = screening?.warning && (
     <div className="portal-partner-submit-callout is-warning">
       <p className="font-medium">Compliance warning</p>
