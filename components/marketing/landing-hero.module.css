@@ -57,9 +57,6 @@
 
 .description { max-width: 700px; margin: 18px 0 0; color: var(--nav-muted); font-size: clamp(16px, 1.25vw, 18px); line-height: 1.6; }
 .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 26px; }
-.proof { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin: 18px 0 0; padding: 0; color: var(--nav-muted); font-size: 13.5px; list-style: none; }
-.proof li { display: inline-flex; align-items: center; gap: 7px; }
-.proof svg { width: 15px; height: 15px; color: var(--primary); stroke-width: 2.5; }
 
 /* The device sits under the copy and runs off the bottom of the hero into the next section. */
 .deviceWrap { position: relative; max-height: clamp(380px, 46vw, 640px); overflow: hidden; }
@@ -75,5 +72,4 @@
 
 @media (max-width: 760px) {
   .copy { width: calc(100% - 32px); padding-top: 104px; }
-  .proof { flex-direction: column; align-items: center; }
 }

@@ -1,5 +1,4 @@
 import { Fragment } from "react";
-import { Check } from "lucide-react";
 
 import { MarketingCta } from "@/components/marketing/cta";
 import { LandingDevice } from "@/components/marketing/landing-device";
@@ -9,7 +8,7 @@ import styles from "@/components/marketing/landing-hero.module.css";
 /**
  * The first viewport: the promise, and beneath it the product itself — the agency dashboard in a
  * device frame that lifts to face the reader as the page scrolls. Deep olive in both themes.
- * Copy and proof points are the homepage baseline, verbatim
+ * Copy is the homepage baseline, verbatim
  * (docs/design/landing-page-research/homepage-copy-source-snapshot.md).
  */
 const HEADLINE = ["Know", "what", "every", "lead", "really", "cost", "you."];
@@ -32,9 +31,6 @@ export function LandingHero() {
           <MarketingCta href="/signup">Start your free trial</MarketingCta>
           <MarketingCta href="#features" variant="onDark" icon="down">See how it works</MarketingCta>
         </div>
-        <ul className={styles.proof} data-enter="">
-          {["$0 due during the free trial", "No per-lead fees", "Consent, DNC and calling-window screening before a dial"].map((item) => <li key={item}><Check aria-hidden="true" />{item}</li>)}
-        </ul>
       </div>
       <div className={styles.deviceWrap} data-enter="">
         <LandingDevice />
