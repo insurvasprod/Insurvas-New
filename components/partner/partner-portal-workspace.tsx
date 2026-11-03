@@ -267,9 +267,7 @@ export type PartnerFormPreviewSource = {
 
 export function PartnerLeadForm({
   productCode,
-  productName,
   partnerStatus,
-  agencyName,
   onFormVersion,
   onHasAnswersChange,
   market,
@@ -915,20 +913,6 @@ export function PartnerLeadForm({
     await runScreening();
   }
   const requiredErrors = validateRequired(values);
-  const requiredFieldCount = sections
-    .flatMap((section) => section.fields)
-    .filter((formField) => {
-      const field = fields.get(formField.field_key);
-      return (
-        field &&
-        templateFormFieldVisible(formField, values) &&
-        (field.is_required || formField.is_required)
-      );
-    }).length;
-  const completedRequiredFieldCount = Math.max(
-    0,
-    requiredFieldCount - Object.keys(requiredErrors).length,
-  );
   // The fields a duplicate is matched on. Their values are the signature: the check runs again only
   // when one of them changes, and only once the number has been screened.
   const duplicateKeys = template
@@ -1009,7 +993,6 @@ export function PartnerLeadForm({
   const duplicateFlagged = duplicateMatches.length > 0 || duplicateState === "match" || internalDqFlagged;
   const duplicateReasonReady = !duplicateFlagged || duplicateJustification.trim().length >= 10;
   const matchLatest = duplicateState === "match" && duplicateCheck?.signature === duplicateSignature ? duplicateCheck?.latest ?? null : null;
-  const progressPercent = requiredFieldCount === 0 ? null : Math.round((completedRequiredFieldCount / requiredFieldCount) * 100);
   const canSubmit = Boolean(
     partnerStatus === "active" &&
     consentGiven &&
@@ -1203,15 +1186,7 @@ export function PartnerLeadForm({
               : "Internal warning noted"
             : "DNC/TCPA clear"
         }${screenedAt ? ` — checked ${agoLabel(screenedAt, now)}` : ""}.`
-      : "Screening starts when you leave this field.";
-  const phoneTone: ChipTone =
-    screeningBusy || !screening
-      ? "neutral"
-      : screening.blocked
-        ? "warning"
-      : screening.warning
-        ? "warning"
-        : "success";
+      : "";
   const phoneLabel = screeningBusy
     ? "Screening…"
     : !screening
@@ -1225,24 +1200,6 @@ export function PartnerLeadForm({
             : "Needs acknowledgement"
           : "Internal warning"
         : "DNC/TCPA clear";
-  const phoneScreenComplete = screening?.outcome === "clear";
-  const duplicateTone: ChipTone =
-    duplicateMatches.length || duplicateState === "match"
-      ? "warning"
-      : duplicateState === "clear"
-        ? "success"
-        : "neutral";
-  const duplicateLabel = duplicateMatches.length
-    ? "Review match"
-    : duplicateState === "match"
-      ? "Possible match"
-      : duplicateState === "clear"
-        ? "No match"
-        : duplicateState === "checking"
-          ? "Checking…"
-          : duplicateState === "unavailable"
-            ? "Runs on submit"
-            : "Not yet";
   const warningBlock = screening?.warning && (
     <div className="portal-partner-submit-callout is-warning">
       <p className="font-medium">Compliance warning</p>
@@ -1370,13 +1327,14 @@ export function PartnerLeadForm({
                 {screeningBusy ? "Screening…" : screening ? "Screened" : "Screen"}
               </Button>
             </div>
-            <small>{screening ? phoneLabel : phoneHint}</small>
+            {(screening || screeningBusy) && <small>{screening ? phoneLabel : phoneHint}</small>}
             {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
             {fieldErrors[phoneField.field_key] && <p className="portal-partner-submit-error" role="alert">{fieldErrors[phoneField.field_key]}</p>}
           </div>
         </div>
       </div>
-      <div className="portal-partner-submit-body">
+      {/* Nothing to show under the setup row until the number is screened, or the screen says something. */}
+      <div className="portal-partner-submit-body" hidden={!formOpened && !(screeningError || rejectionNotice || dncPending)}>
         <form
           id={`partner-form-${productCode}`}
           className="portal-partner-submit-main"
@@ -1385,43 +1343,6 @@ export function PartnerLeadForm({
           <p className="sr-only" role="status">
             {status}
           </p>
-          {!formOpened && (
-            <section className="portal-partner-submit-screening-intro" aria-labelledby={`partner-submit-start-${productCode}`}>
-              <div className="portal-partner-submit-screening-intro-head">
-                <div>
-                  <h2 id={`partner-submit-start-${productCode}`}>Start with a phone screen</h2>
-                  <p>Screen the customer’s number to open the application. Your answers save automatically as you work.</p>
-                </div>
-                <span className="portal-partner-submit-step-count">Step {phoneScreenComplete ? 2 : 1} of 3</span>
-              </div>
-              <ol className="portal-partner-submit-steps" aria-label="Lead submission steps">
-                <li className={phoneScreenComplete ? "is-complete" : "is-current"} aria-current={phoneScreenComplete ? undefined : "step"}>
-                  <span className="portal-partner-submit-step-number">{phoneScreenComplete ? <CheckCircle2 aria-hidden="true" /> : "1"}</span>
-                  <span className="portal-partner-submit-step-copy"><strong>Screen phone</strong><small>{screening ? screening.outcome === "clear" ? "Screening complete" : "Needs review before continuing" : screeningBusy ? "Checking the number…" : "Check DNC/TCPA eligibility"}</small></span>
-                </li>
-                <li className={phoneScreenComplete ? "is-current" : "is-upcoming"} aria-current={phoneScreenComplete ? "step" : undefined}>
-                  <span className="portal-partner-submit-step-number">2</span>
-                  <span className="portal-partner-submit-step-copy"><strong>Complete application</strong><small>Enter the customer and coverage details</small></span>
-                </li>
-                <li className="is-upcoming">
-                  <span className="portal-partner-submit-step-number">3</span>
-                  <span className="portal-partner-submit-step-copy"><strong>Review and submit</strong><small>Check the answers and confirm consent</small></span>
-                </li>
-              </ol>
-              {sections.length > 0 && (
-                <div className="portal-partner-submit-section-preview" aria-labelledby={`partner-submit-sections-${productCode}`}>
-                  <div className="portal-partner-submit-section-preview-head">
-                    <h3 id={`partner-submit-sections-${productCode}`}>Your application sections</h3>
-                    <span>{sections.length} {sections.length === 1 ? "section" : "sections"}</span>
-                  </div>
-                  <ul>{sections.map((item, index) => <li key={item.section_key}>
-                    <span aria-hidden="true">{String(index + 1).padStart(2, "0")}</span>
-                    <strong>{item.label}</strong>
-                  </li>)}</ul>
-                </div>
-              )}
-            </section>
-          )}
           {!formOpened && (screeningError || rejectionNotice || dncPending) && (
             <div className="portal-partner-submit-phone-feedback">
               {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
@@ -1440,11 +1361,10 @@ export function PartnerLeadForm({
             <section key={section.section_key} className="portal-partner-submit-active-section" aria-labelledby={`partner-section-${productCode}-${section.section_key}`}>
               <div className="portal-partner-submit-panel-head">
                 <h2 id={`partner-section-${productCode}-${section.section_key}`}>{section.label}</h2>
-                <p>{(() => {
-                  const total = visibleRequired(section).length;
+                {(() => {
                   const left = requiredLeft(section);
-                  return total === 0 ? "No required fields in this section." : left ? `${left} required ${left === 1 ? "field" : "fields"} left. Required fields are marked *.` : "Required fields complete.";
-                })()}</p>
+                  return left ? <p>{left} required {left === 1 ? "field" : "fields"} left</p> : null;
+                })()}
               </div>
               <div className="portal-partner-submit-fields">{section.fields.map(renderField)}</div>
             </section>
@@ -1485,13 +1405,12 @@ export function PartnerLeadForm({
           {formOpened && (
             <section className={`${cardSurface} portal-partner-submit-consent`} aria-labelledby={`partner-consent-heading-${productCode}`}>
               <div className="portal-partner-submit-review-consent-head">
-                <div><h3 id={`partner-consent-heading-${productCode}`}>Customer consent</h3><p>Required before this lead can be submitted.</p></div>
+                <div><h3 id={`partner-consent-heading-${productCode}`}>Customer consent</h3></div>
                 <StatusChip tone={consentGiven ? "good" : "warning"}>{consentGiven ? "Confirmed" : "Required"}</StatusChip>
               </div>
               <label><input ref={consentRef} id={`partner-consent-${productCode}`} type="checkbox" checked={consentGiven} onChange={(event) => setConsentGiven(event.target.checked)} />
                 <span>The customer gave express written consent to be contacted by a licensed agent at the number above, by phone and by SMS, about insurance products. I hold documentation of that consent and understand every submission is audit logged.</span>
               </label>
-              <p>Consent is never pre-selected. We record the confirmation time with the lead.</p>
             </section>
           )}
           {submitError && (
@@ -1501,7 +1420,7 @@ export function PartnerLeadForm({
           )}
           <div className="portal-partner-submit-actions">
             <span className="portal-partner-submit-save-status" role="status">
-              {saving ? "Saving draft…" : draftSavedAt ? `Saved ${agoLabel(draftSavedAt, now)}` : "Changes save automatically"}
+              {saving ? "Saving…" : draftSavedAt ? `Saved ${agoLabel(draftSavedAt, now)}` : ""}
             </span>
             {saveFailed && <Button type="button" variant="outline" disabled={saving} onClick={() => void persistDraft()}>Retry save</Button>}
             {formOpened && (
@@ -1521,96 +1440,11 @@ export function PartnerLeadForm({
             </p>
           )}
         </form>
-        <aside
-          className="portal-partner-submit-readiness"
-          aria-label="Submission checks"
-        >
-          <div className="portal-partner-submit-panel-head">
-            <h2>Submission checks</h2>
-            <p>Here’s what still needs attention.</p>
-          </div>
-          <div className="portal-partner-submit-progress">
-            <div><span>{formOpened ? "Form progress" : "Current step"}</span><strong>{formOpened ? `${progressPercent == null ? "—" : `${progressPercent}%`} required fields complete` : "Phone screening"}</strong></div>
-            {formOpened && (
-              <div
-                className="portal-partner-submit-progress-track"
-                role="progressbar"
-                aria-label="Required form fields completed"
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={progressPercent ?? 0}
-              >
-                <span style={{ width: `${progressPercent ?? 0}%` }} />
-              </div>
-            )}
-          </div>
-          <dl className="portal-partner-submit-checks">
-            <div>
-              <dt>Phone screened</dt>
-              <dd>
-                <ReadinessValue tone={phoneTone}>{phoneLabel}</ReadinessValue>
-              </dd>
-            </div>
-            <div>
-              <dt>Required fields</dt>
-              <dd>
-                <ReadinessValue
-                  tone={
-                    requiredFieldCount === 0 || completedRequiredFieldCount === 0
-                      ? "neutral"
-                      : completedRequiredFieldCount === requiredFieldCount
-                        ? "success"
-                        : "warning"
-                  }
-                >
-                  {!formOpened
-                    ? "After screening"
-                    : requiredFieldCount === 0
-                    ? "None required"
-                    : `${completedRequiredFieldCount} of ${requiredFieldCount}`}
-                </ReadinessValue>
-              </dd>
-            </div>
-            <div>
-              <dt>Duplicate check</dt>
-              <dd>
-                <ReadinessValue tone={duplicateTone}>{duplicateLabel}</ReadinessValue>
-              </dd>
-            </div>
-            <div>
-              <dt>Consent captured</dt>
-              <dd>
-                <ReadinessValue tone={consentGiven ? "success" : "neutral"}>
-                  {consentGiven ? "Yes" : "Not yet"}
-                </ReadinessValue>
-              </dd>
-            </div>
-          </dl>
-          <dl className="portal-partner-submit-facts">
-            <div>
-              <dt>Product</dt>
-              <dd>{productName}</dd>
-            </div>
-            <div>
-              <dt>Form version</dt>
-              <dd>v{template.assignment.definition_version}</dd>
-            </div>
-            <div>
-              <dt>Agency</dt>
-              <dd>{agencyName ?? "Your agent"}</dd>
-            </div>
-            <div>
-              <dt>Draft saved</dt>
-              <dd>{draftSavedAt ? agoLabel(draftSavedAt, now) : "Not yet"}</dd>
-            </div>
-          </dl>
-        </aside>
       </div>
     </>
   );
 }
 
-type ChipTone = "success" | "warning" | "neutral";
 
 /** One started form, as GET /api/partner/drafts lists it (LA-1.6-5). */
 type PartnerDraftRow = {
@@ -1625,16 +1459,6 @@ type PartnerDraftRow = {
   pause_notes: string | null;
   updated_at: string;
 };
-
-/** Plain status text with one restrained signal dot; the wording carries the meaning. */
-function ReadinessValue({ tone, children }: { tone: ChipTone; children: ReactNode }) {
-  return (
-    <span className={`portal-partner-submit-readiness-value is-${tone}`}>
-      <span aria-hidden="true" />
-      {children}
-    </span>
-  );
-}
 
 export type PartnerPortalSection =
   "overview" | "submit" | "pipeline" | "team" | "team-review" | "messages" | "settings";

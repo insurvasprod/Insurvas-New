@@ -4009,3 +4009,10 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .portal-partner-submit-main { padding-inline: 16px; }
   .portal-partner-submit-save-status { flex-basis: 100%; }
 }
+
+/* Submit a lead (owner pick A, 2026-11-04): the setup row, then one centred column. The hero, the steps,
+   the sections preview and the checks panel are gone, so the body has nothing beside it. */
+.portal-partner-submit-page .portal-partner-submit-body { display: block; }
+.portal-partner-submit-page .portal-partner-submit-main { max-width: 52rem; margin-inline: auto; }
+
+.portal-partner-submit-page .portal-partner-submit-body[hidden] { display: none; }
