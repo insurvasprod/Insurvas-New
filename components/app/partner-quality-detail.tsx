@@ -7,18 +7,25 @@ import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
+import { FramedLoading } from "@/components/app/reports/reports-slot";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { defaultPartnerQualityPeriod, percentChange, percentOf, pointChange, screeningFlags } from "@/lib/partnerQuality/metrics";
 import type { PartnerQualityDetail, PartnerQualityDetailLead, PartnerQualityMember, PartnerQualityMetric, PartnerQualityPeriodMetrics } from "@/lib/partnerQuality/types";
 import { count, dateText, dispositionText, downloadCsv, humanize, MetricCell, metricLabel, paginate, Pager, partnerTypeLabel, percent, PeriodInputs, periodQuery, periodText, Prior, productText, useDrilldown, type Period } from "./partner-quality-parts";
-import { FILL_CARD, useFittingRows } from "./use-fitting-rows";
+import { useFittingRows } from "./use-fitting-rows";
 import { ViewTabs } from "@/components/ui/view-tabs";
-import { InReportsSlot, useReportsTitle } from "@/components/app/reports/reports-slot";
+import { Callout } from "@/components/app/settings/primitives";
+import { InReportsSlot, useReportsTitle, useUrlTab } from "@/components/app/reports/reports-slot";
 
-/** The partner's sections, one at a time (2026-10-06 redesign: five stacked tables became tabs). */
-type DetailTab = "leads" | "outcomes" | "team" | "agents" | "daily";
+/**
+ * The partner's sections, one at a time (2026-10-06 redesign: five stacked tables became tabs; foundation
+ * pass 2026-11-03: Outcomes and Screening, two tables side by side, are a tab each). `?section=` opens one
+ * (not `?tab=`: on a partner record that already names the record's own tab).
+ */
+const DETAIL_TABS = ["leads", "outcomes", "screening", "team", "agents", "daily"] as const;
+type DetailTab = (typeof DETAIL_TABS)[number];
 
 type LeadFilter = "all" | "unclaimed" | "claimed" | "worked" | "submitted" | "flagged" | "duplicate" | "disqualified";
 const LEAD_FILTERS: { value: LeadFilter; label: string }[] = [
@@ -79,10 +86,10 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   const [dayPage, setDayPage] = useState(1);
   const [teamPage, setTeamPage] = useState(1);
   const [agentPage, setAgentPage] = useState(1);
-  const [tab, setTab] = useState<DetailTab>("leads");
+  const { tab, setTab, href: tabHref } = useUrlTab(DETAIL_TABS, "leads", "section");
   // Back link, header, strip, tab row, toolbar, column heads and pager around the rows.
   const pageSize = useFittingRows(480, 45);
-  const drilldown = useDrilldown(data?.disposition_labels);
+  const drilldown = useDrilldown();
 
   const load = useCallback(async (next: Period) => {
     setLoading(true); setError("");
@@ -111,12 +118,13 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
     return data.leads.filter((lead) => matchesFilter(lead, filter) && (!needle || [lead.full_name, lead.phone, lead.state, lead.product, lead.agent_name, lead.submitted_by, leadStatus(lead, labels)].some((value) => value?.toLowerCase().includes(needle))));
   }, [data, filter, search, labels]);
 
-  useReportsTitle(framed ? data?.partner.name ?? null : null);
+  // The header: the partner's name, and its type and the period as the facts line (owner 2026-11-02).
+  useReportsTitle(framed ? data?.partner.name ?? null : null, framed && data ? `${partnerTypeLabel(data.partner.partner_type)} · ${periodText({ from: data.from, to: data.to })} · against the ${periodText({ from: data.previous_from ?? data.from, to: data.previous_to ?? data.to })} before` : undefined);
   const backHref = `/app/partner-quality?${periodQuery(period)}`;
   // The way back is the trail above the title (owner 2026-10-30), keeping the period.
   const trail = (current: string) => [{ label: "Reports" }, { label: "Partner quality", href: backHref }, { label: current }];
 
-  if (loading && !data) return <PageLoading />;
+  if (loading && !data) return framed ? <FramedLoading /> : <PageLoading />;
   if (!data) return <div className="flex flex-col gap-6">{!framed && <PageHeader title="Partner" breadcrumbs={trail("Partner")} />}<ErrorState detail={error || "Could not load this partner"} action={<Button variant="outline" onClick={() => void load(period)}>Try again</Button>} /></div>;
 
   const active: Period = { from: data.from, to: data.to };
@@ -158,12 +166,16 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   ];
   const tabs: { key: DetailTab; label: string; count?: number }[] = [
     { key: "leads", label: "Leads sent", count: data.leads.length },
-    { key: "outcomes", label: "Outcomes & screening" },
+    { key: "outcomes", label: "Outcomes" },
+    { key: "screening", label: "Screening" },
     { key: "team", label: "Team", count: data.team.length },
     { key: "agents", label: "By agent", count: data.agents.length },
     { key: "daily", label: "Daily volume" },
   ];
-  const fill = `${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-362px)]`;
+  // Every tab's toolbar starts with the period (which every tab reads) and ends with Refresh.
+  const periodTool = <PeriodInputs value={active} onChange={changePeriod} />;
+  const refreshTool = <RefreshButton onClick={() => void load(period)} refreshing={loading} />;
+  const plainToolbar = <DataToolbar actions={refreshTool}>{periodTool}</DataToolbar>;
 
   return <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
     {embedded ? <p className="m-0 text-sm leading-[1.5] text-muted-foreground">{periodText(active)}</p> : framed ? null : <PageHeader title={name} breadcrumbs={trail(name)} description={`${partnerTypeLabel(data.partner.partner_type)} · ${periodText(active)}`} />}
@@ -171,34 +183,29 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
     {/* Four figures (2026-10-06 redesign): claimed and worked ride on Sent's footnote, duplicates
         on DQ's. Every count is still in the Team and Daily tabs, and opens its leads there. */}
     <StatStrip label={`${name} totals`}>
-      <StatTile label="Sent" value={count(now.sent)} delta={countDelta(now.sent, prev.sent)} footnote={`prev ${count(prev.sent)} · ${count(now.claimed)} claimed · ${count(now.worked)} worked`} />
-      <StatTile label="Conversion" value={rate(now.conversion_rate, now.sent)} delta={rateDelta(now.conversion_rate, prev.conversion_rate)} footnote={`${count(now.submitted)} submitted · prev ${rate(prev.conversion_rate, prev.sent)}`} />
-      <StatTile label="Screening" labelTitle="Screening pass rate: sent leads with no TCPA, DNC or invalid-phone flag" value={rate(now.screening_pass_rate, now.sent)} valueTone={now.screening_pass_rate != null && now.screening_pass_rate < 90 ? "warning" : undefined} delta={rateDelta(now.screening_pass_rate, prev.screening_pass_rate)} footnote={`prev ${rate(prev.screening_pass_rate, prev.sent)}`} />
-      <StatTile label="DQ %" value={rate(now.disqualification_rate, now.sent)} delta={rateDelta(now.disqualification_rate, prev.disqualification_rate, "down")} footnote={`${count(now.duplicates)} duplicates · prev ${rate(prev.disqualification_rate, prev.sent)}`} />
+      <StatTile label="Sent" href={tabHref("leads")} value={count(now.sent)} delta={countDelta(now.sent, prev.sent)} footnote={`prev ${count(prev.sent)} · ${count(now.claimed)} claimed · ${count(now.worked)} worked`} />
+      <StatTile label="Conversion" href={tabHref("agents")} value={rate(now.conversion_rate, now.sent)} delta={rateDelta(now.conversion_rate, prev.conversion_rate)} footnote={`${count(now.submitted)} submitted · prev ${rate(prev.conversion_rate, prev.sent)}`} />
+      <StatTile label="Screening" href={tabHref("screening")} labelTitle="Screening pass rate: sent leads with no TCPA, DNC or invalid-phone flag" value={rate(now.screening_pass_rate, now.sent)} valueTone={now.screening_pass_rate != null && now.screening_pass_rate < 90 ? "warning" : undefined} delta={rateDelta(now.screening_pass_rate, prev.screening_pass_rate)} footnote={`prev ${rate(prev.screening_pass_rate, prev.sent)}`} />
+      <StatTile label="DQ %" href={tabHref("outcomes")} value={rate(now.disqualification_rate, now.sent)} delta={rateDelta(now.disqualification_rate, prev.disqualification_rate, "down")} footnote={`${count(now.duplicates)} duplicates · prev ${rate(prev.disqualification_rate, prev.sent)}`} />
     </StatStrip>
 
     {/* Sections as tabs on the left, the period (which every tab reads) on the right. */}
     <InReportsSlot framed={framed} slot="lead">
-    <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3">
       <ViewTabs label="Partner sections" tabs={tabs} value={tab} onChange={setTab} idPrefix="partner-tab" controls="partner-view" />
-      <div className="flex flex-wrap items-center gap-2">
-        <PeriodInputs value={active} onChange={changePeriod} />
-        <RefreshButton onClick={() => void load(period)} refreshing={loading} />
-      </div>
-    </div>
     </InReportsSlot>
-    {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    {error && <Callout tone="error" title="This partner did not reload">{error}</Callout>}
 
     {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
     <div key={tab} role="tabpanel" id="partner-view" aria-labelledby={`partner-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
     {tab === "leads" && <TableCard
-      className={fill}
       toolbar={
         <DataToolbar actions={<>
           {leadsFiltered && <ClearFiltersButton onClick={clearLeadFilters} />}
           <Button type="button" variant="outline" onClick={exportLeads} disabled={shownLeads.length === 0}><Download aria-hidden="true" />Export</Button>
+          {refreshTool}
         </>}>
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setLeadPage(1); }} placeholder="Search leads" />
+          {periodTool}
           <select aria-label="Show leads" className={toolbarControl} value={filter} onChange={(event) => { setFilter(event.target.value as LeadFilter); setLeadPage(1); }}>
             {LEAD_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
@@ -210,14 +217,13 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
         ? <EmptyState title="No leads in this period" hint="Widen the period to see earlier leads." />
         : shownLeads.length === 0
           ? <NoMatches noun="leads" onClear={clearLeadFilters} />
-          : <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
-              <thead><tr><th>Received</th><th>Customer</th><th>Phone</th><th>State</th><th>Product</th><th>Screening</th><th>Duplicate</th><th>Submitted by</th><th>Claimed by</th><th>Status</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
+          : <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
+              <thead><tr><th>Received</th><th>Customer</th><th>State</th><th>Product</th><th>Screening</th><th>Duplicate</th><th>Submitted by</th><th>Claimed by</th><th>Status</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
               <tbody className="m-seq">
                 {leadRows.map((lead) => (
                   <tr key={lead.lead_id} className="m-row">
                     <td className="whitespace-nowrap tabular-nums">{dateText(lead.date)}</td>
-                    <td className="max-w-[220px]"><span className="block truncate font-semibold" title={lead.full_name}>{lead.full_name}</span></td>
-                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{lead.phone ?? "No phone"}</td>
+                    <td className="max-w-[220px]"><span className="block truncate font-semibold" title={lead.full_name}>{lead.full_name}</span><span className="block text-xs tabular-nums text-muted-foreground">{lead.phone ?? "No phone"}</span></td>
                     <td>{lead.state ?? "—"}</td>
                     <td className="whitespace-nowrap">{productText(lead.product)}</td>
                     <td className="whitespace-nowrap"><span className={FLAGGED.has(lead.screening) || lead.screening === "Disqualified" ? "font-semibold text-[var(--warning-ink)]" : undefined}>{lead.screening}</span></td>
@@ -232,8 +238,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
             </table>, 6)}
     </TableCard>}
 
-    {tab === "outcomes" && <div className="grid items-start gap-6 lg:grid-cols-2">
-      <TableCard title="Outcomes">
+    {tab === "outcomes" && <TableCard toolbar={plainToolbar}>
         {section(now.sent === 0
           ? <EmptyState title="No outcomes" hint="Nothing was sent in this period." />
           : <table className="portal-lead-table w-full min-w-0! text-left text-sm">
@@ -249,9 +254,8 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
                 {now.sent - dispositioned > 0 && <tr><td className="text-muted-foreground">No outcome yet</td><td className="text-right tabular-nums">{count(now.sent - dispositioned)}</td><td className="text-right tabular-nums">{percent(percentOf(now.sent - dispositioned, now.sent))}</td></tr>}
               </tbody>
             </table>, 3)}
-      </TableCard>
-
-      <TableCard title="Screening">
+      </TableCard>}
+    {tab === "screening" && <TableCard toolbar={plainToolbar}>
         {section(<table className="portal-lead-table w-full min-w-0! text-left text-sm">
           <thead><tr><th>Result</th><th className="text-right">Leads</th><th className="text-right">Of sent</th><th className="text-right">Prev</th></tr></thead>
           <tbody>
@@ -265,19 +269,17 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
             ))}
           </tbody>
         </table>, 4)}
-      </TableCard>
-    </div>}
+      </TableCard>}
 
-    {tab === "team" && <TableCard className={fill} footer={data.team.length ? <Pager page={teamCurrent} total={data.team.length} pageSize={pageSize} noun="members" onPage={setTeamPage} /> : undefined}>
+    {tab === "team" && <TableCard toolbar={plainToolbar} footer={data.team.length ? <Pager page={teamCurrent} total={data.team.length} pageSize={pageSize} noun="members" onPage={setTeamPage} /> : undefined}>
       {section(data.team.length === 0 && data.unattributed.sent === 0
         ? <EmptyState title="No partner users" hint="Invite them from the partner's record." action={<Button asChild variant="outline"><Link href={`/app/publishers/${data.partner.id}`}>Open partner</Link></Button>} />
-        : <table className="portal-lead-table w-full min-w-[1180px] text-left text-sm">
-            <thead><tr><th>Member</th><th>Email</th><th>Role</th><th>Access</th><th>Reports to</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Conversion</th></tr></thead>
+        : <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
+            <thead><tr><th>Member</th><th>Role</th><th>Access</th><th>Reports to</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Conversion</th></tr></thead>
             <tbody>
               {teamRows.map((member) => (
                 <tr key={member.id}>
-                  <td className="max-w-[200px]"><span className="block truncate font-semibold" title={member.name}>{member.name}</span></td>
-                  <td className="max-w-[220px] truncate text-muted-foreground" title={member.email ?? undefined}>{member.email}</td>
+                  <td className="max-w-[240px]"><span className="block truncate font-semibold" title={member.name}>{member.name}</span><span className="block truncate text-xs text-muted-foreground" title={member.email ?? undefined}>{member.email}</span></td>
                   <td className="whitespace-nowrap">{member.role === "partner_admin" ? "Partner admin" : "Partner user"}</td>
                   <td className="whitespace-nowrap">{member.status === "revoked" ? <span className="text-muted-foreground">Revoked</span> : "Active"}</td>
                   <td className="whitespace-nowrap">{member.role === "partner_admin" ? "—" : member.partner_admin_name ?? "Unassigned"}</td>
@@ -293,7 +295,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
           </table>, 6)}
     </TableCard>}
 
-    {tab === "agents" && <TableCard className={fill} footer={data.agents.length ? <Pager page={agentCurrent} total={data.agents.length} pageSize={pageSize} noun="agents" onPage={setAgentPage} /> : undefined}>
+    {tab === "agents" && <TableCard toolbar={plainToolbar} footer={data.agents.length ? <Pager page={agentCurrent} total={data.agents.length} pageSize={pageSize} noun="agents" onPage={setAgentPage} /> : undefined}>
       {section(data.agents.length === 0
         ? <EmptyState title="No leads claimed yet" hint="Agents appear here once they claim this partner's leads." />
         : <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
@@ -312,7 +314,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
           </table>, 5)}
     </TableCard>}
 
-    {tab === "daily" && <TableCard className={fill} footer={<Pager page={dayCurrent} total={data.daily.length} pageSize={pageSize} noun="days" onPage={setDayPage} />}>
+    {tab === "daily" && <TableCard toolbar={plainToolbar} footer={<Pager page={dayCurrent} total={data.daily.length} pageSize={pageSize} noun="days" onPage={setDayPage} />}>
       {section(<table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
         <thead><tr><th>Date</th><th className="text-right">Sent</th><th className="text-right">Claimed</th><th className="text-right">Worked</th><th className="text-right">Submitted</th><th className="text-right">Flagged</th><th className="text-right">Dupes</th></tr></thead>
         <tbody>
@@ -331,15 +333,13 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
       </table>, 7)}
     </TableCard>}
     </div>
-    {drilldown.drawer}
   </div>;
 }
 
 /** Leads no partner account submitted (API posts, agency imports), so the team rows add up to Sent. */
 function UnattributedRow({ metrics }: { metrics: PartnerQualityPeriodMetrics }) {
   return <tr className="text-muted-foreground">
-    <td className="whitespace-nowrap">Other sources</td>
-    <td>API or agency import</td>
+    <td className="whitespace-nowrap">Other sources<span className="block text-xs">API or agency import</span></td>
     <td>—</td>
     <td>—</td>
     <td>—</td>

@@ -2,6 +2,7 @@ import "server-only";
 
 import { createHash } from "node:crypto";
 
+import { carrierFilter } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { dayMonthYear } from "@/lib/format/dates";
@@ -113,11 +114,13 @@ async function carriersById(ids: string[]): Promise<Map<string, MatchCarrier>> {
   return new Map(((result.data ?? []) as MatchCarrier[]).map((row) => [row.id, row]));
 }
 
-/** The platform carrier library, for the import dialog's carrier choice. */
-export async function listStatementCarriers(): Promise<StatementCarrierOption[]> {
-  const result = await db().from("carriers").select("id, code, name").is("organization_id", null).eq("is_active", true).order("sort_order").order("name");
-  if (result.error) throw new Error(`Could not load carriers: ${result.error.message}`);
-  return (result.data ?? []) as StatementCarrierOption[];
+/**
+ * The import dialog's carrier choice (LA-0.4): the carriers switched on in Settings › Carriers, plus
+ * any the agency already holds statements from (a carrier switched off keeps paying on its policies).
+ */
+export async function listStatementCarriers(tenantId: string): Promise<StatementCarrierOption[]> {
+  const held = await db().from("tenant_commission_statements").select("carrier_id").eq("tenant_id", tenantId);
+  return carrierFilter(tenantId, ((held.data ?? []) as Array<{ carrier_id: string | null }>).map((row) => row.carrier_id));
 }
 
 type PolicyRow = { id: string; policy_number: string; insured_name: string; carrier: string; created_by: string | null };

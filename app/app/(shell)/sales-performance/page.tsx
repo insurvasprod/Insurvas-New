@@ -21,6 +21,9 @@ async function orPending<T>(read: Promise<T>): Promise<T | null> {
   }
 }
 
+/** The view's (i) (foundation pass 2026-11-03): what the report counts, once, beside the title. */
+const INFO = "Where applications stop, by carrier and reason. Every rate shows the two numbers it comes from; under 5 cases a cell shows the count, greyed. Placed is partial: it is never inferred from issued.";
+
 export default async function SalesPerformancePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("sales_report");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Sales performance" description="Where cases drop, and which carriers decline what." />;
@@ -29,11 +32,11 @@ export default async function SalesPerformancePage({ searchParams }: { searchPar
   if (query.preview === "sample" && process.env.NODE_ENV !== "production") {
     // eslint-disable-next-line react-hooks/purity -- a server render: the sample is dated as of this request.
     const now = Date.now();
-    return <ReportsPage view="sales"><SalesPerformance report={buildSalesReport(sampleReportInput(now), defaultWindow(now, "UTC"))} sample framed /></ReportsPage>;
+    return <ReportsPage view="sales" info={INFO}><SalesPerformance report={buildSalesReport(sampleReportInput(now), defaultWindow(now, "UTC"))} sample framed /></ReportsPage>;
   }
   // The Reports views' shared period (?from&to), when another view set one.
   const period = sharedPeriod(query);
   const loaded = await orPending(scopeFor(guard.context).then((scope) => loadSalesReport(guard.context.tenantId, period ?? {}, undefined, scope)));
   if (!loaded) return <SetupPending title="Sales performance" />;
-  return <ReportsPage view="sales"><SalesPerformance report={loaded.report} timeZone={loaded.timeZone} framed periodFromAddress={Boolean(period)} /></ReportsPage>;
+  return <ReportsPage view="sales" info={INFO}><SalesPerformance report={loaded.report} timeZone={loaded.timeZone} framed periodFromAddress={Boolean(period)} /></ReportsPage>;
 }

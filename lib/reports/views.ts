@@ -7,7 +7,7 @@
 /** The Reports menu collapsed or open, remembered for a year; the frame reads it on the server so the page draws at the right width. */
 export const REPORTS_RAIL_COOKIE = "insurvas_reports_rail";
 
-export type ReportsView = "sales" | "activity" | "scoring" | "book" | "cpa" | "partner";
+export type ReportsView = "sales" | "activity" | "scoring" | "book" | "cpa" | "partner" | "retention" | "retentionResults" | "producers";
 
 export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; sub: string; href: string; sharesPeriod: boolean }[] = [
   { key: "sales", menuKey: "insight.sales-performance", label: "Sales performance", sub: "Funnel, timing, declines", href: "/app/sales-performance", sharesPeriod: true },
@@ -15,8 +15,13 @@ export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; 
   { key: "scoring", menuKey: "insight.scoring", label: "Queue scoring", sub: "Scored order against plain", href: "/app/scoring", sharesPeriod: false },
   // Cohorts in months (LA-4.18), not a date window: its own period.
   { key: "book", menuKey: "insight.book-scorecards", label: "Book scorecards", sub: "Persistency and chargebacks", href: "/app/book-scorecards", sharesPeriod: false },
+  // AG-1.9 · the agency's producer scorecards (2026-11-03, out of Team): a date window, so the shared period.
+  { key: "producers", menuKey: "team.scorecards", label: "Producer scorecards", sub: "Who is profitable, not just busy", href: "/app/producer-scorecards", sharesPeriod: true },
   { key: "cpa", menuKey: "insight.true-cpa", label: "True CPA", sub: "Cost per issued policy", href: "/app/true-cpa", sharesPeriod: true },
   { key: "partner", menuKey: "partners.review", label: "Partner quality", sub: "Lead quality, by partner", href: "/app/partner-quality", sharesPeriod: true },
+  // Module 5's two report pages (owner 2026-11-02: "this can go into reports"), each with its own period.
+  { key: "retention", menuKey: "retention.scorecard", label: "Retention scorecard", sub: "Save rate by reason, per rep", href: "/app/retention-scorecard", sharesPeriod: false },
+  { key: "retentionResults", menuKey: "retention.results", label: "Retention results", sub: "Did the radar and the saves work", href: "/app/retention-results", sharesPeriod: false },
 ];
 
 /** The view an address belongs to (a partner's page is Partner quality), or null outside Reports. */

@@ -16,10 +16,13 @@ import { REPORTS_RAIL_COOKIE, reportsViewLabel, type ReportsView } from "@/lib/r
  * frame. The menu offers the Reports pages the sidebar offers this person.
  *
  * `title`: the record a drill or a sub-page has open (a scorecard's rows), in place of the view's name.
- * `bar`: the view puts its own tabs or actions in the top row (ReportsSlot), so the row is held open on
- * the first paint rather than pushing the view down once they arrive.
+ * `bar`: accepted and ignored (2026-11-02): a view's tabs and actions (ReportsSlot) sit on the title's line.
+ *
+ * Foundation pass (2026-11-03, docs/reports/FOUNDATION-PASS.md), as Accounting: `info` is the view's (i)
+ * (what used to be a sentence over a table); a record under a view (a drill, an agent, a partner) passes
+ * its `title`, its status `chip` and one muted line of `facts`.
  */
-export async function ReportsPage({ view, title, bar = true, children }: { view: ReportsView; title?: string; bar?: boolean; children: ReactNode }) {
+export async function ReportsPage({ view, title, info, chip, facts, children }: { view: ReportsView; title?: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; bar?: boolean; children: ReactNode }) {
   const jar = await cookies();
   const collapsed = jar.get(REPORTS_RAIL_COOKIE)?.value === "collapsed";
 
@@ -27,19 +30,15 @@ export async function ReportsPage({ view, title, bar = true, children }: { view:
     // The title and trail across the top, 24px over the content; then the rail and the view's column,
     // starting on one line. The view scrolls inside its own column; the page never does (lg and up).
     // One column under lg: minmax(0,1fr), or the rail's row of chips would stretch it past the phone's width.
-    <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
-      <ReportsHeader title={title ?? reportsViewLabel(view)}>
+    <div data-step-frame className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
+      <ReportsHeader title={title ?? reportsViewLabel(view)} info={info} chip={chip} facts={facts}>
         <div className="lg:col-start-1 lg:row-start-2 lg:min-h-0">
           <ReportsRail view={view} initialCollapsed={collapsed} />
         </div>
         <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-2 lg:min-h-0">
-          <div className={`flex flex-none flex-wrap items-center gap-3 pb-4 ${bar ? "" : "hidden"}`}>
-            <div id="reports-lead" className="flex min-h-[2.25rem] min-w-0 flex-1 flex-wrap items-center gap-2" />
-            <div id="reports-corner" className="ml-auto flex items-center gap-2" />
-          </div>
           {/* The view rises in on every switch; rows, figures and bars bring their own motion. */}
           {/* [&>*]:shrink-0: a view's own wrapper never gives up height to the scroll box (a StatStrip squeezed to a line). */}
-          <div key={view} className="flex min-w-0 flex-col gap-6 [&>*]:shrink-0 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+          <div key={view} className="flex min-w-0 flex-col gap-4 [&>*]:shrink-0 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
             {children}
           </div>
         </div>

@@ -145,6 +145,7 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
   return (
     <>
       <TableCard
+        title="Problems found"
         toolbar={
           <DataToolbar actions={<>{(agent || status !== "open") && <ClearFiltersButton onClick={clear} />}<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} /></>}>
             <select aria-label="Filter by agent" className={toolbarControl} value={agent} onChange={(e) => { setAgent(e.target.value); setPage(1); }}>
@@ -157,11 +158,11 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
             </select>
           </DataToolbar>
         }
-        footer={available && visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="findings" onPage={setPage} /> : undefined}
+        footer={available && visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="problems" onPage={setPage} /> : undefined}
       >
-        {!available ? <EmptyState title="Findings aren't available yet" hint="They appear once the database update (20261008280000) is applied." />
-          : findings.length === 0 ? <EmptyState title="No findings yet" hint="Agents note what they see in each run: a missing file, an unknown column, a status nobody has mapped." />
-          : visible.length === 0 ? <NoMatches noun="findings" onClear={clear} />
+        {!available ? <EmptyState title="Problems found aren't available yet" hint="They appear once the database update (20261008280000) is applied." />
+          : findings.length === 0 ? <EmptyState title="No problem found yet" hint="Agents note what they see in each run: a missing file, an unknown column, a status nobody has mapped." />
+          : visible.length === 0 ? <NoMatches noun="problems" onClear={clear} />
           : (
             <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
               <thead><tr><th className="w-[160px]">Agent</th><th>What it saw</th><th className="w-[110px]">Severity</th><th className="w-[130px]">When</th><th className="w-[200px] text-right">Was it right?</th></tr></thead>

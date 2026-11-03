@@ -325,8 +325,9 @@ export async function saveTemplate(tenantId: string, userId: string, input: { id
 }
 
 export async function removeTemplate(tenantId: string, id: string): Promise<void> {
-  const { error } = await db().from("vendor_invoice_template").update({ active: false }).eq("tenant_id", tenantId).eq("id", id);
+  const { data, error } = await db().from("vendor_invoice_template").update({ active: false }).eq("tenant_id", tenantId).eq("id", id).select("id");
   if (error) fail(error);
+  if (!(data as Loose[] | null)?.length) throw new InvoiceError("That template isn't in this agency.", 404);
 }
 
 /** This month's invoice from a template: number, date and quantities — the rest is filled in. */

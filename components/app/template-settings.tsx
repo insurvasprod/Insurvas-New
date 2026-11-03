@@ -21,8 +21,10 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { SectionLoading } from "@/components/ui/page-states";
+import Link from "next/link";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { DefaultChip, ResetToDefault } from "@/components/app/settings/defaults";
 import { Callout, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { ProductChips } from "@/components/app/form-templates/product-chips";
 import { PartnerLeadForm, type PartnerFormPreviewSource } from "@/components/partner/partner-portal-workspace";
@@ -82,6 +84,8 @@ export function TemplateSettings() {
   const [switchTo, setSwitchTo] = useState<string | null>(null);
   /** A part with questions in it, waiting on its remove confirmation. */
   const [removing, setRemoving] = useState<string | null>(null);
+  /** The agency sells nothing yet, so there is no form to set up. */
+  const [noProducts, setNoProducts] = useState(false);
 
   async function load(product?: string) {
     setLoading(true);
@@ -89,6 +93,7 @@ export function TemplateSettings() {
     const response = await fetch(url, { cache: "no-store" }).catch(() => null);
     const body = response ? await response.json().catch(() => null) : null;
     setLoading(false);
+    setNoProducts(body?.code === "no_products");
     if (!response?.ok) { setError(body?.error ?? "Your form templates didn’t load."); return; }
     setError("");
     setCurrent(body.current);
@@ -191,6 +196,19 @@ export function TemplateSettings() {
     return true;
   }
 
+  /** Reset to default: the Insurvas form's questions and parts into the draft; the owner publishes it. */
+  async function resetToDefault(): Promise<boolean> {
+    if (!current) return false;
+    const response = await fetch(`/api/app/templates/default?product=${encodeURIComponent(current.assignment.product_code)}`, { cache: "no-store" }).catch(() => null);
+    const body = response ? await response.json().catch(() => null) : null;
+    if (!response?.ok || !body) { notify.block(body?.error ?? "Couldn’t read the Insurvas form"); return false; }
+    const fields = (body.fields as TemplateField[]).map((field) => ({ ...field, options: [...(field.options ?? [])], validation: { ...(field.validation ?? {}) } }));
+    update((d) => ({ ...d, fields, form: body.form_definition as TemplateFormDefinition }));
+    setPicked(null);
+    notify.done("The Insurvas form is in your draft", { detail: "Review it, then publish to use it." });
+    return true;
+  }
+
   const chosen = available.find((template) => `${template.id}:${template.version}` === selected);
   async function showPreview(template: Available | null = chosen ?? null) {
     if (!template) return;
@@ -214,7 +232,13 @@ export function TemplateSettings() {
     return (
       <SettingsStack>
         <SettingsSectionHeader />
-        {error ? (
+        {noProducts ? (
+          <EmptyState
+            title="No products switched on yet"
+            hint="Each product you sell starts with the Insurvas form for it. Switch one on first."
+            action={<Button asChild variant="outline"><Link href="/app/settings#products">Open Products</Link></Button>}
+          />
+        ) : error ? (
           <Callout tone="error" title={error}>
             <Button onClick={() => void load()} type="button" variant="outline" className="mt-2">Try again</Button>
           </Callout>
@@ -386,6 +410,8 @@ export function TemplateSettings() {
 
       <div className="flex shrink-0 flex-wrap items-center gap-2">
         <ProductChips products={productOptions} value={productCode} changes={changes.length} liveVersions={liveVersions} onChange={switchProduct} />
+        {/* Insurvas default (docs/settings/DEFAULTS.md): the copy as Insurvas made it, until the agency publishes its own. */}
+        {!published && !dirty ? <DefaultChip /> : published && <ResetToDefault what={`the ${current.template.product_name || "product"} form`} kept="Your lead steps stay. Nothing changes for partners until you publish." onReset={resetToDefault} disabled={saving} />}
       </div>
 
       <ViewTabs

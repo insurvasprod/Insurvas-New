@@ -1,7 +1,7 @@
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { addMonths } from "@/lib/ledger/compute";
 import {
-  BUCKETS, DIMENSIONS, chargebacks, drillRows, everyWeek, historyStart, netByWeek, persistencyAll, placement, readDrill, scorecards, slices,
+  BUCKETS, DIMENSIONS, centsText, chargebacks, drillParam, drillRows, everyWeek, historyStart, netByWeek, persistencyAll, placement, readDrill, scorecards, slices,
   type PersistencyCell, type ScorePolicy,
 } from "@/lib/ingestion/scorecards";
 import { loadScorecards, loadWeekEntries, SCORECARDS_PENDING_MESSAGE } from "@/lib/ingestion/scorecardsStore";
@@ -20,7 +20,11 @@ import { TableCard } from "@/components/ui/table-card";
  *
  * Owner, producer (their own book) and bookkeeper, as Persistency. Opening the page writes nothing.
  */
-const VIEWS = ["overview", "persistency", "scorecards"] as const;
+// Foundation pass (2026-11-03, docs/reports/FOUNDATION-PASS.md): Overview's five stacked cards are tabs of
+// their own; an old ?view=overview opens Book.
+const VIEWS = ["book", "persistency", "chargebacks", "weeks", "scorecards", "today"] as const;
+const INFO = "Persistency, placement, chargebacks and net commission, computed live from your carrier files and the ledger. Every figure opens the rows behind it. Under the agency's sample size a share shows as a count; a bucket the book's history can't fill yet reads Building. Placed means issued and paid at least once.";
+const PLACEMENT_SETS = [{ set: "placed", label: "Placed" }, { set: "issued", label: "Issued" }, { set: "not_placed", label: "Never paid" }] as const;
 const PERIODS = [3, 6, 12, 24] as const;
 
 const cellView = (c: PersistencyCell): CellView => ({ month: c.month, building: c.building, readyOn: c.readyOn, eligible: c.eligible, alive: c.alive, premiumEligibleCents: c.premiumEligibleCents, premiumAliveCents: c.premiumAliveCents, premiumUnknown: c.premiumUnknown, endUnknown: c.endUnknown });
@@ -35,7 +39,7 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
   }
 
   const sp = await searchParams;
-  const view = (VIEWS as readonly string[]).includes(sp.view ?? "") ? (sp.view as (typeof VIEWS)[number]) : "overview";
+  const view = (VIEWS as readonly string[]).includes(sp.view ?? "") ? (sp.view as (typeof VIEWS)[number]) : "book";
   const months = (PERIODS as readonly number[]).includes(Number(sp.months)) ? Number(sp.months) : 12;
   const drill = readDrill(sp.drill);
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role };
@@ -44,7 +48,7 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
   const todayUtc = new Date().toISOString().slice(0, 10);
   const firstRead = await loadScorecards(viewer, { from: addMonths(todayUtc, -months), to: todayUtc }, { withClients: Boolean(drill), withSpend: view === "scorecards" && !drill });
   if (!firstRead.available) {
-    return <ReportsPage view="book" bar={false}><div className="m-stagger flex flex-col gap-6"><TableCard><EmptyState title="No carrier files read yet" hint="Scorecards appear once a policy file from a carrier has been read." /></TableCard></div></ReportsPage>;
+    return <ReportsPage view="book" info={INFO}><div className="m-stagger flex flex-col gap-6"><TableCard><EmptyState title="No carrier files read yet" hint="Scorecards appear once a policy file from a carrier has been read." /></TableCard></div></ReportsPage>;
   }
   const data = firstRead;
   const period = { from: addMonths(data.today, -months), to: data.today };
@@ -56,22 +60,23 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
     if (drill.kind === "week") {
       const entries = await loadWeekEntries(viewer, drill.week);
       return (
-        <ReportsPage view="book" bar={false}>
+        <ReportsPage view="book" title={`Commission lines in the week of ${drill.week}`} facts={entries ? `${entries.length} ${entries.length === 1 ? "line" : "lines"} · ${centsText(entries.reduce((sum, e) => sum + e.cents, 0))} in all` : SCORECARDS_PENDING_MESSAGE}>
           <div className="m-stagger flex flex-col gap-6">
-            <ScoreDrill back={back} title={`Commission lines in the week of ${drill.week}`} figure={entries ? `${entries.length} ${entries.length === 1 ? "line" : "lines"}` : SCORECARDS_PENDING_MESSAGE} entries={entries ?? []} />
+            <ScoreDrill entries={entries ?? []} />
           </div>
         </ReportsPage>
       );
     }
     const set = drillRows(data.policies, drill, ctx);
+    const pl = placement(data.policies, data.submissions, period.from, period.to);
+    const throughInsurvas = pl.submitted === null ? "nothing submitted through Insurvas in the period" : `through Insurvas: ${pl.submitted} submitted, ${pl.submittedIssued ?? 0} issued so far`;
     const byKey = new Map<string, ScorePolicy>(data.policies.map((p) => [p.key, p]));
     return (
-      <ReportsPage view="book" bar={false}>
+      <ReportsPage view="book" title={set?.title ?? "Nothing behind this figure"} facts={[set?.figure ?? "The figure has no rows yet.", drill.kind === "placement" ? throughInsurvas : null].filter(Boolean).join(" · ")}>
       <div className="m-stagger flex flex-col gap-6">
         <ScoreDrill
-          back={back}
-          title={set?.title ?? "Nothing behind this figure"}
-          figure={set?.figure ?? "The figure has no rows yet."}
+          // A placement figure has sibling sets: they are the record's tabs, on the title line.
+          tabs={drill.kind === "placement" ? { active: drill.set, items: PLACEMENT_SETS.map((p) => ({ key: p.set, label: p.label, href: `${back}&drill=${encodeURIComponent(drillParam({ kind: "placement", set: p.set }))}` })) } : undefined}
           policies={(set?.rows ?? []).map((r) => {
             const p = byKey.get(r.key) as ScorePolicy;
             return { key: r.key, note: r.note, tone: r.tone, clientName: p.clientName, carrierId: p.carrierId, carrierName: p.carrierName, policyNumber: p.policyNumber, status: p.status, issueDate: p.issueDate, annualCents: p.annualCents, agentName: p.agentName, sourceName: p.sourceName };
@@ -126,7 +131,7 @@ export default async function BookScorecardsPage({ searchParams }: { searchParam
   };
 
   return (
-    <ReportsPage view="book">
+    <ReportsPage view="book" info={INFO}>
       <div className="m-stagger flex flex-col gap-6">
         <BookScorecards model={model} framed />
       </div>

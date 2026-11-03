@@ -264,13 +264,29 @@ export async function advanceRuleResolver(tenantId: string): Promise<(carrierId:
  * out, statements that don't add up held out. Null when no advance is on file at all — Unknown, never $0.
  */
 export async function bookAdvanceAtRisk(tenantId: string): Promise<{ cents: number | null; policies: number; unknown: number }> {
+  const perPolicy = await advanceAtRiskByPolicy(tenantId);
+  if (!perPolicy) return { cents: null, policies: 0, unknown: 0 };
+  let cents = 0, counted = 0, unknown = 0;
+  for (const p of perPolicy) {
+    if (p.atRiskCents === null) unknown++;
+    else { cents += p.atRiskCents; counted++; }
+  }
+  return { cents: counted ? cents : null, policies: counted, unknown };
+}
+
+/**
+ * The unearned advance per policy that has one (LA-4.12: computed from the ledger, never stored —
+ * policy_current's money columns stay empty), with the facts a rollup groups by. Null when the ledger
+ * can't be read; a policy with no advance on file is left out; atRiskCents null is Unknown.
+ */
+export async function advanceAtRiskByPolicy(tenantId: string): Promise<Array<{ carrierId: string; policyNumber: string; agentUserId: string | null; inClawbackWindow: boolean | null; atRiskCents: number | null }> | null> {
   const [policies, lines, flagged, ruleFor] = await Promise.all([
-    (async () => { const rows: Loose[] = []; for (let from = 0; from < 50_000; from += 1000) { const { data } = await db().from("policy_current").select("carrier_id, policy_number, months_paid, product_code, as_of").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").range(from, from + 999); rows.push(...(data ?? [])); if (!data || data.length < 1000) break; } return rows; })(),
+    (async () => { const rows: Loose[] = []; for (let from = 0; from < 50_000; from += 1000) { const { data } = await db().from("policy_current").select("carrier_id, policy_number, months_paid, product_code, as_of, agent_user_id, in_clawback_window").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").range(from, from + 999); rows.push(...(data ?? [])); if (!data || data.length < 1000) break; } return rows; })(),
     (async () => { const rows: Loose[] = []; for (let from = 0; from < 100_000; from += 1000) { const { data, error } = await db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id").eq("tenant_id", tenantId).order("id").range(from, from + 999); if (error) return null; rows.push(...(data ?? [])); if (!data || data.length < 1000) break; } return rows; })(),
     flaggedFiles(tenantId),
     advanceRuleResolver(tenantId),
   ]);
-  if (!lines) return { cents: null, policies: 0, unknown: 0 };
+  if (!lines) return null;
   const money = new Map<string, { advanced: number; chargedBack: number; months: number | null }>();
   for (const e of lines) {
     if (flagged.has(e.file_id)) continue;
@@ -281,13 +297,12 @@ export async function bookAdvanceAtRisk(tenantId: string): Promise<{ cents: numb
     if (kind === "chargeback") m.chargedBack += Number(e.amount_cents);
     money.set(key, m);
   }
-  let cents = 0, counted = 0, unknown = 0;
+  const out: Array<{ carrierId: string; policyNumber: string; agentUserId: string | null; inClawbackWindow: boolean | null; atRiskCents: number | null }> = [];
   for (const p of policies) {
     const m = money.get(`${p.carrier_id}|${p.policy_number}`);
     if (!m || m.advanced <= 0) continue;
     const atRisk = unearnedAdvance({ advancedCents: m.advanced, chargedBackCents: m.chargedBack, monthsPaid: p.months_paid, rule: ruleFor(p.carrier_id, p.product_code, p.as_of), statementMonths: m.months }).atRiskCents;
-    if (atRisk === null) unknown++;
-    else { cents += atRisk; counted++; }
+    out.push({ carrierId: p.carrier_id, policyNumber: p.policy_number, agentUserId: p.agent_user_id ?? null, inClawbackWindow: p.in_clawback_window ?? null, atRiskCents: atRisk });
   }
-  return { cents: counted ? cents : null, policies: counted, unknown };
+  return out;
 }

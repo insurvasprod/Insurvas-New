@@ -10,7 +10,7 @@
  */
 
 import { accountTrend, type StatementCheck } from "./carrierAccounts.ts";
-import { unearnedAdvance } from "./commissionLedger.ts";
+import { unearnedAdvance, type AdvanceRule } from "./commissionLedger.ts";
 
 export const DISCREPANCY_TYPES = ["missing", "short_paid", "over_paid", "mis_rated", "duplicate_chargeback", "unexpected_chargeback", "missing_chargeback", "held_building_up", "debit_balance_growing", "not_received"] as const;
 export type DiscrepancyType = (typeof DISCREPANCY_TYPES)[number];
@@ -33,7 +33,11 @@ export const DISCREPANCY_LABELS: Record<DiscrepancyType, { label: string; plural
 /** The default when a carrier has no tolerance of its own (LA-4.17 settings): a dollar. */
 export const DEFAULT_TOLERANCE_CENTS = 100;
 
-export type EnginePolicy = { carrierId: string; carrierName: string; policyNumber: string; status: string | null; inClawbackWindow: boolean | null; lapsedOn: string | null; monthsPaid: number | null };
+export type EnginePolicy = {
+  carrierId: string; carrierName: string; policyNumber: string; status: string | null; inClawbackWindow: boolean | null; lapsedOn: string | null; monthsPaid: number | null;
+  /** The agency's advance rule for this policy's product (as the policy page reads it), when it has one. */
+  advanceRule?: AdvanceRule;
+};
 export type EngineExpected = {
   carrierId: string; policyNumber: string; policyYear: number; confidence: string; trigger: string; triggerOn: string; overdueFrom: string | null; reason: string | null;
   expectedAmountCents: number | null; expectedAdvanceCents: number | null; scheduleId: string | null; scheduleVersion: string | null; rateBp: number | null; premiumCents: number | null;
@@ -188,10 +192,16 @@ export function detect(input: {
     const wrongPremium = x.premiumCents !== null ? rated.filter((e) => e.commissionablePremiumCents !== null && Math.abs(e.commissionablePremiumCents - x.premiumCents!) > tol) : [];
     if (wrongRate.length || wrongPremium.length) {
       const line = wrongRate[0] ?? wrongPremium[0];
+      const lines = [...new Set([...wrongRate, ...wrongPremium])];
+      // The money side is the figure compared above (the advance, or the year's commission) when there is one, so
+      // "expected" and "paid" are the same kind of amount; otherwise the year's figure against these lines' total.
+      // Never a blank "paid": screens print a missing reported amount as $0.00 when money did come in.
+      const expectedCents = compare ? compare.expected : x.expectedAmountCents;
+      const reportedCents = compare ? compare.reported : lines.reduce((s, e) => s + e.amountCents, 0);
       findings.push({
         carrier_id: x.carrierId, discrepancy_type: "mis_rated", subject_key: x.policyNumber, policy_number: x.policyNumber, policy_year: x.policyYear, severity: "warning",
-        expected_amount_cents: x.expectedAmountCents, expected_source: source, reported_amount_cents: null, reported_entry_ids: [...new Set([...wrongRate, ...wrongPremium].map((e) => e.id))],
-        difference_cents: null, tolerance_applied_cents: tol,
+        expected_amount_cents: expectedCents, expected_source: source, reported_amount_cents: reportedCents, reported_entry_ids: compare ? compare.entryIds : lines.map((e) => e.id),
+        difference_cents: expectedCents === null ? null : expectedCents - reportedCents, tolerance_applied_cents: tol,
         explanation: wrongRate.length
           ? `The carrier paid at ${line.rateBp! / 100}%; your rate card says ${x.rateBp! / 100}% for this product and level. Check the contract level and age band before disputing.`
           : `The carrier paid on a premium of ${money(line.commissionablePremiumCents!)}; the policy's annual premium is ${money(x.premiumCents!)} (tolerance ${money(tol)}). A policy fee or rider the carrier doesn't commission can explain it.`,
@@ -235,7 +245,9 @@ export function detect(input: {
     const advanced = rows.filter((e) => kind(e) === "advance").reduce((s, e) => s + e.amountCents, 0);
     if (policy && ["lapsed", "not_taken"].includes(policy.status ?? "") && policy.inClawbackWindow === true && advanced > 0 && chargedBack === 0) {
       const months = Math.max(0, ...rows.filter((e) => kind(e) === "advance" && e.monthsAdvanced !== null).map((e) => e.monthsAdvanced as number));
-      const coming = unearnedAdvance({ advancedCents: advanced, chargedBackCents: 0, monthsPaid: policy.monthsPaid, rule: null, statementMonths: months || null });
+      // The advance rule as the policy page uses it: a statement that doesn't say how many months it advanced
+      // (AMAM's) left the amount coming back unknown here while the policy page showed it (E2E 2026-11-03).
+      const coming = unearnedAdvance({ advancedCents: advanced, chargedBackCents: 0, monthsPaid: policy.monthsPaid, rule: policy.advanceRule ?? null, statementMonths: months || null });
       findings.push({
         carrier_id: carrierId, discrepancy_type: "missing_chargeback", subject_key: policyNumber, policy_number: policyNumber, policy_year: 1, severity: "info",
         expected_amount_cents: coming.unearnedCents === null ? null : -coming.unearnedCents, expected_source: { advanced_cents: advanced, months_advanced: months || null, months_paid: policy.monthsPaid },

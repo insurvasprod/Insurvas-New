@@ -3,7 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError, type DbError } from "@/lib/applications/db";
-import { switchedOffCarrierIds } from "@/lib/carriers/service";
+import { carrierIdsOn } from "@/lib/carriers/agency";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { effectiveCarrierFacts } from "@/lib/salesSettings/carriers";
 import type { CarrierFacts } from "@/lib/salesSettings/views";
@@ -332,13 +332,8 @@ export async function listGrantActivity(actor: Actor): Promise<{ grants: GrantVi
 /** The agency's carriers with a portal origin — the extension's host allowlist — and their map status. */
 export async function carrierSites(tenantId: string): Promise<CarrierSiteView[]> {
   const client = db();
-  const [contracted, switchedOff] = await Promise.all([
-    client.from("tenant_carriers").select("carrier_id, is_active").eq("tenant_id", tenantId),
-    switchedOffCarrierIds(tenantId),
-  ]);
-  if (contracted.error && !isMissingSchema(contracted.error)) fail(contracted.error, "Carriers");
-  // LA-0.4: a carrier the agency switched off gets no site in the extension's allowlist.
-  const ids = [...new Set(rows<{ carrier_id: string; is_active: boolean }>(contracted.data).filter((c) => c.is_active !== false && !switchedOff.has(c.carrier_id)).map((c) => c.carrier_id))];
+  // LA-0.4: only the carriers switched on in Settings › Carriers get a site in the extension's allowlist.
+  const ids = [...await carrierIdsOn(tenantId)];
   if (!ids.length) return [];
   const [carriers, portals, maps, facts] = await Promise.all([
     client.from("carriers").select("id, name, portal_origin").in("id", ids),

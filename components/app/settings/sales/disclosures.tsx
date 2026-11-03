@@ -25,6 +25,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Copy, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
+import { ReviewChip } from "@/components/app/settings/defaults";
 import { Callout, Field, SettingsCard, SettingsStack, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, confirmAction } from "@/components/ui/confirm-dialog";
@@ -92,7 +93,8 @@ function lifecycleOf(item: DisclosureItem): Lifecycle {
 
 function StatusCell({ doc }: { doc: LibraryDoc }) {
   if (doc.live && !doc.live.platform) return <LifecyclePill state="live" />;
-  if (doc.shown.platform) return <LifecyclePill state="platform" />;
+  // Insurvas wording is a starting point, never final legal text (docs/settings/DEFAULTS.md §2.5).
+  if (doc.shown.platform) return <span className="flex flex-wrap items-center gap-2"><LifecyclePill state="platform" /><ReviewChip /></span>;
   if (doc.draft && !doc.live) return <LifecyclePill state="draft" />;
   if (doc.draft && doc.live?.platform) return <span className="flex flex-wrap items-center gap-2"><LifecyclePill state="draft" /><span className="text-xs text-[var(--muted)]">Insurvas v{doc.live.version} in use</span></span>;
   return <LifecyclePill state="retired" />;
@@ -484,7 +486,8 @@ export function SalesDisclosures() {
       d.versions.length > 0 && { label: "Versions", onSelect: () => openItem(d.draft ?? d.live ?? d.shown, "versions") },
       d.live && { label: "Try it on a case", onSelect: () => setTab("try") },
       (d.live ?? d.shown).hasAttachment && { label: "Open its PDF", onSelect: () => openPdf(d.live ?? d.shown) },
-      canEdit && ownLive && { label: `Retire v${ownLive.version}…`, onSelect: () => openAndAsk(ownLive, "retire"), danger: true, disabled: busy },
+      // With an Insurvas version of the same code behind it, retiring is the way back to the default.
+      canEdit && ownLive && { label: d.platform ? "Reset to default…" : `Retire v${ownLive.version}…`, onSelect: () => openAndAsk(ownLive, "retire"), danger: true, disabled: busy },
       canEdit && d.draft && d.own.length > 1 && { label: `Delete draft v${d.draft.version}…`, onSelect: () => openAndAsk(d.draft!, "discard"), danger: true, disabled: busy },
       canEdit && d.own.length > 0 && { label: "Delete document…", onSelect: () => openAndAsk(d.own[0], "deleteDoc"), danger: true, disabled: busy || carried(d) > 0, reason: carried(d) > 0 ? inUse(d) : null },
     ];
@@ -618,6 +621,7 @@ export function SalesDisclosures() {
           <h2 className="m-0 min-w-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{draft.title.trim() || (open ? open.title : "New document")}</h2>
           {open && <StatusChip dot={false} tone={pillTone(open.platform ? "neutral" : "brand")}>v{open.version}</StatusChip>}
           <LifecyclePill state={state ?? "draft"} />
+          {open?.platform && <ReviewChip />}
           <span className="text-sm text-[var(--muted)]">
             {!open ? "Applies to nothing until you publish it"
               : open.status === "published" ? `${apps(open.acknowledged)} acknowledged it`

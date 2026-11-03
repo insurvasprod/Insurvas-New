@@ -34,6 +34,8 @@ export type PolicyFacts = {
   paidToDate: string | null;
   effectiveDate: string | null;
   issuedOn: string | null;
+  /** The carrier's own issue date from the file (policy_current.issue_date). */
+  issueDate?: string | null;
   firstSeenDate: string | null;
   premiumCents: number | null;
   caseId: string | null;
@@ -70,6 +72,19 @@ export const policyKey = (carrierId: string, policyNumber: string) => `${carrier
 const STATUS_EVENTS: Partial<Record<string, RuleEvent>> = { lapsed: "lapsed", not_taken: "not_taken", declined: "declined", withdrawn: "withdrawn" };
 const LEDGER_EVENTS: Partial<Record<string, RuleEvent>> = { advance: "advance_received", earned: "commission_credited", chargeback: "chargeback_received" };
 const CLOSED_BY_STATUS = new Set(["lapsed", "not_taken", "declined", "withdrawn"]);
+/** Statuses that say the carrier issued the policy. */
+const ISSUED_STATUSES = new Set(["approved_unpaid", "active", "at_risk", "paid_up"]);
+
+/**
+ * The day a policy was issued, for the Issued event: issued_on when a file showed the policy change to issued.
+ * A policy whose first file already shows it issued (most new business) has no such change, so issued_on stays
+ * empty; then the carrier's own issue date counts, when its status says issued. A whole book imported at once
+ * carries old issue dates, which fall outside the look-back, so it does not read as issued today.
+ */
+export function issuedDay(p: PolicyFacts): string | null {
+  if (p.issuedOn) return p.issuedOn;
+  return p.issueDate && ISSUED_STATUSES.has(p.status ?? "") ? p.issueDate : null;
+}
 
 export type ComputeInput = {
   tenantId: string;
@@ -112,8 +127,9 @@ export function computeEvents(input: ComputeInput): ComputeResult {
 
   for (const p of input.policies) {
     const fills = baseFills(p, name(p.carrierId), p.policyNumber);
-    if (p.issuedOn && p.issuedOn >= since && p.issuedOn <= input.asOf) {
-      add({ event: "issued", carrierId: p.carrierId, policyNumber: p.policyNumber, date: p.issuedOn, changeKey: key(p, `issued:${p.issuedOn}`), fills, because: `issued ${noteDay(p.issuedOn)}` });
+    const issued = issuedDay(p);
+    if (issued && issued >= since && issued <= input.asOf) {
+      add({ event: "issued", carrierId: p.carrierId, policyNumber: p.policyNumber, date: issued, changeKey: key(p, `issued:${issued}`), fills, because: `issued ${noteDay(issued)}` });
     }
     const status = p.status ?? "";
     if (!["approved_unpaid", "active", "at_risk"].includes(status)) continue;

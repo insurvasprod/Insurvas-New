@@ -53,6 +53,11 @@ export type FileStageFacts = {
   waitingForLayout: boolean;
   /** Rows were kept (raw_extracted_at set). */
   rowsKept: boolean;
+  /** How many rows were kept, when known: 0 is a file that read cleanly and held nothing (E2E 2026-11-02). */
+  rowCount?: number | null;
+  /** Typed rows the layout read (parsed_row_count), when known. A PDF keeps its statement-total row as a raw row,
+   *  so a statement with no lines has rowCount 1 and parsedRows 0. */
+  parsedRows?: number | null;
   errorDetail: string | null;
   heldRows: number;
   /** Every step after reading finished (pipeline_completed_at). */
@@ -122,7 +127,10 @@ export function fileStages(facts: FileStageFacts): FileStage[] {
 
   // Read (status parsed, or superseded after it was read).
   out.push(stage("Layout", "done", "Read with the carrier's layout"));
-  out.push(stage("Read", "done", "Every row read"));
+  // An empty file (a statement with no lines that "balances" at 0.00) is read, but says so rather than "every row".
+  // Rows held for a status word are not "nothing read": they wait, and say so on their own stage.
+  const empty = facts.rowCount === 0 || (facts.status === "parsed" && facts.parsedRows === 0 && facts.heldRows === 0);
+  out.push(stage("Read", "done", empty ? "Read, but the file holds no rows" : "Every row read"));
 
   const failedStep = facts.unfinishedStage;
   const running = !facts.completed && !failedStep;
@@ -163,7 +171,7 @@ export function fileStages(facts: FileStageFacts): FileStage[] {
     if (failedStep === "reconcile") out.push(stage("Commissions", "failed", "Posting the lines stopped. Read again finishes it"));
     else if (!facts.completed) out.push(stage("Commissions", "pending", "Posting the lines now"));
     else if ((facts.commissionWaiting ?? 0) > 0) out.push(stage("Commissions", "needs", `${facts.commissionWaiting} ${facts.commissionWaiting === 1 ? "line waits" : "lines wait"} on a policy or a person`, facts.commissionWaiting ?? null));
-    else out.push(stage("Commissions", "done", "Lines posted and checked against what was expected"));
+    else out.push(stage("Commissions", "done", empty ? "No commission lines in this file" : "Lines posted and checked against what was expected"));
     return out;
   }
 
@@ -171,7 +179,23 @@ export function fileStages(facts: FileStageFacts): FileStage[] {
   return rest(4, "skipped", "Nothing is derived from this kind of file");
 }
 
-export type WhereItIs = { label: string; tone: "good" | "warning" | "danger" | "info" | "neutral" };
+/**
+ * The stages a file of its type goes through (round 4, owner 2026-11-02: "it doesn't need to show commissions
+ * when we are uploading a policy file"): a policy file never reaches Commissions; a commission file has no
+ * History or Pipeline, and Status words only when a word holds its rows. Whatever else is "not needed" goes too.
+ * Known by the type, so a file that stopped early shows the same stages it would have run.
+ */
+const NOT_FOR: Record<string, readonly FileStageName[]> = {
+  policies: ["Commissions"],
+  new_business: ["Commissions"],
+  commissions: ["History", "Pipeline"],
+};
+export function shownStages(stages: FileStage[], fileType: string | null = null): FileStage[] {
+  const never = (fileType && NOT_FOR[fileType]) || [];
+  return stages.filter((s) => s.state !== "skipped" && !never.includes(s.name) && !(fileType === "commissions" && s.name === "Status words" && s.state !== "needs"));
+}
+
+export type WhereItIs ={ label: string; tone: "good" | "warning" | "danger" | "info" | "neutral" };
 
 /**
  * The "where it is" chip: a failure first, then what waits on a person (the total, at the first stage
@@ -199,6 +223,27 @@ export type FileStageView = { stages: FileStage[]; where: WhereItIs; needs: numb
 
 /** How many things wait on a person across the stages. */
 export const needsCount = (stages: FileStage[]): number => stages.reduce((sum, s) => sum + (s.state === "needs" ? s.count ?? 0 : 0), 0);
+
+/** Where a file of the Files list is, for its filters: one rule for the chips' counts and the list. */
+export type FileWhere = "needs" | "failed" | "waiting" | "running" | "done" | "replaced";
+
+export function fileWhere(file: { status: string; waitingForLayout: boolean }, view?: Pick<FileStageView, "stages"> | null): FileWhere {
+  if (file.status === "superseded") return "replaced";
+  if (file.waitingForLayout) return "waiting";
+  if (view?.stages.some((s) => s.state === "failed") || file.status === "failed") return "failed";
+  if (view?.stages.some((s) => s.state === "needs")) return "needs";
+  if (view?.stages.some((s) => s.state === "pending") || file.status === "received" || file.status === "parsing") return "running";
+  return "done";
+}
+
+/** The Files step's filter chips (round 3, owner 2026-11-02): one list, no tabs. */
+export const FILE_FILTERS = [
+  { key: "all", label: "All" },
+  { key: "needs", label: "Needs you" },
+  { key: "failed", label: "Failed" },
+  { key: "missing", label: "Missing" },
+] as const;
+export type FileFilter = (typeof FILE_FILTERS)[number]["key"];
 
 // ─── rows ────────────────────────────────────────────────────────────────────────────────────────
 

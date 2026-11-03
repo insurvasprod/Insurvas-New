@@ -12,6 +12,8 @@ export function applicationsTabs(entitlement: Entitlement): ApplicationsTab[] {
     tabs.push({ key: "waiting", label: "Waiting on the carrier", href: "/app/pending" });
   }
   if (hasFeature(entitlement, "quoting")) tabs.push({ key: "quotes", label: "Quotes", href: "/app/quoting" });
+  // AG-1.11 (2026-11-03, out of Team): an agency's sampled applications, read against the submission's checks.
+  if (hasFeature(entitlement, "team_qa")) tabs.push({ key: "review", label: "Application review", href: "/app/application-review" });
   return tabs;
 }
 

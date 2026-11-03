@@ -67,7 +67,6 @@ export default async function PublisherDetailPage({
             runs={loaded.runs.filter((run) => run.partnerId === id)}
             partners={[partner]}
             readOnly={payouts.entitlement.access === "read_only"}
-            openId={null}
             partnerFixed
           />
         );

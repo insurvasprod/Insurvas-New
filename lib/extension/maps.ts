@@ -2,7 +2,7 @@ import "server-only";
 
 import { ApplicationError, db, isMissingSchema, rows, SchemaPendingError, type DbError } from "@/lib/applications/db";
 import { CANONICAL_GROUPS, isSensitiveKey, PAYMENT_FIELD_KEYS } from "@/lib/applications/constants";
-import { switchedOffCarrierIds } from "@/lib/carriers/service";
+import { carrierIdsOn } from "@/lib/carriers/agency";
 import { effectiveCarrierFacts } from "@/lib/salesSettings/carriers";
 import type { CarrierFacts } from "@/lib/salesSettings/views";
 import { auditExtension } from "./audit";
@@ -165,13 +165,8 @@ export async function carrierOptions(scope: MapScope): Promise<FieldMapCarrierOp
   const client = db();
   let carrierIds: string[] | null = null;
   if (scope.plane === "tenant") {
-    const [contracted, switchedOff] = await Promise.all([
-      client.from("tenant_carriers").select("carrier_id").eq("tenant_id", scope.tenantId).eq("is_active", true),
-      switchedOffCarrierIds(scope.tenantId),
-    ]);
-    if (contracted.error && !isMissingSchema(contracted.error)) fail(contracted.error, "Carriers");
-    // LA-0.4: only carriers with a current contract that the agency has switched on.
-    carrierIds = [...new Set(rows<{ carrier_id: string }>(contracted.data).map((c) => c.carrier_id))].filter((id) => !switchedOff.has(id));
+    // LA-0.4: only the carriers switched on in Settings › Carriers.
+    carrierIds = [...await carrierIdsOn(scope.tenantId)];
     if (!carrierIds.length) return [];
   }
   let cq = client.from("carriers").select("id, name, portal_origin").eq("is_active", true).order("name");

@@ -8,8 +8,9 @@ import { LEADS_IN_STEPS, leadsInStepLabel, leadsInStepOf } from "@/lib/leadSourc
 import { COMPLIANCE_STEPS, complianceStepLabel, complianceStepOf } from "@/lib/compliance/steps";
 import { REPORTS_VIEWS, reportsViewLabel, reportsViewOf } from "@/lib/reports/views";
 import { BOOK_AREA_LABEL, DATA_IN_STEPS, bookAreaOf, dataInStepLabel } from "@/lib/dataIn/steps";
-import { accountingStepLabel, accountingStepOf } from "@/lib/accounting/steps";
+import { accountingStepHref, accountingStepLabel, accountingStepOf } from "@/lib/accounting/steps";
 import { commissionsStepLabel, commissionsStepOf } from "@/lib/commissions/steps";
+import { agencyStepHref, agencyStepLabel, agencyStepOf } from "@/lib/agency/steps";
 import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
 
 /**
@@ -82,18 +83,23 @@ export function PageTrail({ title }: { title: string }) {
     const stepHref = LEADS_IN_STEPS.find((step) => step.key === leadsStep)?.href;
     return <Breadcrumbs crumbs={[{ label: item?.section ?? "Leads" }, { label: "Lead Flow", href: LEADS_IN_STEPS[0]?.href }, { label: leadsInStepLabel(leadsStep), href: stepHref }, ...leadsCrumbs]} />;
   }
-  // A Compliance step (2026-10-30): Compliance › the step, named as the rail names it.
+  // A Compliance step (2026-10-30): Compliance › the step, named as the rail names it, and › the record it has
+  // open (a complaint, a request, a certificate; foundation pass 2026-11-03).
   const complianceStep = complianceStepOf(pathname);
   if (complianceStep) {
     const stepHref = COMPLIANCE_STEPS.find((step) => step.key === complianceStep)?.href;
-    return <Breadcrumbs crumbs={[{ label: "Compliance", href: COMPLIANCE_STEPS[0]?.href }, { label: complianceStepLabel(complianceStep), href: stepHref }]} />;
+    const label = complianceStepLabel(complianceStep);
+    // A record can sit at the step's own address (Evidence's ?phone= report, a ?focus= finding): its title says so.
+    const below = title.trim() && title !== label;
+    return <Breadcrumbs crumbs={[{ label: "Compliance", href: COMPLIANCE_STEPS[0]?.href }, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
   }
   // A Reports view (2026-10-30): Reports › the view, and › the record it has open (a partner).
   const reportsView = reportsViewOf(pathname);
   if (reportsView) {
     const view = REPORTS_VIEWS.find((entry) => entry.key === reportsView);
     const label = reportsViewLabel(reportsView);
-    const below = view && pathname !== view.href && title.trim() && title !== label;
+    // A record names the title (a partner, an agent, a drill on the view's own address: ?drill=).
+    const below = view && title.trim() && title !== label;
     return <Breadcrumbs crumbs={[{ label: "Reports" }, { label, href: view?.href }, ...(below ? [{ label: title }] : [])]} />;
   }
   // A Book of business step (2026-11-02): Book of business › the step, named as the rail names it, and › the
@@ -105,9 +111,25 @@ export function PageTrail({ title }: { title: string }) {
     const below = pathname !== stepHref && title.trim() && title !== label;
     return <Breadcrumbs crumbs={[{ label: BOOK_AREA_LABEL, href: DATA_IN_STEPS[0]?.href }, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
   }
-  // An Accounting step (2026-11-02): Accounting › the step (My balance on its own address).
+  // An Accounting step (2026-11-02): Accounting › the step (My balance on its own address), and › the record it
+  // has open (an invoice, a producer, a payee, a P&L line; foundation pass 2026-11-03).
   const accountingStep = accountingStepOf(pathname);
-  if (accountingStep) return <Breadcrumbs crumbs={[{ label: "Accounting" }, { label: accountingStepLabel(accountingStep, pathname), href: pathname }]} />;
+  if (accountingStep) {
+    const label = accountingStepLabel(accountingStep, pathname);
+    const stepHref = accountingStepHref(accountingStep, pathname);
+    const below = pathname !== stepHref && title.trim() && title !== label;
+    return <Breadcrumbs crumbs={[{ label: "Accounting" }, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
+  }
+  // Home › Agency (Team rearranged, 2026-11-03): "Home › Agency dashboard"; under it "Home › Agency › Producers", and
+  // › the record it has open (a producer, the invite form). Agency links back to the dashboard: there is no rail.
+  const agencyStep = agencyStepOf(pathname);
+  if (agencyStep) {
+    const label = agencyStepLabel(agencyStep);
+    const stepHref = agencyStepHref(agencyStep);
+    const below = pathname !== stepHref && title.trim() && title !== label;
+    const agency = agencyStep === "overview" ? [] : [{ label: "Agency", href: agencyStepHref("overview") }];
+    return <Breadcrumbs crumbs={[{ label: "Home" }, ...agency, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
+  }
   // A Commissions step (2026-11-02): Commissions › the step (My pay on its own address).
   const commissionsStep = commissionsStepOf(pathname);
   if (commissionsStep) return <Breadcrumbs crumbs={[{ label: "Commissions" }, { label: commissionsStepLabel(commissionsStep, pathname), href: pathname }]} />;

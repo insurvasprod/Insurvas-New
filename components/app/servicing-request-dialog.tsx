@@ -1,4 +1,5 @@
 "use client";
+import { Callout } from "@/components/app/settings/primitives";
 
 import { useEffect, useState } from "react";
 
@@ -16,7 +17,6 @@ const labelClass = "grid gap-1.5 text-sm font-medium text-foreground";
 const METHOD_WORDS: Record<PaymentMethod, string> = { bank_draft: "Bank draft", direct_express: "Direct Express card", card: "Debit or credit card", direct_bill: "Mailed bill" };
 const ordinal = (n: number) => `${n}${n % 100 >= 11 && n % 100 <= 13 ? "th" : ({ 1: "st", 2: "nd", 3: "rd" } as Record<number, string>)[n % 10] ?? "th"}`;
 const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
-const alertClass = "rounded-lg border border-[color-mix(in_srgb,var(--error)_24%,transparent)] bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]";
 
 /**
  * LA-5.4 · open a servicing request. Pre-filled from the server: the current draft day, LA-3.9's
@@ -113,12 +113,12 @@ export function ServicingRequestDialog({ carrierId, policyNumber, type, origin, 
           <DialogDescription>{prefill ? `${prefill.carrierName} · ${policyNumber}. Open until a carrier file shows the change.` : policyNumber}</DialogDescription>
         </DialogHeader>
         {loadError ? (
-          <p role="alert" className={alertClass}>{loadError}</p>
+          <Callout tone="error" title={loadError} />
         ) : !prefill ? (
           <SectionLoading rows={3} columns={2} label="Reading the policy" />
         ) : (
           <div className="grid gap-4">
-            {openSame && <p role="alert" className={alertClass}>This policy already has an open request of this kind. Finish or cancel it on the Servicing page first.</p>}
+            {openSame && <Callout tone="warning" title="This policy already has an open request of this kind. Finish or cancel it on Servicing first." />}
 
             <div className="rounded-lg border border-border px-3 py-2 text-sm">
               <span className="block font-semibold text-foreground">How {prefill.carrierName} does it</span>
@@ -206,7 +206,7 @@ export function ServicingRequestDialog({ carrierId, policyNumber, type, origin, 
             )}
 
             <label htmlFor="svc-note" className={labelClass}>Note<textarea id="svc-note" className={`${field} min-h-16 py-2`} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></label>
-            {error && <p role="alert" className={alertClass}>{error}</p>}
+            {error && <Callout tone="error" title={error} />}
           </div>
         )}
         <DialogFooter>

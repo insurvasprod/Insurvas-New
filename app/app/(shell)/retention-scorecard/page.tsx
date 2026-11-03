@@ -3,12 +3,12 @@ import { loadScorecard, SCORECARD_PERIODS, type ScorecardPeriod } from "@/lib/re
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionScorecardBoard } from "@/components/app/retention/retention-scorecard-board";
-import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { ReportsPage } from "@/components/app/reports/reports-page";
 
 /**
- * Book › Retention scorecard (LA-5.8, Notion sprint). What each person working retention achieved:
+ * Reports › Retention scorecard (LA-5.8, Notion sprint). What each person working retention achieved:
  * policies worked, contact rate, save rate by reason (never blended alone), verified conversions,
  * reinstatements, and the premium and advance still in force 90 days after being worked. Holdout
  * cases count against nobody. An owner sees everyone; anyone else their own card only.
@@ -26,8 +26,8 @@ export default async function RetentionScorecardPage({ searchParams }: { searchP
   const data = await loadScorecard({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, period);
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Retention scorecard" description={guard.role === "owner" ? "What each person working retention achieved, save rate by reason." : "What you achieved working retention, save rate by reason."} />
+    <ReportsPage view="retention" info="What each person working retention achieved. The save rate is shown per reason, never blended on its own; under 10 decided cases a reason shows the counts. Unreachable cases have their own column, and held-out policies count against nobody.">
+    <>
       {data.available ? (
         <RetentionScorecardBoard data={data} period={period} selected={rep ?? null} isOwner={guard.role === "owner"} viewerId={guard.context.userId} />
       ) : (
@@ -35,6 +35,7 @@ export default async function RetentionScorecardPage({ searchParams }: { searchP
           <EmptyState title="Not switched on yet" hint="The retention scorecard needs a database update (20261016200000)." />
         </TableCard>
       )}
-    </div>
+    </>
+    </ReportsPage>
   );
 }

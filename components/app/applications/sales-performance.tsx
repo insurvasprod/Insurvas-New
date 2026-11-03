@@ -1,53 +1,47 @@
 "use client";
 
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
-import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/app/book-of-business-views";
-import { InReportsSlot } from "@/components/app/reports/reports-slot";
+import { Callout } from "@/components/app/settings/primitives";
+import { PeriodPicker, type Period } from "@/components/app/reports/period-picker";
+import { InReportsSlot, useUrlTab } from "@/components/app/reports/reports-slot";
 import { keepSharedPeriod } from "@/lib/reports/views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { REQUIREMENT_KIND_LABEL } from "@/lib/applications/constants";
-import { dayMonth } from "@/lib/applications/listRules";
-import { buildSalesReport, crossCell, dayIn, MIN_CASES, pct, type Median, type Ratio, type ReportFilters, type SalesReport } from "@/lib/applications/reportRules";
+import { reportPeriod } from "@/lib/reports/periodText";
+import { buildSalesReport, crossCell, MIN_CASES, pct, type Median, type Ratio, type ReportFilters, type SalesReport } from "@/lib/applications/reportRules";
 import { sampleReportInput } from "@/lib/applications/reportFixtures";
 import { cn } from "@/lib/utils";
 import { useSampleRefresh } from "./applications-list";
-import { money, SampleDataNotice } from "./parts";
+import { money } from "./parts";
 
 const TABS = [
   { key: "funnel", label: "Funnel and rates" },
   { key: "timing", label: "Timing" },
+  // Its own tab (foundation pass 2026-11-03): it was a second table stacked under Timing.
+  { key: "requirements", label: "Requirements" },
   { key: "declines", label: "Decline reasons" },
   { key: "counteroffers", label: "Counteroffers" },
   { key: "premium", label: "Premium and commission" },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
-const RANGES = [
-  { key: "30", label: "Last 30 days", days: 30 },
-  { key: "90", label: "Last 90 days", days: 90 },
-  { key: "180", label: "Last 6 months", days: 180 },
-  { key: "365", label: "Last 12 months", days: 365 },
-  { key: "custom", label: "Custom dates", days: null },
-] as const;
-type RangeKey = (typeof RANGES)[number]["key"];
-
 const count = (n: number) => n.toLocaleString("en-US");
 
-/** "63.5% (198/312)" — the rate and the two numbers it comes from, every time; under MIN_CASES, the count greyed. */
+/** "63.5% (198/312)" — the rate and the two numbers it comes from, every time; under MIN_CASES, "4 of 26" greyed. */
 function RateCell({ r, digits = 0 }: { r: Ratio; digits?: number }) {
-  if (r.d <= 0) return <span className="text-muted-foreground">—</span>;
-  if (r.n < MIN_CASES) return <span className="tabular-nums text-muted-foreground" title={`${r.n} of ${r.d} — fewer than ${MIN_CASES} cases, too few for a rate`}>n={r.n}</span>;
+  if (r.d <= 0 || r.n === 0 && r.d < MIN_CASES) return <span className="text-muted-foreground">—</span>;
+  if (r.n < MIN_CASES) return <span className="tabular-nums text-muted-foreground" title={`Fewer than ${MIN_CASES} cases, too few for a rate`}>{count(r.n)} of {count(r.d)}</span>;
   return <span className="tabular-nums">{pct(r, digits)}% <span className="text-muted-foreground">({count(r.n)}/{count(r.d)})</span></span>;
 }
 
@@ -60,45 +54,43 @@ function Cross({ n, d }: { n: number; d: number }) {
 function MedianCell({ m, unit }: { m: Median; unit: string }) {
   if (m.value === null || m.n === 0) return <span className="text-muted-foreground">—</span>;
   const small = m.n < MIN_CASES;
-  return <span className={cn("tabular-nums", small && "text-muted-foreground")} title={small ? `Only ${m.n} cases — too few to rely on` : undefined}>{small ? `n=${m.n}` : <>{m.value} {unit} <span className="text-muted-foreground">(n={m.n})</span></>}</span>;
+  return <span className={cn("tabular-nums", small && "text-muted-foreground")} title={small ? `Fewer than ${MIN_CASES} cases, too few to rely on` : undefined}>{small ? `${m.n} ${m.n === 1 ? "case" : "cases"}` : <>{m.value} {unit} <span className="text-muted-foreground">({m.n} cases)</span></>}</span>;
 }
 
 function tileRate(r: Ratio, noun: string) {
   return r.d > 0 ? `${pct(r, 1)}% of ${noun} · ${count(r.n)}/${count(r.d)}` : `of ${noun}`;
 }
 
-function windowFor(range: RangeKey, now: number, timeZone: string, custom: { from: string; to: string }) {
-  const def = RANGES.find((r) => r.key === range);
-  if (!def || def.days === null) return custom;
-  return { from: dayIn(new Date(now - (def.days - 1) * 86_400_000).toISOString(), timeZone), to: dayIn(new Date(now).toISOString(), timeZone) };
-}
-
 type Filters = { carrierId: string; productCode: string; source: string; producerId: string };
 const NO_FILTERS: Filters = { carrierId: "", productCode: "", source: "", producerId: "" };
+const TAB_KEYS = TABS.map((t) => t.key);
 
 /**
  * `framed`: inside the Reports page (components/app/reports/reports-page.tsx), which draws the title;
  * the tabs go to its top row. `periodFromAddress`: the report was read for the Reports views' shared
  * period (`?from&to`), so it opens on those dates; any change of window is kept in the address.
+ *
+ * Foundation pass (2026-11-03, docs/reports/FOUNDATION-PASS.md): the tab is in the address (`?tab=`) and
+ * each figure tile opens its tab; the period is the Reports period control; carrier, product, lead source
+ * and producer sit in the Filters panel (UI-CONSISTENCY §6a); a failed reload goes to the bell.
  */
-export function SalesPerformance({ report: initialReport, sample = false, timeZone = "UTC", initialTab = "declines", framed = false, periodFromAddress = false }: { report: SalesReport; sample?: boolean; timeZone?: string; initialTab?: Tab; framed?: boolean; periodFromAddress?: boolean }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
+export function SalesPerformance({ report: initialReport, sample = false, initialTab = "declines", framed = false }: { report: SalesReport; sample?: boolean; timeZone?: string; initialTab?: Tab; framed?: boolean; periodFromAddress?: boolean }) {
+  const { tab, setTab, href: tabHref } = useUrlTab(TAB_KEYS, initialTab);
   const [report, setReport] = useState(initialReport);
-  const [range, setRange] = useState<RangeKey>(periodFromAddress ? "custom" : "90");
-  const [custom, setCustom] = useState({ from: initialReport.from, to: initialReport.to });
+  const [period, setPeriod] = useState<Period>({ from: initialReport.from, to: initialReport.to });
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
   const sampleRefresh = useSampleRefresh();
   const sampleInput = useMemo(() => (sample ? sampleReportInput(now) : null), [sample, now]);
   const seq = useRef(0);
+  // The first window is the server's; a later period or filter recounts (an effect, so a filter chip's
+  // remove handler only sets state).
+  const served = useRef(true);
 
-  const win = windowFor(range, now, timeZone, custom);
-  const queryFor = (r: RangeKey, c: { from: string; to: string }, fl: Filters): ReportFilters => {
-    const w = windowFor(r, now, timeZone, c);
-    return { from: w.from, to: w.to, carrierId: fl.carrierId || null, productCode: fl.productCode || null, source: fl.source || null, producerId: fl.producerId || null };
-  };
+  const queryFor = (w: Period, fl: Filters): ReportFilters => ({ from: w.from, to: w.to, carrierId: fl.carrierId || null, productCode: fl.productCode || null, source: fl.source || null, producerId: fl.producerId || null });
 
   /** Recount for a new window or filter: in the browser for the sample, from the route otherwise. */
   async function load(q: ReportFilters) {
@@ -122,83 +114,86 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
       if (mine === seq.current) setLoading(false);
     }
   }
-  const change = (next: { range?: RangeKey; custom?: { from: string; to: string }; filters?: Filters }) => {
-    const r = next.range ?? range; const c = next.custom ?? custom; const fl = next.filters ?? filters;
-    if (next.range) setRange(next.range);
-    if (next.custom) setCustom(next.custom);
+  const change = (next: { period?: Period; filters?: Filters }) => {
+    const w = next.period ?? period; const fl = next.filters ?? filters;
+    if (next.period) setPeriod(next.period);
     if (next.filters) setFilters(next.filters);
-    const q = queryFor(r, c, fl);
-    if (framed && (next.range || next.custom)) keepSharedPeriod(q);
-    void load(q);
+    if (framed && next.period) keepSharedPeriod(queryFor(w, fl));
   };
-  const refresh = () => { if (sample) sampleRefresh.refresh(); void load(queryFor(range, custom, filters)); };
+  useEffect(() => {
+    if (served.current) { served.current = false; return; }
+    void load(queryFor(period, filters));
+  }, [period, filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  const refresh = () => { if (sample) sampleRefresh.refresh(); void load(queryFor(period, filters)); };
   const panelCount = Object.values(filters).filter(Boolean).length;
   const setFilter = (k: keyof Filters, v: string) => change({ filters: { ...filters, [k]: v } });
-  const period = `${report.from}-to-${report.to}`;
-  const windowLabel = `${dayMonth(report.from)} – ${dayMonth(report.to)}`;
+  const span = `${report.from}-to-${report.to}`;
+  const windowLabel = reportPeriod(report.from, report.to);
   const t = report.totals;
   // An empty window says how to widen it: clear the filters when one is on (2026-10-09 copy pass).
   const emptyAction = panelCount > 0 ? <Button type="button" variant="outline" onClick={() => change({ filters: NO_FILTERS })}>Clear filters</Button> : undefined;
+  const optionLabel = (k: keyof Filters, v: string) => k === "carrierId" ? report.options.carriers.find((c) => c.id === v)?.name : k === "productCode" ? report.options.products.find((p) => p.code === v)?.label : k === "source" ? report.options.sources.find((o) => o.value === v)?.label : report.options.producers.find((p) => p.id === v)?.name;
+  const FILTER_LABEL: Record<keyof Filters, string> = { carrierId: "Carrier", productCode: "Product", source: "Lead source", producerId: "Producer" };
+  const chips: ActiveFilter[] = (Object.keys(filters) as Array<keyof Filters>).filter((k) => filters[k]).map((k) => ({ key: k, label: FILTER_LABEL[k], value: optionLabel(k, filters[k]) ?? filters[k], onRemove: () => setFilter(k, "") }));
   const emptyHint = panelCount > 0 ? "Clear a filter or widen the dates." : "Try a wider date range.";
 
   // ── per-tab table and export ─────────────────────────────────────────────
   const d = report.declines;
   const declineCarriers = d.carriers;
   const exporters: Record<Tab, () => void> = {
-    funnel: () => downloadCsv(`sales-funnel-${period}.csv`, ["Stage", "Insureds", "Of previous stage", "Previous stage", "Of quoted", "Quoted", "Note"], [
+    funnel: () => downloadCsv(`sales-funnel-${span}.csv`, ["Stage", "Insureds", "Of previous stage", "Previous stage", "Of quoted", "Quoted", "Note"], [
       ["Quoted", report.funnel.quoted, null, null, null, null, ""],
       ["Applied", report.funnel.applied.n, pct(report.funnel.applied), report.funnel.applied.d, pct(report.funnel.applied), report.funnel.quoted, ""],
       ["Submitted", report.funnel.submitted.n, pct(report.funnel.submitted), report.funnel.submitted.d, pct({ n: report.funnel.submitted.n, d: report.funnel.quoted }), report.funnel.quoted, ""],
       ["Issued", report.funnel.issued.n, pct(report.funnel.issued), report.funnel.issued.d, pct({ n: report.funnel.issued.n, d: report.funnel.quoted }), report.funnel.quoted, ""],
       ["Placed", null, null, null, null, null, "Partial — not recorded yet"],
     ]),
-    timing: () => downloadCsv(`timing-${period}.csv`, ["Carrier", "Median hours first quote to submit", "n", "Median days submit to issue", "n"],
+    timing: () => downloadCsv(`timing-${span}.csv`, ["Carrier", "Median hours first quote to submit", "n", "Median days submit to issue", "n"],
       [...report.timing.rows.map((r) => [r.name, r.quoteToSubmitHours.value, r.quoteToSubmitHours.n, r.submitToIssueDays.value, r.submitToIssueDays.n]), ["All carriers", report.timing.all.quoteToSubmitHours.value, report.timing.all.quoteToSubmitHours.n, report.timing.all.submitToIssueDays.value, report.timing.all.submitToIssueDays.n]]),
-    declines: () => downloadCsv(`decline-reasons-${period}.csv`, ["Reason", ...declineCarriers.flatMap((c) => [`${c.name} cases`, `${c.name} declines`]), "All cases", "All declines"],
+    requirements: () => exportRequirements(),
+    declines: () => downloadCsv(`decline-reasons-${span}.csv`, ["Reason", ...declineCarriers.flatMap((c) => [`${c.name} cases`, `${c.name} declines`]), "All cases", "All declines"],
       [...d.rows.map((r) => [r.label, ...declineCarriers.flatMap((c) => [r.byCarrier[c.id] ?? 0, c.total]), r.total, d.total]), ["All declines", ...declineCarriers.flatMap((c) => [c.total, c.total]), d.total, d.total]]),
-    counteroffers: () => downloadCsv(`counteroffers-${period}.csv`, ["Carrier", "Submitted", "Counteroffered", "Accepted", "Refused by client", "Expired", "Still waiting", "Top reason"],
+    counteroffers: () => downloadCsv(`counteroffers-${span}.csv`, ["Carrier", "Submitted", "Counteroffered", "Accepted", "Refused by client", "Expired", "Still waiting", "Top reason"],
       [...report.counteroffers.rows.map((r) => [r.name, r.submitted, r.counteroffered, r.accepted, r.refused, r.expired, r.pending, r.topReason]), ["All carriers", report.counteroffers.total.submitted, report.counteroffers.total.counteroffered, report.counteroffers.total.accepted, report.counteroffers.total.refused, report.counteroffers.total.expired, report.counteroffers.total.pending, null]]),
-    premium: () => downloadCsv(`premium-${period}.csv`, ["Carrier", "Submitted annualised (USD)", "Issued annualised (USD)", "Issued applications", "Estimated first-year commission (USD)", "Issued with a commission rate"],
+    premium: () => downloadCsv(`premium-${span}.csv`, ["Carrier", "Submitted annualised (USD)", "Issued annualised (USD)", "Issued applications", "Estimated first-year commission (USD)", "Issued with a commission rate"],
       [...report.premium.rows.map((r) => [r.name, (r.submittedAnnualCents / 100).toFixed(2), (r.issuedAnnualCents / 100).toFixed(2), r.issuedCount, (r.estimatedFycCents / 100).toFixed(2), r.ratedCount]), ["All carriers", (report.premium.total.submittedAnnualCents / 100).toFixed(2), (report.premium.total.issuedAnnualCents / 100).toFixed(2), report.premium.total.issuedCount, (report.premium.total.estimatedFycCents / 100).toFixed(2), report.premium.total.ratedCount]]),
   };
-  const exportRequirements = () => downloadCsv(`requirement-days-${period}.csv`, ["Requirement", ...report.timing.rows.flatMap((c) => [`${c.name} median days`, `${c.name} n`]), "All median days", "All n"],
-    report.timing.requirements.map((r) => [REQUIREMENT_KIND_LABEL[r.kind], ...report.timing.rows.flatMap((c) => [r.byCarrier[c.carrierId]?.value ?? null, r.byCarrier[c.carrierId]?.n ?? 0]), r.all.value, r.all.n]));
+  function exportRequirements() { downloadCsv( `requirement-days-${span}.csv`, ["Requirement", ...report.timing.rows.flatMap((c) => [`${c.name} median days`, `${c.name} n`]), "All median days", "All n"],
+    report.timing.requirements.map((r) => [REQUIREMENT_KIND_LABEL[r.kind], ...report.timing.rows.flatMap((c) => [r.byCarrier[c.carrierId]?.value ?? null, r.byCarrier[c.carrierId]?.n ?? 0]), r.all.value, r.all.n])); }
 
-  // 2026-10-06 redesign: the date range and the four filters sit on the toolbar's one line (no
-  // Filters panel), Clear shows only while a filter is on, and Refresh is last.
+  // The period first, then the one Filters button (UI-CONSISTENCY §6a: carrier, product, lead source and
+  // producer open in the panel under the toolbar); Export and Refresh last.
   const toolbar = (
     <DataToolbar actions={<>
-        {panelCount > 0 && <ClearFiltersButton onClick={() => change({ filters: NO_FILTERS })} />}
-        <Button type="button" variant="outline" onClick={exporters[tab]} aria-label={`Export ${TABS.find((x) => x.key === tab)?.label.toLowerCase()} as CSV`}><Download aria-hidden="true" />Export</Button>
+        <Button type="button" variant="outline" onClick={exporters[tab]} aria-label={`Export ${TABS.find((x) => x.key === tab)?.label.toLowerCase()} as CSV`} disabled={tab === "requirements" && report.timing.requirements.length === 0}><Download aria-hidden="true" />Export</Button>
         <RefreshButton onClick={refresh} refreshing={loading || sampleRefresh.refreshing} />
       </>}>
-        <select aria-label="Date range" className={toolbarControl} value={range} onChange={(event) => { const next = event.target.value as RangeKey; change(next === "custom" ? { range: next, custom: win } : { range: next }); }}>
-          {RANGES.map((r) => <option key={r.key} value={r.key}>{r.label}</option>)}
-        </select>
-        {range === "custom" && (
-          <span className="inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-            <input type="date" aria-label="From" className={toolbarControl} value={custom.from} max={custom.to} onChange={(event) => { if (event.target.value) change({ custom: { ...custom, from: event.target.value } }); }} />
-            <span aria-hidden="true">–</span>
-            <input type="date" aria-label="To" className={toolbarControl} value={custom.to} min={custom.from} onChange={(event) => { if (event.target.value) change({ custom: { ...custom, to: event.target.value } }); }} />
-          </span>
-        )}
-        <select aria-label="Carrier" className={toolbarControl} value={filters.carrierId} onChange={(event) => setFilter("carrierId", event.target.value)}>
-          <option value="">All carriers</option>
-          {report.options.carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </select>
-        <select aria-label="Product" className={toolbarControl} value={filters.productCode} onChange={(event) => setFilter("productCode", event.target.value)}>
-          <option value="">All products</option>
-          {report.options.products.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
-        </select>
-        <select aria-label="Lead source" className={toolbarControl} value={filters.source} onChange={(event) => setFilter("source", event.target.value)}>
-          <option value="">All lead sources</option>
-          {report.options.sources.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-        </select>
-        <select aria-label="Producer" className={toolbarControl} value={filters.producerId} onChange={(event) => setFilter("producerId", event.target.value)}>
-          <option value="">All producers</option>
-          {report.options.producers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
+        <PeriodPicker value={period} onChange={(next) => change({ period: next })} />
+        <FilterButton open={filtersOpen} count={panelCount} controls="sales-filters" onClick={() => setFiltersOpen(!filtersOpen)} />
     </DataToolbar>
+  );
+  const filterPanel = (
+    <>
+      <FilterPanel id="sales-filters" open={filtersOpen}>
+          <FilterField label="Carrier" htmlFor="sales-carrierId"><select id="sales-carrierId" className={toolbarControl} value={filters.carrierId} onChange={(event) => setFilter("carrierId", event.target.value)}>
+            <option value="">All carriers</option>
+            {report.options.carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select></FilterField>
+          <FilterField label="Product" htmlFor="sales-productCode"><select id="sales-productCode" className={toolbarControl} value={filters.productCode} onChange={(event) => setFilter("productCode", event.target.value)}>
+            <option value="">All products</option>
+            {report.options.products.map((p) => <option key={p.code} value={p.code}>{p.label}</option>)}
+          </select></FilterField>
+          <FilterField label="Lead source" htmlFor="sales-source"><select id="sales-source" className={toolbarControl} value={filters.source} onChange={(event) => setFilter("source", event.target.value)}>
+            <option value="">All lead sources</option>
+            {report.options.sources.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select></FilterField>
+          <FilterField label="Producer" htmlFor="sales-producerId"><select id="sales-producerId" className={toolbarControl} value={filters.producerId} onChange={(event) => setFilter("producerId", event.target.value)}>
+            <option value="">All producers</option>
+            {report.options.producers.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select></FilterField>
+      </FilterPanel>
+      <ActiveFilters filters={chips} onClear={() => change({ filters: NO_FILTERS })} />
+    </>
   );
 
   let body: ReactNode;
@@ -206,7 +201,6 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
   let suffix: ReactNode = null;
   let total = 0;
   let noun = "carriers";
-  let secondary: ReactNode = null;
   if (loading) body = <SectionLoading rows={6} columns={5} label="Loading the report" />;
   else if (tab === "funnel") {
     const f = report.funnel;
@@ -240,18 +234,21 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
           </PagedBody>
           <tfoot><tr className="bg-[var(--surface-alt)] font-semibold text-foreground"><td className="border-t border-[var(--border-strong)] px-3 py-2.5">All carriers</td><td className="border-t border-[var(--border-strong)] px-3 py-2.5"><MedianCell m={tm.all.quoteToSubmitHours} unit="h" /></td><td className="border-t border-[var(--border-strong)] px-3 py-2.5"><MedianCell m={tm.all.submitToIssueDays} unit="days" /></td></tr></tfoot>
         </table>;
-    secondary = (
-      <TableCard title="Days a requirement sits open" action={<Button type="button" variant="outline" onClick={exportRequirements} disabled={tm.requirements.length === 0} title={tm.requirements.length === 0 ? "Nothing to export" : undefined}><Download aria-hidden="true" />Export</Button>}>
-        {tm.requirements.length === 0
-          ? <EmptyState title="No met requirements in this window" hint="Counted once met, from the day it was raised." />
-          : <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-              <thead><tr><th>Requirement</th>{tm.rows.map((c) => <th key={c.carrierId} className="w-[150px]">{c.name}</th>)}<th className="w-[128px]">All</th></tr></thead>
-              <tbody className="m-seq">
-                {tm.requirements.map((r) => <tr key={r.kind} className="m-row"><td>{REQUIREMENT_KIND_LABEL[r.kind]}</td>{tm.rows.map((c) => <td key={c.carrierId}><MedianCell m={r.byCarrier[c.carrierId] ?? { value: null, n: 0 }} unit="days" /></td>)}<td><MedianCell m={r.all} unit="days" /></td></tr>)}
-              </tbody>
-            </table>}
-      </TableCard>
-    );
+  } else if (tab === "requirements") {
+    const tm = report.timing;
+    // Only the carriers with a met requirement in the window: an empty column per carrier pushed the grid past the card.
+    const reqCarriers = tm.rows.filter((c) => tm.requirements.some((r) => (r.byCarrier[c.carrierId]?.n ?? 0) > 0));
+    footer = <span>{windowLabel} · median days from raised to met, counted once met · under {MIN_CASES} cases shows the count in grey</span>;
+    total = tm.requirements.length;
+    noun = "requirements";
+    body = tm.requirements.length === 0
+      ? <EmptyState title="No met requirements in this window" hint={emptyHint} action={emptyAction} />
+      : <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
+          <thead><tr><th>Requirement</th>{reqCarriers.map((c) => <th key={c.carrierId}>{c.name}</th>)}<th>All</th></tr></thead>
+          <PagedBody className="m-seq">
+            {tm.requirements.map((r) => <tr key={r.kind} className="m-row"><td>{REQUIREMENT_KIND_LABEL[r.kind]}</td>{reqCarriers.map((c) => <td key={c.carrierId}><MedianCell m={r.byCarrier[c.carrierId] ?? { value: null, n: 0 }} unit="days" /></td>)}<td><MedianCell m={r.all} unit="days" /></td></tr>)}
+          </PagedBody>
+        </table>;
   } else if (tab === "declines") {
     suffix = <>{windowLabel} · each figure is that reason’s share of the carrier’s declines</>;
     footer = <span>{suffix}</span>;
@@ -344,25 +341,23 @@ export function SalesPerformance({ report: initialReport, sample = false, timeZo
         />
       )}
 
-      {/* The views under the title, or in the Reports frame's top row. ("Open the funnel" is gone,
-          2026-10-30: the Funnel tab opens it.) */}
+      {/* The views on the title line (UI-CONSISTENCY §8a). ("Open the funnel" is gone, 2026-10-30: the Funnel tab opens it.) */}
       <InReportsSlot framed={framed} slot="lead">
         <ViewTabs label="Sales performance views" tabs={TABS.map((item) => ({ key: item.key, label: item.label }))} active={tab} onChange={setTab} controls="sales-panel" />
       </InReportsSlot>
-      {sample && <SampleDataNotice />}
+      {sample && <Callout tone="info" title="Sample data">This screen is a design preview and nothing on it is saved.</Callout>}
+      {error && <Callout tone="error" title="The report did not reload">{error}</Callout>}
 
+      {/* Each tile opens the tab its figure is read from (owner 2026-11-02: the tiles are the links). */}
       <StatStrip label="Sales totals">
-        <StatTile label="Submitted" value={count(t.submitted)} footnote={windowLabel} />
-        <StatTile label="Issued" value={count(t.issued.n)} valueTone={t.issued.n > 0 ? "good" : undefined} footnote={tileRate(t.issued, "submitted")} />
-        <StatTile label="Declined" value={count(t.declined.n)} valueTone={t.declined.n > 0 ? "danger" : undefined} footnote={tileRate(t.declined, "submitted")} />
-        <StatTile label="Counteroffered" value={count(t.counteroffered.n)} valueTone={t.counteroffered.n > 0 ? "warning" : undefined} footnote={tileRate(t.counteroffered, "submitted")} />
+        <StatTile label="Submitted" value={count(t.submitted)} footnote={windowLabel} href={tabHref("funnel")} />
+        <StatTile label="Issued" value={count(t.issued.n)} valueTone={t.issued.n > 0 ? "good" : undefined} footnote={tileRate(t.issued, "submitted")} href={tabHref("premium")} />
+        <StatTile label="Declined" value={count(t.declined.n)} valueTone={t.declined.n > 0 ? "danger" : undefined} footnote={tileRate(t.declined, "submitted")} href={tabHref("declines")} />
+        <StatTile label="Counteroffered" value={count(t.counteroffered.n)} valueTone={t.counteroffered.n > 0 ? "warning" : undefined} footnote={tileRate(t.counteroffered, "submitted")} href={tabHref("counteroffers")} />
       </StatStrip>
 
-      {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
-
       <div id="sales-panel" role="tabpanel" aria-labelledby={`sales-panel-tab-${tab}`} className="flex flex-col gap-6">
-        <PagedTableCard key={tab} total={total} noun={noun} suffix={suffix} className={secondary ? undefined : "flex min-h-[calc(100dvh-var(--top-bar-h)-432px)] flex-col [&>.overflow-x-auto]:flex-1"} toolbar={toolbar} footer={footer}>{body}</PagedTableCard>
-        {!loading && secondary}
+        <PagedTableCard key={tab} total={total} noun={noun} suffix={suffix} toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</PagedTableCard>
       </div>
     </div>
   );

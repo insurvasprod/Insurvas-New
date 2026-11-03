@@ -1,10 +1,12 @@
 import "server-only";
 
+import { carrierFilter } from "@/lib/carriers/agency";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { moveLead } from "@/lib/applications/stageSyncService";
 import { HUMAN_STAGE_SOURCES } from "@/lib/applications/stageSync";
 import { agencyToday } from "@/lib/ingestion/agencyDay";
+import { isRecordUuid } from "@/lib/ingestion/path";
 import type { RuleRow } from "@/lib/ingestion/carrierRules";
 
 import { computeEvents, OPEN_STATUSES, policyKey, addDays, type ChangeFact, type LedgerFact, type PolicyFacts, type RuleEventFact } from "./events";
@@ -136,9 +138,14 @@ function stageMap(board: BoardPipeline[]): Map<string, StageInfo> {
   return map;
 }
 
-export async function loadCarrierChoices(): Promise<Array<{ id: string; name: string }>> {
-  const { data } = await db().from("carriers").select("id, name").eq("is_active", true).order("name");
-  return ((data ?? []) as Loose[]).map((c) => ({ id: c.id, name: c.name }));
+/**
+ * LA-0.4: the carriers switched on in Settings › Carriers, plus any a rule already names (a carrier
+ * switched off later keeps its rules readable and editable).
+ */
+export async function loadCarrierChoices(tenantId: string): Promise<Array<{ id: string; name: string }>> {
+  const { data } = await db().from("pipeline_rule_version").select("carrier_ids").eq("tenant_id", tenantId).limit(5000);
+  const named = ((data ?? []) as Loose[]).flatMap((row) => (row.carrier_ids ?? []) as string[]);
+  return (await carrierFilter(tenantId, named)).map((c) => ({ id: c.id, name: c.name }));
 }
 
 // ─── the list page ──────────────────────────────────────────────────────────────────────────────────
@@ -314,8 +321,8 @@ async function checkContent(tenantId: string, content: RuleContent): Promise<voi
   if (target.archived) throw new PipelineRulesError("That stage is archived; choose one on the board.", 400);
   if (content.fromStageIds.some((id) => !stages.has(id))) throw new PipelineRulesError("A from-stage is no longer on the board.", 400);
   if (content.carrierIds.length) {
-    const { data } = await db().from("carriers").select("id").in("id", content.carrierIds);
-    if ((data ?? []).length !== new Set(content.carrierIds).size) throw new PipelineRulesError("Choose carriers from the library.", 400);
+    const allowed = new Set((await loadCarrierChoices(tenantId)).map((c) => c.id));
+    if (content.carrierIds.some((id) => !allowed.has(id))) throw new PipelineRulesError("Choose carriers from your carriers in Settings › Carriers.", 400);
   }
 }
 
@@ -437,10 +444,10 @@ export async function resolveHold(scope: Scope, holdId: string, chosenRuleId: st
 
 type World = { asOf: string; events: RuleEventFact[]; carriersWithoutGrace: string[]; leads: Map<string, LeadState | null>; stages: Map<string, StageInfo> };
 
-const POLICY_COLUMNS = "carrier_id, policy_number, status_normalized, carrier_status_raw, paid_to_date, effective_date, issued_on, first_seen_date, premium_cents, case_id, application_id";
+const POLICY_COLUMNS = "carrier_id, policy_number, status_normalized, carrier_status_raw, paid_to_date, effective_date, issued_on, issue_date, first_seen_date, premium_cents, case_id, application_id";
 const toPolicy = (r: Loose): PolicyFacts => ({
   carrierId: r.carrier_id, policyNumber: r.policy_number, status: r.status_normalized, carrierStatusRaw: r.carrier_status_raw, paidToDate: r.paid_to_date,
-  effectiveDate: r.effective_date, issuedOn: r.issued_on, firstSeenDate: r.first_seen_date, premiumCents: r.premium_cents === null ? null : Number(r.premium_cents), caseId: r.case_id, applicationId: r.application_id,
+  effectiveDate: r.effective_date, issuedOn: r.issued_on, issueDate: r.issue_date, firstSeenDate: r.first_seen_date, premiumCents: r.premium_cents === null ? null : Number(r.premium_cents), caseId: r.case_id, applicationId: r.application_id,
 });
 const toCarrierRule = (row: Loose): RuleRow => ({ id: row.id, tenantId: row.tenant_id, carrierId: row.carrier_id, ruleType: row.rule_type, windowDays: row.window_days, graceDays: row.grace_days, redraftAttempts: row.redraft_attempts, redraftIntervalDays: row.redraft_interval_days, source: row.source, notes: row.notes, effectiveFrom: row.effective_from, createdAt: row.created_at, cleared: row.cleared, verifiedAt: row.verified_at });
 
@@ -453,7 +460,8 @@ async function readWorld(tenantId: string, wanted: Set<RuleEvent>, handMoveDays:
 
   const [open, issued, changes, ledger, carrierRules, carriers, board] = await Promise.all([
     allPages((from, to) => db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).in("status_normalized", [...OPEN_STATUSES]).order("carrier_id").order("policy_number").range(from, to)),
-    wanted.has("issued") ? allPages((from, to) => db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).gte("issued_on", since).order("carrier_id").order("policy_number").range(from, to)) : Promise.resolve({ data: [], error: null }),
+    // Issued in the look-back by a change (issued_on), or first seen already issued (the carrier's issue date): issuedDay().
+    wanted.has("issued") ? allPages((from, to) => db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).or(`issued_on.gte.${since},issue_date.gte.${since}`).order("carrier_id").order("policy_number").range(from, to)) : Promise.resolve({ data: [], error: null }),
     needChanges ? allPages((from, to) => db().from("policy_change").select("carrier_id, policy_number, field_name, old_value, new_value, from_snapshot_date, to_snapshot_date").eq("tenant_id", tenantId).gte("to_snapshot_date", since).in("field_name", ["status_normalized", "paid_to_date", "termination_date", "carrier_status_raw"]).order("to_snapshot_date", { ascending: false }).order("id").range(from, to)) : Promise.resolve({ data: [], error: null }),
     needLedger ? allPages((from, to) => db().from("commission_entry").select("id, carrier_id, policy_number, entry_type, amount_cents, transaction_date, statement_date, created_at, reverses_entry_id").eq("tenant_id", tenantId).gte("created_at", `${since}T00:00:00Z`).in("entry_type", ["advance", "earned", "chargeback", "reversal"]).order("created_at").order("id").range(from, to)) : Promise.resolve({ data: [], error: null }),
     db().from("carrier_retention_rule").select("*").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(5000),
@@ -543,7 +551,9 @@ function specOf(rule: RuleRowView): RuleSpec | null {
 async function readDone(tenantId: string, specs: RuleSpec[], events: RuleEventFact[]): Promise<Set<string>> {
   const done = new Set<string>();
   const keys = [...new Set(events.filter((e) => specs.some((s) => s.event === e.event)).map((e) => e.changeKey))];
-  const ruleIds = [...new Set(specs.map((s) => s.ruleId))];
+  // A rule being previewed before it is saved ("preview") has done nothing yet, and rule_id is a uuid column:
+  // asking for it made every preview with an event in it fail (E2E 2026-11-02).
+  const ruleIds = [...new Set(specs.map((s) => s.ruleId))].filter(isRecordUuid);
   if (!keys.length || !ruleIds.length) return done;
   for (const part of chunks(keys, 100)) {
     const { data, error } = await db().from("pipeline_rule_evaluation").select("rule_id, version, mode, change_key").eq("tenant_id", tenantId).in("rule_id", ruleIds).in("change_key", part).limit(10_000);

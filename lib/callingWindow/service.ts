@@ -5,6 +5,8 @@ import { SchemaGapError, isSchemaGap } from "@/lib/appointments/schemaGap";
 import {
   DEFAULT_OPTIONS,
   FEDERAL_WINDOW,
+  INSURVAS_DEFAULT_OPTIONS,
+  INSURVAS_DEFAULT_WINDOW,
   hoursFor,
   type CallingWindow,
   type CallingWindowOptions,
@@ -78,7 +80,7 @@ export async function getCallingWindows(tenantId: string): Promise<CallingWindow
     client.from("tenant_campaigns").select(columns).eq("tenant_id", tenantId).order("name", { ascending: true });
   const today = new Date().toISOString().slice(0, 10);
 
-  const [firstTenant, firstCampaigns, rules, options, holidays, feed, leadStates, licensed, agencyLicences] = await Promise.all([
+  const [firstTenant, firstCampaigns, rules, options, holidays, feed, leadStates, licensed, agencyLicences, insurvasDefault] = await Promise.all([
     readTenant(TENANT_COLUMNS),
     readCampaigns(CAMPAIGN_COLUMNS),
     client.rpc("calling_window_rules_in_force", {}),
@@ -104,6 +106,8 @@ export async function getCallingWindows(tenantId: string): Promise<CallingWindow
     client.rpc("tenant_dialing_states", { p_tenant_id: tenantId }),
     client.from("tenant_user_licensed_states").select("state").eq("tenant_id", tenantId).limit(500),
     client.from("licenses").select("state").eq("tenant_id", tenantId).limit(500),
+    // Present once 20261103100000 is live; its presence is what says the default applies.
+    client.rpc("calling_window_insurvas_default", {}),
   ]);
 
   // Before 20260924121000 the minute and reason columns and the options table are absent. The page
@@ -129,6 +133,11 @@ export async function getCallingWindows(tenantId: string): Promise<CallingWindow
   const dialingStates =
     leadStates.error && licensed.error && agencyLicences.error ? null : [...new Set(workedStates)];
 
+  // The Insurvas default (20261103100000): with no row of its own, the dial check narrows to it.
+  // Before that migration no row means federal and state limits only, and the screen says so.
+  const defaultLive = !insurvasDefault.error;
+  const defaultHours = hoursFor(INSURVAS_DEFAULT_WINDOW);
+
   return {
     federal: FEDERAL_WINDOW,
     tenant: tenant.data
@@ -138,7 +147,12 @@ export async function getCallingWindows(tenantId: string): Promise<CallingWindow
           startMinute: int(tenant.data.start_minute),
           endMinute: int(tenant.data.end_minute),
         }
-      : null,
+      : defaultLive
+        ? { ...defaultHours, startMinute: INSURVAS_DEFAULT_WINDOW.start, endMinute: INSURVAS_DEFAULT_WINDOW.end }
+        : null,
+    insurvasDefaultLive: defaultLive,
+    tenantIsDefault: !tenant.data && defaultLive,
+    optionsAreDefault: !options.data && defaultLive && schemaReady,
     campaigns: (campaigns.data ?? []).map((row) => ({
       id: text(row.id),
       name: text(row.name),
@@ -178,7 +192,7 @@ export async function getCallingWindows(tenantId: string): Promise<CallingWindow
           noFederalHolidays: options.data.no_federal_holidays === true,
           campaignOverrides: options.data.campaign_overrides_enabled !== false,
         }
-      : { ...DEFAULT_OPTIONS },
+      : defaultLive && schemaReady ? { ...INSURVAS_DEFAULT_OPTIONS } : { ...DEFAULT_OPTIONS },
     schemaReady,
     federalHolidays: holidays.error
       ? null
@@ -266,6 +280,18 @@ export async function saveTenantCallingWindow(input: {
   }
   if (!saved.data) throw new Error("The calling window did not save.");
   return { startHour: Number(saved.data.start_hour), endHour: Number(saved.data.end_hour) };
+}
+
+/**
+ * Reset to default (docs/settings/DEFAULTS.md): remove the agency's own hours and switches, so the
+ * Insurvas default applies again (20261103100000). Campaign narrowing is the campaigns' own and stays.
+ */
+export async function resetCallingWindowDefaults(tenantId: string): Promise<void> {
+  const client = db();
+  const hours = await client.from("tenant_calling_windows").delete().eq("tenant_id", tenantId);
+  if (hours.error) throw new Error(`Could not reset your calling hours: ${hours.error.message}`);
+  const switches = await client.from("tenant_calling_window_options").delete().eq("tenant_id", tenantId);
+  if (switches.error && !isSchemaGap(switches.error)) throw new Error(`Could not reset your calling-window switches: ${switches.error.message}`);
 }
 
 export async function saveCallingWindowOptions(input: {

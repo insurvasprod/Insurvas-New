@@ -12,6 +12,8 @@
 
 export type AgencyProducerRow = {
   producerUserId: string;
+  /** The producer record's id (`/app/producers/<id>`); absent in older samples, null without a record. */
+  producerId?: string | null;
   name: string;
   submitted: number;
   issued: number;

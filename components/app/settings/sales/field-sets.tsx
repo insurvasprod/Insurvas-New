@@ -13,7 +13,7 @@
  *
  * Also here: what changed from the platform set, the versions with who and when, whether the
  * carrier's autofill map (/api/app/field-maps) places every asked field, Give a carrier its own set
- * (starting from any set), Use for other carriers, Delete draft, Retire and Go back to the platform set.
+ * (starting from any set), Use for other carriers, Delete draft, Retire and Reset to default (back to the Insurvas set).
  * A platform set is read-only until it is customised for the agency.
  */
 
@@ -356,9 +356,9 @@ export function SalesFieldSets() {
     if (!selected?.own) return;
     const platformReq = entriesOf(selected.platform).filter((e) => e.required).length;
     const ok = await confirmAction({
-      title: "Go back to the platform set?",
+      title: "Reset to the Insurvas default?",
       description: `${[selected.liveOwn && `v${selected.liveOwn.version} is retired`, selected.draftOwn && `draft v${selected.draftOwn.version} is deleted`].filter(Boolean).join(" and ")}. New ${selected.carrierName} applications then use the platform set (${platformReq} required). Started applications keep their version.`,
-      confirmLabel: "Use the platform set",
+      confirmLabel: "Reset to default", cancelLabel: "Keep mine",
     });
     if (!ok) return;
     if (sample) {
@@ -368,7 +368,7 @@ export function SalesFieldSets() {
       await runAll([
         ...(selected.draftOwn ? [{ url: `${base}/${selected.draftOwn.id}`, method: "DELETE" }] : []),
         ...(selected.liveOwn ? [{ url: `${base}/${selected.liveOwn.id}/retire`, method: "POST" }] : []),
-      ], `${selected.carrierName} is back on the platform set`);
+      ], `${selected.carrierName} is back on the Insurvas default`);
     }
     setEntries(entriesOf(selected.platform));
   };
@@ -495,7 +495,7 @@ export function SalesFieldSets() {
                 <p className="m-0 px-1 py-4 text-center text-sm text-[var(--body)]">No carrier matches. Clear the search or pick All.</p>
               ) : (
                 <div className="flex flex-col gap-1.5">
-                  {[{ title: "Your own sets", list: ownListed }, { title: "On the platform set", list: platformListed }].filter((g) => g.list.length).map((g) => (
+                  {[{ title: "Your own sets", list: ownListed }, { title: "On the Insurvas default", list: platformListed }].filter((g) => g.list.length).map((g) => (
                     <div key={g.title} className="flex flex-col gap-1.5">
                       <h3 className="m-0 px-1 pt-1.5 text-xs font-semibold text-[var(--body)]">{g.title} · {g.list.length}</h3>
                       <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
@@ -540,7 +540,7 @@ export function SalesFieldSets() {
                 <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 text-center">
                   <p className="m-0 text-base font-semibold text-[var(--ink)]">Pick a carrier</p>
                   <p className="m-0 max-w-[420px] text-sm text-[var(--body)]">
-                    Each carrier uses the platform set until you give it its own. A field set says which fields an agent must fill before submitting that carrier&apos;s application.
+                    Each carrier uses the Insurvas default set until you give it its own. A field set says which fields an agent must fill before submitting that carrier&apos;s application.
                   </p>
                 </div>
               ) : (
@@ -568,7 +568,7 @@ export function SalesFieldSets() {
                           Boolean(selected.carrierId) && mapKeys !== null && { label: "Open the field map", onSelect: () => router.push(FIELD_MAP_HREF) },
                           Boolean(selected.draftOwn) && { label: `Delete draft v${selected.draftOwn?.version}`, onSelect: () => { void deleteDraft(); }, disabled: !canEdit, reason: ownerOnly, danger: true },
                           Boolean(selected.liveOwn) && { label: `Retire v${selected.liveOwn?.version}`, onSelect: () => setDialog({ kind: "retire", template: selected.liveOwn! }), disabled: !canEdit, reason: ownerOnly, danger: true },
-                          Boolean(selected.own) && { label: "Go back to the platform set", onSelect: () => { void backToPlatform(); }, disabled: !canEdit, reason: ownerOnly, danger: true },
+                          Boolean(selected.own) && { label: "Reset to default", onSelect: () => { void backToPlatform(); }, disabled: !canEdit, reason: ownerOnly, danger: true },
                         ]}
                       />
                     </div>
@@ -763,7 +763,7 @@ export function SalesFieldSets() {
                       )}
                       {selected.own && (
                         <WithReason reason={ownerOnly}>
-                          <Button type="button" variant="outline" className="w-fit" disabled={!canEdit} onClick={() => { void backToPlatform(); }}>Go back to the platform set</Button>
+                          <Button type="button" variant="outline" className="w-fit" disabled={!canEdit} onClick={() => { void backToPlatform(); }}>Reset to default</Button>
                         </WithReason>
                       )}
                     </div>

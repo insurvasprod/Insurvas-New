@@ -29,9 +29,7 @@ export default async function SetupCarrierRulesPage() {
       ) : (
         <>
           {missing > 0 && (
-            <Callout tone="warning" title={`${missing} ${missing === 1 ? "carrier you write with has" : "carriers you write with have"} no payment window or grace.`}>
-              No missed-payment countdown or pipeline rule event is made for their policies until one is set: by Insurvas, or here as your own.
-            </Callout>
+            <Callout tone="warning" title={`${missing} ${missing === 1 ? "carrier you write with has" : "carriers you write with have"} no payment window or grace: no missed-payment countdown or pipeline rule event is made for their policies until one is set, by Insurvas or here as your own.`} />
           )}
           <CarrierRulesEditor carriers={view.carriers} asOf={view.asOf} readOnly={guard.entitlement.access === "read_only"} />
         </>

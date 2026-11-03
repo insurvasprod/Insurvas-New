@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { BOOK_IMPORT_PENDING_MESSAGE, BookImportError, loadBookImport, setSkipped, uploadForImport } from "@/lib/ingestion/bookImport";
+import { acceptsFilesFrom } from "@/lib/carriers/agency";
 import { MAX_UPLOAD_BYTES, carrierFileBytesMatch, carrierFileKind } from "@/lib/ingestion/constants";
 import { runArrival } from "@/lib/ingestion/dailyRunStore";
 import { processFileQuietly } from "@/lib/ingestion/parser";
@@ -70,6 +71,8 @@ export async function POST(request: NextRequest) {
   const fileDate = String(form.get("file_date") ?? "");
   if (!isRecordUuid(carrierId)) return NextResponse.json({ error: "Choose the carrier." }, { status: 400 });
   if (isoDate(fileDate) === null) return NextResponse.json({ error: "Enter the file's date." }, { status: 400 });
+  // LA-0.4: only a carrier from Settings › Carriers (or one whose files the agency already holds).
+  if (!(await acceptsFilesFrom(tenantId, carrierId))) return NextResponse.json({ error: "That carrier is not one of yours. Add it, or switch it on, in Settings › Carriers." }, { status: 400 });
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!carrierFileBytesMatch(kind, bytes.subarray(0, 1024))) return NextResponse.json({ error: kind === "csv" ? "That file is not plain text, so it cannot be read as a CSV." : "That file is not the Excel workbook its name says it is." }, { status: 400 });
 

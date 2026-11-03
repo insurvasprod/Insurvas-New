@@ -7,9 +7,9 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { ReinstatementBoard } from "@/components/app/reinstatement-board";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { WinbackBoard } from "@/components/app/winback-board";
-import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { RetentionPage } from "@/components/app/retention/retention-page";
 
 /**
  * Book › Reinstatement (the `winback` feature). Two views:
@@ -36,12 +36,7 @@ export default async function ReinstatementPage({ searchParams }: { searchParams
   const [cases, winback] = winbackView ? [null, await loadWinback(viewer, { release: !readOnly })] : [await loadReinstatement(viewer), null];
 
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader
-        title="Reinstatement"
-        description={winbackView ? "Former clients past reinstatement, each back on a call list when their cooling-off ends." : "Lapsed policies the carrier will still take back, fewest days left first."}
-      />
-      {canWinback ? (
+    <RetentionPage step="reinstatement" lead={canWinback ? (
         <ViewTabs
           label="Reinstatement views"
           active={winbackView ? "winback" : "cases"}
@@ -50,7 +45,8 @@ export default async function ReinstatementPage({ searchParams }: { searchParams
             { key: "winback", label: "Win-back", href: "/app/reinstatement?view=winback" },
           ]}
         />
-      ) : null}
+      ) : undefined}>
+    <>
       {winback ? (
         winback.available ? <WinbackBoard data={winback} readOnly={readOnly} /> : <TableCard><EmptyState title="Not switched on yet" hint={WINBACK_PENDING_MESSAGE} /></TableCard>
       ) : cases && cases.available ? (
@@ -60,6 +56,7 @@ export default async function ReinstatementPage({ searchParams }: { searchParams
           <EmptyState title="Not switched on yet" hint={REINSTATEMENT_PENDING_MESSAGE} />
         </TableCard>
       )}
-    </div>
+    </>
+    </RetentionPage>
   );
 }

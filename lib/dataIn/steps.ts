@@ -38,6 +38,8 @@ const STEP_PATHS: [RegExp, DataInStep][] = [
 /** The records that live under a step (a file, a row, an item, a policy, a rule): the same step, a detail page. */
 const RECORD_PATHS: [RegExp, DataInStep][] = [
   [/^\/app\/carrier-files\/.+/, "files"],
+  // Statements and a statement's own page (owner 2026-11-02: out of Commissions, under Files).
+  [/^\/app\/statements(\/|$)/, "files"],
   [/^\/app\/needs-you\/.+/, "needs-you"],
   [/^\/app\/policies\/.+/, "policies"],
   [/^\/app\/book-setup\/.+/, "setup"],

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { applySignupProducts } from "@/lib/products/applySignupProducts";
 import { deriveRecommendedSetupSteps } from "@/lib/signup/constants";
 import { resolveSignupContext } from "@/lib/signup/context";
 import { PROFILE_EDITABLE_STATES, signupDestination } from "@/lib/signup/destination";
@@ -68,6 +69,12 @@ export async function POST(request: NextRequest) {
     console.error("Could not save signup business profile", error?.code, error?.message);
     return NextResponse.json({ error: "Could not save your business profile" }, { status: 500 });
   }
+
+  // What they sell is switched on in Settings › Products (owner 2026-11-03), once, within the plan. A
+  // failure here never fails the sign-up: the owner can still switch products on by hand.
+  await applySignupProducts(context.tenantId, profile.productsSold).catch((cause: unknown) => {
+    console.error("Could not switch on the sign-up products", cause instanceof Error ? cause.message : cause);
+  });
 
   // Wherever the sign-up stands after saving: the plan or checkout if payment is still to come, the
   // app once the plan has started (payment comes first since migration 20261028200000).

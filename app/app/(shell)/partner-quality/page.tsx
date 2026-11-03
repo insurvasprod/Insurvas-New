@@ -18,5 +18,5 @@ export default async function PartnerQualityPage({ searchParams }: { searchParam
   // A row opens the partner record's Quality tab for someone who may open partner records.
   const recordLinks = records.entitled && actAsPage(records, ["owner", "bookkeeper"]);
   // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
-  return <ReportsPage view="partner" bar={false}><PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} framed /></ReportsPage>;
+  return <ReportsPage view="partner" info="How good each partner's leads are, against the period before. Every figure opens the leads it counted. Quality and conversion only: cost is not included yet."><PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} framed /></ReportsPage>;
 }

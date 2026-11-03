@@ -521,7 +521,10 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
   --t-enter:  360ms;  /* a section arriving */
 }
 
-@keyframes m-rise  { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* A section arriving rises a few pixels and is never invisible on the way (owner 2026-11-03, "it flashes" in
+   light mode): starting from opacity 0, the frames between the loading skeleton leaving and the page coming
+   in showed the bare white background — a blink on light, unseen on dark. */
+@keyframes m-rise  { from { opacity: .72; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes m-fade  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes m-grow  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 /* A chart bar rising from its baseline (the dashboard's Today chart). */
@@ -574,8 +577,9 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 .m-stagger > *:nth-child(7) { animation-delay: 192ms; }
 .m-stagger > *:nth-child(n + 8) { animation-delay: 224ms; }
 
-/* 2 · Row fill-in. Opacity only, so a 40-row table does not ripple. */
-.m-seq > * { animation: m-fade 300ms var(--e-out) both; }
+/* 2 · Row fill-in. Opacity only, so a 40-row table does not ripple. Never from invisible (owner 2026-11-03,
+   "it flashes"): held at 0 through its delay, a table sat blank on the page background after loading. */
+.m-seq > * { animation: m-panel-settle 300ms var(--e-out) both; }
 .m-seq > *:nth-child(1) { animation-delay: 120ms; }
 .m-seq > *:nth-child(2) { animation-delay: 144ms; }
 .m-seq > *:nth-child(3) { animation-delay: 168ms; }
@@ -603,7 +607,10 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 @keyframes m-flyout-in { from { opacity: 0; transform: translateX(-6px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes m-flyout-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-4px) scale(.98); } }
 .m-panel { animation: m-panel-in var(--t-panel) var(--e-out) both; }
-[role="tabpanel"] { animation: m-fade 180ms var(--e-out) both; }
+/* A tab's panel settles in, never from invisible (owner 2026-11-03): a table inside a panel blanked to the
+   page background for a few frames as the page finished loading — a flash on light. */
+@keyframes m-panel-settle { from { opacity: .72; } to { opacity: 1; } }
+[role="tabpanel"] { animation: m-panel-settle 180ms var(--e-out) both; }
 
 /* 6 · Refusal. The only animation in the product that signals no. */
 .m-deny { animation: m-deny 200ms var(--e) 1 both; animation-delay: 760ms; }
@@ -3887,6 +3894,24 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 @media (prefers-reduced-motion: reduce) {
 .portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-icon { transition: none; transform: none !important; }
 }
+
+/* Merged pages (StepFrame, Compliance, Reports, Leads in; UI-CONSISTENCY §8a, owner 2026-11-02): the
+   title's column is the rail's width, so the step's tabs start on the cards' left edge. A collapsed rail
+   (72px) is narrower than any title, so the tabs follow the title instead, set off by a hairline. */
+[data-step-frame] { --frame-rail-w: 248px; }
+[data-step-frame]:has(> * > nav[data-collapsed]) { --frame-rail-w: 72px; }
+@media (min-width: 1024px) {
+  [data-step-frame]:has(> * > nav[data-collapsed]) [data-page-lead]:has(button, a, [role="tab"]) {
+    border-left: 1px solid var(--border);
+    padding-left: 1rem;
+  }
+}
+
+/* A carrier file's stages fill up in order, once (owner 2026-11-02): the bar grows from its left, the
+   step's mark pops in after the line that reaches it. Never loops (§17); off under reduced motion. */
+@keyframes m-stage-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes m-stage-pop { 0% { opacity: 0; transform: scale(.4); } 70% { opacity: 1; transform: scale(1.12); } 100% { opacity: 1; transform: scale(1); } }
+@keyframes m-stage-name { from { opacity: 0; transform: translateX(-3px); } to { opacity: 1; transform: none; } }
 
 /* Submit lead follow-up: one quiet setup row and the complete configured form in a single scroll. */
 .portal-partner-submit-page { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; }

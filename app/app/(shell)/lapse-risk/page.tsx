@@ -8,10 +8,12 @@ import { LapseRiskBoard } from "@/components/app/lapse-risk-board";
 import { LapseRiskEmpty } from "@/components/app/lapse-risk-empty";
 import { RetentionBoard } from "@/components/app/retention-board";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { PageHeader } from "@/components/ui/page-header";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
+import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
 
 /**
- * Retention › Lapse risk. Two views:
+ * Book of business › Needs you › Lapse risk (owner 2026-11-02: it was in the Book group; it is what the
+ * carriers' files already show — LA-4.16 — so it sits with Book of business, never beside a prediction). Two views:
  *   · Call list (LA-4.16, the default): who to phone today, from the carriers' own files — the
  *     reason, days left before the carrier closes the policy, the advance at stake, the last call.
  *   · Recorded signals (the earlier board): lapse signals a person or a call recorded.
@@ -51,17 +53,22 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
 
   if (view === "signals") {
     const legacy = await getLapseRisk(guard.context);
-    if (legacy.policies.length === 0) return <LapseRiskEmpty notice={legacy.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} tabs={tabs()} />;
-    return <LapseRiskBoard policies={legacy.policies} totals={legacy.totals} readOnly={readOnly} tabs={tabs()} />;
+    return (
+      <DataInPage step="needs-you" title="Lapse risk" lead={tabs()} actions={readOnly || legacy.policies.length === 0 ? undefined : <RecordLapseSignal />}>
+        {legacy.policies.length === 0
+          ? <LapseRiskEmpty notice={legacy.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} framed />
+          : <LapseRiskBoard policies={legacy.policies} totals={legacy.totals} readOnly={readOnly} framed />}
+      </DataInPage>
+    );
   }
 
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const [board, rates] = await Promise.all([loadBoard(viewer), loadSaveRates(viewer)]);
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      <PageHeader title="Lapse risk" description="Who to call today to keep a policy alive." />
-      {tabs(board.rows.length)}
-      <RetentionBoard rows={board.rows} rates={rates.available ? { calls: rates.calls, byReason: rates.byReason, byCarrier: rates.byCarrier, byAgent: rates.byAgent } : null} readOnly={readOnly} />
-    </div>
+    <DataInPage step="needs-you" title="Lapse risk" lead={tabs(board.rows.length)}>
+      <div className="m-stagger flex flex-col gap-6">
+        <RetentionBoard rows={board.rows} rates={rates.available ? { calls: rates.calls, byReason: rates.byReason, byCarrier: rates.byCarrier, byAgent: rates.byAgent } : null} readOnly={readOnly} />
+      </div>
+    </DataInPage>
   );
 }

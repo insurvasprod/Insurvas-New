@@ -14,6 +14,7 @@
  */
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 import { Callout, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { NotificationPreferences } from "@/components/app/settings/notification-preferences";
@@ -22,6 +23,7 @@ import { OwnProfileForm } from "@/components/app/own-profile-form";
 import { SecurityLog, SecuritySettings } from "@/components/app/profile/security-settings";
 import { SectionLoading } from "@/components/ui/page-states";
 import { ViewTabs } from "@/components/ui/view-tabs";
+import { Button } from "@/components/ui/button";
 import { parseSettingsHash } from "@/lib/settings/registry";
 import type { OwnProfile } from "@/lib/users/ownProfile";
 
@@ -55,6 +57,9 @@ export function MyProfileSettings() {
   const [historyView, setHistoryView] = useState<HistoryView>("settings");
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A producer's own record (AG-1.1): licences, carriers and what still blocks them. Since the Team group went
+  // (2026-11-03) it is under Home › Agency, which a producer does not open, so their way in is here.
+  const [recordId, setRecordId] = useState<string | null>(null);
   // The sign-in sends a person whose role requires two-factor here with ?two_factor=required.
   const [promptTwoFactor] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).get("two_factor") === "required");
 
@@ -65,6 +70,7 @@ export function MyProfileSettings() {
       if (!live) return;
       if (!res.ok || !body?.profile) { setError(body?.error ?? "Your profile could not be loaded. Nothing has changed; reload the page to try again."); return; }
       setProfile(body.profile as OwnProfile);
+      setRecordId(typeof body.producerRecordId === "string" ? body.producerRecordId : null);
     });
     return () => { live = false; };
   }, []);
@@ -105,7 +111,16 @@ export function MyProfileSettings() {
           : error ? <Callout tone="error" title={error} />
           : !profile ? <SettingsCard><SectionLoading rows={5} columns={2} label="Loading your profile" /></SettingsCard>
           : tab === "security" ? <SecuritySettings email={profile.email} timeZone={profile.displayTimezone} promptTwoFactor={promptTwoFactor} />
-          : <OwnProfileForm initial={profile} />}
+          : <>
+            {recordId && (
+              <SettingsCard
+                title="My producer record"
+                sub="Your carriers and writing numbers, and anything that still stops you submitting."
+                action={<Button asChild variant="outline"><Link href={`/app/producers/${recordId}`}>Open my record</Link></Button>}
+              />
+            )}
+            <OwnProfileForm initial={profile} />
+          </>}
       </div>
     </SettingsStack>
   );

@@ -8,7 +8,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { moneyEntries, type MoneyFilter } from "./costLedger";
 import type { Basis } from "./costLedgerCore";
 import { fromRow } from "./settingsCore";
-import { chargebackTax, comparisons, moneyIn, perPolicy, persisting, statement, type PeriodKind, type PnlLine, type Range } from "./pnlCore";
+import { chargebackTax, comparisons, moneyIn, perPolicy, periodRange, persisting, statement, type PeriodKind, type PnlLine, type Range } from "./pnlCore";
 
 /**
  * LA-7.7 (Notion sprint, Module 7 — Accounting) · the P&L, server side. Computed live from the
@@ -119,6 +119,33 @@ export async function loadPnl(tenantId: string, input: { kind: PeriodKind; range
     chargebackTaxCents: chargebackTax(perIssued, lasting),
     trend: trendRows,
   };
+}
+
+/**
+ * LA-7.7 · the trailing view: "a separate trailing view shows periods old enough to have the figure". The
+ * six months whose cohorts have passed the persistency horizon, newest first, each with its acquisition
+ * cost, policies issued, cost per issued and cost per persisting policy, and the chargeback tax between
+ * them. Three reads for all six (settings, the monthly ledger, the book), never one P&L per month.
+ */
+export async function persistingCohorts(tenantId: string, basis: Basis, count = 6) {
+  const [settings, book] = await Promise.all([reportingSettings(tenantId), policies(tenantId)]);
+  // The newest month whose last day is a full horizon ago: its cohort has its figure today.
+  const newest = addMonths(`${book.today.slice(0, 7)}-01`, -(settings.horizon + 1));
+  const oldest = addMonths(newest, -(count - 1));
+  const { data, error } = await db().rpc("pnl_monthly", { p_tenant_id: tenantId, p_from: oldest, p_to: addMonths(newest, 1), p_basis: basis });
+  if (error) fail(error);
+  const acquisition = new Map<string, number>();
+  for (const r of (data ?? []) as Loose[]) if (r.section === "acquisition") acquisition.set(String(r.month).slice(0, 7), (acquisition.get(String(r.month).slice(0, 7)) ?? 0) + Number(r.amount_cents));
+  const start = historyStart(book.rows);
+  return Array.from({ length: count }, (_, i) => {
+    const range = periodRange("month", addMonths(newest, -i));
+    const acquisitionCents = acquisition.get(range.from.slice(0, 7)) ?? 0;
+    const cohort = book.rows.filter((p) => issued(p) && !!p.issueDate && p.issueDate >= range.from && p.issueDate < range.to);
+    const cell = persistency(cohort, settings.horizon, book.today, start);
+    const perIssued = perPolicy(acquisitionCents, cohort.length, settings.threshold);
+    const lasting = persisting({ range, horizon: settings.horizon, today: book.today, acquisitionCents, issued: cell.eligible, alive: cell.alive, cohortBuilding: cell.building, threshold: settings.threshold });
+    return { month: range.from.slice(0, 7), label: range.label, acquisitionCents, issued: cohort.length, alive: cell.alive, perIssued, persisting: lasting, chargebackTaxCents: chargebackTax(perIssued, lasting) };
+  });
 }
 
 function totalsOf(ls: PnlLine[]) {

@@ -18,7 +18,7 @@ export default async function NewPipelineRulePage() {
   // Owner and bookkeeper, like every Setup tab and its API.
   if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Pipeline rules" detail="Setup is for the account owner and bookkeepers." />;
   const tenantId = guard.context.tenantId;
-  const [view, board, carriers] = await Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices()]);
+  const [view, board, carriers] = await Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
   const readOnly = guard.entitlement.access === "read_only";
 
   return (

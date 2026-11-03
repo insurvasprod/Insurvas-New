@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Check } from "lucide-react";
 import { notify } from "@/lib/notify";
 
@@ -47,18 +48,15 @@ export function ProducerOnboardingTab({ producerId, isOwner, isSelf }: { produce
     input.click();
   };
 
-  if (error) return <ErrorState detail={error} />;
-  if (loading || !data) return <SectionLoading rows={6} columns={3} label="Loading the checklist" />;
+  if (error) return <TableCard><ErrorState detail={error} /></TableCard>;
+  if (loading || !data) return <TableCard><SectionLoading rows={6} columns={3} label="Loading the checklist" /></TableCard>;
   const missing = data.items.filter((i) => !i.done);
+  // Why he cannot submit is the card's own title (foundation pass 2026-11-03), not a tinted notice above it.
+  const title = data.canSubmit ? (isSelf ? "You can submit applications" : "They can submit applications")
+    : `${isSelf ? "You can't" : "They can't"} submit yet${missing.length ? ` · ${missing.length} item${missing.length === 1 ? "" : "s"} missing` : ""}`;
   return (
     <div className="flex flex-col gap-4">
-      {!data.canSubmit && (
-        <p role="status" className="rounded-lg border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] p-3 text-sm text-[var(--warning-ink)]">
-          <strong>{isSelf ? "You can't submit applications yet." : "They can't submit applications yet."}</strong>{" "}
-          {missing.length ? `${missing.length} item${missing.length === 1 ? " is" : "s are"} missing: ${missing.map((m) => m.detail.replace(/ \(.*\)$/, "")).join(", ")}.` : data.reason ?? ""}
-        </p>
-      )}
-      <TableCard>
+      <TableCard title={title} description={!data.canSubmit && !missing.length ? data.reason ?? undefined : undefined}>
         <ul className="divide-y divide-border">
           {data.items.map((i) => (
             <li key={i.item} className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-sm">
@@ -67,7 +65,7 @@ export function ProducerOnboardingTab({ producerId, isOwner, isSelf }: { produce
               <span className="flex items-center gap-2">
                 {i.item === "contracting" && !i.done && isOwner && <Button size="sm" onClick={() => complete("contracting")} disabled={busy !== null}>Approve</Button>}
                 {i.item === "w9" && !i.done && isOwner && <Button size="sm" variant="outline" onClick={() => upload("w9")} disabled={busy !== null}>{busy === "w9" ? "Uploading…" : "Upload W-9"}</Button>}
-                {["licence", "appointments", "numbers", "levels"].includes(i.item) && !i.done && <span className="text-xs text-[var(--muted)]">{i.item === "licence" ? "Settings › Team › licensed states" : "Carriers tab"}</span>}
+                {["licence", "appointments", "numbers", "levels"].includes(i.item) && !i.done && (i.item === "licence" ? <span className="text-xs text-[var(--muted)]">Settings › Team › licensed states</span> : <Link className="text-xs font-medium text-[var(--accent-ink)] hover:underline" href={`/app/producers/${producerId}?tab=carriers`}>Set on the Carriers tab</Link>)}
               </span>
             </li>
           ))}

@@ -1,25 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ComponentType, type SVGProps } from "react";
 import Link from "next/link";
-import { AlertTriangle, PenLine, ShieldAlert, Wallet } from "lucide-react";
+import { ArrowLeftRight, ChevronRight, FileCheck, Gauge, HandCoins, KeyRound, Network, Route, UserRoundCheck, WalletCards } from "lucide-react";
 
 import { PageHeader } from "@/components/ui/page-header";
 import { Segmented } from "@/components/ui/view-tabs";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { BarSeries, ShareBar } from "@/components/ui/chart";
-import { HomePanel } from "@/components/app/home/home-panel";
+import { HomePanel, PanelLink } from "@/components/app/home/home-panel";
+import { HomeAttention } from "@/components/app/home/home-attention";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RefreshButton } from "@/components/ui/data-toolbar";
-import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
-import { InfoTip } from "@/components/ui/info-tip";
+import { useMenuSections } from "@/components/ui/page-trail";
+import { StepSlot } from "@/components/app/step-frame/step-slot";
 import { dollars } from "@/lib/agency/constants";
-import { BasisChip, Money } from "./money";
+import type { AttentionItem } from "@/lib/dashboard/homeView";
+import { Money } from "./money";
 import { useAgencyData } from "./use-agency-data";
 import { moneySplit, periodChange, standing, type AgencyDashboardView, type AgencyProducerRow } from "@/lib/agency/dashboardCore";
 
@@ -40,12 +43,48 @@ function monthRange(offset: number) {
   return { from: first.toISOString().slice(0, 10), to: last.toISOString().slice(0, 10), label: first.toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" }) };
 }
 
+type Icon = ComponentType<SVGProps<SVGSVGElement>>;
+
 /**
- * AG-0.11 · the agency owner's home: which of my producers is actually making me money? One strip (seats, payable
- * out, the owner's override, licence alerts), one producer table carrying panels 1–3, and the health table (panel 4).
- * Under the sample a count ("6/9"), never a percentage. Every money figure says its basis.
+ * Every agency page, one click from the dashboard (owner 2026-11-03: "everything inside an agency here"). Each is the
+ * menu item of the same key, so a tile shows only when the server-filtered menu offers that page to this person —
+ * a plan, a role or a hidden page takes the tile away with the link. Producers is first: it left the rail and lives
+ * here as a shortcut.
  */
-export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: string; scoped: boolean; preview?: AgencyPreview }) {
+const TOOLS: { key: string; label: string; href: string; icon: Icon; sub: string }[] = [
+  { key: "team.producers", label: "Producers", href: "/app/producers", icon: UserRoundCheck, sub: "Roster, onboarding, carriers" },
+  { key: "team.hierarchy", label: "Hierarchy & overrides", href: "/app/hierarchy", icon: Network, sub: "Who reports to whom, levels" },
+  { key: "team.payouts", label: "Producer payouts", href: "/app/producer-payouts", icon: WalletCards, sub: "Pay runs and statements" },
+  { key: "team.splits", label: "Commission splits", href: "/app/commission-splits", icon: HandCoins, sub: "Shared policies, who gets what" },
+  { key: "commissions.producer_reconciliation", label: "Producer pay", href: "/app/producer-reconciliation", icon: ArrowLeftRight, sub: "Expected, reported, received" },
+  { key: "team.scorecards", label: "Producer scorecards", href: "/app/producer-scorecards", icon: Gauge, sub: "Who is profitable, not just busy" },
+  { key: "team.review", label: "Application review", href: "/app/application-review", icon: FileCheck, sub: "Sampled applications to check" },
+  { key: "team.routing", label: "Lead routing", href: "/app/lead-routing", icon: Route, sub: "Who gets which lead" },
+];
+
+/** What waits across the agency, read from the pages that own each queue; a read that is refused or fails is left out. */
+type Waiting = { blocked?: number; levels?: number; payIssues?: number; toReview?: number; complaints?: number };
+
+const getJson = async <T,>(url: string): Promise<T | null> => {
+  const response = await fetch(url, { cache: "no-store" }).catch(() => null);
+  return response?.ok ? ((await response.json().catch(() => null)) as T | null) : null;
+};
+
+/**
+ * AG-0.11 · the agency's dashboard (redesign 2026-11-03, /ui-taste critique in docs/agency/DASHBOARD.md): the agency
+ * at a glance, not the person's own day (that is Home). Top to bottom:
+ *
+ *   Needs you      every agency queue with something in it, as Home draws it — one row of links
+ *   the strip      five figures, each the door into its page: issued, override, owed, at risk, producers
+ *   Agency tools   a tile per agency page this person may open (Producers first)
+ *   the charts     who wrote it, and where the money went
+ *   Producers      the period's standing; a name opens the producer's record; "All producers" the roster
+ *   Expiring       licences and appointments inside 60 days, only when there are any
+ *
+ * Under the sample a count ("6/9"), never a percentage. Every money figure says its basis. A manager sees his
+ * reports and no agency money.
+ */
+export function AgencyDashboard({ agencyName, scoped, preview, slot, canManage = false }: { agencyName: string; scoped: boolean; preview?: AgencyPreview; slot?: string; canManage?: boolean }) {
   const [which, setWhich] = useState<"this" | "last">("this");
   const range = useMemo(() => monthRange(which === "this" ? 0 : -1), [which]);
   const live = useAgencyData<Dashboard>(preview ? null : `/api/app/agency/dashboard?from=${range.from}&to=${range.to}`);
@@ -67,6 +106,36 @@ export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: s
     preview || !wantPrevious ? null : `/api/app/agency/dashboard?from=${previousRange.from}&to=${previousRange.to}`,
   );
   const before = preview ? preview.previous ?? null : previous.data;
+
+  // The tiles this person may open: the shell's menu, already filtered by plan, role and hidden pages. The design
+  // sample has no shell, so it shows them all.
+  const menu = useMenuSections();
+  const offered = useMemo(() => (menu ? new Set(menu.flatMap((section) => section.items.map((entry) => entry.key))) : null), [menu]);
+  const tools = TOOLS.filter((tool) => !offered || offered.has(tool.key));
+  const toolKeys = tools.map((tool) => tool.key).join(",");
+
+  const [waiting, setWaiting] = useState<Waiting>({});
+  useEffect(() => {
+    if (preview) return;
+    let active = true;
+    const has = (key: string) => toolKeys.split(",").includes(key);
+    void Promise.all([
+      has("team.producers") ? getJson<{ counts?: { producers?: number } }>("/api/app/agency/steps") : null,
+      !scoped ? getJson<{ counts?: { discrepancies?: number; hierarchy?: number } }>("/api/app/commissions/steps") : null,
+      has("team.review") ? getJson<{ reviews?: Array<{ status: string }>; canReview?: boolean }>("/api/app/agency/review") : null,
+      !scoped ? getJson<{ counts?: { complaints?: number } }>("/api/app/compliance/steps") : null,
+    ]).then(([agency, commissions, review, compliance]) => {
+      if (!active) return;
+      setWaiting({
+        blocked: agency?.counts?.producers,
+        levels: commissions?.counts?.hierarchy,
+        payIssues: commissions?.counts?.discrepancies,
+        toReview: review?.canReview ? review.reviews?.filter((row) => row.status === "queued").length : undefined,
+        complaints: compliance?.counts?.complaints,
+      });
+    });
+    return () => { active = false; };
+  }, [preview, scoped, toolKeys]);
 
   const [producerPage, setProducerPage] = useState(1);
   const [alertPage, setAlertPage] = useState(1);
@@ -93,99 +162,133 @@ export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: s
   const written = totals(data?.producers);
   const wasWritten = before ? totals(before.producers) : null;
   const atRisk = { total: written.advance + written.chargeback, chargeback: written.chargeback };
-  const writtenChange = periodChange(written.issued, wasWritten?.issued);
+  const issuedChange = periodChange(written.issued, wasWritten?.issued);
   const overrideChange = periodChange(data?.overrideCents ?? null, before?.overrideCents);
+  const atRiskChange = periodChange(atRisk.total, wasWritten ? wasWritten.advance + wasWritten.chargeback : undefined);
   const standingBars = ranked
     .filter((row) => row.value > 0)
     .slice(0, 12)
     .map((row) => ({ key: row.id, label: row.name.split(" ")[0], value: row.value }));
   const split = moneySplit({ overrideCents: data?.overrideCents ?? null, payableOutCents: data?.payableOutCents ?? null, leadSpendCents: written.spend })
     ?.map((part, index) => ({ key: part.label, label: part.label, value: part.value, tone: (["strong", "mid", "faint"] as const)[index] }));
-  const atRiskChange = periodChange(atRisk.total, wasWritten ? wasWritten.advance + wasWritten.chargeback : undefined);
   /**
    * A brand-new agency, not a quiet month. The difference matters: an agency with producers who
    * wrote nothing in November wants its charts, because "nobody wrote anything" is the finding.
    * An agency with no producers at all wants to be told what this page will become.
    */
   const isNew = (data?.producers.length ?? 0) === 0;
+  const seats = data?.seats.max ? `${data.seats.used} of ${data.seats.max} seats` : data ? `${data.seats.used} seats used` : "";
+
+  // Needs you, the agency's: each count links to the rows behind it, the most urgent first (HomeAttention sorts).
+  const soonest = data?.alerts[0]?.daysLeft;
+  const waitingItems: Array<AttentionItem | null> = [
+    waiting.blocked ? { key: "blocked", count: waiting.blocked, label: waiting.blocked === 1 ? "producer can't submit" : "producers can't submit", tone: "danger" as const, href: "/app/producers?status=blocked" } : null,
+    data?.alerts.length ? { key: "expiring", count: data.alerts.length, label: data.alerts.length === 1 ? "licence or appointment expiring" : "licences and appointments expiring", detail: soonest !== undefined ? `first in ${soonest} day${soonest === 1 ? "" : "s"}` : undefined, tone: soonest !== undefined && soonest <= 14 ? ("danger" as const) : ("warning" as const), href: "#expiring" } : null,
+    waiting.complaints ? { key: "complaints", count: waiting.complaints, label: waiting.complaints === 1 ? "open complaint" : "open complaints", tone: "danger" as const, href: "/app/complaints" } : null,
+    waiting.levels ? { key: "levels", count: waiting.levels, label: waiting.levels === 1 ? "contract level to fix" : "contract levels to fix", tone: "warning" as const, href: "/app/hierarchy?issues=1" } : null,
+    !scoped && data?.negativeCount ? { key: "owing", count: data.negativeCount, label: data.negativeCount === 1 ? "producer owes the agency" : "producers owe the agency", tone: "warning" as const, href: "/app/producer-payouts" } : null,
+    waiting.payIssues ? { key: "payIssues", count: waiting.payIssues, label: waiting.payIssues === 1 ? "pay issue" : "pay issues", tone: "info" as const, href: "/app/discrepancies" } : null,
+    waiting.toReview ? { key: "review", count: waiting.toReview, label: waiting.toReview === 1 ? "application to review" : "applications to review", tone: "info" as const, href: "/app/application-review" } : null,
+  ];
+  const attention = waitingItems.filter((item): item is AttentionItem => item !== null);
+
+  const headerActions = <>
+    <Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "this", label: "This month" }, { key: "last", label: "Last month" }]} />
+    {!scoped && <Button asChild><Link href="/app/producers/invite">Invite producer</Link></Button>}
+  </>;
 
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
-      {/* The title names the page, as every other page's does (§2). The agency's own name is said
-          once, on the quiet line under it, where it is context rather than the heading — the trail
-          and the top bar were already naming it twice over. */}
-      <PageHeader
-        title="Agency dashboard"
-        description={scoped ? "Your reports: what they wrote, what it is worth, and what is at risk." : "Which of your producers is actually making the agency money."}
-        meta={<p className="mt-1 text-sm leading-normal text-muted-foreground">{agencyName} · {range.label}</p>}
-        actions={<>
-          <Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "this", label: "This month" }, { key: "last", label: "Last month" }]} />
-          {!scoped && <Button asChild><Link href="/app/producers?invite=1">Invite producer</Link></Button>}
-        </>}
-      />
-      {data && isNew && (
-        // One line, not a card (§3): a new agency's page should read as new rather than broken,
-        // and the strip's honest zeros underneath are the rest of the answer.
-        <p role="status" className="m-0 text-sm leading-normal text-muted-foreground">
-          {scoped
-            ? "Nothing here yet. As the producers who report to you submit, their production, persistency and advance risk appear on this page."
-            : "Nothing here yet. Invite a producer and this page fills in from their first application — what they wrote, what it is worth, and what is at risk."}
-        </p>
+      {slot ? (
+        // On /app/agency the server page draws the title and the facts; the period and the invite sit on its line.
+        <StepSlot id={slot}>{headerActions}</StepSlot>
+      ) : (
+        <PageHeader
+          title="Agency dashboard"
+          description={scoped ? "Your reports: what they wrote, what it is worth, and what is at risk." : "Which of your producers is actually making the agency money."}
+          meta={<p className="mt-1 text-sm leading-normal text-muted-foreground">{agencyName} · {range.label}</p>}
+          actions={headerActions}
+        />
       )}
       {error ? <ErrorState detail={error} action={<Button variant="outline" onClick={reload}>Try again</Button>} /> : loading || !data ? <SectionLoading rows={4} columns={6} label="Loading the dashboard" /> : (
         <>
-          {/* Four figures that answer the page's question — am I making money, and from whom —
-              each a door into the page that owns its depth. Seats came off on 2 Nov: it is an
-              administrative fact that changes twice a year and it was taking a quarter of the
-              headline space; it is on the quiet line under the title now.
+          {isNew ? (
+            // One line, not a card (§3): a new agency's page should read as new rather than broken,
+            // and the strip's honest zeros underneath are the rest of the answer.
+            <p role="status" className="m-0 text-sm leading-normal text-muted-foreground">
+              {scoped
+                ? "Nothing here yet. As the producers who report to you submit, their production, persistency and advance risk appear on this page."
+                : "Nothing here yet. Invite a producer and this page fills in from their first application — what they wrote, what it is worth, and what is at risk."}
+            </p>
+          ) : <HomeAttention items={attention} />}
 
-              Every figure is the same ink (owner, 2 Nov). Two amber figures in one row was both
-              against §4a ("one per row at most") and a scale with no zero: once two of four are
-              coloured, the colour stops meaning "look here". What the figure is doing is carried
-              by its change pill, its minus sign and the fact beneath it. */}
-          <StatRow label="Agency at a glance">
-            <StatCard
-              icon={PenLine}
-              label="Written"
-              period={range.label}
-              value={written.issued}
-              delta={writtenChange === null ? undefined : { value: writtenChange, goodWhen: "up" }}
-              fact={{ label: "Submitted", value: written.submitted.toLocaleString("en-US") }}
+          {/* Five figures that answer the page's question — am I making money, and from whom. Each tile is the link
+              to the rows behind it (§6: a figure is a door). One ink for all of them: the change pill, the sign and
+              the line beneath carry what the figure is doing. */}
+          <StatStrip label="Agency at a glance">
+            <StatTile
+              label="Issued"
+              value={written.issued.toLocaleString("en-US")}
+              delta={issuedChange === null ? undefined : { value: issuedChange, goodWhen: "up" }}
+              footnote={<>Submitted · <span className="font-semibold text-foreground">{written.submitted.toLocaleString("en-US")}</span></>}
+              href={offered && !offered.has("team.scorecards") ? undefined : "/app/producer-scorecards"}
             />
-            {!scoped && <StatCard
-              icon={Wallet}
-              label="Your override"
+            {!scoped && <StatTile
+              label="Override"
               labelTitle="What carriers paid the agency on producers' business this period, less the producers' reported share."
-              period={range.label}
               value={data.overrideCents === null ? "—" : dollars(data.overrideCents)}
               delta={overrideChange === null ? undefined : { value: overrideChange, goodWhen: "up" }}
-              fact={{ label: "Reported basis" }}
-              action={<Link href="/app/hierarchy" className="hover:underline">Overrides</Link>}
+              footnote="What the agency keeps"
+              href={offered && !offered.has("team.hierarchy") ? undefined : "/app/hierarchy"}
             />}
-            <StatCard
-              icon={ShieldAlert}
+            {!scoped && <StatTile
+              label="Owed to producers"
+              labelTitle="Producers' positive balances on the reported basis: what the next pay run would pay out."
+              value={data.payableOutCents === null ? "—" : dollars(data.payableOutCents)}
+              footnote={data.ledgerReady ? (data.negativeCount ? <>Owe you back · <span className="font-semibold text-foreground">{data.negativeCount}</span></> : "Nobody owes you back") : "Once the payable ledger is live"}
+              href={offered && !offered.has("team.payouts") ? undefined : "/app/producer-payouts"}
+            />}
+            <StatTile
               label="At risk"
               labelTitle="Unearned advance that could come back, plus what has already been clawed back this period."
-              period={range.label}
               value={dollars(atRisk.total)}
               delta={atRiskChange === null ? undefined : { value: atRiskChange, goodWhen: "down" }}
-              fact={{ label: "Clawed back", value: dollars(atRisk.chargeback) }}
-              action={<Link href="/app/lapse-risk" className="hover:underline">Lapse risk</Link>}
+              footnote={<>Clawed back · <span className="font-semibold text-foreground">{dollars(atRisk.chargeback)}</span></>}
+              href={offered && !offered.has("retention.lapse-risk") ? undefined : "/app/lapse-risk"}
             />
-            <StatCard
-              icon={AlertTriangle}
-              label="Needs you"
-              period="next 60 days"
-              value={data.alerts.length}
-              fact={{ label: data.alerts.length ? "Licences and appointments expiring" : "Nothing expiring" }}
+            <StatTile
+              label={scoped ? "Your reports" : "Producers"}
+              value={data.producers.length.toLocaleString("en-US")}
+              footnote={waiting.blocked ? <>Can&apos;t submit · <span className="font-semibold text-[var(--error-ink)]">{waiting.blocked}</span></> : scoped ? "Can submit" : seats}
+              href={offered && !offered.has("team.producers") ? undefined : "/app/producers"}
             />
-          </StatRow>
+          </StatStrip>
+
+          {/* Agency tools: the shortcuts. Producers is no longer a rail beside the dashboard; it is the first tile. */}
+          {(tools.length > 0 || canManage) && (
+            <section aria-label="Agency tools" className="@container">
+              <h2 className="sr-only">Agency tools</h2>
+              {/* Rows that fill: nine tiles are three by three, eight four by two — never one tile alone on a row. */}
+              <ul className={`m-0 grid list-none grid-cols-1 gap-3 p-0 @md:grid-cols-2 ${(tools.length + (canManage ? 1 : 0)) % 3 === 0 ? "@4xl:grid-cols-3" : "@4xl:grid-cols-4"}`}>
+                {tools.map((tool) => (
+                  <li key={tool.key}>
+                    <ToolTile href={tool.href} icon={tool.icon} label={tool.label} sub={toolFact(tool.key, waiting, data, seats) ?? tool.sub} />
+                  </li>
+                ))}
+                {canManage && (
+                  <li>
+                    <ToolTile href="/app/settings#team-access" icon={KeyRound} label="Team & access" sub="Logins, roles and seats" />
+                  </li>
+                )}
+              </ul>
+            </section>
+          )}
 
           {/* One 12-column row: the standing beside where the money went. Container queries, not
               viewport breakpoints — the sidebar takes its share of the width (§4b). */}
           {!isNew && <div className="@container">
             <div className="grid gap-4 @4xl:grid-cols-12">
-              <HomePanel title="Who wrote it" period={range.label} className="@4xl:col-span-8" link={{ label: "Scorecards", href: "/app/producer-scorecards" }}>
+              <HomePanel title="Who wrote it" period={range.label} className="@4xl:col-span-7" link={offered && !offered.has("team.scorecards") ? undefined : { label: "Scorecards", href: "/app/producer-scorecards" }}>
                 {standingBars.length ? (
                   <BarSeries
                     bars={standingBars}
@@ -199,7 +302,7 @@ export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: s
                   <p className="m-0 py-6 text-center text-sm text-muted-foreground">Nothing issued in {range.label}.</p>
                 )}
               </HomePanel>
-              <HomePanel title="Where the money went" period={range.label} className="@4xl:col-span-4" link={{ label: "Ledger", href: "/app/ledger" }}>
+              <HomePanel title="Where the money went" period={range.label} className="@4xl:col-span-5" link={scoped ? undefined : { label: "Ledger", href: "/app/ledger" }}>
                 {split ? (
                   <ShareBar
                     segments={split}
@@ -209,8 +312,6 @@ export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: s
                 ) : (
                   <p className="m-0 py-6 text-center text-sm text-muted-foreground">No money moved in {range.label}.</p>
                 )}
-                {/* The old Payable out card said this; the figure now lives in the bar, so the
-                    sentence has to move with it rather than be dropped. */}
                 {!data.ledgerReady && (
                   <p className="m-0 mt-2 text-xs text-muted-foreground">What you owe producers appears here once the payable ledger is live.</p>
                 )}
@@ -218,23 +319,17 @@ export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: s
             </div>
           </div>}
 
-          {/* Refresh sits on the card's own action slot. It had a whole `DataToolbar` to itself,
-              which drew a 56px band of nothing across the card with one button floating in it —
-              a toolbar with no search and no filters is not a toolbar. */}
-          <TableCard
-            title="Producers"
-            info="Every producer who can submit, and what they wrote this period. Placement and month-4 survival show a count until there are enough policies for a percentage."
-            action={<RefreshButton onClick={reload} refreshing={refreshing} />}
-            footer={data.producers.length ? <Pager page={producers.current} total={data.producers.length} noun="producers" pageSize={pageSize} onPage={setProducerPage} /> : undefined}
-          >
-            {/* The empty state carries no action: the header already has Invite producer, and
-                the same green button twice on one short page reads as two different offers. */}
-            {data.producers.length === 0 ? (
-              <EmptyState
-                title={scoped ? "No reports yet" : "No producers yet"}
-                hint={scoped ? "Producers assigned to you appear here, with what they wrote." : "Their production shows here from their first submission."}
-              />
-            ) : (
+          {/* The period's standing. A name opens the producer's record; the roster is one link away. */}
+          {data.producers.length > 0 && (
+            <TableCard
+              title="Producer standing"
+              info="Every producer who can submit, ranked by what was issued this period. Placement and month-4 / month-13 survival show a count until there are enough policies for a percentage. Balance is on the reported basis."
+              action={<span className="flex items-center gap-1">
+                <RefreshButton onClick={reload} refreshing={refreshing} />
+                {(!offered || offered.has("team.producers")) && <PanelLink href="/app/producers">All producers</PanelLink>}
+              </span>}
+              footer={<Pager page={producers.current} total={data.producers.length} noun="producers" pageSize={pageSize} onPage={setProducerPage} />}
+            >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -242,28 +337,28 @@ export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: s
                     <TableHead>Producer</TableHead>
                     <TableHead className="text-right">Submitted</TableHead>
                     <TableHead className="text-right">Issued</TableHead>
-                    <TableHead className="text-right">Placement <InfoTip label="About placement and month-4 survival">Placement and month-4 survival show counts until there are enough policies for a percentage.</InfoTip></TableHead>
-                    <TableHead className="text-right">Month-4 alive</TableHead>
-                    <TableHead className="text-right">Month-13 alive</TableHead>
+                    <TableHead className="text-right">Placement</TableHead>
+                    <TableHead className="text-right" title="Still paying at month 4 and month 13">Month 4 · 13</TableHead>
                     <TableHead className="text-right">Advance at risk</TableHead>
-                    <TableHead className="text-right">Balance <BasisChip basis="reported" /></TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {producers.rows.map((r) => (
                     <TableRow key={r.producerUserId}>
-                      {/* Quiet and tabular, not a medal: the rank orders the eye, it does not
-                          decorate the row. */}
+                      {/* Quiet and tabular, not a medal: the rank orders the eye, it does not decorate the row. */}
                       <TableCell className="text-right tabular-nums text-muted-foreground">{rankOf.get(r.producerUserId)}</TableCell>
-                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="font-medium">
+                        {r.producerId && (!offered || offered.has("team.producers"))
+                          ? <Link className="hover:underline" href={`/app/producers/${r.producerId}`} title={`Open ${r.name}'s record`}>{r.name}</Link>
+                          : r.name}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums">{r.submitted}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.issued}</TableCell>
                       <TableCell className="text-right tabular-nums">{r.placement}</TableCell>
-                      <TableCell className="text-right tabular-nums">{r.m4.text}</TableCell>
-                      <TableCell className="text-right tabular-nums">{r.m13.text}</TableCell>
-                      {/* The worst advance risk is marked on the figure, not by washing the whole
-                          row in --warning-surface: a filled row reads as an error state, and this
-                          is a thing to watch, not a thing that is wrong. */}
+                      <TableCell className="text-right tabular-nums">{r.m4.text} · {r.m13.text}</TableCell>
+                      {/* The worst advance risk is marked on the figure, not by washing the whole row: this is a
+                          thing to watch, not a thing that is wrong. */}
                       <TableCell className="text-right">
                         <Money
                           cents={r.advanceAtRiskCents}
@@ -275,32 +370,64 @@ export function AgencyDashboard({ agencyName, scoped, preview }: { agencyName: s
                   ))}
                 </TableBody>
               </Table>
-            )}
-          </TableCard>
+            </TableCard>
+          )}
 
-          <TableCard title="Expiring inside 60 days" info="Licences and appointments. An expiry stops that producer from submitting." footer={data.alerts.length ? <Pager page={alerts.current} total={data.alerts.length} noun="expiries" pageSize={pageSize} onPage={setAlertPage} /> : undefined}>
-            {data.alerts.length === 0 ? (
-              <EmptyState title="Nothing expires in the next 60 days" hint="Licences and appointments appear here two months before they lapse." />
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow><TableHead>Producer</TableHead><TableHead>Item</TableHead><TableHead>Detail</TableHead><TableHead className="text-right">Expires</TableHead></TableRow>
-                </TableHeader>
-                <TableBody>
-                  {alerts.rows.map((a, i) => (
-                    <TableRow key={`${a.producerUserId}-${a.item}-${i}`}>
-                      <TableCell className="font-medium">{a.name}</TableCell>
-                      <TableCell>{a.item}</TableCell>
-                      <TableCell>{a.detail}</TableCell>
-                      <TableCell className="text-right"><StatusChip tone={a.daysLeft <= 14 ? "danger" : "warning"}>in {a.daysLeft} day{a.daysLeft === 1 ? "" : "s"}</StatusChip></TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </TableCard>
+          {/* Only when something expires: Needs you already says "nothing" by leaving the chip out. */}
+          {data.alerts.length > 0 && (
+            <div id="expiring" className="scroll-mt-4">
+              <TableCard title="Expiring inside 60 days" info="Licences and appointments. An expiry stops that producer from submitting." footer={<Pager page={alerts.current} total={data.alerts.length} noun="expiries" pageSize={pageSize} onPage={setAlertPage} />}>
+                <Table>
+                  <TableHeader>
+                    <TableRow><TableHead>Producer</TableHead><TableHead>Item</TableHead><TableHead>Detail</TableHead><TableHead className="text-right">Expires</TableHead></TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {alerts.rows.map((a, i) => {
+                      const record = data.producers.find((p) => p.producerUserId === a.producerUserId)?.producerId;
+                      return (
+                        <TableRow key={`${a.producerUserId}-${a.item}-${i}`}>
+                          <TableCell className="font-medium">{record && (!offered || offered.has("team.producers")) ? <Link className="hover:underline" href={`/app/producers/${record}?tab=${a.item === "Licence" ? "onboarding" : "carriers"}`}>{a.name}</Link> : a.name}</TableCell>
+                          <TableCell>{a.item}</TableCell>
+                          <TableCell>{a.detail}</TableCell>
+                          <TableCell className="text-right"><StatusChip tone={a.daysLeft <= 14 ? "danger" : "warning"}>in {a.daysLeft} day{a.daysLeft === 1 ? "" : "s"}</StatusChip></TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableCard>
+            </div>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+/** A tile's live line, where the dashboard already knows something better than the tile's description. */
+function toolFact(key: string, waiting: Waiting, data: Dashboard | null, seats: string): string | null {
+  if (key === "team.producers" && data) return [`${data.producers.length} producer${data.producers.length === 1 ? "" : "s"}`, seats].filter(Boolean).join(" · ");
+  if (key === "team.hierarchy" && waiting.levels) return `${waiting.levels} level${waiting.levels === 1 ? "" : "s"} to fix`;
+  if (key === "team.payouts" && data?.payableOutCents) return `${dollars(data.payableOutCents)} owed`;
+  if (key === "team.review" && waiting.toReview) return `${waiting.toReview} to review`;
+  return null;
+}
+
+/** One shortcut: the page's icon, its name and one live line, the whole tile the link (the mockup card). */
+function ToolTile({ href, icon: Glyph, label, sub }: { href: string; icon: Icon; label: string; sub: string }) {
+  return (
+    <Link
+      href={href}
+      className="m-glass group flex h-full min-w-0 items-center gap-3 rounded-lg border border-border px-3 py-2.5 text-inherit no-underline transition-colors hover:border-[var(--border-strong)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-[var(--surface-alt)] text-[var(--accent-ink)]">
+        <Glyph className="size-[18px]" aria-hidden="true" />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-semibold text-foreground">{label}</span>
+        <span className="block truncate text-xs text-muted-foreground">{sub}</span>
+      </span>
+      <ChevronRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+    </Link>
   );
 }

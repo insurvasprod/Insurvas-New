@@ -36,7 +36,7 @@ export default async function BookImportPage() {
             <StatTile label="Persistency" value={view.persistency.ready ? "Ready" : "Building"} footnote={view.persistency.ready ? "enough months of files" : view.persistency.label.replace(/^building — /, "")} />
             <StatTile label="Advances at risk" value={moneyOrUnknown(advance.cents)} footnote={advance.cents === null ? "until commission statements arrive" : `unearned, on ${advance.policies} ${advance.policies === 1 ? "policy" : "policies"} with an advance${advance.unknown ? ` · ${advance.unknown} more not known yet` : ""}`} />
           </StatStrip>
-          <BookImport carriers={view.carriers} others={view.others} processing={view.processing} readOnly={guard.entitlement.access === "read_only"} />
+          <BookImport carriers={view.carriers} processing={view.processing} readOnly={guard.entitlement.access === "read_only"} />
         </>
       )}
     </DataInPage>

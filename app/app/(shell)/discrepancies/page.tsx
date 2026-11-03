@@ -8,6 +8,7 @@ import { payTimingGapText } from "@/lib/ingestion/carrierRules";
 import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
 import { CommissionsPage } from "@/components/app/commissions/commissions-page";
 import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies } from "@/lib/discrepancies/service";
+import { Callout } from "@/components/app/settings/primitives";
 
 /**
  * Book of Business › Discrepancies: "You appear to be owed $X".
@@ -26,10 +27,10 @@ import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies } from "@/lib/dis
 export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<{ view?: string; source?: string }> }) {
   const guard = await guardPage("discrepancy_report");
   if (!guard.entitled) {
-    return <FeatureGateNotice guard={guard} featureLabel="Discrepancies" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
+    return <FeatureGateNotice guard={guard} featureLabel="Pay issues" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
   }
   if (!actAsPagePermission(guard, "statements.view")) {
-    return <RoleGateNotice featureLabel="Discrepancies" detail="Discrepancies are worked by the account owner or a bookkeeper." />;
+    return <RoleGateNotice featureLabel="Pay issues" detail="Pay issues are worked by the account owner or a bookkeeper." />;
   }
 
   const tenantId = guard.context.tenantId;
@@ -48,26 +49,25 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
     note: item.note, statusChangedByName: item.statusChangedByName, statusChangedAt: item.statusChangedAt, history: item.history,
   }));
   const working = (found.available ? found.items.filter((i) => i.status === "open" || i.status === "disputed").length : 0) + hand.filter((i) => i.status === "open" || i.status === "disputed").length;
-  const pending = "rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]";
 
   return (
     <CommissionsPage
       step="discrepancies"
       lead={
         <ViewTabs
-            label="Discrepancy views"
+            label="Pay issue views"
             active={view === "letters" ? "letters" : "items"}
             tabs={[
-              { key: "items", label: "Discrepancies", count: view === "letters" ? undefined : working, href: "/app/discrepancies" },
+              { key: "items", label: "Issues", count: view === "letters" ? undefined : working, href: "/app/discrepancies" },
               { key: "letters", label: "Letters", href: "/app/discrepancies?view=letters" },
             ]}
         />
       }
     >
-      {!found.available && <div role="status" className={pending}>{DISCREPANCIES_PENDING_MESSAGE}</div>}
-      {list && !list.available && <div role="status" className={pending}>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</div>}
-      {untimed && untimed.length > 0 && <div role="status" className={pending}>Missing commission is not checked for {untimed.length === 1 ? "1 carrier" : `${untimed.length} carriers`} with no pay trigger or lag set: {payTimingGapText(untimed)}. Insurvas sets these for each carrier.</div>}
-      {found.available && found.truncated && <div role="status" className={pending}>Showing the first {found.items.length.toLocaleString("en-US")} findings, most serious first; the rest are not listed here.</div>}
+      {!found.available && <Callout tone="warning" title={<>{DISCREPANCIES_PENDING_MESSAGE}</>} />}
+      {list && !list.available && <Callout tone="warning" title={<>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</>} />}
+      {untimed && untimed.length > 0 && <Callout tone="warning" title={<>Missing commission is not checked for {untimed.length === 1 ? "1 carrier" : `${untimed.length} carriers`} with no pay trigger or lag set: {payTimingGapText(untimed)}. Insurvas sets these for each carrier.</>} />}
+      {found.available && found.truncated && <Callout tone="warning" title={<>Showing the first {found.items.length.toLocaleString("en-US")} findings, most serious first; the rest are not listed here.</>} />}
       {view === "letters" ? (
         found.available && <DisputeLetters disputes={found.disputes} readOnly={readOnly} />
       ) : (

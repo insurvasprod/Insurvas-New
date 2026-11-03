@@ -14,6 +14,8 @@
 
 import { createContext, useContext, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { CircleAlert, CircleCheck, Info, TriangleAlert } from "lucide-react";
+import { useNoticesInline, usePageNotice } from "@/components/ui/page-notices";
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -41,6 +43,8 @@ type SectionMeta = {
    */
   framed?: boolean;
   actionsSlot?: HTMLElement | null;
+  /** A routed section's tabs go here, on the title's line (2026-11-03). */
+  leadSlot?: HTMLElement | null;
 };
 const SectionContext = createContext<SectionMeta | null>(null);
 
@@ -53,8 +57,10 @@ export function SettingsSectionProvider({ value, children }: { value: SectionMet
  * Discard / Save pair. Sections that save each edit as it is made pass no actions: a Save button
  * with nothing pending behind it is a control that lies.
  */
-export function SettingsSectionHeader({ actions, trail }: {
+export function SettingsSectionHeader({ actions, trail, lead }: {
   actions?: ReactNode;
+  /** A routed section's tabs, drawn on the frame's title line (Accounting, Retention, Compliance). */
+  lead?: ReactNode;
   /**
    * A record open inside the section (owner 2026-10-28, Underwriting templates): drawn on the
    * title's own line after an arrow, with `actions` at the end of that line. The purpose line and
@@ -78,6 +84,7 @@ export function SettingsSectionHeader({ actions, trail }: {
     }
     return (
       <>
+        {lead && (meta.leadSlot ? createPortal(lead, meta.leadSlot) : lead)}
         {actions && (meta.actionsSlot ? createPortal(actions, meta.actionsSlot) : <div className="flex justify-end gap-2.5">{actions}</div>)}
       </>
     );
@@ -169,22 +176,34 @@ export function btn(kind: BtnKind, className?: string) {
 /* ── callout ────────────────────────────────────────────────────────────── */
 
 export type Tone = "info" | "success" | "warning" | "error";
-const CALLOUT: Record<Tone, { edge: string; ground: string; ink: string }> = {
-  info: { edge: "border-l-[var(--info)]", ground: "bg-[var(--info-surface)]", ink: "text-[var(--info-ink)]" },
-  success: { edge: "border-l-[var(--success)]", ground: "bg-[var(--success-surface)]", ink: "text-[var(--success-ink)]" },
-  warning: { edge: "border-l-[var(--warning)]", ground: "bg-[var(--warning-surface)]", ink: "text-[var(--warning-ink)]" },
-  error: { edge: "border-l-[var(--error)]", ground: "bg-[var(--error-surface)]", ink: "text-[var(--error-ink)]" },
+const CALLOUT: Record<Tone, { icon: typeof Info; ink: string }> = {
+  info: { icon: Info, ink: "text-[var(--info-ink)]" },
+  success: { icon: CircleCheck, ink: "text-[var(--success-ink)]" },
+  warning: { icon: TriangleAlert, ink: "text-[var(--warning-ink)]" },
+  error: { icon: CircleAlert, ink: "text-[var(--error-ink)]" },
 };
 
+/**
+ * A notice goes to the bell, never onto the page (owner 2026-11-02: "do not show anything; if there
+ * is anything to show put it as an alert in the notification"). It is listed under the bell's Alerts
+ * while this page is open, and draws nothing here. Only inside a dialog, where the bell is out of
+ * reach, does it stay on screen: one line of text (a tone icon, the title, the detail inline), never
+ * a card. lib/design/noNoticeCards.test.mjs holds both rules.
+ */
 export function Callout({ tone, title, children, className }: { tone: Tone; title: ReactNode; children?: ReactNode; className?: string }) {
+  const inline = useNoticesInline();
+  usePageNotice({ tone, title, detail: children }, !inline);
+  if (!inline) return null;
   const t = CALLOUT[tone];
+  const Icon = t.icon;
   return (
-    <div
-      role={tone === "error" || tone === "warning" ? "note" : undefined}
-      className={cn("rounded-[12px] border border-[var(--border)] border-l-[3px] px-4 py-3.5", t.edge, t.ground, className)}
-    >
-      <div className={cn("text-sm leading-[1.5] font-semibold tracking-[-0.02em]", t.ink)}>{title}</div>
-      {children && <div className="mt-1.5 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)]">{children}</div>}
+    <div role={tone === "error" || tone === "warning" ? "note" : undefined} className={cn("flex min-w-0 items-start gap-2 text-sm leading-[1.5] tracking-[-0.02em]", className)}>
+      <Icon aria-hidden="true" className={cn("mt-[3px] size-4 shrink-0", t.ink)} />
+      {/* A div, not a p: some callers pass buttons or a row of actions as the detail. */}
+      <div className="min-w-0">
+        <span className={cn("font-semibold", t.ink)}>{title}</span>
+        {children && <div className="inline text-[var(--ink)]"> {children}</div>}
+      </div>
     </div>
   );
 }

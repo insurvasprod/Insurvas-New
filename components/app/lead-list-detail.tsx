@@ -626,19 +626,6 @@ export function LeadListDetailView({
   const d = detail;
   const { removed, claimableRows, exportHref, unassigned } = listFigures(d);
 
-  const canClaim = canSeeMoney && d.claims.supported && d.claims.unclaimedRows > 0 && !claimBlocked;
-  const canAssign = assign.manager && d.assignable > 0 && !assign.blocked;
-  const closingSoon = d.returnDaysLeft != null && d.returnDaysLeft > 0 && d.returnDaysLeft <= 3;
-  const nextStep: { text: ReactNode; action: ReactNode } | null =
-    canClaim && closingSoon
-      ? { text: <>The return window closes in <strong className="font-semibold text-[var(--ink)]">{d.returnDaysLeft} {d.returnDaysLeft === 1 ? "day" : "days"}</strong> — {count(d.claims.unclaimedRows)} rows ({money(d.claims.unclaimedCents)}) are still unclaimed.</>, action: <LeadListClaimButton campaignId={d.campaignId} rows={d.claims.unclaimedRows} amount={money(d.claims.unclaimedCents)} blocked={claimBlocked} /> }
-      : canAssign
-        ? { text: <><strong className="font-semibold text-[var(--ink)]">{count(d.assignable)}</strong> usable {d.assignable === 1 ? "lead has" : "leads have"} no owner yet. Assign them so they reach the dialer.</>, action: <LeadListAssignDrawer campaignId={d.campaignId} listName={d.campaignName} assignable={d.assignable} /> }
-        : canClaim
-          ? { text: <>{count(d.claims.unclaimedRows)} rows the vendor owes you for ({money(d.claims.unclaimedCents)}) are not claimed yet.</>, action: <LeadListClaimButton campaignId={d.campaignId} rows={d.claims.unclaimedRows} amount={money(d.claims.unclaimedCents)} blocked={claimBlocked} /> }
-          : d.poolBlockers && d.poolBlockers.total > 0
-            ? { text: <>{count(d.poolBlockers.total)} leads in the pool are not being served. The <strong className="font-semibold text-[var(--ink)]">Not being served</strong> tab says what unblocks each.</>, action: null }
-            : null;
 
   return (
     // 2026-10-26: a list's page on the moving ribbon, like Lead sources it opens from.
@@ -657,7 +644,7 @@ export function LeadListDetailView({
             {/* Owners and producers assign the whole pool remainder at once in the drawer. Everyone
                 else — and any list whose unassigned leads are not in the pool — keeps the per-lead
                 view, which the index opens from the hash (lead-list-workspace). */}
-            {/* On its campaign's page the assign is the next-up line's button, not a second primary. */}
+            {/* On its campaign's page the campaign owns the assign, not a second primary. */}
             {!inCampaign && assign.manager && d.assignable > 0 && !assign.blocked && (
               <LeadListAssignDrawer campaignId={d.campaignId} listName={d.campaignName} assignable={d.assignable} />
             )}
@@ -682,13 +669,6 @@ export function LeadListDetailView({
 
       <ListEconomics detail={d} money={canSeeMoney} spend={assign.manager} />
 
-      {nextStep && !inCampaign && (
-        <section aria-label="Next step" className="m-glass flex flex-wrap items-center gap-4 rounded-xl border border-border px-4 py-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--primary-soft)] text-[var(--accent-ink)]"><ArrowRight className="size-4" aria-hidden="true" /></span>
-          <span className="min-w-0 flex-1 text-sm text-[var(--body)]"><span className="block text-xs font-semibold text-[var(--accent-ink)]">Next step</span>{nextStep.text}</span>
-          {nextStep.action}
-        </section>
-      )}
 
       {/* 2026-10-06 redesign: the three long sections are tabs, one at a time; health and consent
           stay beside them, always in view. */}

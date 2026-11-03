@@ -12,11 +12,15 @@
  * "?tab=licences"). The dialogs and the checkbox grid live in appointment-vault-parts.tsx.
  *
  * 2026-10-06 redesign: appointments, licences and carrier trainings are three tabs under the
- * strip; every readiness item stays listed above them, one line each. (CE and E&O cover were
- * removed from the platform 2026-10-26.)
+ * strip. (CE and E&O cover were removed from the platform 2026-10-26.)
+ *
+ * Foundation pass (2026-11-03, docs/compliance/FOUNDATION-PASS.md): the tabs are the address (`?tab=`) and
+ * sit on Compliance's title line; the figures link to them; every readiness item, and why editing is off,
+ * goes to the bell, never a tinted box on the page; Carrier trainings lists every training as a row.
  */
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 
@@ -26,7 +30,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
-import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -35,11 +39,12 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import {
   Callout,
   Field,
-  KeyValues,
   control,
   st,
 } from "@/components/app/settings/primitives";
 import { ViewTabs } from "@/components/app/view-tabs";
+import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
+import { useUrlTab } from "@/components/app/reports/reports-slot";
 import {
   AppointmentGrid,
   FormFooter,
@@ -72,6 +77,7 @@ import {
 import { daysUntilExpiry } from "@/lib/appointments/warnings";
 import { cn } from "@/lib/utils";
 import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
+import { agencyCarrierModel, offeredCarriers } from "@/lib/carriers/agencyModel";
 import type {
   AppointmentRow,
   AppointmentStatus,
@@ -96,8 +102,6 @@ type Dialog = null | "license" | "training" | { carrierId: string; state: string
 
 type Tab = "appointments" | "licences" | "cover";
 
-/** The tab's one card reaches the bottom of the window. */
-const FILL = "flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>*:nth-child(2)]:flex-1";
 const MUTED = "text-sm leading-normal tracking-[-0.02em] text-[var(--muted)]";
 const TONE: Record<"success" | "warning" | "error" | "neutral", StatusTone> = { success: "good", warning: "warning", error: "danger", neutral: "neutral" };
 
@@ -115,7 +119,7 @@ const CELL_PILL: Record<CellStatus["kind"], { tone: StatusTone; label: (status: 
  * `readOnlyReason`: why editing is off for an owner whose account is read-only (LA-4.10). The edit
  * controls are already hidden (`canEdit`); this one line says why, instead of them just vanishing.
  */
-export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = null }: { canEdit: boolean; isOwner: boolean; readOnlyReason?: string | null }) {
+export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = null, framed = false }: { canEdit: boolean; isOwner: boolean; readOnlyReason?: string | null; framed?: boolean }) {
   const [vault, setVault] = useState<Vault | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -132,15 +136,16 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const [licencePage, setLicencePage] = useState(1);
   const pageSize = useFittingPageSize(480, 45);
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<Tab>("appointments");
-  // "?tab=licences" opens on Licences: where the dialer's licence refusals and a lead list's
-  // "Add a licence" point, since Settings › Carriers no longer edits licences (2026-10-26).
-  // "&state=TX" (Route's "Add a TX licence", 2026-10-30) also opens Add licence on that state for an editor.
+  // The tab is the address (foundation pass 2026-11-03), so the figures link to it: "?tab=licences" is where
+  // the dialer's licence refusals and a lead list's "Add a licence" point, since Settings › Carriers no longer
+  // edits licences (2026-10-26); "&state=TX" (Route's "Add a TX licence", 2026-10-30) also opens Add licence
+  // on that state for an editor.
+  const pathname = usePathname();
+  const { tab, setTab } = useUrlTab<Tab>(["appointments", "licences", "cover"], "appointments");
   const [licenceState, setLicenceState] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("tab") !== "licences") return;
-    setTab("licences"); // eslint-disable-line react-hooks/set-state-in-effect -- reads the URL once, after hydration
     const state = (params.get("state") ?? "").toUpperCase();
     if (canEdit && /^[A-Z]{2}$/.test(state)) { setLicenceState(state); setDialog("license"); } // eslint-disable-line react-hooks/set-state-in-effect -- same read
   }, [canEdit]);
@@ -184,10 +189,9 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const latestByKey = useMemo(() => latestAppointmentByCell(vault?.appointments ?? []), [vault]);
   const configuredCarriers = useMemo(() => {
     if (!vault) return [];
-    // LA-0.4: a carrier the agency switched off is not offered here.
-    const off = new Set((vault.carrierRequirements ?? []).filter((row) => row.contracted === false).map((row) => row.carrier_id));
-    const ids = new Set(vault.tenantCarriers.map((row) => row.carrier_id));
-    return vault.carriers.filter((row) => ids.has(row.id) && !off.has(row.id));
+    // LA-0.4: the carriers switched on in Settings › Carriers (agencyModel.ts, the rule every screen uses).
+    const on = new Set(offeredCarriers(agencyCarrierModel({ library: vault.carriers, contracts: vault.tenantCarriers, requirements: (vault.carrierRequirements ?? []).map((row) => ({ carrier_id: row.carrier_id, contracted: row.contracted !== false })), appointments: [], today: "" })).map((row) => row.id));
+    return vault.carriers.filter((row) => on.has(row.id));
   }, [vault]);
   const gridStates = useMemo(
     () =>
@@ -243,21 +247,18 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     return result.ok;
   }
 
-  const header = (
-    <PageHeader
-      title="Appointments & licences"
-      description="Whether you may legally write this product in this state today."
-      actions={
-        isOwner ? (
-          <Button asChild variant="outline">
-            <Link href="/app/settings#carriers">Connect a carrier</Link>
-          </Button>
-        ) : undefined
-      }
-    />
-  );
+  const connect = isOwner ? (
+    <Button asChild variant="outline">
+      <Link href="/app/settings#carriers">Connect a carrier</Link>
+    </Button>
+  ) : undefined;
+  // Inside Compliance (owner 2026-11-02) the frame draws the title; the button goes to its corner.
+  const header = framed
+    ? (connect ? <ComplianceSlot slot="corner">{connect}</ComplianceSlot> : null)
+    : <PageHeader title="Appointments & licences" description="Whether you may legally write this product in this state today." actions={connect} />;
 
-  if (!vault) return <PageLoading />;
+  // Inside Compliance the frame already draws the title, so only the rows wait.
+  if (!vault) return framed ? <TableCard><SectionLoading rows={6} columns={5} label="Loading appointments and licences" /></TableCard> : <PageLoading />;
 
   const extended = vault.extendedFields !== false;
   const detailsAvailable = vault.appointmentDetails !== false;
@@ -317,56 +318,39 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   );
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
+    <div className="flex w-full min-w-0 flex-col gap-4">
       <LeaveGuard dirty={dirty} onSave={saveGrid} onDiscard={() => setSelected(new Set(saved))} what="the appointments grid" />
       {header}
-      {readOnlyReason && <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{readOnlyReason}</p>}
-
-      {!canEdit && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--info)] bg-[var(--info-surface)] px-4 py-2.5 text-sm text-[var(--info-ink)]">
-          View only. An owner with full access edits appointments and licences.
-        </div>
-      )}
+      {/* Why editing is off, and every readiness blocker, go to the bell (owner 2026-11-02): never a box on the page. */}
+      {readOnlyReason ? <Callout tone="warning" title="Read-only">{readOnlyReason}</Callout>
+        : !canEdit ? <Callout tone="info" title="View only">An owner with full access edits appointments and licences.</Callout> : null}
+      {items.map((item) => <Callout key={item.key} tone={item.tone === "error" ? "error" : "warning"} title={item.title}>{item.body}</Callout>)}
 
       <StatStrip label="Readiness">
-        <StatTile label="Readiness" value={summary.label} valueTone={summary.tone === "error" ? "danger" : summary.tone === "warning" ? "warning" : "good"} footnote={`inside ${READINESS_WINDOW_DAYS} days`} />
-        <StatTile label="Appointed states" value={appointedStates.size} footnote={plural(activeAppointments.length, "active appointment")} />
-        <StatTile label="Licences" value={licenceRows.length} valueTone={unlicensedAppointedStates.length ? "danger" : undefined} footnote={unlicensedAppointedStates.length ? `${plural(unlicensedAppointedStates.length, "appointed state")} unlicensed` : expiringLicences ? `${expiringLicences} need attention` : "all current"} />
+        <StatTile label="Readiness" value={summary.label} valueTone={summary.tone === "error" ? "danger" : summary.tone === "warning" ? "warning" : "good"} footnote={`${plural(items.length, "item")} inside ${READINESS_WINDOW_DAYS} days`} href={unlicensedAppointedStates.length || expiringLicences ? `${pathname}?tab=licences` : overdueTrainings ? `${pathname}?tab=cover` : pathname} />
+        <StatTile label="Appointed states" value={appointedStates.size} footnote={plural(activeAppointments.length, "active appointment")} href={pathname} />
+        <StatTile label="Licences" href={`${pathname}?tab=licences`} value={licenceRows.length} valueTone={unlicensedAppointedStates.length ? "danger" : undefined} footnote={unlicensedAppointedStates.length ? `${plural(unlicensedAppointedStates.length, "appointed state")} unlicensed` : expiringLicences ? `${expiringLicences} need attention` : "all current"} />
       </StatStrip>
 
-      {/* Every readiness item, one line each, in one block: a fifth blocker is never dropped to keep the page tidy. */}
-      {items.length > 0 && (
-        <ul className="m-0 list-none divide-y divide-border overflow-hidden rounded-lg border border-border p-0" aria-label="Readiness items">
-          {items.map((item) => (
-            <li
-              key={item.key}
-              className={cn(
-                "border-l-[3px] px-4 py-2 text-sm",
-                item.tone === "error"
-                  ? "border-l-[var(--error)] bg-[var(--error-surface)] text-[var(--error-ink)]"
-                  : "border-l-[var(--warning)] bg-[var(--warning-surface)] text-[var(--warning-ink)]",
-              )}
-            >
-              <span className="font-semibold">{item.title}</span> <span className="text-[var(--body)]">· {item.body}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <ViewTabs
-        label="Appointment vault views"
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { key: "appointments", label: "Carrier appointments", count: activeAppointments.length },
-          { key: "licences", label: "State licences", count: licenceRows.length },
-          { key: "cover", label: "Carrier trainings" },
-        ]}
-      />
+      {(() => {
+        const tabs = (
+          <ViewTabs
+            label="Appointment vault views"
+            value={tab}
+            onChange={setTab}
+            tabs={[
+              { key: "appointments", label: "Carrier appointments", count: activeAppointments.length },
+              { key: "licences", label: "State licences", count: licenceRows.length },
+              { key: "cover", label: "Carrier trainings" },
+            ]}
+          />
+        );
+        return framed ? <ComplianceSlot slot="lead">{tabs}</ComplianceSlot> : tabs;
+      })()}
 
       {tab === "appointments" && (editing && canEdit ? (
         configuredCarriers.length === 0 ? (
-          <TableCard className={FILL} toolbar={<DataToolbar actions={<Button type="button" variant="outline" onClick={closeEditor}>Done editing</Button>} />}>
+          <TableCard toolbar={<DataToolbar actions={<Button type="button" variant="outline" onClick={closeEditor}>Done editing</Button>} />}>
             {noCarrier}
           </TableCard>
         ) : (
@@ -394,7 +378,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
         )
       ) : (
         <TableCard
-          className={FILL}
           toolbar={
             <DataToolbar
               actions={<>
@@ -476,7 +459,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
 
       {tab === "licences" && (
         <TableCard
-          className={FILL}
           toolbar={
             <DataToolbar
               actions={<>
@@ -539,25 +521,43 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
         </TableCard>
       )}
 
+      {/* Every carrier training as a row (foundation pass 2026-11-03; was one "N outstanding" line in a half-width
+          card). Recording and completing them stays in the Trainings pop-up. */}
       {tab === "cover" && (
-        <div className="grid items-start gap-6 lg:grid-cols-2">
-          <TableCard
-            title="Carrier trainings"
-            action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("training")}>Trainings</Button> : undefined}
-          >
-            <div className="flex flex-col gap-4 border-t border-border px-4 py-4">
-              <KeyValues
-                items={[
-                  {
-                    label: "Carrier-specific",
-                    value: outstanding === null ? "Not recorded" : `${outstanding.length} outstanding`,
-                    tone: overdueTrainings > 0 ? ("warning" as const) : undefined,
-                  },
-                ]}
-              />
-            </div>
-          </TableCard>
-        </div>
+        <TableCard
+          toolbar={<DataToolbar actions={<>
+            {canEdit && <Button type="button" variant="outline" onClick={() => setDialog("training")}><Plus aria-hidden="true" />Trainings</Button>}
+            {refreshButton}
+          </>} />}
+          footer={trainings && trainings.length ? <span>{plural(trainings.length, "training")}{outstanding?.length ? ` · ${outstanding.length} outstanding` : ""}{overdueTrainings ? ` · ${overdueTrainings} overdue` : ""}</span> : undefined}
+        >
+          {trainings === null ? (
+            <EmptyState title="Carrier trainings are not recordable yet" hint="They need a database update." />
+          ) : trainings.length === 0 ? (
+            <EmptyState title="No carrier training recorded" hint="Some carriers require their own product training before you sell." action={canEdit ? <Button type="button" variant="outline" onClick={() => setDialog("training")}>Add a training</Button> : undefined} />
+          ) : (
+            <table className={cn(st.table, "min-w-[640px]")}>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={cn(st.th, "pl-4")}>Carrier</th>
+                  <th scope="col" className={st.th}>Training</th>
+                  <th scope="col" className={st.th}>Due</th>
+                  <th scope="col" className={cn(st.th, "pr-4")}>Status</th>
+                </tr>
+              </thead>
+              <tbody className="m-seq">
+                {[...trainings].sort((a, b) => Number(Boolean(a.completed_on)) - Number(Boolean(b.completed_on)) || a.due_on.localeCompare(b.due_on)).map((row) => (
+                  <tr key={row.id}>
+                    <td className={cn(st.td, "max-w-[220px] truncate pl-4")} title={vault.carriers.find((carrier) => carrier.id === row.carrier_id)?.name}>{vault.carriers.find((carrier) => carrier.id === row.carrier_id)?.name ?? "Carrier"}</td>
+                    <td className={cn(st.td, "max-w-[320px] truncate")} title={row.title}>{row.title}</td>
+                    <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{shortDate(row.due_on)}</td>
+                    <td className={cn(st.td, "pr-4")}>{row.completed_on ? <StatusChip tone="good">{`Done ${shortDate(row.completed_on)}`}</StatusChip> : row.due_on < today ? <StatusChip tone="danger">Overdue</StatusChip> : <StatusChip tone="warning">Outstanding</StatusChip>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </TableCard>
       )}
 
       {canEdit && (

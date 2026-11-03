@@ -2,12 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Download, ExternalLink, ShieldCheck } from "lucide-react";
-import { notify } from "@/lib/notify";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Meter, StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
@@ -16,10 +15,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { ViewTabs } from "@/components/app/view-tabs";
-import { CONSENT_STATUS_HINTS, CONSENT_STATUS_LABELS, type ConsentArtefact } from "@/lib/consent/constants";
+import { Callout } from "@/components/app/settings/primitives";
 import { EVIDENCE_FILTER_LABEL, EVIDENCE_LABEL, EVIDENCE_TONE, evidenceTime, keptFor, type EvidenceFilter, type EvidenceLevel } from "@/lib/consent/evidence";
 import { Pager, paginate } from "@/components/ui/pager";
-import { NextUp } from "@/components/app/lead-sources/next-up";
+import { formatPhone, normalizeDigits } from "@/lib/suppression/constants";
 import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 
@@ -34,9 +33,13 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
  * 2026-10-06 redesign: the leads and the coverage by vendor are two tabs; the source filter sits in
  * the toolbar as toggles instead of a panel that opened under it; the phone is its own column.
  *
- * Compliance in one page (2026-10-30): the Consent step. Its tabs sit in the frame's top row and Export in
- * its corner; each figure's "Show" filters the table to the leads behind it, and the step's one next-up
- * line names the biggest gap.
+ * Compliance in one page (2026-10-30): the Consent step. Its tabs sit on the title line and Export in its
+ * corner.
+ *
+ * Foundation pass (2026-11-03, docs/compliance/FOUNDATION-PASS.md): the tab and the evidence filter are the
+ * address (`?view=coverage`, `?evidence=no_text`), so each figure is a link to the leads behind it; the biggest
+ * gap goes to the bell; a certificate opens its own page (/app/consent/[id], was a pop-up); a page of leads is
+ * as many as fit above the rail's foot, so the card never scrolls inside itself.
  */
 type Row = {
   leadId: string; name: string; phone: string | null; providerName: string; captured: string;
@@ -48,19 +51,15 @@ type Loaded = {
   coverage: Array<{ vendorId: string; vendorName: string; leads: number; claimedPct: number | null }>;
   coverageAvailable: boolean;
 };
-type Record_ = ConsentArtefact & { storedCopy: unknown; storedRef: string | null };
 type Source = "partner" | "vendor" | "direct";
 type Tab = "leads" | "coverage";
 
 const SOURCE_LABEL: Record<Source, string> = { partner: "Partner submitted", vendor: "Vendor list or post", direct: "Direct" };
 const CHIP_TONE: Record<"success" | "warning" | "error", StatusTone> = { success: "good", warning: "warning", error: "danger" };
-/** The tab's one card fills the rest of the step's column. */
-const FILL = "flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:flex-1";
-/** The leads card: the server pages 50 at a time, so from lg the card fills the rest of the step's column
-    and its table scrolls inside it under sticky headers, rather than the page scrolling (2026-10-06). */
-const LEADS_FILL = "flex min-h-[420px] flex-1 flex-col [&>*:nth-child(2)]:min-h-0 [&>*:nth-child(2)]:flex-1 [&>*:nth-child(2)]:overflow-auto [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-[1] [&_thead_th]:bg-card";
+const FILTERS = Object.keys(EVIDENCE_FILTER_LABEL) as EvidenceFilter[];
 const when = (value: string | null) => evidenceTime(value);
-const pct = (part: number, whole: number) => (whole ? `${((part / whole) * 100).toFixed(1)}%` : "—");
+// A few in a big locker is "under 0.1%", never "0.0%" beside a count that is not zero.
+const pct = (part: number, whole: number) => (!whole ? "—" : part > 0 && (part / whole) * 100 < 0.05 ? "under 0.1%" : `${((part / whole) * 100).toFixed(1)}%`);
 
 function coverageTone(value: number | null): MeterTone {
   if (value === null) return "neutral";
@@ -68,26 +67,35 @@ function coverageTone(value: number | null): MeterTone {
 }
 
 export function ConsentLockerWorkspace() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const tab: Tab = params.get("view") === "coverage" ? "coverage" : "leads";
+  const asked = params.get("evidence") as EvidenceFilter | null;
+  const filter: EvidenceFilter = asked && FILTERS.includes(asked) ? asked : "every";
+  const go = (next: { view?: Tab; evidence?: EvidenceFilter }) => {
+    const query = new URLSearchParams();
+    if ((next.view ?? tab) === "coverage") query.set("view", "coverage");
+    const evidence = next.evidence ?? filter;
+    if (evidence !== "every") query.set("evidence", evidence);
+    router.replace(query.size ? `${pathname}?${query}` : pathname, { scroll: false });
+  };
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<EvidenceFilter>("every");
   const [sources, setSources] = useState<Source[]>([]);
   const [page, setPage] = useState(0);
-  const [open, setOpen] = useState<Record_ | null>(null);
-  const [opening, setOpening] = useState<string | null>(null);
   const [now] = useState(() => Date.now());
   const [refreshing, setRefreshing] = useState(false);
-  const [tab, setTab] = useState<Tab>("leads");
   const [coveragePage, setCoveragePage] = useState(1);
-  const coveragePageSize = useFittingPageSize(480, 45);
+  const pageSize = useFittingPageSize(480, 45);
 
   const query = useCallback((extra: Record<string, string> = {}) => {
-    const params = new URLSearchParams({ view: "leads", evidence: filter, page: String(page), ...extra });
-    if (search.trim()) params.set("search", search.trim());
-    if (sources.length) params.set("sources", sources.join(","));
-    return params.toString();
-  }, [filter, page, search, sources]);
+    const search_ = new URLSearchParams({ view: "leads", evidence: filter, page: String(page), pageSize: String(pageSize), ...extra });
+    if (search.trim()) search_.set("search", search.trim());
+    if (sources.length) search_.set("sources", sources.join(","));
+    return search_.toString();
+  }, [filter, page, pageSize, search, sources]);
 
   const load = useCallback(async () => {
     setError(null);
@@ -108,18 +116,6 @@ export function ConsentLockerWorkspace() {
     return () => clearTimeout(timer);
   }, [load]);
 
-  async function openRecord(id: string) {
-    setOpening(id);
-    try {
-      const response = await fetch(`/api/app/consent?id=${id}`);
-      const body = await response.json().catch(() => null);
-      if (!response.ok) { notify.block(body?.error ?? "Could not open that certificate"); return; }
-      setOpen(body.record);
-    } finally {
-      setOpening(null);
-    }
-  }
-
   async function refresh() {
     setRefreshing(true);
     try { await load(); } finally { setRefreshing(false); }
@@ -131,12 +127,12 @@ export function ConsentLockerWorkspace() {
   }
 
   const tiles = loaded?.tiles;
-  const coverage = paginate([...(loaded?.coverage ?? [])].sort((a, b) => (b.claimedPct ?? -1) - (a.claimedPct ?? -1)), coveragePage, coveragePageSize);
+  const coverage = paginate([...(loaded?.coverage ?? [])].sort((a, b) => (b.claimedPct ?? -1) - (a.claimedPct ?? -1)), coveragePage, pageSize);
   const filtered = Boolean(search || filter !== "every" || sources.length);
-  const clearFilters = () => { setSearch(""); setFilter("every"); setSources([]); setPage(0); };
+  const clearFilters = () => { setSearch(""); setSources([]); setPage(0); go({ evidence: "every" }); };
   /** A figure's way into the rows behind it: the Leads tab, filtered to that evidence status. */
-  const showOnly = (next: EvidenceFilter) => { setTab("leads"); setFilter(next); setPage(0); };
-  const show = (next: EvidenceFilter, n: number | undefined) => (n ? <button type="button" onClick={() => showOnly(next)} className="font-semibold text-[var(--accent-ink)] hover:underline">Show</button> : undefined);
+  const showHref = (next: EvidenceFilter) => `${pathname}?evidence=${next}`;
+  const exportQuery = query({ format: "csv" });
 
   return (
     <>
@@ -145,7 +141,7 @@ export function ConsentLockerWorkspace() {
           label="Consent locker views"
           idPrefix="consent-view"
           value={tab}
-          onChange={setTab}
+          onChange={(next) => go({ view: next })}
           tabs={[
             { key: "leads", label: "Leads", count: loaded ? loaded.total : null },
             ...(loaded?.coverageAvailable ? [{ key: "coverage" as const, label: "Coverage by vendor", count: loaded.coverage.length }] : []),
@@ -154,37 +150,36 @@ export function ConsentLockerWorkspace() {
       </ComplianceSlot>
       {/* Export follows the list's filters; with none set it is the whole locker. The step's one primary. */}
       <ComplianceSlot slot="corner">
-        <Button asChild><a href={`/api/app/consent?${query({ format: "csv" })}`}><Download aria-hidden="true" />Export</a></Button>
+        <Button asChild><a href={`/api/app/consent?${exportQuery}`}><Download aria-hidden="true" />Export</a></Button>
       </ComplianceSlot>
+      {/* The biggest gap goes to the bell (owner 2026-11-02); the figure under it is its link. */}
+      {tiles && tiles.textMissing > 0
+        ? <Callout tone="warning" title={`${tiles.textMissing.toLocaleString()} ${tiles.textMissing === 1 ? "lead has" : "leads have"} no consent text`}>They stay dialable and flagged — ask the vendor for the certificate.</Callout>
+        : tiles && tiles.noIp > 0
+          ? <Callout tone="warning" title={`${tiles.noIp.toLocaleString()} ${tiles.noIp === 1 ? "lead's" : "leads'"} consent has no IP address`}>Still dialable and flagged.</Callout>
+          : null}
 
       {/* The first read only; a filter or page change keeps the page drawn and swaps the rows. */}
-      {!loaded && !error ? <TableCard className={LEADS_FILL}><SectionLoading rows={6} columns={5} label="Loading consent evidence" /></TableCard> : <>
-
-      {tiles ? (tiles.textMissing > 0
-        ? <NextUp tone="warning" action={<Button variant="outline" onClick={() => showOnly("no_text")}>Show the {tiles.textMissing.toLocaleString()}</Button>}><strong>{tiles.textMissing.toLocaleString()}</strong> {tiles.textMissing === 1 ? "lead has" : "leads have"} no consent text. They stay dialable and flagged — ask the vendor for the certificate.</NextUp>
-        : tiles.noIp > 0
-          ? <NextUp tone="warning" action={<Button variant="outline" onClick={() => showOnly("no_ip")}>Show the {tiles.noIp.toLocaleString()}</Button>}><strong>{tiles.noIp.toLocaleString()}</strong> {tiles.noIp === 1 ? "lead's" : "leads'"} consent has no IP address. Still dialable and flagged.</NextUp>
-          : <NextUp tone="done">{tiles.leads ? <>Every lead with a certificate has its consent text and IP address.</> : "No leads yet: evidence arrives with each posted or imported lead."}</NextUp>) : null}
+      {!loaded && !error ? <TableCard><SectionLoading rows={6} columns={5} label="Loading consent evidence" /></TableCard> : <>
 
       <StatStrip label="Consent evidence totals">
-        <StatTile label="Leads with full evidence" value={tiles ? tiles.full.toLocaleString() : "—"} valueTone={tiles && tiles.full > 0 ? "good" : undefined} footnote={tiles ? `${pct(tiles.full, tiles.leads)} of ${tiles.leads.toLocaleString()} leads` : " "} action={show("full", tiles?.full)} />
-        <StatTile label="Consent text missing" value={tiles ? tiles.textMissing.toLocaleString() : "—"} valueTone={tiles && tiles.textMissing > 0 ? "danger" : undefined} footnote="flagged; still dialable" action={show("no_text", tiles?.textMissing)} />
-        <StatTile label="IP address missing" value={tiles ? tiles.noIp.toLocaleString() : "—"} valueTone={tiles && tiles.noIp > 0 ? "danger" : undefined} footnote="flagged; still dialable" action={show("no_ip", tiles?.noIp)} />
+        <StatTile label="Leads with full evidence" value={tiles ? tiles.full.toLocaleString() : "—"} valueTone={tiles && tiles.full > 0 ? "good" : undefined} footnote={tiles ? `${pct(tiles.full, tiles.leads)} of ${tiles.leads.toLocaleString()} leads` : " "} href={showHref("full")} />
+        <StatTile label="Consent text missing" value={tiles ? tiles.textMissing.toLocaleString() : "—"} valueTone={tiles && tiles.textMissing > 0 ? "danger" : undefined} footnote="flagged; still dialable" href={showHref("no_text")} />
+        <StatTile label="IP address missing" value={tiles ? tiles.noIp.toLocaleString() : "—"} valueTone={tiles && tiles.noIp > 0 ? "danger" : undefined} footnote="flagged; still dialable" href={showHref("no_ip")} />
         <StatTile label="Oldest record kept" value={tiles?.oldestCapturedAt ? keptFor(tiles.oldestCapturedAt, now) : "—"} footnote={tiles?.oldestCapturedAt ? `captured ${when(tiles.oldestCapturedAt).replace(/, .*$/, "")}` : "no certificates yet"} />
       </StatStrip>
 
-      <div role="tabpanel" aria-labelledby={`consent-view-${tab === "leads" || !loaded?.coverageAvailable ? "leads" : "coverage"}`} className="flex min-w-0 flex-1 flex-col">
+      <div role="tabpanel" aria-labelledby={`consent-view-${tab === "leads" || !loaded?.coverageAvailable ? "leads" : "coverage"}`} className="flex min-w-0 flex-col">
       {tab === "leads" || !loaded?.coverageAvailable ? (
         <TableCard
-          className={LEADS_FILL}
           toolbar={
             <DataToolbar actions={<>
               {filtered && <ClearFiltersButton onClick={clearFilters} />}
               <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
             </>}>
               <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(0); }} placeholder="Search name or phone" label="Search leads" />
-              <select aria-label="Evidence status" className={toolbarControl} value={filter} onChange={(event) => { setFilter(event.target.value as EvidenceFilter); setPage(0); }}>
-                {(Object.keys(EVIDENCE_FILTER_LABEL) as EvidenceFilter[]).map((key) => <option key={key} value={key}>{EVIDENCE_FILTER_LABEL[key]}</option>)}
+              <select aria-label="Evidence status" className={toolbarControl} value={filter} onChange={(event) => { setPage(0); go({ evidence: event.target.value as EvidenceFilter }); }}>
+                {FILTERS.map((key) => <option key={key} value={key}>{EVIDENCE_FILTER_LABEL[key]}</option>)}
               </select>
               {/* Sources are toggles, any number on at once; none on is every source. */}
               <span role="group" aria-label="Filter by source" className="inline-flex max-w-full gap-1.5 overflow-x-auto">
@@ -205,13 +200,12 @@ export function ConsentLockerWorkspace() {
             : loaded.rows.length === 0 ? (filtered
               ? <NoMatches noun="leads" onClear={clearFilters} />
               : <EmptyState title="No leads yet" hint="Evidence arrives with each posted or imported lead." action={<Button variant="outline" asChild><Link href="/app/import">Import leads</Link></Button>} />)
-            : <Table className="min-w-[1000px]">
+            : <Table className="min-w-[760px]">
                 <TableHeader><TableRow>
                   <TableHead>Lead</TableHead>
                   <TableHead>Phone</TableHead>
                   <TableHead>Provider</TableHead>
                   <TableHead>Consent given</TableHead>
-                  <TableHead>Captured</TableHead>
                   <TableHead>Evidence</TableHead>
                   <TableHead className="text-right"><span className="sr-only">Open</span></TableHead>
                 </TableRow></TableHeader>
@@ -219,15 +213,15 @@ export function ConsentLockerWorkspace() {
                   {loaded.rows.map((row) => (
                     <TableRow key={row.leadId}>
                       <TableCell className="max-w-[220px] truncate font-semibold text-[var(--ink)]" title={row.name}>{row.name}</TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">{row.phone ?? <span className="text-[var(--muted)]">—</span>}</TableCell>
-                      <TableCell className="max-w-[200px] truncate" title={row.providerName}>{row.providerName}</TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">{when(row.consentGivenAt)}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.captured}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">{row.phone ? formatPhone(normalizeDigits(row.phone) ?? row.phone) : <span className="text-[var(--muted)]">—</span>}</TableCell>
+                      {/* How it was captured is the line under who provided it, so the table keeps to the card at 1280. */}
+                      <TableCell className="max-w-[180px]"><span className="block truncate" title={row.providerName}>{row.providerName}</span><span className="block truncate text-xs text-muted-foreground">{row.captured}</span></TableCell>
+                      {/* The day over the time, so the column stays narrow at 1280. */}
+                      <TableCell className="whitespace-nowrap tabular-nums">{(() => { const [date, time] = when(row.consentGivenAt).split(", "); return <>{date}{time ? <span className="block text-xs text-muted-foreground">{time}</span> : null}</>; })()}</TableCell>
                       <TableCell><StatusChip tone={CHIP_TONE[EVIDENCE_TONE[row.level]]}>{EVIDENCE_LABEL[row.level]}</StatusChip></TableCell>
                       <TableCell className="text-right">
-                        {row.artefactId
-                          ? <Button type="button" variant="outline" size="sm" disabled={opening === row.artefactId} onClick={() => void openRecord(row.artefactId!)}>{opening === row.artefactId ? "Opening…" : "Open"}</Button>
-                          : <Button variant="outline" size="sm" asChild><Link href={`/app/leads/${row.leadId}`}>Open</Link></Button>}
+                        {/* A certificate is a record of its own; a lead with none opens the lead. */}
+                        <Button variant="outline" size="sm" asChild><Link href={row.artefactId ? `/app/consent/${row.artefactId}` : `/app/leads/${row.leadId}`}>Open</Link></Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -236,9 +230,8 @@ export function ConsentLockerWorkspace() {
         </TableCard>
       ) : (
         <TableCard
-          className={FILL}
           toolbar={<DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />} />}
-          footer={loaded.coverage.length ? <Pager page={coverage.current} total={loaded.coverage.length} noun={loaded.coverage.length === 1 ? "vendor" : "vendors"} pageSize={coveragePageSize} onPage={setCoveragePage} /> : undefined}
+          footer={loaded.coverage.length ? <Pager page={coverage.current} total={loaded.coverage.length} noun={loaded.coverage.length === 1 ? "vendor" : "vendors"} pageSize={pageSize} onPage={setCoveragePage} /> : undefined}
         >
           {loaded.coverage.length === 0 ? <EmptyState title="No vendor coverage yet" hint="No vendor has supplied leads yet." />
             : <Table className="min-w-[640px]">
@@ -265,58 +258,6 @@ export function ConsentLockerWorkspace() {
       )}
       </div>
       </>}
-
-      <Dialog open={open !== null} onOpenChange={(next) => !next && setOpen(null)}>
-        <DialogContent className="max-w-2xl">
-          {open && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{open.leadName}</DialogTitle>
-                <DialogDescription>{open.provider} certificate · {CONSENT_STATUS_LABELS[open.status]}. {CONSENT_STATUS_HINTS[open.status]}</DialogDescription>
-              </DialogHeader>
-              <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                <Field label="Certificate id" value={open.certificateId} />
-                <Field label="Consent given" value={when(open.consentTimestamp)} />
-                <Field label="Captured" value={when(open.capturedAt)} />
-                <Field label="Copy claimed" value={open.claimedAt ? when(open.claimedAt) : null} />
-                <Field label="IP address" value={open.ip} />
-                <Field label="Phone on the lead" value={open.leadPhone} />
-                <Field label="Landing page" value={open.landingPage} />
-                <Field label="Source URL" value={open.sourceUrl} />
-              </dl>
-              {open.certificateUrl && (
-                <a className="inline-flex items-center gap-1 text-sm underline" href={open.certificateUrl} target="_blank" rel="noreferrer noopener">
-                  Open the provider&rsquo;s certificate <ExternalLink className="size-3.5" aria-hidden />
-                </a>
-              )}
-              {/* Everything else held about this number is one step over, on Evidence (owners and producers). */}
-              {open.leadPhone && open.leadPhone.replace(/\D/g, "").length >= 10 && (
-                <Link className="inline-flex items-center gap-1 text-sm underline" href={`/app/evidence-report?phone=${open.leadPhone.replace(/\D/g, "").slice(-10)}`}>
-                  Evidence report for this number
-                </Link>
-              )}
-              {open.hasStoredCopy ? (
-                <div className="space-y-2">
-                  <p className="flex items-center gap-2 text-sm font-medium"><ShieldCheck className="size-4 text-[var(--success-ink)]" aria-hidden /> Our stored copy</p>
-                  <pre className="max-h-64 overflow-auto rounded-md border bg-muted/40 p-3 text-xs">{JSON.stringify(open.storedCopy ?? { stored_ref: open.storedRef }, null, 2)}</pre>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">There is no stored copy for this certificate. The link above is all that exists, and it is the provider&rsquo;s to expire.</p>
-              )}
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
     </>
-  );
-}
-
-function Field({ label, value }: { label: string; value: string | null }) {
-  return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
-      {/* "Not recorded" rather than a blank cell: a missing IP is a fact about the certificate. */}
-      <dd className="break-words">{value || <span className="text-muted-foreground">Not recorded</span>}</dd>
-    </div>
   );
 }

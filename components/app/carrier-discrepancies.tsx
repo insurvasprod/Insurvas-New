@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { Callout } from "@/components/app/settings/primitives";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -74,11 +76,13 @@ const HAND_STATUS: Record<HandDiscrepancyRow["status"], { label: string; tone: S
 type Item = { source: "carrier"; row: DiscrepancyRow } | { source: "hand"; row: HandDiscrepancyRow };
 const carrierKey = (item: Item) => item.row.carrierId ?? `hand:${item.row.carrierName}`;
 /** The status filter, read the same way for both sources. */
-function statusMatches(item: Item, status: string) {
+function statusMatches(item: Item, status: string): boolean {
   if (!status) return true;
   const s = item.row.status;
   if (status === "open") return s === "open" || s === "disputed";
   if (status === "resolved") return s === "resolved";
+  // Closed is resolved or dismissed; the row's own status chip says which (one toolbar row, 2026-11-02).
+  if (status === "closed") return s === "resolved" || statusMatches(item, "dismissed");
   return item.source === "carrier" ? s === "dismissed" || s === "expired" : s === "written_off" || s === "cleared";
 }
 
@@ -105,6 +109,8 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
   const [type, setType] = useState("");
   const [carrier, setCarrier] = useState("");
   const [status, setStatus] = useState("open");
+  const [query, setQuery] = useState("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [source, setSource] = useState(initialSource === "hand" || initialSource === "carrier" ? initialSource : "");
   const [page, setPage] = useState(1);
   const [open, setOpen] = useState<string | null>(null);
@@ -126,7 +132,10 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
     (!source || i.source === source) &&
     (!type || (i.source === "hand" ? HAND_TYPE[i.row.kind] === type : i.row.type === type)) &&
     (!carrier || carrierKey(i) === carrier) &&
-    statusMatches(i, status)), [all, source, type, carrier, status]);
+    (!query.trim() || `${i.row.policyNumber ?? ""} ${i.row.carrierName} ${"insuredName" in i.row ? i.row.insuredName ?? "" : ""}`.toLowerCase().includes(query.trim().toLowerCase())) &&
+    statusMatches(i, status)), [all, source, type, carrier, status, query]);
+  // The status chips count within the other filters, so each number is what pressing it shows.
+  const statusCount = (value: string) => all.filter((i) => (!source || i.source === source) && (!type || (i.source === "hand" ? HAND_TYPE[i.row.kind] === type : i.row.type === type)) && (!carrier || carrierKey(i) === carrier) && statusMatches(i, value)).length;
   const pageSize = useFittingPageSize(480, 45);
   const { current, rows } = paginate(visible, page, pageSize);
   const pickedRows = items.filter((i) => picked.includes(i.id));
@@ -136,8 +145,8 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
   const handCarrier = handChosen[0]?.carrierId ?? null;
   const canPickHand = (row: HandDiscrepancyRow) => picked.length === 0 && row.status !== "cleared" && Boolean(row.carrierId) && (!handCarrier || handCarrier === row.carrierId);
   const handLetterHref = handChosen.length && handCarrier ? `/app/discrepancies/letter?carrier=${handCarrier}&ids=${handChosen.map((i) => i.id).join(",")}` : null;
-  const filtered = Boolean(type || carrier || source || status !== "open");
-  const clear = () => { setType(""); setCarrier(""); setSource(""); setStatus("open"); setPage(1); };
+  const filtered = Boolean(type || carrier || source || query.trim() || status !== "open");
+  const clear = () => { setType(""); setCarrier(""); setSource(""); setQuery(""); setStatus("open"); setPage(1); };
 
   async function run(work: () => Promise<unknown>, done: string) {
     setBusy(true);
@@ -203,7 +212,12 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
           <span className="mt-0.5 block text-xs text-muted-foreground">{row.carrierName}</span>
         </td>
         <td className="tabular-nums">{row.policyNumber ? <Link href={policyHref(row)} className="hover:underline">{row.policyNumber}</Link> : <span className="text-muted-foreground">Whole account</span>}</td>
-        <td className="text-right tabular-nums" title={row.expectedSource?.schedule_id ? `From your rate card: ${Number(row.expectedSource.rate_bp) / 100}% (rate effective ${row.expectedSource.schedule_version})` : undefined}>{coming ? <span className="text-muted-foreground">—</span> : money(row.expectedCents)}</td>
+        <td className="text-right tabular-nums" title={row.expectedSource?.schedule_id ? `From your rate card: ${Number(row.expectedSource.rate_bp) / 100}% (rate effective ${row.expectedSource.schedule_version})` : undefined}>
+          {coming ? <span className="text-muted-foreground">—</span> : row.expectedCents === null && row.type === "missing"
+            // No rate to price it: the fix is one click away (owner 2026-11-02: "help the user navigate faster").
+            ? <Link href="/app/book-setup" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline">Add the rate</Link>
+            : money(row.expectedCents)}
+        </td>
         <td className="text-right tabular-nums" title={row.reportedEntryIds.length ? `${row.reportedEntryIds.length} ledger ${row.reportedEntryIds.length === 1 ? "line" : "lines"}` : undefined}>{coming ? <span className="text-muted-foreground">—</span> : money(row.reportedCents)}</td>
         <td className={`text-right font-semibold tabular-nums ${row.differenceCents !== null && row.differenceCents > 0 ? "text-[var(--warning-ink)]" : ""}`}>
           {coming ? money(row.expectedCents) : money(row.differenceCents)}
@@ -297,13 +311,13 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
   return (
     <>
       {/* Nothing found yet is not "$0 owed": the totals appear with the first finding. */}
-      {all.length > 0 && <StatStrip label="Discrepancies">
+      {all.length > 0 && <StatStrip label="Pay issues">
         <StatTile label="You appear to be owed" value={money(sum.owedCents + handOwedCents)} valueTone={sum.owedCents + handOwedCents ? "warning" : undefined} footnote={sum.unpricedMissing ? `plus ${sum.unpricedMissing} missing without a rate to price them` : handOwedCents ? `incl. ${money(handOwedCents)} from statements imported by hand` : "missing, short-paid and charged back twice"} />
         <StatTile label="Coming back" value={money(sum.comingBackCents)} footnote="chargebacks not taken yet; don't spend it" />
         <StatTile label="Held by carriers" value={money(sum.heldCents)} footnote="withheld, not missing" />
         <StatTile label="Open" value={(sum.open + handWorking.length).toLocaleString("en-US")} footnote="including items in a letter" />
       </StatStrip>}
-      {handItems.length > 0 && !handCanWrite && handBlockedReason && <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{handBlockedReason}</p>}
+      {handItems.length > 0 && !handCanWrite && handBlockedReason && <Callout tone="warning" title={handBlockedReason} />}
 
       <TableCard
         toolbar={
@@ -317,39 +331,42 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
             {!readOnly && <Button type="button" variant="outline" disabled={busy} onClick={() => void run(() => post({ action: "run" }), "Checked against the latest files.")}>Check now</Button>}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
-            <select aria-label="Filter by status" className={toolbarControl} value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
-              <option value="open">Open and in a letter</option>
-              <option value="resolved">Resolved</option>
-              <option value="dismissed">Dismissed or written off</option>
-              <option value="">Everything</option>
-            </select>
-            <select aria-label="Filter by type" className={toolbarControl} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
+            <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Policy, client or carrier" />
+            {([["open", "Open"], ["closed", "Closed"], ["", "All"]] as const).map(([value, label]) => (
+              <ToggleChip key={label} role="radio" selected={status === value} count={statusCount(value)} onClick={() => { setStatus(value); setPage(1); }}>{label}</ToggleChip>
+            ))}
+            <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={(type ? 1 : 0) + (carrier ? 1 : 0) + (source ? 1 : 0)} aria-controls="pay-issue-filters" />
+          </DataToolbar>
+        }
+        filters={
+          <FilterPanel id="pay-issue-filters" open={filtersOpen}>
+            <FilterField label="Kind" htmlFor="issue-kind"><select id="issue-kind" className={toolbarControl} value={type} onChange={(e) => { setType(e.target.value); setPage(1); }}>
               <option value="">Every kind</option>
               {DISCREPANCY_TYPES.map((t) => <option key={t} value={t}>{DISCREPANCY_LABELS[t].label}</option>)}
-            </select>
+            </select></FilterField>
             {carriers.length > 1 && (
-              <select aria-label="Filter by carrier" className={toolbarControl} value={carrier} onChange={(e) => { setCarrier(e.target.value); setPage(1); }}>
+              <FilterField label="Carrier" htmlFor="issue-carrier"><select id="issue-carrier" className={toolbarControl} value={carrier} onChange={(e) => { setCarrier(e.target.value); setPage(1); }}>
                 <option value="">All carriers</option>
                 {carriers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
+              </select></FilterField>
             )}
             {(handItems.length > 0 || source) && (
-              <select aria-label="Filter by source" className={toolbarControl} value={source} onChange={(e) => { setSource(e.target.value); setPage(1); }}>
+              <FilterField label="Source" htmlFor="issue-source"><select id="issue-source" className={toolbarControl} value={source} onChange={(e) => { setSource(e.target.value); setPage(1); }}>
                 <option value="">Every source</option>
                 <option value="carrier">From carrier files</option>
                 <option value="hand">Statements imported by hand</option>
-              </select>
+              </select></FilterField>
             )}
-          </DataToolbar>
+          </FilterPanel>
         }
         footer={all.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "item" : "items"} /> : undefined}
       >
         {all.length === 0 ? (
-          <EmptyState title="Nothing found yet" hint="Discrepancies appear once commission files are read: commission that never came, was paid short or at the wrong rate, chargebacks that look wrong or are coming, held money and debit balances." />
+          <EmptyState title="Nothing found yet" hint="Pay issues appear once commission files are read: pay that never came or came short, chargebacks that look wrong, held money." />
         ) : visible.length === 0 ? (
           <NoMatches noun="items" onClear={clear} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
+          <table className="portal-lead-table w-full text-left text-sm">
             <thead>
               <tr>
                 <th className="w-[36px]"><span className="sr-only">Choose for a letter</span></th>

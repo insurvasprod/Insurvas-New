@@ -1,6 +1,7 @@
 "use client";
 
 import { useTransition } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,9 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { fileDay } from "@/lib/ingestion/constants";
+import { ViewTabs } from "@/components/ui/view-tabs";
+import { ReportsSlot, useUrlTab } from "@/components/app/reports/reports-slot";
+import { reportPeriod } from "@/lib/reports/periodText";
 import { MIN_SAVE_SAMPLE, rateText, SAVE_REASON_LABELS, SAVED_AFTER_DAYS, SCORECARD_PERIOD_LABELS, SCORECARD_PERIODS, type ReasonLine, type ScorecardPeriod } from "@/lib/retention/scorecard";
 import type { Scorecard } from "@/lib/retention/scorecardStore";
 
@@ -20,6 +23,10 @@ const pct = (r: number | null) => (r === null ? "—" : `${Math.round(r * 100)}%
  * LA-5.8 (Notion sprint) · the retention scorecard. The save rate exists only in the by-reason table,
  * whose last row is the blended figure — never shown on its own. Under ten decided cases a reason shows
  * "3 of 5 saved", not a percentage. Unreachable cases have their own column and stay out of the rate.
+ *
+ * Foundation pass (2026-11-03, docs/reports/FOUNDATION-PASS.md): the person's reasons and the owner's
+ * list of people were two tables stacked under the strip; they are the view's tabs on the title line
+ * (`?tab=reasons|people`), and a person in the list opens their reasons.
  */
 export function RetentionScorecardBoard({ data, period, selected, isOwner, viewerId }: { data: Scorecard; period: ScorecardPeriod; selected: string | null; isOwner: boolean; viewerId: string }) {
   const router = useRouter();
@@ -34,26 +41,27 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
     router.push(params.size ? `${pathname}?${params}` : pathname);
   };
   const card = data.cards.find((c) => c.userId === (selected ?? (isOwner ? data.cards[0]?.userId : viewerId))) ?? null;
+  const team = isOwner && data.cards.length > 1;
+  const { tab, setTab } = useUrlTab(["reasons", "people"] as const, "reasons");
+  const shown = team ? tab : "reasons";
+  const repHref = (rep: string) => { const params = new URLSearchParams(); if (period !== "180") params.set("period", period); params.set("rep", rep); params.set("tab", "reasons"); return `${pathname}?${params}`; };
+  const span = <>{reportPeriod(data.from, data.to)}{data.holdoutExcluded ? ` · ${data.holdoutExcluded.toLocaleString("en-US")} held-out ${data.holdoutExcluded === 1 ? "policy" : "policies"} left out` : ""}</>;
   const toolbar = (
     <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
       <select aria-label="Period" className={toolbarControl} value={period} onChange={(e) => go({ period: e.target.value })}>
         {(Object.keys(SCORECARD_PERIODS) as ScorecardPeriod[]).map((p) => <option key={p} value={p}>{SCORECARD_PERIOD_LABELS[p]}</option>)}
       </select>
-      {isOwner && data.cards.length > 1 && (
+      {team && shown === "reasons" && (
         <select aria-label="Person" className={toolbarControl} value={card?.userId ?? ""} onChange={(e) => go({ rep: e.target.value })}>
           {data.cards.map((c) => <option key={c.userId} value={c.userId}>{c.name}</option>)}
         </select>
       )}
-      <span className="text-sm text-muted-foreground">
-        {fileDay(data.from)} – {fileDay(data.to)}
-        {data.holdoutExcluded ? ` · ${data.holdoutExcluded.toLocaleString("en-US")} held-out ${data.holdoutExcluded === 1 ? "policy" : "policies"} left out` : ""}
-      </span>
     </DataToolbar>
   );
 
   if (!data.cards.length) {
     return (
-      <TableCard toolbar={toolbar}>
+      <TableCard toolbar={toolbar} footer={<span>{span}</span>}>
         <EmptyState title="Nothing worked in this period" hint="Calls logged on the Save queue and the paper-bill campaign, and reinstatements the carrier confirmed, show here." />
       </TableCard>
     );
@@ -61,6 +69,7 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
 
   return (
     <>
+      {team && <ReportsSlot slot="lead"><ViewTabs label="Retention scorecard views" value={shown} onChange={setTab} tabs={[{ key: "reasons", label: card ? `${card.name}'s save rate` : "Save rate by reason" }, { key: "people", label: "Everyone", count: data.cards.length }]} /></ReportsSlot>}
       {card && (
         <StatStrip label={`${card.name}'s retention`}>
           <StatTile label="Policies worked" value={card.policiesWorked.toLocaleString("en-US")} footnote={`${card.attempts.toLocaleString("en-US")} calls`} />
@@ -71,12 +80,14 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
         </StatStrip>
       )}
 
-      <TableCard toolbar={toolbar}>
-        {card ? <ReasonTable lines={card.byReason} blended={card.blended} /> : null}
-      </TableCard>
+      {shown === "reasons" && (
+        <TableCard toolbar={toolbar} footer={<span>{span}</span>}>
+          {card ? <ReasonTable lines={card.byReason} blended={card.blended} /> : null}
+        </TableCard>
+      )}
 
-      {isOwner && data.cards.length > 1 && (
-        <TableCard>
+      {shown === "people" && (
+        <TableCard toolbar={toolbar} footer={<span>{span}</span>}>
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
             <thead>
               <tr>
@@ -98,7 +109,7 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
                   <td className="text-right tabular-nums">{c.conversions.toLocaleString("en-US")}</td>
                   <td className="text-right tabular-nums">{c.reinstatements.toLocaleString("en-US")}</td>
                   <td className="text-right tabular-nums">{money(c.advanceProtectedCents)}</td>
-                  <td className="text-right"><Button size="sm" variant="outline" onClick={() => go({ rep: c.userId })}>Save rate</Button></td>
+                  <td className="text-right"><Button asChild size="sm" variant="outline"><Link href={repHref(c.userId)}>Save rate</Link></Button></td>
                 </tr>
               ))}
             </tbody>

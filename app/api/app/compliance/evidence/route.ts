@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
       return new NextResponse(Buffer.from(bytes), { headers: { "Content-Type": "application/pdf", "Content-Disposition": `attachment; filename="${name}.pdf"`, "Cache-Control": "no-store" } });
     }
     if (output === "csv") {
-      return new NextResponse(evidenceCsv(report), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}.csv"`, "Cache-Control": "no-store" } });
+      // A byte-order mark, so Excel reads the file as UTF-8: without it every "·" in a summary opened as "Â·" (QA 2026-11-03).
+      return new NextResponse(`${String.fromCharCode(0xfeff)}${evidenceCsv(report)}`, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="${name}.csv"`, "Cache-Control": "no-store" } });
     }
     return NextResponse.json(report, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

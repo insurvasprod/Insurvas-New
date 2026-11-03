@@ -36,5 +36,17 @@ const saveRule = z.object({
   escalate_to_role: z.enum(OWNER_ROLES).nullable(),
 }).strict();
 
-export const exceptionsRequest = z.union([resolve, saveRule]);
+/**
+ * Round 4 (owner 2026-11-02, beyond LA-4.9, which resolves one item at a time): one answer for a batch of items
+ * that share it — "the client is right" for a file's "policy with no sale" items, or "not mine". Only the two
+ * resolutions that need nothing but the item; each item is still resolved and audited on its own.
+ */
+export const RESOLVE_MANY_MAX = 50;
+const resolveMany = z.object({
+  action: z.literal("resolve_many"),
+  item_ids: z.array(uuid).min(1).max(RESOLVE_MANY_MAX),
+  resolution: z.enum(["confirm_client", "not_mine"]),
+}).strict();
+
+export const exceptionsRequest = z.union([resolve, resolveMany, saveRule]);
 export type ExceptionsRequest = z.infer<typeof exceptionsRequest>;

@@ -347,7 +347,13 @@ export async function buildEvidenceReport(viewer: Viewer, scope: EvidenceScope, 
 export type BookScan = { generatedAt: string; range: EvidenceRange; lines: BookGapLine[]; numbersByCategory: Record<string, { phone: string; count: number; firstAt: string | null; lastAt: string | null }[]> };
 
 /** The same gap checks across the whole book, as a summary (and the numbers behind each line). Logged. */
-export async function bookGapScan(viewer: Viewer, range: EvidenceRange, opts: { log?: boolean; numbers?: boolean } = {}): Promise<BookScan> {
+/**
+ * `focus`: one finding's page (Compliance › Evidence › a finding, foundation pass 2026-11-03) reads that line's
+ * numbers again up to the API's 1,000-row cap, where the scan carries 300 per line.
+ */
+export const FOCUS_NUMBERS_CAP = 1000;
+
+export async function bookGapScan(viewer: Viewer, range: EvidenceRange, opts: { log?: boolean; numbers?: boolean; focus?: string } = {}): Promise<BookScan> {
   // Summarised in the database (20261015180000): per-number rows for a whole book run past the
   // API's 1,000-row cap, and a truncated scan is worse than none.
   const claim = JSON.parse(CLAIM_HOURS);
@@ -387,6 +393,11 @@ export async function bookGapScan(viewer: Viewer, range: EvidenceRange, opts: { 
       const { data } = await db().rpc("compliance_gap_numbers", { p_tenant_id: viewer.tenantId, p_category: l.category, p_from: range.from ?? null, p_to: range.to ?? null, p_claim_hours: claim, p_limit: 300 });
       numbersByCategory[l.category] = toNumbers(data);
     }));
+  }
+  const focused = wantNumbers && opts.focus ? lines.find((l) => l.category === opts.focus && l.numbers > (numbersByCategory[l.category]?.length ?? 0)) : undefined;
+  if (focused) {
+    const { data, error } = await db().rpc("compliance_gap_numbers", { p_tenant_id: viewer.tenantId, p_category: focused.category, p_from: range.from ?? null, p_to: range.to ?? null, p_claim_hours: claim, p_limit: FOCUS_NUMBERS_CAP });
+    if (!error && data) numbersByCategory[focused.category] = toNumbers(data);
   }
   if (opts.log !== false) await log(viewer, { scopeType: range.from || range.to ? "date_range" : "book_scan", scopeValue: null, range, output: "screen", eventCount: null, gapCount: lines.filter((l) => l.numbers > 0).length });
   return { generatedAt: new Date().toISOString(), range, lines, numbersByCategory };
