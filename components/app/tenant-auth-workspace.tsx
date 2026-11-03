@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useRef, useState, type FormEvent } from "react";
+import { startTransition, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
@@ -33,9 +33,11 @@ function signInError(response: Response, body: { error?: string } | null, fallba
 }
 
 /**
- * The brand panel beside the agent forms: the product, moving (components/app/auth-showcase.tsx).
- * Manager review, 2026-10-28: show what the software looks like, one feature at a time, animated.
- * Sign-up screen N opens on feature N, so each step moves the story on; sign-in starts at the first.
+ * The brand panel beside the agent sign-up steps and the account screens: the product, moving
+ * (components/app/auth-showcase.tsx). Manager review, 2026-10-28: show what the software looks
+ * like, one feature at a time, animated. Sign-up screen N opens on feature N, so each step moves
+ * the story on. The agent sign-in passes no panel at all (owner, 2026-11-03: one centred card on
+ * the brand field), so its branch here is only kept for the screens that still render it.
  * The payment line stays as a footnote; it never names a trial length, because that depends on the
  * plan (owner, 2026-10-27). AppAuthFrame (set password, confirm email) shows the sign-in one.
  */
@@ -45,6 +47,13 @@ export function StoryPanel({ mode, step = 1, noPayment = false }: { mode: Portal
   }
   return <AuthShowcase step={0} />;
 }
+
+/**
+ * One state of the door, split the way the layout draws it: the heading and the row of other ways in
+ * sit on the brand field around the card, and only the working part is inside it (owner,
+ * 2026-11-03: "move this outside").
+ */
+type AuthView = { heading: ReactNode; body: ReactNode; footer?: ReactNode };
 
 /**
  * Sign-in only. Sign-up is the one public flow at /signup (/api/public/signup): email verification,
@@ -237,12 +246,28 @@ export function TenantAuthWorkspace({
     </label>
   );
 
-  const signIn = (
-    <>
-      {/* The sign-in page cannot know an agency from one agent, so it names neither (manager review, 2026-10-28). */}
-      <AuthHeading title="Welcome back">Sign in to your workspace.</AuthHeading>
-
-      <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
+  const signIn: AuthView = {
+    // The sign-in page cannot know an agency from one agent, so it names neither (manager review, 2026-10-28).
+    // Same header as sign-up: the title on the left, a short note on the right, one bar under (owner, 2026-11-03).
+    heading: (
+      <div data-auth-line="" className="mb-3">
+        <div className="flex flex-wrap items-end justify-center gap-x-4 gap-y-1">
+          <div className="min-w-0"><AuthHeading title="Sign in to your Workspace" /></div>
+        </div>
+      </div>
+    ),
+    body: (
+      <>
+      {/* Google first, like sign-up: the fast path, then the email form. */}
+      {googleEnabled && (
+        <>
+          <GoogleButton intent="sign-in" className="w-full" />
+          <div data-auth-divider="" className="my-4 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
+            <span className="h-px flex-1 bg-border" />or use your email<span className="h-px flex-1 bg-border" />
+          </div>
+        </>
+      )}
+        <form className="flex flex-col gap-4" onSubmit={handleLogin} noValidate>
         <AuthField label="Email" htmlFor="tenant-login-email">
           <AuthInput
             ref={emailRef}
@@ -303,21 +328,12 @@ export function TenantAuthWorkspace({
           {loginLoading ? "Signing in…" : "Sign in"}
         </AuthSubmit>
       </form>
-
-      {/* One other way in: Google, full width under the "or". "Email me a link" is gone from here
-          (manager review, 2026-10-28); a link already sent still opens the finish panel below. */}
-      {googleEnabled && (
-        <>
-          <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
-            <span className="h-px flex-1 bg-border" />or<span className="h-px flex-1 bg-border" />
-          </div>
-          <GoogleButton intent="sign-in" />
-        </>
-      )}
-
-      {/* Both "elsewhere" lines in one style, side by side where they fit (manager review, 2026-10-28:
-          the partner line had a different font and colour). */}
-      <div className="mt-6 flex flex-wrap gap-x-5 gap-y-1.5 text-sm leading-normal tracking-[-0.02em] text-muted-foreground">
+    </>
+    ),
+    // Both "elsewhere" lines in one style, side by side where they fit (manager review, 2026-10-28:
+    // the partner line had a different font and colour).
+    footer: (
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm leading-normal tracking-[-0.02em]">
         <p className="m-0">
           New to Insurvas?{" "}
           <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
@@ -325,27 +341,34 @@ export function TenantAuthWorkspace({
           </Link>
         </p>
         <p className="m-0">
-          Partner or affiliate?{" "}
           <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
             Partner portal
           </Link>
         </p>
       </div>
-    </>
-  );
+    ),
+  };
 
-  const reset = (
+  const reset: AuthView = {
+    heading: <>
+      {resetState === "sent" ? (
+        <AuthHeading title="Check your inbox">
+            If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to an agent account, a link to choose a new password is on its way. It works once.
+          </AuthHeading>
+      ) : (
+        <AuthHeading title="Reset your password">Enter the email you sign in with. We send a one-time link to choose a new password.</AuthHeading>
+      )}
+    </>,
+    body: (
     <>
       {resetState === "sent" ? (
         <>
-          <AuthHeading title="Check your inbox">
-            If <strong className="font-semibold text-foreground">{resetEmail.trim()}</strong> belongs to an agent account, a link to choose a new password is on its way. It works once.
-          </AuthHeading>
+          
           <p className="text-sm leading-normal text-[var(--body)]">Nothing arrived after a few minutes? Check spam, then write to <a href="mailto:support@insurvas.com?subject=Password%20help" className="font-semibold text-foreground">support@insurvas.com</a>.</p>
         </>
       ) : (
         <>
-          <AuthHeading title="Reset your password">Enter the email you sign in with. We send a one-time link to choose a new password.</AuthHeading>
+          
           <form className="flex flex-col gap-4" onSubmit={handleReset} noValidate>
             <AuthField label="Email" htmlFor="tenant-reset-email">
               <AuthInput id="tenant-reset-email" type="email" inputMode="email" autoComplete="username" required value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
@@ -365,13 +388,16 @@ export function TenantAuthWorkspace({
         </LinkArrow>
       </div>
     </>
-  );
+    ),
+  };
 
-  const twoFactor = (
-    <>
-      <AuthHeading title={useRecoveryCode ? "Enter a recovery code" : "Enter your 6-digit code"}>
+  const twoFactor: AuthView = {
+    heading: <AuthHeading title={useRecoveryCode ? "Enter a recovery code" : "Enter your 6-digit code"}>
         {useRecoveryCode ? "Type one of the recovery codes you saved. Each one works once." : "From your authenticator app. You are signed in as soon as the sixth digit is in."}
-      </AuthHeading>
+      </AuthHeading>,
+    body: (
+    <>
+      
       <form className="flex flex-col gap-4" onSubmit={(event) => void handleTwoFactor(event)} noValidate>
         {useRecoveryCode ? (
           <AuthField label="Recovery code" htmlFor="tenant-login-code">
@@ -418,7 +444,8 @@ export function TenantAuthWorkspace({
         </LinkArrow>
       </div>
     </>
-  );
+    ),
+  };
 
   const backToPassword = (
     <div className="mt-[22px]">
@@ -430,13 +457,21 @@ export function TenantAuthWorkspace({
     </div>
   );
 
-  const linkRequestPanel = (
+  const linkRequestPanel: AuthView = {
+    heading: <>
+      {linkRequest === "sent" ? (
+        <AuthHeading title="Check your inbox">
+            If <strong className="font-semibold text-foreground">{linkEmail.trim()}</strong> belongs to an agent account, a sign-in link is on its way. It works once, for {SIGN_IN_LINK_MINUTES} minutes.
+          </AuthHeading>
+      ) : (
+        <AuthHeading title="Sign in with a link">We email you a link that signs you in once, within {SIGN_IN_LINK_MINUTES} minutes. No password needed.</AuthHeading>
+      )}
+    </>,
+    body: (
     <>
       {linkRequest === "sent" ? (
         <>
-          <AuthHeading title="Check your inbox">
-            If <strong className="font-semibold text-foreground">{linkEmail.trim()}</strong> belongs to an agent account, a sign-in link is on its way. It works once, for {SIGN_IN_LINK_MINUTES} minutes.
-          </AuthHeading>
+          
           <div className="flex flex-wrap gap-2.5">
             <AuthSecondary asChild className="w-auto px-4">
               <a href="https://mail.google.com/mail/u/0/#search/from%3Ainsurvas" target="_blank" rel="noopener noreferrer">Open Gmail</a>
@@ -455,7 +490,7 @@ export function TenantAuthWorkspace({
         </>
       ) : (
         <>
-          <AuthHeading title="Sign in with a link">We email you a link that signs you in once, within {SIGN_IN_LINK_MINUTES} minutes. No password needed.</AuthHeading>
+          
           <form className="flex flex-col gap-4" onSubmit={(event) => void requestLink(event)} noValidate>
             <AuthField label="Email" htmlFor="tenant-link-email">
               <AuthInput id="tenant-link-email" type="email" inputMode="email" autoComplete="username" autoFocus required value={linkEmail} onChange={(event) => { setLinkEmail(event.target.value); setLinkError(null); }} />
@@ -470,13 +505,16 @@ export function TenantAuthWorkspace({
       )}
       {backToPassword}
     </>
-  );
+    ),
+  };
 
   // Opened from the emailed link. Nothing happens until the button is pressed, so a mail scanner that
   // opens the link does not use it up.
-  const linkFinishPanel = (
+  const linkFinishPanel: AuthView = {
+    heading: <AuthHeading title="Finish signing in">You opened your sign-in link. Press the button to sign in on this device.</AuthHeading>,
+    body: (
     <>
-      <AuthHeading title="Finish signing in">You opened your sign-in link. Press the button to sign in on this device.</AuthHeading>
+      
       <div className="flex flex-col gap-4">
         {rememberBox}
         {loginError && <AuthAlert>{loginError}</AuthAlert>}
@@ -486,13 +524,14 @@ export function TenantAuthWorkspace({
       </div>
       {backToPassword}
     </>
-  );
+    ),
+  };
 
-  const form = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
+  const view = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
 
   return (
-    <AuthLayout plane="agent" story={<StoryPanel mode="sign-in" />}>
-      {form}
+    <AuthLayout plane="agent" heading={view.heading} footer={view.footer}>
+      {view.body}
     </AuthLayout>
   );
 }

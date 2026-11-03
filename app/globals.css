@@ -1855,7 +1855,7 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
    sits at 90% 0% of it with a 75% × 60% ellipse, which over the whole page is 95% 0% and 37.5% × 60%.
    Desktop only: below 1024px the story is hidden. */
 @media (min-width: 1024px) {
-  html:has(.portal-tenant-auth-shell) {
+  html:has(.portal-tenant-auth-shell[data-layout="split"]) {
     background:
       radial-gradient(37.5% 60% at 95% 0%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 70%),
       var(--brand-700);
@@ -1951,6 +1951,85 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 }
 @media (max-width: 360px) {
   .portal-login-footer, .portal-auth-footer { gap: 1.25rem; }
+}
+
+/* The agent sign-in, one door, one column (owner, 2026-11-03: "remove this separation … make the
+   whole process centred"). With no story the shell is not two halves: the green the panel used to
+   own becomes the page — the brand field with one soft light at the top — and the form sits on one
+   card in the middle. The logo, the heading, the other ways in and the legal line stay on the field,
+   lined up with the card's content edge (data-auth-card is painted; data-layout="single" is set
+   only when AuthLayout is given no story, so every other door keeps the split above). */
+html:has(.portal-tenant-auth-shell[data-layout="single"]) {
+  background: linear-gradient(180deg, var(--brand-700), var(--brand-900));
+  background-attachment: fixed;
+}
+html:has(.portal-tenant-auth-shell[data-layout="single"]) body { background: transparent; }
+/* A faint dot grid that fades out downward (owner pick E, 2026-11-03). */
+.portal-tenant-auth-shell[data-layout="single"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(color-mix(in srgb, var(--nav-muted) 22%, transparent) 1px, transparent 1px);
+  background-size: 14px 14px;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%);
+  mask-image: linear-gradient(180deg, #000, transparent 85%);
+}
+.portal-tenant-auth-shell[data-layout="single"] { display: flex; flex-direction: column; min-height: 100vh; background: transparent; overflow: visible; }
+.portal-tenant-auth-shell[data-layout="single"] .portal-auth-split-form { width: 100%; min-height: 100vh; background: transparent; padding: 40px clamp(16px, 6vw, 64px); overflow: visible; }
+.portal-tenant-auth-shell[data-layout="single"] .portal-auth-split-form > div { flex: 1 1 auto; justify-content: center; }
+/* Auto margins, not justify-content: a door taller than the window starts at the top and scrolls
+   instead of being cut off above it. */
+.portal-tenant-auth-shell[data-layout="single"] .portal-auth-form-inner { flex: 0 0 auto; width: min(100%, 552px); max-width: 552px; margin: auto; }
+/* The logo stands in the page's top-left corner, off the column (owner, 2026-11-03). Narrow windows keep it
+   in the column, where a corner would collide with the step line. */
+@media (min-width: 900px) {
+  .portal-tenant-auth-shell[data-layout="single"] { position: relative; }
+  .portal-tenant-auth-shell[data-layout="single"] .portal-auth-form-inner { position: static; }
+  .portal-tenant-auth-shell[data-layout="single"] .portal-auth-split-form { position: static; }
+  .portal-tenant-auth-shell[data-layout="single"] [data-auth-logo] { position: absolute; top: 28px; left: clamp(20px, 4vw, 48px); padding-inline: 0; z-index: 1; }
+}
+/* The one card: 472px of content inside 40px of padding. */
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-card] {
+  padding: 28px 40px 32px;
+  border-radius: var(--radius-xl);
+  background: var(--surface);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .12), 0 40px 80px -40px rgba(0, 0, 0, .55);
+}
+/* Everything else sits on the field, inset by the card's padding so its text shares the fields' edge. */
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-logo], [data-auth-steps], [data-auth-heading-slot], [data-auth-footer], .portal-login-footer) { padding-inline: 40px; }
+/* The step line (sign-up) stands on the field above the heading: light text, the other way in as a link. */
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-steps], [data-auth-line]) :is(p, span) { color: var(--nav-muted); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] p > span:first-child { color: var(--on-dark); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] a { color: var(--on-dark); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+/* Compact step line: the title on the left, "Step n of N" on the right, a smaller title (owner, 2026-11-03). */
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-steps][data-compact], [data-auth-line]) [data-auth-heading] { margin-bottom: 0; }
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-steps][data-compact], [data-auth-line]) [data-auth-heading] h1 { font-size: 1.75rem; line-height: 1.15; color: var(--on-dark); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] p { color: var(--nav-muted); }
+/* The steps are named under their bars: the current one bright, done ones light, the rest dimmer but readable (owner, 2026-11-03). */
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-state="next"] [data-step-bar] { background: color-mix(in srgb, var(--on-dark) 28%, transparent); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-name] { color: color-mix(in srgb, var(--nav-muted) 85%, transparent); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-state="current"] [data-step-name] { color: var(--on-dark); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-state="done"] [data-step-name] { color: var(--on-dark); }
+/* "Have an account? Sign in" on the legal links' line. */
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.75rem; margin-top: 1rem; padding-inline: 40px; }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > [data-auth-footer], .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > * { margin: 0; padding-inline: 0; }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-note] { margin-top: .5rem; padding-inline: 40px; color: var(--nav-muted); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-note] a { color: var(--on-dark); }
+@media (max-width: 560px) { .portal-tenant-auth-shell[data-layout="single"] [data-auth-note] { padding-inline: 20px; } }
+@media (max-width: 560px) { .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { padding-inline: 20px; } }
+/* A heading that still sits inside the card (a screen that did not lift it) keeps card colours. */
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-card] [data-auth-heading] h1 { color: var(--ink); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-card] [data-auth-heading] p { color: var(--body); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-heading] h1 { color: var(--on-dark); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-heading] p { color: var(--nav-muted); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer] { margin-top: 1.5rem; color: var(--nav-muted); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer] :is(a, button) { color: var(--on-dark); }
+.portal-tenant-auth-shell[data-layout="single"] :is([data-auth-footer], .portal-login-footer) :is(a, button):hover { color: var(--on-dark); text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 560px) {
+  .portal-tenant-auth-shell[data-layout="single"] [data-auth-card] { padding: 24px 20px; }
+  .portal-tenant-auth-shell[data-layout="single"] :is([data-auth-logo], [data-auth-steps], [data-auth-heading-slot], [data-auth-footer], .portal-login-footer) { padding-inline: 20px; }
 }
 
 .portal-partner-set-password-page { display: flex; min-height: 100vh; flex-direction: column; color: var(--portal-ink); }

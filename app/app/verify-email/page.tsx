@@ -1,4 +1,5 @@
-import { FunnelFrame } from "@/components/app/funnel-frame";
+import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
+import { verifyEmailHeading } from "@/components/app/funnel-headings";
 import { FunnelReview } from "@/components/app/funnel-review";
 import { VerifyEmailPanel } from "@/components/app/verify-email-panel";
 import { checkoutPaymentMode } from "@/lib/checkout/paymentMode";
@@ -15,10 +16,8 @@ export default async function VerifyEmailPage() {
   const destination = context && context.userStatus === "active" ? signupDestination(context) : null;
   if (context && destination) {
     return (
-      <FunnelFrame step={2}>
+      <FunnelFrame step={2} heading={<FunnelHeading title="Your Email Is Confirmed">Nothing more to do here.</FunnelHeading>}>
         <FunnelReview
-          title="Your email is confirmed"
-          subtitle="Nothing more to do here."
           rows={[{ label: "Email", value: context.email, done: true }]}
           continueHref={destination}
           back={BACK}
@@ -27,8 +26,8 @@ export default async function VerifyEmailPage() {
     );
   }
   return (
-    <FunnelFrame step={2}>
-      <VerifyEmailPanel ttlHours={EMAIL_VERIFICATION_TTL_HOURS} noPayment={checkoutPaymentMode() === "none"} back={BACK} />
+    <FunnelFrame step={2} heading={verifyEmailHeading(EMAIL_VERIFICATION_TTL_HOURS)}>
+      <VerifyEmailPanel ttlHours={EMAIL_VERIFICATION_TTL_HOURS} noPayment={checkoutPaymentMode() === "none"} back={BACK} withHeading={false} />
     </FunnelFrame>
   );
 }

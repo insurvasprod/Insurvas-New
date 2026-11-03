@@ -13,8 +13,9 @@ import { AuthBrand, PortalAuthSplitShell, type PortalAuthMode } from "@/componen
  *
  * Before this, they shared the split shell but drew their own heading, stepper, alerts and brand
  * panel, so no two looked alike. Now the column is always, top to bottom: logo, steps, back link,
- * the screen's own content (opening with <AuthHeading>), legal links — and the panel is always an
- * <AuthStory>, or real content (the plan summary, the receipt) passed as `aside`.
+ * the screen's own content (opening with <AuthHeading>), legal links — and the panel is an
+ * <AuthStory>, or real content (the plan summary, the receipt) passed as `story`. The agent
+ * sign-in passes no panel: it is one centred card on the brand field (owner, 2026-11-03).
  *
  * It is the only component that renders PortalAuthSplitShell (lib/design/authShell.test.mjs).
  */
@@ -33,7 +34,11 @@ export function AuthLayout({
   width = "default",
   steps,
   back,
+  heading,
   story,
+  footer,
+  footerInline = false,
+  note,
   align,
   legal = true,
   children,
@@ -46,8 +51,24 @@ export function AuthLayout({
   steps?: AuthStepsProps;
   /** "← Back to …" above the heading. */
   back?: { href: string; label: string };
-  /** The brand panel: an <AuthStory>, or real content such as the plan summary or the receipt. */
-  story: ReactNode;
+  /**
+   * The screen's <AuthHeading>, for a door that has no panel: it is then drawn above the card, and
+   * the card holds only the form (owner, 2026-11-03). A door with a panel keeps the heading as the
+   * first thing inside `children`.
+   */
+  heading?: ReactNode;
+  /** The row of other ways in under the card ("New to Insurvas? · Partner portal"). */
+  footer?: ReactNode;
+  /** Put the footer on the legal links' own line (sign-up: "Have an account? Sign in · Privacy · Terms · Support"). */
+  footerInline?: boolean;
+  /** One more quiet line under the footer row (sign-in: "Partner or affiliate? Partner portal"). */
+  note?: ReactNode;
+  /**
+   * The brand panel: an <AuthStory>, or real content such as the plan summary or the receipt.
+   * Omit it for a door that is one centred column with no panel (the agent sign-in); the shell is
+   * then drawn as a single card on the brand field (owner, 2026-11-03).
+   */
+  story?: ReactNode;
   /**
    * "center" (the default): the logo stays at the top and the rest sits in the middle of the space
    * below it (owner, 2026-10-27: sign-in looked unfinished with the form at the top; then "all of
@@ -62,6 +83,9 @@ export function AuthLayout({
   legal?: boolean;
   children: ReactNode;
 }) {
+  // No panel means the single door: the card is painted and the heading and the other ways in sit
+  // on the field around it (globals.css, data-layout="single").
+  const single = !story;
   return (
     <PortalAuthSplitShell
       mode={mode}
@@ -71,7 +95,8 @@ export function AuthLayout({
           {/* flex, so the inline logo link adds no line-height gap under it. */}
           <div className="m-stagger flex" data-auth-logo="">
             <AuthBrand href="/" label="Insurvas home">
-              <InsurvasLogo size="auth" />
+              {/* The single door stands on the brand field, where the mark must be the light one. */}
+              <InsurvasLogo size="auth" tone={single ? "dark" : undefined} />
             </AuthBrand>
           </div>
           {/* Auto margins, not justify-content: a door taller than the window starts at the top
@@ -80,18 +105,39 @@ export function AuthLayout({
             {/* Step to step (manager review, 2026-10-28: "from this page to next page should be smooth"):
                 the progress bar stays where it is and only the step's own content moves, a quick fade
                 out and a short rise in. Classes in globals.css (auth-still, auth-step). */}
+            {/* No panel: the title, centred, over the bars (owner, 2026-11-03). The title moves with the step's own
+                content, the bars stay put, so going from step to step only the words change. */}
+            {single && steps && heading && (
+              <ViewTransition name="auth-heading" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
+                <div data-auth-heading-slot="">
+                  <div data-auth-line="" className="mb-4 flex justify-center text-center">{heading}</div>
+                </div>
+              </ViewTransition>
+            )}
             {steps && (
               <ViewTransition name="auth-steps" share="auth-still" default="none">
-                <div><AuthSteps {...steps} /></div>
+                <div><AuthSteps {...steps} compact={single} /></div>
               </ViewTransition>
             )}
             <ViewTransition name="auth-step-body" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
               <div>
-                {back && <AuthBack href={back.href} label={back.label} />}
-                {children}
-                {legal && <AuthLegalLinks />}
+                {heading && !(single && steps) && <div data-auth-heading-slot="">{heading}</div>}
+                <div data-auth-card="">
+                  {back && <AuthBack href={back.href} label={back.label} />}
+                  {children}
+                </div>
+                {footer && !(single && footerInline && legal) && <div data-auth-footer="">{footer}</div>}
               </div>
             </ViewTransition>
+            {legal && (single && footerInline && footer ? (
+              <div data-auth-footer-row="">
+                <div data-auth-footer="">{footer}</div>
+                <AuthLegalLinks onDark={single} />
+              </div>
+            ) : (
+              <AuthLegalLinks onDark={single} />
+            ))}
+            {note && <div data-auth-note="">{note}</div>}
           </div>
         </div>
       }
@@ -126,11 +172,31 @@ export type AuthStepsProps = {
   ariaLabel?: string;
   /** A short link on the right of the step line ("Have an account? Sign in" on step 1). */
   aside?: ReactNode;
+  /** The centred card: bars with each step named under its bar; the heading is drawn above, by the layout. */
+  compact?: boolean;
 };
 
 /** "Step 1 of 3 · Your account" over one bar per step. One stepper, so no screen counts differently. */
-export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside }: AuthStepsProps) {
+export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside, compact }: AuthStepsProps) {
   const done = current > total;
+  if (compact) {
+    return (
+      <div data-auth-steps="" data-compact="" className="mb-6">
+        <ol className="grid gap-3" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }} aria-label={ariaLabel}>
+          {Array.from({ length: total }, (_, index) => {
+            const name = labels?.[index] ?? `Step ${index + 1}`;
+            return (
+              <li key={name} data-step-state={index + 1 < current ? "done" : index + 1 === current ? "current" : "next"} aria-current={index + 1 === current ? "step" : undefined}>
+                <span data-step-bar="" className={cn("block h-1 rounded-full transition-colors duration-300", index < current ? "bg-[var(--primary)]" : "bg-border")} />
+                <span data-step-name="" className="mt-2 block text-xs font-semibold leading-normal tracking-[-0.01em]">{name}</span>
+                <span className="sr-only">{index + 1 < current ? "done" : index + 1 === current ? "current step" : ""}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    );
+  }
   return (
     <div data-auth-steps="" className="mb-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">

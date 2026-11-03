@@ -7,7 +7,7 @@ import { Check, LoaderCircle } from "lucide-react";
 
 import { Input } from "@/components/ui/input";
 import { AuthAlert, AuthSubmit, authLabel } from "@/components/portal/auth-controls";
-import { FunnelHeading } from "@/components/app/funnel-frame";
+import { googleFinishHeading } from "@/components/app/funnel-headings";
 import { cn } from "@/lib/utils";
 
 type LegalDoc = { id: string; doc_type: string; version: number; title: string };
@@ -21,7 +21,7 @@ const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base md
  * The address is the one Google vouched for, read again from the signed cookie on the server. On
  * "Create account" the workspace is made and step 2 is skipped.
  */
-export function GoogleFinishForm({ email, name }: { email: string; name: string }) {
+export function GoogleFinishForm({ email, name, withHeading = true }: { email: string; name: string; /** False when the page draws the heading above the card. */ withHeading?: boolean }) {
   const router = useRouter();
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
   const [legalState, setLegalState] = useState<"loading" | "ready" | "failed">("loading");
@@ -70,7 +70,7 @@ export function GoogleFinishForm({ email, name }: { email: string; name: string 
 
   return (
     <div>
-      <FunnelHeading title="Finish your account">Google confirmed your email.</FunnelHeading>
+      {withHeading && googleFinishHeading()}
 
       <form onSubmit={submit} noValidate data-auth-fields="" className="flex flex-col gap-4">
         {/* The step 1 Email field, filled and locked: Google's mark at the start, "Verified" at the end. */}
