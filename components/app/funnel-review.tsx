@@ -14,15 +14,16 @@ import { Button } from "@/components/ui/button";
  * "Next: …" button and "Not you? Sign out" are gone; `back` adds the Back button on steps after the first.
  */
 export function FunnelReview({ title, subtitle, rows, continueHref, back }: {
-  title: string;
-  subtitle: string;
+  /** Omit both when the page draws the heading above the card (FunnelFrame `heading`). */
+  title?: string;
+  subtitle?: string;
   rows: { label: string; value: string; done?: boolean }[];
   continueHref: string;
   back?: string;
 }) {
   return (
     <div>
-      <FunnelHeading title={title}>{subtitle}</FunnelHeading>
+      {title && <FunnelHeading title={title}>{subtitle}</FunnelHeading>}
       <dl className="m-0 divide-y divide-border rounded-lg border border-border bg-card">
         {rows.map((row) => (
           <div key={row.label} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-4 py-3.5">

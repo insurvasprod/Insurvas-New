@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 
 import { FunnelFrame, FunnelHeading } from "@/components/app/funnel-frame";
+import { googleFinishHeading } from "@/components/app/funnel-headings";
 import { FunnelReview } from "@/components/app/funnel-review";
 import { GoogleFinishForm } from "@/components/public/google-finish-form";
 import { SignupForm } from "@/components/public/signup-form";
@@ -29,10 +30,8 @@ export default async function SignupPage({
   const destination = context ? signupDestination(context) : null;
   if (context && destination) {
     return (
-      <FunnelFrame step={1}>
+      <FunnelFrame step={1} heading={<FunnelHeading title="Your Account Is Created">Carry on from where you left off.</FunnelHeading>}>
         <FunnelReview
-          title="Your account is created"
-          subtitle="Carry on from where you left off."
           rows={[{ label: "Email", value: context.email }]}
           // The first step: one Continue, back to where the sign-up stands. No Sign out, no second
           // button (manager review, 2026-10-28: "we want them to start and complete the process").
@@ -47,8 +46,8 @@ export default async function SignupPage({
     const google = await verifyGoogleSignupToken((await cookies()).get(GOOGLE_SIGNUP_COOKIE)?.value ?? "");
     if (google) {
       return (
-        <FunnelFrame step={1} stepsAside={<>Not you? <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Use another email</Link></>}>
-          <GoogleFinishForm email={google.email} name={google.name} />
+        <FunnelFrame step={1} heading={googleFinishHeading()} stepsAside={<>Not you? <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Use another email</Link></>}>
+          <GoogleFinishForm email={google.email} name={google.name} withHeading={false} />
         </FunnelFrame>
       );
     }
@@ -58,7 +57,7 @@ export default async function SignupPage({
     <>Have an account? <Link href="/app/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">Sign in</Link></>
   );
   return (
-    <FunnelFrame step={1} stepsAside={signIn} heading={<FunnelHeading title="Create your account" />}>
+    <FunnelFrame step={1} stepsAside={signIn} heading={<FunnelHeading title="Create Your Account" />}>
       <SignupForm
         initialPlanCode={query.plan}
         initialCycle={query.cycle}

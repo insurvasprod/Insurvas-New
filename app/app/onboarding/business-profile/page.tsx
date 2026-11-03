@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { FunnelFrame } from "@/components/app/funnel-frame";
+import { businessProfileHeading } from "@/components/app/funnel-headings";
 import { LogoutButton } from "@/components/app/logout-button";
 import { BusinessProfileForm, type AboutYouInitial, type BusinessProfileInitial } from "@/components/app/business-profile-form";
 import { audienceForPlanType } from "@/lib/agency/constants";
@@ -70,6 +71,7 @@ export default async function BusinessProfilePage({ searchParams }: { searchPara
     <FunnelFrame
       step={5}
       wide
+      heading={businessProfileHeading({ gate, solo: audience === "individual" })}
       stepsAside={gate ? <>Not now? <LogoutButton variant="link" className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground" /></> : undefined}
     >
       <BusinessProfileForm
@@ -81,6 +83,7 @@ export default async function BusinessProfilePage({ searchParams }: { searchPara
         // The first-login gate (?finish=1, lib/signup/profileGate.ts) blocks: no Skip there.
         skipHref={paid && !gate ? PROFILE_SKIP_PATH : undefined}
         gate={gate}
+        withHeading={false}
       />
     </FunnelFrame>
   );

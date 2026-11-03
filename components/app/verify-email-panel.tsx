@@ -7,7 +7,7 @@ import { ArrowLeft, ExternalLink, LoaderCircle, Mail, MailCheck } from "lucide-r
 
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
-import { FunnelHeading } from "@/components/app/funnel-frame";
+import { verifyEmailHeading } from "@/components/app/funnel-headings";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -24,7 +24,7 @@ const INBOXES = [
  * line of "What to expect" makes.
  */
 // `noPayment` is still passed by the page; this step no longer mentions charging, so it is unused.
-export function VerifyEmailPanel({ ttlHours, back }: { ttlHours: number; noPayment?: boolean; back?: string }) {
+export function VerifyEmailPanel({ ttlHours, back, withHeading = true }: { ttlHours: number; noPayment?: boolean; back?: string; /** False when the page draws the heading above the card (see verifyEmailHeading). */ withHeading?: boolean }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -101,9 +101,7 @@ export function VerifyEmailPanel({ ttlHours, back }: { ttlHours: number; noPayme
 
   return (
     <div>
-      <FunnelHeading title="Confirm your email">
-        We sent a link to the address below. It works once, for {ttlHours} hours, and this page moves on by itself when you open it.
-      </FunnelHeading>
+      {withHeading && verifyEmailHeading(ttlHours)}
       {loading ? (
         <div className="flex h-28 items-center justify-center" role="status" aria-label="Loading your account"><LoaderCircle className="animate-spin text-muted-foreground" /></div>
       ) : (

@@ -22,8 +22,8 @@ export default async function PlanStepPage({ searchParams }: { searchParams: Pro
   const [{ plans, modules }, saved] = await Promise.all([fetchPlanChoices(), readPlanChoice(context.tenantId)]);
   if (plans.length === 0) {
     return (
-      <FunnelFrame step={3}>
-        <FunnelHeading title="Choose your plan">No plan is open for sign-up right now. Write to support@insurvas.com and we will set you up.</FunnelHeading>
+      <FunnelFrame step={3} heading={<FunnelHeading title="Choose Your Plan">No plan is open for sign-up right now. Write to support@insurvas.com and we will set you up.</FunnelHeading>}>
+        <p className="sr-only">No plan is open for sign-up right now.</p>
       </FunnelFrame>
     );
   }
@@ -42,9 +42,9 @@ export default async function PlanStepPage({ searchParams }: { searchParams: Pro
     >
       {/* Picked on Pricing: the plan is on the left, so the right shows the product slides like the
           other steps (owner, 2026-10-28: don't show the plan twice). The chooser keeps its live summary. */}
-      <FunnelFrame step={3} wide aside={showChosen ? undefined : <PlanChoiceSummary />}>
+      <FunnelFrame step={3} wide aside={showChosen ? undefined : <PlanChoiceSummary />} heading={showChosen ? <FunnelHeading title="Your Plan" /> : undefined}>
         {/* Picked on the pricing page: show it, don't ask again (manager review, 2026-10-28). */}
-        {showChosen ? <PlanChosenPanel /> : <PlanChoiceForm />}
+        {showChosen ? <PlanChosenPanel withHeading={false} /> : <PlanChoiceForm />}
       </FunnelFrame>
     </PlanChoiceProvider>
   );

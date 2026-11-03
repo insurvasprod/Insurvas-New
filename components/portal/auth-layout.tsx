@@ -105,10 +105,18 @@ export function AuthLayout({
             {/* Step to step (manager review, 2026-10-28: "from this page to next page should be smooth"):
                 the progress bar stays where it is and only the step's own content moves, a quick fade
                 out and a short rise in. Classes in globals.css (auth-still, auth-step). */}
+            {/* No panel: the title, centred, over the bars (owner, 2026-11-03). The title moves with the step's own
+                content, the bars stay put, so going from step to step only the words change. */}
+            {single && steps && heading && (
+              <ViewTransition name="auth-heading" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
+                <div data-auth-heading-slot="">
+                  <div data-auth-line="" className="mb-4 flex justify-center text-center">{heading}</div>
+                </div>
+              </ViewTransition>
+            )}
             {steps && (
               <ViewTransition name="auth-steps" share="auth-still" default="none">
-                {/* No panel: the title and "Step 1 of 3" share one row, the bars under it (owner, 2026-11-03). */}
-                <div><AuthSteps {...steps} lead={single ? heading : undefined} /></div>
+                <div><AuthSteps {...steps} compact={single} /></div>
               </ViewTransition>
             )}
             <ViewTransition name="auth-step-body" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
@@ -164,18 +172,17 @@ export type AuthStepsProps = {
   ariaLabel?: string;
   /** A short link on the right of the step line ("Have an account? Sign in" on step 1). */
   aside?: ReactNode;
-  /** The step's heading, drawn on the step line's left with "Step n of N" on its right (the centred card). */
-  lead?: ReactNode;
+  /** The centred card: bars with each step named under its bar; the heading is drawn above, by the layout. */
+  compact?: boolean;
 };
 
 /** "Step 1 of 3 · Your account" over one bar per step. One stepper, so no screen counts differently. */
-export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside, lead }: AuthStepsProps) {
+export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside, compact }: AuthStepsProps) {
   const done = current > total;
-  if (lead) {
+  if (compact) {
     return (
       <div data-auth-steps="" data-compact="" className="mb-6">
-        <div className="flex justify-center text-center">{lead}</div>
-        <ol className="mt-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }} aria-label={ariaLabel}>
+        <ol className="grid gap-3" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }} aria-label={ariaLabel}>
           {Array.from({ length: total }, (_, index) => {
             const name = labels?.[index] ?? `Step ${index + 1}`;
             return (

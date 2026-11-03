@@ -363,7 +363,7 @@ export function PlanChoiceForm() {
  * full chooser (?change=1). Back and "Continue to payment" sit under it; the right side shows the
  * product slides, since the plan is already on the left (owner, 2026-10-28).
  */
-export function PlanChosenPanel() {
+export function PlanChosenPanel({ withHeading = true }: { /** False when the page draws "Your Plan" above the card; the note then opens the card. */ withHeading?: boolean } = {}) {
   const choice = useChoice();
   const { plan, cycle, seats, totalCents, noPayment } = choice;
   const price = plan.cents[cycle];
@@ -375,9 +375,10 @@ export function PlanChosenPanel() {
   ];
   return (
     <div>
-      <FunnelHeading title="Your plan">
-        {noPayment ? "Picked on the pricing page. Nothing is charged." : plan.trialDays > 0 ? "Picked on the pricing page. Nothing to pay today." : "Picked on the pricing page."}
-      </FunnelHeading>
+      {(() => {
+        const note = noPayment ? "Picked on the pricing page. Nothing is charged." : plan.trialDays > 0 ? "Picked on the pricing page. Nothing to pay today." : "Picked on the pricing page.";
+        return withHeading ? <FunnelHeading title="Your plan">{note}</FunnelHeading> : <p className="mb-4 mt-0 text-sm leading-normal text-muted-foreground">{note}</p>;
+      })()}
       <section aria-label="The plan you picked" data-plan-chosen="" className="rounded-xl border-[1.5px] border-[var(--primary)] bg-[var(--primary-soft)] p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">

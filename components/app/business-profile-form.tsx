@@ -7,7 +7,7 @@ import { useRouter } from "next/navigation";
 import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelActions } from "@/components/portal/funnel-actions";
-import { FunnelHeading } from "@/components/app/funnel-frame";
+import { businessProfileHeading } from "@/components/app/funnel-headings";
 import { MultiPicker } from "@/components/app/multi-picker";
 import { StatePicker } from "@/components/app/state-picker";
 import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
@@ -102,7 +102,9 @@ export type AboutYouInitial = { firstName: string; lastName: string; phone: stri
  * `initial`: the saved profile, when the owner comes back to correct it while checkout is pending.
  * The name starts empty otherwise: guessing it from the email domain is gone (owner, 2026-10-27).
  */
-export function BusinessProfileForm({ initial = null, person, audience = "agency", back, skipHref, gate = false }: {
+export function BusinessProfileForm({ initial = null, person, audience = "agency", back, skipHref, gate = false, withHeading = true }: {
+  /** False when the page draws the heading above the card (funnel-headings.tsx). */
+  withHeading?: boolean;
   initial?: BusinessProfileInitial | null;
   person: AboutYouInitial;
   audience?: "individual" | "agency";
@@ -187,9 +189,7 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
   return (
     <div>
       {/* One line saying why (copy table, owner 2026-10-27); the NPN is asked later in Settings. */}
-      <FunnelHeading title={gate ? "Finish setting up your workspace" : solo ? "Tell us about you" : "Tell us about your agency"}>
-        {gate ? "One last step before you start. It takes a minute." : "We use this to set up your workspace."}
-      </FunnelHeading>
+      {withHeading && businessProfileHeading({ gate, solo })}
       <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-5">
         {/* One grid, two to a row on a wide screen, so the step fits without scrolling (2026-10-26).
             One grid rather than one per row: an independent agent has no business-name field, and the

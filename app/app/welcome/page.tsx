@@ -51,10 +51,14 @@ export default async function WelcomePage() {
   const found = owed?.available && owed.totalCents > 0 ? owed : null;
 
   return (
-    <FunnelFrame step={6}>
+    <FunnelFrame
+      step={6}
+      heading={found
+        ? <FunnelHeading title="Here Is Your First Number">Every line of your statement was matched to a policy and compared with what your contract says you should be paid.</FunnelHeading>
+        : <FunnelHeading title="Let’s Find Money The Carriers Owe You">Add one commission statement. Insurvas matches every line to a policy and shows what was not paid.</FunnelHeading>}
+    >
       {found ? (
         <>
-          <FunnelHeading title="Here is your first number.">Every line of your statement was matched to a policy and compared with what your contract says you should be paid.</FunnelHeading>
           <section className="rounded-xl bg-[var(--brand-700)] px-5 py-5 text-[var(--on-dark)]" aria-label="You appear to be owed">
             <p className="text-sm text-[var(--nav-muted)]">You appear to be owed</p>
             <p className="mt-1 text-[2.75rem] font-semibold leading-none tracking-[-0.035em] tabular-nums">{money(found.totalCents)}</p>
@@ -67,9 +71,6 @@ export default async function WelcomePage() {
         </>
       ) : (
         <>
-          <FunnelHeading title="Let’s find money the carriers owe you.">
-            Add one commission statement. Insurvas matches every line to a policy and shows what was not paid.
-          </FunnelHeading>
           <div className="flex flex-col gap-4">
             <div className="flex flex-col gap-3 rounded-xl border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_55%,transparent)] bg-[var(--primary-soft)] p-5">
               <p className="text-base font-semibold tracking-[-0.02em] text-foreground">Upload a statement</p>
