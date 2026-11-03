@@ -19,9 +19,6 @@ export function LandingHero() {
     <section data-landing-hero="" className={styles.hero}>
       <div className={styles.backdrop} aria-hidden="true" />
       <div className={styles.copy}>
-        <p className={styles.audience} data-enter="">
-          <span className={styles.dot} aria-hidden="true" />For life &amp; health agencies and call centers that buy their leads
-        </p>
         <h1 className={styles.title}>
           {HEADLINE.map((word, i) => (
             <Fragment key={word}>
