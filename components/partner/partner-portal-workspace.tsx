@@ -1767,7 +1767,7 @@ function LegacyPartnerPortalWorkspace({
             description="Start a new application for your customer."
             visible
             infoDescription
-            actions={<Button asChild variant="outline"><Link href="/partner/submit-lead/drafts"><FileText aria-hidden="true" />Drafts</Link></Button>}
+            actions={<Button asChild variant="outline"><Link href="/partner/submit-lead/drafts"><FileText aria-hidden="true" />Save as Draft</Link></Button>}
           />
           {!productsLoaded ? (
             <div className="overflow-hidden rounded-lg border border-border bg-card">
