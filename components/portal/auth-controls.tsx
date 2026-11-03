@@ -35,10 +35,14 @@ export function AuthField({ label, htmlFor, aside, hint, children, className }: 
 }) {
   return (
     <div className={cn("space-y-1.5", className)}>
-      <div className="flex items-baseline justify-between gap-3">
+      {aside ? (
+        <div className="flex h-3.5 items-baseline justify-between gap-3">
+          <label htmlFor={htmlFor} className={authLabel}>{label}</label>
+          {aside}
+        </div>
+      ) : (
         <label htmlFor={htmlFor} className={authLabel}>{label}</label>
-        {aside}
-      </div>
+      )}
       {children}
       {hint && <p className="text-sm leading-normal tracking-[-0.02em] text-muted-foreground">{hint}</p>}
     </div>
