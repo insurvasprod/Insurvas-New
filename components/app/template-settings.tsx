@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Settings › Form templates, layout A (owner pick 2026-10-30; canvas page settings-form-templates):
+ * Settings › Application forms, layout A (owner pick 2026-10-30; canvas page settings-form-templates):
  * the form partners fill in, with one side panel beside it that shows the form's settings until a
  * question is picked, then that question. The title's line says Live, or N changes with Review,
  * Undo all and Publish version N — the page's only green button.
@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Link from "next/link";
@@ -30,17 +31,17 @@ import { PartnerLeadForm, type PartnerFormPreviewSource } from "@/components/par
 import type { TemplateField, TemplateFieldType, TemplateFormDefinition, TemplateFormField, TemplateRow, TemplateValidation } from "@/lib/templates/constants";
 import { moveFieldWithinSection, moveSection } from "@/lib/templates/formMoves";
 import { applyRequiredChoice, type RequiredChoice } from "@/lib/templates/plainLabels";
-import { sectionAvailability, sectionAvailabilityError, sectionsByGroup } from "@/lib/templates/sectionAvailability";
 import { diffTemplateDraft, eligibilityFieldKey, type TemplateDraft } from "@/lib/agentTemplates/draftChanges";
 import { parseSettingsHash } from "@/lib/settings/registry";
 import { draftFrom, uniqueKey, type Available, type Current, type DraftState, type Preview, type Product, type Published } from "@/components/app/form-templates/draft";
 import { FormCanvas, type Picked } from "@/components/app/form-templates/form-canvas";
+import { FormPreview } from "@/components/app/form-templates/form-preview";
 import { QuestionPanel } from "@/components/app/form-templates/question-panel";
-import { FormSettingsPanel } from "@/components/app/form-templates/form-settings";
+import { FormSettingsCard } from "@/components/app/form-templates/form-settings";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { PublishBar, PublishControls, SETTINGS_TABS, type SettingsTab } from "@/components/app/form-templates/status-line";
+import { PublishBar, PublishControls, SETTINGS_TABS } from "@/components/app/form-templates/status-line";
 import { publishBlockers } from "@/lib/templates/publishBlockers";
-import { SIDE_BY_SIDE, SidePanelHost } from "@/components/app/form-templates/side-panel-host";
 
 const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
 /** Undo toasts sit at the foot, clear of the Publish controls at the end of the title's line (board FtE07). */
@@ -74,10 +75,10 @@ export function TemplateSettings() {
   const [published, setPublished] = useState<Published | null>(null);
   /** Each product's live form version, for its chip. */
   const [liveVersions, setLiveVersions] = useState<Record<string, number>>({});
-  /** The "This form" panel: open beside the form on wide screens, a sheet opened on demand below. */
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  /** Which of its rows is open. */
-  const [settingsRow, setSettingsRow] = useState<SettingsTab | null>(null);
+  /** Form setup (the questions and what partners see) or Form settings (owner 2026-11-03). */
+  const [tab, setTab] = useState<"setup" | "settings">("setup");
+  /** The preview starts folded, so the questions have the room. */
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [trying, setTrying] = useState(false);
   /** A product switch waiting on Publish / Discard / Stay. */
   const [switchTo, setSwitchTo] = useState<string | null>(null);
@@ -85,16 +86,6 @@ export function TemplateSettings() {
   const [removing, setRemoving] = useState<string | null>(null);
   /** The agency sells nothing yet, so there is no form to set up. */
   const [noProducts, setNoProducts] = useState(false);
-
-  // The side panel starts open where it sits beside the form; on smaller screens it waits for the button.
-  // It follows the width: narrowing to a sheet closes it, so it never covers the form unasked.
-  useEffect(() => {
-    const query = window.matchMedia(SIDE_BY_SIDE);
-    const sync = () => setSettingsOpen(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
 
   async function load(product?: string) {
     setLoading(true);
@@ -121,12 +112,12 @@ export function TemplateSettings() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load(); }, []);
 
-  // "#form-templates/form-lead-steps" (the settings search) opens the side panel on that row.
+  // "#form-templates/form-lead-steps" (the settings search) opens Form settings.
   useEffect(() => {
     const fromHash = () => {
       const { tab, anchor } = parseSettingsHash(window.location.hash);
       const hit = tab === "form-templates" ? SETTINGS_TABS.find((item) => item.anchor === anchor) : null;
-      if (hit) { setPicked(null); setSettingsOpen(true); setSettingsRow(hit.key); }
+      if (hit) { setPicked(null); setTab("settings"); }
     };
     fromHash();
     window.addEventListener("hashchange", fromHash);
@@ -369,26 +360,33 @@ export function TemplateSettings() {
 
   const pickedField = picked ? fieldMap.get(picked.fieldKey) ?? null : null;
   const pickedPlacement = picked?.sectionKey ? draft.form.sections.find((section) => section.section_key === picked.sectionKey)?.fields.find((field) => field.field_key === picked.fieldKey) ?? null : null;
-  const groups = sectionAvailability(draft.form);
-  const governed = sectionsByGroup(draft.form);
-  const topics = (Object.keys(governed) as Array<keyof typeof governed>).filter((group) => governed[group].length > 0);
-  const topicsOn = topics.filter((group) => groups[group]).length;
-  const ages = eligibility ? [eligibility.validation?.age_min, eligibility.validation?.age_max] : null;
   const placed = new Set(draft.form.sections.flatMap((section) => section.fields.map((field) => field.field_key)));
   const agentsOnly = draft.fields.filter((field) => !placed.has(field.field_key));
-  const settingValues: Record<SettingsTab, { text: string; tone?: "warn" | "info" }> = {
-    who: { text: !ages ? "Anyone" : ages[0] != null && ages[1] != null ? `Ages ${ages[0]}–${ages[1]}` : ages[0] != null ? `Ages ${ages[0]}+` : ages[1] != null ? `Up to age ${ages[1]}` : "Any age" },
-    parts: { text: topics.length ? `${topicsOn} of ${topics.length} on` : "None on this form", tone: sectionAvailabilityError(draft.form, draft.fields) ? "warn" : undefined },
-    steps: { text: "Set in Pipelines & outcomes" },
-    versions: current.latest ? { text: `Insurvas version ${current.latest.version} is out`, tone: "info" } : { text: `Version ${current.assignment.definition_version} live` },
-    agents: { text: `${agentsOnly.length} ${agentsOnly.length === 1 ? "question" : "questions"}` },
-  };
   const removingSection = removing ? draft.form.sections.find((section) => section.section_key === removing) ?? null : null;
   const switchName = switchTo ? productOptions.find((product) => product.code === switchTo)?.name ?? "the other product" : "";
+  /** One question at a time, opened in place (owner 2026-11-03: no popup). */
+  const questionEditor = picked && pickedField ? (
+    <QuestionPanel
+            field={pickedField}
+            fields={draft.fields}
+            form={draft.form}
+            sectionKey={picked.sectionKey}
+            placement={pickedPlacement}
+            changed={changed.has(pickedField.field_key)}
+            setField={setField}
+            setValidation={setValidation}
+            setPlacement={setPlacement}
+            onRequired={(choice) => setRequired(pickedField.field_key, picked.sectionKey, choice)}
+            onMoveTo={(to) => moveTo(pickedField.field_key, picked.sectionKey, to)}
+            onReset={saved.fields.some((field) => field.field_key === pickedField.field_key) && changed.has(pickedField.field_key) ? () => resetQuestion(pickedField.field_key, picked.sectionKey) : null}
+            onDelete={() => deleteField(pickedField.field_key)}
+            onClose={() => setPicked(null)}
+          />
+  ) : null;
   const publishAndReload = () => void publish().then((ok) => { if (ok) void load(productCode); });
 
   return (
-    <SettingsStack>
+    <SettingsStack className="min-h-0 flex-1 gap-3">
       <SettingsSectionHeader
         actions={
           <PublishControls
@@ -410,19 +408,26 @@ export function TemplateSettings() {
         </Callout>
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
         <ProductChips products={productOptions} value={productCode} changes={changes.length} liveVersions={liveVersions} onChange={switchProduct} />
         {/* Insurvas default (docs/settings/DEFAULTS.md): the copy as Insurvas made it, until the agency publishes its own. */}
         {!published && !dirty ? <DefaultChip /> : published && <ResetToDefault what={`the ${current.template.product_name || "product"} form`} kept="Your lead steps stay. Nothing changes for partners until you publish." onReset={resetToDefault} disabled={saving} />}
-        {!settingsOpen && !picked && <Button onClick={() => setSettingsOpen(true)} type="button" variant="outline" className="ml-auto">Form settings</Button>}
       </div>
 
-      <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1">
+      <ViewTabs
+        label="Form"
+        value={tab}
+        onChange={setTab}
+        tabs={[{ key: "setup", label: "Form setup" }, { key: "settings", label: "Form settings" }]}
+      />
+
+      {tab === "setup" ? (
+        // The questions on the left, what partners get on the right.
+        <div className={cn("grid min-h-0 min-w-0 flex-1 gap-4", previewOpen ? "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]" : "lg:grid-cols-[minmax(0,1fr)_auto]")}>
           <FormCanvas
             form={draft.form}
             fields={draft.fields}
-            productName={current.template.product_name}
+            renderEditor={() => questionEditor}
             picked={picked}
             changed={changed}
             onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
@@ -435,36 +440,23 @@ export function TemplateSettings() {
             onAddQuestion={addQuestion}
             onReuse={reuse}
             onAddSection={addSection}
+          />
+          <FormPreview
+            form={draft.form}
+            fields={draft.fields}
+            productName={current.template.product_name}
+            picked={picked}
+            open={previewOpen}
+            onToggle={() => setPreviewOpen((open) => !open)}
+            onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
             onTry={() => setTrying(true)}
           />
         </div>
-        {/* One side panel: the picked question, else the form's own settings. */}
-        <SidePanelHost>
-        {picked && pickedField ? (
-          <QuestionPanel
-            field={pickedField}
-            fields={draft.fields}
-            form={draft.form}
-            sectionKey={picked.sectionKey}
-            placement={pickedPlacement}
-            changed={changed.has(pickedField.field_key)}
-            setField={setField}
-            setValidation={setValidation}
-            setPlacement={setPlacement}
-            onRequired={(choice) => setRequired(pickedField.field_key, picked.sectionKey, choice)}
-            onMoveTo={(to) => moveTo(pickedField.field_key, picked.sectionKey, to)}
-            onReset={saved.fields.some((field) => field.field_key === pickedField.field_key) && changed.has(pickedField.field_key) ? () => resetQuestion(pickedField.field_key, picked.sectionKey) : null}
-            onDelete={() => deleteField(pickedField.field_key)}
-            onBack={() => { setPicked(null); setSettingsOpen(true); }}
-            onClose={() => setPicked(null)}
-          />
-        ) : settingsOpen && (
-          <FormSettingsPanel
-            open={settingsRow}
-            onOpen={setSettingsRow}
-            onClose={() => setSettingsOpen(false)}
-            values={settingValues}
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1.5">
+          <FormSettingsCard
             eligibility={eligibility}
+            agentEditor={picked?.sectionKey === null ? questionEditor : null}
             onAges={(patch) => { if (eligibility) setValidation(eligibility.field_key, patch); }}
             form={draft.form}
             fields={draft.fields}
@@ -492,10 +484,10 @@ export function TemplateSettings() {
               onAdd: addAgentField,
             }}
           />
-        )}
-        </SidePanelHost>
-      </div>
+        </div>
+      )}
 
+      <div className="shrink-0">
       <PublishBar
         changes={changes}
         seen={state?.seen ?? {}}
@@ -505,6 +497,7 @@ export function TemplateSettings() {
         onUndoAll={discard}
         onPublish={publishAndReload}
       />
+      </div>
 
       {/* "Try the form": the partner's own form component, fed this draft, so show-when runs for real (LA-1.4-5). */}
       <Dialog open={trying} onOpenChange={setTrying}>

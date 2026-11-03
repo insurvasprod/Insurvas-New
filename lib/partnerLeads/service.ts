@@ -2,15 +2,18 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { csvCell } from "@/lib/csv/cell";
-import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerLeadRow, PartnerPipelineStage } from "@/lib/partnerLeads/types";
+import type { PartnerLeadDetail, PartnerLeadFacets, PartnerLeadFilters, PartnerLeadRow, PartnerPipelineChoice, PartnerPipelineStage } from "@/lib/partnerLeads/types";
 import { maskSensitiveValues } from "@/lib/partnerLeads/mask";
 import { CONVERTED_WINDOW_MS, HELD_STATUSES, NOBODY_CLAIMED_LABEL, SALE_DISPOSITIONS, nobodyClaimed, partnerLane, type PartnerLaneCounts } from "./lanes";
 import { countersFromLanes, startOfTodayIn, submittedSinceFromBuckets } from "./counters";
 import { partnerBoardStages, type BoardCount, type BoardStage } from "./board";
+import { partnerLeadLanguage } from "./language";
 import { canSeeLead, effectiveCloser, type PartnerLeadAccess } from "./scope";
 import { getQueueSlaSettings } from "@/lib/queueSla/service";
 import { DEFAULT_AGE_THRESHOLDS, type AgeThresholds } from "./view";
 import type { PartnerTerm } from "@/lib/partners/payout";
+import { getTenantTemplateForProductVersion } from "@/lib/agentTemplates/service";
+import { snapshotFields } from "./view";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -31,7 +34,7 @@ type QueueRow = {
   updated_at: string;
 };
 
-type LeadRow = { id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; pipeline_id: string; stage_id: string };
+type LeadRow = { id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; definition_version: number; pipeline_id: string; stage_id: string };
 type DealRow = { lead_id: string; call_result: string | null; disposition_at: string | null; disposition_by: string | null; updated_at: string };
 type StageRow = { id: string; pipeline_id: string; name: string; position: number; stage_type: string; color: string; is_archived: boolean };
 type PipelineRow = { id: string; name: string };
@@ -107,7 +110,7 @@ async function loadPartnerData(tenantId: string, partnerId: string, filters: Par
   const queueRows = [(firstQueues.data ?? []), ...queueResults.map((result) => { if (result.error) throw new Error(`Could not load partner leads: ${result.error.message}`); return result.data ?? []; })].flat() as QueueRow[];
   const leadIds = queueRows.map((row) => row.lead_id);
   if (!leadIds.length) return { queues: [], leads: [], deals: [], stages: [], pipelines: [], users: [], dispositions: [], timelineMessages: null };
-  const leadsPage = (start: number) => { let query = db.from("agent_leads").select("id, values, created_by, created_at, updated_at, product_line, pipeline_id, stage_id").eq("tenant_id", tenantId).eq("partner_id", partnerId).order("created_at", { ascending: false }).range(start, start + 999); if (leadId) query = query.eq("id", leadId); return query; };
+  const leadsPage = (start: number) => { let query = db.from("agent_leads").select("id, values, created_by, created_at, updated_at, product_line, definition_version, pipeline_id, stage_id").eq("tenant_id", tenantId).eq("partner_id", partnerId).order("created_at", { ascending: false }).range(start, start + 999); if (leadId) query = query.eq("id", leadId); return query; };
   const dealsPage = (start: number) => { let query = db.from("deal_flow").select("lead_id, call_result, disposition_at, disposition_by, updated_at").eq("tenant_id", tenantId).eq("partner_id", partnerId).order("updated_at", { ascending: false }).range(start, start + 999); if (leadId) query = query.eq("lead_id", leadId); return query; };
   const [firstLeads, firstDeals, stages, pipelines, partnerMembers, dispositions, timelineMessages] = await Promise.all([
     leadsPage(0),
@@ -147,8 +150,39 @@ function mapRows(data: Awaited<ReturnType<typeof loadPartnerData>>, filters: Par
     if (!lead || !stage) return [];
     if (filters.closerId && lead.created_by !== filters.closerId) return [];
     const outcome = queue.disposition ? partnerOutcomeLabel(dispositions.get(queue.disposition) ?? queue.disposition) : null;
-    return [{ id: lead.id, workItemId: queue.id, customer: displayName(lead.values), submittedAt: lead.created_at, updatedAt: queue.updated_at, product: queue.product_line, stageId: stage.id, stageName: stage.name, stageType: stage.stage_type, disposition: queue.disposition, outcome, submittedBy: { id: lead.created_by, name: lead.created_by ? users.get(lead.created_by) ?? "Partner closer" : "Partner closer" }, status: queue.status }];
+    return [{ id: lead.id, workItemId: queue.id, customer: displayName(lead.values), submittedAt: lead.created_at, updatedAt: queue.updated_at, product: queue.product_line, language: partnerLeadLanguage(lead.values), stageId: stage.id, stageName: stage.name, stageType: stage.stage_type, disposition: queue.disposition, outcome, submittedBy: { id: lead.created_by, name: lead.created_by ? users.get(lead.created_by) ?? "Partner closer" : "Partner closer" }, status: queue.status }];
   });
+}
+
+/**
+ * Older deployed page RPCs do not include the submitted language field. Only for those rows, read
+ * that one display value by the already-authorized lead IDs, with tenant and partner guards too.
+ * A failed enrichment leaves the pipeline usable; the detail record still contains the full form.
+ */
+async function fillMissingLeadLanguages(
+  db: ReturnType<typeof getSupabaseServiceClient>,
+  tenantId: string,
+  partnerId: string,
+  rows: PartnerLeadRow[],
+): Promise<PartnerLeadRow[]> {
+  const missingIds = [...new Set(rows.filter((row) => !row.language && UUID.test(row.id)).map((row) => row.id))];
+  if (!missingIds.length) return rows;
+
+  const { data, error } = await db.from("agent_leads")
+    .select("id, values")
+    .eq("tenant_id", tenantId)
+    .eq("partner_id", partnerId)
+    .in("id", missingIds);
+  if (error) {
+    console.error(`[partner-pipeline] customer language lookup failed: ${error.message}`);
+    return rows;
+  }
+
+  const languages = new Map((data ?? []).flatMap((lead) => {
+    const language = partnerLeadLanguage(lead.values);
+    return language ? [[lead.id, language] as const] : [];
+  }));
+  return rows.map((row) => row.language ? row : { ...row, language: languages.get(row.id) ?? null });
 }
 
 /**
@@ -246,6 +280,7 @@ async function partnerLaneFigures(
   const scope = (query: any) => {
     let q = query.eq("tenant_id", tenantId).eq("partner_id", partnerId);
     if (closerId) q = q.eq("agent_leads.created_by", closerId);
+    if (filters.pipelineId) q = q.eq("pipeline_id", filters.pipelineId);
     if (filters.product) q = q.eq("product_line", filters.product);
     if (filters.dateFrom) q = q.gte("queued_at", filters.dateFrom);
     if (filters.dateTo) q = q.lt("queued_at", new Date(Date.parse(filters.dateTo) + 86_400_000).toISOString().slice(0, 10));
@@ -307,6 +342,7 @@ async function submittedSince(
     .eq("partner_id", partnerId)
     .gte("agent_leads.created_at", since.toISOString());
   if (closerId) query = query.eq("agent_leads.created_by", closerId);
+  if (filters.pipelineId) query = query.eq("pipeline_id", filters.pipelineId);
   if (filters.product) query = query.eq("product_line", filters.product);
   if (filters.stageId) query = query.eq("stage_id", filters.stageId);
   if (filters.outcome) query = query.eq("disposition", filters.outcome);
@@ -317,7 +353,7 @@ async function submittedSince(
   return count ?? 0;
 }
 
-async function oldestOpenQueuedAt(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, partnerId: string, closerId: string | null): Promise<string | null> {
+async function oldestOpenQueuedAt(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, partnerId: string, closerId: string | null, pipelineId?: string): Promise<string | null> {
   let query = db
     .from("lead_queue")
     .select("queued_at, agent_leads!inner(created_by)")
@@ -327,6 +363,7 @@ async function oldestOpenQueuedAt(db: ReturnType<typeof getSupabaseServiceClient
     .order("queued_at", { ascending: true })
     .limit(1);
   if (closerId) query = query.eq("agent_leads.created_by", closerId);
+  if (pipelineId) query = query.eq("pipeline_id", pipelineId);
   const { data, error } = await query;
   if (error) { console.error(`[partner-pipeline] oldest open lookup failed: ${error.message}`); return null; }
   const first = (data ?? [])[0] as { queued_at?: unknown } | undefined;
@@ -356,18 +393,18 @@ async function partnerOwnPipelineId(db: ReturnType<typeof getSupabaseServiceClie
  * partner's leads. Pipelines are read tenant-scoped and a stage is kept only under one of them;
  * the candidate ids come from the partner-scoped read model and the tenant-scoped lookup above.
  */
-async function partnerPipelineStages(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, ownPipelineId: string | null, counts: BoardCount[]): Promise<PartnerPipelineStage[]> {
-  const ids = [...new Set([ownPipelineId, ...counts.map((entry) => entry.pipelineId)].filter((id): id is string => Boolean(id && UUID.test(id))))];
+async function partnerPipelineStages(db: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, ownPipelineId: string | null, counts: BoardCount[], selectedPipelineId?: string): Promise<PartnerPipelineStage[]> {
+  const ids = [...new Set((selectedPipelineId ? [selectedPipelineId] : [ownPipelineId, ...counts.map((entry) => entry.pipelineId)]).filter((id): id is string => Boolean(id && UUID.test(id))))];
   if (!ids.length) return partnerBoardStages({ defaultPipelineId: null, pipelines: [], stages: [], counts });
   const [pipelines, stages] = await Promise.all([
     db.from("tenant_pipelines").select("id, name").eq("tenant_id", tenantId).in("id", ids),
     db.from("tenant_pipeline_stages").select("id, pipeline_id, name, position, stage_type, color, is_archived").in("pipeline_id", ids),
   ]);
   if (pipelines.error || stages.error) throw new Error(`Could not load partner pipeline stages: ${pipelines.error?.message ?? stages.error?.message}`);
-  return partnerBoardStages({ defaultPipelineId: ownPipelineId, pipelines: pipelines.data ?? [], stages: (stages.data ?? []) as BoardStage[], counts });
+  return partnerBoardStages({ defaultPipelineId: ownPipelineId, selectedPipelineId, pipelines: pipelines.data ?? [], stages: (stages.data ?? []) as BoardStage[], counts });
 }
 
-export async function listPartnerLeads(tenantId: string, partnerId: string, filters: PartnerLeadFilters, timezone: string, pagination: { limit?: number; offset?: number } = {}, access?: PartnerLeadAccess) {
+export async function listPartnerLeads(tenantId: string, partnerId: string, filters: PartnerLeadFilters, timezone: string, pagination: { limit?: number; offset?: number } = {}, access?: PartnerLeadAccess & { visibleSubmitterIds?: string[] }) {
   validateFilter({ ...filters });
   const limit = pagination.limit ?? 250;
   const offset = pagination.offset ?? 0;
@@ -376,11 +413,9 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   // LA-1.17's database read model keeps filtering, paging, counters, and facets
   // next to the tenant-scoped indexes. The previous implementation fetched up to
   // 5,000 queue rows and 5,000 lead rows into Node before slicing the first page.
-  // Partner users are permanently scoped to leads they submitted. This is enforced
-  // in the read-model query itself (created_by), before paging, counters, or facets
-  // are calculated. Partner admins retain organization-wide visibility and may use
-  // the optional closer filter.
-  // A partner user is pinned to their own submissions whatever the request asked for (scope.ts).
+  // The route supplies the signed-in viewer's own submitter id or their own plus assigned team
+  // ids. SQL applies that list before paging, counters, or facets. The optional closer filter can
+  // narrow within it, never widen it. The DB fails closed when a caller omits the list.
   const effectiveCloserId = effectiveCloser(access, filters);
   const [{ data, error }, ownPipelineId] = await Promise.all([
     db.rpc("partner_lead_pipeline_page", {
@@ -395,6 +430,10 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
       p_timezone: timezone,
       p_limit: limit,
       p_offset: offset,
+      p_pipeline_id: filters.pipelineId ?? null,
+      // This list is computed from the signed-in partner membership. SQL fails closed for a
+      // missing list, then applies the optional closer filter inside this same boundary.
+      p_visible_submitter_ids: access?.visibleSubmitterIds ?? [],
     }),
     partnerOwnPipelineId(db, tenantId, partnerId),
   ]);
@@ -402,12 +441,18 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("Could not load partner pipeline: invalid read model response");
 
   const payload = data as Record<string, unknown>;
+  const pipelines: PartnerPipelineChoice[] = (Array.isArray(payload.pipelines) ? payload.pipelines : []).flatMap((value): PartnerPipelineChoice[] => {
+    if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+    const option = value as Record<string, unknown>;
+    return typeof option.id === "string" && typeof option.name === "string" && UUID.test(option.id) ? [{ id: option.id, name: option.name }] : [];
+  });
+  if (filters.pipelineId && !pipelines.some((pipeline) => pipeline.id === filters.pipelineId)) throw new Error("Choose a pipeline available to your account");
   const rowValues = Array.isArray(payload.rows) ? payload.rows : [];
   // 20260929140000 adds position 15, "the SLA ladder has told the partner", so the page needs no
   // second read for it. Null means an older read model: partnerToldIds below answers instead.
   const flagged = rowValues.filter((value): value is unknown[] => Array.isArray(value) && value.length >= 16 && typeof value[15] === "boolean");
   const toldByModel = flagged.length > 0 ? new Set(flagged.filter((value) => value[15] === true && typeof value[1] === "string").map((value) => value[1] as string)) : null;
-  const rows: PartnerLeadRow[] = rowValues.flatMap((value): PartnerLeadRow[] => {
+  let rows: PartnerLeadRow[] = rowValues.flatMap((value): PartnerLeadRow[] => {
     if (!Array.isArray(value) || value.length < 13) return [];
     // The stage-aware read model returns stage_name and stage_type in positions
     // 7 and 8. Keep accepting the older 13-item payload while a rolling deploy
@@ -422,9 +467,10 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
     const submittedById = hasStageFields ? value[12] : value[10];
     const submittedByName = hasStageFields ? value[13] : value[11];
     const status = hasStageFields ? value[14] : value[12];
+    const language = value.length >= 17 && typeof value[16] === "string" && value[16].trim() ? value[16].trim().slice(0, 80) : null;
     if (![id, workItemId, customer, submittedAt, updatedAt, product, stageId, submittedByName, status].every((item) => typeof item === "string")) return [];
     return [{
-      id, workItemId, customer, submittedAt, updatedAt, product, stageId,
+      id, workItemId, customer, submittedAt, updatedAt, product, language, stageId,
       stageName: typeof stageName === "string" ? stageName : "",
       stageType: typeof stageType === "string" ? stageType : "",
       disposition: typeof disposition === "string" ? disposition : null,
@@ -433,6 +479,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
       status,
     }];
   });
+  rows = await fillMissingLeadLanguages(db, tenantId, partnerId, rows);
   // The read model's `stages` are per-stage counts only (its name is the queue's stage_key and its
   // pipeline name a placeholder); the stage names, order and types come from the pipeline itself.
   const stageCounts: BoardCount[] = (Array.isArray(payload.stages) ? payload.stages : []).flatMap((value): BoardCount[] => {
@@ -441,7 +488,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
     if (typeof stageId !== "string" || typeof pipelineId !== "string" || typeof leadCount !== "number") return [];
     return [{ stageId, pipelineId, stageName: typeof stageName === "string" ? stageName : "", leadCount }];
   });
-  const stages: PartnerPipelineStage[] = await partnerPipelineStages(db, tenantId, ownPipelineId, stageCounts);
+  const stages: PartnerPipelineStage[] = await partnerPipelineStages(db, tenantId, ownPipelineId, stageCounts, filters.pipelineId);
   const closers = (Array.isArray(payload.closers) ? payload.closers : []).flatMap((value): PartnerLeadFacets["closers"] => {
     if (!Array.isArray(value) || value.length < 2 || typeof value[0] !== "string" || typeof value[1] !== "string") return [];
     return [{ id: value[0], name: value[1] }];
@@ -460,9 +507,9 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   const counter = (key: string) => typeof rawCounters[key] === "number" ? rawCounters[key] : 0;
   const total = typeof payload.total === "number" ? payload.total : 0;
   const nextOffset = typeof payload.next_offset === "number" ? payload.next_offset : null;
-  // Only unfiltered (apart from the closer scope every partner user carries): a date, product or
-  // stage filter narrows the still-open count, and an "oldest" from outside that filter would sit
-  // under a number it does not describe.
+  // Date, product, stage, and outcome facets narrow the client-computed lane counts, so an oldest
+  // row from outside them would be misleading. The pipeline selector is inside the read model and
+  // its fallback query below, so its oldest value remains scoped correctly.
   const unfiltered = !filters.dateFrom && !filters.dateTo && !filters.product && !filters.stageId && !filters.outcome;
   // 20260929140000's read model answers "oldest open" and "submitted since midnight" from the rows
   // it already read, under the same scope and filters. Without it (an older read model) the two
@@ -473,7 +520,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   const modelSubmitted = submittedSinceFromBuckets(payload.submitted_recent, since);
   const pageWorkItemIds = rows.map((row) => row.workItemId);
   const [oldestOpenAt, lanes, submittedToday, told, terms, ageThresholds] = await Promise.all([
-    !unfiltered ? Promise.resolve(null) : modelOldest !== undefined ? Promise.resolve(modelOldest) : oldestOpenQueuedAt(db, tenantId, partnerId, effectiveCloserId),
+    !unfiltered ? Promise.resolve(null) : modelOldest !== undefined ? Promise.resolve(modelOldest) : oldestOpenQueuedAt(db, tenantId, partnerId, effectiveCloserId, filters.pipelineId),
     partnerLaneFigures(db, tenantId, partnerId, effectiveCloserId, filters),
     modelSubmitted !== null ? Promise.resolve(modelSubmitted) : submittedSince(db, tenantId, partnerId, effectiveCloserId, filters, since),
     toldByModel ? Promise.resolve(toldByModel) : partnerToldIds(db, tenantId, partnerId, pageWorkItemIds),
@@ -494,6 +541,7 @@ export async function listPartnerLeads(tenantId: string, partnerId: string, filt
   return {
     rows: lanedRows,
     stages,
+    pipelines,
     facets: { closers, products, outcomes },
     counters,
     oldestOpenAt,
@@ -525,14 +573,22 @@ export async function getPartnerLeadDetail(tenantId: string, partnerId: string, 
   const sharedNotes = noteIds.length ? await db.from("tenant_lead_notes").select("id, visibility, deleted_at").eq("tenant_id", tenantId).in("id", noteIds) : { data: [], error: null };
   if (sharedNotes.error) throw new Error(`Could not filter partner notes: ${sharedNotes.error.message}`);
   const visibleNoteIds = new Set((sharedNotes.data ?? []).filter((note) => note.visibility === "shared" && !note.deleted_at).map((note) => note.id));
+  const noteMessages = (messages.data ?? []).filter((message) => {
+    const noteId = message.event_key?.startsWith("lead-note:") ? message.event_key.slice("lead-note:".length) : null;
+    return Boolean(noteId && visibleNoteIds.has(noteId));
+  });
+  const notes: PartnerLeadDetail["notes"] = noteMessages.map((message) => ({ at: message.created_at, body: message.message }));
   const timeline: PartnerLeadDetail["timeline"] = [{ type: "submitted", label: "Lead submitted", at: lead.created_at, detail: row.submittedBy.name }];
   if (queue.claimed_at) timeline.push({ type: "claimed", label: "Lead claimed", at: queue.claimed_at, detail: queue.owner_user_id ? data.users.find((user) => user.id === queue.owner_user_id)?.name ?? "Agent" : "Agent" });
   if (queue.disposition_at) timeline.push({ type: "outcome", label: row.outcome ?? "Outcome recorded", at: queue.disposition_at, detail: null });
-  for (const message of (messages.data ?? []).filter((item) => !item.event_key?.startsWith("lead-note:") || visibleNoteIds.has(item.event_key.slice("lead-note:".length)))) timeline.push({ type: message.message_kind === "system_card" ? "system" : "message", label: message.message_kind === "system_card" ? "Pipeline update" : "Message", at: message.created_at, detail: message.message });
+  for (const message of (messages.data ?? []).filter((item) => !item.event_key?.startsWith("lead-note:"))) timeline.push({ type: message.message_kind === "system_card" ? "system" : "message", label: message.message_kind === "system_card" ? "Pipeline update" : "Message", at: message.created_at, detail: message.message });
   timeline.sort((a, b) => a.at.localeCompare(b.at));
   const told = await partnerToldIds(db, tenantId, partnerId, [row.workItemId]);
   const stageName = told.has(row.workItemId) && nobodyClaimed({ status: row.status, slaPartnerNotifiedAt: "told" }) ? NOBODY_CLAIMED_LABEL : row.stageName;
-  return { ...row, stageName, values: maskSensitiveValues(lead.values) as Record<string, unknown>, timeline };
+  const values = maskSensitiveValues(lead.values) as Record<string, unknown>;
+  const configured = await getTenantTemplateForProductVersion(tenantId, lead.product_line, lead.definition_version).catch(() => null);
+  const groups = snapshotFields(values, configured?.template);
+  return { ...row, stageName, values, groups, notes, timeline };
 }
 
 export function partnerLeadsCsv(rows: PartnerLeadRow[]) {

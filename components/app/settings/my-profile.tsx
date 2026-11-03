@@ -3,7 +3,7 @@
 /**
  * Settings › My profile (redesign 2026-10-27, owner pick A, canvas "Settings · My profile"): the
  * person's own page, inside Settings instead of a page of its own, with Notifications folded in.
- * Four tabs — About you, Signing in, Alerts, History (plain names, settings redesign R4; the keys
+ * Four tabs — Profile, Sign-in and security, Alerts, History (plain names, settings redesign R4; the keys
  * are unchanged so every link still works). History holds two lists: the settings you changed, and
  * your sign-ins and security changes (moved from Signing in).
  *
@@ -29,8 +29,8 @@ import type { OwnProfile } from "@/lib/users/ownProfile";
 
 type Tab = "profile" | "security" | "notifications" | "changes";
 const TABS: ReadonlyArray<{ key: Tab; label: string }> = [
-  { key: "profile", label: "About you" },
-  { key: "security", label: "Signing in" },
+  { key: "profile", label: "Profile" },
+  { key: "security", label: "Sign-in and security" },
   { key: "notifications", label: "Alerts" },
   { key: "changes", label: "History" },
 ];
@@ -95,13 +95,15 @@ export function MyProfileSettings() {
   };
 
   return (
-    <SettingsStack>
+    <SettingsStack className="min-h-0 flex-1 gap-3">
       <SettingsSectionHeader />
+      {/* The tabs are a fixed header; only the cards below them scroll (owner 2026-11-03), so
+          nothing is cut off at the tabs' edge. flex-1: the card reaches the foot of the menu. */}
       <ViewTabs label="My profile" tabs={TABS} value={tab} onChange={pick} controls="my-profile-panel" />
-      <div id="my-profile-panel" role="tabpanel" className="flex flex-col gap-6">
+      <div id="my-profile-panel" role="tabpanel" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1.5">
         {tab === "notifications" ? <div id="notifications"><NotificationPreferences embedded /></div>
           : tab === "changes" ? (
-            <div id="changes" className="flex flex-col gap-4">
+            <div id="changes" className="flex min-h-0 flex-1 flex-col gap-3">
               <ViewTabs label="History" tabs={HISTORY_VIEWS} value={historyView} onChange={setHistoryView} />
               {historyView === "settings" ? <SettingsHistory mine /> : <SecurityLog timeZone={profile?.displayTimezone ?? null} />}
             </div>

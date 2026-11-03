@@ -37,7 +37,7 @@ export const TEMPLATE_FIELD_TYPE_LABELS: Record<TemplateFieldType, string> = {
 };
 
 /**
- * The Type column of Settings → Form templates, in the board's words: a yes/no question is a choice
+ * The Type column of Settings → Application forms, in the board's words: a yes/no question is a choice
  * too ("Tobacco in 12 months · Choice"). The pickers keep the longer labels above, so the two kinds
  * of choice can still be told apart when one is being picked.
  */

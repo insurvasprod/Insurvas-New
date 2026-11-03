@@ -32,7 +32,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
-import { Callout, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
+import { Callout, SettingsSectionHeader, SettingsStack, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -42,6 +42,7 @@ import { CarrierFieldMaps } from "@/components/app/settings/carrier-field-maps";
 import { ContractingDetail, type DetailTarget } from "@/components/app/settings/contracting-detail";
 import { ContractingSetup, setupProgress } from "@/components/app/settings/contracting-setup";
 import { Pager } from "@/components/ui/pager";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { ToolbarSearch } from "@/components/ui/data-toolbar";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { NoMatches } from "@/components/ui/page-states";
@@ -336,7 +337,7 @@ export function CarriersSettings() {
       {/* Manager review 29 Oct (10:02–11:10): once set up, the wizard goes and Carriers and States are
           read-only overviews, changed on the Set Up tab, which is always there (owner, 29 Oct). No Add Carriers, no ⋯:
           a person only ticks the carriers that are there, and Field maps (postponed) has its link. */}
-      {step === "setup" && <div ref={setStepsSlot} />}
+      {step === "setup" && !setupDone && <div ref={setStepsSlot} />}
       {/* The tabs, the search and the filter in one bar, the same card as the pager at the foot of
           the list (owner, 29 Oct), so the list sits between two matching bars. */}
       <div className="rounded-[12px] border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5">
@@ -416,6 +417,7 @@ export function CarriersSettings() {
           onStatesSaved={async (codes) => { for (const code of codes) touched.current.add(code); }}
           search={setupSearch}
           stepsSlot={stepsSlot}
+          hideSteps={setupDone}
           onStepChange={onSetupStep}
           onFinish={() => {
             notify.done("Contracting is set up", { detail: "Change a carrier or a state any time on Carriers and States." });
@@ -434,45 +436,49 @@ export function CarriersSettings() {
           </div>
         ) : (
           carriersShown.length === 0 ? noMatch("carriers") : (
-          <FittedGrid
-            key={`${query}|${carrierFilter}`}
-            items={carriersShown}
-            noun="carriers"
-            rowHeight={144}
-            className="grid-cols-1 @2xl:grid-cols-2 @5xl:grid-cols-3"
-            keyOf={(carrier) => carrier.id}
-            render={(carrier) => {
-              const contract = vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active) ?? null;
-              const off = Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === carrier.id && row.contracted === false));
-              const appointed = appointedStatesFor(vault.appointments, carrier.id, today);
-              return (
-                <div className={cn(PANE, CLICKABLE, "relative flex h-full flex-col gap-3 overflow-hidden p-4", off && "opacity-70", detail?.kind === "carrier" && detail.id === carrier.id && OPEN)}>
-                  <div className="flex items-start justify-between gap-2">
-                    {/* The whole card opens the carrier's states: this button stretches over it (Edit sits above). */}
-                    <button type="button" onClick={() => setTrail([{ kind: "carrier", id: carrier.id }])} aria-label={`${carrier.name}: see its states`} className="flex min-w-0 items-center gap-2 text-left after:absolute after:inset-0 after:rounded-lg focus-visible:outline-none focus-visible:after:ring-2 focus-visible:after:ring-[var(--primary)]">
-                      <span className={cn("size-2.5 shrink-0 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
-                      <span className="truncate text-sm font-semibold text-[var(--ink)]" title={carrier.name}>{carrier.name}</span>
-                    </button>
-                    <ProgressLine progress={progressOf(carrier.id)} switchedOff={off} />
-                  </div>
-                  <dl className="m-0 grid grid-cols-3 gap-2 text-xs">
-                    <div><dt className="text-[var(--muted)]">Level</dt><dd className="m-0 font-semibold tabular-nums text-[var(--ink)]">{contract ? `${bpToLevel(contract.contract_level_bp)}%` : "—"}</dd></div>
-                    <div className="min-w-0"><dt className="text-[var(--muted)]">Writing number</dt><dd className="m-0 truncate font-mono text-[var(--ink)]">{contract?.writing_number || "—"}</dd></div>
-                    <div><dt className="text-[var(--muted)]">States</dt><dd className="m-0 font-semibold tabular-nums text-[var(--ink)]">{appointed.length}</dd></div>
-                  </dl>
-                  {/* Any number of states fits one line: the first few, then "+N" (all of them on hover). */}
-                  <div className="mt-auto flex items-center justify-between gap-3">
-                    {/* A searched state leads the line, so "is it there?" is read at once. */}
-                    <p className="m-0 min-w-0 truncate font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>
-                      {lookup.state && <span className="mr-2 font-sans font-semibold text-[var(--accent-ink)]">{appointed.includes(lookup.state.code) ? `✓ ${lookup.state.code}` : `${lookup.state.code} applied for`}</span>}
-                      {appointed.length ? firstFew(appointed, 6, " · ") : "No states yet"}
-                    </p>
-                    <Button type="button" variant="outline" size="sm" className="relative z-10 shrink-0" onClick={() => setEditingId(carrier.id)}>Edit</Button>
-                  </div>
-                </div>
-              );
-            }}
-          />
+          // A table, not cards: the same facts on one line each (owner 2026-11-03).
+          <PagedTableCard key={`${query}|${carrierFilter}`} total={carriersShown.length} noun="carriers">
+            <table className={st.table}>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={st.th}>Carrier</th>
+                  <th scope="col" className={st.th}>Status</th>
+                  <th scope="col" className={st.th}>Level</th>
+                  <th scope="col" className={st.th}>Writing number</th>
+                  <th scope="col" className={st.th}>States</th>
+                  <th scope="col" className={st.th}><span className="sr-only">Edit</span></th>
+                </tr>
+              </thead>
+              <PagedBody>
+                {carriersShown.map((carrier) => {
+                  const contract = vault.tenantCarriers.find((row) => row.carrier_id === carrier.id && row.is_active) ?? null;
+                  const off = Boolean(vault.carrierRequirements?.some((row) => row.carrier_id === carrier.id && row.contracted === false));
+                  const appointed = appointedStatesFor(vault.appointments, carrier.id, today);
+                  return (
+                    <tr key={carrier.id} className={cn(off && "opacity-70")}>
+                      <td className={st.td}>
+                        <button type="button" onClick={() => setTrail([{ kind: "carrier", id: carrier.id }])} aria-label={`${carrier.name}: see its states`} className="flex min-w-0 items-center gap-2 text-left text-sm font-semibold text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--primary)]">
+                          <span className={cn("size-2.5 shrink-0 rounded-full", dotOf(carrier.id))} aria-hidden="true" />
+                          <span className="truncate" title={carrier.name}>{carrier.name}</span>
+                        </button>
+                      </td>
+                      <td className={st.td}><ProgressLine progress={progressOf(carrier.id)} switchedOff={off} /></td>
+                      <td className={cn(st.td, "tabular-nums")}>{contract ? `${bpToLevel(contract.contract_level_bp)}%` : "—"}</td>
+                      <td className={cn(st.td, "font-mono")}>{contract?.writing_number || "—"}</td>
+                      <td className={st.td}>
+                        {/* A searched state leads the line, so "is it there?" is read at once. */}
+                        <span className="font-mono text-xs text-[var(--muted)]" title={appointed.join(", ")}>
+                          {lookup.state && <span className="mr-2 font-sans font-semibold text-[var(--accent-ink)]">{appointed.includes(lookup.state.code) ? `✓ ${lookup.state.code}` : `${lookup.state.code} applied for`}</span>}
+                          {appointed.length ? firstFew(appointed, 6, " · ") : "No states yet"}
+                        </span>
+                      </td>
+                      <td className={cn(st.td, "text-right")}><Button type="button" variant="outline" size="sm" onClick={() => setEditingId(carrier.id)}>Edit</Button></td>
+                    </tr>
+                  );
+                })}
+              </PagedBody>
+            </table>
+          </PagedTableCard>
           )
         )
       )}

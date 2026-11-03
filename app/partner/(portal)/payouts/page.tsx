@@ -13,9 +13,9 @@ export default async function PartnerPayoutsPage() {
   if (!context) redirect("/partner/login");
   if (context.role !== "partner_admin") redirect("/partner");
   return (
-    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6">
+    <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6 md:h-[calc(100dvh-var(--top-bar-h)-3rem)] lg:h-[calc(100dvh-var(--top-bar-h)-3.5rem)]">
       <PageHeader title="Commission statements" description="What the agency owes you, line by line." visible infoDescription />
-      <PartnerPayouts />
+      <PartnerPayouts partnerName={context.partnerName} />
     </div>
   );
 }

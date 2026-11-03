@@ -1,7 +1,7 @@
 /**
  * What a form-template draft would change, read by diffing the draft against the saved copy.
  *
- * Settings → Form templates holds every edit in the browser until the owner commits, and the board
+ * Settings → Application forms holds every edit in the browser until the owner commits, and the board
  * lists the pending changes one line each. Deriving them from the two states (rather than logging
  * each keystroke) means undoing an edit by hand removes its line, and the count on the table is the
  * number of things a commit would actually change.

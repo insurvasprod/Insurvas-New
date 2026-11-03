@@ -2,6 +2,7 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { narrowTo } from "@/lib/partnerAuth/team";
+import { matchesPartnerDealFlowFilters } from "@/lib/partnerDealFlow/filters";
 import { partnerOutcomeLabel } from "@/lib/partnerLeads/service";
 import { intakeLocalDate } from "@/lib/dealFlow/localDate";
 import { dealFlowFigures, type FigureRow } from "./figures";
@@ -72,7 +73,6 @@ type DealRow = {
   product_type: string | null;
   monthly_premium_cents: number | null;
   face_amount_cents: number | null;
-  draft_date: string | null;
   disposition_at: string | null;
   updated_at: string;
   agent_leads: { created_by: string | null; created_at: string; stage_id: string | null };
@@ -98,6 +98,8 @@ export async function listPartnerDealFlow(
   if (!isValidDay(from) || !isValidDay(to)) throw new Error("Choose a valid date range");
   if (from > to) throw new Error("The start date must be on or before the end date");
   const filters = options.filters ?? {};
+  if (filters.annualisedPremiumMinCents != null && (!Number.isSafeInteger(filters.annualisedPremiumMinCents) || filters.annualisedPremiumMinCents < 0)) throw new Error("Enter a valid minimum annualised premium");
+  if (filters.annualisedPremiumMaxCents != null && (!Number.isSafeInteger(filters.annualisedPremiumMaxCents) || filters.annualisedPremiumMaxCents < 0)) throw new Error("Enter a valid maximum annualised premium");
   const db = getSupabaseServiceClient();
 
   // An empty list is a bug upstream, not a scope. It would read as "nobody", and worse, it invites
@@ -154,6 +156,7 @@ export async function listPartnerDealFlow(
     // alike — the same fallback the agency's report makes (lib/dealFlow/types.ts).
     const stage = (deal.agent_leads?.stage_id && stages.get(deal.agent_leads.stage_id)) || { name: "In progress", stageType: "open" as const };
     const submittedBy = deal.agent_leads?.created_by ?? null;
+    const submittedDay = intakeLocalDate(timezone, new Date(deal.agent_leads.created_at));
     return {
       leadId: deal.lead_id,
       day: deal.local_date,
@@ -165,10 +168,12 @@ export async function listPartnerDealFlow(
       productType: deal.product_type,
       monthlyPremiumCents: deal.monthly_premium_cents,
       faceAmountCents: deal.face_amount_cents,
-      draftDate: deal.draft_date,
+      // This partner-facing column is the date the lead was created. The deal_flow draft_date
+      // is a policy payment draft date, which is unrelated and is normally blank at submission.
+      draftDate: submittedDay,
       outcome: partnerOutcomeLabel(deal.call_result),
       submittedBy: { id: submittedBy, name: (submittedBy && names.get(submittedBy)) || "Partner closer" },
-      submittedDay: intakeLocalDate(timezone, new Date(deal.agent_leads.created_at)),
+      submittedDay,
       updatedAt: deal.updated_at,
     };
   });
@@ -180,6 +185,7 @@ export async function listPartnerDealFlow(
   // would then refuse to show.
   const facets = {
     products: [...new Set(scoped.map((row) => row.productLine))].sort(),
+    carriers: [...new Set(scoped.map((row) => row.carrier))].sort((a, b) => a === null ? -1 : b === null ? 1 : a.localeCompare(b)),
     submitters: [...new Map(scoped.filter((row) => row.submittedBy.id).map((row) => [row.submittedBy.id as string, { id: row.submittedBy.id as string, name: row.submittedBy.name }])).values()]
       .sort((a, b) => a.name.localeCompare(b.name)),
   };
@@ -195,6 +201,7 @@ export async function listPartnerDealFlow(
     if (!row.submittedBy.id || !allowedIds.includes(row.submittedBy.id)) return false;
     if (filters.product && row.productLine !== filters.product) return false;
     if (search && !searchable(row).includes(search)) return false;
+    if (!matchesPartnerDealFlowFilters(row, filters)) return false;
     return true;
   });
   const stageCounts = {

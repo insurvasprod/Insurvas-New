@@ -15,6 +15,7 @@
 import { useEffect, useState } from "react";
 
 import { Callout, control, LockIcon, SettingsCard, SettingsSectionHeader, SettingsStack, st, Switch } from "@/components/app/settings/primitives";
+import { InfoTip } from "@/components/ui/info-tip";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
@@ -37,10 +38,10 @@ const CHANNELS: { key: Channel; label: string }[] = [
   { key: "push", label: "Browser" },
 ];
 const DIGEST_LABELS: Record<DigestCadence, string> = { immediate: "Each one", daily: "Daily digest", weekly: "Weekly digest", off: "No email" };
-const CHIP = (on: boolean) => cn(
-  "inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-  on ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--ink)]" : "border-[var(--border)] text-[var(--muted)] hover:text-[var(--ink)]",
-);
+/** Under the sticky chip bar (44px), so the column names stay in view too. */
+const STICKY_TH = "sticky top-11 z-10 bg-[var(--surface)]";
+/** The email choices once email is on; turning email off is the switch. */
+const DIGEST_CHOICES: DigestCadence[] = ["immediate", "daily", "weekly"];
 
 /** `embedded`: drawn inside My profile, whose header names the section. */
 export function NotificationPreferences({ embedded = false }: { embedded?: boolean } = {}) {
@@ -116,28 +117,25 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
           {off ? <span className="block text-xs text-[var(--warning-ink)]">Off: you will not hear about this.</span> : null}
         </td>
         {CHANNELS.map((c) => (
-          <td key={c.key} className={cn(st.td, "text-center")} title={e.protected ? "This alert cannot be switched off" : undefined}>
-            <span className="inline-flex justify-center">
+          <td key={c.key} className={cn(st.td, c.key === "email" ? "text-left" : "text-center")} title={e.protected ? "This alert cannot be switched off" : undefined}>
+            <span className={cn("inline-flex items-center gap-2", c.key !== "email" && "justify-center")}>
               <Switch checked={e.delivery[c.key]} disabled={e.protected || !view.available} label={`${e.label}: ${c.label}`}
                 onChange={(next) => void saveEvent(e.key, { [c.key]: next }, { [c.key]: next })} />
+              {/* How email arrives sits beside its own switch, only while email is on. */}
+              {c.key === "email" && e.supportsDigest && e.delivery.email ? (
+                <select
+                  aria-label={`${e.label}: how email arrives`}
+                  disabled={!view.available}
+                  value={e.delivery.digest === "off" ? "immediate" : e.delivery.digest}
+                  onChange={(event) => { const digest = event.target.value as DigestCadence; void saveEvent(e.key, { digest, email: true }, { digest, email: true }); }}
+                  className="h-7 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-xs font-medium text-[var(--ink)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-color)] disabled:opacity-50"
+                >
+                  {DIGEST_CHOICES.map((d) => <option key={d} value={d}>{DIGEST_LABELS[d]}</option>)}
+                </select>
+              ) : null}
             </span>
           </td>
         ))}
-        <td className={st.td}>
-          {e.supportsDigest ? (
-            <span role="group" aria-label={`${e.label}: how email arrives`} className="flex flex-wrap gap-1">
-              {(Object.keys(DIGEST_LABELS) as DigestCadence[]).map((d) => {
-                const current = e.delivery.email ? e.delivery.digest : "off";
-                return (
-                  <button key={d} type="button" aria-pressed={current === d} disabled={!view.available} className={CHIP(current === d)}
-                    onClick={() => current !== d && void saveEvent(e.key, { digest: d === "off" ? e.delivery.digest : d, email: d !== "off" }, { digest: d, email: d !== "off" })}>
-                    {DIGEST_LABELS[d]}
-                  </button>
-                );
-              })}
-            </span>
-          ) : <span className="text-xs text-[var(--muted)]">{e.delivery.email ? "Each one, as it happens" : "No email"}</span>}
-        </td>
       </tr>
     );
   };
@@ -147,50 +145,56 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
       {header}
       {!view.available ? <Callout tone="warning" title="Saving notification preferences needs a database update." /> : null}
 
-      <SettingsCard title="Quiet hours" info={`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts marked Always on still come through.`}>
-        <div id="notify-quiet-hours" className="mt-3 flex flex-wrap items-end gap-4">
-          <label className="flex items-center gap-2 text-sm">
-            <Switch checked={quiet.enabled} disabled={busy || !view.available} label="Quiet hours" onChange={(next) => saveQuiet({ ...quiet, enabled: next })} />
-            Quiet hours
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">From
-            <input type="time" className={`${control} mt-0 w-auto`} value={quiet.start} disabled={busy || !quiet.enabled} onChange={(e) => setQuiet({ ...quiet, start: e.target.value })} onBlur={() => saveQuiet(quiet)} />
-          </label>
-          <label className="flex flex-col gap-1 text-xs text-[var(--muted)]">Until
-            <input type="time" className={`${control} mt-0 w-auto`} value={quiet.end} disabled={busy || !quiet.enabled} onChange={(e) => setQuiet({ ...quiet, end: e.target.value })} onBlur={() => saveQuiet(quiet)} />
-          </label>
-          <span className="pb-2 text-xs text-[var(--muted)]">Saved as you change it.</span>
-        </div>
-      </SettingsCard>
+      {/* Quiet hours: one line. The times appear only while it is on; the switch and each time save as they change. */}
+      <div id="notify-quiet-hours" className="m-glass flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 rounded-[12px] border border-[var(--border)] px-4 py-2">
+        <label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]">
+          <Switch checked={quiet.enabled} disabled={busy || !view.available} label="Quiet hours" onChange={(next) => saveQuiet({ ...quiet, enabled: next })} />
+          Quiet hours
+        </label>
+        {quiet.enabled ? (
+          <>
+            <label className="flex items-center gap-2 text-sm text-[var(--body)]">From
+              <input type="time" className={`${control} mt-0 h-8 w-auto`} value={quiet.start} disabled={busy} onChange={(e) => setQuiet({ ...quiet, start: e.target.value })} onBlur={() => saveQuiet(quiet)} />
+            </label>
+            <label className="flex items-center gap-2 text-sm text-[var(--body)]">Until
+              <input type="time" className={`${control} mt-0 h-8 w-auto`} value={quiet.end} disabled={busy} onChange={(e) => setQuiet({ ...quiet, end: e.target.value })} onBlur={() => saveQuiet(quiet)} />
+            </label>
+          </>
+        ) : (
+          <span className="text-sm text-[var(--muted)]">Off. Turn it on to hold email and browser alerts overnight.</span>
+        )}
+        <span className="ml-auto inline-flex items-center">
+          <InfoTip label="About quiet hours">{`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts marked Always on still come through.`}</InfoTip>
+        </span>
+      </div>
 
-      <TableCard
-        toolbar={
-          <div className="flex w-full flex-wrap items-center gap-2">
-            <div role="radiogroup" aria-label="Which alerts" className="flex flex-wrap items-center gap-2">
-              <ToggleChip role="radio" selected={filter === "all"} count={view.events.length} onClick={() => setFilter("all")}>All</ToggleChip>
-              {groups.map((group) => (
-                <ToggleChip key={group} role="radio" selected={filter === group} count={view.events.filter((e) => e.group === group).length} onClick={() => setFilter(group)}>
-                  {group}
-                </ToggleChip>
-              ))}
-              {locked.length ? (
-                <span id="notify-protected" className="inline-flex" title="Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too.">
-                  <ToggleChip role="radio" selected={filter === "locked"} count={locked.length} onClick={() => setFilter("locked")}>
-                    <LockIcon />Always on
-                  </ToggleChip>
-                </span>
-              ) : null}
-            </div>
-            {switchedOff ? <span className="ml-auto text-xs text-[var(--warning-ink)]">{switchedOff} switched off</span> : null}
-          </div>
-        }
-      >
+      {/* The filter chips stay in view while the table scrolls under them. */}
+      <div className="sticky top-0 z-20 flex min-h-9 items-center gap-2 bg-[var(--canvas)]">
+        <div role="radiogroup" aria-label="Which alerts" className="flex flex-wrap items-center gap-2">
+          <ToggleChip role="radio" selected={filter === "all"} count={view.events.length} onClick={() => setFilter("all")}>All</ToggleChip>
+          {groups.map((group) => (
+            <ToggleChip key={group} role="radio" selected={filter === group} count={view.events.filter((e) => e.group === group).length} onClick={() => setFilter(group)}>
+              {group}
+            </ToggleChip>
+          ))}
+          {locked.length ? (
+            <span id="notify-protected" className="inline-flex" title="Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too.">
+              <ToggleChip role="radio" selected={filter === "locked"} count={locked.length} onClick={() => setFilter("locked")}>
+                <LockIcon />Always on
+              </ToggleChip>
+            </span>
+          ) : null}
+        </div>
+        {switchedOff ? <span className="ml-auto text-xs text-[var(--warning-ink)]">{switchedOff} switched off</span> : null}
+      </div>
+
+      {/* The card's body would scroll sideways and so break a sticky header; four columns never need it. */}
+      <TableCard bodyClassName="overflow-x-visible">
         <table className={st.table}>
           <thead>
             <tr className={st.headRow}>
-              <th className={st.th}>Alert</th>
-              {CHANNELS.map((c) => <th key={c.key} className={cn(st.th, "w-[104px] text-center")}>{c.label}</th>)}
-              <th className={cn(st.th, "w-[340px]")}>Email as</th>
+              <th className={cn(st.th, STICKY_TH)}>Alert</th>
+              {CHANNELS.map((c) => <th key={c.key} className={cn(st.th, STICKY_TH, c.key === "email" ? "w-[230px] text-left" : "w-[104px] text-center")}>{c.label}</th>)}
             </tr>
           </thead>
           <tbody>{shown.map(row)}</tbody>

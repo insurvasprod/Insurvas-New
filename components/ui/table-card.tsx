@@ -27,6 +27,7 @@ export function TableCard({
   toolbar,
   filters,
   footer,
+  bodyClassName,
   children,
   className,
 }: {
@@ -39,6 +40,8 @@ export function TableCard({
   /** Under the toolbar, above the table: `<FilterPanel>` then `<ActiveFilters>` (UI-CONSISTENCY §6a). */
   filters?: ReactNode;
   footer?: ReactNode;
+  /** Optional layout for a list's body when the card fills the remaining page height. */
+  bodyClassName?: string;
   children: ReactNode;
   className?: string;
 }) {
@@ -82,8 +85,8 @@ export function TableCard({
           border-b sits above them. Empty when neither is showing. */}
       {filters && <div data-slot="table-card-filters" className="bg-[var(--surface-alt)]/40">{filters}</div>}
 
-      {/* The table foundation (2026-11-02): full height when last on the page, columns spread evenly. */}
-      <div className="flex-1 overflow-x-auto">{children}<TableCardLayout /></div>
+      {/* The table foundation (2026-11-02): fill available height, spread columns evenly. */}
+      <div className={cn("flex-1 overflow-x-auto", bodyClassName)}>{children}<TableCardLayout /></div>
 
       {footer && (
         /* The footer sits on the page grey, not the card white: it is the card's plinth, and a

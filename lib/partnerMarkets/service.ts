@@ -278,3 +278,24 @@ export async function assertPartnerMarketAccess(
     revision: resolved.revision,
   };
 }
+
+/**
+ * Lead intake knows the customer's state before a carrier has been selected. Keep that state
+ * inside the partner's configured markets while allowing the closer to choose a carrier later.
+ */
+export async function assertPartnerStateAccess(
+  tenantId: string,
+  partnerId: string,
+  userId: string,
+  state: string,
+) {
+  if (!isState(state)) throw new Error("invalid_market_state");
+  const resolved = await resolvePartnerMarkets(tenantId, partnerId, userId);
+  if (!resolved.markets.some((market) => market.state === state))
+    throw new Error("partner_state_not_allowed");
+  return {
+    state,
+    profile_id: resolved.profile_id,
+    revision: resolved.revision,
+  };
+}

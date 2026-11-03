@@ -15,12 +15,14 @@
 import { useEffect, useRef, useState } from "react";
 
 import { Callout, control, DraftActions, Field, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
-import { FieldRow, FormSection, FormSections } from "@/components/app/settings/patterns";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { OwnershipCard, PartnerSupportCard } from "@/components/app/settings/agency-contact";
 import type { SettingsPanelContext } from "@/components/app/settings/panels";
 import { Button } from "@/components/ui/button";
+import { cardSurface } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { InfoTip } from "@/components/ui/info-tip";
 import { SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -68,6 +70,9 @@ const draftFrom = (p: AgencyProfileView): Draft => ({
   phone: p.phone ?? "", email: p.email ?? "", website: p.website ?? "", timezone: p.timezone ?? "",
 });
 
+/** The card every tab is drawn in: the shared surface (components/ui/card), 16px padding. */
+const SHEET = cn(cardSurface, "flex min-w-0 flex-1 flex-col gap-4 p-4");
+
 export function BusinessIdentitySettings({ team = null, workspace = null }: Partial<SettingsPanelContext> = {}) {
   const [response, setResponse] = useState<AgencyProfileResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -76,6 +81,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
   const [saveError, setSaveError] = useState<string | null>(null);
   const [revealed, setRevealed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [tab, setTab] = useState<IdentityTab>(() => tabForHash(typeof window === "undefined" ? "" : window.location.hash));
   useEffect(() => {
     const follow = () => setTab((current) => tabForHash(window.location.hash, current));
@@ -215,49 +221,49 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
   const discard = () => { if (original) setDraft(original); setSaveError(null); };
 
   return (
-    <SettingsStack>
+    <SettingsStack className="min-h-0 flex-1 gap-3">
       <SettingsSectionHeader />
       {!response.schemaReady && <Callout tone="warning" title="Saving the business identity needs a database update." />}
 
       <ViewTabs label="Business identity" tabs={tabs} value={tab} onChange={setTab} idPrefix="identity-tab" controls="identity-panel" />
 
-      <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex flex-col gap-6">
+      {/* Only the cards scroll; the tabs above stay put. */}
+      <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1.5 @container">
         {tab === "business" && (
-          <FormSections>
-            <FormSection title="Names and licence" info="Clients see the trading name on the welcome pack, statements and letters. Tax forms and regulators use the legal name.">
-              <FieldRow>
-                <Field label="Trading name" htmlFor="identity-trading-name">
-                  <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
-                </Field>
-                <Field label="Legal name" htmlFor="identity-legal-name" required>
-                  <input id="identity-legal-name" type="text" className={control} value={draft.legalName} onChange={set("legalName")} autoComplete="organization" required placeholder="Masood Insurance Services LLC" />
-                </Field>
-              </FieldRow>
-              <div className="flex flex-col gap-1.5">
-                <span className="text-label text-[var(--body)]">Entity Type</span>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Entity type">
-                  {(Object.keys(ENTITY_TYPE_LABELS) as EntityType[]).map((key) => (
-                    <ToggleChip key={key} role="radio" selected={draft.entityType === key} onClick={() => pick("entityType", draft.entityType === key ? "" : key)}>{ENTITY_TYPE_LABELS[key]}</ToggleChip>
-                  ))}
-                </div>
-              </div>
-              <FieldRow>
-                <Field label="National producer number (NPN)" htmlFor="identity-npn" hint={npnHint(p, draft.npn, response.niprConfigured === true, formatDay)}>
-                  <input id="identity-npn" type="text" inputMode="numeric" className={cn(control, "font-mono tabular-nums")} value={draft.npn} onChange={set("npn")} />
-                </Field>
-              </FieldRow>
-            </FormSection>
-
-            <FormSection title="Tax ID" info="Stored encrypted and shown masked; each reveal is recorded. A sole proprietor without an EIN uses their Social Security number." aside={p.hasTaxId ? <StatusChip tone="good">On file</StatusChip> : <StatusChip tone="warning">Not added</StatusChip>}>
-              <div className="flex flex-col gap-1.5">
-                <span className="text-label text-[var(--body)]">Type</span>
-                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Tax ID type">
+          <div className={SHEET}>
+            <div className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-2">
+              <Field label="Trading name" htmlFor="identity-trading-name" info="Printed on client documents.">
+                <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
+              </Field>
+              <Field label="Legal name" htmlFor="identity-legal-name" required info="Used on tax forms.">
+                <input id="identity-legal-name" type="text" className={control} value={draft.legalName} onChange={set("legalName")} autoComplete="organization" required placeholder="Masood Insurance Services LLC" />
+              </Field>
+              <Field label="Entity type" htmlFor="identity-entity-type">
+                <select id="identity-entity-type" className={control} value={draft.entityType} onChange={(event) => pick("entityType", event.target.value as EntityType)}>
+                  <option value="">Not set</option>
+                  {(Object.keys(ENTITY_TYPE_LABELS) as EntityType[]).map((key) => <option key={key} value={key}>{ENTITY_TYPE_LABELS[key]}</option>)}
+                </select>
+              </Field>
+              <Field label="National producer number (NPN)" htmlFor="identity-npn" info={npnHint(p, draft.npn, response.niprConfigured === true, formatDay)}>
+                <input id="identity-npn" type="text" inputMode="numeric" className={cn(control, "font-mono tabular-nums")} value={draft.npn} onChange={set("npn")} />
+              </Field>
+              <div className="min-w-0">
+                <span className="text-label text-[var(--body)]">Tax ID type</span>
+                <div className="mt-1.5 flex flex-wrap gap-2" role="radiogroup" aria-label="Tax ID type">
                   <ToggleChip role="radio" selected={draft.taxIdType === "ein"} onClick={() => pick("taxIdType", "ein")}>EIN</ToggleChip>
                   <ToggleChip role="radio" selected={draft.taxIdType === "ssn"} onClick={() => pick("taxIdType", "ssn")}>Social Security number</ToggleChip>
                 </div>
               </div>
+              <Field
+                label={<span className="inline-flex items-center gap-2">{p.hasTaxId ? "Replace the tax ID" : "Tax ID"}{p.hasTaxId ? <StatusChip tone="good">On file</StatusChip> : <StatusChip tone="neutral">Not added</StatusChip>}</span>}
+                htmlFor="identity-tax-id"
+                infoLabel="About the tax ID"
+                info={p.hasTaxId && !p.taxIdReadable ? `One ending ${p.taxIdLast4 ?? "····"} is stored, but this server has no key to show it. Typing a new one replaces it.` : "Stored encrypted, shown masked."}
+              >
+                <input id="identity-tax-id" type="text" inputMode="numeric" autoComplete="off" className={cn(control, "block font-mono tabular-nums")} value={draft.taxId} onChange={set("taxId")} placeholder={draft.taxIdType === "ssn" ? "123-45-6789" : "12-3456789"} />
+              </Field>
               {p.hasTaxId && (
-                <div className="flex flex-wrap items-center gap-3 text-sm">
+                <div className="flex flex-wrap items-center gap-3 text-sm sm:col-span-2">
                   <span className="text-[var(--body)]">On file: <span className="font-mono font-semibold tabular-nums text-[var(--ink)]">{revealed ?? maskTaxId(p.taxIdType, p.taxIdLast4)}</span></span>
                   {revealed
                     ? <Button type="button" variant="outline" size="sm" onClick={() => setRevealed(null)}>Hide</Button>
@@ -265,38 +271,26 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                   <Button type="button" variant="ghost" size="sm" disabled={busy} className="text-[var(--error-ink)]" onClick={() => void clearTaxId()}>Remove</Button>
                 </div>
               )}
-              <Field
-                label={p.hasTaxId ? "Replace the tax ID" : "Tax ID"}
-                htmlFor="identity-tax-id"
-                hint={p.hasTaxId && !p.taxIdReadable ? `One ending ${p.taxIdLast4 ?? "····"} is stored, but this server has no key to show it. Typing a new one replaces it.` : undefined}
-              >
-                <input id="identity-tax-id" type="text" inputMode="numeric" autoComplete="off" className={cn(control, "block max-w-[260px] font-mono tabular-nums")} value={draft.taxId} onChange={set("taxId")} placeholder={draft.taxIdType === "ssn" ? "123-45-6789" : "12-3456789"} />
-              </Field>
-            </FormSection>
-
-            <FormSection title="Time zone" info="How times show for your team, and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state.">
-              <Field label="Business time zone" htmlFor="identity-timezone">
-                <select id="identity-timezone" className={cn(control, "block max-w-sm")} value={draft.timezone} onChange={set("timezone")}>
+              <Field label="Business time zone" htmlFor="identity-timezone" info="How times show for your team, and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state.">
+                <select id="identity-timezone" className={control} value={draft.timezone} onChange={set("timezone")}>
                   <option value="">Not set</option>
                   {timezoneOptions.map((zone) => <option key={zone} value={zone}>{ZONE_NAMES[zone] ?? zone}</option>)}
                 </select>
               </Field>
-            </FormSection>
-          </FormSections>
+            </div>
+          </div>
         )}
 
         {tab === "address" && (
-          <FormSections>
-            <FormSection title="Address" info="Your agency’s own address, as clients and carriers see it. Letters and statements print it.">
-              <FieldRow>
-                <Field label="Address" htmlFor="identity-address-line1">
-                  <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
-                </Field>
-                <Field label="Address line 2" htmlFor="identity-address-line2">
-                  <input id="identity-address-line2" type="text" className={control} value={draft.addressLine2} onChange={set("addressLine2")} autoComplete="address-line2" placeholder="Suite, floor (optional)" />
-                </Field>
-              </FieldRow>
-              <FieldRow cols={3}>
+          <div className={SHEET}>
+            <div className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-2">
+              <Field label="Address" htmlFor="identity-address-line1" info="As clients and carriers see it. Letters and statements print it.">
+                <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
+              </Field>
+              <Field label="Address line 2" htmlFor="identity-address-line2">
+                <input id="identity-address-line2" type="text" className={control} value={draft.addressLine2} onChange={set("addressLine2")} autoComplete="address-line2" placeholder="Suite, floor (optional)" />
+              </Field>
+              <div className="grid min-w-0 gap-x-4 gap-y-3 sm:col-span-2 sm:grid-cols-3">
                 <Field label="City" htmlFor="identity-city">
                   <input id="identity-city" type="text" className={control} value={draft.city} onChange={set("city")} autoComplete="address-level2" />
                 </Field>
@@ -309,89 +303,100 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                 <Field label="ZIP code" htmlFor="identity-postal-code">
                   <input id="identity-postal-code" type="text" inputMode="numeric" className={cn(control, "tabular-nums")} value={draft.postalCode} onChange={set("postalCode")} autoComplete="postal-code" />
                 </Field>
-              </FieldRow>
-            </FormSection>
-            <FormSection title="Contact" info="How clients and carriers reach the agency. Your own phone is on My profile.">
-              <FieldRow>
-                <Field label="Business phone" htmlFor="identity-phone">
-                  <input id="identity-phone" type="tel" className={control} value={draft.phone} onChange={set("phone")} autoComplete="tel" placeholder="(312) 555-0100" />
-                </Field>
-                <Field label="Business email" htmlFor="identity-email">
-                  <input id="identity-email" type="email" className={control} value={draft.email} onChange={set("email")} autoComplete="email" />
-                </Field>
-              </FieldRow>
-              <Field label="Website" htmlFor="identity-website">
+              </div>
+              <hr className="m-0 border-0 border-t border-[var(--border)] sm:col-span-2" />
+              <Field label="Business phone" htmlFor="identity-phone" info="Your own phone is on My profile.">
+                <input id="identity-phone" type="tel" className={control} value={draft.phone} onChange={set("phone")} autoComplete="tel" placeholder="(312) 555-0100" />
+              </Field>
+              <Field label="Business email" htmlFor="identity-email">
+                <input id="identity-email" type="email" className={control} value={draft.email} onChange={set("email")} autoComplete="email" />
+              </Field>
+              <Field label="Website" htmlFor="identity-website" className="sm:col-span-2">
                 <input id="identity-website" type="url" className={control} value={draft.website} onChange={set("website")} placeholder="https://" />
               </Field>
-            </FormSection>
-          </FormSections>
+            </div>
+          </div>
         )}
 
         {tab === "documents" && (
-          <FormSections>
-            <FormSection title="Logo" info="Without a logo, documents print your trading name as text.">
-              <div className="flex flex-wrap items-center gap-4">
-                <div id="identity-logo" className="flex h-16 min-w-40 items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] m-glass-inset px-4">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL from private storage */}
-                  {p.logoUrl ? <img src={p.logoUrl} alt="Business logo" className="max-h-12 max-w-48 object-contain" />
-                    : <span className="text-base font-semibold">{tradingName || "Your trading name"}</span>}
-                </div>
-                <input ref={fileRef} type="file" accept="image/png,image/jpeg" className="hidden" aria-label="Choose a logo" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); }} />
-                <Button type="button" variant="outline" disabled={busy || !p.updatedAt} onClick={() => fileRef.current?.click()}>{p.logoUrl ? "Replace" : "Upload logo"}</Button>
-                {p.logoUrl && <Button type="button" variant="ghost" disabled={busy} onClick={() => void removeLogo()}>Remove</Button>}
+          <div className="grid min-w-0 flex-1 items-stretch gap-4 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
+            <div className={SHEET}>
+              <div className="flex items-center gap-1.5">
+                <h3 className="m-0 text-card-title text-[var(--ink)]">Logo</h3>
+                <InfoTip label="About the logo">Without a logo, documents print your trading name as text.</InfoTip>
+              </div>
+              <div id="identity-logo" className="flex h-24 items-center justify-center rounded-[8px] border border-dashed border-[var(--border-strong)] m-glass-inset px-4">
+                {/* eslint-disable-next-line @next/next/no-img-element -- a short-lived signed URL from private storage */}
+                {p.logoUrl ? <img src={p.logoUrl} alt="Business logo" className="max-h-16 max-w-full object-contain" />
+                  : <span className="text-base font-semibold">{tradingName || "Your trading name"}</span>}
+              </div>
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg" className="hidden" aria-label="Choose a logo" onChange={(e) => { const f = e.target.files?.[0]; if (f) void uploadLogo(f); }} />
+              <div className="flex flex-wrap items-center gap-2">
+                <Button type="button" variant="outline" size="sm" disabled={busy || !p.updatedAt} onClick={() => fileRef.current?.click()}>{p.logoUrl ? "Replace" : "Upload logo"}</Button>
+                {p.logoUrl && <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void removeLogo()}>Remove</Button>}
                 <span className="text-xs text-[var(--muted)]">PNG or JPEG, up to 512 KB</span>
               </div>
               {!p.updatedAt && <p className="m-0 text-sm text-[var(--muted)]">Save the business identity first, then add a logo.</p>}
-            </FormSection>
+            </div>
 
-            <FormSection
-              title="Documents that use it"
-              info="Each document checks these details before it is made, and says which one is missing."
-              aside={<StatusChip tone={notReady ? "warning" : "good"}>{ready} of {docs.length} ready</StatusChip>}
-            >
+            <div className={SHEET}>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <div className="flex items-center gap-1.5">
+                  <h3 className="m-0 text-card-title text-[var(--ink)]">Documents that use it</h3>
+                  <InfoTip label="About these documents">Each document checks these details before it is made, and says which one is missing.</InfoTip>
+                </div>
+                <StatusChip tone={notReady ? "neutral" : "good"}>{ready} of {docs.length} ready</StatusChip>
+                <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => setPreviewOpen(true)}>Preview a letter</Button>
+              </div>
               <ul className="m-0 flex list-none flex-col p-0">
                 {docs.map(({ doc, missing, label }) => (
                   <li key={doc} className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] py-2.5 text-sm first:border-t-0 first:pt-0 last:pb-0">
                     <span className="min-w-0 flex-1 font-medium text-[var(--ink)]">{label.charAt(0).toUpperCase() + label.slice(1)}</span>
                     {missing.length
-                      ? <StatusChip tone="warning">Needs {missing.map((f) => BUSINESS_FIELD_LABELS[f]).join(", ")}</StatusChip>
+                      ? <span className="text-xs text-[var(--muted)]">Needs {missing.map((f) => BUSINESS_FIELD_LABELS[f]).join(", ")}</span>
                       : <StatusChip tone="good">Ready</StatusChip>}
                   </li>
                 ))}
               </ul>
-            </FormSection>
-
-            {/* How a letter prints with what is on screen now (owner, 2026-10-27: keep the letterhead from B). */}
-            <FormSection title="How it prints" info="A letter’s head and foot, from what is on screen now. It changes as you type.">
-              <div className="rounded-[8px] bg-white p-5 text-[rgb(16,32,27)] shadow-[0_10px_30px_rgba(0,0,0,.25)]">
-                <div className="flex items-start justify-between gap-4 border-b-2 border-[rgb(11,94,72)] pb-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element -- the same signed logo URL as above */}
-                  {p.logoUrl ? <img src={p.logoUrl} alt="" className="max-h-9 max-w-40 object-contain" />
-                    : <strong className="text-base font-extrabold tracking-[-0.01em] text-[rgb(11,94,72)]">{(tradingName || "Your trading name").toUpperCase()}</strong>}
-                  <span className="text-right text-xs leading-[1.5] text-[rgb(68,86,79)]">
-                    {draft.addressLine1 || "Your address"}{draft.addressLine2 ? <><br />{draft.addressLine2}</> : null}
-                    <br />{cityLine || "City, ST ZIP"}
-                    <br />{draft.phone || "Business phone"}
-                    {draft.email ? <><br />{draft.email}</> : null}
-                  </span>
-                </div>
-                <p className="m-0 mt-4 text-sm">Dear client,</p>
-                <p className="m-0 mt-1.5 text-xs leading-[1.6] text-[rgb(68,86,79)]">Thank you for choosing us. This letter confirms your policy and how to reach your agent.</p>
-                <p className="m-0 mt-5 text-xs leading-[1.6] text-[rgb(68,86,79)]">
-                  {draft.legalName || "Legal name"}{draft.npn ? ` · NPN ${draft.npn}` : ""}{draft.website ? ` · ${draft.website}` : ""}
-                </p>
-              </div>
-            </FormSection>
-          </FormSections>
+            </div>
+          </div>
         )}
 
         {tab === "support" && (
-          <FormSections>
+          <div className="grid min-w-0 flex-1 items-stretch gap-4 @3xl:grid-cols-2 [&>section]:h-full [&>section>div:last-child]:flex-1">
             <PartnerSupportCard />
             <OwnershipCard team={team} workspace={workspace} />
-          </FormSections>
+          </div>
         )}
       </div>
+
+      {/* How a letter prints with what is on screen now (owner, 2026-10-27: keep the letterhead from B). */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>How a letter prints</DialogTitle>
+            <DialogDescription>A letter&apos;s head and foot, from what is on screen now. It changes as you type.</DialogDescription>
+          </DialogHeader>
+          <div className="rounded-[8px] bg-white p-5 text-[rgb(16,32,27)] shadow-[0_10px_30px_rgba(0,0,0,.25)]">
+            <div className="flex items-start justify-between gap-4 border-b-2 border-[rgb(11,94,72)] pb-3">
+              {/* eslint-disable-next-line @next/next/no-img-element -- the same signed logo URL as above */}
+              {p.logoUrl ? <img src={p.logoUrl} alt="" className="max-h-9 max-w-40 object-contain" />
+                : <strong className="text-base font-extrabold tracking-[-0.01em] text-[rgb(11,94,72)]">{(tradingName || "Your trading name").toUpperCase()}</strong>}
+              <span className="text-right text-xs leading-[1.5] text-[rgb(68,86,79)]">
+                {draft.addressLine1 || "Your address"}{draft.addressLine2 ? <><br />{draft.addressLine2}</> : null}
+                <br />{cityLine || "City, ST ZIP"}
+                <br />{draft.phone || "Business phone"}
+                {draft.email ? <><br />{draft.email}</> : null}
+              </span>
+            </div>
+            <p className="m-0 mt-4 text-sm">Dear client,</p>
+            <p className="m-0 mt-1.5 text-xs leading-[1.6] text-[rgb(68,86,79)]">Thank you for choosing us. This letter confirms your policy and how to reach your agent.</p>
+            <p className="m-0 mt-5 text-xs leading-[1.6] text-[rgb(68,86,79)]">
+              {draft.legalName || "Legal name"}{draft.npn ? ` · NPN ${draft.npn}` : ""}{draft.website ? ` · ${draft.website}` : ""}
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {saveError && <Callout tone="error" title={saveError} />}
       <LeaveGuard dirty={dirty} onDiscard={discard} what="the business identity" />

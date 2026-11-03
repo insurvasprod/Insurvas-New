@@ -23,6 +23,7 @@ function titleCase(value: string) {
 
 export function partnerBoardStages(input: {
   defaultPipelineId: string | null;
+  selectedPipelineId?: string | null;
   pipelines: BoardPipeline[];
   stages: BoardStage[];
   counts: BoardCount[];
@@ -37,8 +38,8 @@ export function partnerBoardStages(input: {
   }
   const pipelineLeads = (id: string) => (byPipeline.get(id) ?? []).reduce((sum, stage) => sum + (counts.get(stage.id) ?? 0), 0);
   const order = [...byPipeline.keys()]
-    .filter((id) => id === input.defaultPipelineId || pipelineLeads(id) > 0)
-    .sort((a, b) => Number(b === input.defaultPipelineId) - Number(a === input.defaultPipelineId) || pipelineLeads(b) - pipelineLeads(a) || (pipelines.get(a)?.name ?? "").localeCompare(pipelines.get(b)?.name ?? ""));
+    .filter((id) => id === input.defaultPipelineId || id === input.selectedPipelineId || pipelineLeads(id) > 0)
+    .sort((a, b) => Number(b === input.defaultPipelineId) - Number(a === input.defaultPipelineId) || Number(b === input.selectedPipelineId) - Number(a === input.selectedPipelineId) || pipelineLeads(b) - pipelineLeads(a) || (pipelines.get(a)?.name ?? "").localeCompare(pipelines.get(b)?.name ?? ""));
   const placed = new Set<string>();
   const columns: PartnerPipelineStage[] = [];
   for (const pipelineId of order) {
@@ -46,8 +47,9 @@ export function partnerBoardStages(input: {
     const stages = [...(byPipeline.get(pipelineId) ?? [])].sort((a, b) => a.position - b.position || a.name.localeCompare(b.name));
     for (const stage of stages) {
       const leadCount = counts.get(stage.id) ?? 0;
-      // Archived stages, and another pipeline's empty stages, are not columns. A lead on one still is.
-      if (leadCount === 0 && (stage.is_archived || !own)) continue;
+      // Archived stages, and other pipelines' empty stages, are not columns. A selected pipeline's
+      // configured stages remain visible even before its first lead arrives.
+      if (leadCount === 0 && (stage.is_archived || (!own && pipelineId !== input.selectedPipelineId))) continue;
       placed.add(stage.id);
       columns.push({ id: stage.id, pipelineId, pipelineName: pipelines.get(pipelineId)?.name ?? "Pipeline", name: stage.name, position: stage.position, stageType: stage.stage_type, color: stage.color, isArchived: stage.is_archived, leadCount });
     }

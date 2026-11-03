@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Copy, Plus } from "lucide-react";
+import { Copy, Plus, RefreshCw } from "lucide-react";
 
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
@@ -145,21 +144,25 @@ export function IntegrationsSettings() {
           { key: "keys", label: "API keys", count: endingSoon || null, tone: "danger" },
           { key: "webhooks", label: "Webhooks", count: failingHooks || null, tone: "danger" },
         ]}
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {view === "keys" && idle.length > 0 && <StatusChip tone="neutral">{idle.length} unused for {IDLE_DAYS}+ days</StatusChip>}
+            <Button type="button" variant="outline" size="icon" onClick={() => void reload()} disabled={refreshing} aria-label="Refresh" title="Refresh"><RefreshCw aria-hidden="true" className={cn(refreshing && "animate-spin")} /></Button>
+            {view === "keys"
+              ? <Button type="button" onClick={() => setCreatingKey(true)}><Plus aria-hidden="true" />Create a key</Button>
+              : <Button type="button" onClick={() => setCreatingHook(true)}><Plus aria-hidden="true" />Add a webhook</Button>}
+          </div>
+        }
       />
 
       {view === "keys" ? (
         <PagedTableCard
           total={keys.length}
           noun="keys"
-          title="API keys"
-          toolbar={
-            <DataToolbar actions={<><Button type="button" onClick={() => setCreatingKey(true)}><Plus aria-hidden="true" />Create a key</Button><RefreshButton onClick={() => void reload()} refreshing={refreshing} /></>}>
-              {idle.length > 0 && <StatusChip tone="warning">{idle.length} unused for {IDLE_DAYS}+ days</StatusChip>}
-            </DataToolbar>
-          }
+          bodyClassName={keys.length === 0 ? "flex flex-col" : undefined}
         >
           {keys.length === 0 ? (
-            <EmptyState title="No API keys yet" hint="A key lets another system post leads in or read your book. It is shown once, when it is created." action={<Button type="button" onClick={() => setCreatingKey(true)}>Create a key</Button>} />
+            <div className="flex flex-1 items-center justify-center"><EmptyState title="No API keys yet" hint="A key lets another system post leads in or read your book. It is shown once, when it is created." /></div>
           ) : (
             <table className={st.table}>
               <thead>
@@ -210,11 +213,10 @@ export function IntegrationsSettings() {
         <PagedTableCard
           total={hooks.length}
           noun="webhooks"
-          title="Webhooks"
-          toolbar={<DataToolbar actions={<><Button type="button" onClick={() => setCreatingHook(true)}><Plus aria-hidden="true" />Add a webhook</Button><RefreshButton onClick={() => void reload()} refreshing={refreshing} /></>} />}
+          bodyClassName={hooks.length === 0 ? "flex flex-col" : undefined}
         >
           {hooks.length === 0 ? (
-            <EmptyState title="No webhooks yet" hint="A webhook sends policy and commission events to your system as they happen, signed so it can check they came from us." action={<Button type="button" onClick={() => setCreatingHook(true)}>Add a webhook</Button>} />
+            <div className="flex flex-1 items-center justify-center"><EmptyState title="No webhooks yet" hint="A webhook sends policy and commission events to your system as they happen, signed so it can check they came from us." /></div>
           ) : (
             <table className={st.table}>
               <thead>

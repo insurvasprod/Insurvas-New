@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Upload } from "lucide-react";
+import { ChevronDown, Upload } from "lucide-react";
 
-import { Advanced, FieldRow, FormSection, FormSections } from "@/components/app/settings/patterns";
-import { Callout, DraftActions, Field, control } from "@/components/app/settings/primitives";
+import { Callout, DraftActions, Field, checkboxControl, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { ToggleChip } from "@/components/ui/toggle-chip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 import { WORKSPACE_TIMEZONES } from "@/lib/agencyProfile/types";
 import { notify } from "@/lib/notify";
 import { LANGUAGE_CODES, languageKey, languageName } from "@/lib/transferInbox/constants";
@@ -17,7 +17,7 @@ import { AVATAR_TYPES, avatarFileProblem } from "@/lib/users/avatarRules";
 import { LICENCE_NUMBER_MAX, OWN_NAME_MAX, OWN_PHONE_MAX, type OwnProfile } from "@/lib/users/ownProfile";
 
 /**
- * Settings › My profile › About you (settings redesign R4, 2026-10-29). One draft and one save bar for
+ * Settings › My profile › Profile (settings redesign R4, 2026-10-29; one compact card, 2026-11-03). One draft and one save bar for
  * the whole tab: name, phone, licence numbers, the languages you speak and your time zone. It was two
  * forms with two Save buttons (the profile, then the languages).
  *
@@ -59,7 +59,7 @@ function initialsOf(name: string) {
 }
 
 /** The photo (or the initials), Upload and Remove. Saves straight away. */
-function ProfilePicture({ name, version, onChange }: { name: string; version: string | null; onChange: (version: string | null) => void }) {
+function ProfilePicture({ name, email, version, onChange }: { name: string; email: string; version: string | null; onChange: (version: string | null) => void }) {
   const [busy, setBusy] = useState<"upload" | "remove" | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -100,14 +100,20 @@ function ProfilePicture({ name, version, onChange }: { name: string; version: st
   }
 
   return (
-    <div className="flex items-center gap-4">
-      <span className="inline-flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]">
-        {version
-          // eslint-disable-next-line @next/next/no-img-element -- a session-bound redirect to a signed URL; next/image cannot optimise it
-          ? <img src={`/api/app/profile/avatar?v=${encodeURIComponent(version)}`} alt="Your profile picture" className="size-full object-cover" />
-          : <span aria-hidden="true">{initialsOf(name)}</span>}
-      </span>
-      <div className="flex min-w-0 flex-col gap-1.5">
+    <div id="profile-about" className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <span className="inline-flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]">
+          {version
+            // eslint-disable-next-line @next/next/no-img-element -- a session-bound redirect to a signed URL; next/image cannot optimise it
+            ? <img src={`/api/app/profile/avatar?v=${encodeURIComponent(version)}`} alt="Your profile picture" className="size-full object-cover" />
+            : <span aria-hidden="true">{initialsOf(name)}</span>}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="m-0 truncate text-sm font-semibold text-[var(--ink)]">{name}</p>
+          <p className="m-0 truncate text-sm text-[var(--muted)]">
+            {email} · <a href="#my-profile/security-email" className="font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Change in Sign-in and security</a>
+          </p>
+        </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button asChild variant="outline" size="sm" disabled={busy !== null}>
             <label className="cursor-pointer">
@@ -124,11 +130,47 @@ function ProfilePicture({ name, version, onChange }: { name: string; version: st
           </Button>
           {version && <Button type="button" variant="ghost" size="sm" disabled={busy !== null} onClick={() => void remove()}>{busy === "remove" ? "Removing…" : "Remove"}</Button>}
         </div>
-        {problem
-          ? <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{problem}</p>
-          : <p className="m-0 text-xs text-[var(--muted)]">JPG, PNG or WebP, up to 2 MB. Saves as soon as you choose it.</p>}
       </div>
+      {problem && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{problem}</p>}
     </div>
+  );
+}
+
+/** Languages as one dropdown of ticks, with a way to add one that is not listed. */
+function LanguagePicker({ picked, options, disabled, onToggle, onAdd }: {
+  picked: string[];
+  options: string[];
+  disabled: boolean;
+  onToggle: (key: string) => void;
+  onAdd: (name: string) => boolean;
+}) {
+  const [other, setOther] = useState("");
+  const add = () => { if (onAdd(other)) setOther(""); };
+  const summary = picked.length ? picked.map(languageName).join(", ") : "Choose languages";
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button id="profile-languages" type="button" disabled={disabled} className={cn(control, "flex items-center justify-between gap-2 text-left", !picked.length && "text-[var(--muted)]")}>
+          <span className="min-w-0 truncate">{summary}</span>
+          <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-[var(--muted)]" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[var(--radix-popover-trigger-width)] min-w-64 p-2">
+        <div role="group" aria-label="Languages you speak" className="flex max-h-64 flex-col overflow-y-auto">
+          {options.map((key) => (
+            <label key={key} className="flex min-h-9 cursor-pointer items-center gap-2.5 rounded-[8px] px-2 text-sm hover:bg-[var(--surface-alt)]">
+              <input type="checkbox" className={checkboxControl} checked={picked.includes(key)} onChange={() => onToggle(key)} />
+              <span className="min-w-0 flex-1 truncate">{languageName(key)}</span>
+            </label>
+          ))}
+        </div>
+        <div className="mt-2 flex items-center gap-2 border-t border-[var(--border)] pt-2">
+          <label htmlFor="profile-language-other" className="sr-only">Another language</label>
+          <input id="profile-language-other" className={cn(control, "mt-0 min-w-0 flex-1")} placeholder="Another language" value={other} onChange={(event) => setOther(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); add(); } }} />
+          <Button type="button" variant="outline" disabled={!other.trim()} onClick={add}>Add</Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -144,7 +186,6 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
   const [timezone, setTimezone] = useState(initial.displayTimezone ?? "");
   const [languages, setLanguages] = useState<Languages>(null);
   const [picked, setPicked] = useState<string[]>([]);
-  const [other, setOther] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -187,16 +228,15 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
     setNpn(profile.npn ?? "");
     setNumbers(profile.licenceNumbers);
     setPicked(savedLanguages ?? []);
-    setOther("");
     setError(null);
   }
 
   const toggleLanguage = (key: string) => setPicked((current) => (current.includes(key) ? current.filter((value) => value !== key) : [...current, key]));
-  const addOther = () => {
-    const key = languageKey(other.trim());
-    if (!key) return;
+  const addOther = (value: string) => {
+    const key = languageKey(value.trim());
+    if (!key) return false;
     if (!picked.includes(key)) setPicked((current) => [...current, key]);
-    setOther("");
+    return true;
   };
 
   async function save() {
@@ -250,97 +290,63 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
   const extraLanguages = picked.filter((key) => !COMMON_LANGUAGES.includes(key));
   const zones = timezone && !(WORKSPACE_TIMEZONES as readonly string[]).includes(timezone) ? [timezone, ...WORKSPACE_TIMEZONES] : WORKSPACE_TIMEZONES;
 
+  const languageOptions = [...COMMON_LANGUAGES, ...extraLanguages];
+  const languagesReady = languages !== null && "saved" in languages;
+
   return (
-    <form id="profile" onSubmit={(event) => { event.preventDefault(); if (dirty) void save(); }} className="flex min-w-0 flex-col gap-6">
+    <form id="profile" onSubmit={(event) => { event.preventDefault(); if (dirty) void save(); }} className="flex min-w-0 flex-1 flex-col gap-4">
       <LeaveGuard dirty={dirty} what="your profile" onDiscard={discard} />
-      <FormSections>
-        <FormSection id="profile-about" title="Your details" info="Your team sees your name and photo. Customers never see your phone.">
-          <ProfilePicture
-            name={profile.name}
-            version={profile.avatarVersion}
-            onChange={(version) => { setProfile((current) => ({ ...current, avatarVersion: version })); router.refresh(); }}
-          />
-          <FieldRow>
-            <Field label="Name" htmlFor="profile-name">
-              <input id="profile-name" className={control} value={name} maxLength={OWN_NAME_MAX} required autoComplete="name" onChange={(event) => setName(event.target.value)} />
-            </Field>
-            <Field label="Phone" htmlFor="profile-phone">
-              <input id="profile-phone" className={control} type="tel" value={phone} maxLength={OWN_PHONE_MAX} autoComplete="tel" placeholder="(312) 555-0100" onChange={(event) => setPhone(event.target.value)} />
-            </Field>
-          </FieldRow>
-          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-            <span className="min-w-0">
-              <span className="block text-label text-[var(--body)]">Sign-in email</span>
-              <span className="mt-1 block truncate text-sm text-[var(--ink)]">{profile.email}</span>
-            </span>
-            <a href="#my-profile/security-email" className="text-sm font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Change it in Signing in</a>
-          </div>
-          <Advanced summary="Time zone" hint={timezone ? zoneName(timezone) : "The agency's"}>
-            <Field label="Show times in" htmlFor="profile-timezone" hint={<>How times show for you only. Calling hours still follow each customer&apos;s state.</>}>
-              <select id="profile-timezone" className={control} value={timezone} onChange={(event) => setTimezone(event.target.value)}>
-                <option value="">The agency&apos;s time zone</option>
-                {zones.map((zone) => <option key={zone} value={zone}>{zoneName(zone)}</option>)}
-              </select>
-            </Field>
-          </Advanced>
-        </FormSection>
-
-        <FormSection id="profile-licences" title="Licence" info="Your own producer numbers. Your owner records the states you are licensed in, on Team & access.">
-          {!profile.licenceNumbersReady ? (
-            <Callout tone="warning" title="Licence numbers need a database update that has not been applied yet.">Your name and phone still save.</Callout>
-          ) : (
+      <div className="m-glass flex min-w-0 flex-1 flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">
+        <ProfilePicture
+          name={profile.name}
+          email={profile.email}
+          version={profile.avatarVersion}
+          onChange={(version) => { setProfile((current) => ({ ...current, avatarVersion: version })); router.refresh(); }}
+        />
+        <hr className="m-0 border-0 border-t border-[var(--border)]" />
+        {!profile.licenceNumbersReady && <Callout tone="warning" title="Licence numbers need a database update that has not been applied yet.">Your name and phone still save.</Callout>}
+        {languages && "error" in languages && <Callout tone="error" title={languages.error} />}
+        {languages && "available" in languages && !languages.available && <Callout tone="warning" title="Languages need a database update that has not been applied yet." />}
+        <div className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-2">
+          <Field label="Full name" htmlFor="profile-name">
+            <input id="profile-name" className={control} value={name} maxLength={OWN_NAME_MAX} required autoComplete="name" onChange={(event) => setName(event.target.value)} />
+          </Field>
+          <Field label="Phone" htmlFor="profile-phone">
+            <input id="profile-phone" className={control} type="tel" value={phone} maxLength={OWN_PHONE_MAX} autoComplete="tel" placeholder="(312) 555-0100" onChange={(event) => setPhone(event.target.value)} />
+          </Field>
+          <Field label="Time zone" htmlFor="profile-timezone" info={<>How times show for you only. Calling hours still follow each customer&apos;s state.</>}>
+            <select id="profile-timezone" className={control} value={timezone} onChange={(event) => setTimezone(event.target.value)}>
+              <option value="">The agency&apos;s time zone</option>
+              {zones.map((zone) => <option key={zone} value={zone}>{zoneName(zone)}</option>)}
+            </select>
+          </Field>
+          <Field label="Languages you speak" htmlFor="profile-languages" info={languagesReady && picked.length === 0 ? "None listed: you are offered English-speaking callers first. Callers who speak a language you list are offered to you first." : "Callers who speak these are offered to you first."}>
+            <LanguagePicker picked={picked} options={languageOptions} disabled={!languagesOpen || saving} onToggle={toggleLanguage} onAdd={addOther} />
+          </Field>
+          {profile.licenceNumbersReady && (
             <>
-              <FieldRow>
-                <Field label="National producer number (NPN)" htmlFor="profile-npn">
-                  <input id="profile-npn" className={`${control} font-mono tabular-nums`} inputMode="numeric" value={npn} maxLength={12} onChange={(event) => setNpn(event.target.value)} />
+              <Field label="National producer number (NPN)" htmlFor="profile-npn">
+                <input id="profile-npn" className={`${control} font-mono tabular-nums`} inputMode="numeric" value={npn} maxLength={12} onChange={(event) => setNpn(event.target.value)} />
+              </Field>
+              {states.length === 0 ? (
+                <Field label="Licensed states" htmlFor="profile-states" info="Your owner adds them on Team & access.">
+                  <input id="profile-states" className={control} value="" readOnly placeholder={profile.licensedStates === null ? "Cannot be read yet" : "None yet"} />
                 </Field>
-              </FieldRow>
-              {profile.licensedStates === null ? (
-                <p className="m-0 text-sm text-[var(--muted)]">Your licensed states cannot be read yet, so there are no state numbers to fill in.</p>
-              ) : states.length === 0 ? (
-                <p className="m-0 text-sm text-[var(--muted)]">No licensed states yet. Your owner adds them on Team &amp; access.</p>
-              ) : (
-                <FieldRow cols={states.length > 2 ? 3 : 2}>
-                  {states.map((state) => (
-                    <Field key={state} label={`${state} licence number`} htmlFor={`profile-licence-${state}`}>
-                      <input
-                        id={`profile-licence-${state}`}
-                        className={`${control} font-mono tabular-nums`}
-                        value={numbers[state] ?? ""}
-                        maxLength={LICENCE_NUMBER_MAX}
-                        onChange={(event) => setNumbers((current) => ({ ...current, [state]: event.target.value }))}
-                      />
-                    </Field>
-                  ))}
-                </FieldRow>
-              )}
+              ) : states.map((state) => (
+                <Field key={state} label={`${state} licence number`} htmlFor={`profile-licence-${state}`}>
+                  <input
+                    id={`profile-licence-${state}`}
+                    className={`${control} font-mono tabular-nums`}
+                    value={numbers[state] ?? ""}
+                    maxLength={LICENCE_NUMBER_MAX}
+                    onChange={(event) => setNumbers((current) => ({ ...current, [state]: event.target.value }))}
+                  />
+                </Field>
+              ))}
             </>
           )}
-        </FormSection>
-
-        <FormSection id="profile-languages" title="Languages you speak" info="Callers who speak one of these are offered to you first. Your manager sees the same list in Lead routing.">
-          {languages === null ? (
-            <p className="m-0 text-sm text-[var(--muted)]">Loading your languages…</p>
-          ) : "error" in languages ? (
-            <Callout tone="error" title={languages.error} />
-          ) : (
-            <>
-              {!languages.available && <Callout tone="warning" title="Languages need a database update that has not been applied yet." />}
-              <div role="group" aria-label="Languages you speak" className="flex flex-wrap gap-2">
-                {[...COMMON_LANGUAGES, ...extraLanguages].map((key) => (
-                  <ToggleChip key={key} selected={picked.includes(key)} disabled={!languagesOpen || saving} onClick={() => toggleLanguage(key)}>{languageName(key)}</ToggleChip>
-                ))}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <label htmlFor="profile-language-other" className="sr-only">Another language</label>
-                <input id="profile-language-other" className={`${control} mt-0 w-56`} placeholder="Another language" value={other} disabled={!languagesOpen || saving} onChange={(event) => setOther(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addOther(); } }} />
-                <Button type="button" variant="outline" disabled={!languagesOpen || saving || !other.trim()} onClick={addOther}>Add</Button>
-              </div>
-              {picked.length === 0 && <p className="m-0 text-xs text-[var(--muted)]">None listed: you are offered English-speaking callers first.</p>}
-            </>
-          )}
-        </FormSection>
-      </FormSections>
+        </div>
+      </div>
 
       {error && <Callout tone="error" title={error} />}
       <SettingsSaveBar visible={dirty} note={`${changes.length} unsaved change${changes.length === 1 ? "" : "s"}`}>

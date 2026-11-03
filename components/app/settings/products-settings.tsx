@@ -85,46 +85,52 @@ export function ProductsSettings() {
     .map((category) => ({ category, rows: rows.filter((row) => row.category === category) }))
     .filter((group) => group.rows.length > 0);
 
+  const live = groups.flatMap((group) => group.rows).filter((row) => row.inPlan);
+  const locked = groups.flatMap((group) => group.rows).filter((row) => !row.inPlan);
+
   return (
-    <SettingsStack>
+    <SettingsStack className="flex-1 gap-3">
       <SettingsSectionHeader actions={<StatusChip tone={sold ? "good" : "neutral"} dot={false}>{sold} sold · {inPlan} in your plan</StatusChip>} />
-      {sold === 0 && <Callout tone="warning" title="Choose the products you sell. Partners cannot send leads, and forms and quotes have nothing to offer, until you do." />}
-      <SettingsCard bodyClassName="-m-4">
-        {/* One grid of products, two across on a wide screen, so each switch sits beside its name and a
-            one-product category never leaves half a row empty (2026-10-29). The category is in each
-            row's caption. */}
-        <div id="products-list" className="grid @2xl:grid-cols-2">
-          {groups.flatMap((group) => group.rows).map((row, index) => (
-                <div key={row.code} className={cn("flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-[var(--border)] px-4 py-3 @2xl:odd:border-r", index > 0 && "border-t", index === 1 && "@2xl:border-t-0")}>
-                  <div className={row.inPlan ? "min-w-0 flex-1" : "min-w-0 flex-1 opacity-60"}>
-                    <div className="text-sm font-semibold text-[var(--ink)]">{row.name}</div>
-                    <div className="text-xs text-[var(--muted)]">
-                      {CATEGORY_LABEL[row.category] ?? row.category} · {!row.inPlan ? "in the Insurvas catalogue, not in your plan" : row.sold ? partnersText(row.partners) : "not sold"}
-                    </div>
-                  </div>
-                  {row.sold && (
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      {row.formReady
-                        ? <StatusChip tone="good" dot>Form ready</StatusChip>
-                        : <Link href="/app/settings#form-templates"><StatusChip tone="warning" dot>Set up its form</StatusChip></Link>}
-                      {row.carriers > 0 && <StatusChip tone="neutral" dot={false}>{row.carriers} {row.carriers === 1 ? "carrier" : "carriers"} offer it</StatusChip>}
-                    </span>
-                  )}
-                  {row.inPlan ? (
-                    <Switch
-                      checked={row.enabled}
-                      label={`Sell ${row.name}`}
-                      onChange={(next) => { if (busy === row.code) return; if (next) void save(row, true); else setConfirmOff(row); }}
-                    />
-                  ) : (
-                    <Link href="/app/settings#billing" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)] hover:text-[var(--ink)]">
-                      <Lock aria-hidden className="size-3.5" />Not in your plan
-                    </Link>
-                  )}
+      {sold === 0 && <p className="m-0 text-sm text-[var(--muted)]">Choose the products you sell. Partners cannot send leads, and forms and quotes have nothing to offer, until you do.</p>}
+      <div id="products-list" className="m-glass flex min-w-0 flex-1 flex-col rounded-[12px] border border-[var(--border)]">
+        {live.map((row, index) => (
+          <div key={row.code} className={cn("flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-[var(--border)] px-4 py-3", index > 0 && "border-t")}>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-[var(--ink)]">{row.name}</div>
+              <div className="text-xs text-[var(--muted)]">{CATEGORY_LABEL[row.category] ?? row.category} · {row.sold ? partnersText(row.partners) : "not sold"}</div>
+            </div>
+            {row.sold && (
+              <span className="flex flex-wrap items-center gap-2">
+                {row.carriers > 0 && <span className="text-xs text-[var(--muted)]">{row.carriers} {row.carriers === 1 ? "carrier offers" : "carriers offer"} it</span>}
+                {row.formReady
+                  ? <StatusChip tone="good" dot>Form ready</StatusChip>
+                  : <Link href="/app/settings#form-templates" className="text-xs font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">Set up its form</Link>}
+              </span>
+            )}
+            <Switch
+              checked={row.enabled}
+              label={`Sell ${row.name}`}
+              onChange={(next) => { if (busy === row.code) return; if (next) void save(row, true); else setConfirmOff(row); }}
+            />
+          </div>
+        ))}
+        {locked.length > 0 && (
+          <>
+            <div className="border-t border-[var(--border)] px-4 pt-3 pb-1 text-xs font-semibold text-[var(--muted)]">Not in your plan</div>
+            {locked.map((row) => (
+              <div key={row.code} className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-[var(--muted)]">{row.name}</div>
+                  <div className="text-xs text-[var(--muted)]">{CATEGORY_LABEL[row.category] ?? row.category}</div>
                 </div>
-          ))}
-        </div>
-      </SettingsCard>
+                <Link href="/app/settings#billing" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">
+                  <Lock aria-hidden className="size-3.5" />See plans
+                </Link>
+              </div>
+            ))}
+          </>
+        )}
+      </div>
 
       <Dialog open={confirmOff !== null} onOpenChange={(open) => { if (!open) setConfirmOff(null); }}>
         <DialogContent className="sm:max-w-[400px]">

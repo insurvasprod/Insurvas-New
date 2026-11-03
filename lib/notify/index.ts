@@ -37,7 +37,7 @@ export type NotifyOptions = {
   durationMs?: number;
   /**
    * Where this one toast appears; the Toaster's top-right otherwise. For an Undo beside the work it
-   * undoes, on a page whose own actions sit top-right (Settings › Form templates: bottom-center).
+   * undoes, on a page whose own actions sit top-right (Settings › Application forms: bottom-center).
    */
   position?: SileoPosition;
 };

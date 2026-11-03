@@ -25,7 +25,7 @@ import {
   recordRejectedPartnerSubmission,
   TCPA_REJECTION_REASON,
 } from "@/lib/compliance/rejectedSubmissions";
-import { assertPartnerMarketAccess } from "@/lib/partnerMarkets/service";
+import { assertPartnerStateAccess } from "@/lib/partnerMarkets/service";
 import { isPhoneTemplateField } from "@/lib/templates/constants";
 
 export async function POST(request: NextRequest) {
@@ -43,7 +43,6 @@ export async function POST(request: NextRequest) {
     screening_warning_acknowledged?: unknown;
     duplicate_override_justification?: unknown;
     consent_attested?: unknown;
-    carrier_id?: unknown;
     carrier_state?: unknown;
     draft_id?: unknown;
   } | null;
@@ -105,22 +104,15 @@ export async function POST(request: NextRequest) {
     );
   const draftId = typeof body.draft_id === "string" ? body.draft_id : null;
   try {
-    if (
-      typeof body.carrier_id !== "string" ||
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-        body.carrier_id,
-      ) ||
-      typeof body.carrier_state !== "string" ||
-      !/^[A-Z]{2}$/.test(body.carrier_state)
-    ) {
-      // The product check has always been decided before the carrier shape; keep that order.
+    if (typeof body.carrier_state !== "string" || !/^[A-Z]{2}$/.test(body.carrier_state)) {
+      // The product check has always been decided before the market shape; keep that order.
       await assertPartnerProductApproved(
         auth.context.tenantId,
         auth.context.partnerId,
         body.product_code,
       );
       return NextResponse.json(
-        { error: "Choose an allowed carrier and state" },
+        { error: "Choose an allowed customer state" },
         { status: 400 },
       );
     }
@@ -139,11 +131,10 @@ export async function POST(request: NextRequest) {
           auth.context.partnerId,
           body.product_code,
         ),
-        assertPartnerMarketAccess(
+        assertPartnerStateAccess(
           auth.context.tenantId,
           auth.context.partnerId,
           auth.context.userId,
-          body.carrier_id,
           body.carrier_state,
         ),
         getPartnerTemplateForProduct(
@@ -338,7 +329,7 @@ export async function POST(request: NextRequest) {
             ? body.duplicate_override_justification
             : null,
         market: {
-          carrier_id: market.carrier_id,
+          carrier_id: null,
           state: market.state,
           profile_id: market.profile_id,
           revision: market.revision,

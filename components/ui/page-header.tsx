@@ -30,8 +30,14 @@ export function PageHeader({
   breadcrumbs,
   meta,
   infoDescription = true,
+  hideTitle = false,
   className,
 }: {
+  /**
+   * The trail is the title (Settings, owner 2026-11-03): one line with the alerts, the (i) and the
+   * actions beside it. The <h1> stays for screen readers and the document outline.
+   */
+  hideTitle?: boolean;
   /** The description behind an (i) beside the title (default) rather than a line under it. */
   infoDescription?: boolean;
   /** Accepted and ignored (2026-10-30): every header shows its title now. */
@@ -53,6 +59,24 @@ export function PageHeader({
   size?: "page" | "hero";
   className?: string;
 }) {
+  if (hideTitle) {
+    return (
+      <header data-page-header="visible" className={cn("flex shrink-0 flex-col gap-1", className)}>
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+            <div className="flex items-center gap-1.5">
+              {breadcrumbs ? <Breadcrumbs crumbs={breadcrumbs} /> : <PageTrail title={title} />}
+              {description && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+            </div>
+            <PageAlertSlot />
+          </div>
+          {(titleInfo || actions) && <div className="flex max-w-full shrink-0 flex-wrap items-center gap-2 max-sm:w-full">{titleInfo}{actions}</div>}
+        </div>
+        <h1 data-page-title data-size={size} className="sr-only">{title}</h1>
+        {meta}
+      </header>
+    );
+  }
   return (
     <header data-page-header="visible" className={cn("flex shrink-0 flex-col gap-1.5", className)}>
       {breadcrumbs ? <Breadcrumbs crumbs={breadcrumbs} /> : <PageTrail title={title} />}

@@ -11,7 +11,7 @@
 import { countersFromLanes } from "./counters.ts";
 import type { PartnerLane, PartnerLaneCounts } from "./lanes.ts";
 import { NOBODY_CLAIMED_LABEL } from "./lanes.ts";
-import { DEFAULT_AGE_THRESHOLDS } from "./view.ts";
+import { DEFAULT_AGE_THRESHOLDS, snapshotFields } from "./view.ts";
 import type { PartnerLeadDetail, PartnerLeadRow, PartnerPipelinePayload, PartnerPipelineStage } from "./types.ts";
 
 export const SAMPLE_STATES = ["busy", "crowded", "quiet", "sla", "many", "empty", "error"] as const;
@@ -35,7 +35,7 @@ const ME = { id: "u-me", name: "Rion Test" };
 const TEAM = [ME, { id: "u-dana", name: "Dana Whitfield" }, { id: "u-sam", name: "Sam Okafor" }];
 
 const OWN_PIPELINE = "p-partner";
-const OTHER_PIPELINE = "p-agency";
+const OTHER_PIPELINE = "p-chargeback";
 
 type StageSpec = { id: string; name: string; type: "open" | "won" | "lost"; pipelineId?: string };
 
@@ -49,9 +49,9 @@ const STAGES: StageSpec[] = [
 
 /** The "many" state: a second pipeline some of the partner's leads were moved into. */
 const EXTRA_STAGES: StageSpec[] = [
-  { id: "s-review", name: "Underwriting review", type: "open", pipelineId: OTHER_PIPELINE },
-  { id: "s-issued", name: "Policy issued", type: "won", pipelineId: OTHER_PIPELINE },
-  { id: "s-withdrawn", name: "Withdrawn", type: "lost", pipelineId: OTHER_PIPELINE },
+  { id: "s-review", name: "Customer contacted", type: "open", pipelineId: OTHER_PIPELINE },
+  { id: "s-issued", name: "Chargeback resolved", type: "won", pipelineId: OTHER_PIPELINE },
+  { id: "s-withdrawn", name: "No response", type: "lost", pipelineId: OTHER_PIPELINE },
 ];
 
 type RowSpec = {
@@ -148,7 +148,7 @@ function stageList(state: SampleState, rows: PartnerLeadRow[]): PartnerPipelineS
   return specs.map((spec, position) => ({
     id: spec.id,
     pipelineId: spec.pipelineId ?? OWN_PIPELINE,
-    pipelineName: (spec.pipelineId ?? OWN_PIPELINE) === OWN_PIPELINE ? "Publisher transfers" : "Agency pipeline",
+    pipelineName: (spec.pipelineId ?? OWN_PIPELINE) === OWN_PIPELINE ? "Publisher transfers" : "Chargeback Customer",
     name: spec.name,
     position,
     stageType: spec.type,
@@ -175,6 +175,7 @@ export function samplePipeline(options: { state: SampleState; role?: SampleRole;
   const specs = rowsFor(state);
   const stageName = (id: string) => [...STAGES, ...EXTRA_STAGES].find((stage) => stage.id === id)?.name ?? "New";
   const stageType = (id: string) => [...STAGES, ...EXTRA_STAGES].find((stage) => stage.id === id)?.type ?? "open";
+  const configuredStages = stageList(state, []);
 
   const all: PartnerLeadRow[] = specs.map((spec, index) => ({
     // UUID-shaped so the page's own ?lead=<id> deep link accepts a sample row too.
@@ -184,6 +185,7 @@ export function samplePipeline(options: { state: SampleState; role?: SampleRole;
     submittedAt: ago(now, spec.age),
     updatedAt: ago(now, Math.max(0, Math.round(spec.age / 2))),
     product: spec.product,
+    language: ["English", "Spanish", "French"][index % 3],
     stageId: spec.stage,
     // A flagged submission says so in place of the agency's stage name, exactly as the service does.
     stageName: spec.flagged ? NOBODY_CLAIMED_LABEL : stageName(spec.stage),
@@ -205,6 +207,7 @@ export function samplePipeline(options: { state: SampleState; role?: SampleRole;
   return {
     rows,
     stages: stageList(state, rows),
+    pipelines: [...new Map(configuredStages.map((stage) => [stage.pipelineId, { id: stage.pipelineId, name: stage.pipelineName }])).values()],
     facets: {
       closers: role === "partner_user" ? [ME] : TEAM,
       products: [...new Set(rows.map((row) => row.product))],
@@ -228,25 +231,28 @@ export function samplePipeline(options: { state: SampleState; role?: SampleRole;
 
 /** The record behind a sample row, for the detail panel. */
 export function sampleDetail(row: PartnerLeadRow): PartnerLeadDetail {
+  const values = {
+    first_name: row.customer.split(" ")[0],
+    last_name: row.customer.split(" ").slice(1).join(" "),
+    date_of_birth: "1968-04-11",
+    age: 58,
+    state: "IN",
+    language: "English",
+    tobacco: false,
+    phone: "5550142317",
+    email: `${row.customer.split(" ")[0].toLowerCase()}@example.com`,
+    coverage_amount: 25000,
+    existing_coverage: true,
+    beneficiary_name: "Household member",
+    beneficiary_relationship: "Spouse",
+    health_notes: "Managed condition, no hospital stay in five years.",
+    referral_code: "SAMPLE-2026",
+  };
   return {
     ...row,
-    values: {
-      first_name: row.customer.split(" ")[0],
-      last_name: row.customer.split(" ").slice(1).join(" "),
-      date_of_birth: "1968-04-11",
-      age: 58,
-      state: "IN",
-      language: "English",
-      tobacco: false,
-      phone: "5550142317",
-      email: `${row.customer.split(" ")[0].toLowerCase()}@example.com`,
-      coverage_amount: 25000,
-      existing_coverage: true,
-      beneficiary_name: "Household member",
-      beneficiary_relationship: "Spouse",
-      health_notes: "Managed condition, no hospital stay in five years.",
-      referral_code: "SAMPLE-2026",
-    },
+    values,
+    groups: snapshotFields(values),
+    notes: [],
     timeline: [
       { type: "submitted", label: "You submitted this lead", at: row.submittedAt, detail: "Through the partner portal" },
       ...(row.lane && row.lane !== "new"
@@ -314,6 +320,7 @@ export function sampleOverview(options: { state: SampleOverviewState; role?: Sam
           submittedAt: at.toISOString(),
           updatedAt: at.toISOString(),
           product: index % 2 ? "final_expense" : "medicare_advantage",
+          language: index % 2 ? "English" : "Spanish",
           stageId: "s-new",
           stageName: "New lead",
           stageType: "open",

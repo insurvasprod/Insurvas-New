@@ -27,7 +27,7 @@ import type { TenantRole } from "@/lib/tenantAuth/roles";
  */
 // Seven short groups (owner decision 2026-10-15, after the LA-8 walk: Selling had nineteen entries and
 // pushed the last sections off the screen). None holds more than eight.
-export type SettingsGroup = "Your account" | "Agency" | "Carriers" | "Sales process" | "Leads & dialing" | "Money & compliance" | "Platform";
+export type SettingsGroup = "Your account" | "Contracting" | "Agency" | "Sales process" | "Workspace setup" | "Money & compliance" | "Platform";
 
 export type SettingsItem = {
   label: string;
@@ -86,9 +86,8 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     ],
   },
 
-  // ── Agency ──────────────────────────────────────────────────────────────────────────────────────
   {
-    group: "Agency", id: "business-identity", label: "Business identity", sort_order: 10, owned_by_module: "LA-8.3", required_roles: OWNER,
+    group: "Your account", id: "business-identity", label: "Business identity", sort_order: 20, owned_by_module: "LA-8.3", required_roles: OWNER,
     description: "Who the business is on every document: trading and legal name, NPN, tax ID, address, phone, logo and timezone — plus the support contact partners see, and who owns the workspace.", short: "Who the business is, on every document it produces.",
     search_keywords: ["business", "agency name", "company name", "doing business as", "dba", "ein", "agency profile", "support contact", "partner support", "owner", "ownership", "workspace id"],
     items: [
@@ -105,16 +104,7 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     ],
   },
   {
-    // Owner pick A, 2026-10-27: the products the agency sells, from the Insurvas catalogue and within the plan.
-    group: "Agency", id: "products", label: "Products", sort_order: 15, owned_by_module: "LA-1.3", required_roles: OWNER,
-    description: "The products your agency sells, from the Insurvas catalogue and within your plan. Leads, partners, forms, quotes and reports offer only these.",
-    short: "Which products your agency sells.",
-    search_keywords: ["products", "product", "final expense", "term life", "whole life", "iul", "medicare", "annuity", "what we sell", "product lines", "products you sell"],
-    items: [{ label: "Products you sell", anchor: "products-list", keywords: ["products you sell", "sell", "turn on", "turn off"] }],
-  },
-  { group: "Agency", id: "team-access", label: "Team & access", sort_order: 20, owned_by_module: "LA-0.2", required_roles: OWNER, description: "Owners, licensed agents, setters, assistants and bookkeepers — and the boundary each one works inside.", short: "Who is on the workspace, their role and where they are licensed.", search_keywords: ["team", "users", "staff", "invite", "seats", "roles", "members", "deactivate"] },
-  {
-    group: "Agency", id: "billing", label: "Plan & billing", sort_order: 40, owned_by_module: "LA-8.5", required_roles: OWNER,
+    group: "Your account", id: "billing", label: "Plan & billing", sort_order: 30, owned_by_module: "LA-8.5", required_roles: OWNER,
     description: "Your plan, what it costs and when it renews, every limit with what you use of it, invoices, the card, and changing, pausing or cancelling.",
     short: "Your plan, limits, invoices and card — and changing, pausing or cancelling.",
     search_keywords: ["billing", "plan", "subscription", "invoice", "receipt", "upgrade", "downgrade", "cancel", "pause", "card", "payment method", "usage", "limits", "seats", "renewal"],
@@ -127,13 +117,25 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
     ],
   },
 
-  // ── Carriers ────────────────────────────────────────────────────────────────────────────────────
+  // ── Contracting ────────────────────────────────────────────────────────────────────────────────────
   // Owner pick D, 2026-10-26: Carrier library and States & licences in one place, in three steps.
   // 2026-10-27: Carrier details (sales-carriers) folded into each carrier's card; old links land on Carriers.
   // Manager review 28 Oct §5.1: "Contracting", a guided set-up (carriers, then states) and the two lists. The id stays.
-  { group: "Carriers", id: "carriers", label: "Contracting", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "The carriers you are contracted with and the states you sell in, set up step by step.", short: "Your carriers and the states you sell in, set up in two steps.", search_keywords: ["contracting", "contract management", "carriers", "add carrier", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
+  { group: "Contracting", id: "carriers", label: "Carriers", sort_order: 10, owned_by_module: "LA-0.4 / LA-0.5", required_feature: "appointment_vault", required_roles: OWNER, description: "The carriers you are contracted with and the states you sell in, set up step by step.", short: "Your carriers and the states you sell in, set up in two steps.", search_keywords: ["contracting", "contract management", "carriers", "add carrier", "contract level", "writing number", "appointments", "appointed", "states", "products", "carrier portal", "portal login", "bank descriptor", "payment method", "field map", "autofill"] },
+  // Owner, 2026-11-03: Contracting is the parent; Carriers and Products are its pages.
+  {
+    // Owner pick A, 2026-10-27: the products the agency sells, from the Insurvas catalogue and within the plan.
+    group: "Contracting", id: "products", label: "Products", sort_order: 20, owned_by_module: "LA-1.3", required_roles: OWNER,
+    description: "The products your agency sells, from the Insurvas catalogue and within your plan. Leads, partners, forms, quotes and reports offer only these.",
+    short: "Which products your agency sells.",
+    search_keywords: ["products", "product", "final expense", "term life", "whole life", "iul", "medicare", "annuity", "what we sell", "product lines", "products you sell"],
+    items: [{ label: "Products you sell", anchor: "products-list", keywords: ["products you sell", "sell", "turn on", "turn off"] }],
+  },
   // 2026-10-28 (owner): Carrier rules is neither a rail entry nor a tab on Carriers.
-  { group: "Carriers", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
+  { group: "Contracting", id: "sales-extension", label: "Browser extension", sort_order: 50, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
+
+  // ── Agency ──────────────────────────────────────────────────────────────────────────────────────
+  { group: "Agency", id: "team-access", label: "Team & access", sort_order: 20, owned_by_module: "LA-0.2", required_roles: OWNER, description: "Owners, licensed agents, setters, assistants and bookkeepers — and the boundary each one works inside.", short: "Who is on the workspace, their role and where they are licensed.", search_keywords: ["team", "users", "staff", "invite", "seats", "roles", "members", "deactivate"] },
 
   // ── Sales process ───────────────────────────────────────────────────────────────────────────────
   { group: "Sales process", id: "sales-underwriting", label: "Underwriting templates", sort_order: 10, owned_by_module: "LA-3.17", required_feature: "applications",
@@ -159,11 +161,11 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { group: "Sales process", id: "sales-ai", label: "AI assistant", sort_order: 70, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "The underwriting assistant, and exactly what it would be sent.", search_keywords: ["ai", "assistant"] },
   { group: "Sales process", id: "sales-pipeline-sync", label: "Application stages", sort_order: 80, owned_by_module: "LA-3.17", required_feature: "applications", required_roles: OWNER, description: "Which pipeline stage a lead's card moves to as its application progresses.", search_keywords: ["pipeline sync", "stage sync", "move cards", "application status"] },
 
-  // ── Leads & dialing ─────────────────────────────────────────────────────────────────────────────
+  // ── Workspace setup ─────────────────────────────────────────────────────────────────────────────
   // Pipelines and Dispositions are one page (owner, 2026-10-27); old "#dispositions" links land here (registry.ts).
-  { group: "Leads & dialing", id: "pipelines", label: "Pipelines & outcomes", sort_order: 10, owned_by_module: "LA-1.9 / LA-1.12", required_feature: "book_of_business", required_roles: OWNER, description: "Your pipelines' stages, the call outcomes agents pick, and where each outcome sends the lead.", short: "Stages, call outcomes, and the stage each outcome moves a lead to.", search_keywords: ["stages", "pipeline", "call outcome", "disposition", "dispositions", "outcomes"] },
+  { group: "Workspace setup", id: "pipelines", label: "Pipelines & outcomes", sort_order: 10, owned_by_module: "LA-1.9 / LA-1.12", required_feature: "book_of_business", required_roles: OWNER, description: "Your pipelines' stages, the call outcomes agents pick, and where each outcome sends the lead.", short: "Stages, call outcomes, and the stage each outcome moves a lead to.", search_keywords: ["stages", "pipeline", "call outcome", "disposition", "dispositions", "outcomes"] },
   {
-    group: "Leads & dialing", id: "form-templates", label: "Form templates", sort_order: 30, owned_by_module: "LA-1.4", required_feature: "book_of_business", required_roles: OWNER,
+    group: "Workspace setup", id: "form-templates", label: "Application forms", sort_order: 30, owned_by_module: "LA-1.4", required_feature: "book_of_business", required_roles: OWNER,
     description: "The partner and agent forms that capture a complete lead, before anybody calls it.", search_keywords: ["lead fields", "forms", "application forms", "custom fields", "questions", "partner form"],
     items: [
       { label: "Who can apply", anchor: "form-who-can-apply", keywords: ["age limit", "eligibility", "minimum age", "maximum age", "how old"] },
@@ -172,11 +174,11 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
       { label: "Versions & updates", anchor: "form-versions", keywords: ["platform template", "Insurvas template", "form version", "form name"] },
     ],
   },
-  { group: "Leads & dialing", id: "lead-posting", label: "Lead posting", sort_order: 40, owned_by_module: "LA-2.5", required_feature: "lead_import", required_roles: OWNER, description: "The keys your vendors post with, the URL they post to, and how their field names map onto yours.", short: "Vendor posting keys, the URL they post to and their field maps.", search_keywords: ["post key", "vendor key", "lead post", "posting url", "field map"] },
-  { group: "Leads & dialing", id: "calendar", label: "Calendar & availability", sort_order: 50, owned_by_module: "LA-2.11", required_feature: "outbound_dialing", required_roles: OWNER, description: "Working hours, blocked time and how many appointments fit in a day. Every booking rule reads these.", search_keywords: ["working hours", "availability", "appointments per day", "blocked time"] },
-  { group: "Leads & dialing", id: "cadence", label: "Dialing cadence", sort_order: 60, owned_by_module: "LA-2.7", required_feature: "outbound_dialing", required_roles: OWNER, description: "How long the dialer waits before each retry, and which part of the day it prefers.", search_keywords: ["retry", "redial", "cadence"] },
-  { group: "Leads & dialing", id: "queue-sla", label: "Inbound transfers", sort_order: 70, owned_by_module: "LA-1.23", required_feature: "book_of_business", required_roles: OWNER, description: "How long a transfer may wait and what happens at each step, who hears about it, buffer handoff, and who gets the next transfer.", short: "Waiting time, alerts, buffer agents and who gets the next transfer.", search_keywords: ["sla", "unclaimed", "response time", "escalation ladder", "inbound", "transfers", "buffer", "handoff", "routing", "licensed", "break", "alerts", "queue"] },
-  { group: "Leads & dialing", id: "calling-windows", label: "Calling windows", sort_order: 80, owned_by_module: "LA-2.4", required_feature: "outbound_dialing", required_roles: OWNER, description: "The hours your agency will dial in, on top of the federal and state limits. Narrowing only.", search_keywords: ["calling hours", "dialing hours", "tcpa hours", "holidays", "quiet hours"] },
+  { group: "Workspace setup", id: "lead-posting", label: "Lead posting", sort_order: 40, owned_by_module: "LA-2.5", required_feature: "lead_import", required_roles: OWNER, description: "The keys your vendors post with, the URL they post to, and how their field names map onto yours.", short: "Vendor posting keys, the URL they post to and their field maps.", search_keywords: ["post key", "vendor key", "lead post", "posting url", "field map"] },
+  { group: "Workspace setup", id: "calendar", label: "Calendar & availability", sort_order: 50, owned_by_module: "LA-2.11", required_feature: "outbound_dialing", required_roles: OWNER, description: "Working hours, blocked time and how many appointments fit in a day. Every booking rule reads these.", search_keywords: ["working hours", "availability", "appointments per day", "blocked time"] },
+  { group: "Workspace setup", id: "cadence", label: "Dialing cadence", sort_order: 60, owned_by_module: "LA-2.7", required_feature: "outbound_dialing", required_roles: OWNER, description: "How long the dialer waits before each retry, and which part of the day it prefers.", search_keywords: ["retry", "redial", "cadence"] },
+  { group: "Workspace setup", id: "queue-sla", label: "Inbound settings", sort_order: 70, owned_by_module: "LA-1.23", required_feature: "book_of_business", required_roles: OWNER, description: "How long a transfer may wait and what happens at each step, who hears about it, buffer handoff, and who gets the next transfer.", short: "Waiting time, alerts, buffer agents and who gets the next transfer.", search_keywords: ["sla", "unclaimed", "response time", "escalation ladder", "inbound", "transfers", "buffer", "handoff", "routing", "licensed", "break", "alerts", "queue"] },
+  { group: "Workspace setup", id: "calling-windows", label: "Calling windows", sort_order: 80, owned_by_module: "LA-2.4", required_feature: "outbound_dialing", required_roles: OWNER, description: "The hours your agency will dial in, on top of the federal and state limits. Narrowing only.", search_keywords: ["calling hours", "dialing hours", "tcpa hours", "holidays", "quiet hours"] },
 
   // ── Money & compliance ──────────────────────────────────────────────────────────────────────────
   {

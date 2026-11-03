@@ -49,6 +49,7 @@ export function SelectMenu<K extends string>({
   searchPlaceholder = "Search",
   className,
   panelClassName,
+  matchTriggerWidth = false,
   panelAlign = "end",
 }: {
   /** Accessible name of the control ("Show states"). */
@@ -66,6 +67,8 @@ export function SelectMenu<K extends string>({
   /** The trigger's width and layout (e.g. "w-52"). */
   className?: string;
   panelClassName?: string;
+  /** Size the search panel to the control (useful for compact filter fields). */
+  matchTriggerWidth?: boolean;
   /** The menu's anchor edge when its width differs from the trigger. */
   panelAlign?: "start" | "center" | "end";
 }) {
@@ -146,7 +149,11 @@ export function SelectMenu<K extends string>({
       </PopoverTrigger>
       {/* Never taller than the room below the trigger, so the menu does not flip up over the form it
           belongs to (owner, 2026-10-29); the list inside shrinks to fit rather than fixing its height. */}
-      <PopoverContent align={panelAlign} className={cn("flex w-72 max-h-[min(18rem,var(--radix-popover-content-available-height))] flex-col overflow-hidden p-0", panelClassName)}>
+      <PopoverContent
+        align={panelAlign}
+        style={matchTriggerWidth ? { width: "var(--radix-popover-trigger-width)", maxWidth: "calc(100vw - 2rem)" } : undefined}
+        className={cn("flex w-72 max-h-[min(18rem,var(--radix-popover-content-available-height))] flex-col overflow-hidden p-0", panelClassName)}
+      >
         <label className="relative flex shrink-0 items-center border-b border-[var(--border)]">
           <span className="sr-only">{searchPlaceholder}</span>
           <Search aria-hidden="true" className="pointer-events-none absolute left-3 size-4 text-[var(--muted)]" />
