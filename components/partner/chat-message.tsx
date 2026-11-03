@@ -277,7 +277,7 @@ export function ChatThread({
       })}
     </div>
     {away && (
-      <Button type="button" size="sm" variant="secondary" className="absolute bottom-3 right-4 rounded-full shadow-[var(--shadow-rest)]" onClick={jumpToLatest}>
+      <Button type="button" size="sm" variant="secondary" className="absolute bottom-3 right-4 shadow-[var(--shadow-rest)]" onClick={jumpToLatest}>
         <ArrowDown aria-hidden="true" />Latest
       </Button>
     )}
