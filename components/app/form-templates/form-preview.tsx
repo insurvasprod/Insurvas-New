@@ -1,31 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Play } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Monitor, PanelRightClose, PanelRightOpen, Play, Smartphone } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { cardHead, cardSurface } from "@/components/ui/card";
 import { InfoTip } from "@/components/ui/info-tip";
-import { Segmented } from "@/components/ui/view-tabs";
 import { PartnerField } from "@/components/partner/partner-portal-workspace";
 import type { Picked } from "@/components/app/form-templates/form-canvas";
 import type { TemplateField, TemplateFormDefinition } from "@/lib/templates/constants";
 import { placementWidth } from "@/lib/templates/placementWidth";
 
 type Width = "computer" | "phone";
-const WIDTHS: ReadonlyArray<{ key: Width; label: string }> = [{ key: "computer", label: "Computer" }, { key: "phone", label: "Phone" }];
 const noop = () => {};
 
 /**
  * Form setup, right: what partners get, drawn with the partner portal's own field renderer as a sheet
  * on a quiet canvas. Every part is open. Clicking a question opens it in the editor (owner 2026-11-03).
+ * It starts folded to a slim bar, so the questions have the room; the icon opens it. Computer, Phone and
+ * Try the form are icons.
  */
-export function FormPreview({ form, fields, productName, picked, onPick, onTry }: {
+export function FormPreview({ form, fields, productName, picked, open, onToggle, onPick, onTry }: {
   form: TemplateFormDefinition;
   fields: TemplateField[];
   productName: string;
   picked: Picked;
+  open: boolean;
+  onToggle: () => void;
   onPick: (fieldKey: string, sectionKey: string) => void;
   onTry: () => void;
 }) {
@@ -42,14 +44,31 @@ export function FormPreview({ form, fields, productName, picked, onPick, onTry }
   const twoColumns = width === "computer" && !narrow;
   const fieldMap = new Map(fields.map((field) => [field.field_key, field]));
 
+  if (!open) {
+    return (
+      <section aria-label="Preview, folded" className={cn(cardSurface, "flex min-w-0 flex-row items-center gap-2 px-3 py-2 lg:h-full lg:min-h-0 lg:w-12 lg:flex-col lg:px-0 lg:py-3")}>
+        <Button type="button" variant="ghost" size="icon" aria-label="Show what partners see" title="Show what partners see" aria-expanded={false} onClick={onToggle}><PanelRightOpen aria-hidden="true" /></Button>
+        <span className="text-xs font-semibold text-[var(--muted)] lg:[writing-mode:vertical-rl]">Preview</span>
+      </section>
+    );
+  }
+
+  const iconButton = (label: string, active: boolean, onClick: () => void, icon: ReactNode) => (
+    <Button type="button" variant="ghost" size="icon" aria-label={label} title={label} aria-pressed={active} onClick={onClick} className={cn(active && "bg-[var(--primary-soft)] text-[var(--accent-ink)] hover:bg-[var(--primary-soft)]")}>{icon}</Button>
+  );
+
   return (
     <section aria-label="What partners see" className={cn(cardSurface, "flex min-h-0 min-w-0 flex-col lg:h-full")}>
       <div className={cn(cardHead, "flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3")}>
         <span className="text-xs font-semibold text-[var(--ink)]">Preview</span>
         <InfoTip label="About this preview">Drawn from your changes, as partners will get it once you publish. Nothing typed here is saved.</InfoTip>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <span className="hidden sm:contents"><Segmented label="Preview width" options={WIDTHS} value={width} onChange={setWidth} /></span>
-          <Button onClick={onTry} type="button" variant="outline"><Play aria-hidden="true" />Try the form</Button>
+        <div className="ml-auto flex items-center gap-1">
+          <span className="hidden sm:contents">
+            {iconButton("Show it on a computer", width === "computer", () => setWidth("computer"), <Monitor aria-hidden="true" />)}
+            {iconButton("Show it on a phone", width === "phone", () => setWidth("phone"), <Smartphone aria-hidden="true" />)}
+          </span>
+          <Button onClick={onTry} type="button" variant="ghost" size="icon" aria-label="Try the form" title="Try the form: fill it in as a partner would"><Play aria-hidden="true" /></Button>
+          <Button onClick={onToggle} type="button" variant="ghost" size="icon" aria-label="Fold the preview" title="Fold the preview" aria-expanded><PanelRightClose aria-hidden="true" /></Button>
         </div>
       </div>
 

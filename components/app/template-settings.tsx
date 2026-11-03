@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { notify } from "@/lib/notify";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SectionLoading } from "@/components/ui/page-states";
@@ -76,6 +77,8 @@ export function TemplateSettings() {
   const [liveVersions, setLiveVersions] = useState<Record<string, number>>({});
   /** Form setup (the questions and what partners see) or Form settings (owner 2026-11-03). */
   const [tab, setTab] = useState<"setup" | "settings">("setup");
+  /** The preview starts folded, so the questions have the room. */
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [trying, setTrying] = useState(false);
   /** A product switch waiting on Publish / Discard / Stay. */
   const [switchTo, setSwitchTo] = useState<string | null>(null);
@@ -377,7 +380,7 @@ export function TemplateSettings() {
 
       {tab === "setup" ? (
         // The questions on the left, what partners get on the right.
-        <div className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
+        <div className={cn("grid min-h-0 min-w-0 flex-1 gap-4", previewOpen ? "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]" : "lg:grid-cols-[minmax(0,1fr)_auto]")}>
           <QuestionList
             form={draft.form}
             fields={draft.fields}
@@ -397,6 +400,8 @@ export function TemplateSettings() {
             fields={draft.fields}
             productName={current.template.product_name}
             picked={picked}
+            open={previewOpen}
+            onToggle={() => setPreviewOpen((open) => !open)}
             onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
             onTry={() => setTrying(true)}
           />
