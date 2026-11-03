@@ -88,6 +88,8 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
   const [threadOnPhone, setThreadOnPhone] = useState(false);
   // The conversation list folds to a rail of faces so the thread gets the room; remembered per browser.
   const [listFolded, setListFolded] = useState(false);
+  // How many incoming messages were unread when a conversation opened, for the "New messages" line.
+  const [openUnread, setOpenUnread] = useState<{ id: string; count: number } | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- browser storage is only readable after mount
     try { setListFolded(window.localStorage.getItem("insurvas.partner.chatListFolded") === "1"); } catch { /* storage blocked: start open */ }
@@ -118,6 +120,8 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
       const next = normalize(body as ChatResponse);
       setViewerId(typeof (body as { viewerId?: unknown }).viewerId === "string" ? (body as { viewerId: string }).viewerId : null);
       setData(next);
+      // The first read opens the first conversation: remember what was unread in it before it is marked read.
+      setOpenUnread((previous) => previous ?? { id: next.channels[0]?.id ?? "", count: next.channels[0]?.unreadCount ?? 0 });
       setSelectedId((current) => current && next.channels.some((channel) => channel.id === current) ? current : next.channels[0]?.id ?? null);
       setError(null);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not load partner chat"); }
@@ -197,6 +201,7 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
     [data.directory]);
 
   function openConversation(id: string) {
+    setOpenUnread({ id, count: data.channels.find((channel) => channel.id === id)?.unreadCount ?? 0 });
     setSelectedId(id);
     setThreadOnPhone(true);
     setThreadSearchOpen(false);
@@ -371,7 +376,7 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
 
               {threadSearchOpen && <div className="shrink-0 border-b border-border px-3 py-2 sm:px-4"><label className="relative block"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" /><span className="sr-only">Search messages in this conversation</span><input type="search" autoFocus value={threadSearch} onChange={(event) => setThreadSearch(event.target.value)} placeholder="Search messages" className={cn(control, "mt-0 w-full pl-9")} /></label></div>}
 
-              <ChatThread messages={shownMessages} viewerId={viewerId} nameOf={nameOf} zone={zone} othersReadAt={selected.othersReadAt} emptyTitle={selected.messages.length ? "No messages match" : "No messages yet"} emptyHint={selected.messages.length ? "Try another tab or clear your search." : "Send the first update to this conversation."} />
+              <ChatThread unreadCount={openUnread?.id === selected.id ? openUnread.count : 0} messages={shownMessages} viewerId={viewerId} nameOf={nameOf} zone={zone} othersReadAt={selected.othersReadAt} emptyTitle={selected.messages.length ? "No messages match" : "No messages yet"} emptyHint={selected.messages.length ? "Try another tab or clear your search." : "Send the first update to this conversation."} />
 
               <div className="shrink-0 px-3 pt-1 pb-3 sm:px-4">
                 <ComposerFiles files={files} onRemove={(file) => setFiles((current) => current.filter((item) => item !== file))} />
@@ -390,7 +395,7 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
                   className="rounded-xl border border-input bg-background p-1.5 transition-shadow focus-within:border-[var(--primary)] focus-within:shadow-[0_0_0_3px_var(--primary-soft)]"
                   trailingControl={dictation.supported ? <Button type="button" size="icon" variant={dictation.listening ? "destructive" : "ghost"} disabled={dictation.transcribing} aria-pressed={dictation.listening} aria-label={dictation.listening ? "Stop dictating" : "Dictate a message"} title={dictation.listening ? "Stop dictating" : "Dictate a message"} onClick={() => (dictation.listening ? dictation.stop() : dictation.start())}>{dictation.transcribing ? <Loader2 className="animate-spin" aria-hidden="true" /> : dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}</Button> : undefined}
                 />
-                {dictation.listening ? <p role="status" aria-live="polite" className="m-0 mt-1.5 text-xs text-[var(--body)]">{dictation.engine === "device" ? `Recording ${Math.floor(dictation.seconds / 60)}:${String(dictation.seconds % 60).padStart(2, "0")} · press the microphone again to write it` : dictation.heard || "Listening… say your message, then press Send."}</p> : dictation.transcribing ? <p role="status" className="m-0 mt-1.5 text-xs text-[var(--body)]">{dictation.download !== null && dictation.download < 100 ? `Getting the speech model ready · ${dictation.download}%` : "Writing what you said…"}</p> : dictation.problem ? <p role="alert" className="m-0 mt-1.5 text-xs text-[var(--error-ink)]">{dictation.problem}</p> : <p className="m-0 mt-1.5 hidden text-xs text-muted-foreground sm:block">Enter to send · Shift + Enter for a new line{dictation.supported ? " · the microphone dictates" : ""}</p>}
+                {dictation.listening ? <p role="status" aria-live="polite" className="m-0 mt-1.5 text-xs text-[var(--body)]">{dictation.engine === "device" ? `Recording ${Math.floor(dictation.seconds / 60)}:${String(dictation.seconds % 60).padStart(2, "0")} · press the microphone again to write it` : dictation.heard || "Listening… say your message, then press Send."}</p> : dictation.transcribing ? <p role="status" className="m-0 mt-1.5 text-xs text-[var(--body)]">{dictation.download !== null && dictation.download < 100 ? `Getting the speech model ready · ${dictation.download}%` : "Writing what you said…"}</p> : dictation.problem ? <p role="alert" className="m-0 mt-1.5 text-xs text-[var(--error-ink)]">{dictation.problem}</p> : null}
               </div>
             </>
           ) : (
