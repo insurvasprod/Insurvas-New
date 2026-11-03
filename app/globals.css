@@ -4045,3 +4045,29 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .portal-partner-submit-page .portal-partner-submit-rail { position: static; max-height: none; border-bottom: 1px solid var(--border); }
   .portal-partner-submit-page .portal-partner-submit-main { border-left: 0; }
 }
+
+/* Once the number is screened the setup is one slim row: the values say what they are, the labels and the
+   hint step aside (the side navigation already shows the phone result). */
+.portal-partner-submit-page .portal-partner-submit-topsteps { padding-block: 10px; }
+.portal-partner-submit-page .portal-partner-submit-product-bar[data-compact] { padding: 10px 22px; }
+.portal-partner-submit-page .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-product-row.has-markets { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.4fr); align-items: center; }
+.portal-partner-submit-page .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-select > span,
+.portal-partner-submit-page .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-screening-control > label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.portal-partner-submit-page .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-screening-control > small { display: none; }
+.portal-partner-submit-page .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-select { gap: 0; }
+@media (max-width: 700px) {
+  .portal-partner-submit-page .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-product-row.has-markets { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The setup lives in the form column now: product and state side by side, the phone under them, and the whole
+   thing one slim row once the number is screened. */
+.portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar { padding: 0; border: 0; }
+.portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-row.has-markets { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-screening-control { grid-column: 1 / -1; }
+.portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar[data-compact] { padding: 0; }
+.portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-product-row.has-markets { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.5fr); }
+.portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-screening-control { grid-column: auto; }
+@media (max-width: 900px) {
+  .portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-product-row.has-markets { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .portal-partner-submit-page .portal-partner-submit-main .portal-partner-submit-product-bar[data-compact] .portal-partner-submit-screening-control { grid-column: 1 / -1; }
+}

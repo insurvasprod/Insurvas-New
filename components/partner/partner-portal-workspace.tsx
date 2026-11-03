@@ -1334,31 +1334,6 @@ export function PartnerLeadForm({
           </li>
         ))}
       </ol>
-      <div className="portal-partner-submit-product-bar" role="group" aria-labelledby="partner-lead-details-label">
-        <h2 id="partner-lead-details-label" className="sr-only">Lead setup</h2>
-        <div className="portal-partner-submit-product-row has-markets">
-          {setupControls}
-          <div className="portal-partner-submit-screening-control">
-            <label htmlFor={`screen-phone-${productCode}`}>Phone screening · {phoneField.label}<span className="portal-partner-submit-required"> *</span></label>
-            <div className="portal-partner-submit-screening-input">
-              <PartnerField
-                id={`screen-phone-${productCode}`}
-                field={phoneField}
-                value={values[phoneField.field_key]}
-                error={fieldErrors[phoneField.field_key]}
-                onChange={(value) => updateValue(phoneField.field_key, value)}
-                onBlur={() => { void runScreening(); }}
-              />
-              <Button type="button" disabled={screeningBusy || Boolean(screening && lastScreenedPhone.current === String(values[phoneField.field_key] ?? ""))} onClick={() => void runScreening()}>
-                {screeningBusy ? "Screening…" : screening ? "Screened" : "Screen"}
-              </Button>
-            </div>
-            {(screening || screeningBusy) && <small>{screening ? phoneLabel : phoneHint}</small>}
-            {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
-            {fieldErrors[phoneField.field_key] && <p className="portal-partner-submit-error" role="alert">{fieldErrors[phoneField.field_key]}</p>}
-          </div>
-        </div>
-      </div>
       <div className="portal-partner-submit-body" data-folded={railFolded ? "" : undefined}>
         <nav className="portal-partner-submit-rail" aria-label="Application sections and checks">
           <div className="portal-partner-submit-rail-head">
@@ -1403,6 +1378,31 @@ export function PartnerLeadForm({
           <p className="sr-only" role="status">
             {status}
           </p>
+            <div className="portal-partner-submit-product-bar" data-compact={formOpened ? "" : undefined} role="group" aria-labelledby="partner-lead-details-label">
+              <h2 id="partner-lead-details-label" className="sr-only">Lead setup</h2>
+              <div className="portal-partner-submit-product-row has-markets">
+                {setupControls}
+                <div className="portal-partner-submit-screening-control">
+                  <label htmlFor={`screen-phone-${productCode}`}>Phone screening · {phoneField.label}<span className="portal-partner-submit-required"> *</span></label>
+                  <div className="portal-partner-submit-screening-input">
+                    <PartnerField
+                      id={`screen-phone-${productCode}`}
+                      field={phoneField}
+                      value={values[phoneField.field_key]}
+                      error={fieldErrors[phoneField.field_key]}
+                      onChange={(value) => updateValue(phoneField.field_key, value)}
+                      onBlur={() => { void runScreening(); }}
+                    />
+                    <Button type="button" disabled={screeningBusy || Boolean(screening && lastScreenedPhone.current === String(values[phoneField.field_key] ?? ""))} onClick={() => void runScreening()}>
+                      {screeningBusy ? "Screening…" : screening ? "Screened" : "Screen"}
+                    </Button>
+                  </div>
+                  {(screening || screeningBusy) && <small>{screening ? phoneLabel : phoneHint}</small>}
+                  {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
+                  {fieldErrors[phoneField.field_key] && <p className="portal-partner-submit-error" role="alert">{fieldErrors[phoneField.field_key]}</p>}
+                </div>
+              </div>
+            </div>
           {!formOpened && (screeningError || rejectionNotice || dncPending) && (
             <div className="portal-partner-submit-phone-feedback">
               {screeningError && <p className="portal-partner-submit-error" role="alert">{screeningError}</p>}
