@@ -174,18 +174,15 @@ export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress
   if (lead) {
     return (
       <div data-auth-steps="" data-compact="" className="mb-6">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-          <div className="min-w-0">{lead}</div>
-          <p className="m-0 shrink-0 pb-1 text-sm font-semibold leading-normal tracking-[-0.02em] text-muted-foreground">
-            {done ? <span className="text-foreground">All {total} steps done</span> : <><span className="text-foreground">Step {current}</span> of {total}</>}
-          </p>
-        </div>
-        <ol className="mt-3 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }} aria-label={ariaLabel}>
+        <div className="flex justify-center text-center">{lead}</div>
+        <ol className="mt-3 grid gap-3" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }} aria-label={ariaLabel}>
           {Array.from({ length: total }, (_, index) => {
             const name = labels?.[index] ?? `Step ${index + 1}`;
             return (
-              <li key={name} className={cn("h-1 rounded-full transition-colors duration-300", index < current ? "bg-[var(--primary)]" : "bg-border")} aria-current={index + 1 === current ? "step" : undefined}>
-                <span className="sr-only">{name}{index + 1 < current ? ", done" : index + 1 === current ? ", current step" : ""}</span>
+              <li key={name} data-step-state={index + 1 < current ? "done" : index + 1 === current ? "current" : "next"} aria-current={index + 1 === current ? "step" : undefined}>
+                <span data-step-bar="" className={cn("block h-1 rounded-full transition-colors duration-300", index < current ? "bg-[var(--primary)]" : "bg-border")} />
+                <span data-step-name="" className="mt-2 block text-xs font-semibold leading-normal tracking-[-0.01em]">{name}</span>
+                <span className="sr-only">{index + 1 < current ? "done" : index + 1 === current ? "current step" : ""}</span>
               </li>
             );
           })}
