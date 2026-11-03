@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { BadgeCheck, Handshake, Hourglass, XCircle } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, Handshake, Hourglass, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -11,11 +11,13 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { PremiumBar } from "@/components/ui/premium-bar";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { shiftDay, spanDays } from "@/lib/partnerLeads/trend";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { TableCard } from "@/components/ui/table-card";
-import { st } from "@/components/app/settings/primitives";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { productLineLabel } from "@/lib/format/productLine";
 import { dayLabel } from "@/lib/partnerDealFlow/localDay";
@@ -111,6 +113,7 @@ export function PartnerDealFlow({
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [search, setSearch] = useState("");
   const [showFilters, setShowFilters] = useState(initialFiltersOpen);
+  const [customPeriod, setCustomPeriod] = useState(false);
   const [page, setPage] = useState(1);
   const [data, setData] = useState<PartnerDealFlowPayload | null>(preview ? preview.data : null);
   const [error, setError] = useState<string | null>(preview?.error ?? null);
@@ -151,7 +154,8 @@ export function PartnerDealFlow({
   }, [load, preview]);
 
   const rows = data?.rows ?? [];
-  const pageSize = 10;
+  // The pager takes as many rows as the window has room for, as on Commission statements.
+  const pageSize = useFittingPageSize(420, 45);
   const tablePage = paginate(rows, page, pageSize);
   const figures = data?.figures;
   const counts = data?.stageCounts;
@@ -160,7 +164,6 @@ export function PartnerDealFlow({
   const premiumMax = Math.max(0, ...rows.map((row) => (row.monthlyPremiumCents ?? 0) * 12));
 
   const setDate = (key: "from" | "to", value: string) => { setRange((current) => ({ ...current, [key]: value || ceiling })); setPage(1); };
-  const resetToToday = () => { setRange({ from: ceiling, to: ceiling }); setPage(1); };
   const applyFilter = (patch: Partial<Filters>) => { setFilters((current) => ({ ...current, ...patch })); setPage(1); };
   const clearFilters = () => { setFilters(EMPTY_FILTERS); setSearch(""); setRange({ from: ceiling, to: ceiling }); setPage(1); };
   const premiumNarrowing = Boolean(filters.annualised_premium_min || filters.annualised_premium_max);
@@ -191,20 +194,54 @@ export function PartnerDealFlow({
 
   if (firstLoad) return <PageLoading />;
 
-  const columns = isAdmin ? 8 : 7;
+  const columns = isAdmin ? 7 : 6;
+
+  // The period: a few quick ranges, or two dates. The default is today, where the partner is.
+  const presets = [
+    { key: "today", label: "Today", from: ceiling, to: ceiling },
+    { key: "yesterday", label: "Yesterday", from: shiftDay(ceiling, -1), to: shiftDay(ceiling, -1) },
+    { key: "7", label: "Last 7 days", from: shiftDay(ceiling, -6), to: ceiling },
+    { key: "30", label: "Last 30 days", from: shiftDay(ceiling, -29), to: ceiling },
+  ];
+  const activePreset = presets.find((preset) => preset.from === range.from && preset.to === range.to)?.key;
+  const customRange = customPeriod || !activePreset;
+  function choosePeriod(key: string) {
+    if (key === "custom") { setCustomPeriod(true); return; }
+    const preset = presets.find((item) => item.key === key);
+    if (!preset) return;
+    setCustomPeriod(false);
+    setRange({ from: preset.from, to: preset.to });
+    setPage(1);
+  }
+
+  // The small line in each tile: deals per day through the period, when the period is more than a day.
+  const rangeDays = spanDays(range.from, range.to);
+  const dayList = rangeDays > 1 && rangeDays <= 92 ? Array.from({ length: rangeDays }, (_, index) => shiftDay(range.from, index)) : [];
+  const perDay = (match: (row: (typeof rows)[number]) => boolean) => (dayList.length ? dayList.map((day) => rows.filter((row) => row.day === day && match(row)).length) : undefined);
 
   return (
-    <div className="m-stagger flex h-[calc(100dvh_-_7rem)] min-h-0 w-full min-w-0 flex-none flex-col gap-6">
-      {/* The agent page's header row: the title on the left, the page's actions on the right. */}
+    <div className="m-stagger flex min-h-[calc(100dvh_-_7rem)] w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Daily Deal Flow"
         description="What the agency did with the leads you sent. Published statements show what is paid."
+        hideTitle
+        breadcrumbs={[{ label: "Leads" }, { label: "Daily Deal Flow" }]}
         actions={
           <div className="flex flex-wrap items-center gap-2" aria-label="Deals worked date range">
-            <input type="date" aria-label="Worked from" className={toolbarControl} value={range.from} max={range.to || ceiling} onChange={(event) => setDate("from", event.target.value)} />
-            <span className="text-xs text-muted-foreground" aria-hidden="true">to</span>
-            <input type="date" aria-label="Worked to" className={toolbarControl} value={range.to} min={range.from || undefined} max={ceiling} onChange={(event) => setDate("to", event.target.value)} />
-            {!isToday && <Button type="button" variant="outline" onClick={resetToToday} aria-label="Show today’s deals">Today</Button>}
+            <SelectMenu
+              label="Period"
+              value={customRange ? "custom" : activePreset!}
+              onChange={choosePeriod}
+              className="w-40"
+              panelClassName="w-48"
+              panelAlign="end"
+              options={[...presets.map((preset) => ({ value: preset.key, label: preset.label })), { value: "custom", label: "Custom range" }]}
+            />
+            {customRange && <>
+              <input type="date" aria-label="Worked from" className={toolbarControl} value={range.from} max={range.to || ceiling} onChange={(event) => setDate("from", event.target.value)} />
+              <span className="text-xs text-muted-foreground" aria-hidden="true">to</span>
+              <input type="date" aria-label="Worked to" className={toolbarControl} value={range.to} min={range.from || undefined} max={ceiling} onChange={(event) => setDate("to", event.target.value)} />
+            </>}
           </div>
         }
       />
@@ -217,35 +254,49 @@ export function PartnerDealFlow({
         </Alert>
       )}
 
-      {/* §4a: the four figures once, as the agent draws them. Each card's footer narrows the list
-          to its deals; In progress turns amber when a deal is days old. */}
-      <StatRow label="Deal flow summary">
-        <StatCard icon={Handshake} label="Deals worked" period={periodText} value={figures ? figures.worked : "—"}
-          fact={{ label: isAdmin ? "Across your team" : "Submitted by you" }} />
-        <StatCard icon={BadgeCheck} label="Won" period={periodText} value={figures ? figures.won : "—"}
-          fact={{ label: "Annualised", value: figures ? `${formatCentsAsCurrency(figures.wonAnnualisedCents)}${figures.wonUnpriced > 0 ? ` · ${figures.wonUnpriced} unpriced` : ""}` : "—" }}
-          action={figures && figures.won > 0 && filters.stage_type !== "won" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "won" })}>Show</button> : undefined} />
-        <StatCard icon={Hourglass} label="In progress" period={periodText} value={figures ? figures.inProgress : "—"} tone={oldest != null && oldest >= 2 ? "warn" : "default"}
-          fact={{ label: "Oldest", value: !figures || figures.inProgress === 0 ? "none open" : oldest == null ? "not recorded" : oldest < 1 ? "under a day" : `${oldest} ${oldest === 1 ? "day" : "days"}` }}
-          action={figures && figures.inProgress > 0 && filters.stage_type !== "open" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "open" })}>Show</button> : undefined} />
-        <StatCard icon={XCircle} label="Lost" period={periodText} value={figures ? figures.lost : "—"}
-          fact={{ label: "Of deals worked", value: figures && figures.worked ? `${Math.round((figures.lost / figures.worked) * 100)}%` : "—" }}
-          action={figures && figures.lost > 0 && filters.stage_type !== "lost" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "lost" })}>Show</button> : undefined} />
-      </StatRow>
+      <KpiRow label="Deal flow summary">
+        <KpiTile
+          icon={Handshake}
+          label="Deals worked"
+          value={figures ? figures.worked : "—"}
+          series={perDay(() => true)}
+          note={figures ? `${isAdmin ? "Across your team" : "Submitted by you"} · ${periodText}` : undefined}
+        />
+        <KpiTile
+          icon={BadgeCheck}
+          label="Won"
+          value={figures ? figures.won : "—"}
+          series={perDay((row) => row.stageType === "won")}
+          note={figures ? `${formatCentsAsCurrency(figures.wonAnnualisedCents)} annualised${figures.wonUnpriced > 0 ? ` · ${figures.wonUnpriced} unpriced` : ""}` : undefined}
+        />
+        <KpiTile
+          icon={Hourglass}
+          label="In progress"
+          value={figures ? figures.inProgress : "—"}
+          tone={oldest != null && oldest >= 2 ? "warn" : "default"}
+          series={perDay((row) => row.stageType === "open")}
+          note={figures ? (figures.inProgress === 0 ? "None open" : oldest == null ? "Age not recorded" : `Oldest ${oldest < 1 ? "under a day" : `${oldest} ${oldest === 1 ? "day" : "days"}`}`) : undefined}
+        />
+        <KpiTile
+          icon={XCircle}
+          label="Lost"
+          value={figures ? figures.lost : "—"}
+          series={perDay((row) => row.stageType === "lost")}
+          note={figures ? (figures.worked ? `${Math.round((figures.lost / figures.worked) * 100)}% of deals worked` : "No deals worked") : undefined}
+        />
+      </KpiRow>
 
       <TableCard
-        className="relative z-20 flex min-h-[28rem] min-w-0 flex-1 flex-col"
+        className="relative z-20 flex min-h-[24rem] min-w-0 flex-1 flex-col"
         bodyClassName="flex min-h-0 flex-1 flex-col"
         toolbar={
-          // The page's worked-date scope sits in the page header; this toolbar is for row search
-          // and filters on the table's data fields.
           <DataToolbar actions={
             <>
-              <FilterButton open={showFilters} onClick={() => setShowFilters((value) => !value)} count={extraFilters} controls="partner-deal-flow-filters" />
-              <RefreshButton onClick={() => void load()} refreshing={loading} />
+              <FilterButton iconOnly open={showFilters} onClick={() => setShowFilters((value) => !value)} count={extraFilters} controls="partner-deal-flow-filters" />
+              <RefreshButton onClick={() => void load()} refreshing={loading} labelClassName="sr-only" className="px-2.5" />
             </>
           }>
-            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Customer, carrier, outcome…" label="Search deals" />
+            <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search deals" label="Search deals by customer, carrier or outcome" />
           </DataToolbar>
         }
         filters={<>
@@ -340,50 +391,32 @@ export function PartnerDealFlow({
           </FilterPanel>
           <ActiveFilters filters={chips} onClear={clearFilters} />
         </>}
-        footer={data && rows.length ? <Pager page={tablePage.current} total={rows.length} pageSize={pageSize} noun={rows.length === 1 ? "deal" : "deals"} onPage={setPage} disabled={loading} /> : undefined}
+        footer={data && rows.length > pageSize ? <Pager page={tablePage.current} total={rows.length} pageSize={pageSize} noun={rows.length === 1 ? "deal" : "deals"} onPage={setPage} disabled={loading} /> : undefined}
       >
         {!data
           ? (error
-            ? <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
+            ? <ErrorState detail={error} action={<Button type="button" variant="outline" size="sm" onClick={() => void load()}>Try again</Button>} />
             : <SectionLoading rows={6} columns={columns} label="Loading deals" />)
           : loading
             ? <SectionLoading rows={6} columns={columns} label="Loading deals" />
             : (
-              <table className={cn(st.table, rows.length === 0 ? "h-full min-h-full" : "flex-none", isAdmin ? "min-w-[1000px]" : "min-w-[880px]")}>
-                <thead>
-                  <tr className={st.headRow}>
-                    <th scope="col" className={cn(st.th, "w-[210px]")}>Customer</th>
-                    <th scope="col" className={cn(st.th, "w-[140px]")}>Product</th>
-                    <th scope="col" className={cn(st.th, "w-[170px]")}>Status</th>
-                    <th scope="col" className={cn(st.th, "w-[150px]")}>Carrier</th>
-                    <th scope="col" className={cn(st.th, "w-[180px]")}>Annualised premium</th>
-                    <th scope="col" className={cn(st.th, "w-[110px]")}>Draft date</th>
-                    {isAdmin && <th scope="col" className={cn(st.th, "w-[130px]")}>Submitted by</th>}
-                    <th scope="col" className={cn(st.th, "w-[120px] text-right")}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody className={cn("m-seq", rows.length === 0 && "h-full")}>
-                  {tablePage.rows.map((row) => (
-                    <tr key={row.leadId} data-lead-id={row.leadId} className="m-row h-11 hover:bg-[var(--surface-alt)]">
-                      <td className={cn(st.td, "max-w-[220px]")}>
-                        <span className="block max-w-full truncate" title={row.customer}>{row.customer}</span>
-                      </td>
-                      <td className={st.td}>{productLineLabel(row.productLine)}</td>
-                      <td className={st.td}><StatusChip tone={STAGE_TONE[row.stageType]} dot>{row.stageName}</StatusChip></td>
-                      <td className={cn(st.td, "max-w-[150px] truncate")} title={row.carrier ?? undefined}>{row.carrier ?? "—"}</td>
-                      <td className={st.td}><PremiumBar monthlyCents={row.monthlyPremiumCents} max={premiumMax} /></td>
-                      <td className={cn(st.td, "whitespace-nowrap")}>{dateOnly(row.draftDate)}</td>
-                      {isAdmin && <td className={cn(st.td, "whitespace-nowrap")}>{row.submittedBy.name}</td>}
-                      <td className={cn(st.td, "text-right")}>
-                        <Button asChild variant="outline" size="sm">
-                          <Link href={`/partner/pipeline/${row.leadId}`}>Open lead</Link>
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                  {rows.length === 0 && (
-                    <tr className="h-full">
-                      <td colSpan={columns} className={cn(st.td, "h-full text-center align-middle")}>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Product</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Carrier</TableHead>
+                    <TableHead className="w-[170px]">Annualised premium</TableHead>
+                    <TableHead>Draft date</TableHead>
+                    {isAdmin && <TableHead>Submitted by</TableHead>}
+                    <TableHead className="w-[60px] text-right"><span className="sr-only">Actions</span></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={columns + 1} className="h-64 text-center align-middle">
                         {hasNarrowing ? (
                           <NoMatches noun="deals" onClear={clearFilters} by={search.trim() ? "search" : "filters"} />
                         ) : (
@@ -392,14 +425,28 @@ export function PartnerDealFlow({
                             hint={isAdmin
                               ? "Leads your team sends appear here once the agency works them."
                               : "Leads you send appear here once the agency works them."}
-                            action={<Button asChild variant="outline"><Link href="/partner/submit-lead">Submit a lead</Link></Button>}
                           />
                         )}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                      </TableCell>
+                    </TableRow>
+                  ) : tablePage.rows.map((row) => (
+                    <TableRow key={row.leadId} data-lead-id={row.leadId}>
+                      <TableCell className="max-w-[220px]"><span className="block max-w-full truncate font-semibold text-foreground" title={row.customer}>{row.customer}</span></TableCell>
+                      <TableCell>{productLineLabel(row.productLine)}</TableCell>
+                      <TableCell><StatusChip tone={STAGE_TONE[row.stageType]} dot>{row.stageName}</StatusChip></TableCell>
+                      <TableCell className="max-w-[150px] truncate" title={row.carrier ?? undefined}>{row.carrier ?? "—"}</TableCell>
+                      <TableCell><PremiumBar monthlyCents={row.monthlyPremiumCents} max={premiumMax} /></TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums">{dateOnly(row.draftDate)}</TableCell>
+                      {isAdmin && <TableCell className="whitespace-nowrap">{row.submittedBy.name}</TableCell>}
+                      <TableCell className="text-right">
+                        <Button asChild variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
+                          <Link href={`/partner/pipeline/${row.leadId}`} title="Open the lead" aria-label={`Open the lead for ${row.customer}`}><ArrowUpRight aria-hidden="true" /></Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
       </TableCard>
     </div>
