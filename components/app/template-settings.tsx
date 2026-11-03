@@ -32,8 +32,7 @@ import { applyRequiredChoice, type RequiredChoice } from "@/lib/templates/plainL
 import { diffTemplateDraft, eligibilityFieldKey, type TemplateDraft } from "@/lib/agentTemplates/draftChanges";
 import { parseSettingsHash } from "@/lib/settings/registry";
 import { draftFrom, uniqueKey, type Available, type Current, type DraftState, type Preview, type Product, type Published } from "@/components/app/form-templates/draft";
-import type { Picked } from "@/components/app/form-templates/form-canvas";
-import { QuestionList } from "@/components/app/form-templates/question-list";
+import { FormCanvas, type Picked } from "@/components/app/form-templates/form-canvas";
 import { FormPreview } from "@/components/app/form-templates/form-preview";
 import { QuestionPanel } from "@/components/app/form-templates/question-panel";
 import { FormSettingsCard } from "@/components/app/form-templates/form-settings";
@@ -41,7 +40,6 @@ import { ViewTabs } from "@/components/ui/view-tabs";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PublishBar, PublishControls, SETTINGS_TABS } from "@/components/app/form-templates/status-line";
 import { publishBlockers } from "@/lib/templates/publishBlockers";
-import { OverlayHost } from "@/components/app/form-templates/side-panel-host";
 
 const PREVIEW_MARKET = { carrier_id: "", carrier_name: "", state: "" };
 /** Undo toasts sit at the foot, clear of the Publish controls at the end of the title's line (board FtE07). */
@@ -381,13 +379,15 @@ export function TemplateSettings() {
       {tab === "setup" ? (
         // The questions on the left, what partners get on the right.
         <div className={cn("grid min-h-0 min-w-0 flex-1 gap-4", previewOpen ? "lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]" : "lg:grid-cols-[minmax(0,1fr)_auto]")}>
-          <QuestionList
+          <FormCanvas
             form={draft.form}
             fields={draft.fields}
             picked={picked}
             changed={changed}
             onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
             onMoveField={(sectionKey, fieldKey, by) => update((d) => ({ ...d, form: moveFieldWithinSection(d.form, sectionKey, fieldKey, by) }))}
+            onWidth={(sectionKey, fieldKey, width) => setPlacement(sectionKey, fieldKey, { width })}
+            onDeleteField={deleteField}
             onRenameSection={(sectionKey, label) => update((d) => withSections(d, (sections) => sections.map((section) => (section.section_key === sectionKey ? { ...section, label } : section))))}
             onMoveSection={(sectionKey, by) => update((d) => ({ ...d, form: moveSection(d.form, sectionKey, by) }))}
             onRemoveSection={askRemoveSection}
@@ -440,8 +440,7 @@ export function TemplateSettings() {
         </div>
       )}
 
-      {/* One question at a time, in an overlay over the page. */}
-      <OverlayHost>
+      {/* One question at a time, in a centred popup. */}
         {picked && pickedField && (
           <QuestionPanel
             field={pickedField}
@@ -460,7 +459,6 @@ export function TemplateSettings() {
             onClose={() => setPicked(null)}
           />
         )}
-      </OverlayHost>
 
       <div className="shrink-0">
       <PublishBar

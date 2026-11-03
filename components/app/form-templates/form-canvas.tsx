@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Ellipsis, Play, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Ellipsis, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { InfoTip } from "@/components/ui/info-tip";
-import { Segmented } from "@/components/ui/view-tabs";
 import { PartnerField } from "@/components/partner/partner-portal-workspace";
 import { AddQuestion } from "@/components/app/form-templates/add-question";
 import type { TemplateField, TemplateFieldType, TemplateFormDefinition, TemplateFormField } from "@/lib/templates/constants";
@@ -18,8 +17,6 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { cardHead, cardSurface } from "@/components/ui/card";
 
 export type Picked = { fieldKey: string; sectionKey: string | null } | null;
-type Width = "computer" | "phone";
-const WIDTHS: ReadonlyArray<{ key: Width; label: string }> = [{ key: "computer", label: "Computer" }, { key: "phone", label: "Phone" }];
 
 const noop = () => {};
 
@@ -30,10 +27,9 @@ const noop = () => {};
  * renamed in place; moving or removing one is in its ⋯ menu. Questions kept for agents only live in
  * the side panel, since partners never see them.
  */
-export function FormCanvas({ form, fields, productName, picked, changed, onPick, onMoveField, onWidth, onDeleteField, onRenameSection, onMoveSection, onRemoveSection, onAddQuestion, onReuse, onAddSection, onTry }: {
+export function FormCanvas({ form, fields, picked, changed, onPick, onMoveField, onWidth, onDeleteField, onRenameSection, onMoveSection, onRemoveSection, onAddQuestion, onReuse, onAddSection }: {
   form: TemplateFormDefinition;
   fields: TemplateField[];
-  productName: string;
   picked: Picked;
   /** Field keys whose question or placement differs from the live form. */
   changed: ReadonlySet<string>;
@@ -47,9 +43,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
   onAddQuestion: (sectionKey: string, type: TemplateFieldType) => void;
   onReuse: (sectionKey: string, fieldKey: string) => void;
   onAddSection: () => void;
-  onTry: () => void;
 }) {
-  const [width, setWidth] = useState<Width>("computer");
   // On a phone the preview is what a partner on a phone gets: one column (the switch is hidden there).
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
@@ -64,7 +58,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
   const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
   const toggleFold = (key: string) => setFolded((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   // The partners' own grid: two columns on a computer, one on a phone (globals.css, 640px).
-  const twoColumns = width === "computer" && !narrow;
+  const twoColumns = !narrow;
   const fieldMap = new Map(fields.map((field) => [field.field_key, field]));
   const availability = sectionAvailability(form);
 
@@ -131,22 +125,17 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
   }
 
   return (
-    <section aria-label="What partners see" className={cn(cardSurface, "flex min-h-0 min-w-0 flex-col lg:h-full")}>
+    <section aria-label="Questions" className={cn(cardSurface, "flex min-h-0 min-w-0 flex-col lg:h-full")}>
       <div className={cn(cardHead, "flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3")}>
-        <span className="text-xs font-semibold text-[var(--ink)]">What partners see</span>
-        <InfoTip label="About this preview">Drawn from your changes, as partners will get it once you publish. Nothing typed here is saved.</InfoTip>
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          <span className="hidden sm:contents"><Segmented label="Preview width" options={WIDTHS} value={width} onChange={setWidth} /></span>
-          <Button onClick={onTry} type="button" variant="outline"><Play aria-hidden="true" />Try the form</Button>
-        </div>
+        <span className="text-xs font-semibold text-[var(--ink)]">Questions</span>
+        <InfoTip label="About the questions">Click a question to change it. Parts group the questions; open ⋯ on a part to move or remove it. Open the preview to see what partners get.</InfoTip>
       </div>
 
       {/* The header above stays put; the questions scroll in here. */}
       {/* The canvas: the form sits on it as the sheet a partner sees, so a short or folded form is a small
           sheet on a quiet ground, not a card that looks empty. */}
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[color-mix(in_srgb,var(--canvas)_60%,transparent)] p-3 sm:p-5">
-      <div className={cn("mx-auto flex w-full flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3 transition-[max-width] duration-200 sm:p-4", width === "phone" ? "max-w-[390px]" : "max-w-[760px]")}>
-        <p className="m-0 text-base font-semibold text-[var(--ink)]">Send us a {productName} lead</p>
+      <div className={cn("mx-auto flex w-full flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3 sm:p-4", "max-w-[760px]")}>
 
         {form.sections.map((section, index) => {
           const count = section.fields.length;
@@ -217,10 +206,6 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
         })}
 
         <Button onClick={onAddSection} type="button" variant="outline" className="self-start"><Plus aria-hidden="true" />Add a part</Button>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
-          <span className="text-xs text-[var(--body)]">Partners press this to send. It’s off while you edit.</span>
-          <Button type="button" disabled>Send lead</Button>
-        </div>
       </div>
       </div>
     </section>
