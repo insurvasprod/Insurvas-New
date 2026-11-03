@@ -1508,7 +1508,7 @@ export function PartnerLeadForm({
               {saving ? "Saving…" : draftSavedAt ? `Saved ${agoLabel(draftSavedAt, now)}` : ""}
             </span>
             {formOpened && !canSubmit && outstanding.length > 0 && (
-              <span id={`partner-outstanding-${productCode}`} className="portal-partner-submit-outstanding" title={`Still needed: ${outstanding.join(", ")}`}>{outstanding.length} to go</span>
+              <span id={`partner-outstanding-${productCode}`} className="portal-partner-submit-outstanding" title={`Still needed: ${outstanding.join(", ")}`}><span aria-hidden="true">{outstanding.length} to go</span><span className="sr-only">Still needed to submit: {outstanding.join(", ")}.</span></span>
             )}
             {saveFailed && <Button type="button" variant="outline" disabled={saving} onClick={() => void persistDraft()}>Retry save</Button>}
             {formOpened && (
