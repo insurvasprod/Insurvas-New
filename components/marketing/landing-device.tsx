@@ -46,12 +46,14 @@ const DAYS = series();
 
 function areaPath(values: number[], max: number, w: number, h: number, close: boolean) {
   const step = w / (values.length - 1);
-  const pts = values.map((v, i) => [i * step, h - (v / max) * h * 0.92]);
+  // Rounded so the server and the browser print the same path and hydration agrees.
+  const r = (n: number) => Math.round(n * 100) / 100;
+  const pts = values.map((v, i) => [r(i * step), r(h - (v / max) * h * 0.92)]);
   // A gentle curve through the points.
   let d = `M${pts[0][0]},${pts[0][1]}`;
   for (let i = 1; i < pts.length; i += 1) {
     const [x0, y0] = pts[i - 1], [x1, y1] = pts[i];
-    const cx = (x0 + x1) / 2;
+    const cx = r((x0 + x1) / 2);
     d += ` C${cx},${y0} ${cx},${y1} ${x1},${y1}`;
   }
   return close ? `${d} L${w},${h} L0,${h} Z` : d;
