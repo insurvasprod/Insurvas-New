@@ -19,11 +19,11 @@ import styles from "@/components/marketing/landing-audience.module.css";
 
 /**
  * The trust band (2026-11-04, owner): who built it and who runs on it, as drawn in the approved
- * mockup. The counts and the avatar tones are the owner's figures for now; swap in the real
+ * mockup. The counts are the owner's figures for now; swap in the real
  * numbers (and photographs, if they are supplied) here and nowhere else.
  */
 const TRUST = { agents: "2,400+", agencies: "180+" };
-const AVATARS = ["#1d4a3d", "#2b6b58", "#3a8a72", "#52a88c"];
+const AVATARS = [0, 1, 2, 3];
 
 export function LandingBuiltFor() {
   return (
@@ -34,7 +34,7 @@ export function LandingBuiltFor() {
           <h2 id="landing-trust-heading" className={styles.trustTitle}>Made by people who sold final expense and ran live-transfer floors.</h2>
           <div className={styles.trustRow}>
             <span className={styles.avatars} aria-hidden="true">
-              {AVATARS.map((tone) => <i key={tone} style={{ background: tone }} />)}
+              {AVATARS.map((n) => <i key={n} />)}
             </span>
             <p className={styles.trustLine}>Trusted by {TRUST.agents} agents and {TRUST.agencies} agencies</p>
           </div>

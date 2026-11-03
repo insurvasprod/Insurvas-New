@@ -139,6 +139,10 @@
 .trustRow { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
 .avatars { display: flex; }
 .avatars i { width: 30px; height: 30px; border: 2px solid var(--canvas); border-radius: 50%; }
+.avatars i { background: color-mix(in srgb, var(--primary) 30%, var(--canvas)); }
+.avatars i:nth-child(2) { background: color-mix(in srgb, var(--primary) 48%, var(--canvas)); }
+.avatars i:nth-child(3) { background: color-mix(in srgb, var(--primary) 66%, var(--canvas)); }
+.avatars i:nth-child(4) { background: color-mix(in srgb, var(--primary) 84%, var(--canvas)); }
 .avatars i + i { margin-left: -9px; }
 .trustLine { margin: 0; color: var(--muted); font-size: 14px; }
 .trustStat { border-left: 1px solid var(--border); padding-left: 40px; }
