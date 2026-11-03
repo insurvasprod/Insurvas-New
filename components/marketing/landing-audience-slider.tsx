@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
@@ -13,11 +14,13 @@ import styles from "@/components/marketing/landing-audience-slider.module.css";
  */
 type Slide = { problem: string; outcome: string; proof: readonly (readonly [string, string])[] };
 
-const PERSONAS: Record<"agent" | "agency", { label: string; cta: string; href: string; slides: readonly Slide[] }> = {
+const PERSONAS: Record<"agent" | "agency", { label: string; cta: string; href: string; photo: string; position: string; slides: readonly Slide[] }> = {
   agent: {
     label: "Agent",
     cta: "See agent plans",
     href: "/pricing",
+    photo: "/marketing/audience-agent.webp",
+    position: "50% 30%",
     slides: [
       {
         problem: "I can’t tell which vendor actually paid me back.",
@@ -40,6 +43,8 @@ const PERSONAS: Record<"agent" | "agency", { label: string; cta: string; href: s
     label: "Agency",
     cta: "See agency pricing",
     href: "/pricing?for=agency",
+    photo: "/marketing/audience-agency.webp",
+    position: "50% 40%",
     slides: [
       {
         problem: "My producers cherry-pick the best leads.",
@@ -79,13 +84,18 @@ export function LandingAudienceSlider() {
           <button key={key} type="button" aria-pressed={who === key} onClick={() => choose(key)} className={styles.switchButton}>{PERSONAS[key].label}</button>
         ))}
       </div>
-      <div className={styles.slide} key={`${who}-${index}`} aria-live="polite">
-        <p className={styles.count}>Problem {index + 1} of {slides.length}</p>
-        <p className={styles.problem}>{slide.problem}</p>
-        <p className={styles.outcome}>{slide.outcome}</p>
-        <ul className={styles.proof}>
-          {slide.proof.map(([lead, text]) => <li key={lead + text}><strong>{lead}</strong><span>{text}</span></li>)}
-        </ul>
+      <div className={styles.stage}>
+        <div className={styles.slide} key={`${who}-${index}`} aria-live="polite">
+          <p className={styles.count}>Problem {index + 1} of {slides.length}</p>
+          <p className={styles.problem}>{slide.problem}</p>
+          <p className={styles.outcome}>{slide.outcome}</p>
+          <ul className={styles.proof}>
+            {slide.proof.map(([lead, text]) => <li key={lead + text}><strong>{lead}</strong><span>{text}</span></li>)}
+          </ul>
+        </div>
+        <div className={styles.photo} aria-hidden="true">
+          <Image key={who} src={persona.photo} alt="" fill sizes="(max-width: 900px) 100vw, 40vw" style={{ objectPosition: persona.position }} />
+        </div>
       </div>
       <div className={styles.controls}>
         <div className={styles.progress} role="presentation"><i style={{ width: `${((index + 1) / slides.length) * 100}%` }} /></div>
