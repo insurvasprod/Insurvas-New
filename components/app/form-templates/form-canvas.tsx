@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, Ellipsis, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -27,9 +27,11 @@ const noop = () => {};
  * renamed in place; moving or removing one is in its ⋯ menu. Questions kept for agents only live in
  * the side panel, since partners never see them.
  */
-export function FormCanvas({ form, fields, picked, changed, onPick, onMoveField, onWidth, onDeleteField, onRenameSection, onMoveSection, onRemoveSection, onAddQuestion, onReuse, onAddSection }: {
+export function FormCanvas({ form, fields, renderEditor, picked, changed, onPick, onMoveField, onWidth, onDeleteField, onRenameSection, onMoveSection, onRemoveSection, onAddQuestion, onReuse, onAddSection }: {
   form: TemplateFormDefinition;
   fields: TemplateField[];
+  /** The picked question's editor, opened in place under it (owner 2026-11-03: no popup). */
+  renderEditor: (fieldKey: string, sectionKey: string) => ReactNode;
   picked: Picked;
   /** Field keys whose question or placement differs from the live form. */
   changed: ReadonlySet<string>;
@@ -78,8 +80,8 @@ export function FormCanvas({ form, fields, picked, changed, onPick, onMoveField,
     const bounds = isPicked ? fieldMoveBounds(form, sectionKey, field.field_key) : null;
     const full = placementWidth(field, formField) === "full";
     return (
+      <Fragment key={field.field_key}>
       <div
-        key={field.field_key}
         className={cn(
           "relative min-w-0 rounded-[10px] px-2 py-1 transition-colors",
           twoColumns && full && "col-span-2",
@@ -121,6 +123,8 @@ export function FormCanvas({ form, fields, picked, changed, onPick, onMoveField,
           {field.help_text && <p className="m-0 truncate text-xs text-[var(--body)]">{field.help_text}</p>}
         </div>
       </div>
+      {isPicked && <div className="col-span-full my-1">{renderEditor(field.field_key, sectionKey)}</div>}
+      </Fragment>
     );
   }
 

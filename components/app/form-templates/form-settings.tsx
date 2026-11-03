@@ -210,7 +210,7 @@ function Section({ id, title, info, children }: { id: string; title: string; inf
  * Form settings, a section of its own (owner 2026-11-03): the form's name, who can apply, its topics and
  * the questions kept for agents only on the left; the version and the lead steps on the right.
  */
-export function FormSettingsCard({ eligibility, onAges, form, fields, onGroup, versions, agents }: {
+export function FormSettingsCard({ eligibility, onAges, form, fields, onGroup, versions, agents, agentEditor }: {
   eligibility: TemplateField | null;
   onAges: (patch: { age_min?: number; age_max?: number }) => void;
   form: TemplateFormDefinition;
@@ -218,6 +218,8 @@ export function FormSettingsCard({ eligibility, onAges, form, fields, onGroup, v
   onGroup: (group: TemplateSectionGroup, on: boolean) => void;
   versions: VersionsProps;
   agents: Parameters<typeof AgentsOnly>[0];
+  /** The picked agents-only question's editor, opened under the chips. */
+  agentEditor?: ReactNode;
 }) {
   return (
     <section aria-label="Form settings" className="m-glass flex min-w-0 flex-col gap-5 rounded-[12px] border border-[var(--border)] p-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8 sm:p-5">
@@ -234,6 +236,7 @@ export function FormSettingsCard({ eligibility, onAges, form, fields, onGroup, v
         </Section>
         <Section id="form-agents-only" title="For your agents only" info="Saved on every lead, but partners never see these. Your agents fill them in.">
           <AgentsOnly {...agents} />
+          {agentEditor}
         </Section>
       </div>
       <div className="flex min-w-0 flex-col gap-4">

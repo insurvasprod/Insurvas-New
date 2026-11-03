@@ -340,6 +340,25 @@ export function TemplateSettings() {
   const agentsOnly = draft.fields.filter((field) => !placed.has(field.field_key));
   const removingSection = removing ? draft.form.sections.find((section) => section.section_key === removing) ?? null : null;
   const switchName = switchTo ? productOptions.find((product) => product.code === switchTo)?.name ?? "the other product" : "";
+  /** One question at a time, opened in place (owner 2026-11-03: no popup). */
+  const questionEditor = picked && pickedField ? (
+    <QuestionPanel
+            field={pickedField}
+            fields={draft.fields}
+            form={draft.form}
+            sectionKey={picked.sectionKey}
+            placement={pickedPlacement}
+            changed={changed.has(pickedField.field_key)}
+            setField={setField}
+            setValidation={setValidation}
+            setPlacement={setPlacement}
+            onRequired={(choice) => setRequired(pickedField.field_key, picked.sectionKey, choice)}
+            onMoveTo={(to) => moveTo(pickedField.field_key, picked.sectionKey, to)}
+            onReset={saved.fields.some((field) => field.field_key === pickedField.field_key) && changed.has(pickedField.field_key) ? () => resetQuestion(pickedField.field_key, picked.sectionKey) : null}
+            onDelete={() => deleteField(pickedField.field_key)}
+            onClose={() => setPicked(null)}
+          />
+  ) : null;
   const publishAndReload = () => void publish().then((ok) => { if (ok) void load(productCode); });
 
   return (
@@ -382,6 +401,7 @@ export function TemplateSettings() {
           <FormCanvas
             form={draft.form}
             fields={draft.fields}
+            renderEditor={() => questionEditor}
             picked={picked}
             changed={changed}
             onPick={(fieldKey, sectionKey) => setPicked({ fieldKey, sectionKey })}
@@ -410,6 +430,7 @@ export function TemplateSettings() {
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1.5">
           <FormSettingsCard
             eligibility={eligibility}
+            agentEditor={picked?.sectionKey === null ? questionEditor : null}
             onAges={(patch) => { if (eligibility) setValidation(eligibility.field_key, patch); }}
             form={draft.form}
             fields={draft.fields}
@@ -439,26 +460,6 @@ export function TemplateSettings() {
           />
         </div>
       )}
-
-      {/* One question at a time, in a centred popup. */}
-        {picked && pickedField && (
-          <QuestionPanel
-            field={pickedField}
-            fields={draft.fields}
-            form={draft.form}
-            sectionKey={picked.sectionKey}
-            placement={pickedPlacement}
-            changed={changed.has(pickedField.field_key)}
-            setField={setField}
-            setValidation={setValidation}
-            setPlacement={setPlacement}
-            onRequired={(choice) => setRequired(pickedField.field_key, picked.sectionKey, choice)}
-            onMoveTo={(to) => moveTo(pickedField.field_key, picked.sectionKey, to)}
-            onReset={saved.fields.some((field) => field.field_key === pickedField.field_key) && changed.has(pickedField.field_key) ? () => resetQuestion(pickedField.field_key, picked.sectionKey) : null}
-            onDelete={() => deleteField(pickedField.field_key)}
-            onClose={() => setPicked(null)}
-          />
-        )}
 
       <div className="shrink-0">
       <PublishBar

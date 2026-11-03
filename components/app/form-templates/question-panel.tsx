@@ -1,11 +1,10 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ChevronDown, Plus, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, Plus, RotateCcw, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { InfoTip } from "@/components/ui/info-tip";
 import { StatusChip } from "@/components/ui/status-chip";
 import { ToggleChip } from "@/components/ui/toggle-chip";
@@ -142,13 +141,12 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
   function setCondition(next: { field_key: string; equals: string } | null) { if (sectionKey) setPlacement(sectionKey, key, { show_when: next, conditional_on: null }); }
 
   return (
-    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-    <DialogContent aria-describedby={undefined} className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden border-[var(--border)] bg-[var(--surface)] p-0 sm:max-w-2xl">
-      <DialogHeader className="shrink-0 gap-1.5 border-b border-[var(--border)] px-5 py-4 pr-12 text-left">
-        <DialogTitle className="text-title-sm text-[var(--ink)]">{field.label || "Untitled question"}</DialogTitle>
-        <div className="flex flex-wrap items-center gap-2"><StatusChip>{where}</StatusChip></div>
-      </DialogHeader>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-5 py-4">
+    <section aria-label={`Change “${field.label || "Untitled question"}”`} className="flex flex-col gap-4 rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusChip>{where}</StatusChip>
+        <Button onClick={onClose} type="button" variant="outline" size="sm" className="ml-auto"><Check aria-hidden="true" />Done</Button>
+      </div>
+      <div className="flex flex-col gap-4">
       <p aria-live="polite" className="m-0 rounded-[10px] bg-[var(--surface-alt)] px-3.5 py-3 text-sm leading-[1.55] text-[var(--ink)]">
         {sentence}
         {changed && <span className="mt-1.5 block text-xs font-semibold text-[var(--warning-ink)]">Changed. Not live until you publish.</span>}
@@ -260,11 +258,10 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
         </Fold>
       </div>
       </div>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-[var(--border)] px-5 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-3">
         {onReset && <Button onClick={onReset} type="button" variant="ghost"><RotateCcw aria-hidden="true" />Put back how it was</Button>}
         <Button onClick={onDelete} type="button" variant="ghost" className="ml-auto text-[var(--error-ink)]"><Trash2 aria-hidden="true" />Delete question</Button>
       </div>
-    </DialogContent>
-    </Dialog>
+    </section>
   );
 }
