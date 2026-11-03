@@ -6,7 +6,6 @@ import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { InboundSettingsCards, WaitingBar, useInboundSettings } from "@/components/app/inbound-settings-cards";
@@ -33,18 +32,6 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 
 type Values = LadderValues;
 type Texts = Record<keyof Values, string>;
-type Stats = {
-  since: string;
-  claimedInsideWarn: number;
-  claimed: number;
-  warned: number;
-  escalated: number;
-  partnerTold: number;
-  expired: number;
-  medianClaimSeconds: number | null;
-  sampleCapped: boolean;
-};
-
 const MAX_SECONDS = 604_800;
 
 /** Each rung's hint says what it does on the floor — the one place a reader learns it. */
@@ -87,7 +74,6 @@ function CheckIcon() {
 export function QueueSlaSettings() {
   const [saved, setSaved] = useState<Values | null>(null);
   const [texts, setTexts] = useState<Texts | null>(null);
-  const [stats, setStats] = useState<Stats | null>(null);
   const [oldestWaiting, setOldestWaiting] = useState<number | null>(null);
   const [nurtureReady, setNurtureReady] = useState(false);
   const [jobState, setJobState] = useState<SlaJobState | null>(null);
@@ -111,7 +97,6 @@ export function QueueSlaSettings() {
           };
           setSaved(next);
           setTexts(textsFor(next));
-          setStats(body.lastSevenDays ?? null);
           setOldestWaiting(typeof body.oldestWaitingSeconds === "number" ? body.oldestWaitingSeconds : null);
           setNurtureReady(body.schema?.nurtureOnExpiry === true);
           setJobState(typeof body.job?.state === "string" ? (body.job.state as SlaJobState) : null);
@@ -187,17 +172,6 @@ export function QueueSlaSettings() {
   return (
     <SettingsStack>
       <SettingsSectionHeader />
-
-      {stats && (
-        <StatStrip label="Last seven days">
-          <StatTile label={`Claimed inside ${short(saved.warn)}`} value={stats.claimedInsideWarn.toLocaleString()} footnote="last 7 days" />
-          <StatTile label="Warned" value={stats.warned.toLocaleString()} />
-          <StatTile label="Escalated" value={stats.escalated.toLocaleString()} />
-          <StatTile label="Partner told" value={stats.partnerTold.toLocaleString()} />
-          <StatTile label="Expired" value={stats.expired.toLocaleString()} valueTone={stats.expired > 0 ? "warning" : undefined} footnote={stats.expired > 0 ? "left the queue unclaimed" : undefined} />
-          <StatTile label="Median claim" value={stats.medianClaimSeconds == null ? "—" : short(stats.medianClaimSeconds)} footnote={stats.sampleCapped ? "latest 20,000 claims" : undefined} />
-        </StatStrip>
-      )}
 
       {jobNotice && <Callout tone={jobNotice.tone} title={jobNotice.text} />}
       {error && <Callout tone="error" title={error} />}
