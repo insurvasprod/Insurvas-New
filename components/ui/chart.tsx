@@ -449,3 +449,27 @@ export function LineSeries({
     </figure>
   );
 }
+
+/* ── A small line beside a figure ────────────────────────────────────────────────────────────── */
+
+/** The shape of a series as a line with a soft area and its last point marked; no axis, it sits inside a tile. */
+export function SparkLine({ values, summary, className }: { values: readonly number[]; summary: string; className?: string }) {
+  if (values.length < 2) return null;
+  const top = Math.max(...values, 1);
+  const width = 200;
+  const height = 40;
+  const pad = 3;
+  const x = (index: number) => (index / (values.length - 1)) * width;
+  const y = (value: number) => height - pad - (value / top) * (height - pad * 2);
+  const line = values.map((value, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(1)} ${y(value).toFixed(1)}`).join(" ");
+  return (
+    <figure className={cn("relative m-0 h-10 min-w-0", className)} title={summary}>
+      <figcaption className="sr-only">{summary}</figcaption>
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="size-full overflow-visible" aria-hidden="true">
+        <path d={`${line} L${width} ${height} L0 ${height} Z`} fill="var(--primary)" fillOpacity="0.12" />
+        <path d={line} fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <span aria-hidden="true" className="absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--primary)]" style={{ left: "100%", top: `${(y(values[values.length - 1]) / height) * 100}%` }} />
+    </figure>
+  );
+}

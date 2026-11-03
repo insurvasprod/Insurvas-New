@@ -12,7 +12,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
 import { DonutChart, LineSeries } from "@/components/ui/chart";
 import { HomePanel } from "@/components/app/home/home-panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -55,17 +55,15 @@ function figures(rows: PartnerLeadRow[]) {
   const applications = rows.filter(isSold).length;
   return { submitted: rows.length, progress: rows.filter(isOpen).length, applications, conversion: rows.length ? (applications / rows.length) * 100 : null };
 }
-/** The change pill's number. Nothing to compare against is no pill, not a rise from nothing. */
-function delta(current: number, previous: number | null | undefined) {
+/** The change next to a figure: a percent against the period before. Nothing to compare against is no change shown, not a rise from nothing. */
+function change(current: number, previous: number | null | undefined, good: "up" | "down" | "neither" = "up") {
   if (previous === null || previous === undefined || previous === 0) return undefined;
-  return { value: Math.round(((current - previous) / previous) * 100), goodWhen: "up" as const };
+  return { value: Math.round(((current - previous) / previous) * 100), good };
 }
 
-/** "+14% vs previous 30 days"; a previous period with nothing in it has no percentage to compare to. */
-function changeLabel(current: number, previous: number, days: number) {
-  if (previous === 0) return current === 0 ? `none in the previous ${days} days either` : `none in the previous ${days} days`;
-  const change = Math.round(((current - previous) / previous) * 100);
-  return `${change > 0 ? "+" : change < 0 ? "−" : "±"}${Math.abs(change)}% vs previous ${days} days`;
+/** "30 in the previous 30 days"; a previous period with nothing in it says so. */
+function beforeNote(previous: number, days: number, noun: string) {
+  return previous === 0 ? `None in the previous ${days} days` : `${previous} ${noun} in the previous ${days} days`;
 }
 function rangeLabel(from: string, to: string, now: Date) {
   const start = parseDay(from);
@@ -165,6 +163,23 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     [rows, range.from, range.to, now],
   );
 
+  // The small line in each tile: the same day (or week) buckets as the trend, one series per figure.
+  const kpiSeries = useMemo(() => {
+    const bucketCounts = (predicate: (row: PartnerLeadRow) => boolean) =>
+      trendSeries(rows.filter(predicate).map((row) => row.submittedAt), { from: range.from, to: range.to, now }).buckets.map((bucket) => bucket.count);
+    const submitted = bucketCounts(() => true);
+    const progress = bucketCounts(isOpen);
+    const applications = bucketCounts(isSold);
+    let leadsSoFar = 0;
+    let soldSoFar = 0;
+    const conversion = submitted.map((count, index) => {
+      leadsSoFar += count;
+      soldSoFar += applications[index] ?? 0;
+      return leadsSoFar ? (soldSoFar / leadsSoFar) * 100 : 0;
+    });
+    return { submitted, progress, applications, conversion };
+  }, [rows, range.from, range.to, now]);
+
   const selected = memberStats.find((item) => item.user.user_id === selectedUserId) ?? null;
   const selectedLeads = useMemo(() => !selected ? [] : rows.filter((row) => { const submitterId = row.submittedBy.id ?? row.submittedBy.name; return submitterId === selected.user.user_id || row.submittedBy.name === selected.user.name; }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)), [rows, selected]);
   const rangeInvalid = !draftFrom || !draftTo || draftTo < draftFrom || spanDays(draftFrom, draftTo) > 366;
@@ -235,35 +250,40 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" size="sm" onClick={reload}>Try again</Button></p>}
 
-    <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          icon={Send}
-          label="Leads submitted"
-          value={loading ? "—" : metrics.submitted}
-          delta={delta(metrics.submitted, previous?.submitted)}
-          fact={loading || !previous ? undefined : { label: changeLabel(metrics.submitted, previous.submitted, days) }}
-        />
-        <StatCard
-          icon={Hourglass}
-          label="In progress"
-          value={loading ? "—" : metrics.progress}
-          fact={loading || !previous ? undefined : { label: changeLabel(metrics.progress, previous.progress, days) }}
-        />
-        <StatCard
-          icon={FileCheck2}
-          label="Applications"
-          value={loading ? "—" : metrics.applications}
-          delta={delta(metrics.applications, previous?.applications)}
-          fact={loading || !previous ? undefined : { label: changeLabel(metrics.applications, previous.applications, days) }}
-        />
-        <StatCard
-          icon={Percent}
-          label="Conversion"
-          value={loading || conversionNow === null ? "—" : `${conversionNow.toFixed(1)}%`}
-          delta={metrics.submitted >= MIN_CONVERSION_SAMPLE && previous && previous.submitted >= MIN_CONVERSION_SAMPLE ? delta(conversionNow ?? 0, conversionPrev) : undefined}
-          fact={loading ? undefined : { label: metrics.submitted === 0 ? "No leads yet" : metrics.submitted < MIN_CONVERSION_SAMPLE ? `${metrics.applications} of ${metrics.submitted} · too few leads for a trend` : `${metrics.applications} of ${metrics.submitted} leads became applications` }}
-        />
-      </StatRow>
+    <KpiRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`}>
+      <KpiTile
+        icon={Send}
+        label="Leads submitted"
+        value={loading ? "—" : metrics.submitted}
+        series={loading ? undefined : kpiSeries.submitted}
+        change={loading ? undefined : change(metrics.submitted, previous?.submitted)}
+        note={loading || !previous ? undefined : beforeNote(previous.submitted, days, "leads")}
+      />
+      <KpiTile
+        icon={Hourglass}
+        label="In progress"
+        value={loading ? "—" : metrics.progress}
+        series={loading ? undefined : kpiSeries.progress}
+        change={loading ? undefined : change(metrics.progress, previous?.progress, "neither")}
+        note={loading || !previous ? undefined : beforeNote(previous.progress, days, "leads")}
+      />
+      <KpiTile
+        icon={FileCheck2}
+        label="Applications"
+        value={loading ? "—" : metrics.applications}
+        series={loading ? undefined : kpiSeries.applications}
+        change={loading ? undefined : change(metrics.applications, previous?.applications)}
+        note={loading || !previous ? undefined : beforeNote(previous.applications, days, "applications")}
+      />
+      <KpiTile
+        icon={Percent}
+        label="Conversion"
+        value={loading || conversionNow === null ? "—" : `${conversionNow.toFixed(1)}%`}
+        series={loading ? undefined : kpiSeries.conversion}
+        change={loading || metrics.submitted < MIN_CONVERSION_SAMPLE || !previous || previous.submitted < MIN_CONVERSION_SAMPLE ? undefined : change(conversionNow ?? 0, conversionPrev)}
+        note={loading ? undefined : metrics.submitted === 0 ? "No leads yet" : metrics.submitted < MIN_CONVERSION_SAMPLE ? `${metrics.applications} of ${metrics.submitted} leads: too few for a trend` : `${metrics.applications} of ${metrics.submitted} leads became applications`}
+      />
+    </KpiRow>
 
     <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
       <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"}`} className="min-h-[19rem]">
