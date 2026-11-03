@@ -251,8 +251,8 @@ export function TenantAuthWorkspace({
     // Same header as sign-up: the title on the left, a short note on the right, one bar under (owner, 2026-11-03).
     heading: (
       <div data-auth-line="" className="mb-3">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
-          <div className="min-w-0"><AuthHeading title="Sign in to your workspace" /></div>
+        <div className="flex flex-wrap items-end justify-center gap-x-4 gap-y-1">
+          <div className="min-w-0"><AuthHeading title="Sign in to your Workspace" /></div>
         </div>
       </div>
     ),
