@@ -132,14 +132,17 @@
 
 /* ── Trust band: who built it, who runs on it, three things the product enforces (owner, 4 Nov). ── */
 .band { border-bottom: 1px solid var(--border); background: var(--canvas); }
-.bandInner { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: center; gap: 32px 56px; width: min(100% - 64px, 1320px); margin: 0 auto; padding: 44px 0 48px; }
-.trustCopy { display: grid; gap: 8px; }
+.bandInner { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: center; gap: 32px 48px; width: min(100% - 64px, 1320px); margin: 0 auto; padding: 48px 0 52px; }
+.trustCopy { display: grid; gap: 12px; }
 .bandLabel { margin: 0; color: var(--accent-ink); font-size: 13px; font-weight: 600; }
-.trustTitle { margin: 0; color: var(--ink); font-size: clamp(22px, 2.4vw, 30px); font-weight: 600; letter-spacing: -.02em; line-height: 1.2; text-wrap: balance; }
-.trustLine { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
-.truths { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.truths li { display: flex; align-items: center; gap: 12px; border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; color: var(--muted); font-size: 14px; }
-.truths strong { color: var(--ink); font-weight: 600; }
-.truths svg { width: 16px; height: 16px; flex: none; color: var(--accent-ink); }
-@media (max-width: 860px) { .bandInner { grid-template-columns: minmax(0, 1fr); } }
+.trustTitle { max-width: 20ch; margin: 0; color: var(--ink); font-size: clamp(24px, 2.8vw, 36px); font-weight: 600; letter-spacing: -.02em; line-height: 1.15; text-wrap: balance; }
+.trustRow { display: flex; align-items: center; gap: 12px; margin-top: 6px; }
+.avatars { display: flex; }
+.avatars i { width: 30px; height: 30px; border: 2px solid var(--canvas); border-radius: 50%; }
+.avatars i + i { margin-left: -9px; }
+.trustLine { margin: 0; color: var(--muted); font-size: 14px; }
+.trustStat { border-left: 1px solid var(--border); padding-left: 40px; }
+.trustNumber { margin: 0; color: var(--ink); font-size: clamp(40px, 5vw, 64px); font-weight: 600; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.trustCaption { margin: 8px 0 0; color: var(--muted); font-size: 15px; line-height: 1.4; }
+@media (max-width: 860px) { .bandInner { grid-template-columns: minmax(0, 1fr); } .trustStat { border-left: 0; border-top: 1px solid var(--border); padding: 24px 0 0; } }
 @media (max-width: 640px) { .bandInner { width: calc(100% - 32px); padding: 36px 0 40px; } }

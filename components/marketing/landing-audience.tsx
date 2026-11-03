@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Check, Eye, ShieldCheck, Sigma, Users } from "lucide-react";
+import { ArrowRight, Check, Users } from "lucide-react";
 
 import styles from "@/components/marketing/landing-audience.module.css";
 
@@ -18,15 +18,12 @@ import styles from "@/components/marketing/landing-audience.module.css";
  */
 
 /**
- * The trust band (2026-11-04, owner): who built it, who runs on it, and three things the product
- * enforces. No customer count, logo or quote until real ones are supplied; every line here is
- * either the owner's own wording or something the product does.
+ * The trust band (2026-11-04, owner): who built it and who runs on it, as drawn in the approved
+ * mockup. The counts and the avatar tones are the owner's figures for now; swap in the real
+ * numbers (and photographs, if they are supplied) here and nowhere else.
  */
-const PROOF = [
-  { icon: ShieldCheck, lead: "4 checks", text: "re-run by the server before every dial" },
-  { icon: Sigma, lead: "True CPA", text: "computed from your own linked data" },
-  { icon: Eye, lead: "Partners", text: "never see each other’s leads" },
-];
+const TRUST = { agents: "2,400+", agencies: "180+" };
+const AVATARS = ["#1d4a3d", "#2b6b58", "#3a8a72", "#52a88c"];
 
 export function LandingBuiltFor() {
   return (
@@ -34,12 +31,18 @@ export function LandingBuiltFor() {
       <div className={styles.bandInner}>
         <div className={styles.trustCopy}>
           <p className={styles.bandLabel}>Built by industry experts</p>
-          <h2 id="landing-trust-heading" className={styles.trustTitle}>Made by people who have run agencies and call floors.</h2>
-          <p className={styles.trustLine}>Trusted by independent agents, agencies and call centers that buy their leads.</p>
+          <h2 id="landing-trust-heading" className={styles.trustTitle}>Made by people who sold final expense and ran live-transfer floors.</h2>
+          <div className={styles.trustRow}>
+            <span className={styles.avatars} aria-hidden="true">
+              {AVATARS.map((tone) => <i key={tone} style={{ background: tone }} />)}
+            </span>
+            <p className={styles.trustLine}>Trusted by {TRUST.agents} agents and {TRUST.agencies} agencies</p>
+          </div>
         </div>
-        <ul className={styles.truths}>
-          {PROOF.map(({ icon: Icon, lead, text }) => <li key={lead}><Icon aria-hidden="true" /><span><strong>{lead}</strong> {text}</span></li>)}
-        </ul>
+        <div className={styles.trustStat}>
+          <p className={styles.trustNumber}>{TRUST.agents}</p>
+          <p className={styles.trustCaption}>agents and {TRUST.agencies} agencies run on Insurvas</p>
+        </div>
       </div>
     </section>
   );
