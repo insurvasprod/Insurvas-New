@@ -3,7 +3,7 @@
    of producer seats with live status, a lead being routed across. Each half is one link; hovering or
    focusing a half grows it. Nothing is hidden at rest, so it reads whole on touch and by keyboard. */
 .section { scroll-margin-top: 80px; border-bottom: 1px solid var(--border); background: var(--canvas); }
-.inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(80px, 9vw, 120px) 0; }
+.inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 80px) 0; }
 /* Header: label and headline. Hierarchy comes from weight and colour, not a shouting size. */
 .head { margin-bottom: clamp(32px, 4vw, 44px); }
 .eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 16px; color: var(--accent-ink); font-size: 15px; font-weight: 650; letter-spacing: -.005em; }

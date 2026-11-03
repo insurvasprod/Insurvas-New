@@ -127,7 +127,6 @@ export function LandingAudienceSlider({ header }: { header: ReactNode }) {
         </figure>
       </div>
       <div className={styles.controls}>
-        <div className={styles.progress} role="presentation"><i style={{ width: `${((index + 1) / slides.length) * 100}%` }} /></div>
         <Link href={persona.href} className={styles.cta}>{persona.cta}<ArrowRight aria-hidden="true" /></Link>
         <div className={styles.arrows}>
           <button type="button" onClick={() => step(-1)} aria-label="Previous problem"><ArrowLeft aria-hidden="true" /></button>
