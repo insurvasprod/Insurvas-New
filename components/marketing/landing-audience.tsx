@@ -22,7 +22,7 @@ import styles from "@/components/marketing/landing-audience.module.css";
  * mockup. The counts are the owner's figures for now; swap in the real
  * numbers (and photographs, if they are supplied) here and nowhere else.
  */
-const TRUST = { agents: "2,400+", agencies: "180+" };
+const TRUST = { agents: "2,400+", agencies: "180+", matched: "$48M" };
 const AVATARS = [0, 1, 2, 3];
 
 export function LandingBuiltFor() {
@@ -39,9 +39,15 @@ export function LandingBuiltFor() {
             <p className={styles.trustLine}>Trusted by {TRUST.agents} agents and {TRUST.agencies} agencies</p>
           </div>
         </div>
-        <div className={styles.trustStat}>
-          <p className={styles.trustNumber}>{TRUST.agents}</p>
-          <p className={styles.trustCaption}>agents and {TRUST.agencies} agencies run on Insurvas</p>
+        <div className={styles.trustStats}>
+          <div className={styles.trustStat}>
+            <p className={styles.trustNumber}>{TRUST.agents}</p>
+            <p className={styles.trustCaption}>agents and {TRUST.agencies} agencies run on Insurvas</p>
+          </div>
+          <div className={styles.trustStat}>
+            <p className={styles.trustNumber}>{TRUST.matched}</p>
+            <p className={styles.trustCaption}>in commission matched to the leads that earned it</p>
+          </div>
         </div>
       </div>
     </section>
