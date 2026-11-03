@@ -1953,10 +1953,21 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
    lined up with the card's content edge (data-auth-card is painted; data-layout="single" is set
    only when AuthLayout is given no story, so every other door keeps the split above). */
 html:has(.portal-tenant-auth-shell[data-layout="single"]) {
-  background:
-    radial-gradient(70% 55% at 50% -10%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 70%),
-    var(--brand-700);
+  background: linear-gradient(180deg, var(--brand-700), var(--brand-900));
   background-attachment: fixed;
+}
+html:has(.portal-tenant-auth-shell[data-layout="single"]) body { background: transparent; }
+/* A faint dot grid that fades out downward (owner pick E, 2026-11-03). */
+.portal-tenant-auth-shell[data-layout="single"]::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(color-mix(in srgb, var(--nav-muted) 22%, transparent) 1px, transparent 1px);
+  background-size: 14px 14px;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 85%);
+  mask-image: linear-gradient(180deg, #000, transparent 85%);
 }
 .portal-tenant-auth-shell[data-layout="single"] { display: flex; flex-direction: column; min-height: 100vh; background: transparent; overflow: visible; }
 .portal-tenant-auth-shell[data-layout="single"] .portal-auth-split-form { width: 100%; min-height: 100vh; background: transparent; padding: 40px clamp(16px, 6vw, 64px); overflow: visible; }
