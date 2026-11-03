@@ -2004,7 +2004,7 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) body { background: tra
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-state="next"] [data-step-bar] { background: color-mix(in srgb, var(--on-dark) 28%, transparent); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-name] { color: color-mix(in srgb, var(--nav-muted) 85%, transparent); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-state="current"] [data-step-name] { color: var(--on-dark); }
-.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-state="done"] [data-step-name] { color: var(--primary); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-step-state="done"] [data-step-name] { color: var(--on-dark); }
 /* "Have an account? Sign in" on the legal links' line. */
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.75rem; margin-top: 1rem; padding-inline: 40px; }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > [data-auth-footer], .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > * { margin: 0; padding-inline: 0; }
