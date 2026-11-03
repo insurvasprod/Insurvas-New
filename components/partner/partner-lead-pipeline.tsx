@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, CheckCircle2, CircleAlert, Clock3, Hand, Inbox, Languages, Send } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CheckCircle2, ChevronDown, CircleAlert, Clock3, Hand, Inbox, Languages, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -127,6 +127,9 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const [data, setData] = useState<PipelineResponse | null>(preview?.data ?? null);
   const [filters, setFilters] = useState<Filters>(linked.filters);
   const [search, setSearch] = useState("");
+  // A lane folds to a slim strip with its name and count; its leads stay loaded and searchable.
+  const [foldedLanes, setFoldedLanes] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleLane = (key: string) => setFoldedLanes((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const [view, setView] = useState<"board" | "table">(linked.view);
   const [moreFilters, setMoreFilters] = useState(() => Boolean(linked.filters.stage_id || linked.filters.closer_id || linked.filters.outcome || linked.filters.date_from || linked.filters.date_to));
   /** Narrowing the page does client-side: the server's filters speak stages, not lanes. */
@@ -255,6 +258,13 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setLane(""); setOnlyFlagged(false); setPage(1); setLanePages({}); };
   const tablePage = paginate(sortedRows, page, pageSize);
   const canLoadMore = Boolean(data && data.rows.length < data.total);
+  // The search runs over the leads loaded in the browser, so a typed search reads in the rest, batch by batch.
+  useEffect(() => {
+    if (preview || !search.trim() || !data || loading || loadingMore || data.nextOffset == null || data.rows.length >= data.total) return;
+    const nextOffset = data.nextOffset;
+    const timer = window.setTimeout(() => { void load(nextOffset, true); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [preview, search, data, loading, loadingMore, load]);
   const turnLanePage = (key: PartnerLane, nextPage: number) => {
     setLanePages((current) => ({ ...current, [key]: nextPage }));
     if (data && data.rows.length < nextPage * LANE_PAGE && data.nextOffset != null && !loadingMore) {
@@ -435,18 +445,28 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
       const total = laneTotal(column.key);
       const lanePage = paginate(rows, lanePages[column.key] ?? 1, LANE_PAGE);
       const needsMoreRows = (lanePage.current - 1) * LANE_PAGE >= rows.length && total > rows.length && loadingMore;
-      return <section key={column.key} data-stage={column.key} aria-label={column.label} className="flex min-w-0 flex-col rounded-md border border-border bg-[var(--canvas)] md:w-0 md:min-w-[220px] md:max-w-[420px] md:flex-1">
-        <header className={cn("sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2 text-sm font-semibold md:static", COLUMN_TONE[column.tone])} title={column.footnote}>
-          <h3 className="truncate">{column.label}</h3>
-          <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--surface-alt)] px-2 py-0.5 text-xs tabular-nums text-[var(--body)]">{total.toLocaleString()}</span>
+      const isFolded = foldedLanes.has(column.key);
+      return <section key={column.key} data-stage={column.key} aria-label={column.label} className={cn("flex min-w-0 flex-col rounded-md border border-border bg-[var(--canvas)]", isFolded ? "md:w-12 md:min-w-12 md:flex-none" : "md:w-0 md:min-w-[220px] md:max-w-[420px] md:flex-1")}>
+        <header className={cn("sticky top-0 z-10 border-b border-border bg-card text-sm font-semibold md:static", COLUMN_TONE[column.tone])} title={column.footnote}>
+          <button
+            type="button"
+            aria-expanded={!isFolded}
+            aria-label={`${column.label}, ${total.toLocaleString()} ${total === 1 ? "lead" : "leads"}. ${isFolded ? "Open" : "Fold"} this stage`}
+            onClick={() => toggleLane(column.key)}
+            className={cn("flex w-full items-center gap-2 border-0 bg-transparent px-3 py-2 text-left font-[inherit] text-inherit outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", isFolded && "md:flex-col md:px-0 md:py-3")}
+          >
+            <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-muted-foreground transition-transform", isFolded && "-rotate-90")} />
+            <h3 className={cn("min-w-0 flex-1 truncate", isFolded && "md:flex-none md:[writing-mode:vertical-rl]")}>{column.label}</h3>
+            <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--surface-alt)] px-2 py-0.5 text-xs tabular-nums text-[var(--body)]">{total.toLocaleString()}</span>
+          </button>
         </header>
-        <div className="grid content-start gap-2 p-2">
+        <div className={cn("grid content-start gap-2 p-2", isFolded && "hidden")}>
           {lanePage.rows.map((row) => <LeadCard key={row.id} row={row} href={recordHref(row.id)} now={now} thresholds={data?.ageThresholds} showSubmitter={role === "partner_admin"} />)}
           {/* An empty lane is one quiet line on a phone, not 420px of nothing. */}
           {!rows.length && <p className="px-2 py-2 text-center text-xs text-muted-foreground md:py-6">Nothing here right now</p>}
           {needsMoreRows && <p className="px-2 py-3 text-center text-xs text-muted-foreground" role="status">Loading leads…</p>}
         </div>
-        {total > LANE_PAGE && <div className="border-t border-border bg-[var(--surface-alt)]/60 px-3 py-2">
+        {!isFolded && total > LANE_PAGE && <div className="border-t border-border bg-[var(--surface-alt)]/60 px-3 py-2">
           <Pager page={lanePage.current} total={total} noun={`${column.label.toLowerCase()} leads`} pageSize={LANE_PAGE} onPage={(nextPage) => turnLanePage(column.key, nextPage)} disabled={loadingMore} layout="stepper" />
         </div>}
       </section>;
