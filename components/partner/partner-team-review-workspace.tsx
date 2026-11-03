@@ -237,142 +237,149 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" size="sm" onClick={reload}>Try again</Button></p>}
 
-    <HomePanel title="Needs your attention" period={rangeLabel(range.from, range.to, new Date(now))} className="min-h-0">
-      {loading ? <SectionLoading rows={2} columns={1} label="Reading your leads" />
-        : !insights.length ? <p className="m-0 py-1 text-sm text-muted-foreground">{rows.length ? "All clear: nothing is waiting on you in this period." : "No leads in this period yet. Insights appear as soon as your team submits."}</p>
-        : <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
-          {insights.map((insight) => <li key={insight.key} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-            {insight.tone === "info"
-              ? <Lightbulb className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-              : <TriangleAlert className={`size-4 shrink-0 ${insight.tone === "action" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]"}`} aria-hidden="true" />}
-            <span className="min-w-0 flex-1 text-sm text-foreground">{insight.text}</span>
-            {insight.href && <Link href={insight.href} className="inline-flex shrink-0 items-center gap-0.5 text-sm font-semibold text-[var(--accent-ink)] hover:underline">{insight.hrefLabel}<ChevronRight className="size-4" aria-hidden="true" /></Link>}
-          </li>)}
-        </ul>}
-    </HomePanel>
+    <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="flex min-w-0 flex-col gap-6 lg:order-1">
+      <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          icon={Send}
+          label="Leads submitted"
+          value={loading ? "—" : metrics.submitted}
+          delta={delta(metrics.submitted, previous?.submitted)}
+          fact={loading || !previous ? undefined : { label: changeLabel(metrics.submitted, previous.submitted, days) }}
+        />
+        <StatCard
+          icon={Hourglass}
+          label="In progress"
+          value={loading ? "—" : metrics.progress}
+          fact={loading || !previous ? undefined : { label: changeLabel(metrics.progress, previous.progress, days) }}
+        />
+        <StatCard
+          icon={FileCheck2}
+          label="Applications"
+          value={loading ? "—" : metrics.applications}
+          delta={delta(metrics.applications, previous?.applications)}
+          fact={loading || !previous ? undefined : { label: changeLabel(metrics.applications, previous.applications, days) }}
+        />
+        <StatCard
+          icon={Percent}
+          label="Conversion"
+          value={loading || conversionNow === null ? "—" : `${conversionNow.toFixed(1)}%`}
+          delta={metrics.submitted >= MIN_CONVERSION_SAMPLE && previous && previous.submitted >= MIN_CONVERSION_SAMPLE ? delta(conversionNow ?? 0, conversionPrev) : undefined}
+          fact={loading ? undefined : { label: metrics.submitted === 0 ? "No leads yet" : metrics.submitted < MIN_CONVERSION_SAMPLE ? `${metrics.applications} of ${metrics.submitted} · too few leads for a trend` : `${metrics.applications} of ${metrics.submitted} leads became applications` }}
+        />
+      </StatRow>
 
-    <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-      <StatCard
-        icon={Send}
-        label="Leads submitted"
-        value={loading ? "—" : metrics.submitted}
-        delta={delta(metrics.submitted, previous?.submitted)}
-        fact={loading || !previous ? undefined : { label: changeLabel(metrics.submitted, previous.submitted, days) }}
-      />
-      <StatCard
-        icon={Hourglass}
-        label="In progress"
-        value={loading ? "—" : metrics.progress}
-        fact={loading || !previous ? undefined : { label: changeLabel(metrics.progress, previous.progress, days) }}
-      />
-      <StatCard
-        icon={FileCheck2}
-        label="Applications"
-        value={loading ? "—" : metrics.applications}
-        delta={delta(metrics.applications, previous?.applications)}
-        fact={loading || !previous ? undefined : { label: changeLabel(metrics.applications, previous.applications, days) }}
-      />
-      <StatCard
-        icon={Percent}
-        label="Conversion"
-        value={loading || conversionNow === null ? "—" : `${conversionNow.toFixed(1)}%`}
-        delta={metrics.submitted >= MIN_CONVERSION_SAMPLE && previous && previous.submitted >= MIN_CONVERSION_SAMPLE ? delta(conversionNow ?? 0, conversionPrev) : undefined}
-        fact={loading ? undefined : { label: metrics.submitted === 0 ? "No leads yet" : metrics.submitted < MIN_CONVERSION_SAMPLE ? `${metrics.applications} of ${metrics.submitted} · too few leads for a trend` : `${metrics.applications} of ${metrics.submitted} leads became applications` }}
-      />
-    </StatRow>
+      <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
+        <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"}`} className="min-h-[19rem]">
+          {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
+            : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
+            : <BarSeries
+                bars={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
+                summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
+                unit="leads"
+                className="flex-1"
+                minHeight={180}
+              />}
+        </HomePanel>
+        <HomePanel title="Lead status" link={{ label: "Pipeline", href: "/partner/pipeline" }} className="min-h-[19rem]">
+          {loading ? <SectionLoading rows={4} columns={1} label="Loading" />
+            : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Nothing submitted in this period.</p>
+            : <ul className="m-0 flex flex-1 list-none flex-col justify-center gap-4 p-0">
+              {[
+                { label: "Waiting for an agent", count: where.waiting, color: "bg-[var(--warning-ink)]" },
+                { label: "With a closer", count: where.inProgress, color: "bg-[var(--primary)]" },
+                { label: "Closed without a sale", count: where.closed, color: "bg-muted-foreground" },
+                { label: "Became applications", count: where.applications, color: "bg-[var(--success-ink)]" },
+              ].map((item) => <li key={item.label}>
+                <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-foreground">{item.label}</span><span className="tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{item.count}</b> · {Math.round((item.count / funnelTotal) * 100)}%</span></div>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={`block h-full rounded-full ${item.color}`} style={{ width: `${(item.count / funnelTotal) * 100}%` }} /></div>
+              </li>)}
+            </ul>}
+        </HomePanel>
+      </div>
 
-    <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
-      <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"}`} className="min-h-[19rem]">
-        {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
-          : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
-          : <BarSeries
-              bars={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
-              summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
-              unit="leads"
-              className="flex-1"
-              minHeight={180}
-            />}
-      </HomePanel>
-      <HomePanel title="Where your leads are now" link={{ label: "Pipeline", href: "/partner/pipeline" }} className="min-h-[19rem]">
-        {loading ? <SectionLoading rows={4} columns={1} label="Loading" />
-          : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Nothing submitted in this period.</p>
-          : <ul className="m-0 flex flex-1 list-none flex-col justify-center gap-4 p-0">
-            {[
-              { label: "Waiting for an agent", count: where.waiting, color: "bg-[var(--warning-ink)]" },
-              { label: "With a closer", count: where.inProgress, color: "bg-[var(--primary)]" },
-              { label: "Closed without a sale", count: where.closed, color: "bg-muted-foreground" },
-              { label: "Became applications", count: where.applications, color: "bg-[var(--success-ink)]" },
-            ].map((item) => <li key={item.label}>
-              <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-foreground">{item.label}</span><span className="tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{item.count}</b> · {Math.round((item.count / funnelTotal) * 100)}%</span></div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={`block h-full rounded-full ${item.color}`} style={{ width: `${(item.count / funnelTotal) * 100}%` }} /></div>
-            </li>)}
-          </ul>}
-      </HomePanel>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <HomePanel title="By product" period="leads and conversion" className="min-h-[15rem]">
+          {loading ? <SectionLoading rows={3} columns={1} label="Loading products" />
+            : !products.length ? <p className="m-auto text-sm text-muted-foreground">Products show once leads arrive.</p>
+            : <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
+              {products.slice(0, 6).map((line) => <li key={line.product}>
+                <div className="flex items-baseline justify-between gap-3 text-sm"><span className="min-w-0 truncate text-foreground">{line.product}</span><span className="shrink-0 tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{line.leads}</b> {line.leads === 1 ? "lead" : "leads"} · {line.conversion === null ? "rate needs 5 leads" : `${line.conversion.toFixed(0)}% convert`}</span></div>
+                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${(line.leads / topProductLeads) * 100}%` }} /></div>
+              </li>)}
+            </ul>}
+        </HomePanel>
+        <HomePanel title="Leads by weekday" period="when they arrive" className="min-h-[15rem]">
+          {loading ? <SectionLoading rows={3} columns={1} label="Loading weekdays" />
+            : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Weekday pattern shows once leads arrive.</p>
+            : <BarSeries
+                bars={WEEKDAY_SHORT.map((label, index) => ({ key: label, label, value: weekdays[index] }))}
+                summary={`Leads by weekday: ${WEEKDAY_SHORT.map((label, index) => `${label} ${weekdays[index]}`).join(", ")}`}
+                unit="leads"
+                labels="all"
+                barMaxWidth={36}
+                className="flex-1"
+                minHeight={130}
+              />}
+        </HomePanel>
+      </div>
+
+      <TableCard
+        className="flex min-h-[18rem] flex-1 flex-col"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
+        title="Members"
+        action={<Button asChild variant="ghost" size="sm"><Link href="/partner/team">Manage access<ChevronRight aria-hidden="true" /></Link></Button>}
+        footer={!loading && memberStats.length > pageSize ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
+      >
+        {loading ? <SectionLoading rows={5} columns={6} />
+          : !memberStats.length ? <div className="flex min-h-48 flex-1 items-center justify-center"><EmptyState title="No partner users yet" hint="Invite teammates from Team access." /></div>
+          : <Table>
+            <TableHeader><TableRow>
+              <TableHead>Member</TableHead>
+              <TableHead className="w-[170px]">Submitted</TableHead>
+              <TableHead className="w-[110px] text-right">In progress</TableHead>
+              <TableHead className="w-[120px] text-right">Applications</TableHead>
+              <TableHead className="w-[110px] text-right">Conversion</TableHead>
+              <TableHead className="w-[140px]">Last activity</TableHead>
+              <TableHead className="w-[70px] text-right"><span className="sr-only">Details</span></TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {visible.rows.map(({ user, stats }) => {
+                const isSelected = detailOpen && selected?.user.user_id === user.user_id;
+                return <TableRow key={user.user_id} data-state={isSelected ? "selected" : undefined}>
+                  <TableCell><strong className="font-semibold text-foreground">{user.name}</strong>{user.status !== "active" && <span className="block text-xs text-muted-foreground">Deactivated</span>}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2.5"><span className="w-6 shrink-0 tabular-nums">{stats.submitted}</span><span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${metrics.submitted ? (stats.submitted / metrics.submitted) * 100 : 0}%` }} /></span></div>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{stats.progress}</TableCell>
+                  <TableCell className="text-right tabular-nums">{stats.applications}</TableCell>
+                  <TableCell className="text-right tabular-nums" title={stats.submitted && stats.submitted < MIN_CONVERSION_SAMPLE ? `${stats.applications} of ${stats.submitted} — too few leads for a rate` : undefined}>{stats.submitted >= MIN_CONVERSION_SAMPLE ? `${((stats.applications / stats.submitted) * 100).toFixed(1)}%` : "—"}</TableCell>
+                  <TableCell>{user.last_login_at ? activityLabel(Date.parse(user.last_login_at), now) : "Never"}</TableCell>
+                  <TableCell className="text-right"><Button type="button" variant="ghost" size="icon" title={isSelected ? "Close" : "View leads"} aria-label={isSelected ? `Close ${user.name}` : `View leads from ${user.name}`} aria-expanded={isSelected} onClick={() => toggleDetail(user.user_id)}><ArrowRight aria-hidden="true" /></Button></TableCell>
+                </TableRow>;
+              })}
+            </TableBody>
+          </Table>}
+      </TableCard>
+      </div>
+      <aside className="order-first min-w-0 lg:order-2">
+        <HomePanel title="Needs your attention" period={rangeLabel(range.from, range.to, new Date(now))} className="min-h-0 lg:sticky lg:top-0">
+          {loading ? <SectionLoading rows={3} columns={1} label="Reading your leads" />
+            : !insights.length ? <p className="m-0 py-1 text-sm text-muted-foreground">{rows.length ? "All clear: nothing is waiting on you in this period." : "No leads in this period yet. Insights appear as soon as your team submits."}</p>
+            : <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
+              {insights.map((insight) => <li key={insight.key} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+                <div className="flex items-start gap-2.5">
+                  {insight.tone === "info"
+                    ? <Lightbulb className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                    : <TriangleAlert className={`mt-0.5 size-4 shrink-0 ${insight.tone === "action" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]"}`} aria-hidden="true" />}
+                  <span className="min-w-0 flex-1 text-sm leading-normal text-foreground">{insight.text}</span>
+                </div>
+                {insight.href && <Link href={insight.href} className="inline-flex items-center gap-0.5 self-start pl-[1.625rem] text-sm font-semibold text-[var(--accent-ink)] hover:underline">{insight.hrefLabel}<ChevronRight className="size-4" aria-hidden="true" /></Link>}
+              </li>)}
+            </ul>}
+        </HomePanel>
+      </aside>
     </div>
-
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-      <HomePanel title="By product" period="leads and conversion" className="min-h-[15rem]">
-        {loading ? <SectionLoading rows={3} columns={1} label="Loading products" />
-          : !products.length ? <p className="m-auto text-sm text-muted-foreground">Products show once leads arrive.</p>
-          : <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
-            {products.slice(0, 6).map((line) => <li key={line.product}>
-              <div className="flex items-baseline justify-between gap-3 text-sm"><span className="min-w-0 truncate text-foreground">{line.product}</span><span className="shrink-0 tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{line.leads}</b> {line.leads === 1 ? "lead" : "leads"} · {line.conversion === null ? "rate needs 5 leads" : `${line.conversion.toFixed(0)}% convert`}</span></div>
-              <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${(line.leads / topProductLeads) * 100}%` }} /></div>
-            </li>)}
-          </ul>}
-      </HomePanel>
-      <HomePanel title="Leads by weekday" period="when they arrive" className="min-h-[15rem]">
-        {loading ? <SectionLoading rows={3} columns={1} label="Loading weekdays" />
-          : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Weekday pattern shows once leads arrive.</p>
-          : <BarSeries
-              bars={WEEKDAY_SHORT.map((label, index) => ({ key: label, label, value: weekdays[index] }))}
-              summary={`Leads by weekday: ${WEEKDAY_SHORT.map((label, index) => `${label} ${weekdays[index]}`).join(", ")}`}
-              unit="leads"
-              labels="all"
-              barMaxWidth={36}
-              className="flex-1"
-              minHeight={130}
-            />}
-      </HomePanel>
-    </div>
-
-    <TableCard
-      className="flex min-h-[18rem] flex-1 flex-col"
-      bodyClassName="flex min-h-0 flex-1 flex-col"
-      title="Members"
-      action={<Button asChild variant="ghost" size="sm"><Link href="/partner/team">Manage access<ChevronRight aria-hidden="true" /></Link></Button>}
-      footer={!loading && memberStats.length > pageSize ? <Pager page={visible.current} total={memberStats.length} noun="members" pageSize={pageSize} onPage={setPage} /> : undefined}
-    >
-      {loading ? <SectionLoading rows={5} columns={6} />
-        : !memberStats.length ? <div className="flex min-h-48 flex-1 items-center justify-center"><EmptyState title="No partner users yet" hint="Invite teammates from Team access." /></div>
-        : <Table>
-          <TableHeader><TableRow>
-            <TableHead>Member</TableHead>
-            <TableHead className="w-[170px]">Submitted</TableHead>
-            <TableHead className="w-[110px] text-right">In progress</TableHead>
-            <TableHead className="w-[120px] text-right">Applications</TableHead>
-            <TableHead className="w-[110px] text-right">Conversion</TableHead>
-            <TableHead className="w-[140px]">Last activity</TableHead>
-            <TableHead className="w-[70px] text-right"><span className="sr-only">Details</span></TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {visible.rows.map(({ user, stats }) => {
-              const isSelected = detailOpen && selected?.user.user_id === user.user_id;
-              return <TableRow key={user.user_id} data-state={isSelected ? "selected" : undefined}>
-                <TableCell><strong className="font-semibold text-foreground">{user.name}</strong>{user.status !== "active" && <span className="block text-xs text-muted-foreground">Deactivated</span>}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2.5"><span className="w-6 shrink-0 tabular-nums">{stats.submitted}</span><span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${metrics.submitted ? (stats.submitted / metrics.submitted) * 100 : 0}%` }} /></span></div>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{stats.progress}</TableCell>
-                <TableCell className="text-right tabular-nums">{stats.applications}</TableCell>
-                <TableCell className="text-right tabular-nums" title={stats.submitted && stats.submitted < MIN_CONVERSION_SAMPLE ? `${stats.applications} of ${stats.submitted} — too few leads for a rate` : undefined}>{stats.submitted >= MIN_CONVERSION_SAMPLE ? `${((stats.applications / stats.submitted) * 100).toFixed(1)}%` : "—"}</TableCell>
-                <TableCell>{user.last_login_at ? activityLabel(Date.parse(user.last_login_at), now) : "Never"}</TableCell>
-                <TableCell className="text-right"><Button type="button" variant="ghost" size="icon" title={isSelected ? "Close" : "View leads"} aria-label={isSelected ? `Close ${user.name}` : `View leads from ${user.name}`} aria-expanded={isSelected} onClick={() => toggleDetail(user.user_id)}><ArrowRight aria-hidden="true" /></Button></TableCell>
-              </TableRow>;
-            })}
-          </TableBody>
-        </Table>}
-    </TableCard>
     {detailOpen && selected && <SelectedTeammateDrawer selected={selected} leads={selectedLeads} onClose={() => { setDetailOpen(false); setSelectedUserId(null); }} />}
   </div>;
 }
