@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FileText, Languages, MessageSquare, Phone, UserRound } from "lucide-react";
 
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
@@ -105,34 +105,8 @@ function SharedNotes({ detail }: { detail: PartnerLeadDetail }) {
 
 export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDetail; backHref: string }) {
   const groups = applicationGroups(detail);
-  // One selection for the whole side navigation: a tab ("overview", "call-updates", "notes") or, while the
-  // overview is open, the application group being read.
-  const [active, setActive] = useState<string>(groups[0]?.key ?? "overview");
-  const tab: "overview" | "call-updates" | "notes" = active === "call-updates" || active === "notes" ? active : "overview";
-  const groupKeys = groups.map((group) => group.key).join("|");
-
-  // While the overview is open the side navigation follows the reader: the group nearest the top is the lit one.
-  useEffect(() => {
-    if (tab !== "overview") return;
-    const targets = groupKeys.split("|").map((key) => document.getElementById(groupId(key))).filter((node): node is HTMLElement => Boolean(node));
-    if (!targets.length || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((x, y) => x.boundingClientRect.top - y.boundingClientRect.top)[0];
-      if (visible) setActive(visible.target.id.replace("partner-lead-group-", ""));
-    }, { rootMargin: "-20% 0px -65% 0px" });
-    targets.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-  }, [tab, groupKeys]);
-
-  function choose(key: string) {
-    setActive(key);
-    if (key !== "call-updates" && key !== "notes") {
-      // The overview may have to mount first when the reader comes from another tab.
-      window.setTimeout(() => document.getElementById(groupId(key))?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
-    } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    }
-  }
+  // The lead's three pages are the whole side navigation; the application's sections stay one scroll in the first.
+  const [tab, setTab] = useState<"overview" | "call-updates" | "notes">("overview");
 
   return (
     <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4">
@@ -146,17 +120,12 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
           {detail.language && <StatusChip tone="neutral" className="border border-border"><span className="inline-flex items-center gap-1.5" aria-label={`Customer language: ${detail.language}`}><Languages aria-hidden="true" className="size-3.5" />{detail.language}</span></StatusChip>}
         </div>}
       />
-      {/* The lead's own pages, then the application's sections: one side navigation, as in Settings. */}
       <SettingsLayout
-        active={active}
-        onSelect={choose}
+        active={tab}
+        onSelect={(key) => setTab(key as typeof tab)}
         collapsible
-        groups={[
-          { key: "application", label: "Application", sections: groups.map((group) => group.key) },
-          { key: "activity", label: "Activity", sections: ["call-updates", "notes"] },
-        ]}
         sections={[
-          ...groups.map((group) => ({ key: group.key, label: group.label, icon: <UserRound className="size-4" aria-hidden="true" /> })),
+          { key: "overview", label: "Overview", icon: <UserRound className="size-4" aria-hidden="true" /> },
           { key: "call-updates", label: "Call updates", icon: <Phone className="size-4" aria-hidden="true" /> },
           { key: "notes", label: "Notes", icon: <FileText className="size-4" aria-hidden="true" /> },
         ]}
