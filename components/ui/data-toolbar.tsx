@@ -81,20 +81,28 @@ export function FilterButton({
   count = 0,
   controls,
   children = "Filters",
+  iconOnly = false,
   onClick,
+  className,
   ...props
-}: { open?: boolean; count?: number; controls?: string } & Omit<ComponentProps<typeof Button>, "variant">) {
+}: {
+  open?: boolean;
+  count?: number;
+  controls?: string;
+  /** The icon and the count only, for the actions side of the toolbar beside an icon-only Refresh; the name stays on the control. */
+  iconOnly?: boolean;
+} & Omit<ComponentProps<typeof Button>, "variant">) {
   return (
-    <Button type="button" variant="outline" aria-expanded={open} aria-controls={controls} onClick={onClick} {...props}>
+    <Button type="button" variant="outline" aria-expanded={open} aria-controls={controls} aria-label={iconOnly ? "Filters" : undefined} title={iconOnly ? "Filters" : undefined} onClick={onClick} className={cn(iconOnly && "px-2.5", className)} {...props}>
       <SlidersHorizontal aria-hidden="true" />
-      {children}
+      {!iconOnly && children}
       {count > 0 && (
         <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
           {count}
           <span className="sr-only"> applied</span>
         </span>
       )}
-      <ChevronDown className={cn("transition-transform", open && "rotate-180")} aria-hidden="true" />
+      {!iconOnly && <ChevronDown className={cn("transition-transform", open && "rotate-180")} aria-hidden="true" />}
     </Button>
   );
 }
