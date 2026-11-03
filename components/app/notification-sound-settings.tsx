@@ -78,7 +78,7 @@ export function NotificationSoundSettings({
           storage for these choices is a pending migration; until it lands they apply to this
           browser only, and the toggles would otherwise snap back and simply look broken. */}
       {durable === false && (
-        <p role="status" className="mb-2 rounded border border-[color-mix(in_srgb,var(--warning)_28%,transparent)] bg-[var(--warning-surface)] px-2 py-1.5 text-xs text-[var(--warning-ink)]">
+        <p role="status" className="mb-2 text-xs text-[var(--color-muted-foreground)]">
           These choices apply to this browser only for now, and will not follow you to another machine.
         </p>
       )}

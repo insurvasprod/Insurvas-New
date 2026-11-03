@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { notify } from "@/lib/notify";
 
 import { Button } from "@/components/ui/button";
+import { Field, Switch } from "@/components/ui/field";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { SectionLoading } from "@/components/ui/page-states";
 import type { PartnerAlertEvent, PartnerAlertSettings } from "@/lib/partnerAlerts/presentation";
@@ -109,15 +110,17 @@ export function PartnerNotificationPreferences({
 
   const zones = TIMEZONES.some(([value]) => value === zone) ? TIMEZONES : [[zone, zone] as [string, string], ...TIMEZONES];
 
-  return <div className="flex flex-col items-start gap-4">
-    <div className="flex flex-col gap-2.5">
-      {BOARD_EVENTS.map(([event, label]) => <label className="flex cursor-pointer items-center gap-2.5 text-sm text-[var(--body)]" key={event}>
-        <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={draft.enabled_events[event]} disabled={saving} onChange={(input) => setDraft({ ...draft, enabled_events: { ...draft.enabled_events, [event]: input.target.checked } })} />
-        {label}
-      </label>)}
+  return <div className="flex flex-col items-start gap-5">
+    <div className="w-full">
+      <p className="font-semibold">What reaches you</p>
+      <div className="mt-1 divide-y divide-border">
+        {BOARD_EVENTS.map(([event, label]) => <label className="flex cursor-pointer items-center justify-between gap-3 py-2.5 text-sm text-[var(--body)]" key={event}>
+          {label}
+          <Switch label={label} checked={draft.enabled_events[event]} disabled={saving} onChange={(next) => setDraft({ ...draft, enabled_events: { ...draft.enabled_events, [event]: next } })} />
+        </label>)}
+      </div>
     </div>
-    <label className="flex w-full flex-col gap-1.5">
-      <span className="text-sm font-semibold text-[var(--body)]">Timezone</span>
+    <Field label="Timezone" info={canEditTimezone ? "The timezone your submission dates are read in." : "Your partner admin sets the timezone your submission dates are read in."} className="w-full">
       {/* Nine curated zones rather than the IANA list, so the search is for consistency with the
           rest of the portal rather than because the list is long. */}
       <SelectMenu
@@ -131,9 +134,8 @@ export function PartnerNotificationPreferences({
         panelAlign="start"
         options={zones.map(([value, label]) => ({ value, label }))}
       />
-      {!canEditTimezone && <small className="text-xs text-muted-foreground">Your partner admin sets the timezone your submission dates are read in.</small>}
-    </label>
+    </Field>
     {error && <p className="text-sm text-[var(--error-ink)]" role="alert">{error}</p>}
-    <Button type="button" onClick={() => void save()} disabled={saving || (!eventsChanged && !zoneChanged)}>{saving ? "Saving…" : "Save notification preferences"}</Button>
+    <Button type="button" variant="secondary" size="sm" onClick={() => void save()} disabled={saving || (!eventsChanged && !zoneChanged)}>{saving ? "Saving…" : "Save changes"}</Button>
   </div>;
 }
