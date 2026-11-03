@@ -256,13 +256,14 @@ export function PartnerDealFlow({
           label="Deals worked"
           value={figures ? figures.worked : "—"}
           series={perDay(() => true)}
+          note={figures ? (isAdmin ? "Across your team" : "Submitted by you") : undefined}
         />
         <KpiTile
           icon={BadgeCheck}
           label="Won"
           value={figures ? figures.won : "—"}
           series={perDay((row) => row.stageType === "won")}
-          note={figures ? `${formatCentsAsCurrency(figures.wonAnnualisedCents)} annualised${figures.wonUnpriced > 0 ? ` · ${figures.wonUnpriced} unpriced` : ""}` : undefined}
+          note={figures ? `${formatCentsAsCurrency(figures.wonAnnualisedCents)}/yr${figures.wonUnpriced > 0 ? ` · ${figures.wonUnpriced} unpriced` : ""}` : undefined}
         />
         <KpiTile
           icon={Hourglass}
