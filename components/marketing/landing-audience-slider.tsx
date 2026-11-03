@@ -5,8 +5,8 @@ import { useState } from "react";
 import styles from "@/components/marketing/landing-audience-slider.module.css";
 
 /**
- * "Who it's for" (2026-11-04, owner): one switch, Agent or Agency, and three problems each person
- * has, one at a time. Problems only, no pitch (owner, 4 Nov); the graph beside each is sample data. The pricing views behind the two links are real (plan catalog audiences).
+ * "What's broken today?" (2026-11-04, owner): the six problems agents and agencies have, one at a
+ * time. Problems only, no pitch; the graph beside each is sample data.
  */
 type Chart = { title: string; note: string; main: readonly number[]; base: readonly number[]; at: number };
 type Slide = { problem: string; chart: Chart };
@@ -29,9 +29,8 @@ const STEADY = [0.5, 0.56, 0.52, 0.6, 0.58, 0.66, 0.62, 0.7, 0.68, 0.74, 0.72, 0
 const FLAT = [0.16, 0.17, 0.16, 0.18, 0.17, 0.19, 0.18, 0.2, 0.19, 0.21, 0.2, 0.22, 0.21, 0.23];
 const STEPS = [0.2, 0.2, 0.34, 0.34, 0.34, 0.5, 0.5, 0.5, 0.64, 0.64, 0.78, 0.78, 0.78, 0.9];
 
-const PERSONAS: Record<"agent" | "agency", { label: string; slides: readonly Slide[] }> = {
+const PERSONAS: Record<"agent" | "agency", { slides: readonly Slide[] }> = {
   agent: {
-    label: "Insurvas for Independent Agent",
     slides: [
       {
         problem: "I can’t tell which vendor actually paid me back.",
@@ -48,7 +47,6 @@ const PERSONAS: Record<"agent" | "agency", { label: string; slides: readonly Sli
     ],
   },
   agency: {
-    label: "Insurvas for Agencies",
     slides: [
       {
         problem: "My producers cherry-pick the best leads.",
@@ -66,35 +64,26 @@ const PERSONAS: Record<"agent" | "agency", { label: string; slides: readonly Sli
   },
 };
 
-type Who = keyof typeof PERSONAS;
+/** Agent problems first, then the agency's: one list. */
+const SLIDES: readonly Slide[] = [...PERSONAS.agent.slides, ...PERSONAS.agency.slides];
 
 export function LandingAudienceSlider() {
-  const [who, setWho] = useState<Who>("agent");
   const [index, setIndex] = useState(0);
-  const persona = PERSONAS[who];
-  const slides = persona.slides;
-  const slide = slides[index];
-
-  const choose = (next: Who) => { setWho(next); setIndex(0); };
+  const slide = SLIDES[index];
 
   return (
     <div className={styles.slider}>
-      <div className={styles.switch} role="group" aria-label="Who are you">
-        {(Object.keys(PERSONAS) as Who[]).map((key) => (
-          <button key={key} type="button" aria-pressed={who === key} onClick={() => choose(key)} className={styles.switchButton}>{PERSONAS[key].label}</button>
-        ))}
-      </div>
       <div className={styles.stage}>
-        <div className={styles.slide} key={`${who}-${index}`} aria-live="polite">
+        <div className={styles.slide} key={index} aria-live="polite">
           <div className={styles.count}>
             <span>Problem</span>
-            {slides.map((item, i) => (
-              <button key={item.problem} type="button" aria-label={`Problem ${i + 1} of ${slides.length}`} aria-current={i === index ? "true" : undefined} onClick={() => setIndex(i)}>{i + 1}</button>
+            {SLIDES.map((item, i) => (
+              <button key={item.problem} type="button" aria-label={`Problem ${i + 1} of ${SLIDES.length}`} aria-current={i === index ? "true" : undefined} onClick={() => setIndex(i)}>{i + 1}</button>
             ))}
           </div>
           <p className={styles.problem}>{slide.problem}</p>
         </div>
-        <figure className={styles.chart} key={`chart-${who}-${index}`}>
+        <figure className={styles.chart} key={`chart-${index}`}>
           <figcaption><span>{slide.chart.title}</span><em>Sample data</em></figcaption>
           <svg viewBox="0 0 300 110" role="img" aria-label={`${slide.chart.title}: ${slide.chart.note}`} preserveAspectRatio="none">
             {[0.25, 0.5, 0.75].map((y) => <line key={y} x1="0" x2="300" y1={104 - y * 92} y2={104 - y * 92} className={styles.grid} />)}

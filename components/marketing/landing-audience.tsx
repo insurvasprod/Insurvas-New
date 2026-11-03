@@ -55,7 +55,9 @@ export function LandingAudience() {
   return (
     <section id="industries" aria-labelledby="audience-title" className={`scroll-mt-20 ${styles.section}`}>
       <div className={styles.inner}>
-        <h2 id="audience-title" className="sr-only">One agent, or a whole floor.</h2>
+        <header className={styles.head}>
+          <h2 id="audience-title" className={styles.heading}>What’s broken today?</h2>
+        </header>
         <LandingAudienceSlider />
       </div>
     </section>
