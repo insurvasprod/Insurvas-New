@@ -1,44 +1,35 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { ChevronDown, FileText, Languages, Lock, MessageSquare, Phone, UserRound } from "lucide-react";
+import { FileText, MessageSquare, Phone, UserRound } from "lucide-react";
 
-import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
-import { Button } from "@/components/ui/button";
+import { when } from "@/components/partner/lead-format";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
-import { StatusChip } from "@/components/ui/status-chip";
-import { ViewTabs } from "@/components/ui/view-tabs";
-import { productLineLabel } from "@/lib/format/productLine";
+import { SettingsLayout } from "@/components/ui/settings-layout";
 import type { PartnerLeadDetail } from "@/lib/partnerLeads/types";
 import type { SnapshotGroup } from "@/lib/partnerLeads/view";
 
+const groupId = (key: string) => `partner-lead-group-${key}`;
+
 function InformationGroup({ group }: { group: SnapshotGroup }) {
   return (
-    <details open className="group min-w-0 break-inside-avoid rounded-lg border border-border bg-card">
-      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg px-4 py-3 outline-none transition-colors hover:bg-[var(--surface-alt)] focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-        <span className="grid size-8 shrink-0 place-items-center rounded-md bg-[var(--primary-soft)] text-[var(--accent-ink)]">
-          <FileText aria-hidden="true" className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-semibold text-foreground">{group.label}</span>
-          <span className="mt-0.5 block text-xs text-muted-foreground">{group.fields.length} {group.fields.length === 1 ? "field" : "fields"}</span>
-        </span>
-        <ChevronDown aria-hidden="true" className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" />
-      </summary>
-      <dl className="m-0 grid grid-cols-1 gap-x-6 gap-y-4 border-t border-border px-4 py-3 sm:grid-cols-2 xl:grid-cols-4">
+    <section id={groupId(group.key)} aria-labelledby={`${groupId(group.key)}-heading`} className="grid min-w-0 gap-x-6 gap-y-2 px-5 py-3 md:grid-cols-[8rem_minmax(0,1fr)]">
+      <h3 id={`${groupId(group.key)}-heading`} className="m-0 pt-0.5 text-sm font-semibold text-foreground">{group.label}</h3>
+      <dl className="m-0 grid grid-cols-2 gap-x-5 gap-y-2.5 lg:grid-cols-3">
         {group.fields.map((field) => (
           <div key={field.key} className="min-w-0">
-            <dt className="text-xs font-medium leading-4 text-muted-foreground">{field.label}</dt>
-            <dd className="m-0 mt-1 break-words text-sm font-medium leading-5 text-foreground">{field.value}</dd>
+            <dt className="text-xs leading-4 text-muted-foreground">{field.label}</dt>
+            <dd className="m-0 break-words text-sm font-medium leading-5 text-foreground">{field.value}</dd>
           </div>
         ))}
       </dl>
-    </details>
+    </section>
   );
 }
 
-function Submission({ detail }: { detail: PartnerLeadDetail }) {
+/** The application as submitted, plus the record's own facts, as the groups the side navigation lists. */
+function applicationGroups(detail: PartnerLeadDetail): SnapshotGroup[] {
   const recordGroup: SnapshotGroup = {
     key: "submission",
     label: "Submission",
@@ -49,22 +40,27 @@ function Submission({ detail }: { detail: PartnerLeadDetail }) {
       { key: "outcome", label: "Outcome", value: detail.outcome ?? "Awaiting update" },
     ],
   };
-  const groups = [...detail.groups, recordGroup];
+  return [...detail.groups, recordGroup];
+}
+
+function Submission({ detail, groups }: { detail: PartnerLeadDetail; groups: SnapshotGroup[] }) {
   return (
-    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="grid min-w-0 gap-3 outline-none">
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-        <Lock className="size-3.5 shrink-0" aria-hidden="true" />
-        Form as submitted · view only
-      </p>
-      {!detail.groups.length && <p className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
-      {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
+    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="min-h-full min-w-0 overflow-hidden rounded-lg border border-border bg-card outline-none">
+      <div className="flex items-center gap-1.5 border-b border-border px-5 py-2.5">
+        <h2 className="m-0 text-base font-semibold text-foreground">Application</h2>
+        <InfoTip label="About this application">The form as it was submitted. It is view only; your agency works the lead from here.</InfoTip>
+      </div>
+      {!detail.groups.length && <p className="m-0 border-b border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
+      <div className="divide-y divide-border">
+        {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
+      </div>
     </div>
   );
 }
 
 function CallUpdates({ detail }: { detail: PartnerLeadDetail }) {
   return (
-    <div id="partner-lead-call-updates" role="tabpanel" aria-labelledby="partner-lead-tab-call-updates" className="min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
+    <div id="partner-lead-call-updates" role="tabpanel" aria-labelledby="partner-lead-tab-call-updates" className="min-h-full min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
       {!detail.timeline.length ? <p className="m-0 py-8 text-center text-sm text-muted-foreground">No call or status updates yet.</p> : (
         <ol className="m-0 flex list-none flex-col p-0">
           {detail.timeline.map((event, index) => (
@@ -90,7 +86,7 @@ function CallUpdates({ detail }: { detail: PartnerLeadDetail }) {
 
 function SharedNotes({ detail }: { detail: PartnerLeadDetail }) {
   return (
-    <div id="partner-lead-notes" role="tabpanel" aria-labelledby="partner-lead-tab-notes" className="min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
+    <div id="partner-lead-notes" role="tabpanel" aria-labelledby="partner-lead-tab-notes" className="min-h-full min-w-0 rounded-lg border border-border bg-card p-4 outline-none">
       {!detail.notes.length ? <p className="m-0 py-8 text-center text-sm text-muted-foreground">No notes have been shared with you yet.</p> : (
         <ol className="m-0 list-none divide-y divide-border p-0">
           {detail.notes.map((note, index) => (
@@ -106,39 +102,33 @@ function SharedNotes({ detail }: { detail: PartnerLeadDetail }) {
 }
 
 export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDetail; backHref: string }) {
+  const groups = applicationGroups(detail);
+  // The lead's three pages are the whole side navigation; the application's sections stay one scroll in the first.
   const [tab, setTab] = useState<"overview" | "call-updates" | "notes">("overview");
-  const activePanel = tab === "overview" ? "partner-lead-overview" : tab === "call-updates" ? "partner-lead-call-updates" : "partner-lead-notes";
-  const tabs = [
-    { key: "overview", label: "Overview", marker: <UserRound aria-hidden="true" className="size-3.5" /> },
-    { key: "call-updates", label: "Call updates", marker: <Phone aria-hidden="true" className="size-3.5" /> },
-    { key: "notes", label: "Notes", marker: <FileText aria-hidden="true" className="size-3.5" /> },
-  ] as const;
+
   return (
-    <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4">
+    <div className="m-stagger flex w-full min-w-0 flex-1 flex-col gap-4 lg:min-h-[calc(100dvh_-_var(--top-bar-h,56px)_-_3.5rem)]">
       <PageHeader
         title={detail.customer}
         description={`Submitted by ${detail.submittedBy.name}`}
-        visible
-        infoDescription
         breadcrumbs={[{ label: "Lead Pipeline", href: backHref }, { label: detail.customer }]}
-        meta={<div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <StatusChip tone={stageTone(detail)}>{stageLabel(detail)}</StatusChip>
-          <StatusChip tone="neutral" className="border border-border">{productLineLabel(detail.product)}</StatusChip>
-          {detail.language && <StatusChip tone="neutral" className="border border-border"><span className="inline-flex items-center gap-1.5" aria-label={`Customer language: ${detail.language}`}><Languages aria-hidden="true" className="size-3.5" />{detail.language}</span></StatusChip>}
-        </div>}
-        actions={<div className="flex max-w-full flex-wrap items-center justify-end gap-2">
-          <ViewTabs
-            label="Lead information"
-            tabs={tabs}
-            value={tab}
-            onChange={setTab}
-            idPrefix="partner-lead-tab"
-            controls={activePanel}
-          />
-          <Button asChild><Link href="/partner/messages"><MessageSquare aria-hidden="true" />Message your agent</Link></Button>
-        </div>}
       />
-      {tab === "overview" ? <Submission detail={detail} /> : tab === "call-updates" ? <CallUpdates detail={detail} /> : <SharedNotes detail={detail} />}
+      <SettingsLayout
+        active={tab}
+        onSelect={(key) => setTab(key as typeof tab)}
+        searchable
+        collapsible
+        fitHeight
+        searchNoun="this lead"
+        groups={[{ key: "lead", label: "This Lead", sections: ["overview", "call-updates", "notes"] }]}
+        sections={[
+          { key: "overview", label: "Overview", icon: <UserRound className="size-4" aria-hidden="true" /> },
+          { key: "call-updates", label: "Call updates", icon: <Phone className="size-4" aria-hidden="true" /> },
+          { key: "notes", label: "Notes", icon: <FileText className="size-4" aria-hidden="true" /> },
+        ]}
+      >
+        {tab === "overview" ? <Submission detail={detail} groups={groups} /> : tab === "call-updates" ? <CallUpdates detail={detail} /> : <SharedNotes detail={detail} />}
+      </SettingsLayout>
     </div>
   );
 }

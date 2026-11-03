@@ -2,7 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CheckCircle2, CircleAlert, Clock3, Hand, Inbox, Languages, Send } from "lucide-react";
+import { ArrowRight, ArrowUpRight, CheckCircle2, ChevronDown, CircleAlert, Clock3, Hand, Inbox, Languages, Send } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -14,7 +14,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatCard, StatRow } from "@/components/ui/stat-card";
+import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
@@ -24,6 +24,8 @@ import type { PartnerRole } from "@/lib/partnerAuth/roles";
 import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
 import { productLineLabel } from "@/lib/format/productLine";
 import { oldestOpenLabel } from "@/lib/format/age";
+import { isHeld, isSold } from "@/lib/partnerLeads/insights";
+import { localDay, shiftDay, trendSeries } from "@/lib/partnerLeads/trend";
 import { expectedEarningsFact, termLabel } from "@/lib/partners/payout";
 import { countersFromLanes } from "@/lib/partnerLeads/counters";
 import { AGE_TONE_TEXT, ageShort, ageTone, boardColumns, laneOf, nobodyClaimedRow, oldestOpenIsStuck, type AgeThresholds, type AgeTone } from "@/lib/partnerLeads/view";
@@ -125,6 +127,9 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const [data, setData] = useState<PipelineResponse | null>(preview?.data ?? null);
   const [filters, setFilters] = useState<Filters>(linked.filters);
   const [search, setSearch] = useState("");
+  // A lane folds to a slim strip with its name and count; its leads stay loaded and searchable.
+  const [foldedLanes, setFoldedLanes] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleLane = (key: string) => setFoldedLanes((current) => { const next = new Set(current); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const [view, setView] = useState<"board" | "table">(linked.view);
   const [moreFilters, setMoreFilters] = useState(() => Boolean(linked.filters.stage_id || linked.filters.closer_id || linked.filters.outcome || linked.filters.date_from || linked.filters.date_to));
   /** Narrowing the page does client-side: the server's filters speak stages, not lanes. */
@@ -226,6 +231,14 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const earningsHelp = rate
     ? `Your rate is ${rate}. The figure here is that rate on the conversions above; your agency's published statement is what is actually paid.`
     : "Conversions in the last 30 days. Your agency's published statement is what is actually paid.";
+  // The small line in each tile: the last 14 days of the leads loaded, one point a day.
+  const tileSeries = useMemo(() => {
+    if (now === null) return null;
+    const to = localDay(new Date(now))!;
+    const window = { from: shiftDay(to, -13), to, now };
+    const perDay = (match: (row: PartnerLeadRow) => boolean) => trendSeries(allRows.filter(match).map((row) => row.submittedAt), window).buckets.map((bucket) => bucket.count);
+    return { submitted: perDay(() => true), claimed: perDay(isHeld), converted: perDay(isSold), open: perDay((row) => laneOf(row) !== "closed" && laneOf(row) !== "converted") };
+  }, [allRows, now]);
   const stuck = now !== null && oldestOpenIsStuck(data?.oldestOpenAt, now, data?.ageThresholds);
 
   /** Where a lead's record lives, carrying the view so Back returns to the list as it was. */
@@ -245,6 +258,13 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const clearAll = () => { setFilters(EMPTY_FILTERS); setSearch(""); setLane(""); setOnlyFlagged(false); setPage(1); setLanePages({}); };
   const tablePage = paginate(sortedRows, page, pageSize);
   const canLoadMore = Boolean(data && data.rows.length < data.total);
+  // The search runs over the leads loaded in the browser, so a typed search reads in the rest, batch by batch.
+  useEffect(() => {
+    if (preview || !search.trim() || !data || loading || loadingMore || data.nextOffset == null || data.rows.length >= data.total) return;
+    const nextOffset = data.nextOffset;
+    const timer = window.setTimeout(() => { void load(nextOffset, true); }, 0);
+    return () => window.clearTimeout(timer);
+  }, [preview, search, data, loading, loadingMore, load]);
   const turnLanePage = (key: PartnerLane, nextPage: number) => {
     setLanePages((current) => ({ ...current, [key]: nextPage }));
     if (data && data.rows.length < nextPage * LANE_PAGE && data.nextOffset != null && !loadingMore) {
@@ -271,10 +291,10 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const toolbar = <DataToolbar
     actions={<>
       <IconViewSwitch label="Pipeline view" options={[{ key: "board", label: "Board view", icon: "grid" }, { key: "table", label: "Table view", icon: "list" }]} value={view} onChange={setView} />
-      <FilterButton open={moreFilters} controls="partner-lead-filters" onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
+      <FilterButton iconOnly open={moreFilters} controls="partner-lead-filters" onClick={() => setMoreFilters((value) => !value)} count={filterCount} />
       {/* The label is for the room it has: on a phone the icon carries it, with the name still on
           the control for anyone listening rather than looking. */}
-      <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} labelClassName="hidden sm:inline" />
+      <RefreshButton onClick={() => { setLoading(true); void load(); }} refreshing={loading} labelClassName="sr-only" className="px-2.5" />
     </>}
   >
     <SelectMenu
@@ -402,7 +422,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
   const empty = <div className="flex min-h-[24rem] flex-1 items-center justify-center">
     {search.trim() || hasFilters
       ? <NoMatches noun="leads" onClear={clearAll} />
-      : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline"><a href="/partner/submit-lead">Submit a lead</a></Button>} />}
+      : <EmptyState title="No leads yet" hint="Leads you submit appear here as they move through the pipeline." action={<Button asChild variant="outline" size="sm"><a href="/partner/submit-lead">Submit New Lead</a></Button>} />}
   </div>;
 
   const loadMore = canLoadMore && data
@@ -425,18 +445,28 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
       const total = laneTotal(column.key);
       const lanePage = paginate(rows, lanePages[column.key] ?? 1, LANE_PAGE);
       const needsMoreRows = (lanePage.current - 1) * LANE_PAGE >= rows.length && total > rows.length && loadingMore;
-      return <section key={column.key} data-stage={column.key} aria-label={column.label} className="flex min-w-0 flex-col rounded-md border border-border bg-[var(--canvas)] md:w-0 md:min-w-[220px] md:max-w-[420px] md:flex-1">
-        <header className={cn("sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-card px-3 py-2 text-sm font-semibold md:static", COLUMN_TONE[column.tone])} title={column.footnote}>
-          <h3 className="truncate">{column.label}</h3>
-          <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--surface-alt)] px-2 py-0.5 text-xs tabular-nums text-[var(--body)]">{total.toLocaleString()}</span>
+      const isFolded = foldedLanes.has(column.key);
+      return <section key={column.key} data-stage={column.key} aria-label={column.label} className={cn("flex min-w-0 flex-col rounded-md border border-border bg-[var(--canvas)]", isFolded ? "md:w-12 md:min-w-12 md:flex-none" : "md:w-0 md:min-w-[220px] md:max-w-[420px] md:flex-1")}>
+        <header className={cn("sticky top-0 z-10 border-b border-border bg-card text-sm font-semibold md:static", COLUMN_TONE[column.tone])} title={column.footnote}>
+          <button
+            type="button"
+            aria-expanded={!isFolded}
+            aria-label={`${column.label}, ${total.toLocaleString()} ${total === 1 ? "lead" : "leads"}. ${isFolded ? "Open" : "Fold"} this stage`}
+            onClick={() => toggleLane(column.key)}
+            className={cn("flex w-full items-center gap-2 border-0 bg-transparent px-3 py-2 text-left font-[inherit] text-inherit outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring", isFolded && "md:flex-col md:px-0 md:py-3")}
+          >
+            <ChevronDown aria-hidden="true" className={cn("size-4 shrink-0 text-muted-foreground transition-transform", isFolded && "-rotate-90")} />
+            <h3 className={cn("min-w-0 flex-1 truncate", isFolded && "md:flex-none md:[writing-mode:vertical-rl]")}>{column.label}</h3>
+            <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-[var(--surface-alt)] px-2 py-0.5 text-xs tabular-nums text-[var(--body)]">{total.toLocaleString()}</span>
+          </button>
         </header>
-        <div className="grid content-start gap-2 p-2">
+        <div className={cn("grid content-start gap-2 p-2", isFolded && "hidden")}>
           {lanePage.rows.map((row) => <LeadCard key={row.id} row={row} href={recordHref(row.id)} now={now} thresholds={data?.ageThresholds} showSubmitter={role === "partner_admin"} />)}
           {/* An empty lane is one quiet line on a phone, not 420px of nothing. */}
           {!rows.length && <p className="px-2 py-2 text-center text-xs text-muted-foreground md:py-6">Nothing here right now</p>}
           {needsMoreRows && <p className="px-2 py-3 text-center text-xs text-muted-foreground" role="status">Loading leads…</p>}
         </div>
-        {total > LANE_PAGE && <div className="border-t border-border bg-[var(--surface-alt)]/60 px-3 py-2">
+        {!isFolded && total > LANE_PAGE && <div className="border-t border-border bg-[var(--surface-alt)]/60 px-3 py-2">
           <Pager page={lanePage.current} total={total} noun={`${column.label.toLowerCase()} leads`} pageSize={LANE_PAGE} onPage={(nextPage) => turnLanePage(column.key, nextPage)} disabled={loadingMore} layout="stepper" />
         </div>}
       </section>;
@@ -465,7 +495,7 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
         {role === "partner_admin" && <TableCell className="text-muted-foreground">{row.submittedBy.name}</TableCell>}
         <TableCell><Age row={row} now={now} thresholds={data?.ageThresholds} /></TableCell>
         <TableCell className="tabular-nums text-muted-foreground">{when(row.submittedAt)}</TableCell>
-        <TableCell className="text-right"><Button asChild variant="outline" size="sm"><Link href={recordHref(row.id)}>View</Link></Button></TableCell>
+        <TableCell className="text-right"><Button asChild variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground"><Link href={recordHref(row.id)} title="Open the lead" aria-label={`Open the lead for ${row.customer}`}><ArrowUpRight aria-hidden="true" /></Link></Button></TableCell>
       </TableRow>)}
     </TableBody>
   </Table>;
@@ -488,54 +518,48 @@ export function PartnerLeadPipeline({ role, partnerStatus, preview }: { partnerS
     <PageHeader
       title="Lead Pipeline"
       description={role === "partner_admin" ? "Track leads submitted by you and your team." : "Track the leads you submitted."}
-      visible
-      infoDescription
+      hideTitle
+      breadcrumbs={[{ label: "Leads" }, { label: "Lead Pipeline" }]}
       actions={<>
         {data && <LiveStamp updatedAt={data.generatedAt} staleAfterSeconds={45} />}
-        {partnerStatus === "active" && <Button asChild><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
+        {partnerStatus === "active" && <Button asChild size="sm"><a href="/partner/submit-lead"><Send aria-hidden="true" />Submit New Lead</a></Button>}
       </>}
     />
     {error && data && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">{error}<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button></p>}
-    {/*
-      The counters in the board's own lanes (lib/partnerLeads/counters.ts), as the v3 stat cards
-      (UI-CONSISTENCY §4a) the partner home already uses — the same four figures, one click apart,
-      had two different looks. The row's label says whose leads are being counted, which the page
-      used to say only inside the header's (i).
-    */}
-    {/* Two across on a phone, not four stacked: four full-width cards put the first lead 1.9
-        screens down (measured at 375 before this change). */}
-    <StatRow label={scopeLabel} className="grid-cols-2 sm:grid-cols-[repeat(auto-fit,minmax(220px,1fr))]">
-      <StatCard
+    {/* The counters in the board's own lanes (lib/partnerLeads/counters.ts), as the dashboard tiles the other
+        partner pages use: a round icon, the figure, the last two weeks as a line, one plain sentence. */}
+    <KpiRow label={scopeLabel}>
+      <KpiTile
         icon={Send}
         label="Submitted today"
-        period="today"
         value={figure(counters?.submittedToday)}
-        fact={{ label: "Since midnight, your time" }}
+        series={tileSeries?.submitted}
+        note="Since midnight, your time"
       />
-      <StatCard
+      <KpiTile
         icon={Hand}
         label="With a closer"
         value={figure(counters?.claimed)}
-        fact={{ label: "Claimed, or on a call now" }}
+        series={tileSeries?.claimed}
+        note="Claimed, or on a call now"
       />
-      <StatCard
+      <KpiTile
         icon={CheckCircle2}
-        label="Converted"
-        period="30 days"
-        labelTitle={earningsHelp}
+        label="Converted · 30 days"
+        info={earningsHelp}
         value={figure(counters?.converted)}
-        /* The fact carries a label and a value, so it takes the footer alone: a third item clipped
-           the label at 1536 (measured). Statements is in the sidebar under Organisation. */
-        fact={earningsFact ?? { label: "Became business" }}
+        series={tileSeries?.converted}
+        note={earningsFact ? <>{earningsFact.label}{earningsFact.value !== undefined && <> · <span className="font-semibold text-foreground">{earningsFact.value}</span></>}</> : "Became business"}
       />
-      <StatCard
+      <KpiTile
         icon={Inbox}
         label="Still open"
         value={figure(counters?.stillOpen)}
         tone={stuck ? "warn" : "default"}
-        fact={{ label: now === null ? "Not yet finished" : oldestOpenLabel(counters?.stillOpen ?? 0, data?.oldestOpenAt, now) }}
+        series={tileSeries?.open}
+        note={now === null ? "Not yet finished" : oldestOpenLabel(counters?.stillOpen ?? 0, data?.oldestOpenAt, now)}
       />
-    </StatRow>
+    </KpiRow>
     <TableCard className="flex min-h-[28rem] min-w-0 flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col" toolbar={toolbar} filters={filterPanel} footer={footer}>{body}</TableCard>
   </div>;
 }

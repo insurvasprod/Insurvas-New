@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode, SVGProps } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
 
 import { SparkLine } from "@/components/ui/chart";
+import { InfoTip } from "@/components/ui/info-tip";
 import { cn } from "@/lib/utils";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -26,6 +27,7 @@ export function KpiTile({
   value,
   series,
   seriesSummary,
+  info,
   change,
   note,
   tone: figureTone = "default",
@@ -37,6 +39,8 @@ export function KpiTile({
   /** The figure through the period, drawn as the small line. */
   series?: readonly number[];
   seriesSummary?: string;
+  /** Why the figure is what it is, behind an (i) beside the label. */
+  info?: ReactNode;
   /** Percent against the period before. Nothing to compare against is no pill. */
   change?: { value: number; good: "up" | "down" | "neither" };
   /** The plain sentence after the change. */
@@ -52,7 +56,7 @@ export function KpiTile({
   return (
     <div className={cn("m-glass flex min-w-0 flex-col rounded-lg border border-border px-4 py-3", className)}>
       <div className="flex items-center justify-between gap-3">
-        <span className="min-w-0 text-sm font-medium text-foreground">{label}</span>
+        <span className="flex min-w-0 items-center gap-1 text-sm font-medium text-foreground">{label}{info && <InfoTip label={`About ${label.toLowerCase()}`}>{info}</InfoTip>}</span>
         <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--accent-ink)]" aria-hidden="true"><Glyph className="size-4" /></span>
       </div>
       <div className="mt-1 flex items-center gap-4">
