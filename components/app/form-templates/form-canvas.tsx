@@ -142,8 +142,10 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
       </div>
 
       {/* The header above stays put; the questions scroll in here. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-      <div className={cn("mx-auto flex w-full flex-col gap-3 p-3 transition-[max-width] duration-200 sm:p-4", width === "phone" ? "max-w-[390px]" : "max-w-[760px]")}>
+      {/* The canvas: the form sits on it as the sheet a partner sees, so a short or folded form is a small
+          sheet on a quiet ground, not a card that looks empty. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-[color-mix(in_srgb,var(--canvas)_60%,transparent)] p-3 sm:p-5">
+      <div className={cn("mx-auto flex w-full flex-col gap-3 rounded-[12px] border border-[var(--border)] bg-[var(--surface)] p-3 transition-[max-width] duration-200 sm:p-4", width === "phone" ? "max-w-[390px]" : "max-w-[760px]")}>
         <p className="m-0 text-base font-semibold text-[var(--ink)]">Send us a {productName} lead</p>
 
         {form.sections.map((section, index) => {
@@ -215,7 +217,10 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
         })}
 
         <Button onClick={onAddSection} type="button" variant="outline" className="self-start"><Plus aria-hidden="true" />Add a part</Button>
-        <p className="m-0 border-t border-[var(--border)] pt-2 text-xs text-[var(--body)]">Partners press <strong className="font-semibold text-[var(--ink)]">Send lead</strong> here. It’s off while you edit.</p>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+          <span className="text-xs text-[var(--body)]">Partners press this to send. It’s off while you edit.</span>
+          <Button type="button" disabled>Send lead</Button>
+        </div>
       </div>
       </div>
     </section>
