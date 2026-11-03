@@ -19,7 +19,7 @@ export function AuthCard({ title, description, children, className }: {
   className?: string;
 }) {
   return (
-    <div data-auth-card="" className={cn("m-in w-full", className)}>
+    <div className={cn("m-in w-full", className)}>
       {title ? <AuthHeading title={title}>{description}</AuthHeading> : description && <p className="text-base leading-normal tracking-[-0.02em] text-muted-foreground">{description}</p>}
       {children}
     </div>
