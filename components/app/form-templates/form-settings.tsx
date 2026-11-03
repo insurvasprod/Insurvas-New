@@ -1,5 +1,6 @@
 "use client";
 
+import { InfoTip } from "@/components/ui/info-tip";
 import { useEffect, useState, type ReactNode } from "react";
 import { ArrowRight, ChevronDown, Plus } from "lucide-react";
 
@@ -248,12 +249,12 @@ export function FormSettingsPanel({ open, onOpen, onClose, values, eligibility, 
     <DetailPanel
       mode="split"
       splitFrom="xl"
-      title="This form"
+      title={<span className="inline-flex items-center gap-1">Form settings<InfoTip label="About the form settings" side="bottom">Click a question on the form to change it here.</InfoTip></span>}
       status={<span className="text-sm text-[var(--body)]">{versions.name}</span>}
       onClose={onClose}
       closeLabel="Close the form’s settings"
       // Beside the form it is always there (board FtA), so the × shows only on the sheet below 1280px.
-      className="xl:sticky xl:top-[calc(var(--top-bar-h)+1rem)] xl:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] xl:self-start xl:[&>div:first-child>button:last-child]:hidden"
+      className="xl:min-h-0 xl:self-stretch xl:[&>div:first-child>button:last-child]:hidden"
       bodyClassName="flex flex-col px-4 pt-1 pb-4"
     >
       <div className="border-b border-[var(--border)]">
@@ -264,7 +265,6 @@ export function FormSettingsPanel({ open, onOpen, onClose, values, eligibility, 
         <Row id="form-versions" {...rowProps("versions")}><Versions {...versions} /></Row>
         <Row id="form-agents-only" {...rowProps("agents")}><AgentsOnly {...agents} /></Row>
       </div>
-      <p className="m-0 mt-3 text-xs text-[var(--body)]">Click a question on the form to change it here.</p>
     </DetailPanel>
   );
 }

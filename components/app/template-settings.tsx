@@ -364,7 +364,7 @@ export function TemplateSettings() {
   const publishAndReload = () => void publish().then((ok) => { if (ok) void load(productCode); });
 
   return (
-    <SettingsStack>
+    <SettingsStack className="min-h-0 flex-1 gap-3">
       <SettingsSectionHeader
         actions={
           <PublishControls
@@ -391,8 +391,8 @@ export function TemplateSettings() {
         {!settingsOpen && !picked && <Button onClick={() => setSettingsOpen(true)} type="button" variant="outline" className="ml-auto">Form settings</Button>}
       </div>
 
-      <div className="flex min-w-0 flex-col gap-5 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 xl:flex-row xl:items-stretch">
+        <div className="min-h-0 min-w-0 flex-1 lg:h-full">
           <FormCanvas
             form={draft.form}
             fields={draft.fields}

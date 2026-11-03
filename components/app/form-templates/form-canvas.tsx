@@ -131,8 +131,8 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
   }
 
   return (
-    <section aria-label="What partners see" className={cn(cardSurface, "flex min-w-0 flex-col")}>
-      <div className={cn(cardHead, "flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3")}>
+    <section aria-label="What partners see" className={cn(cardSurface, "flex min-h-0 min-w-0 flex-col lg:h-full")}>
+      <div className={cn(cardHead, "flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3")}>
         <span className="text-xs font-semibold text-[var(--ink)]">What partners see</span>
         <InfoTip label="About this preview">Drawn from your changes, as partners will get it once you publish. Nothing typed here is saved.</InfoTip>
         <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -141,6 +141,8 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
         </div>
       </div>
 
+      {/* The header above stays put; the questions scroll in here. */}
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
       <div className={cn("mx-auto flex w-full flex-col gap-5 p-4 transition-[max-width] duration-200 sm:p-6", width === "phone" ? "max-w-[390px]" : "max-w-[760px]")}>
         <p className="m-0 text-base font-semibold text-[var(--ink)]">Send us a {productName} lead</p>
 
@@ -214,6 +216,7 @@ export function FormCanvas({ form, fields, productName, picked, changed, onPick,
 
         <Button onClick={onAddSection} type="button" variant="outline" className="self-start"><Plus aria-hidden="true" />Add a part</Button>
         <p className="m-0 border-t border-[var(--border)] pt-3 text-xs text-[var(--body)]">Partners press <strong className="font-semibold text-[var(--ink)]">Send lead</strong> here. It’s off while you edit.</p>
+      </div>
       </div>
     </section>
   );

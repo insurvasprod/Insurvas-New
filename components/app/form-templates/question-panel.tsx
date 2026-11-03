@@ -152,7 +152,7 @@ export function QuestionPanel({ field, fields, form, sectionKey, placement, chan
       onClose={onClose}
       closeLabel="Close the question"
       // Beside the form the panel is always there (board FtA): "This form" goes back, so no ×.
-      className="xl:sticky xl:top-[calc(var(--top-bar-h)+1rem)] xl:max-h-[calc(100dvh-var(--top-bar-h)-2rem)] xl:self-start xl:[&>div:first-child>button:last-child]:hidden"
+      className="xl:min-h-0 xl:self-stretch xl:[&>div:first-child>button:last-child]:hidden"
       footer={
         <>
           {onReset && <Button onClick={onReset} type="button" variant="ghost"><RotateCcw aria-hidden="true" />Put back how it was</Button>}
