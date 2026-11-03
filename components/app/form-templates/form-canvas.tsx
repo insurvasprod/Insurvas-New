@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, Ellipsis, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, Columns2, Ellipsis, Plus, RectangleHorizontal, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -110,10 +110,10 @@ export function FormCanvas({ form, fields, renderEditor, picked, changed, onPick
             {changed.has(field.field_key) && <span className="rounded-full bg-[var(--warning-surface)] px-2 py-0.5 text-xs font-semibold text-[var(--warning-ink)]">changed</span>}
             {isPicked && bounds && (
               <span role="toolbar" aria-label={`Move, resize or delete “${field.label}”`} className="pointer-events-auto relative z-10 ml-auto flex items-center gap-0.5">
-                <Button onClick={() => onMoveField(sectionKey, field.field_key, -1)} type="button" variant="ghost" size="icon" disabled={!bounds.up} aria-label="Move up"><ArrowUp aria-hidden="true" /></Button>
-                <Button onClick={() => onMoveField(sectionKey, field.field_key, 1)} type="button" variant="ghost" size="icon" disabled={!bounds.down} aria-label="Move down"><ArrowDown aria-hidden="true" /></Button>
-                {twoColumns && <Button onClick={() => onWidth(sectionKey, field.field_key, full ? "half" : "full")} type="button" variant="outline" aria-label={full ? "Make it a half row" : "Make it a full row"}>{full ? "Full row" : "Half row"}</Button>}
-                <Button onClick={() => onDeleteField(field.field_key)} type="button" variant="ghost" size="icon" className="text-[var(--error-ink)]" aria-label={`Delete “${field.label}”`}><Trash2 aria-hidden="true" /></Button>
+                <Button onClick={() => onMoveField(sectionKey, field.field_key, -1)} type="button" variant="ghost" size="icon-sm" disabled={!bounds.up} aria-label="Move up" title="Move up"><ArrowUp aria-hidden="true" /></Button>
+                <Button onClick={() => onMoveField(sectionKey, field.field_key, 1)} type="button" variant="ghost" size="icon-sm" disabled={!bounds.down} aria-label="Move down" title="Move down"><ArrowDown aria-hidden="true" /></Button>
+                {twoColumns && <Button onClick={() => onWidth(sectionKey, field.field_key, full ? "half" : "full")} type="button" variant="ghost" size="icon-sm" aria-label={full ? "Make it a half row" : "Make it a full row"} title={full ? "Full row: press for a half row" : "Half row: press for a full row"}>{full ? <RectangleHorizontal aria-hidden="true" /> : <Columns2 aria-hidden="true" />}</Button>}
+                <Button onClick={() => onDeleteField(field.field_key)} type="button" variant="ghost" size="icon-sm" className="text-[var(--error-ink)]" aria-label={`Delete “${field.label}”`} title="Delete question"><Trash2 aria-hidden="true" /></Button>
               </span>
             )}
           </div>
