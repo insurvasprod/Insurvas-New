@@ -7,9 +7,8 @@ import { stageLabel, stageTone, when } from "@/components/partner/lead-format";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusChip } from "@/components/ui/status-chip";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { SettingsLayout } from "@/components/ui/settings-layout";
 import { productLineLabel } from "@/lib/format/productLine";
-import { cn } from "@/lib/utils";
 import type { PartnerLeadDetail } from "@/lib/partnerLeads/types";
 import type { SnapshotGroup } from "@/lib/partnerLeads/view";
 
@@ -31,7 +30,8 @@ function InformationGroup({ group }: { group: SnapshotGroup }) {
   );
 }
 
-function Submission({ detail }: { detail: PartnerLeadDetail }) {
+/** The application as submitted, plus the record's own facts, as the groups the side navigation lists. */
+function applicationGroups(detail: PartnerLeadDetail): SnapshotGroup[] {
   const recordGroup: SnapshotGroup = {
     key: "submission",
     label: "Submission",
@@ -42,50 +42,19 @@ function Submission({ detail }: { detail: PartnerLeadDetail }) {
       { key: "outcome", label: "Outcome", value: detail.outcome ?? "Awaiting update" },
     ],
   };
-  const groups = [...detail.groups, recordGroup];
-  const [active, setActive] = useState(groups[0]?.key ?? "");
+  return [...detail.groups, recordGroup];
+}
 
-  // The side navigation follows the reader: the group nearest the top of the page is the lit one.
-  useEffect(() => {
-    const targets = groups.map((group) => document.getElementById(groupId(group.key))).filter((node): node is HTMLElement => Boolean(node));
-    if (!targets.length || typeof IntersectionObserver === "undefined") return;
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
-      if (visible) setActive(visible.target.id.replace("partner-lead-group-", ""));
-    }, { rootMargin: "-20% 0px -65% 0px" });
-    targets.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
-    // The group keys are the dependency; the array is rebuilt every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groups.map((group) => group.key).join("|")]);
-
+function Submission({ detail, groups }: { detail: PartnerLeadDetail; groups: SnapshotGroup[] }) {
   return (
-    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="grid min-w-0 gap-4 outline-none lg:grid-cols-[13rem_minmax(0,1fr)] lg:items-start">
-      <nav aria-label="Application sections" className="flex gap-1 overflow-x-auto lg:sticky lg:top-[calc(var(--top-bar-h,56px)+1rem)] lg:flex-col lg:overflow-visible">
-        {groups.map((group) => (
-          <button
-            key={group.key}
-            type="button"
-            aria-current={active === group.key ? "true" : undefined}
-            onClick={() => { setActive(group.key); document.getElementById(groupId(group.key))?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
-            className={cn(
-              "flex min-h-9 shrink-0 items-center rounded-md border-0 px-3 text-left text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              active === group.key ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]" : "bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground",
-            )}
-          >
-            {group.label}
-          </button>
-        ))}
-      </nav>
-      <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card">
-        <div className="flex items-center gap-1.5 border-b border-border px-5 py-3">
-          <h2 className="m-0 text-base font-semibold text-foreground">Application</h2>
-          <InfoTip label="About this application">The form as it was submitted. It is view only; your agency works the lead from here.</InfoTip>
-        </div>
-        {!detail.groups.length && <p className="m-0 border-b border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
-        <div className="divide-y divide-border">
-          {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
-        </div>
+    <div id="partner-lead-overview" role="tabpanel" aria-labelledby="partner-lead-tab-overview" className="min-w-0 overflow-hidden rounded-lg border border-border bg-card outline-none">
+      <div className="flex items-center gap-1.5 border-b border-border px-5 py-3">
+        <h2 className="m-0 text-base font-semibold text-foreground">Application</h2>
+        <InfoTip label="About this application">The form as it was submitted. It is view only; your agency works the lead from here.</InfoTip>
+      </div>
+      {!detail.groups.length && <p className="m-0 border-b border-border px-4 py-8 text-center text-sm text-muted-foreground">Nothing was recorded on this submission.</p>}
+      <div className="divide-y divide-border">
+        {groups.map((group) => <InformationGroup key={group.key} group={group} />)}
       </div>
     </div>
   );
@@ -135,13 +104,36 @@ function SharedNotes({ detail }: { detail: PartnerLeadDetail }) {
 }
 
 export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDetail; backHref: string }) {
-  const [tab, setTab] = useState<"overview" | "call-updates" | "notes">("overview");
-  const activePanel = tab === "overview" ? "partner-lead-overview" : tab === "call-updates" ? "partner-lead-call-updates" : "partner-lead-notes";
-  const tabs = [
-    { key: "overview", label: "Overview", marker: <UserRound aria-hidden="true" className="size-3.5" /> },
-    { key: "call-updates", label: "Call updates", marker: <Phone aria-hidden="true" className="size-3.5" /> },
-    { key: "notes", label: "Notes", marker: <FileText aria-hidden="true" className="size-3.5" /> },
-  ] as const;
+  const groups = applicationGroups(detail);
+  // One selection for the whole side navigation: a tab ("overview", "call-updates", "notes") or, while the
+  // overview is open, the application group being read.
+  const [active, setActive] = useState<string>(groups[0]?.key ?? "overview");
+  const tab: "overview" | "call-updates" | "notes" = active === "call-updates" || active === "notes" ? active : "overview";
+  const groupKeys = groups.map((group) => group.key).join("|");
+
+  // While the overview is open the side navigation follows the reader: the group nearest the top is the lit one.
+  useEffect(() => {
+    if (tab !== "overview") return;
+    const targets = groupKeys.split("|").map((key) => document.getElementById(groupId(key))).filter((node): node is HTMLElement => Boolean(node));
+    if (!targets.length || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((x, y) => x.boundingClientRect.top - y.boundingClientRect.top)[0];
+      if (visible) setActive(visible.target.id.replace("partner-lead-group-", ""));
+    }, { rootMargin: "-20% 0px -65% 0px" });
+    targets.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [tab, groupKeys]);
+
+  function choose(key: string) {
+    setActive(key);
+    if (key !== "call-updates" && key !== "notes") {
+      // The overview may have to mount first when the reader comes from another tab.
+      window.setTimeout(() => document.getElementById(groupId(key))?.scrollIntoView({ behavior: "smooth", block: "start" }), 60);
+    } else {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }
+
   return (
     <div className="m-stagger flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4">
       <PageHeader
@@ -154,15 +146,23 @@ export function PartnerLeadRecord({ detail, backHref }: { detail: PartnerLeadDet
           {detail.language && <StatusChip tone="neutral" className="border border-border"><span className="inline-flex items-center gap-1.5" aria-label={`Customer language: ${detail.language}`}><Languages aria-hidden="true" className="size-3.5" />{detail.language}</span></StatusChip>}
         </div>}
       />
-      <ViewTabs
-        label="Lead information"
-        tabs={tabs}
-        value={tab}
-        onChange={setTab}
-        idPrefix="partner-lead-tab"
-        controls={activePanel}
-      />
-      {tab === "overview" ? <Submission detail={detail} /> : tab === "call-updates" ? <CallUpdates detail={detail} /> : <SharedNotes detail={detail} />}
+      {/* The lead's own pages, then the application's sections: one side navigation, as in Settings. */}
+      <SettingsLayout
+        active={active}
+        onSelect={choose}
+        collapsible
+        groups={[
+          { key: "application", label: "Application", sections: groups.map((group) => group.key) },
+          { key: "activity", label: "Activity", sections: ["call-updates", "notes"] },
+        ]}
+        sections={[
+          ...groups.map((group) => ({ key: group.key, label: group.label, icon: <UserRound className="size-4" aria-hidden="true" /> })),
+          { key: "call-updates", label: "Call updates", icon: <Phone className="size-4" aria-hidden="true" /> },
+          { key: "notes", label: "Notes", icon: <FileText className="size-4" aria-hidden="true" /> },
+        ]}
+      >
+        {tab === "overview" ? <Submission detail={detail} groups={groups} /> : tab === "call-updates" ? <CallUpdates detail={detail} /> : <SharedNotes detail={detail} />}
+      </SettingsLayout>
     </div>
   );
 }
