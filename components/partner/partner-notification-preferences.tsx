@@ -111,7 +111,7 @@ export function PartnerNotificationPreferences({
 
   const zones = TIMEZONES.some(([value]) => value === zone) ? TIMEZONES : [[zone, zone] as [string, string], ...TIMEZONES];
 
-  const dirty = eventsChanged || zoneChanged;
+  const hasChanges = eventsChanged || zoneChanged;
 
   return <div className="w-full">
     <div className="flex h-8 items-center justify-between gap-3">
@@ -119,7 +119,7 @@ export function PartnerNotificationPreferences({
         What reaches you
         <InfoTip label="About these alerts">Choose which updates reach you. The timezone is how your submission dates are read{canEditTimezone ? "." : "; your partner admin sets it."}</InfoTip>
       </p>
-      {dirty && <Button type="button" variant="secondary" size="sm" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>}
+      {hasChanges && <Button type="button" variant="secondary" size="sm" onClick={() => void save()} disabled={saving}>{saving ? "Saving…" : "Save changes"}</Button>}
     </div>
     <div className="mt-1 divide-y divide-border">
       {BOARD_EVENTS.map(([event, label]) => <label className="flex cursor-pointer items-center justify-between gap-3 py-3 text-sm text-[var(--body)]" key={event}>
