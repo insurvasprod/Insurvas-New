@@ -37,6 +37,7 @@ export function AuthLayout({
   heading,
   story,
   footer,
+  footerInline = false,
   align,
   legal = true,
   children,
@@ -57,6 +58,8 @@ export function AuthLayout({
   heading?: ReactNode;
   /** The row of other ways in under the card ("New to Insurvas? · Partner portal"). */
   footer?: ReactNode;
+  /** Put the footer on the legal links' own line (sign-up: "Have an account? Sign in · Privacy · Terms · Support"). */
+  footerInline?: boolean;
   /**
    * The brand panel: an <AuthStory>, or real content such as the plan summary or the receipt.
    * Omit it for a door that is one centred column with no panel (the agent sign-in); the shell is
@@ -101,20 +104,28 @@ export function AuthLayout({
                 out and a short rise in. Classes in globals.css (auth-still, auth-step). */}
             {steps && (
               <ViewTransition name="auth-steps" share="auth-still" default="none">
-                <div><AuthSteps {...steps} /></div>
+                {/* No panel: the title and "Step 1 of 3" share one row, the bars under it (owner, 2026-11-03). */}
+                <div><AuthSteps {...steps} lead={single ? heading : undefined} /></div>
               </ViewTransition>
             )}
             <ViewTransition name="auth-step-body" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
               <div>
-                {heading && <div data-auth-heading-slot="">{heading}</div>}
+                {heading && !(single && steps) && <div data-auth-heading-slot="">{heading}</div>}
                 <div data-auth-card="">
                   {back && <AuthBack href={back.href} label={back.label} />}
                   {children}
                 </div>
-                {footer && <div data-auth-footer="">{footer}</div>}
+                {footer && !(single && footerInline && legal) && <div data-auth-footer="">{footer}</div>}
               </div>
             </ViewTransition>
-            {legal && <AuthLegalLinks onDark={single} />}
+            {legal && (single && footerInline && footer ? (
+              <div data-auth-footer-row="">
+                <div data-auth-footer="">{footer}</div>
+                <AuthLegalLinks onDark={single} />
+              </div>
+            ) : (
+              <AuthLegalLinks onDark={single} />
+            ))}
           </div>
         </div>
       }
@@ -149,11 +160,35 @@ export type AuthStepsProps = {
   ariaLabel?: string;
   /** A short link on the right of the step line ("Have an account? Sign in" on step 1). */
   aside?: ReactNode;
+  /** The step's heading, drawn on the step line's left with "Step n of N" on its right (the centred card). */
+  lead?: ReactNode;
 };
 
 /** "Step 1 of 3 · Your account" over one bar per step. One stepper, so no screen counts differently. */
-export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside }: AuthStepsProps) {
+export function AuthSteps({ current, total, label, labels, ariaLabel = "Progress", aside, lead }: AuthStepsProps) {
   const done = current > total;
+  if (lead) {
+    return (
+      <div data-auth-steps="" data-compact="" className="mb-6">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+          <div className="min-w-0">{lead}</div>
+          <p className="m-0 shrink-0 pb-1 text-sm font-semibold leading-normal tracking-[-0.02em] text-muted-foreground">
+            {done ? <span className="text-foreground">All {total} steps done</span> : <><span className="text-foreground">Step {current}</span> of {total}</>}
+          </p>
+        </div>
+        <ol className="mt-3 grid gap-1.5" style={{ gridTemplateColumns: `repeat(${total}, minmax(0, 1fr))` }} aria-label={ariaLabel}>
+          {Array.from({ length: total }, (_, index) => {
+            const name = labels?.[index] ?? `Step ${index + 1}`;
+            return (
+              <li key={name} className={cn("h-1 rounded-full transition-colors duration-300", index < current ? "bg-[var(--primary)]" : "bg-border")} aria-current={index + 1 === current ? "step" : undefined}>
+                <span className="sr-only">{name}{index + 1 < current ? ", done" : index + 1 === current ? ", current step" : ""}</span>
+              </li>
+            );
+          })}
+        </ol>
+      </div>
+    );
+  }
   return (
     <div data-auth-steps="" className="mb-6">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">

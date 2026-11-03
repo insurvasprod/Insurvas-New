@@ -1985,6 +1985,14 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) {
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] :is(p, span) { color: var(--nav-muted); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] p > span:first-child { color: var(--on-dark); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-steps] a { color: var(--on-dark); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
+/* Compact step line: the title on the left, "Step n of N" on the right, a smaller title (owner, 2026-11-03). */
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] { margin-bottom: 0; }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] h1 { font-size: 1.75rem; line-height: 1.15; color: var(--on-dark); }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-steps][data-compact] [data-auth-heading] p { color: var(--nav-muted); }
+/* "Have an account? Sign in" on the legal links' line. */
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1.75rem; margin-top: 1.5rem; padding-inline: 40px; }
+.portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] > * { margin: 0; padding-inline: 0; }
+@media (max-width: 560px) { .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer-row] { padding-inline: 20px; } }
 /* A heading that still sits inside the card (a screen that did not lift it) keeps card colours. */
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-card] [data-auth-heading] h1 { color: var(--ink); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-card] [data-auth-heading] p { color: var(--body); }

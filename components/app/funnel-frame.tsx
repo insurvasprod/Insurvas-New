@@ -65,6 +65,7 @@ export function FunnelFrame({ step, children, wide = false, aside, back, stepsAs
       // beside a panel it stays on the step line.
       steps={{ current: funnelStepOf(step), total: FUNNEL_STEPS.length, label: FUNNEL_STEPS[funnelStepOf(step) - 1], labels: FUNNEL_STEPS, ariaLabel: "Sign-up progress", aside: aside ? stepsAside : undefined }}
       footer={!aside && stepsAside ? <div className="text-sm leading-normal tracking-[-0.02em]">{stepsAside}</div> : undefined}
+      footerInline
       back={back}
       legal={legal}
       heading={heading ?? (liftHeading ? first : undefined)}
