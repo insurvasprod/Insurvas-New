@@ -4,7 +4,7 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { HANDOFF_TIMEOUT_RANGE, InboundSettingsError, readInboundSettings, updateInboundSettings } from "@/lib/inboundSettings/service";
 
 /**
- * Settings › Inbound transfers: alerts, buffer handoff and who gets the next transfer (the waiting
+ * Settings › Inbound settings: alerts, buffer handoff and who gets the next transfer (the waiting
  * time itself stays on /api/app/queue-sla-settings). The account owner only, on a plan with inbound
  * transfers; update_tenant_inbound_settings checks the owner again and writes the audit row.
  */

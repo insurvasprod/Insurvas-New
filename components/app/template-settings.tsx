@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Settings › Form templates, layout A (owner pick 2026-10-30; canvas page settings-form-templates):
+ * Settings › Application forms, layout A (owner pick 2026-10-30; canvas page settings-form-templates):
  * the form partners fill in, with one side panel beside it that shows the form's settings until a
  * question is picked, then that question. The title's line says Live, or N changes with Review,
  * Undo all and Publish version N — the page's only green button.

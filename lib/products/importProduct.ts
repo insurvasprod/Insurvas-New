@@ -8,7 +8,7 @@ import { ProductNotSoldError, soldProducts } from "@/lib/products/agencyProducts
 /** A product the agency sells with no lead form yet: nothing to read the file's columns against. */
 export class ProductFormMissingError extends Error {
   constructor(readonly productName: string) {
-    super(`${productName} has no lead form yet. Set one up in Settings › Form templates, then import.`);
+    super(`${productName} has no lead form yet. Set one up in Settings › Application forms, then import.`);
     this.name = "ProductFormMissingError";
   }
 }

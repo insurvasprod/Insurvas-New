@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 /**
- * Settings › Inbound transfers (redesign 2026-10-25): the per-workspace choices that sit beside the
+ * Settings › Inbound settings (redesign 2026-10-25): the per-workspace choices that sit beside the
  * waiting-time ladder. No row means the defaults, which are exactly the behaviour before the
  * setting existed. Migration 20261025100000 adds the table; until it is applied every read returns
  * the defaults and says so (`ready: false`), and nothing that honours a setting changes behaviour.

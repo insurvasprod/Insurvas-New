@@ -1,5 +1,5 @@
 /**
- * Sample answers for Settings › Form templates in the preview (settings-redesign R2): a Final Expense
+ * Sample answers for Settings › Application forms in the preview (settings-redesign R2): a Final Expense
  * form with the agency's own copy of the platform template. Nothing reaches a real API.
  */
 import type { TemplateField, TemplateFormDefinition, TemplateStage } from "@/lib/templates/constants";

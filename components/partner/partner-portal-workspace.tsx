@@ -97,7 +97,7 @@ function forgetSubmissionId(draftId: string | null) {
 }
 
 /**
- * One answer box, as partners get it. Exported for Settings › Form templates, which draws the form
+ * One answer box, as partners get it. Exported for Settings › Application forms, which draws the form
  * being edited with this same renderer so the owner sees exactly what partners see.
  */
 export function PartnerField({
@@ -293,7 +293,7 @@ export function PartnerLeadForm({
   onDraftChange?: (draftId: string | null) => void;
   /** Product and market selectors share one header row with the phone gate. */
   setupControls?: ReactNode;
-  /** Settings → Form templates renders this same form from the owner's unsaved draft. */
+  /** Settings → Application forms renders this same form from the owner's unsaved draft. */
   preview?: PartnerFormPreviewSource;
 }) {
   type FormTemplate = {

@@ -314,7 +314,7 @@ export function OwnProfileForm({ initial }: { initial: OwnProfile }) {
           <Field label="Phone" htmlFor="profile-phone">
             <input id="profile-phone" className={control} type="tel" value={phone} maxLength={OWN_PHONE_MAX} autoComplete="tel" placeholder="(312) 555-0100" onChange={(event) => setPhone(event.target.value)} />
           </Field>
-          <Field label="Time zone" htmlFor="profile-timezone" info="For you only. Calling hours follow each customer's state.">
+          <Field label="Time zone" htmlFor="profile-timezone" info={<>How times show for you only. Calling hours still follow each customer&apos;s state.</>}>
             <select id="profile-timezone" className={control} value={timezone} onChange={(event) => setTimezone(event.target.value)}>
               <option value="">The agency&apos;s time zone</option>
               {zones.map((zone) => <option key={zone} value={zone}>{zoneName(zone)}</option>)}

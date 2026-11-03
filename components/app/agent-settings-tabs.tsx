@@ -71,10 +71,12 @@ const RAIL_ICON_BUTTON = "inline-flex size-9 shrink-0 items-center justify-cente
 /** One icon per group: the folded menu's strip. */
 const GROUP_ICON: Record<string, LucideIcon> = {
   "Your account": UserRound,
+  // Contracting and Workspace setup were named Carriers and Leads & dialing until 2026-11-03; the
+  // group keys follow the registry's names, so a rename carries its icon with it.
+  "Contracting": FileSignature,
   "Agency": Building2,
-  "Carriers": FileSignature,
   "Sales process": ClipboardList,
-  "Leads & dialing": PhoneIncoming,
+  "Workspace setup": Workflow,
   "Money & compliance": Landmark,
   "Platform": KeyRound,
 };

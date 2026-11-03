@@ -1,4 +1,4 @@
-// Settings › Form templates: the shapes the panel loads and the one draft it edits. Client-safe.
+// Settings › Application forms: the shapes the panel loads and the one draft it edits. Client-safe.
 import type { TemplateField, TemplateFormDefinition, TemplateStage } from "@/lib/templates/constants";
 import type { TemplateDraft } from "@/lib/agentTemplates/draftChanges";
 

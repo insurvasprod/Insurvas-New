@@ -20,6 +20,7 @@ import { ToggleChip } from "@/components/ui/toggle-chip";
 import { OwnershipCard, PartnerSupportCard } from "@/components/app/settings/agency-contact";
 import type { SettingsPanelContext } from "@/components/app/settings/panels";
 import { Button } from "@/components/ui/button";
+import { cardSurface } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { InfoTip } from "@/components/ui/info-tip";
 import { SectionLoading } from "@/components/ui/page-states";
@@ -69,8 +70,8 @@ const draftFrom = (p: AgencyProfileView): Draft => ({
   phone: p.phone ?? "", email: p.email ?? "", website: p.website ?? "", timezone: p.timezone ?? "",
 });
 
-/** The card every tab is drawn in: one surface, 16px padding. */
-const CARD = "m-glass flex min-w-0 flex-1 flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4";
+/** The card every tab is drawn in: the shared surface (components/ui/card), 16px padding. */
+const SHEET = cn(cardSurface, "flex min-w-0 flex-1 flex-col gap-4 p-4");
 
 export function BusinessIdentitySettings({ team = null, workspace = null }: Partial<SettingsPanelContext> = {}) {
   const [response, setResponse] = useState<AgencyProfileResponse | null>(null);
@@ -229,7 +230,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
       {/* Only the cards scroll; the tabs above stay put. */}
       <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1.5 @container">
         {tab === "business" && (
-          <div className={CARD}>
+          <div className={SHEET}>
             <div className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-2">
               <Field label="Trading name" htmlFor="identity-trading-name" info="Printed on client documents.">
                 <input id="identity-trading-name" type="text" className={control} value={draft.dba} onChange={set("dba")} placeholder="Power Policies" />
@@ -270,7 +271,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
                   <Button type="button" variant="ghost" size="sm" disabled={busy} className="text-[var(--error-ink)]" onClick={() => void clearTaxId()}>Remove</Button>
                 </div>
               )}
-              <Field label="Business time zone" htmlFor="identity-timezone" info="For your team. Calling hours follow each customer's state.">
+              <Field label="Business time zone" htmlFor="identity-timezone" info="How times show for your team, and when daily summaries arrive. It does not set calling hours: those always follow each customer’s own state.">
                 <select id="identity-timezone" className={control} value={draft.timezone} onChange={set("timezone")}>
                   <option value="">Not set</option>
                   {timezoneOptions.map((zone) => <option key={zone} value={zone}>{ZONE_NAMES[zone] ?? zone}</option>)}
@@ -281,7 +282,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
         )}
 
         {tab === "address" && (
-          <div className={CARD}>
+          <div className={SHEET}>
             <div className="grid min-w-0 gap-x-4 gap-y-3 sm:grid-cols-2">
               <Field label="Address" htmlFor="identity-address-line1" info="As clients and carriers see it. Letters and statements print it.">
                 <input id="identity-address-line1" type="text" className={control} value={draft.addressLine1} onChange={set("addressLine1")} autoComplete="address-line1" />
@@ -319,7 +320,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
         {tab === "documents" && (
           <div className="grid min-w-0 flex-1 items-stretch gap-4 @2xl:grid-cols-[minmax(0,1fr)_minmax(0,1.25fr)]">
-            <div className={CARD}>
+            <div className={SHEET}>
               <div className="flex items-center gap-1.5">
                 <h3 className="m-0 text-card-title text-[var(--ink)]">Logo</h3>
                 <InfoTip label="About the logo">Without a logo, documents print your trading name as text.</InfoTip>
@@ -338,7 +339,7 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
               {!p.updatedAt && <p className="m-0 text-sm text-[var(--muted)]">Save the business identity first, then add a logo.</p>}
             </div>
 
-            <div className={CARD}>
+            <div className={SHEET}>
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div className="flex items-center gap-1.5">
                   <h3 className="m-0 text-card-title text-[var(--ink)]">Documents that use it</h3>

@@ -169,7 +169,7 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
       </div>
 
       {/* The filter chips stay in view while the table scrolls under them. */}
-      <div className="sticky top-0 z-20 flex h-11 items-center gap-2 bg-[var(--canvas)]">
+      <div className="sticky top-0 z-20 flex min-h-9 items-center gap-2 bg-[var(--canvas)]">
         <div role="radiogroup" aria-label="Which alerts" className="flex flex-wrap items-center gap-2">
           <ToggleChip role="radio" selected={filter === "all"} count={view.events.length} onClick={() => setFilter("all")}>All</ToggleChip>
           {groups.map((group) => (

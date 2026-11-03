@@ -25,7 +25,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
  * parsed on the way in. The stepper under it is live: it shows how far up the ladder the
  * longest-waiting transfer is right now.
  *
- * Settings › Inbound transfers (Inbound A, 2026-10-25): the same page also carries the coloured
+ * Settings › Inbound settings (Inbound A, 2026-10-25): the same page also carries the coloured
  * waiting-time bar (redrawn as a rung is typed) and the workspace's alerts, buffer handoff and
  * routing (InboundSettingsCards). One Save changes saves whichever of the two changed.
  */
