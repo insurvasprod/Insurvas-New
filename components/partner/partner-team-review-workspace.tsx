@@ -13,7 +13,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
-import { BarSeries } from "@/components/ui/chart";
+import { DonutChart, LineSeries } from "@/components/ui/chart";
 import { HomePanel } from "@/components/app/home/home-panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
@@ -198,8 +198,6 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
   }
   const conversionNow = metrics.conversion;
   const conversionPrev = previous?.conversion ?? null;
-  const funnelTotal = Math.max(rows.length, 1);
-  const topProductLeads = Math.max(...products.map((line) => line.leads), 1);
 
   if (!loaded) return <PageLoading />;
 
@@ -237,9 +235,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
     {rangeInvalid && <p role="alert" className="rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">Choose an end date on or after the start date, within a year.</p>}
     {error && <p role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-[var(--error)] bg-[var(--error-surface)] px-4 py-2 text-sm text-[var(--error-ink)]">Team performance could not be loaded: {error}<Button type="button" variant="outline" size="sm" onClick={reload}>Try again</Button></p>}
 
-    <div className="grid min-h-0 flex-1 grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
-      <div className="flex min-w-0 flex-col gap-6 lg:order-1">
-      <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+    <StatRow label={`${partnerName} team review, ${rangeLabel(range.from, range.to, new Date(now))}`} className="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           icon={Send}
           label="Leads submitted"
@@ -269,62 +265,80 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
         />
       </StatRow>
 
-      <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
-        <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"}`} className="min-h-[19rem]">
-          {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
-            : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
-            : <BarSeries
-                bars={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
-                summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
-                unit="leads"
-                className="flex-1"
-                minHeight={180}
-              />}
-        </HomePanel>
-        <HomePanel title="Lead status" link={{ label: "Pipeline", href: "/partner/pipeline" }} className="min-h-[19rem]">
-          {loading ? <SectionLoading rows={4} columns={1} label="Loading" />
-            : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Nothing submitted in this period.</p>
-            : <ul className="m-0 flex flex-1 list-none flex-col justify-center gap-4 p-0">
-              {[
-                { label: "Waiting for an agent", count: where.waiting, color: "bg-[var(--warning-ink)]" },
-                { label: "With a closer", count: where.inProgress, color: "bg-[var(--primary)]" },
-                { label: "Closed without a sale", count: where.closed, color: "bg-muted-foreground" },
-                { label: "Became applications", count: where.applications, color: "bg-[var(--success-ink)]" },
-              ].map((item) => <li key={item.label}>
-                <div className="flex items-baseline justify-between gap-3 text-sm"><span className="text-foreground">{item.label}</span><span className="tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{item.count}</b> · {Math.round((item.count / funnelTotal) * 100)}%</span></div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className={`block h-full rounded-full ${item.color}`} style={{ width: `${(item.count / funnelTotal) * 100}%` }} /></div>
-              </li>)}
-            </ul>}
-        </HomePanel>
-      </div>
+    <div className="grid min-h-[19rem] grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(16rem,1fr)]">
+      <HomePanel title="Submission trend" period={`leads per ${trend.step === 1 ? "day" : "week"}`} className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={4} columns={1} label="Loading trend" />
+          : !trend.buckets.length ? <p className="m-auto text-sm text-muted-foreground">Choose a range to see the trend.</p>
+          : <LineSeries
+              points={trend.buckets.map((bucket) => ({ key: bucket.key, label: bucket.label, value: bucket.count }))}
+              summary={`${metrics.submitted} leads submitted between ${rangeLabel(range.from, range.to, new Date(now))}`}
+              unit="leads"
+              className="flex-1"
+              minHeight={180}
+            />}
+      </HomePanel>
+      <HomePanel title="Lead status" link={{ label: "Pipeline", href: "/partner/pipeline" }} className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={4} columns={1} label="Loading" />
+          : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Nothing submitted in this period.</p>
+          : <DonutChart
+              className="flex-1 justify-center"
+              centerValue={String(rows.length)}
+              centerLabel="leads"
+              summary={`Where ${rows.length} leads are now`}
+              unit="leads"
+              segments={[
+                { key: "waiting", label: "Waiting for an agent", value: where.waiting, tone: "warning" },
+                { key: "progress", label: "With a closer", value: where.inProgress, tone: "strong" },
+                { key: "closed", label: "Closed without a sale", value: where.closed, tone: "quiet" },
+                { key: "apps", label: "Became applications", value: where.applications, tone: "success" },
+              ]}
+            />}
+      </HomePanel>
+    </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <HomePanel title="By product" period="leads and conversion" className="min-h-[15rem]">
-          {loading ? <SectionLoading rows={3} columns={1} label="Loading products" />
-            : !products.length ? <p className="m-auto text-sm text-muted-foreground">Products show once leads arrive.</p>
-            : <ul className="m-0 flex list-none flex-col gap-3.5 p-0">
-              {products.slice(0, 6).map((line) => <li key={line.product}>
-                <div className="flex items-baseline justify-between gap-3 text-sm"><span className="min-w-0 truncate text-foreground">{line.product}</span><span className="shrink-0 tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{line.leads}</b> {line.leads === 1 ? "lead" : "leads"} · {line.conversion === null ? "rate needs 5 leads" : `${line.conversion.toFixed(0)}% convert`}</span></div>
-                <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-[var(--surface-alt)]"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${(line.leads / topProductLeads) * 100}%` }} /></div>
-              </li>)}
-            </ul>}
-        </HomePanel>
-        <HomePanel title="Leads by weekday" period="when they arrive" className="min-h-[15rem]">
-          {loading ? <SectionLoading rows={3} columns={1} label="Loading weekdays" />
-            : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Weekday pattern shows once leads arrive.</p>
-            : <BarSeries
-                bars={WEEKDAY_SHORT.map((label, index) => ({ key: label, label, value: weekdays[index] }))}
-                summary={`Leads by weekday: ${WEEKDAY_SHORT.map((label, index) => `${label} ${weekdays[index]}`).join(", ")}`}
-                unit="leads"
-                labels="all"
-                barMaxWidth={36}
-                className="flex-1"
-                minHeight={130}
-              />}
-        </HomePanel>
-      </div>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <HomePanel title="By product" period="share of leads" className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={3} columns={1} label="Loading products" />
+          : !products.length ? <p className="m-auto text-sm text-muted-foreground">Products show once leads arrive.</p>
+          : <DonutChart
+              className="flex-1 justify-center"
+              centerValue={String(rows.length)}
+              centerLabel="leads"
+              summary={`Leads by product: ${products.map((line) => `${line.product} ${line.leads}`).join(", ")}`}
+              unit="leads"
+              segments={products.slice(0, 5).map((line, index) => ({ key: line.product, label: line.product, value: line.leads, tone: (["strong", "mid", "soft", "faint", "quiet"] as const)[index], detail: line.conversion === null ? undefined : `${line.conversion.toFixed(0)}% convert` }))}
+            />}
+      </HomePanel>
+      <HomePanel title="Leads by weekday" period="when they arrive" className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={3} columns={1} label="Loading weekdays" />
+          : !rows.length ? <p className="m-auto text-sm text-muted-foreground">Weekday pattern shows once leads arrive.</p>
+          : <LineSeries
+              points={WEEKDAY_SHORT.map((label, index) => ({ key: label, label, value: weekdays[index] }))}
+              summary={`Leads by weekday: ${WEEKDAY_SHORT.map((label, index) => `${label} ${weekdays[index]}`).join(", ")}`}
+              unit="leads"
+              labels="all"
+              className="flex-1"
+              minHeight={160}
+            />}
+      </HomePanel>
+      <HomePanel title="Needs your attention" period={rangeLabel(range.from, range.to, new Date(now))} className="min-h-[19rem]">
+        {loading ? <SectionLoading rows={3} columns={1} label="Reading your leads" />
+          : !insights.length ? <p className="m-0 py-1 text-sm text-muted-foreground">{rows.length ? "All clear: nothing is waiting on you in this period." : "No leads in this period yet. Insights appear as soon as your team submits."}</p>
+          : <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
+            {insights.map((insight) => <li key={insight.key} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
+              <div className="flex items-start gap-2.5">
+                {insight.tone === "info"
+                  ? <Lightbulb className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+                  : <TriangleAlert className={`mt-0.5 size-4 shrink-0 ${insight.tone === "action" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]"}`} aria-hidden="true" />}
+                <span className="min-w-0 flex-1 text-sm leading-normal text-foreground">{insight.text}</span>
+              </div>
+              {insight.href && <Link href={insight.href} className="inline-flex items-center gap-0.5 self-start pl-[1.625rem] text-sm font-semibold text-[var(--accent-ink)] hover:underline">{insight.hrefLabel}<ChevronRight className="size-4" aria-hidden="true" /></Link>}
+            </li>)}
+          </ul>}
+      </HomePanel>
+    </div>
 
-      <TableCard
+    <TableCard
         className="flex min-h-[18rem] flex-1 flex-col"
         bodyClassName="flex min-h-0 flex-1 flex-col"
         title="Members"
@@ -336,7 +350,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
           : <Table>
             <TableHeader><TableRow>
               <TableHead>Member</TableHead>
-              <TableHead className="w-[170px]">Submitted</TableHead>
+              <TableHead className="w-[110px] text-right">Submitted</TableHead>
               <TableHead className="w-[110px] text-right">In progress</TableHead>
               <TableHead className="w-[120px] text-right">Applications</TableHead>
               <TableHead className="w-[110px] text-right">Conversion</TableHead>
@@ -348,9 +362,7 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
                 const isSelected = detailOpen && selected?.user.user_id === user.user_id;
                 return <TableRow key={user.user_id} data-state={isSelected ? "selected" : undefined}>
                   <TableCell><strong className="font-semibold text-foreground">{user.name}</strong>{user.status !== "active" && <span className="block text-xs text-muted-foreground">Deactivated</span>}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2.5"><span className="w-6 shrink-0 tabular-nums">{stats.submitted}</span><span className="h-1.5 flex-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true"><span className="block h-full rounded-full bg-[var(--primary)]" style={{ width: `${metrics.submitted ? (stats.submitted / metrics.submitted) * 100 : 0}%` }} /></span></div>
-                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{stats.submitted}</TableCell>
                   <TableCell className="text-right tabular-nums">{stats.progress}</TableCell>
                   <TableCell className="text-right tabular-nums">{stats.applications}</TableCell>
                   <TableCell className="text-right tabular-nums" title={stats.submitted && stats.submitted < MIN_CONVERSION_SAMPLE ? `${stats.applications} of ${stats.submitted} — too few leads for a rate` : undefined}>{stats.submitted >= MIN_CONVERSION_SAMPLE ? `${((stats.applications / stats.submitted) * 100).toFixed(1)}%` : "—"}</TableCell>
@@ -361,25 +373,6 @@ export function PartnerTeamReviewWorkspace({ partnerName, sample }: { partnerNam
             </TableBody>
           </Table>}
       </TableCard>
-      </div>
-      <aside className="order-first min-w-0 lg:order-2">
-        <HomePanel title="Needs your attention" period={rangeLabel(range.from, range.to, new Date(now))} className="min-h-0 lg:sticky lg:top-0">
-          {loading ? <SectionLoading rows={3} columns={1} label="Reading your leads" />
-            : !insights.length ? <p className="m-0 py-1 text-sm text-muted-foreground">{rows.length ? "All clear: nothing is waiting on you in this period." : "No leads in this period yet. Insights appear as soon as your team submits."}</p>
-            : <ul className="m-0 flex list-none flex-col divide-y divide-border p-0">
-              {insights.map((insight) => <li key={insight.key} className="flex flex-col gap-1.5 py-3 first:pt-0 last:pb-0">
-                <div className="flex items-start gap-2.5">
-                  {insight.tone === "info"
-                    ? <Lightbulb className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-                    : <TriangleAlert className={`mt-0.5 size-4 shrink-0 ${insight.tone === "action" ? "text-[var(--error-ink)]" : "text-[var(--warning-ink)]"}`} aria-hidden="true" />}
-                  <span className="min-w-0 flex-1 text-sm leading-normal text-foreground">{insight.text}</span>
-                </div>
-                {insight.href && <Link href={insight.href} className="inline-flex items-center gap-0.5 self-start pl-[1.625rem] text-sm font-semibold text-[var(--accent-ink)] hover:underline">{insight.hrefLabel}<ChevronRight className="size-4" aria-hidden="true" /></Link>}
-              </li>)}
-            </ul>}
-        </HomePanel>
-      </aside>
-    </div>
     {detailOpen && selected && <SelectedTeammateDrawer selected={selected} leads={selectedLeads} onClose={() => { setDetailOpen(false); setSelectedUserId(null); }} />}
   </div>;
 }

@@ -247,7 +247,7 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
   13/500 (`text-label`), body 14, meta 12.
 - **Chips.** A state is `StatusChip`; a choice someone presses or removes is `ToggleChip`
   (`components/ui/toggle-chip.tsx`, 36px since 2026-10-30, §16). No local `Chip`/`Pill` (`local-chip`).
-- **Charts.** `BarSeries`, `ShareBar` and `Sparkline` from `components/ui/chart.tsx`, drawn in the
+- **Charts.** New and polished pages draw shares as a wheel (`DonutChart`) and change over time as a line (`LineSeries`), never as rows of horizontal bars (owner, 2026-11-04). `BarSeries`, `ShareBar` and `Sparkline` stay in the kit for existing screens. All from `components/ui/chart.tsx`, drawn in the
   ramp that file sets (`CHART_TONES`). Tokens only, both themes, and every shape carries its
   figures in text behind the picture. There is no charting dependency: the kit is one file with a
   narrow surface so one could be swapped in later without touching a page. A chart's own series
