@@ -96,14 +96,17 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
   }
 
   return (
-    <SettingsStack>
+    <SettingsStack className="min-h-0 flex-1">
       {header}
       <PagedTableCard
+        // An empty list centres its one message in the card instead of leaving a blank block under it.
+        bodyClassName={entries.length === 0 && !filtered ? "flex flex-col" : undefined}
         total={entries.length}
         noun="changes"
-        // One title per screen: the section header already says "Settings history".
-        title={mine ? "Your settings changes" : undefined}
-        toolbar={
+        // No title: in My profile the History tab and its switch already name this list, and on the
+        // Settings history page the section header does.
+        // Nothing to filter, export or refresh until there is a change to look at.
+        toolbar={entries.length === 0 && !filtered ? undefined : (
           <DataToolbar
             actions={
               <>
@@ -132,12 +135,12 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
             <input type="date" aria-label="From" className={toolbarControl} value={filters.from} max={filters.to || undefined} onChange={(e) => set({ from: e.target.value })} />
             <input type="date" aria-label="To" className={toolbarControl} value={filters.to} min={filters.from || undefined} onChange={(e) => set({ to: e.target.value })} />
           </DataToolbar>
-        }
+        )}
       >
         {entries.length === 0 ? (
           filtered
             ? <NoMatches noun="changes" onClear={() => setFilters({ section: "", actor: "", type: "", from: "", to: "" })} />
-            : <EmptyState title={mine ? "You have not changed any settings" : "No settings have been changed yet"} hint="Changes to your agency, team, plan, integrations, calling hours, pipelines, outcomes, accounting, compliance, sales and carrier settings appear here." />
+            : <div className="flex flex-1 items-center justify-center"><EmptyState title={mine ? "You have not changed any settings" : "No settings have been changed yet"} hint="Changes appear here as they happen." /></div>
         ) : (
           <table className={st.table}>
             <thead>

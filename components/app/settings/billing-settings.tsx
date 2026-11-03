@@ -18,7 +18,7 @@
  */
 
 import { useEffect, useState, type ReactNode } from "react";
-import { ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 
 import { Callout, control, KeyValues, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,6 @@ import { USAGE_CRITICAL_FRACTION, retentionEndsAt, tierWarns, type DunningView, 
 import type { SubscriptionStatus } from "@/lib/subscriptions/access";
 import { cardSurface } from "@/components/ui/card";
 import { confirmAction } from "@/components/ui/confirm-dialog";
-import { DangerZone } from "@/components/app/settings/patterns";
 
 type Limit = { key: string; label: string; used: number; limit: number; tier: UsageTier; metered: boolean; resetsAt: string | null; hardCap: boolean };
 type Invoice = { id: string; number: string; status: string; totalCents: number; periodStart: string | null; periodEnd: string | null; issuedAt: string | null; dueAt: string | null; paidAt: string | null; payOnlineUrl: string | null };
@@ -71,15 +70,15 @@ const INVOICE_LABEL: Record<string, string> = { paid: "Paid", issued: "Due", ove
 /** The board's three looks for a limit: comfortable, past the warning, past 95% (or full). */
 const TIER_LOOK: Record<UsageTier, { bar: string; text: string; row: string }> = {
   ok: { bar: "bg-[var(--primary)]", text: "text-[var(--ink)]", row: "border-[var(--border)]" },
-  warning: { bar: "bg-[var(--warning)]", text: "text-[var(--warning-ink)]", row: "border-[color-mix(in_srgb,var(--warning)_45%,var(--border))] bg-[color-mix(in_srgb,var(--warning)_8%,transparent)]" },
-  critical: { bar: "bg-[var(--error)]", text: "text-[var(--error-ink)]", row: "border-[color-mix(in_srgb,var(--error)_45%,var(--border))] bg-[color-mix(in_srgb,var(--error)_8%,transparent)]" },
-  full: { bar: "bg-[var(--error)]", text: "text-[var(--error-ink)]", row: "border-[color-mix(in_srgb,var(--error)_45%,var(--border))] bg-[color-mix(in_srgb,var(--error)_8%,transparent)]" },
-  over: { bar: "bg-[var(--error)]", text: "text-[var(--error-ink)]", row: "border-[color-mix(in_srgb,var(--error)_45%,var(--border))] bg-[color-mix(in_srgb,var(--error)_8%,transparent)]" },
+  warning: { bar: "bg-[var(--warning)]", text: "text-[var(--warning-ink)]", row: "border-[var(--border)]" },
+  critical: { bar: "bg-[var(--error)]", text: "text-[var(--error-ink)]", row: "border-[var(--border)]" },
+  full: { bar: "bg-[var(--error)]", text: "text-[var(--error-ink)]", row: "border-[var(--border)]" },
+  over: { bar: "bg-[var(--error)]", text: "text-[var(--error-ink)]", row: "border-[var(--border)]" },
 };
 /** Which tab each of the section's search anchors lives on. */
 const ANCHOR_TAB: Record<string, Tab> = { "billing-limits": "overview", "billing-plan": "plan", "billing-invoices": "invoices", "billing-card": "invoices", "billing-cancel": "overview" };
 /** A plan can include forty features; the card shows the first few and opens the rest on request. */
-const FEATURES_SHOWN = 10;
+const FEATURES_SHOWN = 4;
 const KICKER = "flex items-center gap-1 text-xs leading-[1.33] font-semibold text-[var(--muted)]";
 
 function tierCaption(l: Limit, warnPercent: number): string {
@@ -186,7 +185,6 @@ export function BillingSettings() {
   const warned = view.limits.filter((l) => tierWarns(l.tier));
   const toPlan = () => setTab("plan");
   const cycle = sub ? BILLING_CYCLE_LABELS[sub.cycle].toLowerCase() : "";
-  const lastInvoice = view.invoices[0] ?? null;
   const exportLinks = (
     <div className="flex flex-wrap gap-2">
       <Button asChild variant="outline"><a href="/api/app/billing/export?part=policies">Export your book (CSV)</a></Button>
@@ -214,7 +212,7 @@ export function BillingSettings() {
   );
 
   return (
-    <SettingsStack>
+    <SettingsStack className="min-h-0 flex-1 gap-3">
       <SettingsSectionHeader />
       {!view.schemaReady ? <Callout tone="warning" title="Changing your plan here needs a database update." /> : null}
 
@@ -264,74 +262,58 @@ export function BillingSettings() {
         ]}
       />
 
+      {/* The tabs stay put; only what is under them scrolls (owner 2026-11-03). */}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1.5 @container">
       {tab === "overview" && (
-        // Two rows that both end level (owner, 2026-10-29: no empty space beside a short column): the
-        // plan beside the charge and the last invoice, then usage across the whole width.
-        <div className="grid items-stretch gap-3.5 @3xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="flex min-w-0 flex-col gap-3.5 [&>section]:flex-1">
-            {sub && view.plan ? (
-              <Card>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <span className={KICKER}>Your plan</span>
-                    <span className="mt-1 flex flex-wrap items-baseline gap-2.5"><h3 className="m-0 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]">{view.plan.name}</h3><StatusChip tone={STATUS_TONE[sub.status]}>{sub.statusLabel}</StatusChip></span>
-                  </div>
-                  <div className="text-right">
-                    {view.plan.priceCents !== null && <><strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(view.plan.priceCents)}</strong><span className="text-sm text-[var(--muted)]"> {cycle}</span></>}
-                    <span className="block text-xs text-[var(--muted)]">{sub.renewsAt ? `${sub.status === "trialing" ? "Trial ends" : "Renews"} ${day(sub.renewsAt)}` : "Does not renew"}</span>
-                  </div>
+        // One card: the plan, what it includes, and what you have used of it (owner 2026-11-03). The
+        // next charge and card are under Invoices & payment.
+        <Card className="flex-1">
+          {sub && view.plan ? (
+            <>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <span className={KICKER}>Your plan</span>
+                  <span className="mt-1 flex flex-wrap items-baseline gap-2.5"><h3 className="m-0 text-title-sm font-semibold tracking-[-0.015em] text-[var(--ink)]">{view.plan.name}</h3><StatusChip tone={STATUS_TONE[sub.status]}>{sub.statusLabel}</StatusChip></span>
                 </div>
-                {view.plan.features.length ? (
-                  <ul className="m-0 flex list-none flex-wrap gap-1.5 p-0" aria-label="What your plan includes">
-                    {(allFeatures ? view.plan.features : view.plan.features.slice(0, FEATURES_SHOWN)).map((f) => <li key={f.key} className="rounded-full bg-[var(--primary-soft)] px-2.5 py-1 text-xs font-semibold text-[var(--accent-ink)]">✓ {f.label}</li>)}
-                    {view.plan.features.length > FEATURES_SHOWN ? (
-                      <li><button type="button" onClick={() => setAllFeatures(!allFeatures)} aria-expanded={allFeatures} className="rounded-full border border-[var(--border-strong)] px-2.5 py-1 text-xs font-semibold text-[var(--body)] hover:border-[var(--accent-ink)]">{allFeatures ? "Show fewer" : `+ ${view.plan.features.length - FEATURES_SHOWN} more`}</button></li>
-                    ) : null}
-                  </ul>
-                ) : null}
-                <KeyValues items={[
-                  { label: "This period", value: sub.periodStart ? `${day(sub.periodStart)} – ${day(sub.periodEnd)}` : "—" },
-                  ...(sub.pendingPlanName ? [{ label: "Changing to", value: `${sub.pendingPlanName} on ${day(sub.periodEnd)}`, tone: "warning" as const }] : []),
-                  ...(view.plan.addons.length ? [{ label: "Add-ons", value: view.plan.addons.map((a) => `${a.name} (${formatCentsAsCurrency(a.priceCents)} ${BILLING_CYCLE_LABELS[a.cycle].toLowerCase()})`).join(", ") }] : []),
-                ]} />
-              </Card>
-            ) : null}
-
-          </div>
-
-          <div className="flex min-w-0 flex-col gap-3.5">
-            {sub && view.plan ? (
-              <Card title="Next charge">
-                <strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">
-                  {sub.status === "paused" ? "Nothing while paused" : !sub.renewsAt ? "None — it does not renew" : view.plan.priceCents !== null ? `${formatCentsAsCurrency(view.plan.priceCents)} on ${day(sub.renewsAt)}` : day(sub.renewsAt)}
-                </strong>
-                {view.plan.addons.length ? <span className="text-xs text-[var(--muted)]">Plus your add-ons</span> : null}
-                {paymentMethod}
-              </Card>
-            ) : null}
-            <Card title="Last invoice" className="flex-1">
-              {lastInvoice ? (
-                <>
-                  <span className="flex items-center justify-between gap-2 text-sm"><span className="flex items-center gap-2 text-[var(--body)] tabular-nums">{day(lastInvoice.issuedAt ?? lastInvoice.periodStart)} · {lastInvoice.number}<StatusChip tone={INVOICE_TONE[lastInvoice.status] ?? "neutral"}>{INVOICE_LABEL[lastInvoice.status] ?? lastInvoice.status}</StatusChip></span><strong className="text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(lastInvoice.totalCents)}</strong></span>
-                  <span className="flex flex-wrap gap-2">{invoiceActions(lastInvoice)}<Button type="button" size="sm" variant="ghost" onClick={() => setTab("invoices")}>See all invoices</Button></span>
-                </>
-              ) : <p className="m-0 text-sm text-[var(--muted)]">No invoices yet.</p>}
-            </Card>
-          </div>
-
-            <Card
-              id="billing-limits"
-              className="@3xl:col-span-2"
-              title={view.limits.length ? `Usage · ${warned.length ? `${warned.length} limit${warned.length === 1 ? "" : "s"} close to full` : "all limits comfortable"}` : "Usage"}
-              hint={`Warnings come at ${view.warnPercent}% and ${Math.round(USAGE_CRITICAL_FRACTION * 100)}%, with the plan change one click away. Metered limits reset each billing period.`}
-            >
+                <div className="text-right">
+                  {view.plan.priceCents !== null && <><strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(view.plan.priceCents)}</strong><span className="text-sm text-[var(--muted)]"> {cycle}</span></>}
+                  <span className="block text-xs text-[var(--muted)]">{sub.renewsAt ? `${sub.status === "trialing" ? "Trial ends" : "Renews"} ${day(sub.renewsAt)}` : "Does not renew"}</span>
+                </div>
+              </div>
+              <div className="grid min-w-0 items-start gap-4 @2xl:grid-cols-2">
+                <div className="flex min-w-0 flex-col gap-3">
+                  {view.plan.features.length ? (
+                    <ul className="m-0 flex list-none flex-col p-0" aria-label="What your plan includes">
+                      {(allFeatures ? view.plan.features : view.plan.features.slice(0, FEATURES_SHOWN)).map((f) => (
+                        <li key={f.key} className="flex items-center gap-2 border-t border-[var(--border)] py-2 text-sm text-[var(--ink)] first:border-t-0 first:pt-0">
+                          <Check aria-hidden="true" className="size-4 shrink-0 text-[var(--accent-ink)]" />{f.label}
+                        </li>
+                      ))}
+                      {view.plan.features.length > FEATURES_SHOWN ? (
+                        <li className="border-t border-[var(--border)] pt-2">
+                          <button type="button" onClick={() => setAllFeatures(!allFeatures)} aria-expanded={allFeatures} className="text-sm font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">{allFeatures ? "Show fewer" : `+ ${view.plan.features.length - FEATURES_SHOWN} more included`}</button>
+                        </li>
+                      ) : null}
+                    </ul>
+                  ) : null}
+                  <KeyValues items={[
+                    { label: "This period", value: sub.periodStart ? `${day(sub.periodStart)} – ${day(sub.periodEnd)}` : "—" },
+                    ...(sub.pendingPlanName ? [{ label: "Changing to", value: `${sub.pendingPlanName} on ${day(sub.periodEnd)}`, tone: "warning" as const }] : []),
+                    ...(view.plan.addons.length ? [{ label: "Add-ons", value: view.plan.addons.map((a) => `${a.name} (${formatCentsAsCurrency(a.priceCents)} ${BILLING_CYCLE_LABELS[a.cycle].toLowerCase()})`).join(", ") }] : []),
+                  ]} />
+                </div>
+            <div id="billing-limits" className="flex flex-col gap-3 rounded-[12px] border border-[var(--border)] p-4">
+              <span className={KICKER}>
+                {view.limits.length ? `Usage · ${warned.length ? `${warned.length} limit${warned.length === 1 ? "" : "s"} close to full` : "all limits comfortable"}` : "Usage"}
+                <HoverHint id="hint-billing-usage" label="About usage">{`Warnings come at ${view.warnPercent}% and ${Math.round(USAGE_CRITICAL_FRACTION * 100)}%, with the plan change one click away. Metered limits reset each billing period.`}</HoverHint>
+              </span>
               {view.limits.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">Your plan sets no limits.</p>}
-              <div className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(260px,1fr))]">
+              <div className="grid gap-3">
               {view.limits.map((l) => {
                 const look = TIER_LOOK[l.tier];
                 const caption = tierCaption(l, view.warnPercent);
                 return (
-                  <div key={l.key} className={cn("flex flex-col gap-2 rounded-[12px] border px-3.5 py-3", look.row)}>
+                  <div key={l.key} className="flex flex-col gap-2">
                     <span className="flex items-baseline justify-between gap-2.5"><strong className="text-sm font-semibold text-[var(--ink)]">{l.label}</strong><span className={cn("text-sm font-semibold tabular-nums", look.text)}>{n(l.used)} of {n(l.limit)}{l.metered ? " this period" : ""}</span></span>
                     <span className="h-1.5 rounded-full bg-[var(--surface-alt)]" role="meter" aria-label={`${l.label}: ${n(l.used)} of ${n(l.limit)} used`} aria-valuemin={0} aria-valuemax={l.limit} aria-valuenow={Math.min(l.used, l.limit)}>
                       <span className={cn("block h-1.5 rounded-full transition-[width] duration-300", look.bar)} style={{ width: `${l.limit ? Math.min(100, (l.used / l.limit) * 100) : 100}%` }} />
@@ -347,24 +329,60 @@ export function BillingSettings() {
               {warned.length && actions?.canChangePlan && (view.options.length || view.planChangeBySupport) ? (
                 <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--body)]">
                   {warned.length === 1 ? `${warned[0].label} is running out.` : `${warned.length} limits are running out.`}
-                  <Button type="button" variant="outline" onClick={toPlan}>Upgrade</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={toPlan}>Upgrade</Button>
                 </div>
               ) : null}
-            </Card>
-        </div>
+            </div>
+              </div>
+            </>
+          ) : (
+            <div id="billing-limits" className="flex flex-col gap-3 rounded-[12px] border border-[var(--border)] p-4">
+              <span className={KICKER}>
+                {view.limits.length ? `Usage · ${warned.length ? `${warned.length} limit${warned.length === 1 ? "" : "s"} close to full` : "all limits comfortable"}` : "Usage"}
+                <HoverHint id="hint-billing-usage" label="About usage">{`Warnings come at ${view.warnPercent}% and ${Math.round(USAGE_CRITICAL_FRACTION * 100)}%, with the plan change one click away. Metered limits reset each billing period.`}</HoverHint>
+              </span>
+              {view.limits.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">Your plan sets no limits.</p>}
+              <div className="grid gap-3">
+              {view.limits.map((l) => {
+                const look = TIER_LOOK[l.tier];
+                const caption = tierCaption(l, view.warnPercent);
+                return (
+                  <div key={l.key} className="flex flex-col gap-2">
+                    <span className="flex items-baseline justify-between gap-2.5"><strong className="text-sm font-semibold text-[var(--ink)]">{l.label}</strong><span className={cn("text-sm font-semibold tabular-nums", look.text)}>{n(l.used)} of {n(l.limit)}{l.metered ? " this period" : ""}</span></span>
+                    <span className="h-1.5 rounded-full bg-[var(--surface-alt)]" role="meter" aria-label={`${l.label}: ${n(l.used)} of ${n(l.limit)} used`} aria-valuemin={0} aria-valuemax={l.limit} aria-valuenow={Math.min(l.used, l.limit)}>
+                      <span className={cn("block h-1.5 rounded-full transition-[width] duration-300", look.bar)} style={{ width: `${l.limit ? Math.min(100, (l.used / l.limit) * 100) : 100}%` }} />
+                    </span>
+                    <span className="flex flex-wrap items-center justify-between gap-2.5 text-xs text-[var(--muted)]">
+                      <span>{l.metered ? (l.resetsAt ? `Resets ${day(l.resetsAt)}` : "Resets each period") : "Plan limit"}</span>
+                      {tierWarns(l.tier) && caption ? <span className={cn("font-semibold", look.text)}>{caption.replace(/ Resets [^.]+\.$/, "")}</span> : null}
+                    </span>
+                  </div>
+                );
+              })}
+              </div>
+              {warned.length && actions?.canChangePlan && (view.options.length || view.planChangeBySupport) ? (
+                <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--body)]">
+                  {warned.length === 1 ? `${warned[0].label} is running out.` : `${warned.length} limits are running out.`}
+                  <Button type="button" variant="outline" size="sm" onClick={toPlan}>Upgrade</Button>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </Card>
       )}
           {tab === "overview" && sub && actions && (actions.canPause || actions.canCancel) ? (
             <div id="billing-cancel" className="scroll-mt-24">
             {/* Settings redesign R5: the two steps that stop the workspace, apart from everything else, last. */}
-            <DangerZone title="Pause or cancel">
-              <div className="flex flex-col gap-3 p-4">
-              <p className="m-0 text-sm text-[var(--muted)]">{`Pausing makes the workspace read-only and stops charges until you resume. Cancelling ends it at the end of this period; your records then stay readable and exportable for ${view.retention.days} days.`}</p>
+            <div className="flex flex-col gap-3 border-t border-[var(--border)] pt-3">
               {!cancelling ? (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <span className="text-sm text-[var(--body)]">Your book stays readable either way.</span>
-                  <span className="flex flex-wrap gap-2">
-                    {actions.canPause ? <Button type="button" variant="outline" disabled={busy || !view.schemaReady} onClick={() => void confirmAction({ title: "Pause your subscription?", description: "The workspace becomes read-only and charges stop until you resume. Nothing is deleted.", confirmLabel: "Pause subscription", cancelLabel: "Keep it running" }).then((sure) => { if (sure) void act({ action: "pause" }, "Your subscription is paused"); })}>Pause subscription</Button> : null}
-                    {actions.canCancel ? <Button type="button" variant="destructive" disabled={busy || !view.schemaReady} onClick={() => setCancelling(true)}>Cancel subscription</Button> : null}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--body)]">
+                    Pause or cancel
+                    <InfoTip label="About pausing and cancelling">{`Pausing makes the workspace read-only and stops charges until you resume. Cancelling ends it at the end of this period; your records then stay readable and exportable for ${view.retention.days} days. Your book stays readable either way.`}</InfoTip>
+                  </span>
+                  <span className="flex flex-wrap gap-1">
+                    {actions.canPause ? <Button type="button" variant="ghost" size="sm" disabled={busy || !view.schemaReady} onClick={() => void confirmAction({ title: "Pause your subscription?", description: "The workspace becomes read-only and charges stop until you resume. Nothing is deleted.", confirmLabel: "Pause subscription", cancelLabel: "Keep it running" }).then((sure) => { if (sure) void act({ action: "pause" }, "Your subscription is paused"); })}>Pause subscription</Button> : null}
+                    {actions.canCancel ? <Button type="button" variant="ghost" size="sm" className="text-[var(--error-ink)]" disabled={busy || !view.schemaReady} onClick={() => setCancelling(true)}>Cancel subscription</Button> : null}
                   </span>
                 </div>
               ) : offerPause ? (
@@ -390,17 +408,17 @@ export function BillingSettings() {
                   </div>
                 </div>
               )}
-              </div>
-            </DangerZone>
+            </div>
             </div>
           ) : null}
 
       {tab === "plan" && sub && actions?.canChangePlan && (
         <div id="billing-plan" className="flex flex-col gap-3.5">
           {view.planChangeBySupport ? (
-            <Callout tone="info" title="Plan changes for card-billed agencies go through support">
-              Your card is billed through Whop, which cannot switch the plan on an existing membership. Email <a className="underline" href="mailto:support@insurvas.com?subject=Change%20my%20plan">support@insurvas.com</a> and we will move you without a gap.
-            </Callout>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[var(--body)]">
+              <span className="inline-flex items-center gap-1">Plan changes go through support.<InfoTip label="About plan changes">Your card is billed through Whop, which cannot switch the plan on an existing membership. Email support and we will move you without a gap.</InfoTip></span>
+              <Button asChild size="sm" variant="outline"><a href="mailto:support@insurvas.com?subject=Change%20my%20plan">Email support</a></Button>
+            </div>
           ) : null}
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {view.plan ? (
@@ -467,32 +485,39 @@ export function BillingSettings() {
       )}
 
       {tab === "invoices" && (
-        // Side by side, like Overview: the invoice list beside the one payment method (2026-10-29).
-        <div className="grid items-start gap-3.5 @3xl:grid-cols-[minmax(0,1fr)_320px]">
-          <Card id="billing-invoices" title="Invoices" className="@3xl:order-1">
-            {view.invoices.length ? (
-              <ul className="m-0 flex list-none flex-col p-0">
-                {view.invoices.map((inv) => (
-                  <li key={inv.id} className="grid gap-2 border-t border-[var(--border)] py-3 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ink)] tabular-nums">{inv.number}<StatusChip tone={INVOICE_TONE[inv.status] ?? "neutral"}>{INVOICE_LABEL[inv.status] ?? inv.status}</StatusChip></div>
-                      <div className="text-xs text-[var(--muted)] tabular-nums">
-                        {inv.periodStart ? `${day(inv.periodStart)} – ${day(inv.periodEnd)}` : `Issued ${day(inv.issuedAt)}`}
-                        {inv.paidAt ? ` · paid ${day(inv.paidAt)}` : inv.dueAt && inv.status !== "void" ? ` · due ${day(inv.dueAt)}` : ""}
-                      </div>
+        <Card id="billing-invoices" title="Invoices and payment" className="flex-1">
+          {sub && view.plan ? (
+            <div className="flex flex-col gap-1">
+              <span className={KICKER}>Next charge</span>
+              <strong className="text-title-sm font-semibold text-[var(--ink)] tabular-nums">
+                {sub.status === "paused" ? "Nothing while paused" : !sub.renewsAt ? "None — it does not renew" : view.plan.priceCents !== null ? `${formatCentsAsCurrency(view.plan.priceCents)} on ${day(sub.renewsAt)}` : day(sub.renewsAt)}
+              </strong>
+              {view.plan.addons.length ? <span className="text-xs text-[var(--muted)]">Plus your add-ons</span> : null}
+            </div>
+          ) : null}
+          <div id="billing-card" className="border-b border-[var(--border)] pb-3">{paymentMethod}</div>
+          {view.invoices.length ? (
+            <ul className="m-0 flex list-none flex-col p-0">
+              {view.invoices.map((inv) => (
+                <li key={inv.id} className="grid gap-2 border-t border-[var(--border)] py-3 first:border-t-0 first:pt-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 text-sm font-semibold text-[var(--ink)] tabular-nums">{inv.number}<StatusChip tone={INVOICE_TONE[inv.status] ?? "neutral"}>{INVOICE_LABEL[inv.status] ?? inv.status}</StatusChip></div>
+                    <div className="text-xs text-[var(--muted)] tabular-nums">
+                      {inv.periodStart ? `${day(inv.periodStart)} – ${day(inv.periodEnd)}` : `Issued ${day(inv.issuedAt)}`}
+                      {inv.paidAt ? ` · paid ${day(inv.paidAt)}` : inv.dueAt && inv.status !== "void" ? ` · due ${day(inv.dueAt)}` : ""}
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-sm font-semibold text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(inv.totalCents)}</span>
-                      {invoiceActions(inv)}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="m-0 text-sm text-[var(--muted)]">No invoices yet.</p>}
-          </Card>
-          <Card id="billing-card" title="Payment method" className="@3xl:order-2">{paymentMethod}</Card>
-        </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-semibold text-[var(--ink)] tabular-nums">{formatCentsAsCurrency(inv.totalCents)}</span>
+                    {invoiceActions(inv)}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="m-0 text-sm text-[var(--muted)]">No invoices yet.</p>}
+        </Card>
       )}
+      </div>
     </SettingsStack>
   );
 }

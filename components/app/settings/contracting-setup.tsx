@@ -78,7 +78,7 @@ export function setupProgress(vault: SetupVault, today = todayIso()) {
   return { mine, withStates, percent, complete: mine.length > 0 && withStates.length === mine.length };
 }
 
-export function ContractingSetup({ vault, setVault, salesAvailable, send, reload, onStatesSaved, onFinish, search = "", onStepChange, stepsSlot }: {
+export function ContractingSetup({ vault, setVault, salesAvailable, send, reload, onStatesSaved, onFinish, search = "", onStepChange, stepsSlot, hideSteps = false }: {
   vault: SetupVault;
   setVault: (update: (current: SetupVault) => SetupVault) => void;
   /** Applications is on: a new carrier is also put on the applications list (its products). */
@@ -99,6 +99,8 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
   onStepChange?: (step: 1 | 2) => void;
   /** Where the two step bars go: above Contracting's tab bar (owner, 29 Oct). In place without one. */
   stepsSlot?: HTMLElement | null;
+  /** Set-up is done: the two step bars go (owner 2026-11-03); Next and Back still move between the steps. */
+  hideSteps?: boolean;
 }) {
   const today = todayIso();
   const [step, setStepState] = useState<1 | 2>(1);
@@ -294,7 +296,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           29 Oct, 08:32: "these lines don't look good"). One brand green for the step you are on and
           a done one (owner, 29 Oct: two greens looked wrong); grey for one not started. The current step
           reads by its ink label. Either step can be opened from here. */}
-      {stepsSlot ? createPortal(steps, stepsSlot) : steps}
+      {hideSteps ? null : stepsSlot ? createPortal(steps, stepsSlot) : steps}
       {step === 1 ? (
         <section ref={stepCard} style={stepMinHeight ? { minHeight: stepMinHeight } : undefined} aria-labelledby="contracting-step-1" className={cn(cardSurface, "flex flex-col gap-4 p-4")}>
           <div className="flex flex-wrap items-center justify-between gap-3">

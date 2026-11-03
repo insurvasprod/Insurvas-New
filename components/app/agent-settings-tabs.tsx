@@ -19,6 +19,9 @@ import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
 import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { cn } from "@/lib/utils";
+
+/** Pages whose tabs are a fixed header and whose cards scroll in their own area (owner 2026-11-03). */
+const OWN_SCROLL: ReadonlySet<string> = new Set(["my-profile", "business-identity", "billing", "pipelines"]);
 import { titleCaseNode } from "@/components/ui/title-case";
 import { titleCase } from "@/lib/format/titleCase";
 
@@ -411,8 +414,6 @@ export function AgentSettingsTabs({
       {active && !guiding && !hashRead && (
         <div aria-hidden="true" className="flex flex-col gap-2">
           <div className="h-3.5 w-36 m-skel rounded-full" />
-          <div className="h-7 w-52 m-skel rounded-md" />
-          <div className="h-3.5 w-96 max-w-full m-skel rounded-full" />
         </div>
       )}
       {active && !guiding && hashRead && (
@@ -421,6 +422,7 @@ export function AgentSettingsTabs({
           title={titleCase(active.label)}
           description={active.short ?? active.description}
           infoDescription
+          hideTitle
           breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: titleCase(active.label) }]}
           // Who last changed something here (LA-8.8), under the purpose line; owners only, like the log.
           meta={role === "owner" ? <SectionLastChanged key={active.id} sectionKey={active.id} /> : undefined}
@@ -561,14 +563,14 @@ export function AgentSettingsTabs({
       </nav>
         )}
       </div>
-      <div ref={contentRef} data-settings-scroll="" className="min-w-0 flex-1 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain lg:pr-1.5">
+      <div ref={contentRef} data-settings-scroll="" className={cn("min-w-0 flex-1 lg:h-full lg:min-h-0 lg:pr-1.5", active && OWN_SCROLL.has(active.id) ? "lg:overflow-hidden" : "lg:overflow-y-auto lg:overscroll-contain")}>
         {active && (
           <section
             id={`settings-panel-${active.id}`}
             // A size container (2026-10-29): beside the app sidebar and this menu, a 1280px screen
             // leaves the content ~650px, so its grids go side by side on its own width, not the
             // screen's (lg: was 1024px of screen, which squeezed columns to 18-110px).
-            className="portal-settings-panel @container min-w-0"
+            className={cn("portal-settings-panel @container min-w-0 lg:flex lg:flex-col", OWN_SCROLL.has(active.id) ? "lg:h-full" : "lg:min-h-full")}
             role="region"
             aria-label={titleCase(active.label)}
             tabIndex={-1}

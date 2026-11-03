@@ -48,7 +48,7 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | Gloss surface tokens (`--gloss-*`, `--stat-icon-*`) | `app/globals.css` | Live as tokens; used from `foundation-components` |
 | One look on every page: the ribbon stage and the glass surface | §5b | Live (consistency pass 2026-10-27) |
 | One kit for cards, chips, dialogs, menus, popovers, fields and the leave guard | §5b | Live; ratchets count the old copies down |
-| Trail and title on every page, actions on the title's line, no title in the top bar | §2 | Live (owner 2026-10-30; replaces the hidden title of 2026-10-28) |
+| Trail and title on every page, actions on the title's line, no title in the top bar | §2 | Live (owner 2026-10-30; replaces the hidden title of 2026-10-28). **Settings is the exception (owner 2026-11-03):** the trail is the title, with the alerts, the (i) and the actions on its line; `PageHeader hideTitle` keeps the h1 for screen readers |
 | Tables: 40px sentence-case head, 44px rows | §6 | Live |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable

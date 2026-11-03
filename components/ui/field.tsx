@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import { InfoTip } from "@/components/ui/info-tip";
 import { titleCaseNode } from "@/components/ui/title-case";
 
 /**
@@ -38,6 +39,8 @@ export function Field({
   htmlFor,
   required,
   hint,
+  info,
+  infoLabel,
   error,
   children,
   className,
@@ -46,16 +49,30 @@ export function Field({
   htmlFor?: string;
   required?: boolean;
   hint?: ReactNode;
+  /** Explanation behind an (i) beside the label (owner 2026-11-03), instead of a line under the control. */
+  info?: ReactNode;
+  /** The (i)'s accessible name when the label is not plain text. */
+  infoLabel?: string;
   error?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <div className={cn("block min-w-0", className)}>
-      <label htmlFor={htmlFor} className="text-label text-[var(--body)]">
-        {titleCaseNode(label)}
-        {required && <span className="text-[var(--error-ink)]"> *</span>}
-      </label>
+      {info ? (
+        <div className="flex items-center gap-1">
+          <label htmlFor={htmlFor} className="text-label text-[var(--body)]">
+            {titleCaseNode(label)}
+            {required && <span className="text-[var(--error-ink)]"> *</span>}
+          </label>
+          <InfoTip label={infoLabel ?? (typeof label === "string" ? `About ${label.toLowerCase()}` : "About this field")} side="right">{info}</InfoTip>
+        </div>
+      ) : (
+        <label htmlFor={htmlFor} className="text-label text-[var(--body)]">
+          {titleCaseNode(label)}
+          {required && <span className="text-[var(--error-ink)]"> *</span>}
+        </label>
+      )}
       {children}
       {error ? (
         <span role="alert" className="mt-1.5 block text-xs leading-[1.5] tracking-[-0.01em] text-[var(--error-ink)]">{error}</span>
