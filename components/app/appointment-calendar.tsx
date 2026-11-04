@@ -641,6 +641,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                 <RefreshButton onClick={refresh} refreshing={loading} />
               </>}
             >
+              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search by customer" />
               <span className="inline-flex items-center gap-1.5">
                 <Button type="button" size="icon-sm" variant="outline" aria-label={view === "day" ? "Previous day" : "Previous week"} onClick={() => step(view === "day" ? -1 : -7)}><ChevronLeft aria-hidden="true" /></Button>
                 <label className={`${toolbarControl} relative inline-flex cursor-pointer items-center gap-2 font-semibold`}>
@@ -657,7 +658,6 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
                 {/* Back to today: today's day, or the week around it. */}
                 <Button type="button" size="sm" variant="ghost" onClick={() => { setAnchor(nowMs()); setListPage(1); }}>Today</Button>
               </span>
-              <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search by customer" />
             </DataToolbar>
             <FilterPanel id="calendar-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">
               <FilterField label="Calendar of" htmlFor="calendar-of">
