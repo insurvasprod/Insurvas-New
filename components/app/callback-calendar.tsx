@@ -816,10 +816,12 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
               noun={["callback", "callbacks"]}
               onClear={selection.clear}
               actions={<>
-                {canSpread && <Button type="button" variant="outline" disabled={spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setSpreadIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><Shuffle aria-hidden="true" />Spread into open times</Button>}
+                {canSpread && <Button type="button" variant="outline" title="Spread these callbacks into the next open times" disabled={spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setSpreadIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><Shuffle aria-hidden="true" />Spread out</Button>}
                 {canSpread && !solo && <Button type="button" variant="outline" disabled={handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setGiveIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><UserRoundPlus aria-hidden="true" />Give to…</Button>}
-                {canSpread && !solo && <Button type="button" variant="outline" disabled={handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)).length === 0} onClick={() => void toQueue(spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)))}><Users aria-hidden="true" />Put in shared queue</Button>}
-                <Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>
+                <MoreMenu items={[
+                  canSpread && !solo && { label: "Put in shared queue", icon: Users, disabled: handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)).length === 0, onSelect: () => void toQueue(spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt))) },
+                  { label: "Export selected", icon: Download, onSelect: exportSelected },
+                ]} />
               </>}
             />
           </>}

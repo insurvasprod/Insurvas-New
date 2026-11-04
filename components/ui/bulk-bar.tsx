@@ -111,16 +111,18 @@ export function BulkBar({ count, noun, actions, onClear, className }: {
 }) {
   if (count <= 0) return null;
   return (
-    <div role="region" aria-label="Bulk actions" className={cn("flex min-h-[3.25rem] flex-wrap items-center gap-2 border-b border-border bg-[var(--primary-soft)] px-4 py-2", className)}>
-      <span className="text-sm font-semibold tabular-nums text-foreground" aria-live="polite">
-        {count.toLocaleString()} {noun ? (count === 1 ? noun[0] : noun[1]) + " " : ""}selected
-      </span>
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        {actions}
-        <Button type="button" variant="outline" onClick={onClear}>
+    <div role="region" aria-label="Bulk actions" className={cn("flex min-h-12 flex-wrap items-center gap-x-3 gap-y-2 border-b border-border bg-[var(--primary-soft)] px-4 py-2", className)}>
+      {/* Clear is a small icon at the left of the count; the actions are one compact row at the right (owner 2026-11-05). */}
+      <span className="flex items-center gap-1.5">
+        <Button type="button" variant="ghost" size="icon-sm" onClick={onClear} aria-label="Clear selection" title="Clear selection">
           <X aria-hidden="true" />
-          Clear selection
         </Button>
+        <span className="text-sm font-semibold tabular-nums text-foreground" aria-live="polite">
+          {count.toLocaleString()} {noun ? (count === 1 ? noun[0] : noun[1]) + " " : ""}selected
+        </span>
+      </span>
+      <div className="ml-auto flex flex-wrap items-center gap-2 [&_[data-slot=button]]:h-8 [&_[data-slot=button]]:px-3 [&_[data-slot=button]]:text-sm">
+        {actions}
       </div>
     </div>
   );
