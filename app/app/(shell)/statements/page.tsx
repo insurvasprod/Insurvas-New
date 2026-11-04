@@ -2,7 +2,8 @@
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { ViewTabs } from "@/components/app/book-of-business-views";
+import { ViewTabs } from "@/components/ui/view-tabs";
+import { Callout } from "@/components/app/settings/primitives";
 import { StatementImportButton } from "@/components/app/statement-import";
 import { StatementsTable } from "@/components/app/statements-table";
 import { UnmatchedLinesTable } from "@/components/app/unmatched-lines-table";
@@ -84,7 +85,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
       lead={statements.length > 0 ? (
         <ViewTabs
           label="Statement lists"
-          active={showUnmatched ? "unmatched" : "statements"}
+          value={showUnmatched ? "unmatched" : "statements"}
           tabs={[
             { key: "statements", label: "Statements", count: statements.length, href: "/app/statements" },
             { key: "unmatched", label: "Unmatched lines", count: unmatchedCount, href: "/app/statements?view=unmatched" },
@@ -93,11 +94,8 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
       ) : undefined}
     >
 
-      {blocked && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
-          {blocked}
-        </div>
-      )}
+      {/* To the bell, not the page (UI-CONSISTENCY §3): Callout raises it there. */}
+      {blocked && <Callout tone="warning" title={blocked} />}
 
       {statements.length > 0 && (
         <StatStrip label="Statement totals">

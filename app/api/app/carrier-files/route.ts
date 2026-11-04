@@ -8,7 +8,7 @@ import { isRecordUuid, isoDate } from "@/lib/ingestion/path";
 import { runArrival } from "@/lib/ingestion/dailyRunStore";
 import { processFileQuietly } from "@/lib/ingestion/parser";
 import { extractRawRows } from "@/lib/ingestion/rawLayer";
-import { CARRIER_FILES_PENDING_MESSAGE, CarrierFileError, listCarrierFiles, uploadCarrierFile } from "@/lib/ingestion/registry";
+import { CARRIER_FILES_PENDING_MESSAGE, CarrierFileError, fileItWouldReplace, listCarrierFiles, uploadCarrierFile } from "@/lib/ingestion/registry";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
@@ -16,7 +16,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
  *
  * GET lists the agency's files (every door, newest first) and the duplicates that were skipped.
  * POST is the upload door: multipart `file`, `carrier_id`, `file_type` (policies | commissions),
- * `file_date` (YYYY-MM-DD) and an optional `agency`. The four facts come from the form, never from
+ * `file_date` (YYYY-MM-DD), an optional `agency`, and `replace=yes` when it may replace that day's file
+ * (409 `would_replace` otherwise). The four facts come from the form, never from
  * the file. The file is registered whether or not it opens; one that does not is `failed`, with why.
  *
  * Owner and bookkeeper, as statements. Uploading is a write.
@@ -81,6 +82,14 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // A plain upload never replaces a day's file silently: the person says it is a corrected copy
+    // (replace=yes; "Replace with a corrected file" always sends it), or changes the date.
+    // replace=no: a commission statement the person says is a different one from the day's (20261103300000).
+    const separate = form.get("replace") === "no" && fields.data.file_type === "commissions";
+    if (form.get("replace") !== "yes" && !separate) {
+      const existing = await fileItWouldReplace(auth.context.tenantId, { bytes, carrierId: fields.data.carrier_id, fileType: fields.data.file_type, fileDate: fields.data.file_date });
+      if (existing) return NextResponse.json({ error: "A file for this carrier, type and day is already in use.", code: "would_replace", existing }, { status: 409 });
+    }
     const result = await uploadCarrierFile(auth.context.tenantId, auth.context.userId, {
       filename: file.name,
       contentType: file.type || null,
@@ -89,6 +98,7 @@ export async function POST(request: NextRequest) {
       fileType: fields.data.file_type,
       fileDate: fields.data.file_date,
       agency: fields.data.agency || null,
+      ...(separate ? { replace: false } : {}),
     });
     await audit({
       actorType: "tenant",

@@ -1,26 +1,19 @@
-"use client";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
-import { useState, type ReactNode } from "react";
+export type ItemTab = "decide" | "row";
 
-import { UnderlineTabs } from "@/components/ui/view-tabs";
-
-type Tab = "decide" | "row";
+/** The tab ?tab= asks for; "The row as sent" only when the item came from a row. */
+export function itemTab(asked: string | undefined, hasRow: boolean): ItemTab {
+  return asked === "row" && hasRow ? "row" : "decide";
+}
 
 /**
  * A Needs you item's parts (owner 2026-11-02, round 2): Decide, then the carrier's row as sent when the item
- * came from one. The page renders both panels; this only switches which shows. There is no Notes tab: none of
- * the sources keeps notes on an item yet.
+ * came from one. On the title line (`lead`, UI-CONSISTENCY §8a) as link tabs: each part is its own address
+ * (?tab=row), so the page renders only the panel asked for. There is no Notes tab: none of the sources keeps
+ * notes on an item yet.
  */
-export function ItemTabs({ decide, row }: { decide: ReactNode; row: ReactNode | null }) {
-  const [tab, setTab] = useState<Tab>("decide");
-  const tabs = [{ key: "decide" as const, label: "Decide" }, ...(row ? [{ key: "row" as const, label: "The row as sent" }] : [])];
-  const current = row ? tab : "decide";
-  return (
-    <div className="flex min-w-0 flex-col gap-4">
-      <UnderlineTabs label="This item" tabs={tabs} value={current} onChange={setTab} idPrefix="needs-you-item" controls="needs-you-item-panel" />
-      <div id="needs-you-item-panel" role="tabpanel" aria-labelledby={`needs-you-item-${current}`} className="flex min-w-0 flex-col gap-4">
-        {current === "row" ? row : decide}
-      </div>
-    </div>
-  );
+export function ItemTabs({ current, hasRow, href }: { current: ItemTab; hasRow: boolean; href: (tab: ItemTab) => string }) {
+  const tabs = [{ key: "decide" as const, label: "Decide", href: href("decide") }, ...(hasRow ? [{ key: "row" as const, label: "The row as sent", href: href("row") }] : [])];
+  return <ViewTabs<ItemTab> label="This item" tabs={tabs} value={current} controls="needs-you-item-panel" />;
 }

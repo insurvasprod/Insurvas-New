@@ -15,7 +15,8 @@ export const POLICY_TABS = [
   { key: "history", label: "History" },
   { key: "client", label: "Client" },
   { key: "pipeline", label: "Pipeline" },
-  { key: "commissions", label: "Commissions" },
+  // Round 5 (board 7): the tab is "Money"; its key stays, so every ?tab=commissions link still lands.
+  { key: "commissions", label: "Money" },
   { key: "files", label: "Files" },
   { key: "notes", label: "Notes" },
 ] as const;
@@ -149,6 +150,45 @@ export function statusTone(status: string | null): "good" | "warning" | "danger"
   if (status === "lapsed" || status === "not_taken" || status === "declined") return "danger";
   if (status === "submitted") return "info";
   return "neutral";
+}
+
+/** Methods that settle who the client is: a person (or a confirmed review) chose, or step 2 linked by number. */
+const SETTLED_METHODS: ReadonlySet<string> = new Set(["human", "ai_review", "submission_record", "policy_number_exact"]);
+const SETTLED_TARGETS: ReadonlySet<string> = new Set(["application", "deal_flow", "contact"]);
+
+/**
+ * QA 2026-11-03 (0119990010): "Provisional · Check the client" is for a client the carrier's row made that
+ * nobody has settled. Once the current link is to a sale, an application or a client, chosen by a person or by
+ * step 2, there is nothing to check — even while the stand-in client record still carries its flag.
+ */
+export function showsProvisional(contactProvisional: boolean | null | undefined, link: { type: string | null; method: string | null } | null | undefined): boolean {
+  if (!contactProvisional) return false;
+  return !(link?.type && link.method && SETTLED_TARGETS.has(link.type) && SETTLED_METHODS.has(link.method));
+}
+
+/** Where a sale came from (tenant_application_cases.source / deal_flow.source), in words. */
+const SALE_SOURCE_WORDS: Record<string, string> = { outbound: "an outbound call", inbound: "an inbound call", partner: "a partner's lead", affiliate: "an affiliate's lead", manual: "a sale entered by hand", import: "an imported lead" };
+
+/**
+ * "Came from" for a policy linked to a sale with no lead source on record: the sale itself, so the page never
+ * says "Lead source not known" for a policy a sale stands behind. Null when there is no sale.
+ */
+export function saleCameFrom(sale: { source: string | null; date: string | null; agentName: string | null } | null | undefined): string | null {
+  if (!sale) return null;
+  const source = sale.source ? SALE_SOURCE_WORDS[sale.source] ?? sale.source.replaceAll("_", " ") : null;
+  // "Nov 3, 2026", as every other date on the policy page.
+  const day = sale.date && /^\d{4}-\d\d-\d\d/.test(sale.date) ? new Date(`${sale.date.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
+  return [`The sale${day ? ` of ${day}` : ""}`, source ? `from ${source}` : null, sale.agentName ? `sold by ${sale.agentName}` : null].filter(Boolean).join(" · ");
+}
+
+/**
+ * QA 2026-11-03: one plain line when the carrier pays someone other than the person who sold it ("Carrier
+ * pays Devin Okafor · sold by Demo Agent"). Compared by user, never by name; null when either is unknown or
+ * they are the same person.
+ */
+export function agentMismatchLine(carrierAgent: { userId: string | null; name: string | null }, seller: { userId: string | null; name: string | null }): string | null {
+  if (!carrierAgent.userId || !seller.userId || carrierAgent.userId === seller.userId) return null;
+  return `Carrier pays ${carrierAgent.name ?? "another producer"} · sold by ${seller.name ?? "another producer"}`;
 }
 
 /** "Why" is kept with the link (policy_match.reasoning holds up to 4,000 characters). */

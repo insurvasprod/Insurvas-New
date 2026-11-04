@@ -24,7 +24,7 @@ export default async function BookSetupPage() {
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <DataInPage step="setup" lead={<SetupTabs active="rate-card" />}>
+    <DataInPage step="setup" lead={<SetupTabs active="rate-card" tenantId={guard.context.tenantId} />}>
       {!view.available ? (
         <Callout tone="warning" title={EXPECTED_PENDING_MESSAGE} />
       ) : (

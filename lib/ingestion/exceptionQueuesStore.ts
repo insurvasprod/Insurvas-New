@@ -9,6 +9,7 @@ import { agencyToday } from "./agencyDay";
 import { findDuplicatesQuietly, queueDuplicateReviews } from "@/lib/contacts/service";
 import { chooseExistingClient, effectiveRules, identityKey, QUEUE_TYPES, type OwnerRole, type QueueRule, type QueueType, type Resolution } from "./exceptionQueues";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
+import { recordCarrierIssues } from "./applicationIssueStore";
 import { scoreCandidate, splitName, type Candidate, type CarrierSide } from "./policyMatching";
 
 /**
@@ -309,13 +310,16 @@ export async function resolveItem(scope: QueueScope, itemId: string, input: Reso
       await retireProvisional(scope.tenantId, item.contact_id, input.contactId);
       ref = { contact_id: input.contactId };
     } else if (input.resolution === "found_the_sale") {
-      const deal = await contactOfDeal(scope.tenantId, input.dealId);
-      if (!deal) throw new QueueError("Choose a sale in this agency.", 400);
-      await link(scope.tenantId, item.carrier_id, item.policy_number, { ...human, matched_to_type: "deal_flow", matched_to_id: input.dealId, contact_id: deal.contactId ?? item.contact_id });
-      await retireProvisional(scope.tenantId, item.contact_id, deal.contactId);
+      // QA 2026-11-03: the sale's open application when it has one, and the sale's client (policyMatchingStore saleLink).
+      const sale = await (await import("./policyMatchingStore")).saleLink(scope.tenantId, item.carrier_id, input.dealId, item.contact_id);
+      if (!sale) throw new QueueError("Choose a sale in this agency.", 400);
+      await link(scope.tenantId, item.carrier_id, item.policy_number, { ...human, ...sale.match });
+      await retireProvisional(scope.tenantId, item.contact_id, sale.match.contact_id);
       ref = { deal_id: input.dealId };
     }
     await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId: item.carrier_id, policies: [item.policy_number] });
+    // Linked to an application: if the carrier already lists it issued, the application records it (LA-3.18).
+    await recordCarrierIssues(scope.tenantId, item.carrier_id, [item.policy_number]);
   } else if (item.queue_type === "no_policy") {
     const deal = await contactOfDeal(scope.tenantId, item.deal_id);
     if (!deal) throw new QueueError("The sale behind this item is gone.", 409);
@@ -323,8 +327,10 @@ export async function resolveItem(scope: QueueScope, itemId: string, input: Reso
       const number = input.policyNumber.trim();
       const { data: policy } = await db().from("policy_current").select("policy_number").eq("tenant_id", scope.tenantId).eq("carrier_id", input.carrierId).eq("policy_number", number).maybeSingle();
       if (!policy) throw new QueueError("No policy with that number has come in from that carrier.", 400);
-      await link(scope.tenantId, input.carrierId, number, { ...human, matched_to_type: "deal_flow", matched_to_id: item.deal_id, contact_id: deal.contactId });
+      const sale = await (await import("./policyMatchingStore")).saleLink(scope.tenantId, input.carrierId, item.deal_id, deal.contactId);
+      await link(scope.tenantId, input.carrierId, number, { ...human, ...(sale?.match ?? { matched_to_type: "deal_flow", matched_to_id: item.deal_id, contact_id: deal.contactId }) });
       await refreshPolicyCurrent({ tenantId: scope.tenantId, carrierId: input.carrierId, policies: [number] });
+      await recordCarrierIssues(scope.tenantId, input.carrierId, [number]);
       ref = { carrier_id: input.carrierId, policy_number: number };
     } else if (input.resolution === "never_submitted") {
       note = input.reason.trim();
@@ -382,7 +388,7 @@ export type QueueItemRow = {
   contact: { id: string; name: string; provisional: boolean } | null; related: { id: string; name: string; provisional: boolean } | null;
   deal: { id: string; insuredName: string | null; date: string; premiumCents: number | null; carrier: string | null; leadId: string } | null;
   payload: Loose; resolution: string | null; resolutionNote: string | null; resolvedAt: string | null; resolvedByName: string | null;
-  choices: { contacts?: Array<{ id: string; name: string; dob: string | null }>; deals?: Array<{ id: string; name: string; date: string }>; policies?: Array<{ carrierId: string; policyNumber: string; label: string }>; applications?: Array<{ id: string; label: string }> };
+  choices: { contacts?: Array<{ id: string; name: string; dob: string | null }>; deals?: Array<{ id: string; name: string; date: string; why?: string }>; policies?: Array<{ carrierId: string; policyNumber: string; label: string }>; applications?: Array<{ id: string; label: string }> };
 };
 
 /** How many choice reads run at once: enough to overlap the round trips, few enough to be kind to a small database. */

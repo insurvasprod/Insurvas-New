@@ -33,6 +33,7 @@ import { Warning } from "@/components/app/applications/submit/warning-line";
 import { useWorkspace } from "@/components/app/applications/workspace/context";
 import { BareStepCards, StepCard } from "@/components/app/applications/workspace/step-card";
 import { FoldSection } from "@/components/app/applications/workspace/fold-section";
+import { zoneShortName } from "@/lib/applications/zonedInput";
 
 /** The welcome pack (LA-3.20) is off for now (owner 2026-10-29); true brings its section back. */
 const WELCOME_PACK_ON = false;
@@ -54,7 +55,9 @@ function SubmitBody() {
   const [copyFolded, setCopyFolded] = useState(submitted);
 
   const [reference, setReference] = useState("");
-  const [at, setAt] = useState(() => toLocalInput(new Date()));
+  // The agency's clock, named once beside the field and on each recorded line (QA 2026-11-03).
+  const [at, setAt] = useState(() => toLocalInput(new Date(), timeZone));
+  const zoneNow = zoneShortName(new Date(), timeZone);
   const shot = useAttachment();
   const picker = useFilePicker((f) => shot.set(f, "chosen"));
   const [seed, setSeed] = useState<CaptureSeed | null>(null);
@@ -102,7 +105,7 @@ function SubmitBody() {
                     {s.carrierReference
                       ? <span className="block font-mono text-sm font-semibold text-[var(--ink)]">{s.carrierReference}</span>
                       : <StatusChip tone="warning">Missing reference</StatusChip>}
-                    <span className="mt-0.5 block text-xs text-[var(--muted)]">{dateTime(s.submittedAt, timeZone)} · {SUBMITTED_VIA_LABEL[s.submittedVia]}{s.policyNumber && s.policyNumber !== s.carrierReference ? ` · policy ${s.policyNumber}` : ""}</span>
+                    <span className="mt-0.5 block text-xs text-[var(--muted)]">{dateTime(s.submittedAt, timeZone)}{timeZone ? ` ${zoneShortName(new Date(s.submittedAt), timeZone)}` : ""} · {SUBMITTED_VIA_LABEL[s.submittedVia]}{s.policyNumber && s.policyNumber !== s.carrierReference ? ` · policy ${s.policyNumber}` : ""}</span>
                   </div>
                   <QaVerdictChip verdict={s.qaVerdict} />
                   <span className="flex gap-2">
@@ -126,7 +129,7 @@ function SubmitBody() {
                 <Field label="Carrier reference number" htmlFor="capture-reference" hint={example?.example ? `${example.carrierName ?? carrier} uses ${example.example}.` : "Copy it from the carrier's confirmation screen."}>
                   <input id="capture-reference" className={`${control} font-mono uppercase`} value={reference} onChange={(e) => setReference(e.target.value)} disabled={!ready || readOnly} autoComplete="off" spellCheck={false} />
                 </Field>
-                <Field label="Submitted at" htmlFor="capture-at">
+                <Field label={zoneNow ? `Submitted at (${zoneNow})` : "Submitted at"} htmlFor="capture-at" hint={timeZone ? "In the agency's time zone." : undefined}>
                   <input id="capture-at" type="datetime-local" className={control} value={at} onChange={(e) => setAt(e.target.value)} disabled={!ready || readOnly} />
                 </Field>
                 <div className="sm:col-span-2">

@@ -13,6 +13,8 @@ import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { loadBook, loadHandPolicies, loadIssuedAwaiting, POLICY_BOOK_PENDING_MESSAGE } from "@/lib/ingestion/policyBookStore";
 import { listPolicyChanges } from "@/lib/ingestion/snapshotStore";
+import { loadBookMoney } from "@/lib/ingestion/policyMoneyStore";
+import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 
 type PoliciesView = "book" | "changes";
 
@@ -23,6 +25,11 @@ type PoliciesView = "book" | "changes";
  * as issued whose carrier file hasn't listed it yet (Module 4, Door 1), with a source filter.
  * Owner, producer and bookkeeper; a producer sees the policies credited to them or that they recorded.
  * Adding by hand is owner and producer, as the API.
+ *
+ * Round 5 (docs/la4/mockups-r5/book-commissions-r5.html, board 6): the book at a glance and where every
+ * policy's money stands. The strip, the Health chip, the Commission bar and the Next date are worked out from
+ * the ledger, the rate card, the open pay issues and policy_current (lib/ingestion/policyMoneyStore.ts); a
+ * figure that can't be is "—". Each row opens its policy.
  *
  * Round 3 (docs/la4/POLISH-ROUND3.md): a "Book · Recent changes" switch. Recent changes (?view=changes) is
  * the old Carrier files › Policy changes view (LA-4.6), moved here because it is about policies; it keeps
@@ -70,6 +77,12 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const query = new URLSearchParams([...Object.entries(params).flatMap(([key, value]) => (typeof value === "string" && key !== "view" ? [[key, value]] : [])), ...(params.view === "entered" && !params.source ? [["source", "hand"]] : [])]).toString();
   const rows = [...(book.available ? book.rows : []), ...hand, ...issued];
   const unpriced = book.available ? book.unpriced : null;
+  // Where each policy's money stands, over exactly the rows this person may see.
+  const money = await loadBookMoney(guard.context.tenantId, rows).catch((error) => {
+    console.error("[policies] money", error);
+    return null;
+  });
+  const listRows = rows.map((row) => ({ ...row, money: money?.byKey.get(`${row.carrierId}|${row.policyNumber}`) ?? null }));
 
   return (
     <DataInPage step="policies" lead={lead} actions={actions}>
@@ -80,8 +93,9 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
         </Callout>
       )}
       {!book.available && <Callout tone="warning" title={POLICY_BOOK_PENDING_MESSAGE} />}
+      {!money && rows.length > 0 && <Callout tone="warning" title="Where each policy's money stands couldn't be worked out just now, so those figures show —. Reload to try again." />}
       {(book.available || hand.length > 0 || issued.length > 0) && (
-        <PolicyBook rows={rows} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={guard.role === "producer"} readOnly={readOnly} />
+        <PolicyBook rows={listRows} strip={money?.strip ?? null} initialQuery={query} saved={book.available ? book.savedFilters : []} savedAvailable={book.available && book.savedFiltersAvailable} scoped={guard.role === "producer"} readOnly={readOnly} canAddRate={!readOnly && holdsAnyRole(guard.roles, ["owner", "bookkeeper"])} />
       )}
     </DataInPage>
   );

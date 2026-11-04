@@ -4,20 +4,21 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { checkboxControl } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { bpToPercent, percentToBp, TRIGGER_LABELS } from "@/lib/ingestion/expectedCommission";
 import type { RateCardCarrier } from "@/lib/ingestion/expectedCommissionStore";
 import { fileDay } from "@/lib/ingestion/constants";
 import { notify } from "@/lib/notify";
 
 const whole = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
-const select = `${toolbarControl} w-full`;
 
 /**
  * LA-4.13 (Notion sprint) · the rate card, carrier by carrier: what is set (pays on, lag, your
@@ -34,6 +35,8 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
   const productRows = open ? [...open.unmapped.map((u) => ({ code: u.code, family: "", note: `${u.policies} ${u.policies === 1 ? "policy" : "policies"}`, own: true })), ...open.mapped.map((m) => ({ code: m.code, family: m.family, note: m.own ? "yours" : "set by Insurvas", own: m.own }))] : [];
   const field = (key: string, fallback = "") => form[key] ?? fallback;
   const set = (key: string, value: string) => setForm((now) => ({ ...now, [key]: value }));
+  // The kit's dropdown (UI-CONSISTENCY §5b): the product families, with the empty choice first.
+  const families = (empty: string) => [{ value: "", label: empty }, ...products.map((p) => ({ value: p.code, label: p.name }))];
 
   async function post(body: Record<string, unknown>, done: string) {
     setBusy(true);
@@ -143,9 +146,9 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                 <section className="grid gap-2 border-t border-border pt-4">
                   <h3 className="m-0 text-sm font-semibold text-foreground">Your contract level</h3>
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <div className="grid gap-1"><Label htmlFor="rc-level">Level (%)</Label><Input id="rc-level" className="h-9" inputMode="decimal" placeholder="e.g. 100" value={field("level", open.levelBp !== null ? bpToPercent(open.levelBp) : "")} onChange={(e) => set("level", e.target.value)} /></div>
-                    <div className="grid gap-1"><Label htmlFor="rc-writing">Writing number</Label><Input id="rc-writing" className="h-9" maxLength={120} value={field("writing", open.writingNumber ?? "")} onChange={(e) => set("writing", e.target.value)} /></div>
-                    <div className="grid gap-1"><Label htmlFor="rc-level-from">Applies from</Label><Input id="rc-level-from" type="date" className="h-9" value={field("levelFrom", today)} onChange={(e) => set("levelFrom", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-level">Level (%)</Label><Input id="rc-level" inputMode="decimal" placeholder="e.g. 100" value={field("level", open.levelBp !== null ? bpToPercent(open.levelBp) : "")} onChange={(e) => set("level", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-writing">Writing number</Label><Input id="rc-writing" maxLength={120} value={field("writing", open.writingNumber ?? "")} onChange={(e) => set("writing", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-level-from">Applies from</Label><Input id="rc-level-from" type="date" value={field("levelFrom", today)} onChange={(e) => set("levelFrom", e.target.value)} /></div>
                   </div>
                   <div><Button type="button" size="sm" onClick={() => { const level = percentToBp(field("level", open.levelBp !== null ? bpToPercent(open.levelBp) : "")); if (level === null) return notify.block("Enter your level as a percentage, like 100."); void post({ action: "save_level", carrier_id: open.carrierId, contract_level_bp: level, writing_number: field("writing", open.writingNumber ?? ""), effective_from: field("levelFrom", today) }, "Contract level saved."); }}>Save level</Button></div>
                 </section>
@@ -158,10 +161,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                       {productRows.map((row) => (
                         <li key={row.code} className="grid items-center gap-2 sm:grid-cols-[1fr_220px_auto]">
                           <span><span className="font-mono text-xs text-foreground">{row.code}</span> <span className="text-xs text-muted-foreground">· {row.note}</span></span>
-                          <select aria-label={`Product family for ${row.code}`} className={select} value={field(`fam:${row.code}`, row.family)} onChange={(e) => set(`fam:${row.code}`, e.target.value)}>
-                            <option value="">{row.family ? "Use Insurvas' match" : "Choose a product family"}</option>
-                            {products.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-                          </select>
+                          <SelectMenu label={`Product family for ${row.code}`} className="w-full" matchTriggerWidth disabled={readOnly || busy} value={field(`fam:${row.code}`, row.family)} options={families(row.family ? "Use Insurvas' match" : "Choose a product family")} onChange={(value) => set(`fam:${row.code}`, value)} />
                           <Button type="button" size="sm" variant="outline" disabled={field(`fam:${row.code}`, row.family) === row.family} onClick={() => void post({ action: "map_product", carrier_id: open.carrierId, carrier_product_code: row.code, product_code: field(`fam:${row.code}`) || null }, "Product matched.")}>Save</Button>
                         </li>
                       ))}
@@ -189,9 +189,9 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                               {s.bands.map((b) => <span key={b.id} className="block text-xs">{b.ageMin}–{b.ageMax}: {bpToPercent(b.rateBp)}%</span>)}
                               {!readOnly && (
                                 <span className="mt-1 inline-flex items-center gap-1">
-                                  <Input aria-label="Band from age" className="h-8 w-14" inputMode="numeric" placeholder="80" value={field(`bmin:${s.id}`)} onChange={(e) => set(`bmin:${s.id}`, e.target.value.replace(/\D/g, ""))} />
-                                  <Input aria-label="Band to age" className="h-8 w-14" inputMode="numeric" placeholder="85" value={field(`bmax:${s.id}`)} onChange={(e) => set(`bmax:${s.id}`, e.target.value.replace(/\D/g, ""))} />
-                                  <Input aria-label="Band rate (%)" className="h-8 w-16" inputMode="decimal" placeholder="110" value={field(`brate:${s.id}`)} onChange={(e) => set(`brate:${s.id}`, e.target.value)} />
+                                  <Input aria-label="Band from age" className="w-14" inputMode="numeric" placeholder="80" value={field(`bmin:${s.id}`)} onChange={(e) => set(`bmin:${s.id}`, e.target.value.replace(/\D/g, ""))} />
+                                  <Input aria-label="Band to age" className="w-14" inputMode="numeric" placeholder="85" value={field(`bmax:${s.id}`)} onChange={(e) => set(`bmax:${s.id}`, e.target.value.replace(/\D/g, ""))} />
+                                  <Input aria-label="Band rate (%)" className="w-16" inputMode="decimal" placeholder="110" value={field(`brate:${s.id}`)} onChange={(e) => set(`brate:${s.id}`, e.target.value)} />
                                   <Button type="button" size="sm" variant="outline" disabled={!field(`bmin:${s.id}`) || !field(`bmax:${s.id}`) || !field(`brate:${s.id}`)} onClick={() => { const rate = percentToBp(field(`brate:${s.id}`)); if (rate === null) return notify.block("Enter the band's rate as a percentage."); void post({ action: "add_band", carrier_id: open.carrierId, schedule_id: s.id, age_min: Number(field(`bmin:${s.id}`)), age_max: Number(field(`bmax:${s.id}`)), rate_bp: rate }, "Age band added."); }}>Add band</Button>
                                 </span>
                               )}
@@ -206,18 +206,15 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                   <div className="grid gap-3 sm:grid-cols-6">
                     <div className="grid gap-1 sm:col-span-2">
                       <Label htmlFor="rc-family">Product family</Label>
-                      <select id="rc-family" className={select} value={field("family", [...open.mapped.map((m) => m.family)][0] ?? "")} onChange={(e) => set("family", e.target.value)}>
-                        <option value="">Choose</option>
-                        {products.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-                      </select>
+                      <SelectMenu id="rc-family" label="Product family" className="w-full" matchTriggerWidth disabled={readOnly || busy} value={field("family", [...open.mapped.map((m) => m.family)][0] ?? "")} options={families("Choose")} onChange={(value) => set("family", value)} />
                     </div>
-                    <div className="grid gap-1"><Label htmlFor="rc-year">Policy year</Label><Input id="rc-year" className="h-9" inputMode="numeric" value={field("year", "1")} onChange={(e) => set("year", e.target.value.replace(/\D/g, ""))} /></div>
-                    <div className="grid gap-1"><Label htmlFor="rc-rate">Rate (%)</Label><Input id="rc-rate" className="h-9" inputMode="decimal" placeholder="e.g. 145" value={field("rate")} onChange={(e) => set("rate", e.target.value)} /></div>
-                    <div className="grid gap-1"><Label htmlFor="rc-rate-level">For level (%)</Label><Input id="rc-rate-level" className="h-9" inputMode="decimal" value={field("rateLevel", open.levelBp !== null ? bpToPercent(open.levelBp) : "")} onChange={(e) => set("rateLevel", e.target.value)} /></div>
-                    <div className="grid gap-1"><Label htmlFor="rc-from">From</Label><Input id="rc-from" type="date" className="h-9" value={field("from", today)} onChange={(e) => set("from", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-year">Policy year</Label><Input id="rc-year" inputMode="numeric" value={field("year", "1")} onChange={(e) => set("year", e.target.value.replace(/\D/g, ""))} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-rate">Rate (%)</Label><Input id="rc-rate" inputMode="decimal" placeholder="e.g. 145" value={field("rate")} onChange={(e) => set("rate", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-rate-level">For level (%)</Label><Input id="rc-rate-level" inputMode="decimal" value={field("rateLevel", open.levelBp !== null ? bpToPercent(open.levelBp) : "")} onChange={(e) => set("rateLevel", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-from">From</Label><Input id="rc-from" type="date" value={field("from", today)} onChange={(e) => set("from", e.target.value)} /></div>
                   </div>
                   <label htmlFor="rc-onward" className="inline-flex items-center gap-2 text-sm text-foreground">
-                    <input id="rc-onward" type="checkbox" className="size-4 accent-[var(--primary)]" checked={field("onward") === "yes"} onChange={(e) => set("onward", e.target.checked ? "yes" : "")} />
+                    <input id="rc-onward" type="checkbox" className={checkboxControl} checked={field("onward") === "yes"} onChange={(e) => set("onward", e.target.checked ? "yes" : "")} />
                     Also every later year without its own rate (year {field("year", "1") || "N"}+)
                   </label>
                   <p className="m-0 text-xs text-muted-foreground">A rate applies from its date onward; figures already worked out never change.</p>
@@ -249,24 +246,18 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                   <div className="grid gap-3 sm:grid-cols-6 sm:items-end">
                     <div className="grid gap-1 sm:col-span-2">
                       <Label htmlFor="rc-adv-family">Product family</Label>
-                      <select id="rc-adv-family" className={select} value={field("advFamily", open.mapped[0]?.family ?? "")} onChange={(e) => set("advFamily", e.target.value)}>
-                        <option value="">Choose</option>
-                        {products.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
-                      </select>
+                      <SelectMenu id="rc-adv-family" label="Product family" className="w-full" matchTriggerWidth disabled={readOnly || busy} value={field("advFamily", open.mapped[0]?.family ?? "")} options={families("Choose")} onChange={(value) => set("advFamily", value)} />
                     </div>
-                    <div className="grid gap-1"><Label htmlFor="rc-adv-months">Months</Label><Input id="rc-adv-months" className="h-9" inputMode="numeric" placeholder="e.g. 9" value={field("advMonths")} onChange={(e) => set("advMonths", e.target.value.replace(/\D/g, ""))} /></div>
-                    <div className="grid gap-1"><Label htmlFor="rc-adv-pct">Advance (%)</Label><Input id="rc-adv-pct" className="h-9" inputMode="decimal" placeholder="e.g. 75" value={field("advPct")} onChange={(e) => set("advPct", e.target.value)} /></div>
-                    <div className="grid gap-1"><Label htmlFor="rc-adv-back">Clawback (mo)</Label><Input id="rc-adv-back" className="h-9" inputMode="numeric" placeholder="e.g. 12" value={field("advBack")} onChange={(e) => set("advBack", e.target.value.replace(/\D/g, ""))} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-adv-months">Months</Label><Input id="rc-adv-months" inputMode="numeric" placeholder="e.g. 9" value={field("advMonths")} onChange={(e) => set("advMonths", e.target.value.replace(/\D/g, ""))} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-adv-pct">Advance (%)</Label><Input id="rc-adv-pct" inputMode="decimal" placeholder="e.g. 75" value={field("advPct")} onChange={(e) => set("advPct", e.target.value)} /></div>
+                    <div className="grid gap-1"><Label htmlFor="rc-adv-back">Clawback (mo)</Label><Input id="rc-adv-back" inputMode="numeric" placeholder="e.g. 12" value={field("advBack")} onChange={(e) => set("advBack", e.target.value.replace(/\D/g, ""))} /></div>
                     <div className="grid gap-1">
                       <Label htmlFor="rc-adv-type">Type</Label>
-                      <select id="rc-adv-type" className={select} value={field("advType", "prorated")} onChange={(e) => set("advType", e.target.value)}>
-                        <option value="prorated">Prorated</option>
-                        <option value="full">Full</option>
-                      </select>
+                      <SelectMenu id="rc-adv-type" label="Clawback type" className="w-full" matchTriggerWidth disabled={readOnly || busy} value={field("advType", "prorated")} options={[{ value: "prorated", label: "Prorated" }, { value: "full", label: "Full" }]} onChange={(value) => set("advType", value)} />
                     </div>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-6">
-                    <div className="grid gap-1 sm:col-span-2"><Label htmlFor="rc-adv-from">From</Label><Input id="rc-adv-from" type="date" className="h-9" value={field("advFrom", today)} onChange={(e) => set("advFrom", e.target.value)} /></div>
+                    <div className="grid gap-1 sm:col-span-2"><Label htmlFor="rc-adv-from">From</Label><Input id="rc-adv-from" type="date" value={field("advFrom", today)} onChange={(e) => set("advFrom", e.target.value)} /></div>
                   </div>
                   <p className="m-0 text-xs text-muted-foreground">Prorated takes back only the months not yet earned; full takes the whole advance back if the policy lapses inside the window.</p>
                   <div><Button type="button" size="sm" onClick={saveAdvanceRule}>Save advance rule</Button></div>

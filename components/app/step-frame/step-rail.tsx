@@ -66,12 +66,13 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
   }, []);
   useEffect(() => {
     if (!countsUrl) return;
-    const controller = new AbortController();
-    fetch(countsUrl, { cache: "no-store", signal: controller.signal })
+    // A stale answer is ignored, not aborted: aborting on unmount surfaced as an uncaught AbortError in dev.
+    let stale = false;
+    fetch(countsUrl, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((body: { counts?: Record<string, number> } | null) => { if (body?.counts) setCounts(body.counts); })
+      .then((body: { counts?: Record<string, number> } | null) => { if (!stale && body?.counts) setCounts(body.counts); })
       .catch(() => {});
-    return () => controller.abort();
+    return () => { stale = true; };
   }, [step, countsUrl, asked]);
 
   return (

@@ -94,7 +94,34 @@ function masked(key: string, label: string, name: string, v: { masked: string; h
     : { key, label, name, display: null, copy: null };
 }
 
+/**
+ * One of the field set's own questions (custom.*: driver's license, occupation, income), drawn by its
+ * type like a built-in field (QA 2026-11-03: the carrier's form asks them, so Copy-assist lists them).
+ */
+function customItem(attempt: AttemptView, q: NonNullable<AttemptView["fieldSet"]>["custom"][number]): CopyItem {
+  const base: CopyItem = { key: q.key, label: q.label, name: lower(q.label), display: null, copy: null };
+  const v = attempt.values[q.key]?.value;
+  if (v === null || v === undefined || v === "") return base;
+  if (q.type === "date" && typeof v === "string") return { ...base, ...withVariants(dobVariants(v)) };
+  if (q.type === "phone") return { ...base, ...withVariants(phoneVariants(String(v))) };
+  if (q.type === "yes_no" || typeof v === "boolean") {
+    const yes = v === true || String(v).toLowerCase() === "yes";
+    return { ...base, display: yes ? "Yes" : "No", copy: yes ? "Yes" : "No" };
+  }
+  if (q.type === "currency" && Number.isFinite(Number(v))) {
+    // Typed in dollars on the Application step: shown with its sign, pasted as a plain number.
+    const n = Number(v);
+    return { ...base, display: `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`, copy: String(n) };
+  }
+  return { ...base, display: String(v), copy: String(v) };
+}
+
+/** The copy group a field-set question's `group` belongs in. */
+export const CUSTOM_COPY_GROUP: Record<string, string> = { insured: "insured", addr: "addr", contact: "addr", owner: "owner", cov: "cov", pay: "pay" };
+
 export function buildCopyGroups(attempt: AttemptView): CopyGroup[] {
+  const custom = attempt.fieldSet?.custom ?? [];
+  const extra = (groupKey: string) => custom.filter((q) => (CUSTOM_COPY_GROUP[q.group] ?? "insured") === groupKey).map((q) => customItem(attempt, q));
   const f = (groupKey: string) => byKey(groupKey).map((x) => field(attempt, x, NAMES[x.key]));
 
   const ownerIsInsured = attempt.values["owner.same_as_insured"]?.value !== false;
@@ -159,12 +186,12 @@ export function buildCopyGroups(attempt: AttemptView): CopyGroup[] {
   }
 
   return [
-    { key: "insured", label: "Proposed insured", items: f("insured") },
+    { key: "insured", label: "Proposed insured", items: [...f("insured"), ...extra("insured")] },
     // Carrier forms ask for the phone and email on the address page.
-    { key: "addr", label: "Address", items: [...f("addr"), ...f("contact")] },
-    { key: "owner", label: "Owner", items: owner },
-    { key: "cov", label: "Coverage", items: coverage },
+    { key: "addr", label: "Address", items: [...f("addr"), ...f("contact"), ...extra("addr")] },
+    { key: "owner", label: "Owner", items: [...owner, ...extra("owner")] },
+    { key: "cov", label: "Coverage", items: [...coverage, ...extra("cov")] },
     { key: "ben", label: "Beneficiaries", items: beneficiaries },
-    { key: "pay", label: "Banking and payment", items: payment },
+    { key: "pay", label: "Banking and payment", items: [...payment, ...extra("pay")] },
   ];
 }

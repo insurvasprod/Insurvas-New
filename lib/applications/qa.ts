@@ -80,6 +80,12 @@ export const DEFAULT_QA_SETTINGS: QaSettings = { appointmentBlocks: false, per10
 const FIELD_STEP: Record<string, WorkspaceStep> = { insured: "application", contact: "application", addr: "application", owner: "application", cov: "quote", pay: "payment" };
 const LABEL = new Map(CANONICAL_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, f.label] as const)));
 
+/** "custom.drivers_license_number" → "Drivers license number": the last resort for a field with no label. */
+export function plainKey(key: string) {
+  const words = (key.split(".").pop() ?? key).replace(/_/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : key;
+}
+
 function ageFrom(dob: unknown, today: Date) {
   if (typeof dob !== "string") return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dob);
@@ -115,6 +121,9 @@ export function runQa(input: {
     const s = step ?? (fieldKey ? FIELD_STEP[fieldKey.split(".")[0]] ?? "application" : "application");
     list.push({ code, message, detail: DETAIL[code] ?? null, fieldKey, step: s, deepLink: link(s, fieldKey) });
   };
+  // A field by its words, never its key (QA 2026-11-03): an agency's own question (custom.*) by its text
+  // from the field set; failing every label, the key's last part in plain words.
+  const fieldName = (key: string) => LABEL.get(key) ?? attempt.fieldSet?.custom.find((c) => c.key === key)?.label ?? plainKey(key);
   const v = (key: string) => attempt.values[key];
   const has = (key: string) => {
     const f = v(key);
@@ -126,7 +135,7 @@ export function runQa(input: {
   for (const key of attempt.requiredKeys) {
     if (key.startsWith("pay.")) continue; // payment is checked by method below
     // An agency's own question (custom.*) is named by its text from the field set.
-    const label = LABEL.get(key) ?? attempt.fieldSet?.custom.find((c) => c.key === key)?.label ?? key;
+    const label = fieldName(key);
     if (!has(key)) add(blocking, "QA_REQUIRED_FIELD", `${label} is required by ${attempt.carrierName ?? "this carrier"}.`, key);
   }
 
@@ -215,7 +224,7 @@ export function runQa(input: {
 
   for (const [key, f] of Object.entries(attempt.values)) {
     if (f.source !== "manual" && f.source !== "household" && !f.reviewed && attempt.requiredKeys.includes(key)) {
-      add(warnings, "QA_PREFILL_UNREVIEWED", `${LABEL.get(key) ?? key} was filled in for you and has not been checked.`, key);
+      add(warnings, "QA_PREFILL_UNREVIEWED", `${fieldName(key)} was filled in for you and has not been checked.`, key);
     }
   }
 

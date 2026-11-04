@@ -38,13 +38,15 @@ export const PREFILL_SURFACE = "border-[var(--border)] bg-[var(--brand-50)]";
  * The one-line hint under a carried-in value: where it came from, and — while nobody has confirmed it —
  * a "Confirm with the client" checkbox that marks it checked without changing it.
  */
-export function PrefillHint({ fv, fieldKey, readOnly, extra, confirmable = true }: {
+export function PrefillHint({ fv, fieldKey, readOnly, extra, confirmable = true, onConfirm }: {
   fv: FieldValue | undefined;
   fieldKey: string | string[];
   readOnly?: boolean;
   extra?: ReactNode;
   /** False for a value read straight from an interview answer: there is no stored field to mark checked. */
   confirmable?: boolean;
+  /** In place of marking a stored value checked: a value shown from the interview is saved when confirmed. */
+  onConfirm?: () => void;
 }) {
   // No workspace outside a case (the settings preview): nothing there is prefilled, so nothing is marked.
   const markReviewed = useOptionalWorkspace()?.markReviewed ?? (() => {});
@@ -63,7 +65,7 @@ export function PrefillHint({ fv, fieldKey, readOnly, extra, confirmable = true 
       {confirmable && !fv.reviewed && !readOnly && (
         <button
           type="button"
-          onClick={() => { for (const k of Array.isArray(fieldKey) ? fieldKey : [fieldKey]) markReviewed(k); }}
+          onClick={() => { if (onConfirm) { onConfirm(); return; } for (const k of Array.isArray(fieldKey) ? fieldKey : [fieldKey]) markReviewed(k); }}
           className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-full border-[1.5px] border-[var(--primary)] bg-[color-mix(in_srgb,var(--primary)_10%,transparent)] px-2.5 text-xs font-semibold text-[var(--accent-ink)] outline-none transition-colors hover:bg-[var(--primary)] hover:text-[var(--ink)] focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span aria-hidden="true" className="inline-block size-3.5 rounded-[4px] border-[1.5px] border-current" />

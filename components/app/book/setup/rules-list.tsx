@@ -7,6 +7,8 @@ import { TableCard } from "@/components/ui/table-card";
 import { EVENT_LABELS } from "@/lib/pipelineRules/rules";
 import type { BoardPipeline, RuleListItem } from "@/lib/pipelineRules/store";
 
+import { LinkRow, RowChevron } from "./link-row";
+
 /** A rule's mode as a chip: Live green, Forecast amber, Draft and Off grey. */
 export function ModeChip({ mode, enabled }: { mode: "draft" | "forecast" | "live"; enabled: boolean }) {
   const [label, tone]: [string, StatusTone] = !enabled ? ["Off", "neutral"] : mode === "live" ? ["Live", "good"] : mode === "forecast" ? ["Forecast", "warning"] : ["Draft", "neutral"];
@@ -22,7 +24,7 @@ export function stageNames(board: BoardPipeline[]) {
 /**
  * Setup › Pipeline rules, the list (board BobRules): when something happens to a policy, move its card
  * and add a note. One row a rule — When · Carriers · From · Moves to · Mode · Last 7 days — and each
- * opens its own page.
+ * opens its own page: the whole row is the link (board 10), with a "›" at its end and no Open button.
  */
 export function RulesList({ rules, board, carriers }: { rules: RuleListItem[]; board: BoardPipeline[]; carriers: Array<{ id: string; name: string }> }) {
   const stages = stageNames(board);
@@ -35,7 +37,7 @@ export function RulesList({ rules, board, carriers }: { rules: RuleListItem[]; b
       ) : (
         <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
           <thead>
-            <tr><th>When</th><th>Carriers</th><th>From</th><th>Moves to</th><th className="w-[110px]">Mode</th><th className="w-[130px]">Last 7 days</th><th className="w-[80px] text-right"><span className="sr-only">Open</span></th></tr>
+            <tr><th>When</th><th>Carriers</th><th>From</th><th>Moves to</th><th className="w-[110px]">Mode</th><th className="w-[130px]">Last 7 days</th><th className="w-10"><span className="sr-only">Open</span></th></tr>
           </thead>
           <tbody>
             {rules.map((rule) => {
@@ -43,7 +45,7 @@ export function RulesList({ rules, board, carriers }: { rules: RuleListItem[]; b
               const to = v ? stages.get(v.targetStageId) : null;
               const last = rule.mode === "live" ? (rule.last7.moved ? `${rule.last7.moved} moved` : "—") : rule.last7.wouldMove ? `would move ${rule.last7.wouldMove}` : "—";
               return (
-                <tr key={rule.id}>
+                <LinkRow key={rule.id} href={`/app/book-setup/pipeline-rules/${rule.id}`}>
                   <td>
                     <Link href={`/app/book-setup/pipeline-rules/${rule.id}`} className="block font-semibold leading-snug text-foreground hover:underline">{rule.name}</Link>
                     <span className="block text-xs text-muted-foreground">{v ? `${EVENT_LABELS[v.event].label} · ${v.noteOn ? "adds a note" : "no note"}` : "no version"}</span>
@@ -53,8 +55,8 @@ export function RulesList({ rules, board, carriers }: { rules: RuleListItem[]; b
                   <td>{to ? `${to.pipeline} › ${to.stage}` : <span className="text-[var(--warning-ink)]">A stage no longer on the board</span>}</td>
                   <td><ModeChip mode={rule.mode} enabled={rule.enabled} /></td>
                   <td className="text-muted-foreground tabular-nums">{last}{rule.last7.held ? ` · ${rule.last7.held} held` : ""}</td>
-                  <td className="text-right"><Link href={`/app/book-setup/pipeline-rules/${rule.id}`} className="font-semibold text-[var(--accent-ink)] hover:underline">Open</Link></td>
-                </tr>
+                  <RowChevron />
+                </LinkRow>
               );
             })}
           </tbody>

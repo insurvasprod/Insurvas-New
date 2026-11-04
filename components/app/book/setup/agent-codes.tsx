@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { inputControl } from "@/components/ui/field";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -17,7 +18,8 @@ import { notify } from "@/lib/notify";
 /**
  * Setup › Agent codes (owner 2026-11-02, round 2): each carrier's writing-agent code and the person it
  * credits, edited in the row. The same data and actions as Policy matching › Agent codes
- * (/api/app/policy-matching: map_agent, unmap_agent, add_agent); the codes to map come first.
+ * (/api/app/policy-matching: map_agent, unmap_agent, add_agent); the codes to map come first. Board 23: a row's
+ * one button is its next step, Map for a code nobody is mapped to; a mapped code's Unmap stays, quiet.
  */
 export function AgentCodes({ unmapped, mapped, members, carriers, readOnly }: { unmapped: UnmappedAgent[]; mapped: MappedAgent[]; members: Array<{ userId: string; name: string }>; carriers: Array<{ id: string; name: string }>; readOnly: boolean }) {
   const router = useRouter();
@@ -51,6 +53,17 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly }: { 
     } finally {
       setBusy(null);
     }
+  }
+
+  // A loss asks first (UI-CONSISTENCY §11): the code stops pointing at its person and goes back to the codes to map.
+  async function unmap(agent: MappedAgent) {
+    const ok = await confirmAction({
+      title: `Unmap ${agent.agentIdentifier}?`,
+      description: `${agent.agentIdentifier} at ${agent.carrierName} stops pointing to ${agent.userName}. It goes back to the codes to map.`,
+      confirmLabel: "Unmap",
+      cancelLabel: "Keep it",
+    });
+    if (ok) await post(`unmap-${agent.id}`, { action: "unmap_agent", map_id: agent.id }, "Mapping removed.");
   }
 
   const search = (value: string) => { setQuery(value); setPage(1); };
@@ -107,7 +120,7 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly }: { 
                   <td>{agent.carrierName}</td>
                   <td className="text-right tabular-nums">{agent.policies.toLocaleString("en-US")}</td>
                   <td>{agent.userName}</td>
-                  <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`unmap-${agent.id}`, { action: "unmap_agent", map_id: agent.id }, "Mapping removed.")}>Unmap</Button>}</td>
+                  <td className="text-right">{!readOnly && <Button type="button" variant="ghost" size="sm" disabled={busy !== null} onClick={() => void unmap(agent)}>Unmap</Button>}</td>
                 </tr>
               );
               const key = `${agent.carrierId}|${agent.agentIdentifier}`;

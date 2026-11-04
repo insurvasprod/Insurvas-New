@@ -1,17 +1,15 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
-import { DecideInPlace } from "@/components/app/book/needs-you/decide-in-place";
-import { Button } from "@/components/ui/button";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { fillLine } from "@/components/ui/table-card-layout";
 import { MAX_ROWS } from "@/components/ui/use-fitting-page-size";
 import { cn } from "@/lib/utils";
-import type { NeedsYouKind } from "@/lib/needsYou/kinds";
 
 /** One row of a file as the table shows it: every word already chosen on the server. */
 export type FileRowLine = {
@@ -29,8 +27,8 @@ export type FileRowLine = {
   linkedTitle: string;
   card: string;
   rowHref: string;
-  /** The Needs you item this row waits on, decided under the row. */
-  item: { kind: NeedsYouKind; id: string } | null;
+  /** The Needs you item this row waits on: its Review page address (round 5), else null. */
+  reviewHref: string | null;
 };
 
 /** The pager row's height before it is drawn (as components/ui/paged.tsx). */
@@ -69,31 +67,21 @@ function useFittedRows(holder: RefObject<HTMLDivElement | null>, total: number, 
 }
 
 /**
- * A file's rows, in their TableCard with the page's toolbar and pager (round 4, owner 2026-11-02: "I want you to be able to fix it … right away in that page"). A row
- * that waits on a person has Decide: its item opens under it, the same form as its Needs you page; saving marks
- * it Saved and opens the next waiting row of this page, and the page refreshes behind it. Every other row opens
- * its own page. No sentence repeats down the table: the outcome is a short chip, the full line its tooltip.
+ * A file's rows, in their TableCard with the page's toolbar and pager. Round 5 (owner 2026-11-03: "I don't want to
+ * have that in my table"): the table only lists. The whole row opens the row's page; a row that waits on a person
+ * says Review, which opens the Review page at its item. No sentence repeats down the table: the outcome is a short
+ * chip, the full line its tooltip.
  */
-export function FileRowsTable({ rows: all, openFirst = false, canDecide, toolbar, empty }: { rows: FileRowLine[]; openFirst?: boolean; canDecide: boolean; toolbar?: ReactNode; empty?: ReactNode }) {
+export function FileRowsTable({ rows: all, toolbar, empty, pageKey = "" }: { rows: FileRowLine[]; toolbar?: ReactNode; empty?: ReactNode; /** A new search (`?q=`) starts at page 1 without remounting the toolbar, so the search box keeps its focus. */ pageKey?: string }) {
+  const router = useRouter();
   const holder = useRef<HTMLDivElement | null>(null);
   const size = useFittedRows(holder, all.length);
   const [page, setPage] = useState(1);
+  const [pagedFor, setPagedFor] = useState(pageKey);
+  if (pagedFor !== pageKey) { setPagedFor(pageKey); setPage(1); }
   const { rows, current } = paginate(all, page, size);
-  const waiting = all.filter((row) => row.item);
   // A column of dashes says nothing: Changed shows only when a row on this page changed something.
   const changed = rows.some((row) => row.detail !== "—");
-  // The next waiting row may be on a later page: open it there.
-  const openRow = (rowNumber: number | null) => {
-    setOpen(rowNumber);
-    const at = rowNumber === null ? -1 : all.findIndex((row) => row.rowNumber === rowNumber);
-    if (at >= 0) setPage(Math.floor(at / size) + 1);
-  };
-  const [open, setOpen] = useState<number | null>(openFirst && canDecide ? waiting[0]?.rowNumber ?? null : null);
-  const [saved, setSaved] = useState<ReadonlySet<number>>(new Set());
-  const nextAfter = (rowNumber: number, skip: ReadonlySet<number>) => {
-    const at = waiting.findIndex((row) => row.rowNumber === rowNumber);
-    return waiting.slice(at + 1).find((row) => !skip.has(row.rowNumber))?.rowNumber ?? null;
-  };
 
   return (
     <div ref={holder} className="contents">
@@ -110,61 +98,31 @@ export function FileRowsTable({ rows: all, openFirst = false, canDecide, toolbar
           {changed && <th>Changed</th>}
           <th>Linked</th>
           <th>Card</th>
-          <th className="text-right"><span className="sr-only">Actions</span></th>
+          <th className="text-right"><span className="sr-only">Next step</span></th>
         </tr>
       </thead>
       <tbody>
-        {rows.map((row) => {
-          const isOpen = open === row.rowNumber && row.item !== null;
-          const done = saved.has(row.rowNumber);
-          return (
-            <Fragment key={row.rowNumber}>
-              <tr data-line="" className={cn(done && "opacity-60", isOpen && "bg-[var(--surface-alt)]")}>
-                <td>
-                  {row.policyHref ? <Link href={row.policyHref} className="block truncate font-semibold text-foreground hover:underline">{row.policyNumber}</Link>
-                    : <span className="block truncate font-semibold text-foreground">{row.policyNumber ?? "—"}</span>}
-                  <span className="block text-xs tabular-nums text-muted-foreground">Row {row.rowNumber}</span>
-                </td>
-                <td className={cn("truncate", row.clientName ? "text-foreground" : "text-muted-foreground")} title={row.clientName ?? undefined}>{row.clientName ?? (row.policyNumber ? "No client yet" : "—")}</td>
-                <td><span title={row.chipTitle}><StatusChip tone={done ? "good" : row.tone}>{done ? "Saved" : row.chip}</StatusChip></span></td>
-                {changed && <td><span className="block truncate" title={row.detail}>{row.detail}</span></td>}
-                <td className="truncate text-muted-foreground" title={row.linkedTitle}>{row.linked}</td>
-                <td className="truncate text-muted-foreground" title={row.card}>{row.card}</td>
-                <td className="text-right">
-                  {row.item && canDecide && !done ? (
-                    <Button type="button" size="sm" variant="outline" aria-expanded={isOpen} aria-controls={`decide-${row.rowNumber}`} onClick={() => setOpen(isOpen ? null : row.rowNumber)}>{isOpen ? "Close" : "Decide"}</Button>
-                  ) : (
-                    <Button asChild variant="outline" size="sm"><Link href={row.rowHref} aria-label={`Open row ${row.rowNumber}`}>Open</Link></Button>
-                  )}
-                </td>
-              </tr>
-              {isOpen && row.item && (
-                <tr id={`decide-${row.rowNumber}`}>
-                  <td colSpan={changed ? 7 : 6} className="!h-auto border-b border-[var(--border)] bg-[var(--surface-alt)] !p-0">
-                    {/* The panel takes the row's width and adds none, so the columns above never move. */}
-                    <div className="w-0 min-w-full">
-                      <DecideInPlace
-                        key={`${row.item.kind}:${row.item.id}`}
-                        kind={row.item.kind}
-                        id={row.item.id}
-                        onClose={() => setOpen(null)}
-                        inline={{
-                          hasNext: nextAfter(row.rowNumber, saved) !== null,
-                          onSkip: () => openRow(nextAfter(row.rowNumber, saved)),
-                          onDone: (how) => {
-                            const next = new Set(saved).add(row.rowNumber);
-                            setSaved(next);
-                            openRow(how === "next" ? nextAfter(row.rowNumber, next) : null);
-                          },
-                        }}
-                      />
-                    </div>
-                  </td>
-                </tr>
+        {rows.map((row) => (
+          <tr key={row.rowNumber} data-line="" className="group cursor-pointer" onClick={() => router.push(row.rowHref)}>
+            <td>
+              {row.policyHref ? <Link href={row.policyHref} onClick={(event) => event.stopPropagation()} className="block truncate font-semibold text-foreground hover:underline">{row.policyNumber}</Link>
+                : <span className="block truncate font-semibold text-foreground">{row.policyNumber ?? "—"}</span>}
+              <span className="block text-xs tabular-nums text-muted-foreground">Row {row.rowNumber}</span>
+            </td>
+            <td className={cn("truncate", row.clientName ? "text-foreground" : "text-muted-foreground")} title={row.clientName ?? undefined}>{row.clientName ?? (row.policyNumber ? "No client yet" : "—")}</td>
+            <td><span title={row.chipTitle}><StatusChip tone={row.tone}>{row.chip}</StatusChip></span></td>
+            {changed && <td><span className="block truncate" title={row.detail}>{row.detail}</span></td>}
+            <td className="truncate text-muted-foreground" title={row.linkedTitle}>{row.linked}</td>
+            <td className="truncate text-muted-foreground" title={row.card}>{row.card}</td>
+            <td className="text-right">
+              {row.reviewHref ? (
+                <Link href={row.reviewHref} onClick={(event) => event.stopPropagation()} className="font-semibold text-[var(--accent-ink)] hover:underline">Review</Link>
+              ) : (
+                <Link href={row.rowHref} aria-label={`Open row ${row.rowNumber}`} className="text-muted-foreground group-hover:text-foreground">›</Link>
               )}
-            </Fragment>
-          );
-        })}
+            </td>
+          </tr>
+        ))}
       </tbody>
     </table>
     )}

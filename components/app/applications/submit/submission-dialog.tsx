@@ -28,11 +28,14 @@ import { REFERENCE_KIND_LABEL, SUBMITTED_VIA_LABEL } from "./labels";
 import { Overlay } from "./overlay";
 import { useReferenceCheck } from "./reference-check";
 import { Warning } from "./warning-line";
+import { toZonedInput, zonedInputToIso, zoneShortName } from "@/lib/applications/zonedInput";
 
-/** `YYYY-MM-DDTHH:mm` in local time, for a datetime-local input. */
-export function toLocalInput(d: Date) {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+/**
+ * `YYYY-MM-DDTHH:mm` for a datetime-local input, on the agency's clock when its zone is given (QA
+ * 2026-11-03: the field showed the browser's time, the recorded card the agency's), else the browser's.
+ */
+export function toLocalInput(d: Date, timeZone?: string) {
+  return toZonedInput(d, timeZone);
 }
 
 export type CaptureSeed = { reference: string; submittedAt: string; attachment: Attachment | null };
@@ -61,10 +64,10 @@ export function SubmissionDialog({ open, onOpenChange, existing, extensionDetect
 function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: {
   open: boolean; onOpenChange: (open: boolean) => void; existing: SubmissionView | null; extensionDetected: boolean; seed: CaptureSeed | null;
 }) {
-  const { caseView, attempt, qa, sample, actions, updateAttempt } = useWorkspace();
+  const { caseView, attempt, qa, sample, actions, updateAttempt, timeZone } = useWorkspace();
   const [chosenKind, setKind] = useState<NonNullable<SubmissionView["referenceKind"]> | null>(existing?.referenceKind ?? null);
   const [reference, setReference] = useState(existing?.carrierReference ?? seed?.reference ?? "");
-  const [at, setAt] = useState(() => (existing ? toLocalInput(new Date(existing.submittedAt)) : seed?.submittedAt || toLocalInput(new Date())));
+  const [at, setAt] = useState(() => (existing ? toLocalInput(new Date(existing.submittedAt), timeZone) : seed?.submittedAt || toLocalInput(new Date(), timeZone)));
   const [via, setVia] = useState<SubmissionView["submittedVia"]>(existing?.submittedVia ?? (extensionDetected ? "extension" : "copy_assist"));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -78,7 +81,10 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
   // reference_pattern, LA-3.15 / LA-4.17) is taken as the policy number, so a carrier file can link
   // to this sale by number (LA-4.8 step 2). Anything else defaults to the application number.
   const kind: NonNullable<SubmissionView["referenceKind"]> = chosenKind ?? (ref && check.format === "match" ? "policy_no" : "application_no");
-  const atValid = Boolean(at) && !Number.isNaN(new Date(at).getTime()) && new Date(at).getTime() <= openedAt + 10 * 60_000;
+  // The typed time is the agency's wall clock: read it in that zone, not the browser's.
+  const atIso = zonedInputToIso(at, timeZone);
+  const atValid = atIso !== null && new Date(atIso).getTime() <= openedAt + 10 * 60_000;
+  const zone = zoneShortName(atIso ? new Date(atIso) : new Date(openedAt), timeZone);
   const verdict = existing?.qaVerdict ?? qa.verdict;
   const canAttach = !existing?.hasConfirmation;
   const subtitle = [attempt.carrierName, `attempt ${attempt.attemptNo}`, caseView.clientName].filter(Boolean).join(" · ");
@@ -112,10 +118,10 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
         return;
       }
 
-      const recorded = await actions.recordSubmission({ reference: ref || null, referenceKind: kind, submittedAt: new Date(at).toISOString(), submittedVia: via });
+      const recorded = await actions.recordSubmission({ reference: ref || null, referenceKind: kind, submittedAt: (atIso ?? ""), submittedVia: via });
       if (!recorded) { setError("The submission wasn't recorded — everything you typed is still here. Try again."); return; }
       if (sample) {
-        updateAttempt({ status: "submitted", submittedAt: new Date(at).toISOString(), submissions: [...attempt.submissions, { id: recorded.submissionId, attemptNo: attempt.attemptNo, carrierReference: ref || null, referenceKind: ref ? kind : null, policyNumber: ref && kind === "policy_no" ? ref : null, submittedAt: new Date(at).toISOString(), submittedVia: via, hasConfirmation: Boolean(file), qaVerdict: verdict }] });
+        updateAttempt({ status: "submitted", submittedAt: (atIso ?? ""), submissions: [...attempt.submissions, { id: recorded.submissionId, attemptNo: attempt.attemptNo, carrierReference: ref || null, referenceKind: ref ? kind : null, policyNumber: ref && kind === "policy_no" ? ref : null, submittedAt: (atIso ?? ""), submittedVia: via, hasConfirmation: Boolean(file), qaVerdict: verdict }] });
         notify.done("Sample data — nothing was saved");
         onOpenChange(false);
         return;
@@ -169,7 +175,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
       {ref && check.format === "mismatch" && <Warning>{check.example ? `${check.carrierName ?? "This carrier"}'s references look like ${check.example}. Check it against the confirmation — it still saves.` : "Check it against the confirmation — it still saves."}</Warning>}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Submitted at" htmlFor="submission-at" error={atValid ? undefined : "Enter when it was submitted — not in the future."}>
+        <Field label={zone ? `Submitted at (${zone})` : "Submitted at"} htmlFor="submission-at" hint={timeZone ? "In the agency's time zone." : undefined} error={atValid ? undefined : "Enter when it was submitted — not in the future."}>
           <input id="submission-at" type="datetime-local" className={control} value={at} onChange={(e) => setAt(e.target.value)} disabled={Boolean(existing)} />
         </Field>
         <Field label="Submitted by" htmlFor="submission-by">

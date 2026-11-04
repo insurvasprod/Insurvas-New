@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { ViewTabs } from "@/components/app/book-of-business-views";
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import { MATCH_FIELD_LABELS, MATCH_FIELDS, type FieldOutcome } from "@/lib/inges
 import type { LinkRow, MappedAgent, ReviewRow, UnmappedAgent } from "@/lib/ingestion/policyMatchingStore";
 import { notify } from "@/lib/notify";
 
-type Tab = "review" | "links" | "agents";
+export type PolicyMatchingTab = "review" | "links" | "agents";
 const METHOD_LABEL: Record<string, string> = { submission_record: "Submission record", policy_number_exact: "Issued policy number", human: "A person", ai_review: "AI review", import: "Import", no_match: "New client from the file", identity_exact: "Same name and date of birth" };
 const TYPE_LABEL: Record<string, string> = { deal_flow: "Deal", application: "Application", contact: "Client", provisional: "No client found" };
 const OUTCOME_CLASS: Record<FieldOutcome, string> = { match: "text-[var(--success-ink)]", partial: "text-[var(--warning-ink)]", mismatch: "text-[var(--error-ink)]", missing: "text-muted-foreground" };
@@ -30,10 +30,9 @@ const nameOf = (p: { firstName?: string | null; lastName?: string | null }) => [
  * LA-4.8 (Notion sprint) · policies to link, the links made, and agent codes to map. A person picks
  * the client for a policy whose number we don't hold; the AI does it once a provider is configured.
  */
-export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, members, carriers, readOnly, aiNote, initialTab = "review" }: { reviews: ReviewRow[]; links: LinkRow[]; unmapped: UnmappedAgent[]; mapped: MappedAgent[]; members: Array<{ userId: string; name: string; role: string }>; carriers: Array<{ id: string; name: string }>; readOnly: boolean; aiNote: string; initialTab?: Tab }) {
+export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, members, carriers, readOnly, aiNote, tab = "review" }: { reviews: ReviewRow[]; links: LinkRow[]; unmapped: UnmappedAgent[]; mapped: MappedAgent[]; members: Array<{ userId: string; name: string; role: string }>; carriers: Array<{ id: string; name: string }>; readOnly: boolean; aiNote: string; /** The view the page's title-line tabs chose (?tab=). */ tab?: PolicyMatchingTab }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
-  const [tab, setTab] = useState<Tab>(initialTab);
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -78,6 +77,26 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
     }
   }
 
+  // §11: undoing a link or a mapping loses something, so each asks first.
+  async function reopen(link: LinkRow) {
+    const ok = await confirmAction({
+      title: `Reopen policy ${link.policyNumber}?`,
+      description: `Its link to ${link.clientName ?? "this client"} is removed and the policy goes back to To review until someone picks the client again.`,
+      confirmLabel: "Reopen link",
+      cancelLabel: "Keep link",
+    });
+    if (ok) await post(`reopen-${link.id}`, { action: "reopen", match_id: link.id }, "Back in the review queue.");
+  }
+  async function unmap(agent: MappedAgent) {
+    const ok = await confirmAction({
+      title: `Unmap agent code ${agent.agentIdentifier}?`,
+      description: `Policies ${agent.carrierName} files under this code stop crediting ${agent.userName} until the code is mapped again.`,
+      confirmLabel: "Unmap code",
+      cancelLabel: "Keep mapping",
+    });
+    if (ok) await post(`unmap-${agent.id}`, { action: "unmap_agent", map_id: agent.id }, "Mapping removed.");
+  }
+
   const toolbar = (
     <DataToolbar actions={<>
       {q && <ClearFiltersButton onClick={() => search("")} />}
@@ -90,17 +109,8 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
 
   return (
     <>
-      <ViewTabs<Tab>
-        label="Policy matching views"
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { key: "review", label: "To review", count: reviews.length },
-          { key: "links", label: "Links", count: links.length },
-          { key: "agents", label: "Agent codes", count: unmapped.length },
-        ]}
-      />
-
+      {/* The tabs are on the title line (the page's `lead`); this is the panel they switch. */}
+      <div id="policy-matching-panel" role="tabpanel" aria-labelledby={`policy-matching-panel-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
       {tab === "review" && (
         <TableCard toolbar={toolbar} footer={visibleReviews.length ? <Pager page={shownReviews.current} pageSize={pageSize} total={visibleReviews.length} noun="policies" onPage={setReviewPage} /> : undefined}>
           {reviews.length === 0 ? <EmptyState title="Nothing to review" hint="Policies whose number we don't hold appear here with the closest clients." />
@@ -144,7 +154,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                       <td>{link.clientName ?? TYPE_LABEL[link.type] ?? link.type}</td>
                       <td>{METHOD_LABEL[link.method] ?? link.method}{link.confidence !== null ? ` · ${link.confidence}%` : ""}</td>
                       <td className="tabular-nums">{fileDay(link.createdAt.slice(0, 10))}</td>
-                      <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`reopen-${link.id}`, { action: "reopen", match_id: link.id }, "Back in the review queue.")}>Reopen</Button>}</td>
+                      <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void reopen(link)}>Reopen</Button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -168,7 +178,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
                         <td>{agent.carrierName}</td>
                         <td className="text-right tabular-nums">{agent.policies ? agent.policies.toLocaleString("en-US") : <span className="text-muted-foreground" title="No file has carried this code yet">0</span>}</td>
                         <td>{agent.userName}<span className="block text-xs text-muted-foreground">Mapped</span></td>
-                        <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void post(`unmap-${agent.id}`, { action: "unmap_agent", map_id: agent.id }, "Mapping removed.")}>Unmap</Button>}</td>
+                        <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void unmap(agent)}>Unmap</Button>}</td>
                       </tr>
                     );
                     const key = `${agent.carrierId}|${agent.agentIdentifier}`;
@@ -192,6 +202,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             )}
         </TableCard>
       )}
+      </div>
 
       <Dialog open={adding} onOpenChange={(next) => { if (!busy) setAdding(next); }}>
         <DialogContent className="sm:max-w-md">
@@ -209,7 +220,7 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             </div>
             <div className="grid gap-1.5">
               <Label htmlFor="agent-code-code">Agent code</Label>
-              <Input id="agent-code-code" className="h-9 font-mono" spellCheck={false} autoComplete="off" placeholder="e.g. 7771102512" value={newCode.code} onChange={(e) => setNewCode({ ...newCode, code: e.target.value })} />
+              <Input id="agent-code-code" className="font-mono" spellCheck={false} autoComplete="off" placeholder="e.g. 7771102512" value={newCode.code} onChange={(e) => setNewCode({ ...newCode, code: e.target.value })} />
               <p className="m-0 text-xs text-muted-foreground">Exactly as the carrier writes it in its files: same letters, digits and dashes.</p>
             </div>
             <div className="grid gap-1.5">

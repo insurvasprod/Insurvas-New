@@ -9,6 +9,8 @@ import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
 import { CommissionsPage } from "@/components/app/commissions/commissions-page";
 import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies } from "@/lib/discrepancies/service";
 import { Callout } from "@/components/app/settings/primitives";
+import { StepSlotTarget } from "@/components/app/step-frame/step-slot";
+import { PAY_ISSUES_SLOT } from "@/components/app/commissions/slots";
 
 /**
  * Book of Business › Discrepancies: "You appear to be owed $X".
@@ -23,6 +25,10 @@ import { Callout } from "@/components/app/settings/primitives";
  * now"), never because someone opened it. Owner and bookkeeper (`statements.view`), as the menu
  * item. A read-only account reads it and can print a letter, but cannot record decisions.
  * The old "From imported statements" address (?view=statements) lands on the list, filtered to it.
+ *
+ * Board 13 (2026-11-03): the tabs are Open · Letters out · Closed (`?view=letters`, `?view=closed`). Open reads as
+ * groups by cause and carrier, each with its Review page; "Group alike" off is the flat list with every decision.
+ * The title line's one primary, "Review the largest", is filled by the list through PAY_ISSUES_SLOT.
  */
 export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<{ view?: string; source?: string }> }) {
   const guard = await guardPage("discrepancy_report");
@@ -49,6 +55,9 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
     note: item.note, statusChangedByName: item.statusChangedByName, statusChangedAt: item.statusChangedAt, history: item.history,
   }));
   const working = (found.available ? found.items.filter((i) => i.status === "open" || i.status === "disputed").length : 0) + hand.filter((i) => i.status === "open" || i.status === "disputed").length;
+  // A letter is out until the carrier's answer is recorded (board 24: "Sent letters wait in Pay issues › Letters out").
+  const lettersOut = found.available ? found.disputes.filter((d) => d.status === "draft" || d.status === "sent" || d.status === "acknowledged").length : 0;
+  const tab = view === "letters" ? "letters" : view === "closed" ? "closed" : "open";
 
   return (
     <CommissionsPage
@@ -56,13 +65,15 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
       lead={
         <ViewTabs
             label="Pay issue views"
-            active={view === "letters" ? "letters" : "items"}
+            active={tab}
             tabs={[
-              { key: "items", label: "Issues", count: view === "letters" ? undefined : working, href: "/app/discrepancies" },
-              { key: "letters", label: "Letters", href: "/app/discrepancies?view=letters" },
+              { key: "open", label: "Open", count: view === "letters" ? undefined : working, href: "/app/discrepancies" },
+              { key: "letters", label: "Letters out", count: lettersOut || undefined, href: "/app/discrepancies?view=letters" },
+              { key: "closed", label: "Closed", href: "/app/discrepancies?view=closed" },
             ]}
         />
       }
+      actions={tab === "open" ? <StepSlotTarget id={PAY_ISSUES_SLOT} /> : undefined}
     >
       {!found.available && <Callout tone="warning" title={<>{DISCREPANCIES_PENDING_MESSAGE}</>} />}
       {list && !list.available && <Callout tone="warning" title={<>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</>} />}
@@ -78,6 +89,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
           handCanWrite={!readOnly}
           handBlockedReason={readOnly ? "Reading and printing remain available; decisions are paused while the account is read-only." : null}
           initialSource={view === "statements" ? "hand" : source ?? ""}
+          initialStatus={tab === "closed" ? "closed" : "open"}
         />
       )}
     </CommissionsPage>

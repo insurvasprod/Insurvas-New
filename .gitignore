@@ -17,3 +17,6 @@ scripts/*.tmp.*
 /Claude outputs/
 /results.jsonl
 /lead-import-ready.csv
+
+# Graphify code graph (generated, ~50 MB; rebuild with `graphify update .`)
+graphify-out/

@@ -396,12 +396,14 @@ export function TopBarShell({
   // ---- this person's workspaces: read once, drawn only when there is a choice ----
   useEffect(() => {
     if (!workspacesEndpoint) return;
-    const controller = new AbortController();
-    fetch(workspacesEndpoint, { cache: "no-store", signal: controller.signal })
+    // A stale answer is ignored, not aborted: aborting on unmount surfaced as an uncaught AbortError in dev
+    // on every page change (walk 2026-11-03), as the step rail's did.
+    let stale = false;
+    fetch(workspacesEndpoint, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((body: { workspaces?: TopBarWorkspace[] } | null) => { if (body?.workspaces) setWorkspaces(body.workspaces); })
+      .then((body: { workspaces?: TopBarWorkspace[] } | null) => { if (!stale && body?.workspaces) setWorkspaces(body.workspaces); })
       .catch(() => { /* No row is the honest fallback: a switch that cannot list its choices cannot switch. */ });
-    return () => controller.abort();
+    return () => { stale = true; };
   }, [workspacesEndpoint]);
 
   // ---- the sidebar's workspace card opens the account menu at the workspace switch ----

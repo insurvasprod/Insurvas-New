@@ -247,7 +247,7 @@ export function StatementImportButton({
   return (
     <>
       <Button type="button" onClick={() => setOpen(true)}>
-        Import statement
+        Import a statement
       </Button>
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) reset(); }}>
         <DialogContent className="max-h-[calc(100vh-4rem)] overflow-y-auto sm:max-w-3xl">

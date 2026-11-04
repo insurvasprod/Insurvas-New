@@ -2,12 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
+import { Callout } from "@/components/app/settings/primitives";
 import { StatementFileButton, StatementManualEntry } from "@/components/app/statement-manual-entry";
 import { StatementActions, StatementReview } from "@/components/app/statement-review";
-import { PageHeader } from "@/components/ui/page-header";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, isRecordId, statementDay, statementMoney, statementPeriod } from "@/lib/ledger/statementConstants";
 import { getStatementDetail } from "@/lib/ledger/statementService";
 
@@ -22,6 +24,11 @@ import { getStatementDetail } from "@/lib/ledger/statementService";
  *
  * 2026-10-06 redesign: the statement's actions (Original file, Re-process, Void) are grouped top
  * right in the header; the review below it is one full-height list.
+ *
+ * Foundation pass 2026-11-03: the page sits in the Book of business frame (step "files", so the rail shows)
+ * with the trail Book of business › Files › Statements › the statement. No notice boxes on the page
+ * (UI-CONSISTENCY §3): a pending update goes to the bell; a voided statement is a chip on the title line,
+ * its date, person and reason in the facts line, and its actions disabled.
  */
 export default async function StatementPage({ params }: { params: Promise<{ id: string }> }) {
   const guard = await guardPage("statement_ingestion");
@@ -36,16 +43,13 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
   if (!isRecordId(id)) notFound();
   const { available, detail } = await getStatementDetail(guard.context.tenantId, id);
   // A detail page's way back is the trail above its title (owner 2026-10-30).
-  const trail = (current: string) => [{ label: "Book of business" }, { label: "Files", href: "/app/carrier-files" }, { label: "Statements", href: "/app/statements" }, { label: current }];
+  const trail = (current: string) => [{ label: "Book of business", href: "/app/carrier-files" }, { label: "Files", href: "/app/carrier-files" }, { label: "Statements", href: "/app/statements" }, { label: current }];
 
   if (!available) {
     return (
-      <div className="m-stagger flex flex-col gap-6">
-        <PageHeader title="Statement" breadcrumbs={trail("Statement")} />
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
-          {STATEMENT_SCHEMA_PENDING_MESSAGE}
-        </div>
-      </div>
+      <DataInPage step="files" title="Statement" breadcrumbs={trail("Statement")}>
+        <Callout tone="warning" title={STATEMENT_SCHEMA_PENDING_MESSAGE} />
+      </DataInPage>
     );
   }
   if (!detail) notFound();
@@ -57,31 +61,27 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
   const waiting = statement.counts.proposed + statement.counts.unmatched;
   const kindLabel = statement.fileKind === "pdf" ? "PDF" : statement.fileKind === "xlsx" ? `Excel${statement.sheetName ? `, sheet “${statement.sheetName}”` : ""}` : "CSV";
   const canReprocess = statement.hasFile && statement.fileKind !== "pdf" && statement.headers.length > 0 && !voided;
+  const name = `${statement.carrierName} · ${statementPeriod(statement.periodStart, statement.periodEnd)}`;
+  const voidedLine = voided ? `Voided${statement.voidedAt ? ` ${statementDay(statement.voidedAt)}` : ""}${statement.voidedByName ? ` by ${statement.voidedByName}` : ""}` : null;
 
   return (
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title={`${statement.carrierName} · ${statementPeriod(statement.periodStart, statement.periodEnd)}`}
-        breadcrumbs={trail(`${statement.carrierName} · ${statementPeriod(statement.periodStart, statement.periodEnd)}`)}
-        description={`${statement.fileName} · ${kindLabel} · imported ${statementDay(statement.uploadedAt)}${statement.uploadedByName ? ` by ${statement.uploadedByName}` : ""} · ${awaitingEntry ? "lines not entered yet" : `${statement.rowCount.toLocaleString("en-US")} ${statement.rowCount === 1 ? "line" : "lines"}`}`}
-        actions={<>
-          {statement.hasFile && <StatementFileButton statementId={statement.id} />}
-          {!awaitingEntry && <StatementActions statementId={statement.id} canWrite={!readOnly && !voided} reprocess={canReprocess ? { headers: statement.headers, mapping: statement.mapping } : null} />}
-        </>}
-      />
-
-      {statement.reprocessedFrom && (
-        <p role="status" className="text-sm text-muted-foreground">
-          Re-processed from the stored file of an earlier import, which is voided and kept: <Link className="font-semibold text-foreground underline-offset-2 hover:underline" href={`/app/statements/${statement.reprocessedFrom}`}>open the earlier import</Link>.
+    <DataInPage
+      step="files"
+      title={name}
+      breadcrumbs={trail(name)}
+      chip={voidedLine ? <span title={`${voidedLine} · “${statement.voidReason ?? ""}” Its lines no longer post to the commission ledger.`}><StatusChip tone="danger">Voided</StatusChip></span> : undefined}
+      facts={
+        <p className="m-0 mt-1 flex min-w-0 flex-wrap gap-x-1.5 text-sm leading-normal text-muted-foreground">
+          <span>{statement.fileName} · {kindLabel} · imported {statementDay(statement.uploadedAt)}{statement.uploadedByName ? ` by ${statement.uploadedByName}` : ""} · {awaitingEntry ? "lines not entered yet" : `${statement.rowCount.toLocaleString("en-US")} ${statement.rowCount === 1 ? "line" : "lines"}`}</span>
+          {voidedLine && <span>· {voidedLine}: &ldquo;{statement.voidReason}&rdquo;, its lines no longer post</span>}
+          {statement.reprocessedFrom && <span>· <Link className="text-[var(--accent-ink)] hover:underline" href={`/app/statements/${statement.reprocessedFrom}`} title="Re-processed from the stored file of an earlier import, which is voided and kept">re-processed from an earlier import</Link></span>}
         </p>
-      )}
-
-      {voided && (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">
-          <span className="font-semibold">Voided{statement.voidedAt ? ` ${statementDay(statement.voidedAt)}` : ""}{statement.voidedByName ? ` by ${statement.voidedByName}` : ""}</span> · &ldquo;{statement.voidReason}&rdquo; Its lines no longer post to the commission ledger.
-        </div>
-      )}
-
+      }
+      actions={<>
+        {statement.hasFile && <StatementFileButton statementId={statement.id} />}
+        {!awaitingEntry && <StatementActions statementId={statement.id} canWrite={!readOnly && !voided} voided={voided} reprocess={canReprocess ? { headers: statement.headers, mapping: statement.mapping } : null} />}
+      </>}
+    >
       {awaitingEntry ? (
         <StatementManualEntry
           statementId={statement.id}
@@ -106,6 +106,6 @@ export default async function StatementPage({ params }: { params: Promise<{ id: 
         writeBlockedReason={readOnly ? "Reading remains available; decisions are paused while the account is read-only." : null}
       />
       </>}
-    </div>
+    </DataInPage>
   );
 }

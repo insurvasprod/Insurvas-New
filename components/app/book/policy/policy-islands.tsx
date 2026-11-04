@@ -8,20 +8,14 @@ import { Copy, Download, MoreHorizontal, Undo2, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { UnderlineTabs, type ViewTab } from "@/components/ui/view-tabs";
 import { notify } from "@/lib/notify";
-import { historyCsv, type PolicyHistoryRow, type PolicyTab } from "@/lib/ingestion/policyPage";
+import { historyCsv, type PolicyHistoryRow } from "@/lib/ingestion/policyPage";
 
 /**
- * The policy page's small client parts (Book of business, round 2): the record's tabs, Copy policy number,
- * the History export, Unlink and Undo. Each pop-up only confirms; every edit lives on a page or a tab.
+ * The policy page's small client parts (Book of business, round 2): Copy policy number, the History export,
+ * Unlink and Undo. Each pop-up only confirms; every edit lives on a page or a tab. The record's tabs are
+ * link ViewTabs on the title line (UI-CONSISTENCY §8a), drawn by the page itself.
  */
-
-/** The record's tabs as `?tab=` links: the server draws the chosen tab, so a tab is shareable and Back works. */
-export function PolicyTabs({ tabs, value, hrefs }: { tabs: ReadonlyArray<ViewTab<PolicyTab>>; value: PolicyTab; hrefs: Record<string, string> }) {
-  const router = useRouter();
-  return <UnderlineTabs label="This policy" tabs={tabs} value={value} onChange={(key) => router.push(hrefs[key], { scroll: false })} />;
-}
 
 function copyPolicyNumber(policyNumber: string) {
   void navigator.clipboard?.writeText(policyNumber).then(
@@ -41,10 +35,11 @@ export function CopyPolicyNumber({ policyNumber }: { policyNumber: string }) {
 export type MoreLink = { label: string; href: string };
 
 /**
- * Round 3 (docs/la4/POLISH-ROUND3.md): a detail page shows at most two buttons; the rest sit in this "More"
- * menu — the links that didn't fit, and Copy policy number.
+ * Round 3 (docs/la4/POLISH-ROUND3.md), round 5 (board 7): a detail page shows one button and this "More" menu —
+ * the links that didn't fit (Change client, Add a note), Unlink (asks first), and Copy policy number.
  */
-export function PolicyMoreMenu({ links, policyNumber }: { links: MoreLink[]; policyNumber: string }) {
+export function PolicyMoreMenu({ links, policyNumber, unlink }: { links: MoreLink[]; policyNumber: string; unlink?: UnlinkTarget | null }) {
+  const run = useUnlink();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -54,6 +49,7 @@ export function PolicyMoreMenu({ links, policyNumber }: { links: MoreLink[]; pol
         {links.map((link) => (
           <DropdownMenuItem key={link.href} asChild><Link href={link.href}>{link.label}</Link></DropdownMenuItem>
         ))}
+        {unlink && <DropdownMenuItem disabled={run.busy || Boolean(unlink.disabledReason)} onSelect={() => void run.unlink(unlink)}><Unlink aria-hidden="true" />Unlink</DropdownMenuItem>}
         <DropdownMenuItem onSelect={() => copyPolicyNumber(policyNumber)}><Copy aria-hidden="true" />Copy policy number</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -85,10 +81,13 @@ export function ExportHistory({ rows, policyNumber }: { rows: PolicyHistoryRow[]
  * Unlink, after asking: Policy matching's own "reopen" (POST /api/app/policy-matching). The policy goes back
  * to Needs you with a fresh shortlist; its link stands until a person decides there, so no money moves now.
  */
-export function UnlinkClient({ matchId, clientName, disabledReason }: { matchId: string; clientName: string | null; disabledReason: string | null }) {
+export type UnlinkTarget = { matchId: string; clientName: string | null; disabledReason: string | null };
+
+/** The one Unlink flow, for the Client tab's button and the header's More menu. */
+function useUnlink() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const unlink = async () => {
+  const unlink = async ({ matchId, clientName }: UnlinkTarget) => {
     const ok = await confirmAction({
       title: "Unlink this client?",
       description: `The policy goes back to Needs you to choose its client again${clientName ? `, with ${clientName} among the choices` : ""}. Until someone decides, it stays linked as it is now.`,
@@ -109,8 +108,13 @@ export function UnlinkClient({ matchId, clientName, disabledReason }: { matchId:
       setBusy(false);
     }
   };
+  return { busy, unlink };
+}
+
+export function UnlinkClient({ matchId, clientName, disabledReason }: UnlinkTarget) {
+  const run = useUnlink();
   return (
-    <Button type="button" variant="outline" disabled={busy || Boolean(disabledReason)} title={disabledReason ?? undefined} onClick={() => void unlink()}>
+    <Button type="button" variant="outline" disabled={run.busy || Boolean(disabledReason)} title={disabledReason ?? undefined} onClick={() => void run.unlink({ matchId, clientName, disabledReason })}>
       <Unlink aria-hidden="true" />Unlink
     </Button>
   );

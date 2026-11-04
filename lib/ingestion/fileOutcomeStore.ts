@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
+import { fileLineExpectedCents } from "@/lib/commissions/lineExpected";
 import { mapLimit } from "@/lib/retention/batch";
 
 import { fileStages, linkMethodLabel, needsCount, notInFile, rowOutcome, whereItIs, ROW_OUTCOMES, type FileStage, type FileStageFacts, type FileStageView, type RowOutcome, type WhereItIs } from "./fileStages";
@@ -485,7 +486,7 @@ export const loadFileCommissions = cache(async (tenantId: string, fileId: string
   const [current, expected, findings] = await Promise.all([
     chunked(policies, (part) => db().from("policy_current").select("policy_number, contact_id").eq("tenant_id", tenantId).eq("carrier_id", head.carrierId).in("policy_number", part)),
     chunked(policies, (part) => db().from("expected_commission").select("policy_number, policy_year, confidence, expected_amount_cents, expected_advance_cents").eq("tenant_id", tenantId).eq("carrier_id", head.carrierId).eq("policy_year", 1).in("policy_number", part)),
-    chunked(policies, (part) => db().from("commission_discrepancy").select("id, policy_number, discrepancy_type, difference_cents, status").eq("tenant_id", tenantId).eq("carrier_id", head.carrierId).in("status", ["open", "disputed"]).in("policy_number", part)),
+    chunked(policies, (part) => db().from("commission_discrepancy").select("id, policy_number, discrepancy_type, difference_cents, expected_amount_cents, status").eq("tenant_id", tenantId).eq("carrier_id", head.carrierId).in("status", ["open", "disputed"]).in("policy_number", part)),
   ]);
   const contacts = await chunked(current.map((c) => c.contact_id).filter(Boolean), (part) => db().from("contacts").select("id, first_name, last_name").eq("tenant_id", tenantId).in("id", part));
   const contactBy = new Map<string, Loose>(contacts.map((c) => [c.id, c]));
@@ -501,9 +502,14 @@ export const loadFileCommissions = cache(async (tenantId: string, fileId: string
     const paid = group.reduce((sum, l) => sum + Number(l.amount_cents), 0);
     const exp = expectedBy.get(policy);
     const advances = group.some((l) => (l.corrects_type ?? l.entry_type) === "advance");
-    const expectedCents = exp && exp.confidence !== "no_rate_card" ? Number((advances ? exp.expected_advance_cents : null) ?? exp.expected_amount_cents ?? 0) : null;
     const finding = findingBy.get(policy);
     const types = [...new Set(group.map((l) => (l.entry_type === "reversal" && l.corrects_type ? `reversal of ${l.corrects_type}` : l.entry_type).replaceAll("_", " ")))];
+    // QA 2026-11-03: a chargeback line's Expected is what its finding expected ($0.00 for an unexpected one), never the
+    // policy's first-year commission (lib/commissions/lineExpected.ts, as Pay issues).
+    const expectedCents = fileLineExpectedCents(
+      { types, expectedCents: exp && exp.confidence !== "no_rate_card" ? Number((advances ? exp.expected_advance_cents : null) ?? exp.expected_amount_cents ?? 0) : null },
+      finding ? { type: String(finding.discrepancy_type), expectedCents: finding.expected_amount_cents == null ? null : Number(finding.expected_amount_cents) } : null,
+    );
     let result: CommissionGroup["result"];
     if (!currentBy.has(policy)) { waiting += group.length; result = { label: "Waits for the policy", tone: "neutral" }; }
     else if (finding) {

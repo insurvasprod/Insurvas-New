@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+import { ChevronDown } from "lucide-react";
+
+import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -153,11 +157,19 @@ export function RetentionBoard({ rows, rates, readOnly }: { rows: BoardEntry[]; 
                       ) : <span className="text-muted-foreground">Never</span>}
                     </td>
                     <td className="text-right">
+                      {/* A menu of outcomes (§11 row actions): choosing one is the deliberate act that logs, never a select's change. */}
                       {!readOnly && (
-                        <select aria-label={`Log the call to ${row.clientName ?? row.policyNumber}`} className={`${toolbarControl} w-[180px]`} value="" disabled={busy !== null} onChange={(e) => { if (e.target.value) void log(row, e.target.value); }}>
-                          <option value="">{busy === row.key ? "Logging…" : "Log the call…"}</option>
-                          {OUTCOMES.map((o) => <option key={o} value={o}>{OUTCOME_LABELS[o]}</option>)}
-                        </select>
+                        <DropdownMenu modal={false}>
+                          <DropdownMenuTrigger asChild>
+                            <Button type="button" size="sm" variant="outline" disabled={busy !== null} aria-label={`Log the call to ${row.clientName ?? row.policyNumber}`}>
+                              {busy === row.key ? "Logging…" : "Log the call"}<ChevronDown aria-hidden="true" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>What happened</DropdownMenuLabel>
+                            {OUTCOMES.map((o) => <DropdownMenuItem key={o} onSelect={() => void log(row, o)}>{OUTCOME_LABELS[o]}</DropdownMenuItem>)}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                     </td>
                   </tr>,

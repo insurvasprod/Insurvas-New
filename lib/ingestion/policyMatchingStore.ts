@@ -8,7 +8,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { annualisedPremiumCents } from "./policyCurrent";
-import { accuracy, isStrong, ladderShare, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type Scored } from "./policyMatching";
+import { accuracy, applicationNumberIsThePolicy, isStrong, ladderShare, rankSaleChoices, saleApplicationFor, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type SaleChoice, type Scored } from "./policyMatching";
 import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { closeAnsweredItems, noRecordPolicy, openImportSummary, retireProvisional } from "./exceptionQueuesStore";
@@ -19,7 +19,8 @@ import { allRows } from "./pages";
  * LA-4.8 (Notion sprint) · the matching ladder, server side.
  *
  *   1. a policy that already has a current link — nothing to do;
- *   2. its number on an LA-3.15 submission → `submission_record`; on our own LA-2.17 issued policy →
+ *   2. its number on an LA-3.15 submission (as the policy number, or as the application number when the
+ *      insured's surname and date of birth agree) → `submission_record`; on our own LA-2.17 issued policy →
  *      `policy_number_exact`. Linked with certainty, no AI;
  *   3. otherwise a scored shortlist (deal flow and applications, same carrier, the agent's own when
  *      the carrier's agent string is mapped, up to 14 days before the file) goes to the review queue.
@@ -191,6 +192,32 @@ async function fillSaleClients(tenantId: string, carrierId: string, policies: st
   }
 }
 
+/**
+ * Step 2's third source: a submission recorded with the carrier's application number (the default kind)
+ * that equals the policy number, kept only when the carrier's row and the application name the same
+ * insured (applicationNumberIsThePolicy). Read failures fail loudly, as the rest of step 2.
+ */
+async function sameNumberApplications(tenantId: string, carrier: { id: string }, policies: string[]): Promise<Loose[]> {
+  const subs = rowsOrFail(await db().from("tenant_application_submissions").select("application_id, policy_number, carrier_reference, submitted_at").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).eq("reference_kind", "application_no").in("carrier_reference", policies), "Could not read the submitted application numbers");
+  if (!subs.length) return [];
+  const [snapshots, values] = await Promise.all([
+    latestSnapshots(tenantId, carrier.id, [...new Set(subs.map((row: Loose) => row.carrier_reference as string))]),
+    db().from("tenant_application_values").select("application_id, field_key, value").eq("tenant_id", tenantId).in("application_id", [...new Set(subs.map((row: Loose) => row.application_id))]).in("field_key", ["insured.dob", "insured.last_name"]),
+  ]);
+  const insured = new Map<string, { lastName: string | null; dob: string | null }>();
+  for (const row of rowsOrFail(values, "Could not read the submitted applications' insured")) {
+    const person = insured.get(row.application_id) ?? { lastName: null, dob: null };
+    if (row.field_key === "insured.dob") person.dob = str(row.value);
+    else person.lastName = str(row.value);
+    insured.set(row.application_id, person);
+  }
+  return subs.filter((row: Loose) => {
+    const snapshot = snapshots.get(row.carrier_reference);
+    const person = insured.get(row.application_id);
+    return Boolean(snapshot && person && applicationNumberIsThePolicy(carrierSide(snapshot, ""), person));
+  });
+}
+
 /** Step 2: the policies whose number we already hold. Returns those it linked. */
 async function linkExact(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[]): Promise<Set<string>> {
   const linked = new Set<string>();
@@ -200,7 +227,7 @@ async function linkExact(tenantId: string, carrier: { id: string; name: string; 
     db().from("tenant_application_submissions").select("application_id, policy_number, carrier_reference, submitted_at").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).in("policy_number", policies),
     db().from("tenant_application_submissions").select("application_id, policy_number, carrier_reference, submitted_at").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).eq("reference_kind", "policy_no").in("carrier_reference", policies),
   ]);
-  const submissions = [...rowsOrFail(byNumber, "Could not read the submitted policy numbers"), ...rowsOrFail(byReference, "Could not read the submitted carrier references")].sort((a: Loose, b: Loose) => String(b.submitted_at).localeCompare(String(a.submitted_at)));
+  const submissions = [...rowsOrFail(byNumber, "Could not read the submitted policy numbers"), ...rowsOrFail(byReference, "Could not read the submitted carrier references"), ...(await sameNumberApplications(tenantId, carrier, policies))].sort((a: Loose, b: Loose) => String(b.submitted_at).localeCompare(String(a.submitted_at)));
   const appIds = [...new Set(submissions.map((row: Loose) => row.application_id))];
   const apps = appIds.length ? rowsOrFail(await db().from("tenant_applications").select("id, lead_id").eq("tenant_id", tenantId).in("id", appIds), "Could not read the submitted applications") : [];
   const leadOf = new Map<string, string>(apps.map((app: Loose) => [app.id, app.lead_id]));
@@ -269,6 +296,56 @@ export async function answerWithSale(tenantId: string, carrierId: string | null,
   } catch (error) {
     console.error("[policy-matching] the sale's policy could not be linked now", error instanceof Error ? error.message : error);
   }
+}
+
+/**
+ * QA 2026-11-03 (0119990010) · what a person's "this is the sale" link points at. The sale's one application
+ * with this carrier still waiting on it (saleApplicationFor) when there is one — so policy_current carries the
+ * application and recordCarrierIssues closes it as issued, stamps the number and moves the card, as a step-2
+ * link does — else the sale itself. The client is the sale's: the lead's, or one made from the lead
+ * (clientForLead) — never the stand-in made from the carrier's row, which the caller then retires. Null when
+ * the sale is not in this agency. Writes nothing but the lead's client.
+ */
+export async function saleLink(tenantId: string, carrierId: string, dealId: string, fallbackContactId: string | null = null): Promise<{ match: { matched_to_type: "application" | "deal_flow"; matched_to_id: string; contact_id: string | null }; leadId: string } | null> {
+  const { data: deal, error } = await db().from("deal_flow").select("id, lead_id").eq("tenant_id", tenantId).eq("id", dealId).maybeSingle();
+  if (error) fail(error, "Could not read the sale");
+  if (!deal?.lead_id) return null;
+  const apps = rowsOrFail(await db().from("tenant_applications").select("id, carrier_id, status").eq("tenant_id", tenantId).eq("lead_id", deal.lead_id).eq("carrier_id", carrierId), "Could not read the sale's applications");
+  const applicationId = saleApplicationFor(apps.map((app: Loose) => ({ id: app.id, carrierId: app.carrier_id, status: app.status })), carrierId);
+  const contactId = (await clientForLead(tenantId, deal.lead_id)) ?? fallbackContactId;
+  return {
+    match: applicationId ? { matched_to_type: "application", matched_to_id: applicationId, contact_id: contactId } : { matched_to_type: "deal_flow", matched_to_id: deal.id, contact_id: contactId },
+    leadId: deal.lead_id,
+  };
+}
+
+/**
+ * The "Link it to a sale…" choices for a no-record policy (QA 2026-11-03): the submitted sales of the last
+ * 120 days, ranked against the carrier's row (rankSaleChoices: best first with what agreed, then by recency).
+ * A read that fails is no choices, never a wrong order.
+ */
+export async function saleChoicesFor(tenantId: string, row: CarrierSide | null, limit = 25): Promise<SaleChoice[]> {
+  const since = new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10);
+  const { data: deals, error } = await db().from("deal_flow").select("id, lead_id, insured_name, phone, monthly_premium_cents, face_amount_cents, local_date")
+    .eq("tenant_id", tenantId).eq("call_result", "application_submitted").gte("local_date", since).order("local_date", { ascending: false }).order("id").limit(200);
+  if (error) return [];
+  const rows = (deals ?? []) as Loose[];
+  const leadIds = [...new Set(rows.map((d) => d.lead_id).filter(Boolean))] as string[];
+  const leadValues = new Map<string, Record<string, unknown>>();
+  for (let start = 0; row && start < leadIds.length; start += 100) {
+    const { data: leads } = await db().from("agent_leads").select("id, values").eq("tenant_id", tenantId).in("id", leadIds.slice(start, start + 100));
+    for (const lead of (leads ?? []) as Loose[]) leadValues.set(lead.id, lead.values && typeof lead.values === "object" ? lead.values : {});
+  }
+  const sales = rows.map((d) => {
+    const values = leadValues.get(d.lead_id) ?? {};
+    const split = splitName(d.insured_name ?? null);
+    const dob = leadText(values, ["date_of_birth", "dob"]);
+    return { type: "deal_flow" as const, id: d.id as string, contactId: null, date: d.local_date as string, name: (d.insured_name ?? "—") as string,
+      firstName: leadText(values, ["first_name"]) ?? split.firstName, lastName: leadText(values, ["last_name"]) ?? split.lastName,
+      dob: dob && /^\d{4}-\d\d-\d\d$/.test(dob) ? dob : null, phone: (d.phone ?? leadText(values, ["phone", "phone_number", "primary_phone"])) as string | null,
+      premiumCents: (d.monthly_premium_cents ?? null) as number | null, faceCents: (d.face_amount_cents ?? null) as number | null };
+  });
+  return rankSaleChoices(row, sales, limit);
 }
 
 /** Deal-flow entries and applications for one carrier between two dates, as comparable people. */
@@ -471,7 +548,9 @@ export async function resolveReview(scope: MatchingScope, reviewId: string, choi
   } else {
     const entry = (review.shortlist ?? [])[choice.ref];
     if (!entry) throw new MatchingError("Choose one of the shortlisted candidates.", 400);
-    match = { matched_to_type: entry.type, matched_to_id: entry.id, contact_id: entry.contactId ?? null };
+    // A sale picked: its one open application with this carrier, when it has one (saleLink), so the issue path runs.
+    const viaSale = entry.type === "deal_flow" ? await saleLink(scope.tenantId, review.carrier_id, entry.id, entry.contactId ?? null) : null;
+    match = viaSale ? viaSale.match : { matched_to_type: entry.type, matched_to_id: entry.id, contact_id: entry.contactId ?? null };
   }
   const matchId = await record(scope.tenantId, review.carrier_id, review.policy_number, { ...match, method: "human", ladder_step: 3, confirmed_by: scope.userId, created_by: scope.userId }, review.id);
   if ("none" in choice) {

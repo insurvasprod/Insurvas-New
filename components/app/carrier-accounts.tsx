@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,6 +13,7 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { Pager, paginate } from "@/components/ui/pager";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { accountTrend, statementProblem, type StatementCheck } from "@/lib/ingestion/carrierAccounts";
@@ -33,7 +34,6 @@ const toCents = (text: string): number | null => {
   const value = Number(match[2].replaceAll(",", "")) * 100 + Number((match[3] ?? "").padEnd(2, "0"));
   return match[1] ? -value : value;
 };
-const select = `${toolbarControl} w-full`;
 
 /**
  * LA-4.14 (Notion sprint) · each carrier's running account with the agent, statement by statement:
@@ -183,17 +183,17 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
           </DialogHeader>
           <fieldset disabled={busy} className="grid gap-3 text-sm">
             <div className="grid gap-3 sm:grid-cols-2">
-              <div className="grid gap-1"><Label htmlFor="ca-carrier">Carrier</Label><select id="ca-carrier" className={select} value={form.carrier ?? ""} onChange={(e) => setForm((now) => ({ ...now, carrier: e.target.value, file: "" }))}><option value="">Choose</option>{carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-              <div className="grid gap-1"><Label htmlFor="ca-file">Commission file</Label><select id="ca-file" className={select} value={form.file ?? ""} onChange={(e) => { const file = carrierFiles.find((f) => f.id === e.target.value); setForm((now) => ({ ...now, file: e.target.value, date: file?.fileDate ?? now.date })); }} disabled={!form.carrier}><option value="">None (totals only)</option>{carrierFiles.map((f) => <option key={f.id} value={f.id}>{f.label}</option>)}</select></div>
-              <div className="grid gap-1"><Label htmlFor="ca-date">Statement date</Label><Input id="ca-date" type="date" className="h-9" value={form.date ?? today} onChange={(e) => set("date", e.target.value)} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-carrier">Carrier</Label><SelectMenu id="ca-carrier" label="Carrier" className="w-full" matchTriggerWidth disabled={busy} value={form.carrier ?? ""} options={[{ value: "", label: "Choose" }, ...carriers.map((c) => ({ value: c.id, label: c.name }))]} onChange={(value) => setForm((now) => ({ ...now, carrier: value, file: "" }))} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-file">Commission file</Label><SelectMenu id="ca-file" label="Commission file" className="w-full" matchTriggerWidth disabled={busy || !form.carrier} value={form.file ?? ""} options={[{ value: "", label: "None (totals only)" }, ...carrierFiles.map((f) => ({ value: f.id, label: f.label }))]} onChange={(value) => { const file = carrierFiles.find((f) => f.id === value); setForm((now) => ({ ...now, file: value, date: file?.fileDate ?? now.date })); }} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-date">Statement date</Label><Input id="ca-date" type="date" value={form.date ?? today} onChange={(e) => set("date", e.target.value)} /></div>
             </div>
             <div className="grid gap-3 sm:grid-cols-3">
-              <div className="grid gap-1"><Label htmlFor="ca-open">Opening balance</Label><Input id="ca-open" className="h-9" inputMode="decimal" placeholder="-100.00" value={form.opening ?? ""} onChange={(e) => set("opening", e.target.value)} /></div>
-              <div className="grid gap-1"><Label htmlFor="ca-act">Activity</Label><Input id="ca-act" className="h-9" inputMode="decimal" placeholder="871.95" value={form.activity ?? ""} onChange={(e) => set("activity", e.target.value)} /></div>
-              <div className="grid gap-1"><Label htmlFor="ca-close">Closing balance</Label><Input id="ca-close" className="h-9" inputMode="decimal" placeholder="771.95" value={form.closing ?? ""} onChange={(e) => set("closing", e.target.value)} /></div>
-              <div className="grid gap-1"><Label htmlFor="ca-paid">Amount paid (optional)</Label><Input id="ca-paid" className="h-9" inputMode="decimal" value={form.paid ?? ""} onChange={(e) => set("paid", e.target.value)} /></div>
-              <div className="grid gap-1"><Label htmlFor="ca-held">Held (optional)</Label><Input id="ca-held" className="h-9" inputMode="decimal" value={form.held ?? ""} onChange={(e) => set("held", e.target.value)} /></div>
-              <div className="grid gap-1"><Label htmlFor="ca-min">Minimum payout (optional)</Label><Input id="ca-min" className="h-9" inputMode="decimal" value={form.minimum ?? ""} onChange={(e) => set("minimum", e.target.value)} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-open">Opening balance</Label><Input id="ca-open" inputMode="decimal" placeholder="-100.00" value={form.opening ?? ""} onChange={(e) => set("opening", e.target.value)} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-act">Activity</Label><Input id="ca-act" inputMode="decimal" placeholder="871.95" value={form.activity ?? ""} onChange={(e) => set("activity", e.target.value)} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-close">Closing balance</Label><Input id="ca-close" inputMode="decimal" placeholder="771.95" value={form.closing ?? ""} onChange={(e) => set("closing", e.target.value)} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-paid">Amount paid (optional)</Label><Input id="ca-paid" inputMode="decimal" value={form.paid ?? ""} onChange={(e) => set("paid", e.target.value)} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-held">Held (optional)</Label><Input id="ca-held" inputMode="decimal" value={form.held ?? ""} onChange={(e) => set("held", e.target.value)} /></div>
+              <div className="grid gap-1"><Label htmlFor="ca-min">Minimum payout (optional)</Label><Input id="ca-min" inputMode="decimal" value={form.minimum ?? ""} onChange={(e) => set("minimum", e.target.value)} /></div>
             </div>
           </fieldset>
           <DialogFooter>

@@ -17,19 +17,20 @@ import { loadFileTrace } from "@/lib/ingestion/traceStore";
 import { FileFrame, fileTabsOf, type FileTab } from "@/components/app/book/files/file-frame";
 import { FileRowsTable, type FileRowLine } from "@/components/app/book/files/file-rows";
 import { FileRuns } from "@/components/app/book/files/file-runs";
-import { FileWork, type WorkGroup } from "@/components/app/book/files/file-work";
+import { FileWaiting, type WaitingPart } from "@/components/app/book/files/file-work";
 import { OutcomeFilter, RemoveChip } from "@/components/app/book/files/outcome-filter";
 import { StageRow } from "@/components/app/book/files/stage-strip";
 import { CarrierFileAttribute } from "@/components/app/carrier-file-attribute";
-import { CarrierFileReread } from "@/components/app/carrier-file-reread";
+import { FileReread } from "@/components/app/book/files/file-reread";
+import { RowToolbar } from "@/components/app/book/files/row-toolbar";
 import { CarrierFileUploadButton } from "@/components/app/carrier-file-upload";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PdfBalanceReview } from "@/components/app/pdf-balance-review";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { Pager } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -51,10 +52,13 @@ import { TableCard } from "@/components/ui/table-card";
  * and no sentence, the figures one StatStrip whose tiles are the links, what the file needs is 10 rows then
  * "See all N", and no explainer card — a stopped file is one line with its one action.
  */
-const PAGE_SIZE = 25;
+/** The most "Not in this file" policies listed (the rest are counted in its footer). */
+const NOT_IN_SHOWN = 200;
 const cents = (n: number) => `${n < 0 ? "−" : ""}$${(Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const n = (value: number) => value.toLocaleString("en-US");
 const link = "font-semibold text-[var(--accent-ink)] hover:underline";
+
+const PAGE_SIZE = 25;
 
 type Search = { tab?: string; page?: string; outcome?: string; view?: string; q?: string; show?: string; kind?: string; open?: string };
 
@@ -190,32 +194,15 @@ async function FileBody({ tenantId, head, rows, notIn, carriers, readOnly, searc
   const needsTotal = needsCount(head.stages) || needs.length;
   const byKind = new Map<NeedsYouKind, string[]>();
   for (const { item } of lines) if (item) byKind.set(item.kind, [...(byKind.get(item.kind) ?? []), item.id]);
-  const most = Math.max(0, ...all.map((row) => row.reviewChoices ?? 0));
-  const groups: WorkGroup[] = [...byKind.entries()].sort((a, b) => b[1].length - a[1].length).map(([kind, ids]) => {
-    const words = GROUP_WORDS[kind] ?? { label: KIND_META[kind].label, why: KIND_META[kind].source, whyFull: KIND_META[kind].source };
-    return {
-      key: kind,
-      count: ids.length,
-      label: words.label,
-      why: kind === "pick-client" && most > 1 ? `Up to ${most} sales could be each one` : words.why,
-      whyFull: words.whyFull,
-      startHref: `${base}?outcome=needs_you&kind=${kind}&open=first`,
-      // The one kind whose every item takes the same answer: the client made from the row is right.
-      bulk: kind === "no-sale" ? { ids, resolution: "confirm_client" as const, noun: ids.length === 1 ? "client" : "clients" } : undefined,
-    };
-  });
-  // What isn't a row of this file: a commission file's money, the status words it was held on.
+  // Round 5: what the file waits on is one line with one way through, the Review page; groups and bulk live there.
+  const reviewBase = `/app/needs-you/review?file=${head.id}&from=${encodeURIComponent(base)}`;
+  const parts: WaitingPart[] = [...byKind.entries()].sort((x, y) => y[1].length - x[1].length).map(([kind, ids]) => ({ label: GROUP_WORDS[kind]?.label ?? KIND_META[kind].label, count: ids.length, href: `${reviewBase}&kind=${kind}` }));
   for (const kind of ["money", "status-word"] as const) {
     const label = KIND_META[kind].label;
-    const these = needs.filter((item) => item.kind === label && item.href);
-    if (!these.length) continue;
-    const words = GROUP_WORDS[kind]!;
-    groups.push({
-      key: kind, count: these.length, label: words.label, why: words.why, whyFull: words.whyFull,
-      waitsOnInsurvas: kind === "status-word",
-      items: kind === "money" ? these.map((item) => ({ kind, id: item.key.slice(kind.length + 1), about: item.about, why: item.why })) : undefined,
-    });
+    const count = needs.filter((item) => item.kind === label && item.href).length;
+    if (count) parts.push({ label: GROUP_WORDS[kind]!.label, count, href: kind === "money" ? `${reviewBase}&kind=money` : null });
   }
+  const reviewable = parts.reduce((sum, part) => sum + (part.href ? part.count : 0), 0);
 
   // ── the rows ──
   const kindFilter = search.kind && isNeedsYouKind(search.kind) ? search.kind : null;
@@ -246,7 +233,7 @@ async function FileBody({ tenantId, head, rows, notIn, carriers, readOnly, searc
     linkedTitle: row.linkedBy ?? "Not linked",
     card: row.card ? `${row.card.from ?? "—"} → ${row.card.to}` : row.outcome === "needs_you" || row.outcome === "held" ? "Waits" : "—",
     rowHref: rowHref(head.id, row.rowNumber),
-    item,
+    reviewHref: item ? `${reviewBase}&kind=${item.kind}&id=${encodeURIComponent(item.id)}` : null,
   }));
   const notInCount = notIn?.policies.length ?? 0;
 
@@ -275,7 +262,7 @@ async function FileBody({ tenantId, head, rows, notIn, carriers, readOnly, searc
           title={
             <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>Not finished: the {head.unfinished.stage} step failed{head.unfinished.error ? ` (${head.unfinished.error})` : ""}.</span>
-              {!readOnly && <CarrierFileReread fileId={head.id} />}
+              {!readOnly && <FileReread fileId={head.id} />}
             </span>
           }
         />
@@ -297,26 +284,22 @@ async function FileBody({ tenantId, head, rows, notIn, carriers, readOnly, searc
 
       {balance && <PdfBalanceReview check={balance} />}
 
-      <FileWork total={needsTotal} groups={groups} needsHref={`/app/needs-you?file=${head.id}`} canDecide={!readOnly} />
+      <FileWaiting total={needsTotal} parts={parts} reviewHref={reviewable ? reviewBase : null} reviewCount={reviewable} />
 
       <FileRowsTable
-        key={`${active.key}:${kindFilter ?? ""}:${needle}`}
+        key={`${active.key}:${kindFilter ?? ""}`}
+        pageKey={needle}
         rows={table}
-        canDecide={!readOnly}
-        openFirst={search.open === "first"}
         toolbar={head.rowCount !== null ? (
-          <div className="flex w-full flex-wrap items-center gap-2">
-            {/* One toolbar row: the search and the outcomes (the figures the Overview had); As sent and Export are in More. */}
-            <form method="get" action={base} className="flex items-center gap-2">
-              {active.key !== "all" && <input type="hidden" name="outcome" value={active.key} />}
-              {kindFilter && <input type="hidden" name="kind" value={kindFilter} />}
-              <label className="sr-only" htmlFor="row-search">Policy or client</label>
-              <input id="row-search" name="q" defaultValue={search.q ?? ""} placeholder="Policy or client" className={`${toolbarControl} w-40`} />
-            </form>
-            <OutcomeFilter value={active.key} options={filters.map((f) => ({ key: f.key, label: f.label, warn: f.warn, count: all.filter(f.test).length, href: query(f.key) }))} />
-            {kindFilter && <RemoveChip label={GROUP_WORDS[kindFilter]?.label ?? KIND_META[kindFilter].label} href={query(active.key, null)} />}
-            {notInCount > 0 && <Button asChild variant="outline"><Link href={`${base}?tab=changes`} title="The policies the previous file had and this one doesn't: watched, never lapsed">Not in file<span className="tabular-nums text-[var(--warning-ink)]">{n(notInCount)}</span></Link></Button>}
-          </div>
+          // One toolbar row (§6): the search (?q=) and the outcomes (the figures the Overview had), then Not in file and
+          // Refresh last; As sent and Export are in More.
+          <RowToolbar
+            filters={<>
+              <OutcomeFilter value={active.key} options={filters.map((f) => ({ key: f.key, label: f.label, warn: f.warn, count: all.filter(f.test).length, href: query(f.key) }))} />
+              {kindFilter && <RemoveChip label={GROUP_WORDS[kindFilter]?.label ?? KIND_META[kindFilter].label} href={query(active.key, null)} />}
+            </>}
+            actions={notInCount > 0 ? <Button asChild variant="outline"><Link href={`${base}?tab=changes`} title="The policies the previous file had and this one doesn't: watched, never lapsed">Not in file<span className="tabular-nums text-[var(--warning-ink)]">{n(notInCount)}</span></Link></Button> : undefined}
+          />
         ) : undefined}
         empty={head.rowCount === null ? <EmptyState title="No rows kept yet" hint={head.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} />
           : shown.length === 0 ? <EmptyState title="No row matches" hint="Choose another outcome, or clear the search." /> : undefined}

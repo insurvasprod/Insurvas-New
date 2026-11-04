@@ -103,8 +103,11 @@ async function register(args: RegisterArgs): Promise<RegisterOutcome> {
     p_error_detail: args.errorDetail,
     p_email_from: args.emailFrom,
     p_email_message_id: args.emailMessageId,
+    // Only sent when false, so every other door calls the function exactly as before 20261103300000.
+    ...(args.replace === false ? { p_replace: false } : {}),
   });
   if (error) {
+    if (args.replace === false && (error.code === "PGRST202" || /p_replace/.test(error.message ?? ""))) throw new CarrierFileError(SAME_DAY_PENDING_MESSAGE, 503, "schema_pending");
     if (pending(error)) throw new CarrierFileError(CARRIER_FILES_PENDING_MESSAGE, 503, "schema_pending");
     throw new Error(`The file could not be registered: ${error.message}`);
   }
@@ -157,7 +160,11 @@ async function acceptsFiles(tenantId: string): Promise<boolean> {
 
 // ─── door 1: upload ────────────────────────────────────────────────────────────────────────────
 
+export const SAME_DAY_PENDING_MESSAGE = "Two commission statements on one day need a database update (20261103300000). Until then, use the date printed on this one.";
+
 export type UploadInput = {
+  /** False: a commission statement kept beside the day's others (the person said it is a different one). */
+  replace?: boolean;
   filename: string;
   contentType: string | null;
   bytes: Uint8Array;
@@ -166,6 +173,25 @@ export type UploadInput = {
   fileDate: string;
   agency: string | null;
 };
+
+/**
+ * The current file an upload with this carrier, type and day would replace (register_carrier_file keeps one
+ * per day), unless these are the same bytes (skipped, nothing replaced). QA 2026-11-03: a second commission
+ * statement dated the same day silently took the first one's lines out of the books, so the upload door
+ * asks first. Null when there is none, or before the registry exists.
+ */
+export async function fileItWouldReplace(tenantId: string, input: Pick<UploadInput, "bytes" | "carrierId" | "fileType" | "fileDate">): Promise<{ id: string; name: string; receivedAt: string } | null> {
+  const hash = createHash("sha256").update(input.bytes).digest("hex");
+  const { data, error } = await db().from("file_registry").select("id, original_filename, received_at, content_hash")
+    .eq("tenant_id", tenantId).eq("carrier_id", input.carrierId).eq("file_type", input.fileType).eq("file_date", input.fileDate)
+    .is("superseded_by_file_id", null).order("received_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) {
+    if (pending(error)) return null;
+    throw new Error(`Could not check for a file on the same day: ${error.message}`);
+  }
+  if (!data || data.content_hash === hash) return null;
+  return { id: data.id, name: data.original_filename, receivedAt: data.received_at };
+}
 
 export async function uploadCarrierFile(tenantId: string, userId: string, input: UploadInput): Promise<IngestResult> {
   const carrier = (await libraryCarriers()).find((choice) => choice.id === input.carrierId);
@@ -181,6 +207,7 @@ export async function uploadCarrierFile(tenantId: string, userId: string, input:
     carrierId: carrier.id,
     attribution,
     problems: [],
+    ...(input.replace === false && input.fileType === "commissions" ? { replace: false } : {}),
   });
 }
 

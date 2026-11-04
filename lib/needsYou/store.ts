@@ -12,13 +12,16 @@ import { QUEUES_PENDING_MESSAGE, type QueueItemRow } from "@/lib/ingestion/excep
 import { loadFileHead, ROW_QUEUE_TYPE } from "@/lib/ingestion/fileOutcomeStore";
 import { allRows, chunks } from "@/lib/ingestion/pages";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { WRITING_ROLES, type FieldOutcome, type MatchField } from "@/lib/ingestion/policyMatching";
-import { MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
+import { carrierSideOfPayload, WRITING_ROLES, type FieldOutcome, type MatchField } from "@/lib/ingestion/policyMatching";
+import { MATCHING_PENDING_MESSAGE, saleChoicesFor } from "@/lib/ingestion/policyMatchingStore";
 import { loadRowTrace, untraceableDiscrepancies } from "@/lib/ingestion/traceStore";
 import { PIPELINE_RULES_PENDING_MESSAGE } from "@/lib/pipelineRules/rules";
 import { listRuleHolds, loadBoard, type HoldRow } from "@/lib/pipelineRules/store";
 
-import { agentItemId, byOldest, daysSince, dollars, itemHref, KIND_META, parseAgentItemId, QUEUE_KIND, type FileFilter, type NeedsYouItem, type NeedsYouKind, type QueueKind } from "./kinds";
+import {
+  agentItemId, byOldest, daysSince, dollars, itemHref, KIND_META, moneyClosedWords, ORPHAN_NOTICE_DAYS, orphanSubjectKey, parseAgentItemId, parseUnknownPolicyItemId, QUEUE_KIND,
+  unknownPolicies, unknownPolicyItemId, type FileFilter, type NeedsYouItem, type NeedsYouKind, type OrphanLine, type QueueKind, type UnknownPolicy,
+} from "./kinds";
 
 /**
  * Book of business › Needs you (owner 2026-11-02, round 2), server side: every open decision from every source,
@@ -49,7 +52,8 @@ export type NeedsYouScope = {
   credit: boolean;
 };
 
-type Part = { open: NeedsYouItem[]; closed: NeedsYouItem[]; notes: string[] };
+/** `files`: carrier files an item came from that its ref doesn't carry (item key → file ids), for the search. */
+type Part = { open: NeedsYouItem[]; closed: NeedsYouItem[]; notes: string[]; files?: Map<string, string[]> };
 const EMPTY: Part = { open: [], closed: [], notes: [] };
 const KEEPERS = "Owner or bookkeeper";
 const since30 = () => new Date(Date.now() - 30 * 86_400_000).toISOString();
@@ -117,7 +121,8 @@ async function reviews(scope: NeedsYouScope, names: Names, today: string): Promi
   ]);
   const about = (r: Loose) => `${r.policy_number} · ${names.carrier.get(r.carrier_id) ?? "Carrier not known"}`;
   return {
-    open: rows(open).map((r: Loose) => item("pick-client", r.id, { about: about(r), why: reviewWhy(r.shortlist ?? [], r.carrier_row?.fileDate ?? null), who: KEEPERS, ownerUserId: null, since: r.created_at, ref: { carrierId: r.carrier_id, policyNumber: r.policy_number, fileId: r.file_id } }, today)),
+    // The search finds it by the client's name in the carrier's row too, and by the agent code on it.
+    open: rows(open).map((r: Loose) => item("pick-client", r.id, { about: about(r), why: reviewWhy(r.shortlist ?? [], r.carrier_row?.fileDate ?? null), who: KEEPERS, ownerUserId: null, since: r.created_at, ref: { carrierId: r.carrier_id, policyNumber: r.policy_number, fileId: r.file_id, agentCode: r.carrier_row?.agentIdentifier ?? null }, search: [r.carrier_row?.firstName, r.carrier_row?.lastName].filter(Boolean).join(" ") || undefined }, today)),
     closed: rows(closed).map((r: Loose) => ({ ...item("pick-client", r.id, { about: about(r), why: "The client was picked", who: KEEPERS, ownerUserId: null, since: r.created_at, closedAs: "Linked by a person", closedAt: r.resolved_at }, today), href: closedHref("pick-client") })),
     notes: [],
   };
@@ -197,7 +202,7 @@ function moneyWhy(r: Loose): string {
 
 async function money(scope: NeedsYouScope, names: Names, today: string): Promise<Part> {
   if (!scope.keeper || !scope.money) return EMPTY;
-  const columns = "id, carrier_id, discrepancy_type, policy_number, expected_amount_cents, reported_amount_cents, difference_cents, detected_at, status, resolution, resolved_at";
+  const columns = "id, carrier_id, discrepancy_type, policy_number, expected_amount_cents, reported_amount_cents, difference_cents, detected_at, status, resolution, resolution_note, resolved_at";
   const [open, closed, withheld] = await Promise.all([
     allRows(() => db().from("commission_discrepancy").select(columns).eq("tenant_id", scope.tenantId).in("status", ["open", "disputed"]).order("detected_at").order("id"), 50_000),
     db().from("commission_discrepancy").select(columns).eq("tenant_id", scope.tenantId).in("status", ["resolved", "dismissed"]).gte("resolved_at", since30()).order("resolved_at", { ascending: false }).limit(100),
@@ -207,7 +212,7 @@ async function money(scope: NeedsYouScope, names: Names, today: string): Promise
   const about = (r: Loose) => `${r.policy_number ?? "Carrier account"} · ${names.carrier.get(r.carrier_id) ?? "Carrier not known"}`;
   return {
     open: rows(open).filter((r: Loose) => !withheld?.has(r.id)).map((r: Loose) => item("money", r.id, { about: about(r), why: moneyWhy(r), who: KEEPERS, ownerUserId: null, since: r.detected_at, ref: { carrierId: r.carrier_id, policyNumber: r.policy_number } }, today)),
-    closed: rows(closed).map((r: Loose) => ({ ...item("money", r.id, { about: about(r), why: moneyWhy(r), who: KEEPERS, ownerUserId: null, since: r.detected_at, closedAs: r.status === "dismissed" ? "Written off" : "Settled", closedAt: r.resolved_at }, today), href: closedHref("money") })),
+    closed: rows(closed).map((r: Loose) => ({ ...item("money", r.id, { about: about(r), why: moneyWhy(r), who: KEEPERS, ownerUserId: null, since: r.detected_at, closedAs: moneyClosedWords(r.status, r.resolution_note), closedAt: r.resolved_at }, today), href: closedHref("money") })),
     notes: [],
   };
 }
@@ -222,6 +227,64 @@ export async function hiddenOpenFindings(tenantId: string): Promise<number> {
   const ids = [...withheld.keys()];
   const { data } = await byIds(ids, (part) => db().from("commission_discrepancy").select("id").eq("tenant_id", tenantId).in("status", ["open", "disputed"]).in("id", part));
   return data.length;
+}
+
+// ─── Paid on a policy we don't have · commission lines no policy file has (ORPHAN_NOTICE_DAYS) ──────────
+// LA-4.14 keeps these quiet until the agency's orphan threshold (60 days by default), then the sweep opens an
+// orphan_commission item ("Commission, no policy"). QA 2026-11-03: $180 on a policy no file has waited with nobody
+// told. Read from existing rows only: the orphan view says which carriers have one old enough, then those
+// carriers' lines, their known policies and the orphan items already raised (any status) are compared here.
+
+const ORPHAN_LINE_COLUMNS = "id, carrier_id, policy_number, entry_type, corrects_type, amount_cents, transaction_date, statement_date, created_at, file_id, row_number, agent_identifier";
+const seenOn = (l: Loose) => String(l.transaction_date ?? l.statement_date ?? l.created_at ?? "").slice(0, 10);
+const orphanLine = (l: Loose): OrphanLine => ({ carrierId: l.carrier_id, policyNumber: l.policy_number, entryType: l.entry_type, correctsType: l.corrects_type ?? null, amountCents: Number(l.amount_cents), seenOn: seenOn(l), fileId: l.file_id ?? null, agentCode: l.agent_identifier ?? null });
+
+export const unknownPolicyWhy = (amountCents: number, firstSeen: string) => `${dollars(amountCents)} paid · no policy file has this policy · first paid ${fileDay(firstSeen)}`;
+
+/**
+ * The orphans old enough to tell someone about, one row per policy, from commission_orphan_policies
+ * (20261103303000): only those rows are read. Null before that view exists, so the caller reads lines instead.
+ */
+async function orphanPoliciesFromView(tenantId: string, today: string, raised: ReadonlySet<string>): Promise<UnknownPolicy[] | null> {
+  const cutoff = new Date(Date.parse(`${today}T00:00:00Z`) - ORPHAN_NOTICE_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const read = await db().from("commission_orphan_policies").select("carrier_id, policy_number, first_seen, lines, amount_cents, held_cents, agent_identifiers, file_ids").eq("tenant_id", tenantId).lte("first_seen", cutoff).order("first_seen").limit(5000);
+  if (read.error) return isSchemaGap(read.error) ? null : Promise.reject(read.error);
+  return ((read.data ?? []) as Loose[])
+    .filter((r) => !raised.has(orphanSubjectKey(r.carrier_id, r.policy_number)))
+    .map((r) => ({ carrierId: r.carrier_id, policyNumber: r.policy_number, lines: Number(r.lines), amountCents: Number(r.amount_cents), heldCents: Number(r.held_cents), firstSeen: String(r.first_seen).slice(0, 10), fileIds: (r.file_ids ?? []) as string[], agentCodes: (r.agent_identifiers ?? []) as string[] }));
+}
+
+async function unknownPolicyItems(scope: NeedsYouScope, names: Names, today: string): Promise<Part> {
+  if (!scope.keeper) return EMPTY;
+  const t = scope.tenantId;
+  const raisedRows = await allRows(() => db().from("queue_item").select("id, subject_key").eq("tenant_id", t).eq("queue_type", "orphan_commission").order("id"), 20_000);
+  const raisedKeys = new Set(rows(raisedRows).map((q: Loose) => String(q.subject_key)));
+  let policies = await orphanPoliciesFromView(t, today, raisedKeys);
+  if (policies === null) {
+    // Before 20261103303000: the summary says which carriers have one old enough, then their lines are compared here.
+    const summary = await db().from("commission_orphan_summary").select("carrier_id, orphan_policies, oldest_orphan_date").eq("tenant_id", t);
+    const carriers = rows(summary).filter((s: Loose) => Number(s.orphan_policies) > 0 && s.oldest_orphan_date && daysSince(String(s.oldest_orphan_date), today) >= ORPHAN_NOTICE_DAYS).map((s: Loose) => s.carrier_id as string);
+    if (!carriers.length) return EMPTY;
+    const [lines, known] = await Promise.all([
+      allRows(() => db().from("commission_entry").select(ORPHAN_LINE_COLUMNS).eq("tenant_id", t).in("carrier_id", carriers).order("id"), 50_000),
+      allRows(() => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", t).in("carrier_id", carriers).order("carrier_id").order("policy_number"), 50_000),
+    ]);
+    policies = unknownPolicies(rows(lines).map(orphanLine), new Set(rows(known).map((p: Loose) => `${p.carrier_id}|${p.policy_number}`)), raisedKeys, today);
+  }
+  if (!policies.length) return EMPTY;
+  const files = new Map<string, string[]>();
+  const open = policies.map((p) => {
+    const id = unknownPolicyItemId(p.carrierId, p.policyNumber);
+    files.set(`unknown-policy:${id}`, p.fileIds);
+    return item("unknown-policy", id, {
+      about: `${p.policyNumber} · ${names.carrier.get(p.carrierId) ?? "Carrier not known"}`,
+      why: unknownPolicyWhy(p.amountCents, p.firstSeen),
+      who: KEEPERS, ownerUserId: null, since: p.firstSeen,
+      ref: { carrierId: p.carrierId, policyNumber: p.policyNumber, agentCode: p.agentCodes[0] ?? null },
+      search: p.agentCodes.join(" ") || undefined,
+    }, today);
+  });
+  return { open, closed: [], notes: [], files };
 }
 
 // ─── Who gets the credit · agency_attribution_item ───────────────────────────────────────────────────────
@@ -356,6 +419,49 @@ async function ruleHolds(scope: NeedsYouScope, names: Names, today: string): Pro
 
 export type NeedsYouList = { open: NeedsYouItem[]; closed: NeedsYouItem[]; notes: string[]; today: string };
 
+export const ORPHANS_PENDING_MESSAGE = "Commission lines on policies we don't have need a database update (20261008240000).";
+
+/**
+ * The search finds an item by the name of the carrier file it came from (QA 2026-11-03): the file's name is
+ * added to `search` for every item tied to a file — its ref, or the files its lines came from (`extra`). One
+ * read of the files' names; a failed read leaves the search without them, never the list.
+ */
+async function addFileNames(tenantId: string, items: NeedsYouItem[], extra: ReadonlyMap<string, string[]>): Promise<void> {
+  const of = (entry: NeedsYouItem) => [...new Set([entry.ref?.fileId, ...(extra.get(`${entry.kind}:${entry.id}`) ?? [])].filter((id): id is string => Boolean(id)))];
+  const ids = [...new Set(items.flatMap(of))];
+  if (!ids.length) return;
+  const read = await byIds(ids, (part) => db().from("file_registry").select("id, storage_path").eq("tenant_id", tenantId).in("id", part)).catch(() => ({ data: [] as Loose[] }));
+  const name = new Map<string, string>(read.data.map((f: Loose) => [f.id, fileNameOf(f)]));
+  for (const entry of items) {
+    const words = of(entry).map((id) => name.get(id)).filter(Boolean);
+    if (words.length) entry.search = [entry.search, ...words].filter(Boolean).join(" ");
+  }
+}
+
+/**
+ * The search finds a policy's item by its client's name too (QA 2026-11-03: "testmore" found nothing though
+ * Quinn Testmore's chargeback was open): the policy's current client is added to `search` for every item that
+ * names a policy. Batched reads; a failed read leaves the search without names, never the list.
+ */
+async function addClientNames(tenantId: string, items: NeedsYouItem[]): Promise<void> {
+  const named = items.filter((entry) => entry.ref?.policyNumber && entry.ref.carrierId);
+  const policies = [...new Set(named.map((entry) => entry.ref!.policyNumber as string))];
+  if (!policies.length) return;
+  const current = await byIds(policies, (part) => db().from("policy_current").select("carrier_id, policy_number, contact_id").eq("tenant_id", tenantId).in("policy_number", part)).catch(() => ({ data: [] as Loose[] }));
+  const contactIds = [...new Set(current.data.map((row: Loose) => row.contact_id).filter(Boolean))] as string[];
+  const contacts = contactIds.length ? await byIds(contactIds, (part) => db().from("contacts").select("id, first_name, last_name").eq("tenant_id", tenantId).in("id", part)).catch(() => ({ data: [] as Loose[] })) : { data: [] as Loose[] };
+  const person = new Map<string, string>(contacts.data.map((c: Loose) => [c.id, [c.first_name, c.last_name].filter(Boolean).join(" ")]));
+  const client = new Map<string, string>();
+  for (const row of current.data) {
+    const name = row.contact_id ? person.get(row.contact_id) : undefined;
+    if (name) client.set(`${row.carrier_id}:${row.policy_number}`, name);
+  }
+  for (const entry of named) {
+    const name = client.get(`${entry.ref!.carrierId}:${entry.ref!.policyNumber}`);
+    if (name) entry.search = [entry.search, name].filter(Boolean).join(" ");
+  }
+}
+
 /** Every open decision this person may see, oldest first, and what closed in the last 30 days. */
 export async function loadNeedsYou(scope: NeedsYouScope): Promise<NeedsYouList> {
   const [today, carriers] = await Promise.all([agencyToday(scope.tenantId), db().from("carriers").select("id, name")]);
@@ -369,9 +475,13 @@ export async function loadNeedsYou(scope: NeedsYouScope): Promise<NeedsYouList> 
     guarded("Status words", STATUS_WORDS_PENDING_MESSAGE, () => statusWords(scope, names, today)),
     guarded("Two rules disagree", PIPELINE_RULES_PENDING_MESSAGE, () => ruleHolds(scope, names, today)),
     guarded("Files that didn’t read", QUEUES_PENDING_MESSAGE, () => failedFiles(scope, names, today)),
+    guarded("Paid on a policy we don’t have", ORPHANS_PENDING_MESSAGE, () => unknownPolicyItems(scope, names, today)),
   ]);
+  const open = parts.flatMap((p) => p.open);
+  await addFileNames(scope.tenantId, open, new Map(parts.flatMap((p) => [...(p.files ?? new Map<string, string[]>())])));
+  await addClientNames(scope.tenantId, open);
   return {
-    open: parts.flatMap((p) => p.open).sort(byOldest),
+    open: open.sort(byOldest),
     closed: parts.flatMap((p) => p.closed).sort((a, b) => String(b.closedAt ?? "").localeCompare(String(a.closedAt ?? ""))),
     notes: [...new Set(parts.flatMap((p) => p.notes))],
     today,
@@ -454,12 +564,13 @@ export type Person = { userId: string; name: string };
 export type ItemDetail =
   | { kind: "pick-client"; reviewId: string; policyNumber: string; carrierName: string; carrierRow: CarrierRow; candidates: Candidate[] }
   | { kind: QueueKind; queue: QueueItemRow }
-  | { kind: "money"; finding: DiscrepancyRow; disputable: boolean }
+  | { kind: "money"; finding: DiscrepancyRow; disputable: boolean; letter: { id: string; status: string; totalCents: number } | null }
   | { kind: "credit"; id: string; kindOfRow: "disagreement" | "unattributed"; policyNumber: string | null; agentCode: string | null; amountCents: number; carrierName: string | null; writingNumber: Person | null; application: Person | null; producers: Person[] }
   | { kind: "agent"; carrierId: string; carrierName: string; code: string; policies: number; members: Person[] }
   | { kind: "status-word"; word: string; carrierName: string; fileType: string; rows: number; firstSeenFileId: string | null }
   | { kind: "rules"; holdId: string; leadId: string | null; leadName: string | null; carrierName: string; policyNumber: string; options: Array<{ ruleId: string; ruleName: string; version: number; stage: string }> }
-  | { kind: "file"; fileId: string; fileName: string; carrierName: string; fileType: string | null; fileDate: string | null; reason: string };
+  | { kind: "file"; fileId: string; fileName: string; carrierName: string; fileType: string | null; fileDate: string | null; reason: string }
+  | ({ kind: "unknown-policy"; carrierName: string } & UnknownPolicyFound);
 
 export type ItemPage = { detail: ItemDetail; row: RowAsSent | null };
 
@@ -491,10 +602,11 @@ async function oneQueueItem(scope: NeedsYouScope, id: string): Promise<QueueItem
     const lastName = String(i.payload?.insured?.last_name ?? "").replace(/[%_]/g, "");
     const [byName, recent] = await Promise.all([
       lastName ? db().from("contacts").select("id, first_name, last_name, dob").eq("tenant_id", t).is("merged_into_id", null).eq("provisional", false).ilike("last_name", lastName).limit(10) : { data: [] },
-      db().from("deal_flow").select("id, insured_name, local_date").eq("tenant_id", t).eq("call_result", "application_submitted").gte("local_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("local_date", { ascending: false }).limit(25),
+      // QA 2026-11-03: the sales that look like the carrier's row first, with what agreed; then the rest by recency.
+      saleChoicesFor(t, carrierSideOfPayload(i.payload, i.policy_number, (carrier.data as Loose)?.name ?? null)),
     ]);
     choices.contacts = ((byName.data ?? []) as Loose[]).map((c) => ({ id: c.id, name: `${c.first_name} ${c.last_name}`, dob: c.dob }));
-    choices.deals = ((recent.data ?? []) as Loose[]).map((x) => ({ id: x.id, name: x.insured_name ?? "—", date: x.local_date }));
+    choices.deals = recent;
   } else if (i.queue_type === "no_policy") {
     const [policies, apps, carriers] = await Promise.all([
       i.carrier_id ? db().from("policy_current").select("carrier_id, policy_number, status_normalized").eq("tenant_id", t).eq("carrier_id", i.carrier_id).limit(200) : { data: [] },
@@ -559,7 +671,10 @@ export async function loadItemPage(scope: NeedsYouScope, kind: NeedsYouKind, id:
     const finding = list.items.find((entry) => entry.id === id);
     if (!finding || !["open", "disputed"].includes(finding.status)) return null;
     const line = finding.reportedLines.find((l) => l.rowNumber !== null);
-    return { detail: { kind, finding, disputable: finding.status === "open" && DISPUTABLE.has(finding.type) }, row: await rowAsSent(t, line ? { fileId: line.fileId, rowNumber: line.rowNumber! } : null) };
+    // The letter it is on, while disputed: its next step (mark sent, then the carrier's answer) is decided here.
+    const dispute = finding.disputeId ? list.disputes.find((entry) => entry.id === finding.disputeId) : undefined;
+    const letter = dispute ? { id: dispute.id, status: dispute.status, totalCents: dispute.totalCents } : null;
+    return { detail: { kind, finding, disputable: finding.status === "open" && DISPUTABLE.has(finding.type), letter }, row: await rowAsSent(t, line ? { fileId: line.fileId, rowNumber: line.rowNumber! } : null) };
   }
 
   if (kind === "credit") {
@@ -616,5 +731,42 @@ export async function loadItemPage(scope: NeedsYouScope, kind: NeedsYouKind, id:
     if (!f) return null;
     return { detail: { kind, fileId: f.id, fileName: fileNameOf(f), carrierName: f.carrier_id ? await carrierName(f.carrier_id) : "Carrier not known", fileType: f.file_type, fileDate: f.file_date, reason: failedReason(f) }, row: null };
   }
+
+  if (kind === "unknown-policy") {
+    if (!scope.keeper) return null;
+    const found = await loadUnknownPolicy(t, id);
+    if (!found) return null;
+    const first = found.lines.find((l) => l.rowNumber !== null);
+    return { detail: { kind, ...found, carrierName: await carrierName(found.carrierId) }, row: await rowAsSent(t, first ? { fileId: first.fileId, rowNumber: first.rowNumber! } : null) };
+  }
   return null;
+}
+
+export type UnknownPolicyLine = { id: string; fileId: string; fileName: string; rowNumber: number | null; type: string; amountCents: number; seenOn: string; agentCode: string | null };
+export type UnknownPolicyFound = { carrierId: string; policyNumber: string; lines: UnknownPolicyLine[]; amountCents: number; heldCents: number; firstSeen: string };
+
+/**
+ * One "Paid on a policy we don't have" item, read again from its rows: still no policy file has the policy, it
+ * has lines, and no orphan_commission item was raised for it. Null otherwise (it was decided, or the policy came).
+ */
+export async function loadUnknownPolicy(tenantId: string, id: string): Promise<UnknownPolicyFound | null> {
+  const parsed = parseUnknownPolicyItemId(id);
+  if (!parsed) return null;
+  const { carrierId, policyNumber } = parsed;
+  const [current, raised, lines] = await Promise.all([
+    db().from("policy_current").select("policy_number").eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).limit(1),
+    db().from("queue_item").select("id").eq("tenant_id", tenantId).eq("queue_type", "orphan_commission").eq("subject_key", orphanSubjectKey(carrierId, policyNumber)).limit(1),
+    db().from("commission_entry").select(ORPHAN_LINE_COLUMNS).eq("tenant_id", tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("row_number").limit(500),
+  ]);
+  if (current.error || raised.error || lines.error) throw current.error ?? raised.error ?? lines.error;
+  if ((current.data ?? []).length || (raised.data ?? []).length || !(lines.data ?? []).length) return null;
+  const found = unknownPolicies(((lines.data ?? []) as Loose[]).map(orphanLine), new Set(), new Set(), "9999-12-31", 0)[0];
+  if (!found) return null;
+  const fileIds = [...new Set(((lines.data ?? []) as Loose[]).map((l) => l.file_id).filter(Boolean))] as string[];
+  const { data: files } = fileIds.length ? await db().from("file_registry").select("id, storage_path").eq("tenant_id", tenantId).in("id", fileIds.slice(0, 150)) : { data: [] };
+  const fileName = new Map<string, string>(((files ?? []) as Loose[]).map((f) => [f.id, fileNameOf(f)]));
+  return {
+    carrierId, policyNumber, amountCents: found.amountCents, heldCents: found.heldCents, firstSeen: found.firstSeen,
+    lines: ((lines.data ?? []) as Loose[]).map((l) => ({ id: l.id, fileId: l.file_id, fileName: fileName.get(l.file_id) ?? "A carrier file", rowNumber: l.row_number == null ? null : Number(l.row_number), type: String(l.corrects_type && l.entry_type === "reversal" ? `reversal of ${l.corrects_type}` : l.entry_type), amountCents: Number(l.amount_cents), seenOn: seenOn(l), agentCode: l.agent_identifier ?? null })),
+  };
 }

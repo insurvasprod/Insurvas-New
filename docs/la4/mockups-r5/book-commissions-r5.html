@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Book and Commissions R5</title>
+<style>
+:root{--canvas:#0d1412;--surface:#151e1b;--raised:#1d2824;--hi:#24322d;--text:#f2f6f4;--muted:#9fb0a7;--faint:#6f8079;--border:#2a3631;--primary:#35d6aa;--pfg:#0b2119;--psoft:#173a30;--good:#6be3c1;--goodbg:#173a30;--info:#a4c0f8;--infobg:#172a4a;--warn:#f3c266;--warnbg:#3a2b0c;--bad:#f7a1a1;--badbg:#3f1a1a;--r:12px}
+*{box-sizing:border-box}html,body{margin:0;background:#080d0b;color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif}
+a{color:var(--primary);text-decoration:none}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}h2{font-size:15px;margin:0}h3{font-size:13px;margin:0}
+.wrap{max-width:1480px;margin:0 auto;padding:24px 16px 80px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 28px}.toc a{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted)}
+.board{margin:40px 0}.cap{display:flex;gap:12px;align-items:baseline;margin:0 0 10px}.cap b{font-size:13px;letter-spacing:.04em;color:var(--primary)}.cap span{color:var(--muted);font-size:13px}
+.frame{background:var(--canvas);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.app{display:grid;grid-template-columns:56px 200px 1fr;min-height:620px}
+.side{border-right:1px solid var(--border);background:#0a110f}.side i{display:block;width:22px;height:22px;border-radius:6px;background:var(--raised);margin:14px auto}
+.rail{border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px}.rail div{padding:9px 10px;border-radius:9px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between}.rail .on{background:var(--psoft);color:var(--text);border:1px solid #1f5a49}.rail small{font-size:11px;background:var(--warnbg);color:var(--warn);border-radius:6px;padding:0 6px}
+.main{padding:16px 20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.trail{font-size:12px;color:var(--muted)}.trail b{color:var(--text);font-weight:600}
+.tl{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.tl .sp{flex:1}
+.tabs{display:flex;gap:4px;border-left:1px solid var(--border);padding-left:12px}.tab{padding:6px 11px;border-radius:8px;font-weight:600;color:var(--muted);font-size:13px}.tab.on{background:var(--raised);color:var(--text);border:1px solid var(--border)}
+.n{font-size:11px;background:var(--raised);border-radius:6px;padding:1px 6px;margin-left:5px;color:var(--muted)}.n.w{color:var(--warn);background:var(--warnbg)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--pfg);border-color:var(--primary)}.btn.sm{height:30px;padding:0 10px;font-size:12px}.btn.g{background:none;border-color:transparent;color:var(--muted)}.btn.big{height:52px;font-size:14px;justify-content:space-between;width:100%;padding:0 16px}
+kbd{font:600 11px ui-monospace,Consolas,monospace;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--muted);background:var(--canvas)}
+.btn.p kbd{color:var(--pfg);border-color:#1b7a60;background:#5ee3bf}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
+.hd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}.hd .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border);font-weight:600;font-size:13px}.chip.on{border-color:var(--primary);background:var(--psoft)}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}.st:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.w{color:var(--warn);background:var(--warnbg)}.g1{color:var(--good);background:var(--goodbg)}.i{color:var(--info);background:var(--infobg)}.b{color:var(--bad);background:var(--badbg)}.z{color:var(--muted);background:var(--raised)}
+.m{color:var(--muted)}.f{color:var(--faint)}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+table{width:100%;border-collapse:collapse}th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}td{padding:0 14px;height:44px;border-bottom:1px solid var(--border)}.r{text-align:right}
+tr.sel td{background:var(--psoft)}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px}.toolbar .sp{flex:1}
+.input{height:36px;border:1px solid var(--border);background:var(--canvas);border-radius:8px;padding:0 12px;color:var(--faint);min-width:200px;display:inline-flex;align-items:center}
+.foot{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border)}.foot .sp{flex:1}
+.stages{display:flex;gap:4px}.stg{flex:1}.stg .bar{height:4px;border-radius:4px;background:var(--primary)}.stg.nd .bar{background:var(--warn)}.stg .lb{font-size:12px;font-weight:600;margin-top:6px}.stg.nd .lb{color:var(--warn)}
+.note{max-width:1100px;color:var(--muted);font-size:13px;margin:10px 4px 0}.note b{color:var(--text)}.note li{margin:3px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.split{display:grid;grid-template-columns:360px 1fr;gap:0;min-height:560px}
+.q{border-right:1px solid var(--border);display:flex;flex-direction:column}.qi{display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}.qi.on{background:var(--psoft);box-shadow:inset 3px 0 0 var(--primary)}.qi.done{opacity:.45}
+.box{width:14px;height:14px;border:1.5px solid var(--faint);border-radius:4px}.box.x{background:var(--primary);border-color:var(--primary)}
+.dec{padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+.ask{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.cmp{display:grid;grid-template-columns:140px 1fr 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden}.cmp div{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}.cmp .h{color:var(--muted);font-size:12px;font-weight:600;background:var(--raised)}
+.ok{color:var(--good)}.no{color:var(--bad)}
+.answers{display:grid;gap:8px}
+.cand{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.cc{border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px}.cc.top{border-color:var(--primary)}
+.prog{height:4px;background:var(--border);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--primary)}
+.kv{display:grid;grid-template-columns:170px 1fr;gap:0}.kv div{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.kv .k{color:var(--muted)}
+.step{display:grid;grid-template-columns:22px 130px 1fr auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--border)}.dot{width:18px;height:18px;border-radius:50%;background:var(--psoft);border:2px solid var(--primary)}.dot.w{border-color:var(--warn);background:var(--warnbg)}.dot.z{border-color:var(--faint);background:none}
+.board2{display:grid;grid-template-columns:240px 1fr 300px;min-height:560px}
+.col{border-right:1px solid var(--border);padding:12px}.col:last-child{border-right:0}
+.oc{display:grid;grid-template-columns:1fr 18px 200px 70px;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;background:var(--surface)}.oc.on{border-color:var(--primary)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;background:var(--raised);border:1px solid var(--border)}.pill i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.stagecol div{padding:10px 12px;border:1px dashed var(--border);border-radius:9px;margin-bottom:6px;display:flex;justify-content:space-between;font-weight:600;font-size:13px}
+.dlg{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.6);padding:18px;width:440px}
+.pop{background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:6px;width:260px}.pop div{padding:8px 10px;border-radius:7px;font-size:13px}.pop .on{background:var(--psoft)}
+.toast{display:inline-flex;gap:10px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-weight:600}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:18px}.flow .fs{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface);min-width:150px}.flow .fs b{display:block}.flow .fs small{color:var(--muted)}.arrow{color:var(--faint)}
+.map li{margin:6px 0}.k2{display:inline-block;min-width:110px;font-weight:700}
+.phone{width:390px;background:var(--canvas);border:1px solid var(--border);border-radius:28px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.crit td{height:auto;padding:10px 14px;vertical-align:top;font-size:13px}
+.tile{display:block;padding:14px;border-right:1px solid var(--border);color:inherit}.tile:hover{background:var(--raised)}
+.tile2{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:10px;padding:10px;color:inherit}.tile2 b{font-size:18px}
+.bar2{height:4px;border-radius:4px;background:var(--border);margin-top:6px;overflow:hidden}.bar2 i{display:block;height:100%;background:var(--primary)}
+.money{display:flex;height:6px;border-radius:6px;overflow:hidden;background:var(--border);margin-bottom:4px}.money i{display:block;height:100%}.money .e{background:var(--primary)}.money .a{background:var(--warn)}.money .s{background:var(--bad)}.money .z2{background:var(--hi)}
+.months{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}.mo{font-size:11px;text-align:center;border:1px solid var(--border);border-radius:6px;padding:5px 2px;color:var(--muted)}.mo.on{background:var(--psoft);border-color:#1f5a49;color:var(--text)}
+.dots{display:inline-flex;gap:3px}.dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--faint);display:inline-block}.dots .d1{background:var(--primary);border-color:var(--primary)}.dots .d2{background:var(--muted);border-color:var(--muted)}
+tr.hov:hover td,tr.hovon td{background:var(--raised)}tr.hov{cursor:pointer}
+</style>
+</head>
+<body><div class="wrap">
+<h1>Book of business and Commissions, round 5</h1>
+<p class="m" style="margin:6px 0 0">Mockups only, nothing built. Dark theme, 1440 wide. Every page, sub-page, button target and pop-up of both areas, plus the new pages. Grey text under each board says what changed and why.</p>
+<div class="toc">
+<a href="#flow">0 · The flow</a><a href="#files">1 · Files</a><a href="#file">2 · A file</a><a href="#review">3 · Review page</a><a href="#review2">3b · Pick the client</a><a href="#review3">3c · Review states</a><a href="#needs">4 · Needs you</a><a href="#row">5 · A row</a><a href="#policies">6 · Policies</a><a href="#policy">7 · A policy</a><a href="#setup">8 · Setup</a><a href="#rules">9 · Carrier rules</a><a href="#rules2">9b · A carrier</a><a href="#rules3">9c · Its edits</a><a href="#click">10 · Clickability</a><a href="#rates">11 · Rate card</a><a href="#ledger">12 · Ledger</a><a href="#pay">13 · Pay issues</a><a href="#producer">14 · Producer pay</a><a href="#phone">15 · Phone</a><a href="#map">16 · Edit map</a><a href="#crit">17 · Critique</a><a href="#a1">18 · Upload</a><a href="#a2">19 · File tabs</a><a href="#a3">20 · Stopped files</a><a href="#a4">21 · Every decision kind</a><a href="#a5">22 · Policy tabs</a><a href="#a6">23 · Rules, codes, files in</a><a href="#a7">24 · Commissions pages</a><a href="#a8">25 · Empty + bell</a><a href="#cover">26 · Coverage check</a>
+</div>
+
+<!-- 0 FLOW -->
+<div class="board" id="flow"><div class="cap"><b>0</b><span>The flow, as the owner described it, and which screen owns each step</span></div>
+<div class="frame"><div class="flow">
+<div class="fs"><b>Lead comes in</b><small>Inbound · Outbound</small></div><span class="arrow">→</span>
+<div class="fs"><b>Call</b><small>Dialer · lead page</small></div><span class="arrow">→</span>
+<div class="fs"><b>Application filled</b><small>Applications</small></div><span class="arrow">→</span>
+<div class="fs"><b>Submitted + policy number</b><small>Submit step: saved on the application and the lead</small></div><span class="arrow">→</span>
+<div class="fs"><b>Card: Submitted</b><small>Pipeline</small></div><span class="arrow">→</span>
+<div class="fs"><b>Carrier sends a file</b><small>Book › Files</small></div><span class="arrow">→</span>
+<div class="fs"><b>Read · status words · linked</b><small>Stage bar</small></div><span class="arrow">→</span>
+<div class="fs"><b>Ours: linked at once</b><small>by the policy number</small></div><span class="arrow">→</span>
+<div class="fs" style="border-color:var(--warn)"><b>Not sure / not ours</b><small>Needs you → Review page</small></div><span class="arrow">→</span>
+<div class="fs"><b>Card moves</b><small>Setup › Pipeline rules, using Carrier rules' windows</small></div><span class="arrow">→</span>
+<div class="fs"><b>Commission lines</b><small>Commissions › Ledger, Pay issues</small></div>
+</div></div>
+<ul class="note"><li><b>Policies that may not be ours</b> are never thrown away: they sit as "No sale yet" until someone says Mine / Not mine on the Review page.</li><li><b>Every decision happens on one page</b> (the Review page). Tables only list and link; nothing opens inside a table any more.</li></ul></div>
+
+<!-- 1 FILES -->
+<div class="board" id="files"><div class="cap"><b>1</b><span>Book of business › Files</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i></i><i></i></div>
+<div class="rail"><div class="on">Files <small>2</small></div><div>Needs you <small>3,837</small></div><div>Policies</div><div>Setup</div></div>
+<div class="main">
+<div class="trail">Book of business › <b>Files</b></div>
+<div class="tl"><h1>Files</h1><span class="sp"></span><span class="btn">More ▾</span><span class="btn p">Upload a file</span></div>
+<div class="card"><div class="toolbar"><span class="input">File or carrier</span><span class="chip on">All <span class="n">24</span></span><span class="chip">Needs you <span class="n w">6</span></span><span class="chip">Failed <span class="n w">2</span></span><span class="chip">Missing <span class="n">1</span></span><span class="chip">Carrier ▾</span><span class="chip">Type ▾</span><span class="chip">When ▾</span></div>
+<table><thead><tr><th>File</th><th>Carrier</th><th>Type</th><th>Arrived</th><th>Stages</th><th>Where it is</th><th></th></tr></thead><tbody>
+<tr><td><b>policySummary (1).xlsx</b><div class="f" style="font-size:12px">file of Nov 2 · 408 rows</div></td><td>Aetna / CVS</td><td>Policies</td><td>Nov 2 · Upload</td><td><span class="stages" style="width:110px"><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg nd"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span></span></td><td><span class="st w">407 to review</span></td><td class="r"><span class="btn sm p">Review 407</span></td></tr>
+<tr><td><b>AMAM-advances-2026-11-03.csv</b><div class="f" style="font-size:12px">statement · 2 lines</div></td><td>American Amicable</td><td>Commissions</td><td>Nov 3 · Upload</td><td><span class="stages" style="width:80px"><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span></span></td><td><span class="st g1">Done</span></td><td class="r"><span class="btn sm">Open</span></td></tr>
+<tr><td><b>Statement_6914….pdf</b><div class="f" style="font-size:12px">statement · PDF</div></td><td>Americo</td><td>Commissions</td><td>Oct 30 · Email</td><td><span class="stages" style="width:80px"><span class="stg"><span class="bar"></span></span><span class="stg"><span class="bar"></span></span><span class="stg" style="opacity:1"><span class="bar" style="background:var(--bad)"></span></span><span class="stg"><span class="bar" style="background:var(--border)"></span></span><span class="stg"><span class="bar" style="background:var(--border)"></span></span></span></td><td><span class="st b">Doesn't balance</span></td><td class="r"><span class="btn sm">Fix</span></td></tr>
+</tbody></table><div class="foot"><span class="m" style="font-size:12px">1–3 of 24 · fits the window</span><span class="sp"></span><span class="btn sm">‹</span><span class="btn sm">›</span></div></div>
+</div></div></div>
+<ul class="note"><li><b>The row's button is the next step</b>: "Review 407" when it waits on a person, "Fix" when it failed, "Open" when done. One primary per row at most, the rest outline.</li><li><b>Upload is the page's primary</b> (top right); More holds Run history, Checks, How files arrive.</li><li><b>"Where it is"</b> uses verbs ("407 to review", "Doesn't balance") instead of the stage name.</li></ul></div>
+
+<!-- 2 FILE -->
+<div class="board" id="file"><div class="cap"><b>2</b><span>A file · the page shows, it never decides</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i></i></div>
+<div class="rail"><div class="on">Files <small>2</small></div><div>Needs you <small>3,837</small></div><div>Policies</div><div>Setup</div></div>
+<div class="main">
+<div class="trail">Book of business › Files › <b>policySummary (1).xlsx</b></div>
+<div class="tl"><h1>policySummary (1).xlsx</h1><div class="tabs"><span class="tab on">Rows<span class="n">408</span></span><span class="tab">Changes<span class="n">1</span></span><span class="tab">Run history</span></div><span class="sp"></span><span class="btn">Read again</span><span class="btn">More ▾</span></div>
+<div class="stages"><div class="stg"><div class="bar"></div><div class="lb">✓ Uploaded</div></div><div class="stg"><div class="bar"></div><div class="lb">✓ Layout</div></div><div class="stg"><div class="bar"></div><div class="lb">✓ Read</div></div><div class="stg"><div class="bar"></div><div class="lb">✓ Status words</div></div><div class="stg nd"><div class="bar"></div><div class="lb">Linked · 407</div></div><div class="stg"><div class="bar"></div><div class="lb">✓ History</div></div><div class="stg"><div class="bar"></div><div class="lb">✓ Pipeline</div></div></div>
+<div class="card" style="display:flex;align-items:center;gap:18px;padding:14px 16px">
+<div><div style="font-size:26px;font-weight:800;color:var(--warn)">407</div></div>
+<div style="flex:1"><b>Waiting on you before this file is done</b><div class="m" style="font-size:13px">395 No sale yet · 12 Pick the client · 0 Status words</div></div>
+<span class="btn p">Review 407 →</span></div>
+<div class="card"><div class="toolbar"><span class="input">Policy or client</span><span class="chip on">All <span class="n">408</span></span><span class="chip">To review <span class="n w">407</span></span><span class="chip">New <span class="n">1</span></span><span class="chip">Linked <span class="n">396</span></span><span class="chip">Not in file <span class="n w">80</span></span></div>
+<table><thead><tr><th>Policy</th><th>Client</th><th>Outcome</th><th>Linked</th><th>Card</th><th></th></tr></thead><tbody>
+<tr><td><b>ACC9896101</b><div class="f" style="font-size:12px">Row 3</div></td><td>Avery Cole <span class="f">· from the file</span></td><td><span class="st w">No sale yet</span></td><td class="m">New client</td><td class="m">Waits</td><td class="r"><a>Review</a></td></tr>
+<tr><td><b>ACC9893098</b><div class="f" style="font-size:12px">Row 6</div></td><td class="m">No client yet</td><td><span class="st w">Pick client · 4</span></td><td class="m">—</td><td class="m">Waits</td><td class="r"><a>Review</a></td></tr>
+<tr><td><b>ACC9811002</b><div class="f" style="font-size:12px">Row 41</div></td><td>Jordan Lake</td><td><span class="st g1">New</span></td><td class="m">By number</td><td>Submitted → Issued</td><td class="r"><a>Open</a></td></tr>
+</tbody></table><div class="foot"><span class="m" style="font-size:12px">1–3 of 408</span><span class="sp"></span><span class="btn sm">‹</span><span class="btn sm">›</span></div></div>
+</div></div></div>
+<ul class="note"><li><b>Removed:</b> deciding inside the table (the row that grew into a form). Each row now ends in a plain link: <b>Review</b> opens the Review page at that item; <b>Open</b> opens the row page.</li><li><b>The "Needs you · 407" card with groups</b> becomes one line with one button. Groups and bulk live on the Review page, where the work happens.</li><li><b>Download</b> moves into More with "The file as sent", "Export rows", "Replace with a corrected file". Read again stays as the one other button.</li></ul></div>
+
+<!-- 3 REVIEW -->
+<div class="board" id="review"><div class="cap"><b>3</b><span>NEW · Review page: /app/needs-you/review?file=…&amp;kind=no-sale · one question at a time, the answer one key away</span></div>
+<div class="frame"><div class="app" style="grid-template-columns:56px 1fr"><div class="side"><i></i><i></i><i></i></div>
+<div class="main" style="padding:16px 20px">
+<div class="trail">Book of business › Needs you › <b>Review</b></div>
+<div class="tl"><h1>No sale yet</h1><span class="st z">policySummary (1).xlsx · Aetna / CVS</span><span class="sp"></span><span class="m" style="font-size:13px">12 done · 383 left</span><div style="width:160px" class="prog"><i style="width:3%"></i></div><span class="btn">Done for now</span></div>
+<div class="card split">
+<div class="q">
+<div class="toolbar" style="border-bottom:1px solid var(--border)"><span class="input" style="min-width:0;flex:1">Policy or name</span></div>
+<div class="toolbar" style="border-bottom:1px solid var(--border);padding:8px 14px"><span class="box"></span><span class="m" style="font-size:12px">Select all 383</span><span class="sp"></span><span class="m" style="font-size:12px">Oldest first ▾</span></div>
+<div class="qi done"><span class="box"></span><div><b>ACC9896101</b><div class="m" style="font-size:12px">Avery Cole · $52.10</div></div><span class="st g1">Mine</span></div>
+<div class="qi on"><span class="box"></span><div><b>ACC9892811</b><div class="m" style="font-size:12px">Alex Pike · $101.86</div></div><span class="f" style="font-size:12px">now</span></div>
+<div class="qi"><span class="box"></span><div><b>ACC9893027</b><div class="m" style="font-size:12px">Drew Hart · $64.00</div></div></div>
+<div class="qi"><span class="box"></span><div><b>ACC9899168</b><div class="m" style="font-size:12px">Casey Shaw · $48.75</div></div></div>
+<div class="qi"><span class="box"></span><div><b>ACC9895837</b><div class="m" style="font-size:12px">Riley Gray · $73.30</div></div></div>
+<div class="qi"><span class="box"></span><div><b>ACC9893783</b><div class="m" style="font-size:12px">Avery Hill · $58.10</div></div></div>
+<div style="flex:1"></div>
+<div class="foot"><span class="m" style="font-size:12px">1–40 of 383</span><span class="sp"></span><span class="btn sm">‹</span><span class="btn sm">›</span></div>
+</div>
+<div class="dec">
+<div class="m" style="font-size:12px">ACC9892811 · Aetna / CVS · row 4 · file of Nov 2</div>
+<div class="ask">Is Alex Pike your client?</div>
+<div class="m" style="margin-top:-8px">The carrier has this policy, but no sale or application in Insurvas matches it. A client was made from the carrier's row.</div>
+<div class="cmp"><div class="h"></div><div class="h">The carrier's file</div><div class="h">Closest in Insurvas</div>
+<div class="m">Name</div><div>Alex Pike</div><div class="m">— no match</div>
+<div class="m">Born</div><div>Jun 2, 1958</div><div class="m">—</div>
+<div class="m">Premium</div><div>$101.86 / month</div><div class="m">—</div>
+<div class="m">Face</div><div>$29,325</div><div class="m">—</div>
+<div class="m">Writing agent</div><div>GNW6732755 → Devin Okafor</div><div class="m">—</div></div>
+<div class="answers">
+<span class="btn p big">Yes, Alex Pike is my client <span><kbd>1</kbd></span></span>
+<span class="btn big">It's someone already in Insurvas… <span><kbd>2</kbd></span></span>
+<span class="btn big">Link it to a sale… <span><kbd>3</kbd></span></span>
+<span class="btn big">Not ours <span><kbd>4</kbd></span></span>
+</div>
+<div class="tl" style="font-size:12px"><span class="m">Answer saves and opens the next.</span><span class="sp"></span><a>The row as sent</a><span class="btn sm g">Skip <kbd>S</kbd></span></div>
+</div>
+</div>
+</div></div></div>
+<ul class="note"><li><b>The whole screen is the work.</b> Left: the queue (search, select, sort). Right: one question written as a person would ask it, the evidence as a two-column comparison, and four big answers numbered 1–4.</li><li><b>One click (or one key) answers and moves to the next.</b> Answers that need a pick (2, 3) open a search right below the button (board 3c). No radio-then-save.</li><li><b>Bulk:</b> tick rows on the left (or "Select all 383"), then a bar appears: <b>Mark 25 as mine</b> · Not ours. Same confirm dialog as today.</li><li><b>Not ours</b> keeps the policy and hands it to operations, so nothing that might be ours is lost.</li><li><b>Done for now</b> returns to wherever Review was opened from (the file, Needs you, the bell).</li></ul></div>
+
+<!-- 3b PICK -->
+<div class="board" id="review2"><div class="cap"><b>3b</b><span>Review page · Pick the client (several sales could be it): candidates side by side</span></div>
+<div class="frame"><div class="main">
+<div class="tl"><h1>Pick the client</h1><span class="st z">policySummary (1).xlsx</span><span class="sp"></span><span class="m" style="font-size:13px">3 done · 9 left</span><span class="btn">Done for now</span></div>
+<div class="card" style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+<div class="m" style="font-size:12px">ACC9893098 · Aetna / CVS · row 6</div>
+<div class="ask">Which sale is policy ACC9893098?</div>
+<div class="m" style="margin-top:-8px">The file says <b style="color:var(--text)">Robin Cole · $69.23 / month · $17,595 face · agent GNW6732755</b></div>
+<div class="cand">
+<div class="cc top"><b>Lyle Winslow</b><span class="m" style="font-size:12px">sale Oct 27</span><span class="ok" style="font-size:13px">✓ premium $68.40</span><span class="no" style="font-size:13px">✕ name · ✕ face $150</span><span class="btn sm p" style="margin-top:6px">This is the one <kbd>1</kbd></span></div>
+<div class="cc"><b>Application Oct 28</b><span class="m" style="font-size:12px">no name yet</span><span class="ok" style="font-size:13px">✓ premium $68.40</span><span class="no" style="font-size:13px">✕ face $150</span><span class="btn sm" style="margin-top:6px">This is the one <kbd>2</kbd></span></div>
+<div class="cc"><b>Application Oct 29</b><span class="m" style="font-size:12px">no name yet</span><span class="ok" style="font-size:13px">✓ premium $68.40</span><span class="no" style="font-size:13px">✕ face $10,000</span><span class="btn sm" style="margin-top:6px">This is the one <kbd>3</kbd></span></div>
+<div class="cc"><b>Marjorie Delacroix</b><span class="m" style="font-size:12px">sale Oct 29</span><span class="ok" style="font-size:13px">✓ premium $68.40</span><span class="no" style="font-size:13px">✕ name · ✕ face</span><span class="btn sm" style="margin-top:6px">This is the one <kbd>4</kbd></span></div>
+</div>
+<div class="tl"><span class="btn">None of them: keep it as a new client <kbd>0</kbd></span><span class="sp"></span><a style="font-size:12px">The row as sent</a><span class="btn sm g">Skip <kbd>S</kbd></span></div>
+</div></div></div>
+<ul class="note"><li><b>Each candidate is a card with its own button</b>: what matches is green, what doesn't is red, and the strongest match is outlined. The 8-row comparison table is gone; the facts that differ are on the cards.</li><li>Same queue on the left as board 3 (hidden here for width).</li></ul></div>
+
+<!-- 3c STATES -->
+<div class="board" id="review3"><div class="cap"><b>3c</b><span>Review page · every state: picker open, bulk bar, confirm, saved, all done, error, read-only</span></div>
+<div class="frame"><div class="main"><div class="grid3">
+<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><h3>2 · It's someone already in Insurvas…</h3><span class="input" style="color:var(--text)">Pike</span><div class="pop" style="width:auto;box-shadow:none"><div class="on"><b>Alex Pike</b> <span class="m">· born Jun 2, 1958 · 2 policies</span></div><div><b>Alexis Pike</b> <span class="m">· born Mar 9, 1961</span></div></div><span class="btn p sm" style="align-self:flex-end">Link to Alex Pike</span></div>
+<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px"><h3>Bulk bar (25 ticked)</h3><div class="tl" style="background:var(--raised);border-radius:10px;padding:10px"><b>25 selected</b><span class="sp"></span><span class="btn sm">Not ours</span><span class="btn sm p">Mark 25 as mine</span></div><span class="m" style="font-size:12px">Sits at the foot of the queue while anything is ticked.</span></div>
+<div class="dlg" style="width:auto"><h2>Mark 25 as yours?</h2><p class="m" style="font-size:13px">Each client made from the carrier's file becomes a confirmed client and its policy stays linked. Recorded with your name.</p><div class="tl"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Mark 25</span></div></div>
+<div class="card" style="padding:14px"><span class="toast">✓ Alex Pike confirmed · next: Drew Hart</span><p class="m" style="font-size:12px">Toast bottom-right; the next item slides in (150 ms).</p></div>
+<div class="card" style="padding:24px;text-align:center"><div style="font-size:28px">✓</div><h2>Nothing left to review in this file</h2><p class="m" style="font-size:13px">395 answered today.</p><span class="btn p">Back to the file</span></div>
+<div class="card" style="padding:14px"><h3>Error / read-only</h3><p style="font-size:13px" class="b">That item was already decided by Helen Marsh. Moving to the next.</p><p class="m" style="font-size:13px">Read-only plan: the answer buttons are greyed with "Your plan is read-only" as their tooltip.</p></div>
+</div></div></div></div>
+
+<!-- 4 NEEDS -->
+<div class="board" id="needs"><div class="cap"><b>4</b><span>Needs you · a list of groups, each opens the Review page</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i></div>
+<div class="rail"><div>Files</div><div class="on">Needs you <small>3,837</small></div><div>Policies</div><div>Setup</div></div>
+<div class="main">
+<div class="trail">Book of business › <b>Needs you</b></div>
+<div class="tl"><h1>Needs you</h1><div class="tabs"><span class="tab">Mine<span class="n">12</span></span><span class="tab on">Agency<span class="n w">3,837</span></span><span class="tab">Waiting on Insurvas<span class="n">3</span></span><span class="tab">Closed</span></div><span class="sp"></span><span class="btn p">Review the oldest →</span></div>
+<div class="card"><div class="toolbar"><span class="chip on">All <span class="n">3,837</span></span><span class="chip">Clients <span class="n">3,790</span></span><span class="chip">Money <span class="n">31</span></span><span class="chip">Credit <span class="n">16</span></span><span class="chip">Files <span class="n">2</span></span><span class="sp"></span><span class="chip">Group alike ✓</span></div>
+<table><thead><tr><th>What</th><th>From</th><th class="r">How many</th><th>Owner</th><th>Oldest</th><th></th></tr></thead><tbody>
+<tr><td><span class="st w">No sale yet</span></td><td>policySummary (1).xlsx · Aetna / CVS</td><td class="r"><b>1,712</b></td><td>Writing agents</td><td>today</td><td class="r"><span class="btn sm">Review</span></td></tr>
+<tr><td><span class="st w">Pick the client</span></td><td>policySummary (1).xlsx</td><td class="r"><b>7</b></td><td>Owner or bookkeeper</td><td>today</td><td class="r"><span class="btn sm">Review</span></td></tr>
+<tr><td><span class="st b">Money doesn't match</span></td><td>AMAM statements</td><td class="r"><b>31</b></td><td>Owner or bookkeeper</td><td>6 d</td><td class="r"><span class="btn sm">Review</span></td></tr>
+<tr><td><span class="st b">File didn't read</span></td><td>Statement_6914….pdf</td><td class="r"><b>1</b></td><td>Operations</td><td>4 d</td><td class="r"><span class="btn sm">Fix</span></td></tr>
+<tr><td><span class="st z">At lapse risk</span></td><td>Retention</td><td class="r"><b>19</b></td><td>Retention</td><td>2 d</td><td class="r"><span class="btn sm">Review</span></td></tr>
+</tbody></table><div class="foot"><span class="m" style="font-size:12px">5 lines for 3,837 items</span></div></div>
+</div></div></div>
+<ul class="note"><li><b>A line is a group of identical questions</b> ("1,712 No sale yet from one file"); <b>Review</b> opens board 3 filtered to it. Group alike off shows one line per item, each still opening the Review page at that item.</li><li><b>Lapse risk</b> joins here (the Reports session moved it in); "File didn't read" is the new failed-file kind.</li></ul></div>
+
+<!-- 5 ROW -->
+<div class="board" id="row"><div class="cap"><b>5</b><span>A row of a file · what happened to it, and the row itself, on one page</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i></div>
+<div class="rail"><div class="on">Files <small>2</small></div><div>Needs you</div><div>Policies</div><div>Setup</div></div>
+<div class="main">
+<div class="trail">Book of business › Files › <a>AMAM-policies-2026-11-05-corrected.csv</a> › <b>Row 2</b></div>
+<div class="tl"><h1>0119990007 · Maxine Sizemore</h1><span class="st i">Changed</span><span class="m" style="font-size:13px">Row 2 of 1 · American Amicable · file of Nov 5</span><span class="sp"></span><span class="btn">‹ Row</span><span class="btn">Row ›</span><span class="btn p">Open the policy</span></div>
+<div class="two" style="grid-template-columns:1.2fr 1fr">
+<div class="card"><div class="hd"><h2>What happened</h2></div>
+<div class="step"><span class="dot"></span><b>Uploaded</b><span>file of Nov 5, 2026</span><a style="font-size:12px">The file</a></div>
+<div class="step"><span class="dot"></span><b>Read</b><span>with American Amicable policies v1 · 18 of 27 columns used</span><span></span></div>
+<div class="step"><span class="dot"></span><b>Status word</b><span>"Active" → Active</span><span></span></div>
+<div class="step"><span class="dot"></span><b>Linked</b><span>Maxine Sizemore · picked by a person · Nov 3</span><a style="font-size:12px">Change client</a></div>
+<div class="step"><span class="dot"></span><b>Changed</b><span>Premium <span class="m">$45.20</span> → <b>$47.80</b></span><a style="font-size:12px">History</a></div>
+<div class="step"><span class="dot z"></span><b class="m">Pipeline</b><span class="m">No card moved: no rule for a premium change</span><a style="font-size:12px">Add a rule</a></div>
+<div class="step"><span class="dot z"></span><b class="m">Commissions</b><span class="m">A policy file carries no commission lines</span><span></span></div>
+</div>
+<div class="card"><div class="hd"><h2>The row as sent</h2><span class="sp"></span><span class="chip" style="height:30px">Used 18</span><span class="chip" style="height:30px">All 27</span></div>
+<div style="padding:4px 16px 10px" class="kv">
+<div class="k">WritingAgent <span class="f mono">A</span></div><div><b class="mono">0000777001</b> <span class="f">→ agent code</span></div>
+<div class="k">Policy <span class="f mono">D</span></div><div><b class="mono">0119990007</b> <span class="f">→ policy number</span></div>
+<div class="k">Status <span class="f mono">E</span></div><div><b>Active</b> <span class="f">→ status</span></div>
+<div class="k">DOB <span class="f mono">F</span></div><div>Jul 14, 1975 <span class="f">→ to match the client</span></div>
+<div class="k">PolicyDate <span class="f mono">G</span></div><div>Nov 5, 2026 <span class="f">→ effective date</span></div>
+<div class="k">PaidtoDate <span class="f mono">H</span></div><div>Dec 5, 2026 <span class="f">→ paid to</span></div>
+<div class="k">LastName <span class="f mono">J</span></div><div>SIZEMOR <span class="f">→ to match the client</span></div>
+<div class="k">ModalPrem <span class="f mono">K</span></div><div>$47.80 <span class="f">→ premium</span></div>
+<div class="k f">Agency <span class="mono">B</span></div><div class="f">ELLERY &amp; FIELDS · not read</div>
+</div></div>
+</div>
+</div></div></div>
+<ul class="note"><li><b>Header</b>: the policy number <i>and</i> the client, the outcome chip, and one muted facts line. <b>‹ Row / Row ›</b> step through the file without going back. One primary, "Open the policy"; "Open the file" is the link in the trail, so the one-item More menu goes.</li><li><b>What happened</b> is a vertical stepper (done dots, grey for "nothing to do") with the one link each step offers. "Add a rule" appears where no rule moved the card.</li><li><b>The row as sent</b> is beside it, not a second tab: every column on one list (no 7-per-page paging), each value as a person reads it (dates as dates, the Excel <span class="mono">=(…)</span> wrapper dropped; the raw text is the tooltip), what it became, and the column letter. "Used 18 / All 27" filters it.</li></ul></div>
+
+<!-- 6 POLICIES -->
+<div class="board" id="policies"><div class="cap"><b>6</b><span>Policies · redesigned: the book at a glance, and where every policy's money stands</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i></div>
+<div class="rail"><div>Files</div><div>Needs you</div><div class="on">Policies</div><div>Setup</div></div>
+<div class="main">
+<div class="trail">Book of business › <b>Policies</b></div>
+<div class="tl"><h1>Policies</h1><div class="tabs"><span class="tab on">The book<span class="n">865</span></span><span class="tab">Recent changes<span class="n">81</span></span></div><span class="sp"></span><span class="btn">More ▾</span><span class="btn p">Add a policy</span></div>
+<div class="card" style="display:grid;grid-template-columns:repeat(5,1fr)">
+<a class="tile"><div class="m" style="font-size:12px">In force</div><b style="font-size:20px">612</b><div class="f" style="font-size:12px">$31,480 / month premium</div></a>
+<a class="tile"><div class="m" style="font-size:12px">Commission this year</div><b style="font-size:20px">$118,400</b><div class="f" style="font-size:12px">expected from the rate card</div></a>
+<a class="tile"><div class="m" style="font-size:12px">Received so far</div><b style="font-size:20px">$71,920</b><div class="bar2"><i style="width:61%"></i></div></a>
+<a class="tile"><div class="m" style="font-size:12px">Advance at risk</div><b style="font-size:20px;color:var(--warn)">$14,220</b><div class="f" style="font-size:12px">on 38 policies behind on payment</div></a>
+<a class="tile" style="border-right:0"><div class="m" style="font-size:12px">Short or late</div><b style="font-size:20px;color:var(--bad)">$2,118</b><div class="f" style="font-size:12px">31 policies · in Pay issues</div></a>
+</div>
+<div class="card"><div class="toolbar"><span class="input">Policy, client or agent</span><span class="chip on">All <span class="n">865</span></span><span class="chip">Behind on payment <span class="n w">38</span></span><span class="chip">Paid short <span class="n w">31</span></span><span class="chip">Advance at risk <span class="n w">19</span></span><span class="chip">Lapsed <span class="n">71</span></span><span class="chip">Carrier ▾</span><span class="chip">Agent ▾</span></div>
+<table><thead><tr><th>Policy</th><th>Carrier · product</th><th>Health</th><th class="r">Premium</th><th style="width:240px">Commission</th><th>Next date</th><th>Agent</th><th></th></tr></thead><tbody>
+<tr class="hov"><td><b>0119990001</b><div class="m" style="font-size:12px">Maxine Sizemore</div></td><td>American Amicable<div class="f" style="font-size:12px">Senior Choice</div></td><td><span class="st g1">Paid to Dec 2</span></td><td class="r">$45.20</td><td><div class="money"><i class="e" style="width:11%"></i><i class="a" style="width:89%"></i></div><div style="font-size:12px"><b>$22.60</b> earned · <span class="w" style="background:none">$180.80 at risk</span> · of $271.20</div></td><td>Draft Dec 2</td><td>Devin Okafor</td><td class="r f">›</td></tr>
+<tr class="hov"><td><b>ACC9811002</b><div class="m" style="font-size:12px">Jordan Lake</div></td><td>Aetna / CVS<div class="f" style="font-size:12px">Protection Series</div></td><td><span class="st w">1 payment behind</span></td><td class="r">$71.15</td><td><div class="money"><i class="e" style="width:33%"></i><i class="a" style="width:52%"></i><i class="s" style="width:15%"></i></div><div style="font-size:12px"><b>$280</b> earned · $420 at risk · <span class="no">$64 short</span></div></td><td class="w" style="background:none">Grace ends Nov 9</td><td>Marisol Vance</td><td class="r f">›</td></tr>
+<tr class="hov"><td><b>NB2201934</b><div class="m" style="font-size:12px">Ava Reed</div></td><td>Mutual of Omaha<div class="f" style="font-size:12px">Living Promise</div></td><td><span class="st g1">Paid to Jan 15</span></td><td class="r">$58.00</td><td><div class="money"><i class="e" style="width:100%"></i></div><div style="font-size:12px"><b>$612</b> earned · all of it · <span class="ok">paid in full</span></div></td><td class="m">Anniversary Mar 1</td><td>Leah Kim</td><td class="r f">›</td></tr>
+<tr class="hov"><td><b>7113599927</b><div class="m" style="font-size:12px">Robin West</div></td><td>American Amicable<div class="f" style="font-size:12px">— no rate</div></td><td><span class="st g1">Approved</span></td><td class="r">$76.29</td><td><div style="font-size:12px" class="m">Waiting for the first payment · <a>Add the rate</a></div></td><td>First draft Nov 12</td><td>Devin Okafor</td><td class="r f">›</td></tr>
+</tbody></table><div class="foot"><span class="m" style="font-size:12px">1–4 of 865 · fits the window</span><span class="sp"></span><span class="btn sm">Export</span><span class="btn sm">‹</span><span class="btn sm">›</span></div></div>
+</div></div></div>
+<ul class="note"><li><b>The money column answers "where does this policy stand?"</b> One bar: green earned, amber advance not yet earned (at risk), red short-paid. Under it one sentence with the numbers. Every row the same shape, so 865 rows scan in seconds.</li><li><b>Health</b> replaces raw status: "Paid to Dec 2", "1 payment behind", "Lapsed". <b>Next date</b> is the one date that matters now (next draft, grace end, anniversary).</li><li><b>Every figure in the strip is a link</b> to the rows behind it (§16). The chips are the questions an owner asks.</li><li>The whole row opens the policy (a chevron shows it); policy number and client are one cell.</li></ul></div>
+
+<!-- 7 POLICY -->
+<div class="board" id="policy"><div class="cap"><b>7</b><span>A policy · the Commissions tab becomes "Where the money stands"</span></div>
+<div class="frame"><div class="main">
+<div class="trail">Book of business › Policies › <b>0119990001</b></div>
+<div class="tl"><h1>0119990001 · Maxine Sizemore</h1><span class="st g1">Paid to Dec 2</span><span class="m" style="font-size:13px">American Amicable · Senior Choice · $45.20/mo · agent Devin Okafor</span><span class="sp"></span><span class="btn">Open the lead</span><span class="btn">More ▾</span></div>
+<div class="tabs" style="border:0;padding:0"><span class="tab">Overview</span><span class="tab">History<span class="n">4</span></span><span class="tab">Client</span><span class="tab">Pipeline<span class="n">2</span></span><span class="tab on">Money<span class="n w">1</span></span><span class="tab">Files<span class="n">2</span></span></div>
+<div class="two" style="grid-template-columns:1.3fr 1fr">
+<div class="card"><div class="hd"><h2>First year</h2><span class="m" style="font-size:12px">rate card: 110% · advance 75% over 9 months</span><span class="sp"></span><a style="font-size:12px">Change the rate</a></div>
+<div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+<div class="money" style="height:12px"><i class="e" style="width:11%"></i><i class="a" style="width:64%"></i><i class="z2" style="width:25%"></i></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+<a class="tile2"><span class="m" style="font-size:12px">Expected</span><b>$271.20</b><span class="f" style="font-size:12px">first year</span></a>
+<a class="tile2"><span class="m" style="font-size:12px">Advanced</span><b>$203.40</b><span class="f" style="font-size:12px">Nov 2 · AMAM statement</span></a>
+<a class="tile2"><span class="m" style="font-size:12px">Earned</span><b class="ok">$22.60</b><span class="f" style="font-size:12px">1 of 9 months paid</span></a>
+<a class="tile2"><span class="m" style="font-size:12px">At risk</span><b class="w" style="background:none">$180.80</b><span class="f" style="font-size:12px">taken back if it lapses</span></a>
+</div>
+<div class="m" style="font-size:12px;font-weight:600">MONTH BY MONTH</div>
+<div class="months"><span class="mo on">Nov<br><b>✓</b></span><span class="mo">Dec<br>due 2nd</span><span class="mo">Jan</span><span class="mo">Feb</span><span class="mo">Mar</span><span class="mo">Apr</span><span class="mo">May</span><span class="mo">Jun</span><span class="mo">Jul</span><span class="mo">Aug<br><span class="f">earned</span></span><span class="mo">Sep</span><span class="mo">Oct</span></div>
+<div class="m" style="font-size:12px">Each paid month earns $22.60 of the advance. After August the advance is fully earned and nothing can be charged back; the rest of the year ($67.80) is paid as it earns.</div>
+</div></div>
+<div style="display:flex;flex-direction:column;gap:14px">
+<div class="card"><div class="hd"><h2>What's next</h2></div><div style="padding:12px 16px;font-size:13px;display:flex;flex-direction:column;gap:8px"><div><b>Dec 2</b> · draft $45.20 <span class="f">→ earns $22.60</span></div><div><b>Jan 2</b> · draft $45.20</div><div class="w" style="background:none">If Dec 2 is missed: grace ends Dec 7, then $180.80 can be charged back</div></div></div>
+<div class="card"><div class="hd"><h2>Lines from the carrier</h2><span class="sp"></span><a style="font-size:12px">Ledger</a></div><table><tbody><tr class="hov"><td>Nov 2</td><td>Advance</td><td class="r">$203.40</td><td class="f">row 2 ›</td></tr><tr class="hov"><td>Nov 3</td><td><span class="st b">Chargeback</span></td><td class="r">−$203.40</td><td class="f">row 2 ›</td></tr></tbody></table><div style="padding:10px 16px" class="tl"><span class="st w">1 pay issue</span><span class="m" style="font-size:12px">chargeback on an active policy</span><span class="sp"></span><span class="btn sm p">Review</span></div></div>
+</div></div>
+</div></div>
+<ul class="note"><li><b>"How much are we getting on this policy, and is it safe?"</b> One bar (earned · at risk · still to come), four figures, and a 12-month strip showing which months are paid and when the advance is fully earned.</li><li><b>What's next</b> says the next draft, what it earns, and what happens if it's missed, using Carrier rules' grace (board 9). If the carrier's grace isn't set, it says "grace not set for American Amicable", never a guessed number (LA-4.17).</li><li>Each carrier line opens its row; a pay issue on this policy has its own Review button. Tab renamed Money, its count = open pay issues.</li></ul></div>
+
+<!-- 8 SETUP -->
+<div class="board" id="setup"><div class="cap"><b>8</b><span>Setup · five tabs that fit</span></div>
+<div class="frame"><div class="main">
+<div class="tl"><h1>Setup</h1><div class="tabs"><span class="tab">Rate card<span class="n w">4</span></span><span class="tab on">Carrier rules<span class="n w">12</span></span><span class="tab">Pipeline rules</span><span class="tab">Agent codes<span class="n w">2</span></span><span class="tab">Files in</span></div></div>
+<p class="m" style="margin:0;font-size:13px">Was six tabs with two cut off. "How files arrive" and "Bring your existing book" become two sections of <b>Files in</b>. Each tab's count is what's missing there (rates, rules, codes).</p></div></div>
+
+<!-- 9 CARRIER RULES -->
+<div class="board" id="rules"><div class="cap"><b>9</b><span>Setup › Carrier rules (LA-4.17) · every carrier, what's set, what's missing, and what the gap costs</span></div>
+<div class="frame"><div class="main">
+<div class="tl"><h1>Setup</h1><div class="tabs"><span class="tab">Rate card</span><span class="tab on">Carrier rules<span class="n w">12</span></span><span class="tab">Pipeline rules</span><span class="tab">Agent codes</span><span class="tab">Files in</span></div></div>
+<div class="card"><div class="toolbar"><span class="input">Carrier</span><span class="chip on">All <span class="n">7</span></span><span class="chip">Missing a rule <span class="n w">5</span></span><span class="chip">Unverified <span class="n">3</span></span><span class="sp"></span><span class="m" style="font-size:12px">sorted by policies affected</span></div>
+<table><thead><tr><th>Carrier</th><th class="r">In force</th><th>Windows set</th><th>The biggest gap</th><th>Money</th><th>Files</th><th></th></tr></thead><tbody>
+<tr class="hov"><td><b>Americo</b></td><td class="r">112</td><td><span class="dots"><i class="d1"></i><i></i><i></i><i></i><i></i></span> <span class="m" style="font-size:12px">1 of 5</span></td><td class="w" style="background:none"><b>First payment window not set</b><div style="font-size:12px">112 policies can't be counted down</div></td><td class="m">Lag not set</td><td><span class="st g1">PDF · layout v2</span></td><td class="r f">›</td></tr>
+<tr class="hov"><td><b>American Amicable</b></td><td class="r">641</td><td><span class="dots"><i class="d1"></i><i class="d1"></i><i class="d2"></i><i></i><i></i></span> <span class="m" style="font-size:12px">3 of 5</span></td><td class="w" style="background:none">Conservation window not set<div style="font-size:12px">38 behind on payment</div></td><td>On first draft · 30 d</td><td><span class="st g1">CSV · layout v1</span></td><td class="r f">›</td></tr>
+<tr class="hov"><td><b>Aetna / CVS</b></td><td class="r">408</td><td><span class="dots"><i class="d2"></i><i class="d2"></i><i class="d1"></i><i class="d1"></i><i class="d1"></i></span> <span class="m" style="font-size:12px">5 of 5</span></td><td class="m">— nothing missing <span class="st z">2 unverified</span></td><td>On issue · 45 d</td><td><span class="st g1">Excel · layout v1</span></td><td class="r f">›</td></tr>
+</tbody></table><div class="foot"><span class="m" style="font-size:12px"><span class="dots" style="vertical-align:middle"><i class="d1"></i></span> verified &nbsp; <span class="dots" style="vertical-align:middle"><i class="d2"></i></span> observed, unverified &nbsp; <span class="dots" style="vertical-align:middle"><i></i></span> not set</span></div></div>
+</div></div>
+<ul class="note"><li><b>The list is the coverage screen LA-4.17 asks for:</b> per carrier, which of the five windows are set (one dot each: first payment, ongoing payment, reinstatement, conservation, cancellation request), the biggest gap in words, and how many in-force policies it leaves without a countdown. Sorted so the gap that costs most is first.</li><li>The whole row opens that carrier's page (board 9b). Nothing is edited in this list.</li></ul></div>
+
+<!-- 9b CARRIER PAGE -->
+<div class="board" id="rules2"><div class="cap"><b>9b</b><span>A carrier's rules · one carrier, one page, everything about it</span></div>
+<div class="frame"><div class="main">
+<div class="trail">Book of business › Setup › Carrier rules › <b>American Amicable</b></div>
+<div class="tl"><h1>American Amicable</h1><span class="m" style="font-size:13px">641 in force · 2 rules missing · 1 unverified</span><span class="sp"></span><span class="btn">‹ Carrier</span><span class="btn">Carrier ›</span></div>
+<div class="two">
+<div class="card"><div class="hd"><h2>Retention windows</h2><span class="m" style="font-size:12px">days from paid-to</span></div>
+<table><thead><tr><th>Window</th><th class="r">Closes after</th><th class="r">Grace</th><th>Redraft</th><th>Source</th><th></th></tr></thead><tbody>
+<tr class="hov"><td><b>First payment</b></td><td class="r">30 d</td><td class="r">5 d</td><td class="m">2 tries · 7 d apart</td><td><span class="st g1">Agreement · verified</span></td><td class="r"><a>Edit</a></td></tr>
+<tr class="hov"><td><b>Ongoing payment</b></td><td class="r">31 d</td><td class="r">5 d</td><td class="m">1 try</td><td><span class="st z">Observed · unverified</span></td><td class="r"><a>Edit</a></td></tr>
+<tr class="hov"><td><b>Reinstatement</b></td><td class="r">180 d</td><td class="r m">—</td><td class="m">—</td><td><span class="st g1">Agreement · verified</span></td><td class="r"><a>Edit</a></td></tr>
+<tr class="hov"><td><b>Conservation</b></td><td colspan="4" class="w" style="background:none">Not set · 38 policies behind on payment have no save countdown</td><td class="r"><span class="btn sm p">Set it</span></td></tr>
+<tr class="hov"><td><b>Cancellation request</b></td><td colspan="4" class="m">Not set · 0 policies affected today</td><td class="r"><a>Set it</a></td></tr>
+</tbody></table></div>
+<div style="display:flex;flex-direction:column;gap:14px">
+<div class="card"><div class="hd"><h2>Money</h2></div><div class="kv" style="padding:4px 16px 10px">
+<div class="k">Pays commission</div><div>On first draft <span class="f">· yours, from Jan 1</span> <a style="float:right">Edit</a></div>
+<div class="k">Payment lag</div><div>30 days <span class="f">· Insurvas's</span> <a style="float:right">Edit</a></div>
+<div class="k">Minimum payout</div><div class="m">— not set <a style="float:right">Set</a></div>
+<div class="k">Tolerance</div><div>$1.00 <span class="f">· Insurvas's</span> <a style="float:right">Edit</a></div>
+<div class="k">Commissions desk</div><div>commissions@americanamicable.com · 800-736-7311 <a style="float:right">Edit</a></div></div></div>
+<div class="card"><div class="hd"><h2>Files</h2></div><div class="kv" style="padding:4px 16px 10px">
+<div class="k">Statement format</div><div>Spreadsheet · <a>layout v1</a></div>
+<div class="k">Files arrive</div><div>Daily · <a>How files arrive</a></div>
+<div class="k">Portal</div><div><a>agents.americanamicable.com</a> <span class="f">· Reports › Policy summary</span></div>
+<div class="k">Policy numbers</div><div class="mono">01199#####</div></div></div>
+</div></div></div></div>
+<ul class="note"><li><b>"One carrier, one row, everything about it"</b> (LA-4.17): retention windows (with grace, redraft attempts and interval, source, verified), money facts (trigger, lag, minimum payout, tolerance, commissions desk for dispute letters), and file facts (format, layout, cadence, portal and where to find the report, policy number pattern).</li><li><b>Each value says whose it is:</b> Insurvas's default, or yours from a date. Unverified values show their grey "Observed · unverified" chip wherever they're used (countdowns, What's next on a policy).</li><li><b>A missing window is a row, not a notice:</b> it names the cost ("38 policies behind on payment have no save countdown") and its Set it is the only primary on the page. ‹ Carrier › steps to the next carrier without going back.</li></ul></div>
+
+<!-- 9c RULE EDIT -->
+<div class="board" id="rules3"><div class="cap"><b>9c</b><span>Carrier rules · edit surfaces</span></div>
+<div class="frame"><div class="main"><div class="grid3">
+<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px"><h3>Edit a window (opens in the row)</h3>
+<div class="kv"><div class="k">Closes after</div><div><span class="input" style="min-width:80px;color:var(--text)">31</span> days from paid-to</div><div class="k">Grace</div><div><span class="input" style="min-width:80px;color:var(--text)">5</span> days</div><div class="k">Redraft</div><div><span class="input" style="min-width:60px;color:var(--text)">1</span> tries, <span class="input" style="min-width:60px">—</span> days apart</div><div class="k">Where it's from</div><div><span class="chip on" style="height:28px">Agreement</span> <span class="chip" style="height:28px">Phone call</span> <span class="chip" style="height:28px">Observed</span></div><div class="k">From</div><div><span class="input" style="min-width:120px;color:var(--text)">Nov 3, 2026</span></div><div class="k">Note</div><div class="m">"Confirmed by Jane at the agency desk, call of Nov 3"</div></div>
+<div class="tl"><a style="font-size:12px">Back to Insurvas's</a><span class="sp"></span><span class="btn sm">Cancel</span><span class="btn sm p">Save</span></div></div>
+<div class="dlg" style="width:auto"><h2>Mark it verified?</h2><p class="m" style="font-size:13px">"Ongoing payment · 31 days" will show without the unverified mark, recorded as verified by you today.</p><div class="tl"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Verify</span></div></div>
+<div style="display:flex;flex-direction:column;gap:12px"><span class="toast">✓ Conservation window set · 38 countdowns start</span><div class="card" style="padding:14px"><h3>History of a rule</h3><table><tbody><tr><td>Nov 3</td><td>31 d · phone call</td><td class="m">you</td></tr><tr><td>Jan 1</td><td>30 d · Insurvas</td><td class="m">—</td></tr></tbody></table><p class="f" style="font-size:12px;margin:6px 0 0">Past countdowns keep the rule they used.</p></div></div>
+</div></div></div></div>
+
+<!-- 10 CLICK -->
+<div class="board" id="click"><div class="cap"><b>10</b><span>Clickability · the same rules on every board</span></div>
+<div class="frame" style="padding:16px 22px"><div class="two">
+<div><table class="crit"><thead><tr><th>Rule</th><th>Where you see it</th></tr></thead><tbody>
+<tr><td><b>A row that opens something is one click anywhere on it</b>, with a hover tint and a "›" at its end. No "Open" button per row.</td><td>Files, a file's rows, Needs you, Policies, Carrier rules, Ledger, Pay issues</td></tr>
+<tr><td><b>A row's own button is only for its next step</b> (Review 407, Fix, Set it, Add the rate), never for opening.</td><td>Files, Carrier rules, Rate card</td></tr>
+<tr><td><b>Every number is a link</b> to the rows behind it: strip figures, chip counts, tab counts, "407 waiting".</td><td>All strips and chips</td></tr>
+<tr><td><b>Stage bar segments are links</b>: Linked · 407 filters the rows to those 407; Read opens the file as sent.</td><td>A file</td></tr>
+<tr><td><b>Records step sideways</b>: ‹ Row › on a row, ‹ Carrier › on a carrier, next item on the Review page. No back-and-forth.</td><td>Row, carrier, Review</td></tr>
+<tr><td><b>Names are links to their record</b>: a client opens the lead, a policy number the policy, a file name the file, a carrier its rules.</td><td>Every table</td></tr>
+<tr><td><b>Keyboard</b>: ↑↓ moves through a list, Enter opens, 1–4 answers on Review, S skips, Esc goes back.</td><td>Lists, Review</td></tr>
+<tr><td><b>Targets at least 36px</b>, links underlined on hover, focus ring always visible.</td><td>Everywhere</td></tr>
+</tbody></table></div>
+<div class="card"><div class="hd"><h2>A clickable row, close up</h2></div>
+<table><tbody><tr class="hov hovon"><td><b>0119990001</b><div class="m" style="font-size:12px"><a>Maxine Sizemore</a></div></td><td><a style="color:var(--text)">American Amicable</a></td><td><span class="st g1">Paid to Dec 2</span></td><td class="r">$45.20</td><td class="r" style="color:var(--text)">›</td></tr><tr class="hov"><td><b>ACC9811002</b><div class="m" style="font-size:12px">Jordan Lake</div></td><td>Aetna / CVS</td><td><span class="st w">1 behind</span></td><td class="r">$71.15</td><td class="r f">›</td></tr></tbody></table>
+<p class="m" style="font-size:12px;padding:0 16px">Hover: the row tints, the chevron brightens, the client name underlines (it opens the lead; the rest of the row opens the policy).</p></div>
+</div></div></div>
+
+<!-- 11 RATES -->
+<div class="board" id="rates"><div class="cap"><b>11</b><span>Setup › Rate card · the gaps first, then a carrier × product grid</span></div>
+<div class="frame"><div class="main">
+<div class="tl"><h1>Setup</h1><div class="tabs"><span class="tab on">Rate card<span class="n w">4</span></span><span class="tab">Carrier rules</span><span class="tab">Pipeline rules</span><span class="tab">Agent codes</span><span class="tab">Files in</span></div><span class="sp"></span><span class="btn p">Add a rate</span></div>
+<div class="card" style="display:grid;grid-template-columns:repeat(4,1fr)"><div style="padding:14px;border-right:1px solid var(--border)"><div class="m" style="font-size:12px">Carriers priced</div><b style="font-size:20px">5 of 7</b></div><div style="padding:14px;border-right:1px solid var(--border)"><div class="m" style="font-size:12px">Premium priced</div><b style="font-size:20px">91%</b></div><div style="padding:14px;border-right:1px solid var(--border)"><div class="m" style="font-size:12px">Policies with no rate</div><b style="font-size:20px;color:var(--warn)">38</b></div><div style="padding:14px"><div class="m" style="font-size:12px">Expected so far</div><b style="font-size:20px">$41,220</b></div></div>
+<div class="card"><div class="toolbar"><span class="chip on">All</span><span class="chip">Missing a rate <span class="n w">4</span></span><span class="chip">Carrier ▾</span></div>
+<table><thead><tr><th>Carrier · product</th><th class="r">Commission</th><th class="r">Advance</th><th class="r">Months</th><th>Level</th><th>Policies</th><th></th></tr></thead><tbody>
+<tr><td><b>American Amicable</b> · Senior Choice</td><td class="r">110%</td><td class="r">75%</td><td class="r">9</td><td>Agent 110</td><td class="m">641</td><td class="r"><a>Change</a></td></tr>
+<tr><td><b>Aetna / CVS</b> · Protection Series</td><td class="r w" style="background:none">— missing</td><td class="r m">—</td><td class="r m">—</td><td class="m">—</td><td class="m">38</td><td class="r"><span class="btn sm p">Add the rate</span></td></tr>
+</tbody></table></div></div></div>
+<ul class="note"><li><b>Rename to ask:</b> the owner asked to "rename" something here; this board assumes "Rate card" stays and its columns read Commission · Advance · Months. Tell me which name to change.</li><li>The missing rates sort first with the only primary buttons; the coverage strip says why it matters (38 policies can't be checked).</li></ul></div>
+
+<!-- 12 LEDGER -->
+<div class="board" id="ledger"><div class="cap"><b>12</b><span>Commissions › Ledger</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i></div>
+<div class="rail"><div class="on">Ledger</div><div>Pay issues <small>748</small></div><div>Producer pay</div><div>Hierarchy <small>39</small></div></div>
+<div class="main">
+<div class="tl"><h1>Commission ledger</h1><span class="sp"></span><span class="btn">More ▾</span><span class="btn p">Import a statement</span></div>
+<div class="card" style="display:grid;grid-template-columns:repeat(5,1fr)"><div style="padding:14px;border-right:1px solid var(--border)"><div class="m" style="font-size:12px">Advanced</div><b style="font-size:20px">$7,517</b></div><div style="padding:14px;border-right:1px solid var(--border)"><div class="m" style="font-size:12px">Earned</div><b style="font-size:20px">$0</b></div><div style="padding:14px;border-right:1px solid var(--border)"><div class="m" style="font-size:12px">Charged back</div><b style="font-size:20px;color:var(--bad)">−$7,075</b></div><div style="padding:14px;border-right:1px solid var(--border)"><div class="m" style="font-size:12px">Net received</div><b style="font-size:20px">$442</b></div><div style="padding:14px"><div class="m" style="font-size:12px">Held</div><b style="font-size:20px">$0</b></div></div>
+<div class="card"><div class="toolbar"><span class="input">Policy, agent code or file</span><span class="chip on">All <span class="n">65</span></span><span class="chip">Advances</span><span class="chip">Chargebacks <span class="n">12</span></span><span class="chip">Carrier ▾</span><span class="chip">Statement ▾</span></div>
+<table><thead><tr><th>Statement</th><th>Policy</th><th>Client</th><th>Entry</th><th class="r">Amount</th><th>Agent</th></tr></thead><tbody>
+<tr><td>Nov 3 · AMAM <span class="f">row 3</span></td><td><b>0119990003</b></td><td>Lucille Truett</td><td><span class="st g1">Advance</span></td><td class="r">$234.45</td><td>Devin Okafor</td></tr>
+<tr><td>Nov 3 · AMAM <span class="f">row 2</span></td><td><b>0119990001</b></td><td>Maxine Sizemore</td><td><span class="st b">Chargeback</span></td><td class="r">−$203.40</td><td>Devin Okafor</td></tr>
+</tbody></table></div>
+</div></div></div>
+<ul class="note"><li><b>Dropped the empty Payee column</b> (every row read "—"); added Client and Agent, which carry facts. The source file folds into the Statement cell. Carrier accounts and Export go to More; Import a statement is the one primary.</li></ul></div>
+
+<!-- 13 PAY -->
+<div class="board" id="pay"><div class="cap"><b>13</b><span>Commissions › Pay issues · 748 issues as groups, worked on the same Review page</span></div>
+<div class="frame"><div class="main">
+<div class="tl"><h1>Pay issues</h1><div class="tabs"><span class="tab on">Open<span class="n w">748</span></span><span class="tab">Letters out<span class="n">3</span></span><span class="tab">Closed</span></div><span class="sp"></span><span class="btn p">Review the largest →</span></div>
+<div class="card"><table><thead><tr><th>Issue</th><th>Carrier</th><th class="r">How many</th><th class="r">Difference</th><th>Usually</th><th></th></tr></thead><tbody>
+<tr><td><span class="st b">Wrong rate</span></td><td>American Amicable</td><td class="r"><b>702</b></td><td class="r">−$9,410</td><td class="m">the layout reads Adv Rate as the rate: fix the layout first</td><td class="r"><span class="btn sm">Review</span></td></tr>
+<tr><td><span class="st w">Paid late</span></td><td>Aetna / CVS</td><td class="r"><b>31</b></td><td class="r">$2,118</td><td class="m">letter or wait</td><td class="r"><span class="btn sm">Review</span></td></tr>
+<tr><td><span class="st w">Chargeback with no lapse</span></td><td>Mutual of Omaha</td><td class="r"><b>15</b></td><td class="r">−$1,904</td><td class="m">dispute</td><td class="r"><span class="btn sm">Review</span></td></tr>
+</tbody></table></div>
+<div class="card" style="padding:20px 24px;display:flex;flex-direction:column;gap:14px"><div class="m" style="font-size:12px">Review page for a pay issue · 0119990001 · American Amicable</div><div class="ask">American Amicable paid $203.40. You expected $203.40 at 110%.</div><div class="answers" style="grid-template-columns:1fr 1fr"><span class="btn p big">Draft a letter <kbd>1</kbd></span><span class="btn big">The rate is wrong: fix it <kbd>2</kbd></span><span class="btn big">Paid outside the statement… <kbd>3</kbd></span><span class="btn big">Write it off… <kbd>4</kbd></span></div></div>
+</div></div>
+<ul class="note"><li><b>748 is mostly one cause</b> (the AMAM layout bug). Grouping says so on the first line and points at the fix, instead of 702 rows nobody can act on one by one.</li><li>Each group opens the same Review page as Needs you, with the pay-issue answers.</li></ul></div>
+
+<!-- 14 PRODUCER -->
+<div class="board" id="producer"><div class="cap"><b>14</b><span>Commissions › Producer pay and Hierarchy (light touch)</span></div>
+<div class="frame"><div class="main"><div class="two">
+<div class="card"><div class="hd"><h2>Producer pay · November</h2><span class="sp"></span><span class="btn sm p">Run payouts</span></div><table><thead><tr><th>Producer</th><th class="r">Earned</th><th class="r">Advanced</th><th class="r">Charged back</th><th class="r">Owed</th></tr></thead><tbody><tr><td>Devin Okafor</td><td class="r">$22.60</td><td class="r">$437.85</td><td class="r">−$203.40</td><td class="r"><b>$257.05</b></td></tr><tr><td>Marisol Vance</td><td class="r">$0</td><td class="r">$174.38</td><td class="r">−$174.38</td><td class="r"><b>$0</b></td></tr></tbody></table></div>
+<div class="card"><div class="hd"><h2>Hierarchy &amp; overrides</h2><span class="st w">39 levels to fix</span><span class="sp"></span><span class="btn sm">Fix the first</span></div><table><tbody><tr><td>Devin Okafor <span class="f">manager</span></td><td class="m">Agent 110 · override 10%</td></tr><tr><td style="padding-left:30px">Marisol Vance</td><td class="w" style="background:none">no contract level</td></tr></tbody></table></div>
+</div></div></div></div>
+
+<!-- 15 PHONE -->
+<div class="board" id="phone"><div class="cap"><b>15</b><span>Phone (390): the Review page and a row</span></div>
+<div class="frame" style="padding:18px;display:flex;gap:24px;flex-wrap:wrap">
+<div class="phone"><span class="m" style="font-size:12px">No sale yet · 12 of 395</span><div class="prog"><i style="width:3%"></i></div><div class="ask" style="font-size:18px">Is Alex Pike your client?</div><div class="kv"><div class="k">Premium</div><div>$101.86/mo</div><div class="k">Face</div><div>$29,325</div><div class="k">Born</div><div>Jun 2, 1958</div></div><span class="btn p big">Yes, my client</span><span class="btn big">Someone in Insurvas…</span><span class="btn big">Link to a sale…</span><span class="btn big">Not ours</span><span class="btn g">Skip</span></div>
+<div class="phone"><b>0119990007 · Maxine Sizemore</b><span class="st i" style="align-self:flex-start">Changed</span><div class="step" style="grid-template-columns:18px 1fr;padding:6px 0"><span class="dot"></span><span>Linked · Maxine Sizemore</span></div><div class="step" style="grid-template-columns:18px 1fr;padding:6px 0"><span class="dot"></span><span>Premium $45.20 → $47.80</span></div><span class="btn p">Open the policy</span></div>
+</div></div>
+
+<!-- 16 MAP -->
+<div class="board" id="map"><div class="cap"><b>16</b><span>Edit map · where every decision and edit happens</span></div>
+<div class="frame" style="padding:16px 22px"><ul class="map">
+<li><span class="k2">Review page</span> Every Needs you decision (all 12 kinds) and every pay issue. Opened from: a file's "Review N", a Files row's button, a Needs you line, a Pay issues line, the bell, and a row's "Review" link. One question, numbered answers, auto-next, bulk from the queue.</li>
+<li><span class="k2">Dialog</span> Bulk answers (Mark 25 as mine / Not ours), Mark a rule verified, Replace with a corrected file, leave with unsaved changes.</li>
+<li><span class="k2">In the row</span> A carrier rule (window, grace, redraft, source, from, note), a money or file fact on the carrier page, a rate on the rate card.</li>
+<li><span class="k2">Popover</span> Client search on "Someone in Insurvas", sale search on "Link to a sale".</li>
+<li><span class="k2">Page</span> A file, a row, a policy (tabs, with Money), a carrier's rules, Change client, a statement, a ledger line.</li>
+<li><span class="k2">Removed</span> Deciding inside a table row (file rows, Needs you list), the one-item More menu on a row, per-row Open buttons, Setup tabs cut off at the edge.</li>
+<li><span class="k2">Bell</span> Stop reasons, unfinished steps, unreadable sources: never on the page.</li>
+</ul></div></div>
+
+<!-- 17 CRIT -->
+<div class="board" id="crit"><div class="cap"><b>17</b><span>ui-taste critique: what was wrong, what these boards do about it</span></div>
+<div class="frame"><table class="crit"><thead><tr><th style="width:28%">Problem seen</th><th>Fix in these boards</th></tr></thead><tbody>
+<tr><td>A row opened into a whole form inside the table; the table broke, columns jumped, the page scrolled.</td><td>Tables only list. Deciding moved to its own Review page (3–3c).</td></tr>
+<tr><td>"One by one" led to a page whose purpose wasn't obvious: radios, a "When you save" card, a Save button greyed until a pick.</td><td>The page asks one question in words ("Is Alex Pike your client?") and offers the answers as big numbered buttons. One click saves and moves on.</td></tr>
+<tr><td>407 / 1,719 items felt endless.</td><td>Progress bar and "12 done · 383 left", oldest first, keyboard 1–4 + S, bulk from the queue, "Done for now".</td></tr>
+<tr><td>Row page: two tabs, "As sent" paged 7 columns at a time, Excel <span class="mono">=(…)</span> shown raw, More menu with one item.</td><td>One page, stepper + every column side by side, plain values, ‹ Row ›, the file link in the trail.</td></tr>
+<tr><td>Carrier rules: one carrier at a time behind a dropdown, a table of "Not set", Set/Clear buttons off the edge; no way to see which carriers are missing what.</td><td>LA-4.17 as written: a coverage list (windows set as dots, the biggest gap and the policies it costs), then one page per carrier with windows, money facts and file facts, each saying whose value it is and whether it's verified.</td></tr>
+<tr><td>No way to see what a policy earns and whether that money is safe.</td><td>Policies list: a money bar per row (earned · at risk · short). Policy: Money tab with the first year, month by month, and what's next.</td></tr>
+<tr><td>Things that open something were buttons on every row; numbers weren't links.</td><td>Board 10: whole rows click, every number links, records step sideways, keyboard.</td></tr>
+<tr><td>Setup had 6 tabs and two were cut off.</td><td>5 tabs that fit; Files in holds both import tabs.</td></tr>
+<tr><td>Ledger Payee column empty on every row; 748 pay issues as a flat list.</td><td>Columns that carry facts; pay issues grouped by cause with the fix named.</td></tr>
+<tr><td>Test rules "E2E · advance received (test)" are live on the demo agency's Pipeline rules.</td><td>Data, not design: they should be deleted before a demo.</td></tr>
+<tr><td>Kept: white text, one primary top right, ⋯ last, 36px chips, 44px rows, fills the window height, no notices on the page.</td><td></td></tr>
+</tbody></table></div></div>
+
+<!-- 18 ADDED -->
+<div class="board" id="a1"><div class="cap"><b>18</b><span>ADDED · Uploading a file and replacing one (Files › Upload, a file › More › Replace)</span></div>
+<div class="frame"><div class="main"><div class="grid3">
+<div class="dlg" style="width:auto"><h2>Upload a carrier file</h2><div class="kv" style="margin:10px 0"><div class="k">File</div><div><span class="input" style="color:var(--text)">AMAM-policies-2026-11-05.csv</span></div><div class="k">Carrier</div><div><span class="chip on" style="height:30px">American Amicable ▾</span> <span class="f" style="font-size:12px">guessed from the name</span></div><div class="k">Type</div><div><span class="chip on" style="height:30px">Policies</span> <span class="chip" style="height:30px">New business</span> <span class="chip" style="height:30px">Commissions</span></div><div class="k">File of</div><div><span class="input" style="min-width:120px;color:var(--text)">Nov 5, 2026</span></div></div><div class="tl"><span class="m" style="font-size:12px">Only carriers you work with (Settings › Carriers)</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Upload</span></div></div>
+<div class="dlg" style="width:auto"><h2>Uploading… reading 1,720 rows</h2><div class="prog" style="margin:12px 0"><i style="width:55%"></i></div><div class="stages"><div class="stg"><div class="bar"></div><div class="lb">✓ Uploaded</div></div><div class="stg"><div class="bar"></div><div class="lb">✓ Layout</div></div><div class="stg"><div class="bar" style="background:var(--info)"></div><div class="lb">Reading</div></div><div class="stg"><div class="bar" style="background:var(--border)"></div><div class="lb m">Linked</div></div></div><div class="tl" style="margin-top:12px"><span class="sp"></span><span class="btn">Close, keep going</span><span class="btn p">Open the file</span></div></div>
+<div class="dlg" style="width:auto"><h2>Replace with a corrected file</h2><p class="m" style="font-size:13px">Same carrier, type and day as policySummary (1).xlsx, so the new file supersedes it. The old one stays listed as replaced.</p><div class="kv"><div class="k">File</div><div><span class="input">Choose a file</span></div></div><div class="tl" style="margin-top:12px"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Replace</span></div><p class="b" style="font-size:12px;margin:8px 0 0;background:none">Same file as before: this exact file was already read on Nov 2 (shown if the bytes match).</p></div>
+</div></div></div>
+<ul class="note"><li>Was missing from the boards: the upload dialog, its progress while the stages fill, the corrected-file replace, and the duplicate refusal. Carrier list follows Settings › Carriers (done by the carrier session).</li></ul></div>
+
+<div class="board" id="a2"><div class="cap"><b>19</b><span>ADDED · A file's other tabs: Changes, Commissions (a statement), Run history, The file as sent</span></div>
+<div class="frame"><div class="main"><div class="two">
+<div class="card"><div class="hd"><h2>Changes · 13</h2><span class="m" style="font-size:12px">and 1 new</span><span class="sp"></span><span class="chip" style="height:30px">Changed</span><span class="chip" style="height:30px">New</span><span class="chip" style="height:30px">Not in this file 70</span></div><table><thead><tr><th>Policy</th><th>Field</th><th>Change</th></tr></thead><tbody><tr class="hov"><td><b>0119063914</b><div class="m" style="font-size:12px">Tanya Hernandez</div></td><td>Paid to</td><td><span class="m">Sep 15</span> → <b>Nov 15</b></td></tr><tr class="hov"><td><b>0119990007</b><div class="m" style="font-size:12px">Maxine Sizemore</div></td><td>Premium</td><td><span class="m">$45.20</span> → <b>$47.80</b></td></tr></tbody></table><p class="f" style="font-size:12px;padding:0 16px">Not in this file: compared with Policies.csv of Oct 16 · watched, never lapsed · not counted as changes.</p></div>
+<div class="card"><div class="hd"><h2>Commissions (a statement file)</h2></div><div style="display:grid;grid-template-columns:repeat(3,1fr)"><a class="tile"><span class="m" style="font-size:12px">Lines add to</span><b>$408.83</b></a><a class="tile"><span class="m" style="font-size:12px">Statement says</span><b>$408.83</b></a><a class="tile" style="border-right:0"><span class="m" style="font-size:12px">Balance</span><b class="ok">Matches</b></a></div><table><thead><tr><th>Policy</th><th>Line</th><th class="r">Paid</th><th class="r">Expected</th><th>Result</th></tr></thead><tbody><tr class="hov"><td><b>0119990003</b></td><td>Advance</td><td class="r">$234.45</td><td class="r m">$234.45</td><td><span class="st g1">Matches</span></td></tr><tr class="hov"><td><b>0119990001</b></td><td>Chargeback</td><td class="r">−$203.40</td><td class="r m">—</td><td><span class="st w">Review</span></td></tr></tbody></table></div>
+<div class="card"><div class="hd"><h2>Run history</h2></div><table><thead><tr><th>Step</th><th class="r">Rows in → out</th><th class="r">Took</th><th class="r">Found</th><th>Result</th></tr></thead><tbody><tr class="hov"><td colspan="2"><b>▾ Nov 2, 4:40 PM</b> <span class="m">· Files arrived</span></td><td class="r">24.6 s</td><td class="r">5</td><td><span class="st g1">Succeeded</span></td></tr><tr><td style="padding-left:30px">Read</td><td class="r">408 → 408</td><td class="r m">1.8 s</td><td class="r">1</td><td class="ok">✓</td></tr><tr><td style="padding-left:30px">Linked</td><td class="r">408 → 408</td><td class="r m">18.9 s</td><td class="r">—</td><td class="ok">✓</td></tr></tbody></table></div>
+<div class="card"><div class="hd"><h2>The file as sent</h2><span class="sp"></span><span class="chip" style="height:30px">Sheet 1 ▾</span><span class="btn sm">Download</span></div><table><thead><tr><th>Row</th><th>WritingAgent</th><th>Policy</th><th>Status</th><th>Became</th></tr></thead><tbody><tr class="hov"><td class="m">2</td><td class="mono">0000777001</td><td class="mono">0119990007</td><td>Active</td><td><span class="st g1">Policy, changed</span></td></tr><tr class="hov"><td class="m">3</td><td class="mono">0000777001</td><td class="mono">0119990008</td><td>Pending</td><td><span class="st w">Held: word not mapped</span></td></tr></tbody></table></div>
+</div></div></div>
+<ul class="note"><li>These tabs exist today but weren't drawn in round 5. Same table rules (whole row clicks into the row page; figures are links).</li></ul></div>
+
+<div class="board" id="a3"><div class="cap"><b>20</b><span>ADDED · A file that stopped: Who sent this?, Doesn't balance, waiting for a layout, Missing files</span></div>
+<div class="frame"><div class="main"><div class="grid3">
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><h3>Who sent this? (an emailed file with no known sender)</h3><div class="m" style="font-size:13px">These columns look like:</div><div class="qi on" style="border-radius:9px;border:0"><span></span><div><b>American Amicable · policies</b><div class="m" style="font-size:12px">26 of 27 columns match</div></div><span class="st g1">best</span></div><div class="qi" style="border:0"><span></span><div><b>Americo · policies</b><div class="m" style="font-size:12px">14 of 27</div></div></div><div class="kv"><div class="k">File of</div><div>Nov 5 <span class="f">· from the name</span></div></div><span class="btn p" style="align-self:flex-end">Read it as American Amicable</span></div>
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px"><h3>Doesn't balance (a PDF statement)</h3><table><tbody><tr><td class="m">Lines add to</td><td class="r">$0.00</td></tr><tr><td class="m">Statement says</td><td class="r">−$46.25</td></tr><tr><td><b>Off by</b></td><td class="r no"><b>$46.25</b></td></tr></tbody></table><p class="m" style="font-size:12px;margin:0">Nothing was posted. A statement that doesn't balance never is.</p><div class="tl"><span class="btn sm">Read again</span><span class="sp"></span><span class="btn sm p">Replace with a corrected file</span></div></div>
+<div style="display:flex;flex-direction:column;gap:12px"><div class="card" style="padding:16px"><h3>Waiting for a layout</h3><p class="m" style="font-size:13px;margin:6px 0">Insurvas hasn't set up Americo's commission layout yet. It reads by itself once it's published.</p><span class="st i">Waiting on Insurvas</span></div>
+<div class="card"><div class="hd"><h2>Missing files</h2></div><table><tbody><tr class="hov"><td><b>Aflac · policies</b><div class="m" style="font-size:12px">due daily · last Oct 31</div></td><td class="w" style="background:none">3 days late</td><td class="r"><span class="btn sm">Upload</span></td></tr></tbody></table></div></div>
+</div></div></div>
+<ul class="note"><li>Each is what the Files row's <b>Fix</b> button opens. "Missing" is the Files chip (the blueprint's "expected files per day").</li></ul></div>
+
+<div class="board" id="a4"><div class="cap"><b>21</b><span>ADDED · The Review page for every other kind of decision (12 kinds, one layout)</span></div>
+<div class="frame"><div class="main"><div class="grid3">
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Same person?</div><div class="ask" style="font-size:16px;margin:4px 0 8px">Are Robin West and Robin W. West one person?</div><div class="cmp" style="grid-template-columns:90px 1fr 1fr"><div class="h"></div><div class="h">First</div><div class="h">Second</div><div class="m">Born</div><div>Jun 2, 1958</div><div>Jun 2, 1958</div><div class="m">Phone</div><div>(720) 555-0126</div><div class="m">—</div></div><div class="answers" style="margin-top:8px"><span class="btn p sm">Same person: merge <kbd>1</kbd></span><span class="btn sm">Different people <kbd>2</kbd></span></div></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Sale no carrier has · 12 days</div><div class="ask" style="font-size:16px;margin:4px 0 8px">Mildred Whitaker's Aetna sale isn't in any carrier file.</div><div class="answers"><span class="btn p sm">Found it: link the policy… <kbd>1</kbd></span><span class="btn sm">Never submitted… <kbd>2</kbd></span><span class="btn sm">Resubmitted elsewhere… <kbd>3</kbd></span><span class="btn sm">Not mine <kbd>4</kbd></span></div></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Commission, no policy</div><div class="ask" style="font-size:16px;margin:4px 0 8px">Americo paid $118.20 on 7203381, a policy no file lists.</div><div class="answers"><span class="btn p sm">Another writing number… <kbd>1</kbd></span><span class="btn sm">Asked the carrier… <kbd>2</kbd></span><span class="btn sm">Not mine <kbd>3</kbd></span></div></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Who gets the credit</div><div class="ask" style="font-size:16px;margin:4px 0 8px">$203.40 on 0119990001: Devin or Demo Agent?</div><div class="m" style="font-size:12px">The writing number says Devin Okafor; Demo Agent submitted the application.</div><div class="answers" style="margin-top:8px"><span class="btn p sm">Devin Okafor <kbd>1</kbd></span><span class="btn sm">Demo Agent <kbd>2</kbd></span><span class="btn sm">Someone else… <kbd>3</kbd></span></div><span class="input" style="margin-top:8px">Why (kept with the decision)</span></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Who's the agent</div><div class="ask" style="font-size:16px;margin:4px 0 8px">Whose code is 0000569319 at American Amicable?</div><div class="m" style="font-size:12px">11 policies carry it.</div><span class="chip" style="width:100%;margin-top:8px">Choose the agent ▾</span><span class="btn p sm" style="margin-top:8px">Map the code</span></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Two rules disagree</div><div class="ask" style="font-size:16px;margin:4px 0 8px">Where should Jordan Lake's card go?</div><div class="answers"><span class="btn p sm">"Missed payment" → Save attempt <kbd>1</kbd></span><span class="btn sm">"Lapse" → Lapsed <kbd>2</kbd></span><span class="btn sm">Leave it where it is <kbd>3</kbd></span></div></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Money doesn't match</div><div class="ask" style="font-size:16px;margin:4px 0 8px">Aetna paid $64 less than expected on ACC9811002.</div><div class="answers"><span class="btn p sm">Draft a letter <kbd>1</kbd></span><span class="btn sm">The rate is wrong <kbd>2</kbd></span><span class="btn sm">Paid outside… <kbd>3</kbd></span><span class="btn sm">Write it off… <kbd>4</kbd></span></div></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Existing book to look over</div><div class="ask" style="font-size:16px;margin:4px 0 8px">Your Aflac book: 214 policies, 61 new clients made.</div><div class="answers"><span class="btn p sm">Looked over <kbd>1</kbd></span></div><a style="font-size:12px">See the 61 new clients</a></div>
+<div class="card" style="padding:14px"><div class="m" style="font-size:12px">Status word · At lapse risk · File didn't read</div><p class="m" style="font-size:13px">Status word: "waiting on Insurvas to map 'Act-Pastdue' · 12 rows held", no answers, Next only.<br>At lapse risk: "Jordan Lake is at high risk · 1 payment behind" → Call now · Snooze… · It's handled.<br>File didn't read: the reason, then Open the file.</p></div>
+</div></div></div>
+<ul class="note"><li>Every kind the item page handles today, on the Review page's layout: the question in words, the evidence that decides it, numbered answers. Answers ending in "…" open their picker or reason field under the button.</li></ul></div>
+
+<div class="board" id="a5"><div class="cap"><b>22</b><span>ADDED · A policy's other tabs, Change client, and a policy you add by hand</span></div>
+<div class="frame"><div class="main"><div class="two">
+<div class="card"><div class="hd"><h2>Overview</h2></div><div class="kv" style="padding:4px 16px 10px"><div class="k">Status</div><div>Active <span class="f">· carrier says "Active"</span></div><div class="k">Paid to</div><div>Dec 2 · 0 days behind</div><div class="k">Risk</div><div><span class="st g1">None</span></div><div class="k">Issued</div><div>Nov 2, 2026 · effective Nov 5</div><div class="k">Face · premium</div><div>$10,000 · $45.20 monthly (bank draft)</div><div class="k">Came from</div><div><a>Lead Maxine Sizemore</a> · <a>application #1</a></div></div></div>
+<div class="card"><div class="hd"><h2>History</h2></div><table><tbody><tr class="hov"><td>Nov 5</td><td>Premium $45.20 → $47.80</td><td class="f">file · row 2 ›</td></tr><tr class="hov"><td>Nov 2</td><td>First seen · Active</td><td class="f">file · row 2 ›</td></tr></tbody></table></div>
+<div class="card"><div class="hd"><h2>Client</h2><span class="sp"></span><span class="btn sm">Unlink</span><span class="btn sm p">Change client</span></div><div class="kv" style="padding:4px 16px 10px"><div class="k">Linked to</div><div><a>Maxine Sizemore</a></div><div class="k">How</div><div>By the submission number, automatically · Nov 2</div><div class="k">Before</div><div class="m">Odessa Brooks · picked by a person · superseded Nov 3</div></div></div>
+<div class="card"><div class="hd"><h2>Pipeline</h2></div><table><tbody><tr><td>Nov 2</td><td>Submitted → Issued</td><td class="m">by the policy file</td><td class="r"><a>Undo</a></td></tr><tr><td>Nov 2</td><td>Needs callback → Submitted</td><td class="m">by the application</td><td></td></tr></tbody></table></div>
+<div class="card" style="padding:14px"><h3>Change client (its own page)</h3><span class="input" style="margin:8px 0;color:var(--text)">Sizemore</span><div class="qi on" style="border:0;border-radius:9px"><span></span><div><b>Maxine Sizemore</b><div class="m" style="font-size:12px">born Jul 14, 1975 · 1 policy</div></div></div><span class="input" style="margin:8px 0">Why (kept with the change)</span><div class="tl"><span class="m" style="font-size:12px">Re-runs this policy's later steps</span><span class="sp"></span><span class="btn sm p">Link to Maxine</span></div></div>
+<div class="card" style="padding:14px"><h3>Add a policy by hand</h3><div class="kv"><div class="k">Carrier · product</div><div><span class="chip" style="height:28px">Choose ▾</span></div><div class="k">Policy number</div><div><span class="input">—</span></div><div class="k">Client</div><div><span class="input">Search or new</span></div><div class="k">Premium · face</div><div><span class="input" style="min-width:90px">$</span> <span class="input" style="min-width:90px">$</span></div></div><p class="f" style="font-size:12px">It opens in the same policy page; tabs a hand-entered policy can't have (History, Files) don't show.</p><span class="btn sm p">Add the policy</span></div>
+</div></div></div></div>
+
+<div class="board" id="a6"><div class="cap"><b>23</b><span>ADDED · Setup › Pipeline rules, Agent codes, Files in</span></div>
+<div class="frame"><div class="main"><div class="two">
+<div class="card"><div class="hd"><h2>Pipeline rules</h2><span class="sp"></span><span class="btn sm p">New rule</span></div><table><thead><tr><th>When</th><th>Carriers</th><th>Moves to</th><th>Mode</th><th class="r">Last 30 days</th></tr></thead><tbody><tr class="hov"><td><b>First payment missed</b><div class="m" style="font-size:12px">adds a note</div></td><td>Every carrier</td><td>Sales › Payment issue</td><td><span class="st g1">Live</span></td><td class="r">14 moved</td></tr><tr class="hov"><td><b>Chargeback received</b></td><td>American Amicable</td><td>Sales › Chargeback</td><td><span class="st z">Forecast</span></td><td class="r m">would move 3</td></tr></tbody></table><p class="f" style="font-size:12px;padding:0 16px">A rule page has tabs Rule · Forecast · History, and Go live asks first. Windows come from Carrier rules.</p></div>
+<div class="card"><div class="hd"><h2>Agent codes</h2><span class="st w">2 to map</span></div><table><tbody><tr class="hov"><td class="mono">0000569319</td><td>American Amicable</td><td class="w" style="background:none">nobody · 11 policies</td><td class="r"><span class="btn sm p">Map</span></td></tr><tr class="hov"><td class="mono">0000952654</td><td>American Amicable</td><td>Devin Okafor</td><td class="r f">›</td></tr></tbody></table></div>
+<div class="card"><div class="hd"><h2>Files in · How files arrive</h2></div><div class="kv" style="padding:4px 16px 10px"><div class="k">Upload</div><div>Files › Upload a file</div><div class="k">Email</div><div class="mono">files+ellery@in.insurvas.com <a style="font-family:Inter">Copy</a></div><div class="k">Shared folder</div><div>Checked every 5 minutes · <a>Set up</a></div></div></div>
+<div class="card"><div class="hd"><h2>Files in · Bring your existing book</h2></div><div style="padding:12px 16px;font-size:13px"><div>1 Choose the carrier · 2 Upload its full book · 3 Look it over</div><p class="m" style="font-size:12px">Each import raises one "Existing book to look over" item.</p><span class="btn sm p">Start with a carrier</span></div></div>
+</div></div></div></div>
+
+<div class="board" id="a7"><div class="cap"><b>24</b><span>ADDED · Commissions: Statements, a statement, carrier accounts, a ledger line, letters, My pay, payout runs</span></div>
+<div class="frame"><div class="main"><div class="grid3">
+<div class="card"><div class="hd"><h2>Statements</h2><span class="sp"></span><span class="btn sm p">Import a statement</span></div><table><tbody><tr class="hov"><td><b>AMAM Nov 3</b><div class="m" style="font-size:12px">2 lines · $31.05</div></td><td><span class="st g1">Balances</span></td><td class="f">›</td></tr><tr class="hov"><td><b>Americo Oct 30</b><div class="m" style="font-size:12px">PDF</div></td><td><span class="st b">Off by $46.25</span></td><td class="f">›</td></tr></tbody></table><p class="f" style="font-size:12px;padding:0 16px">Statements now live under Files (they are files); this is the same list, filtered.</p></div>
+<div class="card"><div class="hd"><h2>A statement</h2></div><div class="kv" style="padding:4px 16px 10px"><div class="k">Opening</div><div>$0.00</div><div class="k">Activity</div><div>$31.05</div><div class="k">Closing</div><div>$31.05 <span class="ok">✓ agrees</span></div><div class="k">Continuity</div><div>Follows Nov 2's closing <span class="ok">✓</span></div></div></div>
+<div class="card"><div class="hd"><h2>Carrier accounts</h2></div><table><tbody><tr class="hov"><td><b>American Amicable</b></td><td class="r">holds $442</td><td class="m">owes back $0</td></tr><tr class="hov"><td><b>Americo</b></td><td class="r m">—</td><td class="w" style="background:none">1 unmatched line</td></tr></tbody></table></div>
+<div class="card" style="padding:14px"><h3>A ledger line</h3><div class="kv"><div class="k">Advance</div><div>$203.40 · Nov 2</div><div class="k">Policy</div><div><a>0119990001</a> · <a>Maxine Sizemore</a></div><div class="k">From</div><div><a>AMAM-advances-2026-11-02.csv · row 2</a></div><div class="k">Agent</div><div>Devin Okafor <span class="f">· by writing number</span></div></div><p class="f" style="font-size:12px">Lines never change; a correction is a new line.</p></div>
+<div class="card" style="padding:14px"><h3>Dispute letter</h3><p class="m" style="font-size:13px">To American Amicable commissions desk (from Carrier rules) · 1 policy · $64 owed.</p><div class="tl"><span class="btn sm">Edit</span><span class="sp"></span><span class="btn sm">Download PDF</span><span class="btn sm p">Send</span></div><p class="f" style="font-size:12px">Sent letters wait in Pay issues › Letters out until you record what the carrier did.</p></div>
+<div class="card" style="padding:14px"><h3>My pay (a producer)</h3><div class="kv"><div class="k">November</div><div><b>$257.05</b> owed</div><div class="k">Advanced</div><div>$437.85</div><div class="k">Charged back</div><div>−$203.40</div><div class="k">At risk</div><div class="w" style="background:none">$180.80 on 1 policy</div></div><p class="f" style="font-size:12px">Payout runs and a producer's statement open from Producer pay › Run payouts.</p></div>
+</div></div></div></div>
+
+<div class="board" id="a8"><div class="cap"><b>25</b><span>ADDED · First run, empty and loading states, the bell</span></div>
+<div class="frame"><div class="main"><div class="grid3">
+<div class="card" style="padding:24px;text-align:center"><h2>No carrier files yet</h2><p class="m" style="font-size:13px">Upload your first policy file, or forward carrier emails to files+ellery@in.insurvas.com.</p><span class="btn p">Upload a file</span></div>
+<div class="card" style="padding:24px;text-align:center"><h2>Nothing needs you</h2><p class="m" style="font-size:13px">Every policy from your files is linked.</p></div>
+<div class="card" style="padding:14px"><h3>The bell (no notices on the page)</h3><table><tbody><tr><td class="b" style="background:none">Americo's statement doesn't balance</td></tr><tr><td class="w" style="background:none">Aflac's policy file is 3 days late</td></tr><tr><td class="m">407 to review from policySummary (1).xlsx</td></tr></tbody></table></div>
+</div></div></div></div>
+
+<div class="board" id="cover"><div class="cap"><b>26</b><span>Coverage check · every Notion task, every route, every blueprint idea, and its board</span></div>
+<div class="frame"><table class="crit"><thead><tr><th style="width:26%">Task / page</th><th style="width:44%">What it needs on screen</th><th>Board</th></tr></thead><tbody>
+<tr><td>LA-4.1 Three doors (upload, email, bucket)</td><td>Upload dialog, email address, shared folder</td><td>18, 23</td></tr>
+<tr><td>LA-4.2 Raw rows, append-only</td><td>The file as sent, a row as sent</td><td>5, 19</td></tr>
+<tr><td>LA-4.3 Layout maps</td><td>Stage "Layout", Waiting for a layout, Who sent this?</td><td>2, 20</td></tr>
+<tr><td>LA-4.4 PDF statements + balance gate</td><td>Doesn't balance, statement balance</td><td>20, 24</td></tr>
+<tr><td>LA-4.5 Status words</td><td>Held rows, Waiting on Insurvas item</td><td>19, 21</td></tr>
+<tr><td>LA-4.6 Snapshots + change log</td><td>Changes tab, policy History</td><td>19, 22</td></tr>
+<tr><td>LA-4.7 Current policy</td><td>Policies list, Overview, health, next date</td><td>6, 22</td></tr>
+<tr><td>LA-4.8 Matching (ladder, review)</td><td>Pick the client, Change client, link history</td><td>3b, 22</td></tr>
+<tr><td>LA-4.9 Exception queues + owners</td><td>No sale yet, Sale no carrier has, Same person?, owner column</td><td>3, 4, 21</td></tr>
+<tr><td>LA-4.10 Bring your existing book</td><td>Files in wizard, Existing book item</td><td>21, 23</td></tr>
+<tr><td>LA-4.11 Policy list + detail</td><td>Policies, policy tabs, hand-entered policy</td><td>6, 7, 22</td></tr>
+<tr><td>LA-4.12 Commission ledger</td><td>Ledger, a ledger line, policy Money</td><td>7, 12, 24</td></tr>
+<tr><td>LA-4.13 Expected commission</td><td>Rate card, Money tab expected vs paid</td><td>7, 11</td></tr>
+<tr><td>LA-4.14 Orphans + carrier accounts</td><td>Commission, no policy item; Carrier accounts</td><td>21, 24</td></tr>
+<tr><td>LA-4.15 Discrepancies + letters</td><td>Pay issues, Review, dispute letter, Letters out</td><td>13, 21, 24</td></tr>
+<tr><td>LA-4.16 Retention board</td><td>Lives in Retention (LA-5); At lapse risk reaches Needs you</td><td>4, 21 (board in Retention)</td></tr>
+<tr><td>LA-4.17 Carrier rules + coverage</td><td>Coverage list, carrier page, edits</td><td>9, 9b, 9c</td></tr>
+<tr><td>LA-4.18 Scorecards</td><td>Lives in Reports; not redrawn here</td><td>— (Reports)</td></tr>
+<tr><td>LA-4.19 Runs + findings</td><td>Run history, Checks in Files › More</td><td>19, 1</td></tr>
+<tr><td>LA-4.20 Value → row → file trace</td><td>Row page "What happened", ledger line source, History links</td><td>5, 22, 24</td></tr>
+<tr><td>Round 2 Pipeline rules (owner)</td><td>Rules list, forecast, live</td><td>23</td></tr>
+<tr><td>Agency AG · credit / agent codes</td><td>Who gets the credit, Who's the agent, Agent codes</td><td>21, 23</td></tr>
+<tr><td>Commissions › Producer pay, My pay, Hierarchy, payouts</td><td>Producer pay, My pay, levels to fix</td><td>14, 24</td></tr>
+<tr><td>Blueprint: file is the unit of work</td><td>Stage bar on every file, file page hub</td><td>1, 2</td></tr>
+<tr><td>Blueprint: per-file results, why not</td><td>Row outcome + reason, row page</td><td>2, 5</td></tr>
+<tr><td>Blueprint: link once, record how, late link re-runs</td><td>Linked step "by number / picked by a person", Change client re-runs</td><td>5, 22</td></tr>
+<tr><td>Blueprint: expected files per day</td><td>Missing files</td><td>20</td></tr>
+<tr><td>Blueprint: rules as data + forecast</td><td>Pipeline rules</td><td>23</td></tr>
+<tr><td>Blueprint: daily date check</td><td>"First / later payment missed", What's next on a policy</td><td>7, 23</td></tr>
+<tr><td>Blueprint: never relax a check</td><td>Doesn't balance, held rows</td><td>19, 20</td></tr>
+<tr><td>Old addresses: /policy-matching, /exceptions, /duplicates, /attribution, /lapse-risk, /rate-card, /book-import</td><td>Each lands on its new place (Needs you filtered, Review page, Setup tab)</td><td>4, 8, 23</td></tr>
+</tbody></table></div></div>
+
+</div></body></html>

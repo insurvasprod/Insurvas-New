@@ -57,7 +57,7 @@ export default async function SetupPipelineRulesPage() {
   );
 
   return (
-    <DataInPage step="setup" lead={<SetupTabs active="pipeline-rules" />} actions={newRule}>
+    <DataInPage step="setup" lead={<SetupTabs active="pipeline-rules" tenantId={tenantId} />} actions={newRule}>
       {!view.available ? (
         <Callout tone="warning" title={`${PIPELINE_RULES_PENDING_MESSAGE} Nothing moves before then.`} />
       ) : (

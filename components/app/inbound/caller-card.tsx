@@ -107,7 +107,7 @@ function Fact({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
 const label12 = "text-xs leading-[1.33] font-semibold text-[var(--body)]";
 
 /** The phone, large, with Copy (owner 2026-10-28: "their phone number, that's really important"). */
-function PhoneLine({ phone }: { phone: string | null }) {
+function PhoneLine({ phone, loading = false, missing = "Not on the lead" }: { phone: string | null; loading?: boolean; missing?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-center gap-3 rounded-[12px] border border-[color-mix(in_srgb,var(--primary)_40%,var(--border))] bg-[var(--primary-soft)] px-3 py-2.5">
@@ -117,7 +117,7 @@ function PhoneLine({ phone }: { phone: string | null }) {
         {phone
           // Plain text, not a dial link: a call goes through the dialer's gates (calling window, do-not-call).
           ? <span className="block truncate text-lg leading-[1.3] font-semibold tracking-[-0.01em] text-[var(--ink)] tabular-nums select-all">{phone}</span>
-          : <span className="block text-sm font-semibold text-[var(--ink)]">Not on the lead</span>}
+          : loading ? <Pending /> : <span className="block text-sm font-semibold text-[var(--ink)]">{missing}</span>}
       </span>
       {phone && (
         <Button type="button" size="icon" variant="ghost" aria-label={copied ? "Copied" : "Copy the phone number"} title={copied ? "Copied" : "Copy"} onClick={() => { void navigator.clipboard?.writeText(phone).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 1500); }); }}>
@@ -128,10 +128,19 @@ function PhoneLine({ phone }: { phone: string | null }) {
   );
 }
 
+/** A value still on its way: a quiet bar, read out as "Loading". */
+function Pending() {
+  return <span role="status" aria-label="Loading" className="mt-0.5 block h-4 w-32 animate-pulse rounded bg-[var(--surface-alt)]" />;
+}
+
 // `workItemId` stays in the signature for the callers; the screening block it fed is gone (owner 2026-10-28).
-export function CallerCard({ facts, now }: { workItemId: string; facts: CallerFacts | null; now: number }) {
+export function CallerCard({ facts, now, loadFailed = false }: { workItemId: string; facts: CallerFacts | null; now: number; /** The lead could not be read: say so rather than "Not on the lead". */ loadFailed?: boolean }) {
   const onTheCall = facts?.callStartedAt ? elapsed(facts.callStartedAt, now) : null;
   const name = facts?.name ?? "";
+  // QA 2026-11-03: while the lead is loading, nothing is "Not on the lead" yet.
+  const loading = !facts && !loadFailed;
+  const missing = loadFailed && !facts ? "Could not load the lead" : "Not on the lead";
+  const fact = (value: string | null | undefined, fallback = missing): ReactNode => (loading ? <Pending /> : value ?? fallback);
   return (
     <section className="m-glass flex min-w-0 flex-col rounded-[16px] border border-[var(--border)]">
       <div className="flex items-center gap-3 p-4">
@@ -143,16 +152,16 @@ export function CallerCard({ facts, now }: { workItemId: string; facts: CallerFa
       </div>
       {/* Owner 2026-10-28: the screening block gave way to the caller's own details, phone first. */}
       <div className="flex flex-col gap-3 border-t border-[var(--border)] p-4">
-        <PhoneLine phone={facts?.phone ?? null} />
-        <Fact icon={Mail} label="Email" value={facts?.email ?? "Not on the lead"} />
-        <Fact icon={Cake} label="Date of birth" value={facts?.dob ?? "Not on the lead"} />
-        <Fact icon={MapPin} label="Lives in" value={facts?.livesIn ?? "Not on the lead"} />
+        <PhoneLine phone={facts?.phone ?? null} loading={loading} missing={missing} />
+        <Fact icon={Mail} label="Email" value={fact(facts?.email)} />
+        <Fact icon={Cake} label="Date of birth" value={fact(facts?.dob)} />
+        <Fact icon={MapPin} label="Lives in" value={fact(facts?.livesIn)} />
         {facts?.language && <Fact icon={Languages} label="Speaks" value={facts.language} />}
       </div>
       <div className="flex flex-col gap-3 border-t border-[var(--border)] p-4">
-        <Fact icon={Package} label="Product" value={facts?.product ?? "—"} />
-        <Fact icon={Handshake} label="From" value={facts?.from ?? "—"} />
-        <Fact icon={Clock3} label="On the call" value={onTheCall ?? "No open call record"} />
+        <Fact icon={Package} label="Product" value={fact(facts?.product, "—")} />
+        <Fact icon={Handshake} label="From" value={fact(facts?.from, "—")} />
+        <Fact icon={Clock3} label="On the call" value={loading ? <Pending /> : onTheCall ?? "No open call record"} />
       </div>
     </section>
   );
@@ -161,14 +170,15 @@ export function CallerCard({ facts, now }: { workItemId: string; facts: CallerFa
 /** The card on a page that does not already hold the verification panel (Finish the call). */
 export function CallerCardForCall({ workItemId }: { workItemId: string }) {
   const [facts, setFacts] = useState<CallerFacts | null>(null);
+  const [failed, setFailed] = useState(false);
   useEffect(() => {
     let live = true;
     fetch(`/api/app/inbound/verification?work_item_id=${encodeURIComponent(workItemId)}`, { cache: "no-store" })
       .then(async (response) => (response.ok ? callerFacts(await response.json() as PanelLike) : null))
       .catch(() => null)
-      .then((value) => { if (live && value) setFacts(value); });
+      .then((value) => { if (!live) return; if (value) setFacts(value); else setFailed(true); });
     return () => { live = false; };
   }, [workItemId]);
   const now = useNow(Boolean(facts?.callStartedAt));
-  return <CallerCard workItemId={workItemId} facts={facts} now={now} />;
+  return <CallerCard workItemId={workItemId} facts={facts} now={now} loadFailed={failed} />;
 }

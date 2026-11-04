@@ -14,7 +14,7 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { RESOLUTION_LABELS, RESOLUTIONS, type Resolution } from "@/lib/ingestion/exceptionQueues";
 import type { QueueItemRow } from "@/lib/ingestion/exceptionQueuesStore";
 import { MATCH_FIELDS, type FieldOutcome } from "@/lib/ingestion/policyMatching";
-import { dollars, KIND_META, type NeedsYouKind } from "@/lib/needsYou/kinds";
+import { acceptsChargeback, chargebackAcceptedNote, dollars, KIND_META, unknownPolicyItemId, type NeedsYouKind } from "@/lib/needsYou/kinds";
 import type { ItemDetail } from "@/lib/needsYou/store";
 import { notify } from "@/lib/notify";
 import { refreshStepCounts } from "@/components/app/step-frame/step-rail";
@@ -322,16 +322,16 @@ function QueueDecide({ kind, queue: q, nav }: { kind: NeedsYouKind; queue: Queue
 
 // ─── Money doesn't match ─────────────────────────────────────────────────────────────────────────────────
 
-type MoneyChoice = "letter" | "rate" | "paid" | "write_off";
+type MoneyChoice = "letter" | "accept" | "rate" | "paid" | "write_off" | "sent_email" | "sent_portal" | "sent_post" | "carrier_paid" | "carrier_refused";
 
 function MoneyDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "money" }>; nav: Nav }) {
   const router = useRouter();
   const { busy, send } = useDecision(nav);
   const f = detail.finding;
-  const [choice, setChoice] = useState<MoneyChoice | null>(detail.disputable ? "letter" : null);
+  const disputed = f.status === "disputed";
+  const [choice, setChoice] = useState<MoneyChoice | null>(detail.disputable && !disputed ? "letter" : null);
   const [note, setNote] = useState("");
   const off = nav.readOnly || busy !== null;
-  const disputed = f.status === "disputed";
 
   const evidence = (
     <Evidence title="Expected against reported" description={f.explanation}>
@@ -357,26 +357,42 @@ function MoneyDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "mon
     </Evidence>
   );
 
-  if (disputed) {
-    return (
-      <>
-        {/* Round 3: "A letter is out" is the muted line under the item page title (waitsLine), not a card. */}
-        {evidence}
-        <NextOnly nav={nav} />
-      </>
-    );
-  }
-
-  const choices: Choice<MoneyChoice>[] = [
+  // QA 2026-11-03: a drafted letter left the item with nothing to answer ("record what the carrier did" had no
+  // place here). A disputed finding closes only through its letter (set_discrepancy_status refuses it), so the
+  // answers are the letter's next step: how it went out, then what the carrier said. Refused reopens the item,
+  // where "The client cancelled" is one of its answers. A partial credit is recorded on Money › Discrepancies.
+  const letter = detail.letter;
+  const drafted = letter?.status === "draft";
+  const awaiting = letter?.status === "sent" || letter?.status === "acknowledged";
+  const choices: Choice<MoneyChoice>[] = disputed ? (drafted ? [
+    { key: "sent_email", label: "I sent it by email", hint: `marks the letter to ${f.carrierName} sent` },
+    { key: "sent_portal", label: "I sent it through their portal", hint: `marks the letter to ${f.carrierName} sent` },
+    { key: "sent_post", label: "I posted it", hint: `marks the letter to ${f.carrierName} sent` },
+  ] : awaiting ? [
+    { key: "carrier_paid", label: `${f.carrierName} paid it back in full`, hint: `${dollars(letter!.totalCents)} credited; closes the item`, children: <Reason id="money-paid-back" label="Anything to add (optional)" value={note} onChange={setNote} disabled={off} /> },
+    { key: "carrier_refused", label: `${f.carrierName} says the chargeback is right`, hint: "the item opens again, to close as accepted or written off", children: <Reason id="money-refused" label="What they said (optional)" value={note} onChange={setNote} disabled={off} /> },
+  ] : []) : [
     ...(detail.disputable ? [{ key: "letter" as const, label: `Draft a letter to ${f.carrierName}`, hint: "with the figures; you send it" }] : []),
+    // QA 2026-11-03: the most common real answer to a chargeback on an "active" policy — the client cancelled.
+    ...(acceptsChargeback(f.type) ? [{ key: "accept" as const, label: "The client cancelled — the chargeback is right", hint: "closes it as accepted; the policy file shows the lapse when it comes", children: <Reason id="money-accept" label="Anything to add (optional)" value={note} onChange={setNote} disabled={off} /> }] : []),
     { key: "rate", label: "The rate is wrong", hint: "opens Setup › Rate card" },
     { key: "paid", label: "It was paid outside the statement", hint: "marks it settled, with when and how", children: <Reason id="money-paid" label="When and how it was paid" value={note} onChange={setNote} required disabled={off} /> },
     { key: "write_off", label: "Write it off", hint: "with a reason", children: <Reason id="money-off" label="Why it is written off" value={note} onChange={setNote} required disabled={off} /> },
   ];
-  const ready = choice === "letter" || choice === "rate" || ((choice === "paid" || choice === "write_off") && note.trim() !== "");
+  const ready = choice === "letter" || choice === "rate" || choice === "accept" || choice === "sent_email" || choice === "sent_portal" || choice === "sent_post" || choice === "carrier_paid" || choice === "carrier_refused" || ((choice === "paid" || choice === "write_off") && note.trim() !== "");
   const save = (how: "save" | "next") => {
     if (choice === "rate") { router.push("/app/rate-card"); return; }
+    if (letter && (choice === "sent_email" || choice === "sent_portal" || choice === "sent_post")) {
+      void send(how, "/api/app/commission-discrepancies", "POST", { action: "mark_sent", dispute_id: letter.id, via: choice === "sent_email" ? "email" : choice === "sent_portal" ? "portal" : "post" }, "Letter marked sent.");
+      return;
+    }
+    if (letter && (choice === "carrier_paid" || choice === "carrier_refused")) {
+      void send(how, "/api/app/commission-discrepancies", "POST", { action: "record_outcome", dispute_id: letter.id, outcome: choice === "carrier_paid" ? "accepted" : "rejected", amount_cents: null, notes: note.trim() || null }, choice === "carrier_paid" ? "Recorded: paid back." : "Recorded: the carrier says it's right.");
+      return;
+    }
     if (choice === "letter") void send(how, "/api/app/commission-discrepancies", "POST", { action: "draft_dispute", ids: [f.id], recipient: null }, "Letter drafted.");
+    // Its own resolution, "accepted" (20261103301000); before that migration the store closes it as dismissed with the same note.
+    else if (choice === "accept") void send(how, "/api/app/commission-discrepancies", "POST", { action: "set_status", id: f.id, status: "accepted", note: chargebackAcceptedNote(note) }, "Chargeback accepted.");
     else if (choice) void send(how, "/api/app/commission-discrepancies", "POST", { action: "set_status", id: f.id, status: choice === "paid" ? "resolved" : "dismissed", note: note.trim() }, choice === "paid" ? "Marked settled." : "Written off.");
   };
 
@@ -389,8 +405,13 @@ function MoneyDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "mon
         </ChoicesCard>
         <WhenYouSave>
           {choice === "letter" ? <>A letter to {f.carrierName} is drafted with {f.policyNumber ?? "this item"}, the expected {dollars(f.expectedCents)} and what was paid. You send it from Money › Discrepancies; the item stays open until you record what the carrier did.</>
+            : choice === "accept" ? <>The item closes as accepted, with “{chargebackAcceptedNote(note)}” as its note, and stays closed while the files keep showing it. The chargeback stays in the ledger as it is. The policy is not marked lapsed here: the next policy file from {f.carrierName} says so.</>
             : choice === "rate" ? "Nothing is saved here. The rate card opens; once the rate is right, the next check works this item out again."
-            : choice === "paid" ? "The item closes as settled, with your note. Nothing posts to the ledger: the money came outside the statement."
+            : choice === "sent_email" || choice === "sent_portal" || choice === "sent_post" ? `The letter is marked sent today. The item waits for ${f.carrierName}'s answer, which you record here.`
+            : choice === "carrier_paid" ? `The letter closes as accepted with ${dollars(letter?.totalCents ?? null)} credited, and the item is settled. The money itself arrives on ${f.carrierName}'s next statement.`
+            : choice === "carrier_refused" ? "The letter closes as refused and the item opens again, so you can close it as accepted (the client cancelled) or write it off."
+            : disputed && !drafted && !awaiting ? "This letter's outcome is recorded on Money › Discrepancies."
+            : choice === "paid" ?"The item closes as settled, with your note. Nothing posts to the ledger: the money came outside the statement."
             : choice === "write_off" ? "The item closes as written off, with your reason. It is not chased, and nothing posts."
             : "Choose what to do about it."}
         </WhenYouSave>
@@ -529,6 +550,72 @@ function FileDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "file
   );
 }
 
+// ─── Paid on a policy we don't have (QA 2026-11-03) ──────────────────────────────────────────────────────
+
+type UnknownChoice = "wait" | "another_writing_number" | "raised_with_carrier" | "not_mine";
+
+/**
+ * Commission lines on a policy no policy file has, past ORPHAN_NOTICE_DAYS. Waiting saves nothing (the policy
+ * file usually follows); the other answers are the orphan queue's own, saved by raising its item now
+ * (POST /api/app/needs-you/item, answer_unknown_policy).
+ */
+function UnknownPolicyDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "unknown-policy" }>; nav: Nav }) {
+  const { busy, send } = useDecision(nav);
+  const [choice, setChoice] = useState<UnknownChoice | null>(null);
+  const [note, setNote] = useState("");
+  const off = nav.readOnly || busy !== null;
+  const choices: Choice<UnknownChoice>[] = [
+    { key: "wait", label: "Wait for the policy file", hint: "nothing is saved; it stays here until the policy arrives" },
+    { key: "another_writing_number", label: RESOLUTION_LABELS.another_writing_number, hint: QUEUE_HINTS.another_writing_number, children: <Reason id="unknown-number" label="Which writing number, if you know it" value={note} onChange={setNote} disabled={off} /> },
+    { key: "raised_with_carrier", label: RESOLUTION_LABELS.raised_with_carrier, hint: QUEUE_HINTS.raised_with_carrier, children: <Reason id="unknown-asked" label="What you asked the carrier" value={note} onChange={setNote} required disabled={off} /> },
+    { key: "not_mine", label: "Not ours: hand it on", hint: QUEUE_HINTS.not_mine },
+  ];
+  const ready = choice !== null && choice !== "wait" && (choice !== "raised_with_carrier" || note.trim() !== "");
+  const facts: Array<[string, ReactNode]> = [
+    ["Policy number", <span key="p" className="font-mono">{detail.policyNumber}</span>],
+    ["Carrier", detail.carrierName],
+    ["Paid", dollars(detail.amountCents)],
+    ...(detail.heldCents ? [["Held", dollars(detail.heldCents)] as [string, ReactNode]] : []),
+    ["Lines", detail.lines.length.toLocaleString("en-US")],
+    ["First paid", fileDay(detail.firstSeen)],
+    ["Agent code", [...new Set(detail.lines.map((l) => l.agentCode).filter(Boolean))].join(", ") || "—"],
+  ];
+
+  return (
+    <>
+      <Facts title="What the commission files say" facts={facts} />
+      <Evidence title="The lines" description="Each line stays in the ledger as it is, whatever you answer.">
+        <table className="portal-lead-table w-full min-w-[560px] text-left text-sm">
+          <thead><tr><th>Line</th><th>From</th><th className="w-[110px]">Paid on</th><th className="w-[120px] text-right">Amount</th></tr></thead>
+          <tbody>
+            {detail.lines.map((line) => (
+              <tr key={line.id}>
+                <td className="capitalize">{line.type.replaceAll("_", " ")}</td>
+                <td>{line.rowNumber !== null ? <Link href={rowHref(line.fileId, line.rowNumber)} className="text-[var(--accent-ink)] hover:underline">{line.fileName} · row {line.rowNumber}</Link> : line.fileName}</td>
+                <td className="tabular-nums">{fileDay(line.seenOn)}</td>
+                <td className="text-right tabular-nums">{dollars(line.amountCents)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Evidence>
+      <Grid>
+        <ChoicesCard title="What do you want to do?">
+          <ChoiceList name="unknown-policy" label="What do you want to do?" choices={choices} value={choice} onChange={setChoice} disabled={off} />
+        </ChoicesCard>
+        <WhenYouSave>
+          {choice === "wait" ? "Nothing is saved. The item stays in Needs you until a policy file lists this number; then its lines join the policy by themselves."
+            : choice === "not_mine" ? QUEUE_EFFECT.not_mine
+            : choice ? QUEUE_EFFECT[choice]
+            : "Choose what to do about it."}
+        </WhenYouSave>
+      </Grid>
+      {choice === "wait" ? <NextOnly nav={nav} />
+        : <DecideButtons kind="unknown-policy" nav={nav} busy={busy} ready={ready} onSave={(how) => { if (choice) void send(how, "/api/app/needs-you/item", "POST", { action: "answer_unknown_policy", id: unknownPolicyItemId(detail.carrierId, detail.policyNumber), answer: choice, note: note.trim() || null }, choice === "not_mine" ? "Handed on." : "Saved."); }} />}
+    </>
+  );
+}
+
 /** The Decide tab of a Needs you item: the evidence, the choices its own API accepts, and what saving does. */
 export function ItemDecide({ detail, nextHref, listHref, readOnly, inline }: { detail: ItemDetail; nextHref: string | null; listHref: string; readOnly: boolean; inline?: InlineNav }) {
   const nav: Nav = { nextHref, listHref, readOnly, inline };
@@ -544,6 +631,7 @@ function DecideBody({ detail, nav }: { detail: ItemDetail; nav: Nav }) {
     case "status-word": return <StatusWordDecide detail={detail} nav={nav} />;
     case "rules": return <RulesDecide detail={detail} nav={nav} />;
     case "file": return <FileDecide detail={detail} nav={nav} />;
+    case "unknown-policy": return <UnknownPolicyDecide detail={detail} nav={nav} />;
     default: return <QueueDecide kind={detail.kind} queue={detail.queue} nav={nav} />;
   }
 }
