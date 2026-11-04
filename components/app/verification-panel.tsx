@@ -12,6 +12,7 @@ import { callHref } from "@/components/app/inbound/use-floor";
 import { SamePersonPrompt, type SamePersonCheck } from "@/components/app/same-person-prompt";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
+import { InfoTip } from "@/components/ui/info-tip";
 import { PageHeader } from "@/components/ui/page-header";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -308,6 +309,7 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
   const heldAsCustomer = samePerson?.status === "already_customer" && !customerChecked;
   const allFields = sections.flatMap((section) => section.fields);
   const requiredConfirmed = allFields.filter((field) => field.is_required && ["confirmed", "corrected"].includes(field.state)).length;
+  const everySectionComplete = sections.length > 0 && sections.every((section) => sectionComplete(section.fields));
   const requiredDone = Object.keys(optimistic).length ? requiredConfirmed >= panel.requiredCount : panel.session.progress_percentage === 100;
   const progressText = `${requiredConfirmed} of ${panel.requiredCount} required details checked`;
   const left = Math.max(0, panel.requiredCount - requiredConfirmed);
@@ -385,16 +387,17 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <span className="flex min-w-0 flex-wrap items-center gap-3">
                   <h2 className="m-0 text-base leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">Verification</h2>
+                  <InfoTip label="How to verify">Read each detail back to the caller. Right? Press <strong>It’s right</strong>. Wrong? Type the right one and press <strong>Save new value</strong>.</InfoTip>
                   <StatusChip dot={false} tone={pillTone(requiredDone ? "success" : "brand")}>{progressText}</StatusChip>
                 </span>
                 {/* Owner 2026-10-28: Back, Skip (straight to Finish the call), then Continue to Application. */}
                 <span className="flex flex-wrap items-center gap-2">
-                  {onBack && <Button type="button" size="sm" variant="ghost" onClick={onBack}><ChevronLeft aria-hidden />Back</Button>}
+                  {onBack && <Button type="button" size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to the caller profile" title="Back to the caller profile"><ChevronLeft aria-hidden /></Button>}
                   {!canHandoff && (embedded ? (
-                    <Button type="button" size="sm" variant="outline" onClick={onFinish} title={requiredDone ? "Skip the application and record how the call ended" : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Skip · finish the call</Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={onFinish} title={requiredDone ? "Skip the application and record how the call ended" : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Skip to finish</Button>
                   ) : (
-                    <Button asChild size="sm" variant="outline">
-                      <Link href={callHref(workItemId, "finish")} title={requiredDone ? "Skip the application and record how the call ended" : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Skip · finish the call</Link>
+                    <Button asChild size="sm" variant="ghost">
+                      <Link href={callHref(workItemId, "finish")} title={requiredDone ? "Skip the application and record how the call ended" : `${left} required ${left === 1 ? "detail is" : "details are"} still to check. You can finish first and come back.`}>Skip to finish</Link>
                     </Button>
                   ))}
                   {!readOnly && !canHandoff && (
@@ -407,14 +410,13 @@ export function VerificationPanel({ workItemId, readOnly, canHandoff, onUnderwri
               <div aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_8%,transparent)]">
                 <div className="h-full rounded-full bg-[var(--primary)] transition-[width] duration-300" style={{ width: `${percent}%` }} />
               </div>
-              <p className="m-0 text-sm leading-[1.5] tracking-[-0.01em] text-[var(--ink)]">
-                Read each detail back to the caller. Right? Press <strong className="font-semibold text-[var(--ink)]">It’s right</strong>. Wrong? Type the right one and press <strong className="font-semibold text-[var(--ink)]">Save new value</strong>.
-              </p>
             </div>
             <div className={cn("min-w-0", embedded && "lg:min-h-0 lg:flex-1 lg:overflow-y-auto")}>
             {sections.map((section, sectionIndex) => {
               const complete = sectionComplete(section.fields);
-              const folded = complete && !reopened[section.section_key];
+              // A section that is done folds away while others are still open; when all are done there is nothing to hide, so they
+              // show open and the chevron folds one (`reopened` then means "folded by hand").
+              const folded = complete && (everySectionComplete ? Boolean(reopened[section.section_key]) : !reopened[section.section_key]);
               const done = section.fields.filter((field) => field.state !== "outstanding").length;
               return (
               <Fragment key={section.section_key}>
