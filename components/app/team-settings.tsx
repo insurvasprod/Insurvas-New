@@ -3,7 +3,7 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { notify } from "@/lib/notify";
-import { UserPlus } from "lucide-react";
+import { Settings2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -229,35 +229,29 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
           value={seats.used}
           valueTone={atSeatLimit ? "warning" : undefined}
           meter={seats.max !== null ? { value: seats.used, max: seats.max, tone: atSeatLimit ? "warning" : "info", label: `${seats.used} of ${seats.max} seats used` } : undefined}
-          footnote={seats.max === null ? "unlimited" : `of ${seats.max} on ${planName}`}
+          footnote={seats.max === null ? "unlimited" : atSeatLimit ? <>full on {planName} · <Link className="underline" href="/app/settings#billing">upgrade the plan</Link></> : `of ${seats.max} on ${planName}`}
         />
         <StatTile label="Pending invites" value={pendingInvites} footnote={pendingInvites ? "each holds a seat" : "none outstanding"} />
         <StatTile
           label="Buffer seats"
           value={snapshot.bufferSeats.used}
           valueTone={bufferAtLimit ? "warning" : undefined}
-          footnote={snapshot.bufferSeats.max === null ? "unlimited" : `of ${snapshot.bufferSeats.max}`}
+          meter={snapshot.bufferSeats.max !== null ? { value: snapshot.bufferSeats.used, max: snapshot.bufferSeats.max, tone: bufferAtLimit ? "warning" : "info", label: `${snapshot.bufferSeats.used} of ${snapshot.bufferSeats.max} buffer seats used` } : undefined}
+          footnote={snapshot.bufferSeats.max === null ? "unlimited" : bufferAtLimit ? "full" : `of ${snapshot.bufferSeats.max}`}
         />
-        {outbound.map((item) => (
+        {/* The setter-seat limit is its own cap, apart from total seats (LA-2.22): at the cap the tile says so and
+            the invite names which limit refuses the next setter. */}
+        {setterSeats && (
           <StatTile
-            key={item.key}
-            label={item.label}
-            value={item.usage}
-            valueTone={item.limit !== null && item.usage >= item.limit ? "warning" : undefined}
-            footnote={item.limit === null ? "unlimited" : `of ${item.limit}`}
+            label={setterSeats.label}
+            value={setterSeats.usage}
+            valueTone={setterAtLimit || setterNearLimit ? "warning" : undefined}
+            meter={{ value: setterSeats.usage, max: setterSeats.limit ?? 0, tone: setterAtLimit || setterNearLimit ? "warning" : "info", label: `${setterSeats.usage} of ${setterSeats.limit ?? 0} setter seats used` }}
+            footnote={setterAtLimit ? "full · the setter-seat limit is reached" : setterNearLimit ? "nearly full" : `of ${setterSeats.limit ?? 0}`}
           />
-        ))}
+        )}
       </StatStrip>
 
-      {atSeatLimit && <Callout tone="warning" title={<>Every seat is in use — revoke a pending invite, deactivate someone, or <Link className="underline" href="/app/settings#billing">upgrade the plan</Link> before inviting anyone else.</>} />}
-      {setterSeats && (setterAtLimit || setterNearLimit) && (
-        <Callout
-          tone="warning"
-          title={setterAtLimit
-            ? `Your plan's setter-seat limit is reached: ${setterSeats.usage} of ${setterSeats.limit ?? 0} setter seats in use. Upgrade the plan, or deactivate a setter, to invite another.`
-            : `Setter seats are nearly full: ${setterSeats.usage} of ${setterSeats.limit ?? 0} in use. Upgrade the plan before the next setter invite.`}
-        />
-      )}
       {error && <Callout tone="error" title={error} />}
 
       <PagedTableCard
@@ -273,7 +267,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                   <UserPlus aria-hidden="true" />
                   Invite someone
                 </Button>
-                <RefreshButton onClick={() => void reload()} refreshing={refreshing} />
+                <RefreshButton onClick={() => void reload()} refreshing={refreshing} labelClassName="sr-only" className="px-2.5" />
               </>
             }
           >
@@ -295,21 +289,20 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
         ) : filtered.length === 0 ? (
           <NoMatches noun="people" onClear={filtersOn ? () => { setQuery(""); setRoleFilter(""); setStatusFilter(""); } : undefined} />
         ) : (
-        <table className={cn(st.table, "min-w-[760px]")} data-testid="team-settings">
+        <table className={cn(st.table, "min-w-[720px]")} data-testid="team-settings">
           <thead>
             <tr className={st.headRow}>
               <th scope="col" className={st.th}>Person</th>
-              <th scope="col" className={cn(st.th, "w-[120px]")}>Access</th>
-              <th scope="col" className={cn(st.th, "w-[150px]")}>Licensed in</th>
-              <th scope="col" className={cn(st.th, "w-[120px]")}>Status</th>
+              <th scope="col" className={cn(st.th, "w-[130px]")}>Access</th>
+              <th scope="col" className={cn(st.th, "w-[170px]")}>Licensed in</th>
               <th
                 scope="col"
-                className={cn(st.th, st.num, "w-[130px]")}
+                className={cn(st.th, "w-[250px]")}
                 title={snapshot.presenceRecorded === false ? "Presence is not recorded until a database update is applied, so this shows the last sign-in." : "When they last had Insurvas open. “Now” means within the last two minutes."}
               >
-                Last seen
+                Status
               </th>
-              <th scope="col" className={cn(st.th, st.num, "w-[150px]")}><span className="sr-only">Actions</span></th>
+              <th scope="col" className={cn(st.th, st.num, "w-[88px]")}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <PagedBody>
@@ -333,7 +326,7 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                       {member.name}
                     </button>
                     {changed && <StatusChip dot={false} tone="info" className="ml-2">Unsaved</StatusChip>}
-                    <span className={cn(st.sub, "break-all")}>{member.email}</span>
+                    <span className={cn(st.sub, "block max-w-[280px] truncate")} title={member.email}>{member.email}</span>
                   </td>
                   <td className={st.td}>
                     <StatusChip dot={false} tone={pillTone(role === "owner" ? "brand" : "neutral")}>{TENANT_ROLE_LABELS[role]}</StatusChip>
@@ -360,15 +353,15 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                       </span>
                     )}
                   </td>
-                  <td className={st.td}>
-                    <StatusChip dot={false} tone={pillTone(pill.tone)}>{pill.label}</StatusChip>
-                  </td>
-                  <td className={cn(st.td, st.num)}>
-                    {status === "invited" || status === "expired"
-                      ? member.inviteExpiresAt
-                        ? `${status === "expired" ? "Expired" : "Expires"} ${dayMonth(member.inviteExpiresAt, zone)}`
-                        : <>&mdash;</>
-                      : lastSeenCell(member, now, zone)}
+                  <td className={cn(st.td, "whitespace-nowrap")}>
+                    <StatusChip tone={pillTone(pill.tone)}>{pill.label}</StatusChip>
+                    <span className="ml-2 text-[var(--muted)]">
+                      {status === "invited" || status === "expired"
+                        ? member.inviteExpiresAt
+                          ? `${status === "expired" ? "Expired" : "Expires"} ${dayMonth(member.inviteExpiresAt, zone)}`
+                          : null
+                        : lastSeenCell(member, now, zone)}
+                    </span>
                   </td>
                   <td className={cn(st.td, st.num, "whitespace-nowrap")}>
                     {status === "invited" || status === "expired" ? (
@@ -378,8 +371,8 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
                     ) : member.id === viewerId ? (
                       <span className="text-[var(--muted)]" title="This is you. Select your name to change your own licensed states.">&mdash;</span>
                     ) : (
-                      <Button type="button" variant="outline" size="sm" onClick={() => setManaging(member)} aria-label={`Manage ${member.name}`}>
-                        Manage
+                      <Button type="button" variant="outline" size="icon-sm" onClick={() => setManaging(member)} aria-label={`Manage ${member.name}`} title={`Manage ${member.name}`}>
+                        <Settings2 aria-hidden="true" />
                       </Button>
                     )}
                   </td>
