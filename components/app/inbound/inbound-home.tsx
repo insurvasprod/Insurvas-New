@@ -15,7 +15,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Phone } from "lucide-react";
+import { ClipboardCheck, Coffee, Headset, PhoneCall, PhoneIncoming, PhoneOff, Phone, Users } from "lucide-react";
 
 import { Callout, st } from "@/components/app/settings/primitives";
 import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
@@ -137,14 +137,14 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
   const restShown = paginate(rest, linePage, linePageSize);
   const takeReason = readOnly ? "Your agency’s account is paused." : !ready ? "Start taking calls first." : undefined;
 
-  // Two buttons at most (UI-CONSISTENCY §2): the status, one break button, and the rest under More.
+  // The status, then everything else under More with an icon each (owner 2026-11-05).
   const headerActions = (
     <>
       <AvailabilityStatus availability={availability} onCall={onCall} />
-      {ready && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("on_break")}>Take a break</Button>}
       <MoreMenu items={[
-        ready && { label: "Stop taking calls", onSelect: () => setAvailability("off"), disabled: statusLocked },
-        canSeeTeam && (solo ? { label: "All callers", href: "/app/inbound/team?tab=all" } : { label: "Team", href: "/app/inbound/team" }),
+        ready && { label: "Take a break", icon: Coffee, onSelect: () => setAvailability("on_break"), disabled: statusLocked },
+        ready && { label: "Stop taking calls", icon: PhoneOff, onSelect: () => setAvailability("off"), disabled: statusLocked },
+        canSeeTeam && (solo ? { label: "All callers", icon: Users, href: "/app/inbound/team?tab=all" } : { label: "Team", icon: Users, href: "/app/inbound/team" }),
       ]} />
     </>
   );
@@ -218,10 +218,11 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           ))}
 
           {next ? nextCard : (
-            <section aria-label="Nobody in line" className="m-glass flex flex-col gap-1 rounded-xl border border-border p-5">
-              <h2 className="m-0 text-base font-semibold text-[var(--ink)]">Nobody is waiting</h2>
-              <p className="m-0 text-sm text-[var(--muted)]">{ready ? "We chime and show the caller here the moment one arrives." : "When you are taking calls, we chime and show the caller here the moment one arrives."}</p>
-              {floor.callbacks.some((item) => item.isDueToday || item.isOverdue) && <Link href="/app/callbacks" className="mt-1 text-sm font-semibold text-[var(--accent-ink)] hover:underline">Meanwhile: callbacks due today ›</Link>}
+            <section aria-label="Nobody in line" className="m-glass flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl border border-border p-8 text-center">
+              <span aria-hidden="true" className="grid size-12 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--accent-ink)]"><PhoneIncoming className="size-6" /></span>
+              <h2 className="m-0 text-base font-semibold text-[var(--ink)]">{ready ? "You're all caught up" : "You're not taking calls"}</h2>
+              <p className="m-0 max-w-[44ch] text-sm leading-[1.5] text-[var(--muted)]">{ready ? "No one is waiting. When a caller joins the line, you'll hear a chime and their details will appear right here." : "Start taking calls and the next caller in line is offered to you with a chime."}</p>
+              {floor.callbacks.some((item) => item.isDueToday || item.isOverdue) && <Button asChild variant="outline" size="sm" className="mt-1"><Link href="/app/callbacks"><PhoneCall aria-hidden="true" />Callbacks due today</Link></Button>}
             </section>
           )}
 
@@ -251,8 +252,8 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
 
         <aside aria-label="You and your team" className="flex min-w-0 flex-col gap-4">
           <section className="m-glass flex flex-col gap-3 rounded-xl border border-border p-4">
-            <h2 className="m-0 flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">Your open calls{myCalls.length > 0 && <StatusChip tone="neutral" dot={false}>{myCalls.length}</StatusChip>}</h2>
-            {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">None. Every call you took is finished.</p>}
+            <h2 className="m-0 flex items-center gap-2 text-card-title text-[var(--ink)]"><Headset className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />Calls to wrap up{myCalls.length > 0 && <StatusChip tone="neutral" dot={false}>{myCalls.length}</StatusChip>}</h2>
+            {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">All wrapped up. Every call you took has an outcome.</p>}
             {myCalls.length > 0 && (
               <ul className="m-0 flex list-none flex-col p-0">
                 {myCalls.slice(0, 6).map((call) => {
@@ -262,15 +263,15 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
                     <li key={call.id} className="flex items-center justify-between gap-3 border-t border-[var(--border)] py-2.5 first:border-t-0 first:pt-0">
                       <span className="min-w-0 text-sm">
                         <strong className="block truncate font-semibold text-[var(--ink)]">{call.customer}</strong>
-                        <span className="text-xs text-[var(--muted)]">{forgotten ? `Taken ${shortDuration(age)} ago · no outcome` : `On the call ${shortDuration(age)}`}</span>
+                        <span className="text-xs text-[var(--muted)]">{forgotten ? `Answered ${shortDuration(age)} ago · needs an outcome` : `On the call for ${shortDuration(age)}`}</span>
                       </span>
-                      <Button asChild variant="outline" size="sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id, "verify")}>{forgotten ? "Finish it" : "Back to it"}</Link></Button>
+                      <Button asChild variant="outline" size="icon-sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id, "verify")} aria-label={`${forgotten ? "Log the outcome for" : "Return to the call with"} ${call.customer}`} title={forgotten ? "Log outcome" : "Back to the call"}>{forgotten ? <ClipboardCheck aria-hidden="true" /> : <Phone aria-hidden="true" />}</Link></Button>
                     </li>
                   );
                 })}
               </ul>
             )}
-            {myCalls.length > 6 && <p className="m-0 text-xs text-[var(--muted)]">and {myCalls.length - 6} more, the oldest first</p>}
+            {myCalls.length > 6 && <p className="m-0 text-xs text-[var(--muted)]">{myCalls.length - 6} more, oldest first</p>}
           </section>
           <section className="m-glass flex flex-col gap-2.5 rounded-xl border border-border p-4">
             <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your team now</h2>
