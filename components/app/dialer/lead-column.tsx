@@ -165,7 +165,7 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
             {priority && <Fact icon={Flame} tone={priority === "High" ? "bad" : priority === "Medium" ? "warn" : "neutral"} title={why}>{priority}</Fact>}
             <InfoTip label="Where this lead came from">{[panel.campaign?.name ?? "No campaign", panel.campaign?.vendorName ?? "No vendor", panel.campaign ? sourceLabel(panel.campaign.leadType) : null, productLineLabel(panel.lead.productCode)].filter(Boolean).join(" · ")}</InfoTip>
           </div>
-          <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] leading-[1.5] tracking-[-0.01em] text-[var(--body)] tabular-nums">
+          <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] tabular-nums">
             <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--ink)]"><Phone aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{phoneLabel ?? "No phone number"}</span>
             <span className="inline-flex items-center gap-1.5" title="Where they are"><MapPin aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{cityState || "state missing"}</span>
             <span className="inline-flex items-center gap-1.5" title="Their local time"><Clock aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{eligibility?.timezone ? `${localClock(eligibility.checkedAt, eligibility.timezone)} ${zoneShort(eligibility.timezone)}` : "Time unknown"}</span>
