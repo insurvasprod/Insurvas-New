@@ -275,7 +275,7 @@ function AgendaLine({ row, zone, slotLength, highlightId, steps, stepping, isFut
   );
 }
 
-export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
+export function AppointmentCalendar({ highlightId, embedded = false }: { highlightId?: string; embedded?: boolean }) {
   // Calendar B (owner pick 2026-10-25): the day agenda first; Week and List stay one click away.
   // Week first (owner 2026-10-28), then Day; List stays.
   const [view, setView] = useState<View>("week");
@@ -592,11 +592,8 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
 
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Calendar"
-        hideTitle
-        // Owner 2026-10-29: Week / Day / List on the right, just left of "Book an appointment".
-        actions={<>
+      {embedded
+        ? <div className="flex flex-wrap items-center justify-end gap-2">
           <ViewTabs
             label="View"
             value={view}
@@ -609,8 +606,25 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
             ]}
           />
           <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>
-        </>}
-      />
+        </div>
+        : <PageHeader
+          title="Calendar"
+          hideTitle
+          actions={<>
+          <ViewTabs
+            label="View"
+            value={view}
+            controls="calendar-panel"
+            onChange={(nextView) => { setView(nextView); setListPage(1); }}
+            tabs={[
+              { key: "week", label: "Week" },
+              { key: "day", label: "Day" },
+              { key: "list", label: "List", count: listRows.length },
+            ]}
+          />
+          <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>
+          </>}
+        />}
 
       {error && (
         <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-2.5 text-sm text-[var(--error-ink)]">
@@ -636,7 +650,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
             <DataToolbar
               actions={<>
                 <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeFilters.length} controls="calendar-filters" />
-                {holdsCalendar && <Button asChild variant="outline" size="icon"><Link href="/app/settings#calendar" aria-label="Hours and blocks" title="Hours and blocks"><Clock aria-hidden="true" /></Link></Button>}
+                {holdsCalendar && <Button asChild variant="outline" size="icon"><Link href="/app/setters?tab=setup" aria-label="Hours and blocks" title="Hours and blocks"><Clock aria-hidden="true" /></Link></Button>}
                 <RefreshButton onClick={refresh} refreshing={loading} />
               </>}
             >
