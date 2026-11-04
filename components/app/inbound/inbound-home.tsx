@@ -19,7 +19,7 @@ import { ClipboardCheck, Coffee, Headset, PhoneCall, PhoneIncoming, PhoneOff, Ph
 
 import { Callout, st } from "@/components/app/settings/primitives";
 import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
-import { callHref, secondsSince, shortDuration, useFloor, type Availability, type FloorData, type Lead, type Member } from "@/components/app/inbound/use-floor";
+import { callHref, secondsSince, shortDuration, useFloor, type Availability, type FloorData, type Lead } from "@/components/app/inbound/use-floor";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { MoreMenu } from "@/components/ui/more-menu";
@@ -79,12 +79,8 @@ function AvailabilityStatus({ availability, onCall }: { availability: Availabili
   return <StatusChip tone={tone} dot>{label}</StatusChip>;
 }
 
-function isPresent(member: Member, now: number) {
-  return Boolean(member.lastSeenAt) && now - new Date(member.lastSeenAt!).getTime() <= 60_000;
-}
-
 export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false }: { currentUserId: string; readOnly: boolean; canSeeTeam: boolean; /** Solo mode: no Team page; All callers instead. */ solo?: boolean }) {
-  const { floor, error, now, saving, availability, setAvailability, liveLabel, updated, refresh, claim, accept, sendNudge } = useFloor({ readOnly });
+  const { floor, error, now, saving, availability, setAvailability, refresh, claim, accept, sendNudge } = useFloor({ readOnly });
   const [pop, setPop] = useState<Pop>("none");
   useEffect(() => {
     // The browser's pop-up permission, read once after mount.
@@ -106,14 +102,6 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
 
   const line = useMemo(() => [...(floor?.waiting ?? [])].sort((a, b) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime()), [floor?.waiting]);
   const myCalls = useMemo(() => (floor?.onCalls ?? []).filter((call) => call.agentId === currentUserId).sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()), [floor?.onCalls, currentUserId]);
-  const team = useMemo(() => {
-    const members = (floor?.members ?? []).filter((member) => member.id !== currentUserId);
-    return {
-      taking: members.filter((member) => member.availability === "ready" && isPresent(member, now)).length,
-      onCall: members.filter((member) => member.availability === "on_call").length,
-      onBreak: members.filter((member) => member.availability === "on_break" && isPresent(member, now)).length,
-    };
-  }, [floor?.members, currentUserId, now]);
 
   const [linePage, setLinePage] = useState(1);
   const linePageSize = useFittingPageSize(560, 65);
@@ -179,6 +167,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
             {saving === next.id ? "Taking…" : "Take this call"}
           </Button>
           <span className="text-sm text-[var(--body)]">{takeReason ?? "Opens the call: what we know about them, then verification."}</span>
+          {!readOnly && <Button type="button" variant="ghost" size="sm" className="ml-auto" disabled={saving === `nudge:${next.id}`} onClick={() => void sendNudge(next.id, null)}>{saving === `nudge:${next.id}` ? "Asking…" : "Ask the team to help"}</Button>}
         </div>
       </section>
     );
@@ -271,18 +260,6 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
               </ul>
             )}
             {myCalls.length > 6 && <p className="m-0 text-xs text-[var(--muted)]">{myCalls.length - 6} more, oldest first</p>}
-          </section>
-          <section className="m-glass flex flex-col gap-2.5 rounded-xl border border-border p-4">
-            <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your team now</h2>
-            {([["Taking calls", team.taking, "bg-[var(--primary)]"], ["On a call", team.onCall, "bg-[var(--info)]"], ["On break", team.onBreak, "bg-[var(--warning)]"]] as const).map(([label, value, dot]) => (
-              <span key={label} className="flex items-center justify-between text-sm text-[var(--body)]"><span className="flex items-center gap-2"><span aria-hidden="true" className={cn("size-2 rounded-full", dot)} />{label}</span><strong className="font-semibold text-[var(--ink)] tabular-nums">{value}</strong></span>
-            ))}
-            {next && !readOnly && (
-              <Button type="button" variant="outline" size="sm" className="mt-1 self-start" disabled={saving === `nudge:${next.id}`} onClick={() => void sendNudge(next.id, null)}>{saving === `nudge:${next.id}` ? "Asking…" : "Ask the team to help"}</Button>
-            )}
-            <p className="m-0 text-xs text-[var(--muted)]">When a caller waits too long, everyone taking calls is asked.</p>
-            {/* The live-connection note sits with the team numbers it describes. */}
-            <p className="m-0 border-t border-[var(--border)] pt-2.5 text-xs text-[var(--muted)]" role="status">{liveLabel} · updated {updated}</p>
           </section>
         </aside>
       </div>
