@@ -156,9 +156,6 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
       <div className="flex min-w-0 flex-1 flex-col gap-4 @max-2xl:contents">
       {/* Who: the name, the number, and their place, clock, age and attempt as icons. */}
       <div className="flex items-start gap-4">
-        <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">
-          {(name ?? "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
-        </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="m-0 text-title-md leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{name}</h2>
