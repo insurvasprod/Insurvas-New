@@ -1,24 +1,59 @@
-/* The roadmap glimpse on the landing page (owner, 4 Nov). */
-.section { border-top: 1px solid var(--border); background: var(--canvas); }
-.inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0; }
-.head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 32px; margin-bottom: clamp(24px, 3vw, 36px); }
-.eyebrow { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0; color: var(--accent-ink); font-size: 15px; font-weight: 650; }
-.eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
+/* The roadmap glimpse (owner, 4 Nov): a real road from above, a pin per stop whose label opens on hover. */
+.section { position: relative; background: var(--canvas); }
+/* the heading sits over the top of the photo */
+.inner { position: absolute; inset: 0 0 auto; z-index: 3; width: min(100% - 64px, 1320px); margin: 0 auto; padding-top: clamp(48px, 5vw, 72px); pointer-events: none; }
+.inner a { pointer-events: auto; }
+.head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 32px; }
 .heading { margin: 0; color: var(--ink); font: 600 clamp(28px, 3.2vw, 44px)/1.1 var(--font-brand); letter-spacing: -.025em; text-wrap: balance; }
 .link { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-ink); font-size: 15px; font-weight: 600; text-decoration: none; }
 .link:hover { text-decoration: underline; }
-.link svg { width: 16px; height: 16px; }
+.link svg { width: 16px; height: 16px; transition: transform .2s; }
+.link:hover svg { transform: translateX(3px); }
 .link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 
-.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.card { display: grid; align-content: start; gap: 6px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 20px; }
-.card strong { color: var(--ink); font-size: 18px; font-weight: 600; letter-spacing: -.015em; }
-.card > span { color: var(--muted); font-size: 15px; line-height: 1.5; }
-.status { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
-.status span { margin-left: auto; color: var(--muted); font-weight: 400; }
-.status i { width: 10px; height: 10px; border: 2px solid var(--muted); border-radius: 50%; }
-.card[data-status="progress"] .status i { border-color: var(--warning); background: var(--warning); }
-.card[data-status="exploring"] .status i { border-style: dashed; }
+/* the photo */
+.map { position: relative; aspect-ratio: 2400 / 1296; overflow: hidden; background: var(--canvas); }
+.photo { object-fit: cover; opacity: .55; filter: saturate(.8); }
+/* fades into the page above and the footer below, so the photo has no hard edge */
+.shade { position: absolute; inset: 0; background: linear-gradient(180deg, var(--canvas) 0%, color-mix(in srgb, var(--canvas) 70%, transparent) 16%, transparent 34%, transparent 82%, var(--footer-bg) 100%); pointer-events: none; }
 
-@media (max-width: 900px) { .cards { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) { .inner { width: calc(100% - 32px); } }
+/* the pins and their labels */
+.pins { position: absolute; inset: 0; z-index: 2; }
+.pin { position: absolute; width: 0; height: 0; border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; }
+.pin:focus-visible { outline: none; }
+.node { position: absolute; left: -14px; top: -14px; width: 28px; height: 28px; border: 4px solid var(--on-dark); border-radius: 50%; background: var(--muted); box-shadow: 0 4px 14px rgb(0 0 0 / 45%); transition: transform .2s; }
+.pin[data-status="shipped"] .node { background: var(--primary); }
+.pin[data-status="progress"] .node { background: var(--warning); animation: ping 2.2s ease-out infinite; }
+.pin[data-status="exploring"] .node { border-style: dashed; }
+.pin:hover .node, .pin[aria-pressed="true"] .node { transform: scale(1.2); }
+.pin:focus-visible .node { box-shadow: 0 0 0 4px var(--canvas), 0 0 0 7px var(--primary); }
+
+.tag { position: absolute; display: grid; gap: 2px; width: max-content; max-width: 260px; border: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--canvas) 82%, transparent); padding: 9px 13px; text-align: left; backdrop-filter: blur(8px); box-shadow: 0 10px 30px -12px rgb(0 0 0 / 60%); transition: border-color .2s; }
+.pin[data-tag="above"] .tag { bottom: 26px; }
+.pin[data-tag="below"] .tag { top: 26px; }
+.pin[data-align="center"] .tag { left: 0; transform: translateX(-50%); }
+.pin[data-align="start"] .tag { left: -14px; }
+.pin[data-align="end"] .tag { right: -14px; }
+.tag b { color: var(--muted); font-size: 12px; font-weight: 600; }
+.tag span { color: var(--ink); font-size: 14px; font-weight: 600; line-height: 1.3; }
+.pin[data-status="shipped"] .tag b { color: var(--accent-ink); }
+.pin[data-status="progress"] .tag b { color: var(--warning); }
+.pin[aria-pressed="true"] .tag { z-index: 2; border-color: var(--primary); }
+.pin[aria-pressed="true"] { z-index: 2; }
+/* the detail opens inside the label of the pin being pointed at */
+.detail { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .25s ease; }
+.detail > span { overflow: hidden; color: var(--muted); font-size: 13px; font-weight: 400; line-height: 1.45; }
+.pin[aria-pressed="true"] .detail { grid-template-rows: 1fr; }
+.pin[aria-pressed="true"] .detail > span { padding-top: 4px; }
+
+@keyframes ping { 0% { box-shadow: 0 4px 14px rgb(0 0 0 / 45%), 0 0 0 0 color-mix(in srgb, var(--warning) 55%, transparent); } 70%, 100% { box-shadow: 0 4px 14px rgb(0 0 0 / 45%), 0 0 0 16px transparent; } }
+
+/* Narrow screens: only the label of the pin being pointed at shows. */
+@media (max-width: 860px) {
+  .tag { display: none; }
+  .pin[aria-pressed="true"] .tag { display: grid; max-width: min(240px, 60vw); }
+  .node { left: -11px; top: -11px; width: 22px; height: 22px; border-width: 3px; }
+}
+/* Phones: the photo is too short to carry the heading, so the heading sits above it. */
+@media (max-width: 760px) { .inner { position: static; width: calc(100% - 32px); padding: 48px 0 16px; } }
+@media (prefers-reduced-motion: reduce) { .pin[data-status="progress"] .node { animation: none; } .detail { transition: none; } }
