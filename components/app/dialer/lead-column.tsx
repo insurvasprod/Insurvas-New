@@ -43,7 +43,7 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
   const now = useNow();
   const [complianceOpen, setComplianceOpen] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
-  const { searchMode, panel, panelError, loading, served, serving, serveNext, loadingPanel, eligibility, callReady, reasonParts, stateName, stackHits, phoneLabel, cityState, disclosureUnapproved } = d;
+  const { searchMode, panel, panelError, loading, served, loadingPanel, eligibility, callReady, reasonParts, stateName, stackHits, phoneLabel, cityState, disclosureUnapproved } = d;
 
   if (panelError) return <div className="p-4"><Callout tone="error" title={`Could not load this lead: ${panelError}`} /></div>;
   if (loading || loadingPanel) return <div aria-label="Lead"><SectionLoading rows={5} columns={4} label={loading ? "Serving your next lead" : "Loading call guidance"} /></div>;
@@ -51,9 +51,10 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
     if (searchMode) return <EmptyState title="Open a search result" hint="Pick a lead from the results." />;
     // No explanation under the title (owner 2026-10-30): the title and Serve next lead say enough.
     return (
-      <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
         <p className="m-0 text-sm font-semibold text-[var(--ink)]">No lead on your screen</p>
-        {!readOnly && <Button type="button" onClick={() => void serveNext()} disabled={serving}>{serving ? "Serving…" : "Serve next lead"}</Button>}
+        {/* Serve next lead is one button, in the page header (owner 2026-11-05); the queue is below. */}
+        {!readOnly && <span className="text-xs text-[var(--muted)]">Serve the next lead, or pick one below.</span>}
       </div>
     );
   }

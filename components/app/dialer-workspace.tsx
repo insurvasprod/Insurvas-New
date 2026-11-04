@@ -3,6 +3,7 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { PageHeader } from "@/components/ui/page-header";
 import { Callout } from "@/components/app/settings/primitives";
 import { DialerPreflightDialog } from "@/components/app/dialer-preflight";
@@ -206,14 +207,11 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       {(!searchMode || canCheckNumber || !readOnly) && <div className="flex flex-wrap items-center gap-2">
         {!searchMode && <QueuePriorityChips d={dialer} />}
         <span className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Owners and producers (sales.use), as the check route admits; a setter dials what the queue serves. */}
-          {canCheckNumber && <Button type="button" variant="outline" onClick={() => setCheckOpen(true)}><ShieldCheck aria-hidden="true" />Check a number</Button>}
-          {/* Auto-next: serve the next lead as soon as an outcome is recorded (on by default). */}
-          {!searchMode && !readOnly && (
-            <Button type="button" variant="outline" onClick={() => setAutoNext(!autoNext)} aria-pressed={autoNext} title={autoNext ? "The next lead is served as soon as you record an outcome." : "After an outcome the screen clears; serve the next lead when you are ready."} className={autoNext ? "border-[var(--primary)] text-[var(--accent-ink)]" : undefined}>
-              <SkipForward aria-hidden="true" />Auto-next {autoNext ? "on" : "off"}
-            </Button>
-          )}
+          {/* Owners and producers (sales.use) may check a number; auto-next serves the next lead as soon as an outcome is recorded (on by default). Both sit under More (owner 2026-11-05). */}
+          <MoreMenu items={[
+            canCheckNumber && { label: "Check a number", icon: ShieldCheck, onSelect: () => setCheckOpen(true) },
+            !searchMode && !readOnly && { label: autoNext ? "Turn auto-next off" : "Turn auto-next on", icon: SkipForward, onSelect: () => setAutoNext(!autoNext) },
+          ]} />
           {!readOnly && <Button data-guide="dialer-next" type="button" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
             {serving ? "Serving…" : "Serve next lead"}
           </Button>}
@@ -223,9 +221,9 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       {/* Outcomes on the left, the list in the middle, the lead's notes on the right; the two
           side columns run the full height of the screen and stay put while the list scrolls. */}
       <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
-      <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:w-[300px] lg:shrink-0 lg:overflow-y-auto")}>
-        {outcomePanel ?? <p className={cn(small, "m-0")}>The outcomes appear here when a lead is open.</p>}
-      </aside>
+      {panel && <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:w-[300px] lg:shrink-0 lg:overflow-y-auto")}>
+        {outcomePanel}
+      </aside>}
       {/* The middle column (owner 2026-10-29): the lead you are on, then the queue as a table that
           fills what is left of the column and pages the rest, so neither the page nor the card scrolls. */}
       <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1 lg:h-full lg:min-h-0">
@@ -234,11 +232,11 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
         </section>
         <DialerQueueTable d={dialer} readOnly={readOnly} />
       </div>
-      <aside aria-label="Lead notes" className="flex min-w-0 flex-col max-lg:order-3 lg:h-full lg:w-[320px] lg:shrink-0">
-        {panel && !isSetter
+      {panel && <aside aria-label="Lead notes" className="flex min-w-0 flex-col max-lg:order-3 lg:h-full lg:w-[320px] lg:shrink-0">
+        {!isSetter
           ? <DialerLeadNotes key={panel.lead.id} leadId={panel.lead.id} canWrite={!readOnly} />
-          : <div className={cn(card, "h-full p-4")}><p className={cn(small, "m-0")}>{isSetter ? "Lead notes are kept by the agents who sell; your notes go on the booking." : "The lead's notes appear here when a lead is open."}</p></div>}
-      </aside>
+          : <div className={cn(card, "h-full p-4")}><p className={cn(small, "m-0")}>Lead notes are kept by the agents who sell; your notes go on the booking.</p></div>}
+      </aside>}
       </div>
 
       {/* LA-2.23-5 · below 1024px: the number and the call's next step, stuck to the bottom of the
