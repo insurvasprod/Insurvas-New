@@ -703,7 +703,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   );
 
   // The work list (when = "open"): every open callback in the order to call it, in four groups.
-  const grouped = when === "open";
+  const grouped = false; // one flat, paged list (owner 2026-11-05): no group rows, the standard pager
   const groupDueNow = rows.filter((item) => !item.isOverdue && item.isDueToday && soon(item));
   const groupLater = rows.filter((item) => !item.isOverdue && item.isDueToday && !soon(item));
   const groupOverdue = rows.filter((item) => item.isOverdue);
