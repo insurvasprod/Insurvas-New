@@ -17,7 +17,6 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { RebookButton } from "@/components/app/appointment-rebook";
 import { ViewTabs } from "@/components/ui/view-tabs";
-import { MoreMenu } from "@/components/ui/more-menu";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { faceLabel } from "@/lib/appointments/appointmentFacts";
 import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type BlockRepeat, type PickerContext } from "@/lib/appointments/calendarMath";
@@ -609,7 +608,6 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
               { key: "list", label: "List", count: listRows.length },
             ]}
           />
-          {holdsCalendar && <MoreMenu items={[{ label: "Hours & blocks", icon: Clock, href: "/app/settings#calendar" }]} />}
           <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>
         </>}
       />
@@ -638,6 +636,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
             <DataToolbar
               actions={<>
                 <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeFilters.length} controls="calendar-filters" />
+                {holdsCalendar && <Button asChild variant="outline" size="icon"><Link href="/app/settings#calendar" aria-label="Hours and blocks" title="Hours and blocks"><Clock aria-hidden="true" /></Link></Button>}
                 <RefreshButton onClick={refresh} refreshing={loading} />
               </>}
             >
