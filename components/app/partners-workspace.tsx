@@ -18,7 +18,6 @@ import {
   ChevronDown,
   ChevronRight,
   Edit3,
-  MapPin,
   MessagesSquare,
   MoreHorizontal,
   Pause,
@@ -817,14 +816,6 @@ export function PartnersWorkspace({
           detailOnly ? (
             selectedPartner ? (
               <>
-                {messageHref && (
-                  <Button asChild type="button" variant="outline">
-                    <Link href={messageHref}><MessagesSquare data-icon="inline-start" aria-hidden="true" />Message</Link>
-                  </Button>
-                )}
-                <Button type="button" variant="outline" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
-                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit publisher
-                </Button>
                 {!readOnly && selectedPartner.status !== "offboarded" && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -834,6 +825,8 @@ export function PartnersWorkspace({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuGroup>
+                        <DropdownMenuItem onSelect={() => openEdit(selectedPartner)}><Edit3 aria-hidden="true" />Edit publisher</DropdownMenuItem>
+                        {messageHref && <DropdownMenuItem asChild><Link href={messageHref}><MessagesSquare aria-hidden="true" />Message</Link></DropdownMenuItem>}
                         {selectedPartner.status === "active" && <DropdownMenuItem onSelect={() => void changeStatus(selectedPartner, "paused")} disabled={busy !== null}><Pause aria-hidden="true" />Pause partner</DropdownMenuItem>}
                         {selectedPartner.status === "paused" && <DropdownMenuItem onSelect={() => void changeStatus(selectedPartner, "active")} disabled={busy !== null}><Play aria-hidden="true" />Resume partner</DropdownMenuItem>}
                         {selectedPartner.status === "draft" && <DropdownMenuItem onSelect={() => void changeStatus(selectedPartner, "active")} disabled={busy !== null}><Check aria-hidden="true" />Activate partner</DropdownMenuItem>}
@@ -1178,35 +1171,6 @@ export function PartnersWorkspace({
                       onSeatsChanged={() => void refreshCapacity()}
                     />
                   </section>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <section aria-labelledby="partner-contact-title" className="rounded-lg border border-border p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 id="partner-contact-title" className="text-sm font-semibold">Primary contact</h3>
-                        {!readOnly && selectedPartner.status !== "offboarded" && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>Edit</Button>
-                        )}
-                      </div>
-                      <div className="mt-2 space-y-1.5 text-sm">
-                        {selectedPartner.contact_name ? <p className="font-medium">{selectedPartner.contact_name}</p> : <p className="text-muted-foreground">No contact name added.</p>}
-                        {selectedPartner.contact_email ? <p className="break-all text-muted-foreground">{selectedPartner.contact_email}</p> : <p className="text-muted-foreground">No email added.</p>}
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                          <MapPin className="size-3.5" aria-hidden="true" />
-                          {countryName(selectedPartner.country)} · {zonesFor(selectedPartner.country).find(([value]) => value === selectedPartner.timezone)?.[1] ?? selectedPartner.timezone} time
-                        </p>
-                      </div>
-                    </section>
-                    <section aria-labelledby="partner-notes-title" className="rounded-lg border border-border p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 id="partner-notes-title" className="text-sm font-semibold">Internal notes</h3>
-                        {!readOnly && selectedPartner.status !== "offboarded" && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>{selectedPartner.notes ? "Edit" : "Add note"}</Button>
-                        )}
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground" title={selectedPartner.notes ?? undefined}>
-                        {selectedPartner.notes || "No internal notes yet."}
-                      </p>
-                    </section>
-                  </div>
                 </div>
               )}
               {detailTab === "products" && (
