@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { FolderOpen, Phone, User, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ const ROW_HEIGHT = 45;
  * The search box filters the loaded queue as you type (name or phone); Enter or Search runs the
  * server's lead search (LA-2.8, read-only) and shows its results in the same table.
  */
-export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDialer>; readOnly: boolean }) {
+export function DialerQueueTable({ d, readOnly, extra }: { d: ReturnType<typeof useDialer>; readOnly: boolean; extra?: ReactNode }) {
   const { isSetter, search, setSearch, searchMode, searching, searchLeads, clearLeadSearch, visibleLeads, selectedId, selectLead, queue, queueError, queueFilter, setQueueFilter, attempt, picking, pickRefusals, pickLead, served, panel } = d;
   const [campaign, setCampaign] = useState(ALL);
   const [usState, setUsState] = useState(ALL);
@@ -102,6 +102,7 @@ export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDial
         {!isSetter && <Button type="submit" variant="outline" disabled={searching || search.trim().length < 2}>{searching ? "Searching…" : "Search"}</Button>}
       </form>
       {!searchMode && <FilterButton open={filtersOpen} count={active.length} controls="dialer-filters" onClick={() => setFiltersOpen((open) => !open)} />}
+      {extra}
     </>
   );
 

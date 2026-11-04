@@ -223,7 +223,7 @@ export function DialerLeadColumn({ d, call, children }: { d: ReturnType<typeof u
       </section>
 
       </div>
-      {call && <div className="flex shrink-0 flex-col items-stretch gap-2 @max-2xl:order-1">{call}</div>}
+      {call && <div className="flex shrink-0 flex-wrap items-center gap-2 @2xl:flex-col @2xl:items-stretch @max-2xl:order-1">{call}</div>}
       </div>
 
       {!panel.disclosure.configured && (

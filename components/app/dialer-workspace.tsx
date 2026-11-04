@@ -43,7 +43,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
 
   // The Call button, on the right of the lead's facts (owner 2026-10-27).
   const callButton = panel ? (
-      <div className="flex flex-col items-stretch gap-2 max-lg:hidden">
+      <div className="flex flex-wrap items-center gap-2 @2xl:flex-col @2xl:items-stretch max-lg:hidden">
         {!attempt && needsDnc ? (
           // Owner 2026-10-29: check the number first; the Call button appears once it is clear.
           <Button type="button" onClick={() => void checkDnc()} disabled={readOnly || checkingDnc || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
@@ -219,18 +219,6 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
 
       {readOnly && <Callout tone="info" title="Read-only access — review only, no calls." />}
 
-      {/* One row above the list (owner 2026-10-30): the priority filter on the left, the page's
-          actions on the right. Today's dial and contact counts are gone from here. The search and
-          the campaign live in the queue table's toolbar (owner 2026-10-29). */}
-      {(!searchMode || canCheckNumber || !readOnly) && <div className="flex flex-wrap items-center gap-2">
-        <span className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Owners and producers (sales.use) may check a number; auto-next serves the next lead as soon as an outcome is recorded (on by default). Both sit under More (owner 2026-11-05). */}
-          <MoreMenu items={[
-            canCheckNumber && { label: "Check a number", icon: ShieldCheck, onSelect: () => setCheckOpen(true) },
-            !searchMode && !readOnly && { label: autoNext ? "Turn auto-next off" : "Turn auto-next on", icon: SkipForward, onSelect: () => setAutoNext(!autoNext) },
-          ]} />
-        </span>
-      </div>}
 
       {/* Outcomes on the left, the list in the middle, the lead's notes on the right; the two
           side columns run the full height of the screen and stay put while the list scrolls. */}
@@ -244,7 +232,10 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
         <section className={cn(card, "overflow-hidden lg:max-h-[60%] lg:shrink-0 lg:overflow-y-auto")} aria-label="Lead on your screen">
           {current}
         </section>
-        <DialerQueueTable d={dialer} readOnly={readOnly} />
+        <DialerQueueTable d={dialer} readOnly={readOnly} extra={<MoreMenu row label="Dialer options" items={[
+            canCheckNumber && { label: "Check a number", icon: ShieldCheck, onSelect: () => setCheckOpen(true) },
+            !searchMode && !readOnly && { label: autoNext ? "Turn auto-next off" : "Turn auto-next on", icon: SkipForward, onSelect: () => setAutoNext(!autoNext) },
+          ]} />} />
       </div>
       {panel && <aside aria-label="Lead notes" className={cn("flex min-w-0 flex-col max-lg:order-3 lg:h-full lg:shrink-0", notesFolded ? "lg:w-[64px]" : "lg:w-[280px]")}>
         {!isSetter
@@ -305,7 +296,7 @@ function OutcomeButton({ icon: Icon, label: text, hotkey, tone, pressed, disable
       aria-label={compact ? text : undefined}
       title={compact ? `${text}${hotkey ? ` (${hotkey})` : ""}` : undefined}
       className={cn(
-        compact && "justify-center px-0", "flex h-full min-h-9 w-full items-center gap-2.5 rounded-lg border px-3 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+        compact && "justify-center px-0", "flex h-full min-h-9 w-full items-center gap-2.5 rounded-lg border px-3 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70",
         tone === "primary"
           ? "border-transparent bg-primary text-primary-foreground hover:bg-[var(--accent-hover)]"
           : tone === "danger"
