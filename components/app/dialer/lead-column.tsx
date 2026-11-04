@@ -40,7 +40,7 @@ function Fact({ icon: Icon, children, title, tone = "neutral" }: { icon: LucideI
  * screen showed is still here; most of it moved into tooltips and the Details / History toggles.
  */
 /** `call`: the Call button (and Book appointment), drawn on the right of the facts. */
-export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnType<typeof useDialer>; readOnly: boolean; call?: ReactNode; children?: ReactNode }) {
+export function DialerLeadColumn({ d, call, children }: { d: ReturnType<typeof useDialer>; readOnly: boolean; call?: ReactNode; children?: ReactNode }) {
   const now = useNow();
   const [complianceOpen, setComplianceOpen] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
@@ -55,7 +55,7 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
       <div className="flex items-center justify-between gap-3 px-4 py-3">
         <p className="m-0 text-sm font-semibold text-[var(--ink)]">No lead on your screen</p>
         {/* Serve next lead is one button, in the page header (owner 2026-11-05); the queue is below. */}
-        {!readOnly && <span className="text-xs text-[var(--muted)]">Serve the next lead, or pick one below.</span>}
+        <span className="flex items-center gap-3"><span className="text-xs text-[var(--muted)]">Serve the next lead, or pick one below.</span>{call}</span>
       </div>
     );
   }
