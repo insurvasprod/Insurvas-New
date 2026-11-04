@@ -57,11 +57,8 @@ export async function proxy(request: NextRequest) {
   }
   // --- end maintenance gate ---
 
-  // The customer/agent application has its own host. Keep the local /app path available for
-  // development, while making https://app.insurvas.com the tenant entry point when deployed.
-  if (pathname === "/" && hostname === "app.insurvas.com") {
-    return redirectTo(request, "/app/login");
-  }
+  // `/` is the landing page on every host, app.insurvas.com included (owner, 2026-11-04). It used to
+  // be sent to /app/login there; sign-in is one click away from the landing page's header.
 
   if (pathname.startsWith("/admin/login")) {
     return NextResponse.next();
