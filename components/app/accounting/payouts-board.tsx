@@ -12,7 +12,7 @@ import { Field, control } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -258,11 +258,11 @@ export function PayoutsBoard({ runs, partners, readOnly, status: initialStatus, 
   const canDraft = !readOnly && openPartners.length > 0;
   return (
     <>
-      <StatStrip label="Payout totals">
-        <StatTile label="Drafts to review" value={String(drafts.length)} valueTone={drafts.length ? "warning" : undefined} footnote="the partner cannot see these" href={partnerFixed ? undefined : "/app/payouts?status=draft"} />
-        <StatTile label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} run${owed.length === 1 ? "" : "s"} owed`} href={partnerFixed ? undefined : "/app/payouts?status=published"} />
-        <StatTile label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} run${paid.length === 1 ? "" : "s"}`} href={partnerFixed ? undefined : "/app/payouts?status=paid"} />
-      </StatStrip>
+      {!(partnerFixed && runs.length === 0) && <StatRow label="Payout totals">
+        <StatCard label="Drafts to review" value={String(drafts.length)} tone={drafts.length ? "warn" : "default"} fact={{ label: "the partner cannot see these" }} href={partnerFixed ? undefined : "/app/payouts?status=draft"} />
+        <StatCard label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} fact={{ label: `${owed.length} run${owed.length === 1 ? "" : "s"} owed` }} href={partnerFixed ? undefined : "/app/payouts?status=published"} />
+        <StatCard label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} fact={{ label: `${paid.length} run${paid.length === 1 ? "" : "s"}` }} href={partnerFixed ? undefined : "/app/payouts?status=paid"} />
+      </StatRow>}
       <TableCard
         // No runs at all: the empty state's one button is the whole page; filters over nothing are noise.
         toolbar={runs.length === 0 ? undefined :

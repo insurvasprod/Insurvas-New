@@ -1104,7 +1104,8 @@ export function PartnersWorkspace({
                 <div className="space-y-8">
                 <section className="space-y-4">
                   {selectedPartner.terms.length > 0 && (
-                  <div className="flex flex-wrap items-center justify-end gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h3 className="text-base font-semibold">Commercial terms</h3>
                     {!readOnly && selectedPartner.status !== "offboarded" && (
                       <Button
                         type="button"
@@ -1148,7 +1149,7 @@ export function PartnersWorkspace({
                   )}
                 </section>
                 {extraTabs.payouts && selectedPartner.terms.length > 0 && (
-                  <section aria-labelledby="partner-payouts-title" className="space-y-3 border-t border-border pt-6">
+                  <section aria-labelledby="partner-payouts-title" className="space-y-3">
                     <h3 id="partner-payouts-title" className="text-base font-semibold">Payouts</h3>
                     {extraTabs.payouts}
                   </section>
