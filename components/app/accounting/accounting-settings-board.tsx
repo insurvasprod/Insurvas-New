@@ -168,7 +168,7 @@ export function AccountingSettingsBoard({ initial, locked, accounts, canEdit }: 
                 </div>
               ))}
             </div>
-            <p className="m-0 text-sm text-[var(--body)]"><span className="text-[var(--muted)]">What this changes: </span>new expenses in that category. Ones already booked keep their choice; change those one by one on <Link className="underline" href="/app/expenses">Expenses</Link>.</p>
+            <p className="m-0 text-sm text-[var(--muted)]">Applies to new expenses in that category. Ones already booked keep their choice; change those one by one on <Link className="underline" href="/app/expenses">Expenses</Link>.</p>
             {lockLine("recurring_confirmation")}
           </FormSection>
         </FormSections>
