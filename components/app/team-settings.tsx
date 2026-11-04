@@ -257,7 +257,6 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
       <PagedTableCard
         total={filtered.length}
         noun="people"
-        suffix={<span className="tabular-nums">{TENANT_ROLES.map((role) => `${TENANT_ROLE_LABELS[role]} ${seats.byRole[role]}`).join(" · ")}</span>}
         toolbar={
           <DataToolbar
             actions={
@@ -282,7 +281,6 @@ export function TeamSettings({ initial, workspace }: { initial: TeamSnapshot; wo
             </select>
           </DataToolbar>
         }
-        footer={<span className="tabular-nums">{TENANT_ROLES.map((role) => `${TENANT_ROLE_LABELS[role]} ${seats.byRole[role]}`).join(" · ")}</span>}
       >
         {snapshot.members.length === 0 ? (
           <EmptyState title="No one is on this workspace yet" hint="Invite a teammate to give them access." />
