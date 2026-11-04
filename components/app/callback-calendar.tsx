@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlarmClock, CalendarClock, CheckCircle2, CircleAlert, Download, ExternalLink, Phone, Plus, Shuffle, UserRoundPlus, Users } from "lucide-react";
+import { AlarmClock, CalendarClock, CheckCircle2, CircleAlert, Download, ExternalLink, ListOrdered, Phone, Plus, Shuffle, UserRoundPlus, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection, type RowSelection } from "@/components/ui/bulk-bar";
@@ -11,6 +11,7 @@ import { downloadCsv } from "@/components/app/partner-quality-parts";
 import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -155,7 +156,9 @@ function CallbackTableRow({ compact, rowHeight, quietStatus = false, ...props }:
       <td className={st.td}>{quietStatus ? <span className="block max-w-[200px] truncate text-xs text-muted-foreground" title={callback.sourceName ?? undefined}>{callback.sourceName ?? "—"}</span> : <Chip tone={status.tone}>{status.label}</Chip>}</td>
       {!compact && <td className={cn(st.td, "whitespace-nowrap")}>{agent}</td>}
       <td className={cn(st.td, "whitespace-nowrap text-right")}>
-        {callAction && <ActionButton action={callAction} size="sm" />}
+        {callAction && callAction.href && callAction.key !== "open"
+          ? <Button asChild size="icon-sm" variant={callAction.primary ? "default" : "outline"}><Link href={callAction.href} aria-label={`${String(callAction.label)} · ${callback.customerName}`} title={typeof callAction.title === "string" ? callAction.title : String(callAction.label)}><Phone aria-hidden="true" /></Link></Button>
+          : callAction && <ActionButton action={callAction} size="sm" />}
       </td>
     </tr>
   );
@@ -533,9 +536,12 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   // The toolbar: search, the quick "when" filter, the date, saved views, Clear, Refresh. Below lg the
   // search takes the first row and the "when" filter and the date are the same controls behind a
   // Filters button, opening in the toolbar band (2026-10-09 mobile); saved views stay in the row.
+  const scopeToggle = viewer && !solo && (
+    <Segmented label="Whose callbacks" value={scope ?? "all"} onChange={setScope} options={[{ key: "mine", label: "Mine" }, { key: "all", label: "All" }]} />
+  );
   const searchBox = <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search customer, phone, note" label="Search callbacks by customer, phone, source, note or agent" />;
   const whenFilter = (
-    <span role="radiogroup" aria-label="When" className={cn("inline-flex max-w-full min-w-0 gap-1.5 overflow-x-auto", (compact || !wide) && "w-full")}>
+    <span role="radiogroup" aria-label="When" className={cn("inline-flex max-w-full min-w-0 flex-wrap gap-1.5", (compact || !wide) && "w-full")}>
       {(Object.keys(WHEN_LABEL) as WhenFilter[]).map((key) => (
         <ToggleChip key={key} role="radio" selected={when === key} onClick={() => { setWhen(key); setListPage(1); }} count={byWhen[key].length} className="shrink-0">
           {WHEN_LABEL[key]}
@@ -552,6 +558,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const toolbar = wide ? (
     <DataToolbar actions={refreshActions}>
       {searchBox}
+      {scopeToggle}
       {whenFilter}
       {dateFilter}
       {savedViews}
@@ -567,6 +574,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
         </>}
       >
         {searchBox}
+        {scopeToggle}
       </DataToolbar>
       <FilterPanel id="callbacks-filters" open={filtersOpen} className="w-full min-w-0 border-b-0 px-0 py-0">{whenFilter}{dateFilter}</FilterPanel>
     </>
@@ -575,9 +583,6 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
 
   // 36px below lg, for a thumb.
   const smallSize = wide ? "sm" : "default";
-  const scopeToggle = viewer && !solo && (
-    <Segmented label="Whose callbacks" value={scope ?? "all"} onChange={setScope} options={[{ key: "mine", label: "Mine" }, { key: "all", label: "All" }]} />
-  );
   const canAdd = !readOnly;
   const openAdd = (lead: LeadPick | null) => setAdding({ lead });
   // Offered in Add callback before anything is typed: the people waiting longest for their call.
@@ -723,7 +728,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       {groupLater.length > 0 && <GroupRow label="Later today" count={groupLater.length} columns={tableColumns} />}
       {groupLater.map((callback) => <CallbackTableRow key={callback.id} compact={compact} quietStatus {...rowProps(callback)} />)}
       {groupOverdue.length > 0 && <GroupRow label="Overdue" count={`${groupOverdue.length} · oldest first`} tone="error" columns={tableColumns}
-        action={canSpread && spreadable(groupOverdue).length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => setSpreadIds(spreadable(groupOverdue))}><Shuffle aria-hidden="true" />Clear the overdue…</Button> : undefined} />}
+        />}
       {groupOverdue.slice(0, overdueShown).map((callback) => <CallbackTableRow key={callback.id} compact={compact} {...rowProps(callback)} />)}
       {groupOverdue.length > overdueShown && moreRow(`Show ${Math.min(20, groupOverdue.length - overdueShown)} more overdue · ${groupOverdue.length - overdueShown} left`, () => setOverdueShown((count) => count + 20))}
       {groupComing.length > 0 && <GroupRow label="Coming up" count={groupComing.length} columns={tableColumns} />}
@@ -743,9 +748,12 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     <main className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Callbacks"
+        hideTitle
         actions={<div className="flex flex-wrap items-center gap-2">
-          {scopeToggle}
-          <Button variant="outline" asChild><Link href="/app/dialer">Open the queue</Link></Button>
+          <MoreMenu items={[
+            { label: "Open the queue", icon: ListOrdered, href: "/app/dialer" },
+            canSpread && spreadable(groupOverdue).length > 0 && { label: "Clear the overdue…", icon: Shuffle, onSelect: () => setSpreadIds(spreadable(groupOverdue)) },
+          ]} />
           {/* The page's one primary action. */}
           <Button type="button" disabled={!canAdd} onClick={() => openAdd(null)}><Plus aria-hidden="true" />Add callback</Button>
         </div>}
