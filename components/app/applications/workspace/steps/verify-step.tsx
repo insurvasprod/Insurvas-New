@@ -84,7 +84,7 @@ export function VerifyStep() {
 
   return (
     <section aria-label="Verify who you are talking to" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
-      <FoldSection heading="Who you are talking to" done={count} total={items.length} complete={count === items.length} unit="confirmed">
+      <FoldSection heading="Who you are talking to" done={count} total={items.length} complete={count === items.length} keepOpen unit="confirmed">
         {items.map((item, i) => {
           const ok = confirmed[i];
           const fromCall = ok && item.keys.filter((k) => hasContent(attempt.values[k])).every((k) => onCall.has(k));
