@@ -72,9 +72,11 @@ export async function SiteFooter() {
   const legalLinks = await publishedLegalLinks();
   const columns = legalLinks.length > 0 ? [...COLUMNS, { title: "Legal", links: legalLinks }] : COLUMNS;
   return (
-    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-8 pt-20 sm:px-6 lg:px-16">
+    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-6 pt-12 sm:px-6 lg:px-16">
       <div className="relative mx-auto max-w-7xl">
-        <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
+        {/* The wordmark, wide and faded, behind the brand block and the link columns (owner, 2026-11-04). */}
+        <div aria-hidden="true" className={styles.watermark} />
+        <div className="relative grid gap-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
           <div>
             <Link href="/" className="inline-flex no-underline">
               <InsurvasLogo size="auth" tone="dark" alt="Insurvas" />
@@ -105,9 +107,7 @@ export async function SiteFooter() {
           ))}
         </div>
 
-        {/* The wordmark, wide and faded, above the bottom bar (owner, 2026-11-04). */}
-        <div aria-hidden="true" className={styles.watermark} />
-        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-[var(--nav-line)] pt-6 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
+        <div className="relative mt-10 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-[var(--nav-line)] pt-6 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
           <span>© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</span>
           <span>Insurvas is software. It does not give insurance, legal or tax advice, and is not affiliated with any carrier.</span>
         </div>
