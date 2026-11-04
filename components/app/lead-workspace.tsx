@@ -22,7 +22,7 @@ import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
 import { cn } from "@/lib/utils";
 import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
-import { DispositionPicker, ListView, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, initials, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
+import { DispositionPicker, ListView, StageWhy, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, initials, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { useSolo } from "@/components/app/solo-context";
 import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
@@ -163,7 +163,10 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
           >
             <header className="px-3 pt-3 pb-1">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{column.name}</h3>
+                <span className="flex min-w-0 items-center gap-1">
+                  <h3 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{column.name}</h3>
+                  {column.stage && <StageWhy stage={column.stage} first={column.stage.id === activeStages[0]?.id} context={context} />}
+                </span>
                 <span className="text-sm font-semibold tabular-nums text-muted-foreground">{columnLeads.length.toLocaleString()}</span>
               </div>
               <div className={cn("mt-[3px] text-xs leading-normal tracking-[-0.01em] tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-muted-foreground")}>

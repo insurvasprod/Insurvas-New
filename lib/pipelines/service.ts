@@ -307,9 +307,10 @@ const legacyStageName = (stageKey: string, type: PartnerPipelineType) => {
  * The all-in-one Sales pipeline (20261027300000) by the same legacy keys: the stage a key names there.
  * A key it has no stage for, or a stage the agency renamed, falls back to its first open stage.
  */
-const GENERAL_STAGE_NAMES: Record<string, string> = {
-  new: "New lead", partner_submitted: "New lead", contacted: "Trying to reach", quoted: "Qualified",
-  application_sent: "Sent to underwriting", submitted: "Submitted", issued: "Submitted", lost: "Not interested",
+const GENERAL_STAGE_NAMES: Record<string, string[]> = {
+  new: ["New lead"], partner_submitted: ["New lead"], contacted: ["Trying to reach"], quoted: ["Qualified"],
+  // An agency with the after-sale stages (20261103110000 for new agencies, 20261104100000) has Issued.
+  application_sent: ["Sent to underwriting"], submitted: ["Submitted"], issued: ["Issued", "Submitted"], lost: ["Not interested"],
 };
 
 /**
@@ -323,7 +324,8 @@ async function resolveGeneralStage(tenantId: string, stageKey: string): Promise<
   if (general.error || !general.data) return null;
   const { data: stages } = await supabase.from("tenant_pipeline_stages").select("id, pipeline_id, name, position, stage_type, color, is_archived, created_at, updated_at").eq("pipeline_id", general.data.id).eq("is_archived", false).order("position");
   const live = (stages ?? []) as PipelineStage[];
-  const stage = live.find((item) => item.name === GENERAL_STAGE_NAMES[stageKey]) ?? live.find((item) => item.stage_type === "open");
+  const named = (GENERAL_STAGE_NAMES[stageKey] ?? []).map((name) => live.find((item) => item.name === name)).find(Boolean);
+  const stage = named ?? live.find((item) => item.stage_type === "open");
   return stage ? { pipelineId: general.data.id, stage } : null;
 }
 

@@ -95,6 +95,39 @@ export function dispositionLabel(key: string | null | undefined, context: ViewCo
   return context?.unmapped.find((entry) => entry.key === key)?.label ?? key.replaceAll("_", " ");
 }
 
+/**
+ * The (i) beside a stage's title: why leads come to it. Its description, if the agency wrote one, then every
+ * way a lead arrives on its own: the first stage takes new leads, the call outcomes that land here, the
+ * application states that move a card here, and the pipeline rules whose stage it is (Forecast ones say they
+ * move nothing yet). A stage nothing sends leads to says so.
+ */
+export function StageWhy({ stage, first, context }: { stage: PipelineStage; first: boolean; context: ViewContext | null }) {
+  const outcomes = context?.dispositionsByStage[stage.id] ?? [];
+  const arrival = context?.arrivals?.[stage.id];
+  const states = arrival?.applicationStates ?? [];
+  const rules = arrival?.rules ?? [];
+  const lines: string[] = [];
+  if (first) lines.push("New leads arrive here: it is the first stage.");
+  if (outcomes.length) lines.push(`An agent records ${list(outcomes.map((o) => o.label))}.`);
+  if (states.length) lines.push(`The application is ${list(states)}.`);
+  for (const rule of rules) lines.push(`A carrier file shows ${rule.event}${rule.mode === "forecast" ? ". This rule is in Forecast, so it shows the move but makes none yet" : ""}.`);
+  return (
+    <InfoTip label={`Why leads come to ${stage.name}`} className="-my-0.5">
+      {stage.description && <p className="m-0 mb-1.5 text-[var(--ink)]">{stage.description}</p>}
+      {lines.length ? (
+        <>
+          <p className="m-0 font-semibold text-[var(--ink)]">Leads come here when:</p>
+          <ul className="m-0 mt-1 list-disc space-y-0.5 pl-4">{lines.map((line) => <li key={line}>{line}</li>)}</ul>
+        </>
+      ) : (
+        <p className="m-0">Nothing sends leads here on its own. A lead lands here only when someone moves it.</p>
+      )}
+    </InfoTip>
+  );
+}
+
+const list = (items: string[]) => (items.length <= 2 ? items.join(" or ") : `${items.slice(0, -1).join(", ")} or ${items.at(-1)}`);
+
 /** The outcomes that can move a lead, grouped: those that keep it where it is, then those that move it. */
 export function dispositionGroups(pipeline: ViewPipeline | undefined, currentStageId: string | null, context: ViewContext | null) {
   if (!pipeline || !context) return [];
@@ -237,7 +270,7 @@ export function StagesView({ pipelines, leads, context, isOwner, now }: { pipeli
                   <div className="flex min-w-0 items-start gap-3 md:w-[320px] md:shrink-0">
                     <span className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white" style={{ background: stage.color }}>{index + 1}</span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold">{stage.name}</span>
+                      <span className="flex items-center gap-1 text-sm font-semibold">{stage.name}<StageWhy stage={stage} first={index === 0} context={context} /></span>
                       <span className="block text-xs text-muted-foreground tabular-nums">{count.toLocaleString()} {count === 1 ? "lead" : "leads"} · {options.length} {options.length === 1 ? "disposition" : "dispositions"}{overdue ? <span className="font-semibold text-[var(--error-ink)]"> · {overdue} past the time allowed</span> : null}</span>
                       {(meta || stage.description) && <span className="mt-0.5 block text-xs text-muted-foreground">{[stage.description, meta].filter(Boolean).join(" — ")}</span>}
                     </span>
