@@ -206,6 +206,10 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
   // save would then send it as hidden and delete it).
   const unsavedValues = useRef(new Set<string>());
   const unsavedInterview = useRef(new Set<string>());
+  // Fields whose last save failed, with the error: a later save of another field must not turn the chip
+  // back to "Autosaved" while one of these is still only on screen (QA 2026-11-03: four refused fields
+  // read as saved because the street saved after them).
+  const failedValues = useRef(new Map<string, string>());
   const refresh = useCallback(async () => {
     if (sample) return;
     const r = await call<CaseView>(`/api/app/applications/cases/${caseView.caseId}`, { method: "GET" });
@@ -222,7 +226,7 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
         if (!opts.quiet) notify.block(r.error);
         return null;
       }
-      setSaveError(null);
+      setSaveError([...failedValues.current.values()][0] ?? null);
       if (opts.reload !== false) await refresh();
       return r.data;
     } finally {
@@ -306,7 +310,12 @@ export function WorkspaceProvider({ initial, sample, timeZone, seatReadOnly = fa
     unsavedValues.current.add(mark);
     timers.set(key, setTimeout(() => {
       timers.delete(key);
-      void run(() => call(`/api/app/applications/attempts/${id}/values`, { method: "PATCH", body: reviewedOnly ? { reviewed: [key] } : { values: [{ key, value }] } }), { reload: false, quiet: true })
+      void run(async () => {
+        const r = await call(`/api/app/applications/attempts/${id}/values`, { method: "PATCH", body: reviewedOnly ? { reviewed: [key] } : { values: [{ key, value }] } });
+        if (r.ok) failedValues.current.delete(mark);
+        else failedValues.current.set(mark, r.error);
+        return r;
+      }, { reload: false, quiet: true })
         .then((saved) => { if (saved !== null && !timers.has(key)) unsavedValues.current.delete(mark); });
     }, reviewedOnly ? 0 : SAVE_DELAY));
   }, [sample, attemptId, run, queueReviewed]);

@@ -145,8 +145,11 @@ export async function loadDiscrepancies(tenantId: string) {
   };
 }
 
-export async function setStatus(tenantId: string, userId: string, id: string, status: "open" | "dismissed" | "resolved", note: string | null) {
-  const { data, error } = await db().rpc("set_discrepancy_status", { p_tenant_id: tenantId, p_id: id, p_user_id: userId, p_status: status, p_note: note });
+export async function setStatus(tenantId: string, userId: string, id: string, status: "open" | "dismissed" | "resolved" | "accepted", note: string | null) {
+  let { data, error } = await db().rpc("set_discrepancy_status", { p_tenant_id: tenantId, p_id: id, p_user_id: userId, p_status: status, p_note: note });
+  // "accepted" (the chargeback is right) is its own resolution from 20261103301000; before that migration the
+  // function refuses the word (22023), so it closes as dismissed with the same note, as it did.
+  if (error && status === "accepted" && error.code === "22023") ({ data, error } = await db().rpc("set_discrepancy_status", { p_tenant_id: tenantId, p_id: id, p_user_id: userId, p_status: "dismissed", p_note: note }));
   if (error) throw new Error(`Could not save: ${error.message}`);
   if (!data) throw new DiscrepancyError("That item can't be changed: it isn't this agency's, or it is in a dispute.", 409);
 }

@@ -12,23 +12,26 @@ import { PolicyCommissionsTab } from "@/components/app/book/policy/commissions-t
 import { PolicyFilesTab } from "@/components/app/book/policy/files-tab";
 import { PolicyHistoryTab } from "@/components/app/book/policy/history-tab";
 import { PolicyOverviewTab } from "@/components/app/book/policy/overview-tab";
-import { FactLine, PolicyLead, type Fact } from "@/components/app/book/policy/policy-head";
-import { PolicyMoreMenu, PolicyTabs, type MoreLink } from "@/components/app/book/policy/policy-islands";
+import { PolicyLead } from "@/components/app/book/policy/policy-head";
+import { PolicyMoreMenu, type MoreLink } from "@/components/app/book/policy/policy-islands";
 import { PolicyPipelineTab } from "@/components/app/book/policy/pipeline-tab";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { scopeFor } from "@/lib/agency/visibility";
 import { leadStageState } from "@/lib/applications/stageSyncService";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { hasFeature } from "@/lib/entitlements/types";
 import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
-import { fileDay } from "@/lib/ingestion/constants";
-import { inForce, statusLabel } from "@/lib/ingestion/policyBook";
+import { agencyToday } from "@/lib/ingestion/agencyDay";
+import { inForce } from "@/lib/ingestion/policyBook";
+import { policyHealth } from "@/lib/ingestion/policyMoney";
+import { loadCurrentLinkId, loadPolicyGrace } from "@/lib/ingestion/policyMoneyStore";
 import { loadIssuedAwaitingOne, loadPolicy, PolicyBookError } from "@/lib/ingestion/policyBookStore";
 import { MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
-import { carrierPolicyHref, changeClientHref, POLICY_TABS, policyTabOf, statusTone, type PolicyTab } from "@/lib/ingestion/policyPage";
+import { agentMismatchLine, carrierPolicyHref, changeClientHref, POLICY_TABS, policyTabOf, saleCameFrom, showsProvisional, type PolicyTab } from "@/lib/ingestion/policyPage";
 import { loadPolicyFiles, loadPolicyFindings, loadPolicyHistory, loadPolicyLink, loadPolicyPipeline, policyKeys, policyTabCounts, STAGE_HISTORY_PENDING_MESSAGE, type PolicyPipeline } from "@/lib/ingestion/policyPageStore";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { loadPolicyRuleEvents, type EvaluationRow } from "@/lib/pipelineRules/store";
@@ -38,9 +41,11 @@ const money = (cents: number | null | undefined) => (cents === null || cents ===
 
 /**
  * Book of business › Policies › one policy (LA-4.11; round 2 of the Book of business, 2026-11-02): a detail
- * page in the area's frame (DataInPage, step "policies"). The status chip and one line of facts, the
- * actions on the right, a quiet line of figures, then seven tabs as `?tab=` (canvas boards BobPolicy, BobE1,
- * BobE6, BobE6b): Overview · History · Client · Pipeline · Commissions · Files · Notes. Each tab reads only
+ * page in the area's frame (DataInPage, step "policies"). Round 5 (board 7): the title is "<policy> · <client>"
+ * with its health chip beside it and one muted line of facts under it (carrier · product · premium · agent);
+ * one button (Open the lead) and More (Change client, Unlink, Add a note, Copy policy number); then the tabs as
+ * `?tab=` (boards 7 and 22): Overview · History · Client · Pipeline · Money · Files, and Notes when "Add a note"
+ * opens it. Money (?tab=commissions, so old links land) counts the open pay issues. Each tab reads only
  * what it shows. Carrier data is read-only; the link, the card and notes are ours, each changed on its own
  * page or tab (Change client is /client under this address).
  *
@@ -82,43 +87,46 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
   const ownerOrBookkeeper = holdsAnyRole(guard.roles, ["owner", "bookkeeper"]);
   // Changing the link is Policy matching's write: owner and bookkeeper on statement ingestion.
   const canEditLink = ownerOrBookkeeper && hasFeature(guard.entitlement, "statement_ingestion");
-  const title = client?.name ?? sale?.name ?? keys?.leadName ?? `Policy ${policy.policyNumber}`;
+  const clientName = client?.name ?? sale?.name ?? keys?.leadName ?? null;
+  const title = clientName ? `${policy.policyNumber} · ${clientName}` : `Policy ${policy.policyNumber}`;
 
-  // ── the header: chip and facts, actions, the quiet figures ──
+  // ── the header: the health chip, the muted facts, one button and More ──
   const late = (policy.daysPastDue ?? 0) > 0;
   const atRiskCents = view.ledger.unearned?.atRiskCents ?? null;
   const monthly = policy.annualCents === null ? null : Math.round(policy.annualCents / 12);
-  const facts: Fact[] = [
-    { label: "Premium", value: monthly !== null ? `${money(monthly)}/mo` : money(policy.premiumCents) },
-    { label: "Paid to", value: `${fileDay(policy.paidTo)}${late ? ` · ${policy.daysPastDue} days late` : ""}`, tone: late ? "warning" : undefined },
-    ...(late && policy.daysLeft !== null && policy.daysLeft > 0 ? [{ label: policy.status === "lapsed" ? "Can be reinstated" : "The carrier closes it in", value: `${policy.daysLeft} more day${policy.daysLeft === 1 ? "" : "s"}`, tone: "warning" as const }] : []),
-    ...(atRiskCents ? [{ label: "Advance at risk", value: money(atRiskCents), tone: "danger" as const }] : []),
-  ];
+  const health = policyHealth({ status: policy.status, paidTo: policy.paidTo, daysPastDue: policy.daysPastDue, asOf: policy.asOf, premiumMode: policy.premiumMode });
   const saveQueue = inForce(policy.status) && (late || policy.riskBand === "at_risk" || policy.riskBand === "critical") && holdsAnyRole(guard.roles, ["owner", "producer"]);
-  // Round 3: at most two buttons, most useful first; the rest (and Copy policy number) in "More".
+  const canLink = canEditLink && !readOnly;
+  const linkId = canEditLink ? await loadCurrentLinkId(tenantId, carrierId, policy.policyNumber) : null;
+  // Round 5: one button, the lead first; the rest (Change client, Add a note, Unlink, Copy policy number) in "More".
   const links: MoreLink[] = [
-    ...(saveQueue ? [{ label: "Open in Save queue", href: "/app/save-queue" }] : []),
     ...(keys?.leadId ? [{ label: "Open the lead", href: `/app/leads/${keys.leadId}` }] : []),
     ...(sale ? [{ label: "Open the application", href: `/app/applications/${sale.caseId}` }] : []),
+    ...(saveQueue ? [{ label: "Open in Save queue", href: "/app/save-queue" }] : []),
+    ...(canLink ? [{ label: client || sale ? "Change client" : "Link a client", href: changeClientHref(policy.carrierId, policy.policyNumber) }] : []),
+    { label: "Add a note", href: carrierPolicyHref(carrierId, policy.policyNumber, "notes") },
   ];
   const actions = (
     <>
-      {links.slice(0, 2).map((link) => <Button key={link.href} asChild variant="outline"><Link href={link.href}>{link.label}</Link></Button>)}
-      <PolicyMoreMenu links={links.slice(2)} policyNumber={policy.policyNumber} />
+      {links.slice(0, 1).map((link) => <Button key={link.href} asChild><Link href={link.href}>{link.label}</Link></Button>)}
+      <PolicyMoreMenu links={links.slice(1)} policyNumber={policy.policyNumber} unlink={linkId ? { matchId: linkId, clientName, disabledReason: readOnly ? "The account is read-only." : null } : null} />
     </>
   );
   // Round 3: the Overview's three status lines, as chips and links on the header's facts line.
-  const canLink = canEditLink && !readOnly;
   const saleState = sale ? (sale.outcome ? sale.outcome.replaceAll("_", " ") : sale.status ? sale.status.replaceAll("_", " ") : null) : null;
+  // QA 2026-11-03: the carrier pays one producer, the sale names another — said once, plainly.
+  const mismatch = keys?.sale ? agentMismatchLine(keys.carrierAgent, { userId: keys.sale.agentUserId, name: keys.sale.agentName }) : null;
   const notices = (
     <>
-      {client?.provisional && <span className="inline-flex items-center gap-1.5"><ProvisionalBadge /><Link href="/app/duplicates" className={LINK} title="This client was built from the carrier's file">Check the client</Link></span>}
+      {mismatch && <span className="inline-flex items-center gap-1.5" title="The writing number on the carrier's row maps to a different producer than the one who sold it"><StatusChip tone="warning">{mismatch}</StatusChip></span>}
+      {showsProvisional(client?.provisional, keys?.link) && <span className="inline-flex items-center gap-1.5"><ProvisionalBadge /><Link href="/app/duplicates" className={LINK} title="This client was built from the carrier's file">Check the client</Link></span>}
       {sale && <Link href={`/app/applications/${sale.caseId}`} className={LINK} title={`Linked to ${sale.name ? `${sale.name}'s` : "an"} application`}>Application{saleState ? ` · ${saleState}` : ""}</Link>}
       {!client && !sale && <span className="inline-flex items-center gap-1.5"><StatusChip tone="warning">No client linked</StatusChip>{canLink ? <Link href={changeClientHref(policy.carrierId, policy.policyNumber)} className={LINK}>Link a client</Link> : <Link href={carrierPolicyHref(policy.carrierId, policy.policyNumber, "client")} className={LINK}>See the Client tab</Link>}</span>}
     </>
   );
 
-  const tabs = POLICY_TABS.map((item) => ({
+  // Notes is reached from More › Add a note; it shows as a tab only while it is open.
+  const tabs = POLICY_TABS.filter((item) => item.key !== "notes" || tab === "notes").map((item) => ({
     key: item.key,
     label: item.label,
     count: item.key === "history" ? counts.history : item.key === "pipeline" ? counts.pipeline : item.key === "commissions" ? (counts.findings ? counts.findings : null) : null,
@@ -130,11 +138,11 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
     <DataInPage
       step="policies"
       title={title}
-      lead={<PolicyLead status={statusLabel(policy.status)} tone={statusTone(policy.status)} facts={[policy.policyNumber, policy.carrierName, policy.product]} notices={notices} />}
+      chip={<span title={policy.statusRaw ? `The carrier's word: ${policy.statusRaw}` : undefined}><StatusChip tone={health.tone}>{health.label}</StatusChip></span>}
+      facts={<PolicyLead facts={[policy.carrierName, policy.product, monthly !== null ? `${money(monthly)}/mo` : policy.premiumCents !== null ? money(policy.premiumCents) : null, policy.agentName ? `agent ${policy.agentName}` : null]} notices={notices} />}
+      lead={<ViewTabs label="This policy" value={tab} tabs={tabs.map((item) => ({ ...item, href: hrefs[item.key] }))} />}
       actions={actions}
     >
-      <FactLine label="This policy" facts={facts} />
-      <PolicyTabs tabs={tabs} value={tab} hrefs={hrefs} />
       {await tabBody()}
     </DataInPage>
   );
@@ -170,7 +178,11 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
       return <PolicyPipelineTab pipeline={pipeline} leadId={leadId} undo={undo} pendingMessage={STAGE_HISTORY_PENDING_MESSAGE} />;
     }
     if (tab === "commissions") {
-      const findings = ownerOrBookkeeper ? await loadPolicyFindings(tenantId, carrierId, policy.policyNumber) : { available: true, items: [] };
+      const [findings, grace, today] = await Promise.all([
+        ownerOrBookkeeper ? loadPolicyFindings(tenantId, carrierId, policy.policyNumber) : Promise.resolve({ available: true, items: [] }),
+        loadPolicyGrace(tenantId, carrierId, policy.policyNumber).catch(() => ({ graceDays: null, windowDays: null, ruleType: null })),
+        agencyToday(tenantId).catch(() => new Date().toISOString().slice(0, 10)),
+      ]);
       const chargebackLikely = Boolean(policy.inClawbackWindow && (policy.status === "lapsed" || late) && atRiskCents);
       return (
         <PolicyCommissionsTab
@@ -178,6 +190,9 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
           expected={view.expected}
           findings={findings}
           carrierName={policy.carrierName}
+          carrierId={carrierId}
+          facts={{ status: policy.status, paidTo: policy.paidTo, daysPastDue: policy.daysPastDue, daysLeft: policy.daysLeft, asOf: policy.asOf, effectiveDate: policy.effectiveDate, premiumMode: policy.premiumMode, premiumCents: policy.premiumCents, monthsPaid: policy.monthsPaid, graceDays: grace.graceDays }}
+          today={today}
           chargebackLikely={chargebackLikely}
           canFix={ownerOrBookkeeper}
           canLetter={ownerOrBookkeeper && hasFeature(guard.entitlement, "discrepancy_report")}
@@ -208,7 +223,9 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
         </TableCard>
       );
     }
-    return <PolicyOverviewTab view={view} />;
+    // "Came from": a sale with no lead source on record names the sale, not "Lead source not known".
+    const cameFrom = view.lead.name ? null : saleCameFrom(keys?.sale);
+    return <PolicyOverviewTab view={cameFrom ? { ...view, lead: { ...view.lead, name: cameFrom } } : view} />;
   }
 }
 

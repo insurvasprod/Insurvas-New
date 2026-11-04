@@ -4,7 +4,7 @@ import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { fileCarrierChoices } from "@/lib/carriers/agency";
 import { MoreMenu } from "@/components/app/book/files/more-menu";
 import { CarrierFileDownload } from "@/components/app/carrier-file-download";
-import { CarrierFileReread } from "@/components/app/carrier-file-reread";
+import { FileReread } from "@/components/app/book/files/file-reread";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import type { CarrierFileType } from "@/lib/ingestion/constants";
 import type { FileHead } from "@/lib/ingestion/fileOutcomeStore";
@@ -57,7 +57,7 @@ export async function FileFrame({ head, tenantId, tab, counts, readOnly, more = 
         />
       }
       actions={<>
-        {head.rowCount !== null && !readOnly && <CarrierFileReread fileId={head.id} />}
+        {head.rowCount !== null && !readOnly && <FileReread fileId={head.id} />}
         <CarrierFileDownload fileId={head.id} label="Download" />
         {(canReplace || more.length > 0) && (
           <MoreMenu

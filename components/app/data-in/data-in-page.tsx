@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { StepFrame } from "@/components/app/step-frame/step-frame";
+import type { Crumb } from "@/components/ui/breadcrumbs";
 import { BOOK_AREA_LABEL, DATA_IN_RAIL_COOKIE, DATA_IN_STEPS, DATA_IN_WAITING, dataInStepLabel, type DataInStep } from "@/lib/dataIn/steps";
 
 /**
@@ -25,7 +26,7 @@ async function openSteps(): Promise<Set<DataInStep>> {
 }
 
 /** The frame: the shared StepFrame, with this area's steps, rail and badges. */
-export async function DataInPage({ step, title, chip, facts, lead, actions, children }: {
+export async function DataInPage({ step, title, chip, facts, lead, actions, breadcrumbs, children }: {
   step: DataInStep;
   title?: string;
   /** A record's status chip, beside its title (round 3, owner 2026-11-02). */
@@ -34,6 +35,8 @@ export async function DataInPage({ step, title, chip, facts, lead, actions, chil
   facts?: ReactNode;
   lead?: ReactNode;
   actions?: ReactNode;
+  /** A record under a record (a file's row): its own trail, so the parent record is a link. */
+  breadcrumbs?: Crumb[];
   children: ReactNode;
 }) {
   const [open, jar] = await Promise.all([openSteps(), cookies()]);
@@ -46,6 +49,7 @@ export async function DataInPage({ step, title, chip, facts, lead, actions, chil
       meta={facts}
       lead={lead}
       actions={actions}
+      breadcrumbs={breadcrumbs}
       rail={{ label: BOOK_AREA_LABEL, cookie: DATA_IN_RAIL_COOKIE, countsUrl: "/api/app/data-in/steps", waiting: DATA_IN_WAITING, steps: DATA_IN_STEPS.filter((item) => open.has(item.key)), step, collapsed: jar.get(DATA_IN_RAIL_COOKIE)?.value === "collapsed" }}
     >
       {children}

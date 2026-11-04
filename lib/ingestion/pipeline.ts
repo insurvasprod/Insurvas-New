@@ -38,6 +38,8 @@ export type RegisterArgs = {
   errorDetail: string | null;
   emailFrom: string | null;
   emailMessageId: string | null;
+  /** False: a commission statement that sits beside the day's others instead of replacing one (20261103300000). */
+  replace?: boolean;
 };
 
 export type RegisterOutcome =
@@ -83,6 +85,8 @@ export type DoorInput = {
   storagePath?: string;
   emailFrom?: string | null;
   emailMessageId?: string | null;
+  /** The upload door only: false when the person said it is a different statement from the day's. */
+  replace?: boolean;
 };
 
 export type IngestResult =
@@ -128,6 +132,7 @@ export async function ingestCarrierFile(deps: IngestDeps, input: DoorInput): Pro
     errorDetail,
     emailFrom: input.emailFrom ?? null,
     emailMessageId: input.emailMessageId ?? null,
+    ...(input.replace === false ? { replace: false } : {}),
   });
 
   const storedAt =

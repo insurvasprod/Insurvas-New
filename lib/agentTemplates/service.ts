@@ -1450,6 +1450,19 @@ export async function createAgentLead(
     .single();
   if (error || !data)
     throw new Error(error?.message ?? "Could not create lead");
+  // LA-1.7 / Module 1: every new lead creates its work item, the unclaimed queue row an agent claims, so a lead
+  // added by hand can be claimed, routed and sold like any other (E2E 2026-11-03: it had none, so its page said
+  // "no work item, so an application can't start here" and Lead routing could not find it). Best effort, as at
+  // intake: the lead is the only fatal write; a duplicate row (23505) means it is already queued.
+  const queue = await getSupabaseServiceClient().from("lead_queue").insert({
+    tenant_id: tenantId,
+    lead_id: data.id,
+    product_line: data.product_line,
+    pipeline_id: data.pipeline_id,
+    stage_id: data.stage_id,
+    status: "unclaimed",
+  });
+  if (queue.error && queue.error.code !== "23505") console.error("[leads] the work item for a hand-added lead could not be created", queue.error);
   return data;
 }
 

@@ -8,12 +8,15 @@ import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RecordLapseSignal } from "@/components/app/record-lapse-signal";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { FactGrid, FactLine, PolicyLead } from "@/components/app/book/policy/policy-head";
-import { CopyPolicyNumber, PolicyTabs } from "@/components/app/book/policy/policy-islands";
+import { FactGrid, PolicyLead } from "@/components/app/book/policy/policy-head";
+import { PolicyMoreMenu } from "@/components/app/book/policy/policy-islands";
+import { Callout } from "@/components/app/settings/primitives";
+import { StatusChip } from "@/components/ui/status-chip";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { HAND_POLICY_TABS, POLICY_TABS, policyTabOf } from "@/lib/ingestion/policyPage";
 import { getCarrierLibrary } from "@/lib/carriers/service";
 import { DISCREPANCY_KIND_LABELS } from "@/lib/discrepancies/compute";
@@ -43,6 +46,10 @@ import { roleCanViewCommission } from "@/lib/tenantAuth/permissions";
  * Every read is this policy's own (getPolicyStatementLines, listDiscrepancies({ policyId }),
  * leadSourceOf), so the page costs the same in a book of 100 policies or 10,000. The figures are
  * computeLedger([this policy]), the same function and library the ledger page applies per policy.
+ *
+ * Round 5 (board 22): the carrier policy's layout — "<policy> · <client>" with the status chip beside it, the
+ * muted facts line, one button and More — and only the tabs a hand-entered policy can fill (Overview, Money);
+ * History, Client, Pipeline and Files need a carrier file, so they don't show.
  */
 type Loose = { from(table: string): { select(columns: string): { eq(column: string, value: unknown): { eq(column: string, value: unknown): { maybeSingle(): PromiseLike<{ data: BookPolicyRow | null; error: { message: string; code?: string } | null }> } } } } };
 
@@ -177,23 +184,19 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
   return (
     <DataInPage
       step="policies"
-      title={row.insured_name}
-      lead={<PolicyLead status={status.label} tone={status.tone} facts={[row.policy_number, row.carrier, row.product, `lead source ${leadSource}`, "entered by hand"]} />}
-      actions={<><RecordLapseSignal policy={{ id: row.id, status: row.status }} /><CopyPolicyNumber policyNumber={row.policy_number} /></>}
+      title={`${row.policy_number} · ${row.insured_name}`}
+      chip={<StatusChip tone={status.tone}>{status.label}</StatusChip>}
+      facts={<PolicyLead facts={[row.carrier, row.product, row.annual_premium_cents !== null ? `${statementMoney(Math.round(row.annual_premium_cents / 12))}/mo` : null, `lead source ${leadSource}`, "entered by hand"]} />}
+      lead={<ViewTabs label="This policy" value={tab} tabs={tabs.map((item) => ({ ...item, href: hrefs[item.key] }))} />}
+      actions={<><RecordLapseSignal policy={{ id: row.id, status: row.status }} /><PolicyMoreMenu links={[]} policyNumber={row.policy_number} /></>}
     >
-      <FactLine label="This policy" facts={[
-        { label: "Premium", value: `${statementMoney(row.annual_premium_cents)} a year` },
-        { label: "Issued", value: statementDay(row.effective_date) },
-        ...(exposure ? [{ label: "Chargeback exposure", value: statementMoney(exposure.exposureCents), tone: "warning" as const }] : []),
-      ]} />
-      <PolicyTabs tabs={tabs} value={tab} hrefs={hrefs} />
 
       {discrepanciesFailed && (
-        <p role="status" className="m-0 rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">This policy&rsquo;s discrepancies could not be loaded just now, so none are shown. Reload to try again.</p>
+        <Callout tone="warning" title="This policy’s discrepancies could not be loaded just now, so none are shown. Reload to try again." />
       )}
 
       {tab === "overview" ? (
-        <TableCard title="Today">
+        <TableCard title="Overview">
           <FactGrid items={[
             ["Status", status.label],
             ["Carrier", row.carrier],
@@ -209,9 +212,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
       ) : (
         <>
           {ledger.gaps.length > 0 && (
-            <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">
-              {ledger.gaps[0].reason} Until it is fixed on the Rate card, this policy has no expected commission to compare with.
-            </div>
+            <Callout tone="warning" title={`${ledger.gaps[0].reason} Until it is fixed on the Rate card, this policy has no expected commission to compare with.`} />
           )}
 
           <StatStrip label="This policy's money">

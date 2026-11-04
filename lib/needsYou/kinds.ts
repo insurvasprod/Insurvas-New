@@ -11,6 +11,10 @@
  *   same-person           queue_item multi_policy                             POST /api/app/exceptions        resolve
  *   existing-book         queue_item initial_import                           POST /api/app/exceptions        resolve
  *   commission-no-policy  queue_item orphan_commission                        POST /api/app/exceptions        resolve
+ *   unknown-policy        commission_entry lines whose policy no policy file  POST /api/app/needs-you/item    raises the
+ *                         has, first seen ORPHAN_NOTICE_DAYS ago or more,      orphan_commission item now (open_queue_item,
+ *                         with no orphan_commission item yet (QA 2026-11-03:   the sweep's own key) and resolves it with
+ *                         the sweep waits 60 days, so nobody was told)         the queue's own answers
  *   money                 commission_discrepancy (open, disputed)             POST /api/app/commission-discrepancies
  *   credit                agency_attribution_item (open)                      POST /api/app/agency/attribution
  *   agent                 policy_current rows whose agent code maps to nobody POST /api/app/policy-matching   map_agent
@@ -22,7 +26,7 @@
  * Pure; relative imports only (lib/needsYou/needsYou.test.mjs runs it under node).
  */
 
-export const NEEDS_YOU_KINDS = ["pick-client", "no-sale", "no-carrier", "same-person", "existing-book", "commission-no-policy", "money", "credit", "agent", "status-word", "rules", "file"] as const;
+export const NEEDS_YOU_KINDS = ["pick-client", "no-sale", "no-carrier", "same-person", "existing-book", "commission-no-policy", "unknown-policy", "money", "credit", "agent", "status-word", "rules", "file"] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 
 /** The chip groups over the list, in the mockup's order. */
@@ -52,6 +56,8 @@ export const KIND_META: Record<NeedsYouKind, KindMeta> = {
   "same-person": { label: "Same person?", tone: "neutral", group: "clients", keeperOnly: false, verb: "Save", source: "Exceptions" },
   "existing-book": { label: "Existing book to look over", tone: "neutral", group: "files", keeperOnly: false, verb: "Mark looked over", source: "Exceptions" },
   "commission-no-policy": { label: "Commission, no policy", tone: "warning", group: "money", keeperOnly: false, verb: "Save", source: "Exceptions" },
+  // Lines on a policy no file or sale has, past ORPHAN_NOTICE_DAYS: told early, long before the 60-day sweep.
+  "unknown-policy": { label: "Paid on a policy we don’t have", tone: "warning", group: "money", keeperOnly: true, verb: "Save", source: "Commission lines" },
   money: { label: "Money doesn’t match", tone: "danger", group: "money", keeperOnly: true, verb: "Save", source: "Discrepancies" },
   credit: { label: "Who gets the credit", tone: "neutral", group: "credit", keeperOnly: true, verb: "Give the credit", source: "Attribution" },
   agent: { label: "Who’s the agent", tone: "neutral", group: "credit", keeperOnly: true, verb: "Map the code", source: "Policy matching › Agent codes" },
@@ -98,7 +104,123 @@ export type NeedsYouItem = {
   escalated?: boolean;
   /** What ties it to a carrier file (Files › "Open all in Needs you" filters by these). */
   ref?: { carrierId?: string | null; policyNumber?: string | null; fileId?: string | null; fileDate?: string | null; agentCode?: string | null; word?: string | null };
+  /** Words the search also finds it by that its row doesn't show (a client's name, the file's name). */
+  search?: string;
 };
+
+/**
+ * The search over Needs you and its Review queue (QA 2026-11-03: ~3,800 items, no search): an item is found by
+ * its policy number, a client's name, an agent code or a file's name — what its row says (about, why, who), its
+ * ties (ref) and the extra words the store adds (search). Case and spacing aside; every word must be found.
+ */
+export function searchText(item: Pick<NeedsYouItem, "about" | "why" | "who" | "ref" | "search">): string {
+  const ref = item.ref;
+  return [item.about, item.why, item.who, ref?.policyNumber, ref?.agentCode, ref?.word, item.search].filter(Boolean).join(" ").toLowerCase();
+}
+
+/** The words of a search box, lowercased; none for an empty box. */
+export const searchWords = (query: string | null | undefined) => (query ?? "").trim().toLowerCase().split(/\s+/).filter(Boolean);
+
+export function matchesSearch(haystack: string, words: readonly string[]): boolean {
+  return words.every((word) => haystack.includes(word));
+}
+
+/** The items a search keeps, in their order (all of them for an empty search). */
+export function searchItems<T extends Pick<NeedsYouItem, "about" | "why" | "who" | "ref" | "search">>(items: readonly T[], query: string | null | undefined): T[] {
+  const words = searchWords(query);
+  return words.length ? items.filter((item) => matchesSearch(searchText(item), words)) : [...items];
+}
+
+/**
+ * The Review page's question pane (QA 2026-11-03: a search narrowed the queue, but the pane kept the oldest
+ * unfiltered item): the chosen item while the queue as searched (`pool`) still lists it, else the first of the
+ * pool not yet answered. Null when the pool has nothing left to answer.
+ */
+export function reviewFocus<T extends { kind: string; id: string }>(pool: readonly T[], currentKey: string | null, done: { has: (key: string) => boolean }): T | null {
+  const keyOf = (item: T) => `${item.kind}:${item.id}`;
+  return pool.find((item) => keyOf(item) === currentKey) ?? pool.find((item) => !done.has(keyOf(item))) ?? null;
+}
+
+/** The ?q= a search is kept in, as one tidy value (null: no search); capped so an address stays short. */
+export const searchParam = (query: string | null | undefined) => {
+  const value = (query ?? "").trim().slice(0, 100);
+  return value ? value : null;
+};
+
+// ─── Money doesn't match: "The client cancelled — the chargeback is right" ──────────────────────────────
+
+/**
+ * QA 2026-11-03: a chargeback on a policy the latest policy file still shows active is most often simply right —
+ * the client cancelled and the policy file hasn't caught up. commission_discrepancy has no "accepted" resolution
+ * (its resolution is set by set_discrepancy_status: 'dismissed' or 'resolved_by_person'), and a 'resolved'
+ * finding opens again on the next detection run while the files still show it, so the answer closes it as
+ * dismissed — which stays closed — with this reason first in its note. Nothing else changes: the policy is not
+ * marked lapsed (the next policy file says so), and nothing posts.
+ */
+export const CHARGEBACK_ACCEPTED_NOTE = "The client cancelled — the chargeback is right.";
+
+/** The finding types this answer is offered on: a chargeback the engine expected none of. */
+export const acceptsChargeback = (type: string) => type === "unexpected_chargeback";
+
+/** The note the answer saves: the reason, then anything the person added. */
+export const chargebackAcceptedNote = (extra: string | null | undefined) => [CHARGEBACK_ACCEPTED_NOTE, (extra ?? "").trim()].filter(Boolean).join(" ").slice(0, 2000);
+
+/** How a closed money finding ended, in the Closed view's words. */
+export function moneyClosedWords(status: string, note: string | null | undefined): string {
+  if (status === "dismissed" && (note ?? "").startsWith(CHARGEBACK_ACCEPTED_NOTE)) return "Chargeback accepted: the client cancelled";
+  return status === "dismissed" ? "Written off" : "Settled";
+}
+
+// ─── Paid on a policy we don't have (unknown-policy) ─────────────────────────────────────────────────────
+
+/**
+ * Commission lines on a policy number no carrier policy file (policy_current) has are normal for a while: the
+ * policy file often comes a few days after the money. Past this many days a person is told (QA 2026-11-03:
+ * $180 on 0119990099 waited with no item, because the orphan sweep opens its queue item only after the agency's
+ * open_after_days, 60 by default).
+ */
+export const ORPHAN_NOTICE_DAYS = 7;
+
+/** One commission line, as the unknown-policy read needs it. */
+export type OrphanLine = {
+  carrierId: string;
+  policyNumber: string;
+  entryType: string;
+  correctsType: string | null;
+  amountCents: number;
+  /** coalesce(transaction_date, statement_date, created_at::date), as the orphan view and sweep date a line. */
+  seenOn: string;
+  fileId: string | null;
+  agentCode: string | null;
+};
+
+export type UnknownPolicy = { carrierId: string; policyNumber: string; lines: number; amountCents: number; heldCents: number; firstSeen: string; fileIds: string[]; agentCodes: string[] };
+
+/** The orphan sweep's own subject key (sweep_orphan_commissions), so an item raised early is the one it refreshes. */
+export const orphanSubjectKey = (carrierId: string, policyNumber: string) => `orphan:${carrierId}:${policyNumber}`;
+
+/**
+ * The policies to tell someone about: lines grouped by carrier and policy number (the sweep's grouping and its
+ * held/not-held split), whose policy no file has (`known`, carrier|policy), first seen ORPHAN_NOTICE_DAYS or more
+ * before `today`, and with no orphan_commission item ever raised for them (`raised`, subject keys; an open one
+ * shows as "Commission, no policy", a decided one stays decided). Oldest first.
+ */
+export function unknownPolicies(lines: readonly OrphanLine[], known: ReadonlySet<string>, raised: ReadonlySet<string>, today: string, days = ORPHAN_NOTICE_DAYS): UnknownPolicy[] {
+  const groups = new Map<string, UnknownPolicy>();
+  for (const line of lines) {
+    const key = `${line.carrierId}|${line.policyNumber}`;
+    if (known.has(key) || raised.has(orphanSubjectKey(line.carrierId, line.policyNumber))) continue;
+    const entry = groups.get(key) ?? { carrierId: line.carrierId, policyNumber: line.policyNumber, lines: 0, amountCents: 0, heldCents: 0, firstSeen: line.seenOn, fileIds: [], agentCodes: [] };
+    entry.lines++;
+    if ((line.correctsType ?? line.entryType) === "held") entry.heldCents += line.amountCents;
+    else entry.amountCents += line.amountCents;
+    if (line.seenOn < entry.firstSeen) entry.firstSeen = line.seenOn;
+    if (line.fileId && !entry.fileIds.includes(line.fileId)) entry.fileIds.push(line.fileId);
+    if (line.agentCode && !entry.agentCodes.includes(line.agentCode)) entry.agentCodes.push(line.agentCode);
+    groups.set(key, entry);
+  }
+  return [...groups.values()].filter((g) => daysSince(g.firstSeen, today) >= days).sort((a, b) => a.firstSeen.localeCompare(b.firstSeen) || a.carrierId.localeCompare(b.carrierId) || a.policyNumber.localeCompare(b.policyNumber));
+}
 
 /**
  * What one carrier file touched, as its own page counts it (lib/ingestion/fileOutcomeStore.ts): its id (its
@@ -144,6 +266,7 @@ export function fromFile(item: Pick<NeedsYouItem, "kind" | "ref">, file: FileFil
       return Boolean(ref.carrierId && ref.agentCode && file.codes.has(`${ref.carrierId}|${ref.agentCode}`));
     case "money":
     case "commission-no-policy":
+    case "unknown-policy":
       return Boolean(policy && file.commissionPolicies.has(policy));
     case "rules":
       return Boolean(policy && file.policies.has(policy));
@@ -213,8 +336,15 @@ export function parseAgentItemId(id: string): { carrierId: string; code: string 
   return code.trim() ? { carrierId, code } : null;
 }
 
+/** A policy we don't have has no row either: the carrier's id and the policy number, written as an agent code's. */
+export const unknownPolicyItemId = (carrierId: string, policyNumber: string) => agentItemId(carrierId, policyNumber);
+export function parseUnknownPolicyItemId(id: string): { carrierId: string; policyNumber: string } | null {
+  const parsed = parseAgentItemId(id);
+  return parsed ? { carrierId: parsed.carrierId, policyNumber: parsed.code } : null;
+}
+
 /** Every other kind's id is its source row's uuid. */
-export const isItemId = (kind: NeedsYouKind, id: string) => (kind === "agent" ? parseAgentItemId(id) !== null : UUID.test(id));
+export const isItemId = (kind: NeedsYouKind, id: string) => (kind === "agent" || kind === "unknown-policy" ? parseAgentItemId(id) !== null : UUID.test(id));
 
 const dayNumber = (iso: string) => Math.floor(Date.UTC(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10))) / 86_400_000);
 

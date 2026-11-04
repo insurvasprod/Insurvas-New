@@ -139,8 +139,49 @@ export function feedOfQuestionKey(key: string): InterviewFeed | null {
   return INTERVIEW_FEEDS.find((f) => INTERVIEW_SYNONYMS[f.field]?.includes(key)) ?? null;
 }
 
+/**
+ * Interview answers that mean the same as a field set's own question (custom.*), by the question keys
+ * the platform templates use (QA 2026-11-03: "Annual earned income" was asked in the interview, then
+ * again on the Application). Only keys that name the same fact; a custom key the attempt's field set
+ * does not ask is never written.
+ */
+export const INTERVIEW_CUSTOM_SYNONYMS: Record<string, readonly string[]> = {
+  "custom.annual_income": ["annual_income", "annual_earned_income", "income"],
+  "custom.net_worth": ["net_worth", "household_net_worth"],
+  "custom.occupation": ["occupation"],
+  "custom.employer": ["employer"],
+};
+
 /** Interview question keys whose answer is also an application value (the workspace re-reads on them). */
-export const INTERVIEW_VALUE_KEYS: ReadonlySet<string> = new Set(Object.values(INTERVIEW_SYNONYMS).flat());
+export const INTERVIEW_VALUE_KEYS: ReadonlySet<string> = new Set([...Object.values(INTERVIEW_SYNONYMS).flat(), ...Object.values(INTERVIEW_CUSTOM_SYNONYMS).flat()]);
+
+/** "$40,000" / "40000" / 40000 → 40000; anything else null. */
+function amountOf(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) && v >= 0 ? v : null;
+  if (typeof v !== "string" || !v.trim()) return null;
+  const s = v.replace(/[$,\s]/g, "");
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+  return Number(s);
+}
+
+/**
+ * The field-set questions (custom.*) the interview's answers supply: income and net worth as amounts,
+ * occupation and employer as text. `asked` limits it to the keys the attempt's field set asks.
+ */
+export function customPrefillFromInterview(answers: Record<string, unknown>, asked?: Iterable<string>): { key: string; value: string | number }[] {
+  const only = asked ? new Set(asked) : null;
+  const out: { key: string; value: string | number }[] = [];
+  for (const [key, synonyms] of Object.entries(INTERVIEW_CUSTOM_SYNONYMS)) {
+    if (only && !only.has(key)) continue;
+    const v = first(answers, synonyms);
+    if (v === undefined) continue;
+    if (key === "custom.annual_income" || key === "custom.net_worth") {
+      const n = amountOf(v);
+      if (n !== null) out.push({ key, value: n });
+    } else if (typeof v === "string" && v.trim()) out.push({ key, value: v.trim() });
+  }
+  return out;
+}
 
 /**
  * The application values the interview's answers supply (LA-3.2 → LA-3.7): asked once on the call,

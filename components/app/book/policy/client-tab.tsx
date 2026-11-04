@@ -33,6 +33,9 @@ export function PolicyClientTab({ link, carrierId, policyNumber, clientName, can
   const saleText = sale
     ? [sale.kind === "deal_flow" ? "Daily deal flow" : "Application", fileDay(sale.date), sale.agentName, sale.status ? sale.status.replaceAll("_", " ") : null].filter((part) => part && part !== "—").join(" · ")
     : "No sale on record";
+  // Board 22: the link this one replaced, in one line.
+  const before = current ? link.history.find((entry) => !entry.current) ?? null : null;
+  const beforeText = before ? [before.clientName ?? (before.type === "provisional" ? "A client made from the carrier's file" : LINK_TARGET_WORDS[before.type] ?? "A sale"), linkMethodWord(before.method).toLowerCase(), `superseded ${fileDay(current?.at ?? null)}`].join(" · ") : null;
   const issuedText = link.submittedNumber && link.submittedNumber !== policyNumber ? policyNumber : `${policyNumber}${link.submittedNumber ? " (same)" : ""}`;
   const actions = canEdit ? (
     <div className="flex flex-wrap items-center gap-2">
@@ -47,12 +50,12 @@ export function PolicyClientTab({ link, carrierId, policyNumber, clientName, can
 
   return (
     <>
-      <TableCard title="Linked to" action={actions}>
+      <TableCard title="Client" action={actions}>
         {current ? (
           <FactGrid items={[
-            ["Client", `${current.clientName ?? clientName ?? "No client yet"}${current.dob ? ` · born ${fileDay(current.dob)}` : ""}`],
-            ["How", `${linkMethodWord(current.method)}${current.type && LINK_TARGET_WORDS[current.type] ? `, to ${LINK_TARGET_WORDS[current.type]}` : ""}`],
-            ["Since", fileDay(current.at)],
+            ["Linked to", `${current.clientName ?? clientName ?? "No client yet"}${current.dob ? ` · born ${fileDay(current.dob)}` : ""}`],
+            ["How", `${linkMethodWord(current.method)}${current.type && LINK_TARGET_WORDS[current.type] ? `, to ${LINK_TARGET_WORDS[current.type]}` : ""} · ${fileDay(current.at)}`],
+            ["Before", beforeText ?? "No earlier link"],
             ["Sale", saleText],
             ["Submitted number", link.submittedNumber ?? "Not recorded"],
             ["Issued number", issuedText],

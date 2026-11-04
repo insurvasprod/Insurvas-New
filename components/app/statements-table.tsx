@@ -10,7 +10,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { useFittingPageSize } from "@/components/app/book-of-business-views";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import {
   statementDay,
   statementMoney,

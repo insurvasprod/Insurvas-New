@@ -5,6 +5,9 @@ import { isMissingFunction, isMissingSchema } from "./schemaGap";
 import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 import { outcomesByStage } from "./outcomeResolution";
 import { listPipelineOutcomeStages } from "./outcomeStages";
+import { SYNC_KEYS, SYNC_KEY_LABEL, type SyncKey } from "@/lib/applications/stageSync";
+import { DEFAULT_STAGE_NAME } from "@/lib/salesSettings/stageMapChecks";
+import { EVENT_LABELS, type RuleEvent } from "@/lib/pipelineRules/rules";
 
 /**
  * What the four pipeline views (Stages · Board · Table · List) need beyond the leads themselves,
@@ -24,11 +27,20 @@ import { listPipelineOutcomeStages } from "./outcomeStages";
 
 export type StageRule = { timeAllowedMinutes: number | null; countsAsWorked: boolean | null };
 export type MappedDisposition = { key: string; label: string; nextAction: string | null; nextActionMinutes: number | null };
+/** Besides a call outcome, what else sends a lead to a stage on its own (the stage title's (i)). */
+export type StageArrival = {
+  /** Application states that move the card here (LA-3.23): the pipeline's saved map, else the stage-name default. */
+  applicationStates: string[];
+  /** Pipeline rules (LA-4) whose stage this is: what the carrier's file or statement shows, and whether the rule moves cards yet. */
+  rules: Array<{ name: string; event: string; mode: "forecast" | "live" }>;
+};
 export type PipelineViewContext = {
   schemaReady: boolean;
   stageRules: Record<string, StageRule>;
   /** Dispositions that land on each stage, by stage id. */
   dispositionsByStage: Record<string, MappedDisposition[]>;
+  /** The application states and pipeline rules that move leads to each stage, by stage id. */
+  arrivals: Record<string, StageArrival>;
   /** Active dispositions with no stage: an agent can pick them, and the lead does not move. */
   unmapped: Array<{ key: string; label: string; uses: number }>;
   draftPipelineIds: string[];
@@ -175,17 +187,65 @@ export async function pipelineViewContext(tenantId: string, scope: ProducerScope
     }
     return queueRows.filter((row) => leadStage.has(text(row.lead_id)) && leadStage.get(text(row.lead_id)) !== text(row.stage_id)).length;
   })();
-  const [uses, stageDrift] = await Promise.all([usesRead, driftRead]);
+  const [uses, stageDrift, arrivals] = await Promise.all([usesRead, driftRead, stageArrivals(client, tenantId)]);
   const useCount = new Map(uses);
 
   return {
     schemaReady,
     stageRules,
     dispositionsByStage,
+    arrivals,
     unmapped: unmappedKeys.map((key) => ({ key, label: text(active.get(key)?.label) || key, uses: useCount.get(key) ?? 0 })).sort((a, b) => b.uses - a.uses),
     draftPipelineIds: schemaReady ? rows(pipelines).filter((row) => row.status === "draft").map((row) => text(row.id)) : [],
     stageDrift,
   };
+}
+
+/**
+ * What moves a lead to each stage besides a call outcome, read the way the movers read it: the application
+ * stage map per pipeline (a pipeline with no saved map follows the stage that carries the state's default
+ * name, as lib/applications/stageSyncService.ts does), and every pipeline rule switched on, by its current
+ * version's stage. A table that is not there yet answers nothing rather than failing the board.
+ */
+async function stageArrivals(client: Db, tenantId: string): Promise<Record<string, StageArrival>> {
+  const [stagesQ, mapQ, rulesQ] = await Promise.all([
+    client.from("tenant_pipeline_stages").select("id, pipeline_id, name, is_archived, tenant_pipelines!inner(tenant_id)").eq("tenant_pipelines.tenant_id", tenantId),
+    client.from("tenant_application_stage_map").select("sync_key, stage_id, pipeline_id").eq("tenant_id", tenantId),
+    client.from("pipeline_rule").select("id, name, mode, enabled, current_version").eq("tenant_id", tenantId).eq("enabled", true).in("mode", ["forecast", "live"]),
+  ]);
+  const out: Record<string, StageArrival> = {};
+  const at = (stageId: string) => (out[stageId] ??= { applicationStates: [], rules: [] });
+  const stages = stagesQ.error ? [] : rows(stagesQ).filter((row) => row.is_archived !== true);
+
+  if (!mapQ.error) {
+    const saved = rows(mapQ);
+    const mapped = new Set(saved.map((row) => text(row.pipeline_id)));
+    for (const row of saved) if ((SYNC_KEYS as readonly string[]).includes(text(row.sync_key))) at(text(row.stage_id)).applicationStates.push(SYNC_KEY_LABEL[text(row.sync_key) as SyncKey]);
+    for (const pipelineId of new Set(stages.map((row) => text(row.pipeline_id)))) {
+      if (mapped.has(pipelineId)) continue;
+      for (const key of SYNC_KEYS) {
+        const hit = stages.find((row) => text(row.pipeline_id) === pipelineId && text(row.name).trim().toLowerCase() === DEFAULT_STAGE_NAME[key].trim().toLowerCase());
+        if (hit) at(text(hit.id)).applicationStates.push(SYNC_KEY_LABEL[key]);
+      }
+    }
+  }
+
+  const rules = rulesQ.error ? [] : rows(rulesQ);
+  if (rules.length) {
+    const versions = await client.from("pipeline_rule_version").select("rule_id, version, event, target_stage_id").eq("tenant_id", tenantId).in("rule_id", rules.map((row) => text(row.id)));
+    if (!versions.error) {
+      for (const rule of rules) {
+        const current = rows(versions).find((v) => text(v.rule_id) === text(rule.id) && Number(v.version) === Number(rule.current_version));
+        if (!current) continue;
+        at(text(current.target_stage_id)).rules.push({
+          name: text(rule.name),
+          event: EVENT_LABELS[text(current.event) as RuleEvent]?.label ?? text(current.event),
+          mode: rule.mode === "live" ? "live" : "forecast",
+        });
+      }
+    }
+  }
+  return out;
 }
 
 export type LibraryEntry = {

@@ -107,8 +107,17 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const carrierRef = useRef<HTMLSelectElement>(null);
 
-  const termLength = term && product ? (termChoice !== null && product.termLengths.includes(termChoice) ? termChoice : product.termLengths[0] ?? null) : null;
-  const healthClass = term && product ? (classChoice !== null && product.healthClasses.includes(classChoice) ? classChoice : product.healthClasses[0] ?? null) : null;
+  // The template's own "term_length" / "health_class" (an interview answer to the same key) seed the chips.
+  const seededTerm = Number(template.extra.term_length);
+  const seededClass = template.extra.health_class?.trim() ?? "";
+  const termLength = term && product ? (termChoice !== null && product.termLengths.includes(termChoice) ? termChoice : product.termLengths.includes(seededTerm) ? seededTerm : product.termLengths[0] ?? null) : null;
+  const healthClass = term && product ? (classChoice !== null && product.healthClasses.includes(classChoice) ? classChoice : product.healthClasses.includes(seededClass) ? seededClass : product.healthClasses[0] ?? null) : null;
+  // Asked once (QA 2026-11-03): a term product's chips under "3 The carrier" answer the template's
+  // term-length and health-class fields, so those are not asked again under "1 The client". A product
+  // that lists none keeps the template's own input.
+  const termByChip = Boolean(term && product && product.termLengths.length);
+  const classByChip = Boolean(term && product && product.healthClasses.length);
+  const askedByChip = (key: string) => (key === "term_length" && termByChip) || (key === "health_class" && classByChip);
   // The product's tiers, narrowed to the ones its quotation template offers (Settings › Quotation templates).
   const productTiers = product?.tiers.length ? product.tiers : ["level"];
   const templateTiers = fields.find((f) => f.key === "tier")?.options ?? [];
@@ -160,6 +169,8 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
       case "face_amount": return faceCents;
       case "tier": return tier;
       case "riders": return riders;
+      case "term_length": return termByChip ? termLength : template.extra[key]?.trim() || null;
+      case "health_class": return classByChip ? healthClass : template.extra[key]?.trim() || null;
       default: return template.extra[key]?.trim() || null;
     }
   };
@@ -195,7 +206,7 @@ export function AddQuoteForm({ catalogue, template, onTemplate, onExtra, prefill
   const tpl = templateFor(catalogue, carrierId);
 
   // 1 · the client: the template's own client fields (and any it adds), shown as one line until opened.
-  const clientFields = fields.filter((f) => !COVERAGE_KEYS.has(f.key));
+  const clientFields = fields.filter((f) => !COVERAGE_KEYS.has(f.key) && !askedByChip(f.key));
   const clientMissing = clientFields.filter((f) => f.required && (valueFor(f.key) === null || valueFor(f.key) === ""));
   const clientOpen = editClient || clientMissing.length > 0;
   const clientLine = [

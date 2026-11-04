@@ -1,8 +1,7 @@
 import Link from "next/link";
 
-import { cardSurface } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, cardSurface } from "@/components/ui/card";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
 import { RISK_LABELS, statusLabel } from "@/lib/ingestion/policyBook";
 import type { loadPolicy } from "@/lib/ingestion/policyBookStore";
@@ -29,23 +28,22 @@ export function PolicyOverviewTab({ view }: { view: PolicyView }) {
 
   return (
     <>
-      <TableCard title="Today">
-        <FactGrid items={[
+      {/* Board 22: the facts that belong together on one line each (status and the carrier's word, paid-to and
+          how far behind, issue and effective, face and premium and how it is paid). */}
+      <Card className="gap-0 pb-0">
+        <CardHeader><CardTitle>Overview</CardTitle></CardHeader>
+        <FactGrid cols={2} items={[
           ["Status", `${statusLabel(policy.status)}${policy.statusRaw ? ` · carrier says “${policy.statusRaw}”` : ""}`],
+          ["Paid to", `${fileDay(policy.paidTo)} · ${policy.daysPastDue ? `${policy.daysPastDue} days behind` : "0 days behind"}${policy.monthsPaid !== null ? ` · ${policy.monthsPaid} ${policy.monthsPaid === 1 ? "month" : "months"} paid` : ""}${policy.lastFileDate ? ` · per the file of ${fileDay(policy.lastFileDate)}` : ""}`],
           ["Risk", `${RISK_LABELS[policy.riskBand]}${riskFootnote(policy) ? ` · ${riskFootnote(policy)}` : ""}`],
           [next?.label ?? "Next date that matters", next ? `${fileDay(next.date)} · ${next.detail}` : "None"],
-          ["Premium", `${dollars(policy.premiumCents)}${policy.premiumMode ? ` ${MODE[policy.premiumMode] ?? policy.premiumMode}` : ""}`],
-          ["Face amount", dollars(policy.faceCents)],
-          ["Paid to", `${fileDay(policy.paidTo)}${policy.lastFileDate ? ` · per the file of ${fileDay(policy.lastFileDate)}` : ""}`],
-          ["Issued", fileDay(policy.issuedOn)],
-          ["Effective", fileDay(policy.effectiveDate)],
-          ["Payment method", policy.paymentMethod ? METHOD[policy.paymentMethod] ?? policy.paymentMethod : "—"],
+          ["Issued", `${fileDay(policy.issuedOn)}${policy.effectiveDate ? ` · effective ${fileDay(policy.effectiveDate)}` : ""}`],
+          ["Face · premium", `${dollars(policy.faceCents)} · ${dollars(policy.premiumCents)}${policy.premiumMode ? ` ${MODE[policy.premiumMode] ?? policy.premiumMode}` : ""}${policy.paymentMethod ? ` (${(METHOD[policy.paymentMethod] ?? policy.paymentMethod).toLowerCase()})` : ""}`],
           ["Draft day", policy.draftDay ? String(policy.draftDay) : "—"],
-          ["Months paid", policy.monthsPaid === null ? "—" : String(policy.monthsPaid)],
           ["Agent", policy.agentName ?? (policy.agentCode ? <>Code {policy.agentCode}, <Link href="/app/policy-matching?tab=agents" className="text-[var(--accent-ink)] hover:underline">not mapped</Link></> : "—")],
-          ["Lead source", `${lead.name ?? "Not known"}${lead.costPerLeadCents !== null ? ` · ${dollars(lead.costPerLeadCents)} a lead` : ""}`],
+          ["Came from", `${lead.name ?? "Lead source not known"}${lead.costPerLeadCents !== null ? ` · ${dollars(lead.costPerLeadCents)} a lead` : ""}${client?.name ? ` · client ${client.name}` : ""}`],
         ]} />
-      </TableCard>
+      </Card>
 
       {(others.length > 0 || household) && (
         <PagedTableCard total={others.length} noun="policies" title={others.length ? `${client?.name ?? "This client"} has ${others.length + 1} policies` : "Household"}>

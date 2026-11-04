@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
 import { Segmented } from "@/components/ui/view-tabs";
@@ -19,6 +20,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, textareaControl } from "@/components/ui/field";
 import { BasisChip, Money } from "./money";
 import { sendJson, useAgencyData } from "./use-agency-data";
+import type { ProducerPayFigure } from "@/lib/commissions/producerPayFigures";
 
 type Truth = { producerUserId: string; expectedCents: number | null; reportedCents: number; receivedCents: number; expectedMissingLevels: number };
 type Review = { id: string; producerUserId: string; kind: "expected_reported" | "reported_received"; varianceCents: number; status: "open" | "reviewed"; note: string | null };
@@ -38,9 +40,19 @@ function month(offset: number) {
  * AG-1.12 · expected (rate card × his level), reported (the carrier statement) and received (the bank), per producer
  * — three numbers, never averaged. The two variances are named, not netted. A variance over the threshold becomes
  * an open item; nothing resolves it automatically toward whichever number is largest.
+ *
+ * Board 14 (2026-11-03, light touch): the list leads with Pay, what each producer Earned, was Advanced and was
+ * Charged back in the month, and is Owed at its end (reported basis, read by the page); Three truths is the
+ * switch beside it. The whole row opens the producer's Money tab; a row's own button is only its Review.
  */
-export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
+export function ReconciliationBoard({ canReview, pay }: { canReview: boolean; /** Per month, from the page; null where the read failed. */ pay?: { last: ProducerPayFigure[] | null; this: ProducerPayFigure[] | null } }) {
+  const router = useRouter();
   const [which, setWhich] = useState<"this" | "last">("last");
+  const [columns, setColumns] = useState<"pay" | "truths">("pay");
+  const payOf = useMemo(() => {
+    const figures = pay?.[which];
+    return figures ? new Map(figures.map((f) => [f.producerUserId, f])) : null;
+  }, [pay, which]);
   const range = useMemo(() => month(which === "this" ? 0 : -1), [which]);
   const { data, error, loading, refreshing, reload } = useAgencyData<{ rows: Truth[]; reviews: Review[]; threshold: number }>(`/api/app/agency/reconciliation?from=${range.from}&to=${range.to}`);
   const roster = useAgencyData<{ rows: Producer[] }>("/api/app/agency/producers");
@@ -75,6 +87,7 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
       <TableCard toolbar={
         // The period sits on the Refresh line (owner 2026-11-02): the toolbar's controls, one row.
         <DataToolbar actions={<><Segmented label="Period" value={which} onChange={setWhich} options={[{ key: "last", label: "Last month" }, { key: "this", label: "This month" }]} /><RefreshButton onClick={reload} refreshing={refreshing} /></>}>
+          <Segmented label="Columns" value={columns} onChange={setColumns} options={[{ key: "pay", label: "Pay" }, { key: "truths", label: "Three truths" }]} />
           <ToggleChip selected={overOnly} count={data ? overCount : undefined} countTone={overCount > 0 ? "warning" : undefined} onClick={() => { setOverOnly(!overOnly); setPage(1); }}>Needs a review</ToggleChip>
         </DataToolbar>
       } footer={data && rows.length ? <Pager page={shown.current} total={rows.length} noun="producers" pageSize={pageSize} onPage={setPage} /> : undefined}>
@@ -85,32 +98,50 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
             <TableHeader>
               <TableRow>
                 <TableHead>Producer</TableHead>
-                <TableHead className="text-right"><BasisChip basis="expected" /></TableHead>
-                <TableHead className="text-right"><BasisChip basis="reported" /></TableHead>
-                <TableHead className="text-right"><BasisChip basis="received" /></TableHead>
-                <TableHead className="text-right">Expected → reported</TableHead>
-                <TableHead className="text-right">Reported → received</TableHead>
+                {columns === "pay" ? <>
+                  <TableHead className="text-right">Earned</TableHead>
+                  <TableHead className="text-right">Advanced</TableHead>
+                  <TableHead className="text-right">Charged back</TableHead>
+                  <TableHead className="text-right">Owed <BasisChip basis="reported" /> <InfoTip label="About these figures">The month&apos;s figures from the carrier statements, the basis payouts are made on. Owed is the balance at the month&apos;s end, after payouts.</InfoTip></TableHead>
+                </> : <>
+                  <TableHead className="text-right"><BasisChip basis="expected" /></TableHead>
+                  <TableHead className="text-right"><BasisChip basis="reported" /></TableHead>
+                  <TableHead className="text-right"><BasisChip basis="received" /></TableHead>
+                  <TableHead className="text-right">Expected → reported</TableHead>
+                  <TableHead className="text-right">Reported → received</TableHead>
+                </>}
                 <TableHead>Review <InfoTip label="About review items">{`A difference over $${(data.threshold / 100).toFixed(0)} opens a review item.`}</InfoTip></TableHead>
+                <TableHead className="w-9"><span className="sr-only">Open</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {shown.rows.map((r) => {
                 const items = openFor(r.producerUserId);
+                // The producer's own Money tab holds every statement behind these numbers: the whole row opens it.
+                const record = recordOf.has(r.producerUserId) ? `/app/producers/${recordOf.get(r.producerUserId)}?tab=money` : null;
+                // No ledger line in the month is $0 earned; a read that failed is "—".
+                const figure = payOf ? payOf.get(r.producerUserId) ?? { earnedCents: 0, advancedCents: 0, chargedBackCents: 0, owedCents: 0 } : null;
                 return (
-                  <TableRow key={r.producerUserId} className="align-top">
+                  <TableRow key={r.producerUserId} className={record ? "cursor-pointer align-top" : "align-top"} onClick={record ? () => router.push(record) : undefined}>
                     <TableCell className="font-medium">
-                      {/* The producer's own Money tab holds every statement behind these numbers. */}
-                      {recordOf.has(r.producerUserId)
-                        ? <Link href={`/app/producers/${recordOf.get(r.producerUserId)}?tab=money`} className="hover:text-[var(--accent-ink)] hover:underline">{name.get(r.producerUserId)}</Link>
+                      {record
+                        ? <Link href={record} onClick={(event) => event.stopPropagation()} className="hover:text-[var(--accent-ink)] hover:underline">{name.get(r.producerUserId)}</Link>
                         : name.get(r.producerUserId) ?? "Producer"}
                       {r.expectedMissingLevels > 0 && <div className="text-xs font-normal text-[var(--warning-ink)]">{r.expectedMissingLevels} {r.expectedMissingLevels === 1 ? "policy" : "policies"} with no level, not in expected</div>}
                     </TableCell>
-                    <TableCell className="text-right"><Money cents={r.expectedCents} /></TableCell>
-                    <TableCell className="text-right"><Money cents={r.reportedCents} /></TableCell>
-                    <TableCell className="text-right"><Money cents={r.receivedCents} /></TableCell>
-                    <TableCell className="text-right">{r.expectedCents === null ? "—" : <Money cents={r.reportedCents - r.expectedCents} />}</TableCell>
-                    <TableCell className="text-right"><Money cents={r.receivedCents - r.reportedCents} /></TableCell>
-                    <TableCell>
+                    {columns === "pay" ? <>
+                      <TableCell className="text-right"><Money cents={figure?.earnedCents} /></TableCell>
+                      <TableCell className="text-right"><Money cents={figure?.advancedCents} /></TableCell>
+                      <TableCell className="text-right"><Money cents={figure?.chargedBackCents} /></TableCell>
+                      <TableCell className="text-right font-semibold"><Money cents={figure?.owedCents} /></TableCell>
+                    </> : <>
+                      <TableCell className="text-right"><Money cents={r.expectedCents} /></TableCell>
+                      <TableCell className="text-right"><Money cents={r.reportedCents} /></TableCell>
+                      <TableCell className="text-right"><Money cents={r.receivedCents} /></TableCell>
+                      <TableCell className="text-right">{r.expectedCents === null ? "—" : <Money cents={r.reportedCents - r.expectedCents} />}</TableCell>
+                      <TableCell className="text-right"><Money cents={r.receivedCents - r.reportedCents} /></TableCell>
+                    </>}
+                    <TableCell onClick={(event) => event.stopPropagation()}>
                       {items.length === 0 ? <StatusChip tone="good">Within threshold</StatusChip> : items.map((i) => (
                         <div key={i.id} className="flex items-center gap-2 py-0.5">
                           <StatusChip tone="warning">{KIND_LABEL[i.kind]}</StatusChip>
@@ -118,6 +149,7 @@ export function ReconciliationBoard({ canReview }: { canReview: boolean }) {
                         </div>
                       ))}
                     </TableCell>
+                    <TableCell className="text-right text-muted-foreground" aria-hidden="true">{record ? "›" : ""}</TableCell>
                   </TableRow>
                 );
               })}

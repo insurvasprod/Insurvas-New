@@ -1,20 +1,17 @@
-"use client";
-
-import { usePathname, useRouter } from "next/navigation";
-
-import { UnderlineTabs } from "@/components/ui/view-tabs";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
 export type RuleTab = "rule" | "preview" | "forecast" | "versions";
 
-/** A rule's parts (board BobE7): Rule · Preview · Forecast · Versions, each its own address (?tab=). */
-export function RuleTabs({ active, counts }: { active: RuleTab; counts: Partial<Record<RuleTab, number>> }) {
-  const router = useRouter();
-  const path = usePathname();
-  const tabs: Array<{ key: RuleTab; label: string; count?: number }> = [
-    { key: "rule", label: "Rule" },
-    { key: "preview", label: "Preview", count: counts.preview },
-    { key: "forecast", label: "Forecast", count: counts.forecast },
-    { key: "versions", label: "Versions", count: counts.versions },
+/**
+ * A rule's parts (board BobE7): Rule · Preview · Forecast · Versions, each its own address (?tab=). Link tabs
+ * on the title line (the page's `lead`, UI-CONSISTENCY §8a), so no hooks: the server page draws them.
+ */
+export function RuleTabs({ active, base, counts }: { active: RuleTab; base: string; counts: Partial<Record<RuleTab, number>> }) {
+  const tabs: Array<{ key: RuleTab; label: string; count?: number; href: string }> = [
+    { key: "rule", label: "Rule", href: base },
+    { key: "preview", label: "Preview", count: counts.preview, href: `${base}?tab=preview` },
+    { key: "forecast", label: "Forecast", count: counts.forecast, href: `${base}?tab=forecast` },
+    { key: "versions", label: "Versions", count: counts.versions, href: `${base}?tab=versions` },
   ];
-  return <UnderlineTabs label="Rule" tabs={tabs} value={active} onChange={(key) => router.push(key === "rule" ? path : `${path}?tab=${key}`, { scroll: false })} />;
+  return <ViewTabs label="Rule" tabs={tabs} value={active} />;
 }

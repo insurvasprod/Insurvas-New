@@ -5,7 +5,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import { ProvisionalBadge } from "@/components/app/provisional-badge";
-import { ViewTabs } from "@/components/app/book-of-business-views";
+import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -13,13 +13,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { SelectMenu } from "@/components/ui/select-menu";
 import { TableCard } from "@/components/ui/table-card";
 import { ageDays, ageLabel, ageTone, OWNER_ROLE_LABELS, OWNER_ROLES, QUEUE_LABELS, QUEUE_TYPES, RESOLUTION_LABELS, RESOLUTIONS, type OwnerRole, type QueueRule, type QueueType, type Resolution } from "@/lib/ingestion/exceptionQueues";
 import type { QueueItemRow } from "@/lib/ingestion/exceptionQueuesStore";
 import { fileDay } from "@/lib/ingestion/constants";
 import { notify } from "@/lib/notify";
 
-type Tab = "open" | "closed" | "owners";
+export type ExceptionsTab = "open" | "closed" | "owners";
 const TONE_CLASS = { fresh: "text-muted-foreground", aging: "text-[var(--warning-ink)]", escalated: "text-[var(--error-ink)]" } as const;
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toFixed(2)}`);
 
@@ -48,10 +49,9 @@ function subject(item: QueueItemRow) {
  * LA-4.9 (Notion sprint) · every exception queue through one component: grouped by queue, oldest
  * first, each item with what it is, why it is here, its age, its owner and the actions that close it.
  */
-export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly, carriers }: { open: QueueItemRow[]; closed: QueueItemRow[]; rules: Record<QueueType, QueueRule>; isOwner: boolean; today: string; readOnly: boolean; carriers: Array<{ id: string; name: string }> }) {
+export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly, carriers, tab = "open" }: { open: QueueItemRow[]; closed: QueueItemRow[]; rules: Record<QueueType, QueueRule>; isOwner: boolean; today: string; readOnly: boolean; carriers: Array<{ id: string; name: string }>; /** The view the page's title-line tabs chose (?tab=). */ tab?: ExceptionsTab }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
-  const [tab, setTab] = useState<Tab>("open");
   const [current, setCurrent] = useState<QueueItemRow | null>(null);
   const [choice, setChoice] = useState<Resolution | null>(null);
   const [fields, setFields] = useState<Record<string, string>>({});
@@ -94,7 +94,8 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
 
   return (
     <>
-      <ViewTabs<Tab> label="Exception views" active={tab} onChange={setTab} tabs={[{ key: "open", label: "Open", count: open.length }, { key: "closed", label: "Closed, 30 days", count: closed.length }, ...(isOwner ? [{ key: "owners" as const, label: "Who owns each queue" }] : [])]} />
+      {/* The tabs are on the title line (the page's `lead`); this is the panel they switch. */}
+      <div id="exceptions-panel" role="tabpanel" aria-labelledby={`exceptions-panel-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
 
       {tab === "open" && (open.length === 0 ? (
         <TableCard toolbar={toolbar}><EmptyState title="Nothing open" hint="Policies with no sale, sales no carrier has heard of, and possible duplicate clients appear here." /></TableCard>
@@ -163,8 +164,8 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
                   <tr key={type}>
                     <td className="font-semibold text-foreground">{QUEUE_LABELS[type].title}</td>
                     <td><select aria-label={`Owner of ${QUEUE_LABELS[type].title}`} className={`${toolbarControl} w-full`} value={rule.ownerRole} onChange={(e) => set({ ownerRole: e.target.value as OwnerRole })}>{OWNER_ROLES.map((role) => <option key={role} value={role}>{OWNER_ROLE_LABELS[role]}</option>)}</select></td>
-                    <td>{type === "no_policy" ? <Input aria-label="Raise after days" className="h-9" inputMode="numeric" value={rule.openAfterDays ?? ""} onChange={(e) => set({ openAfterDays: num(e.target.value) })} /> : <span className="text-muted-foreground">at once</span>}</td>
-                    <td><Input aria-label="Escalate after days" className="h-9" inputMode="numeric" value={rule.escalateAfterDays ?? ""} onChange={(e) => set({ escalateAfterDays: num(e.target.value) })} /></td>
+                    <td>{type === "no_policy" ? <Input aria-label="Raise after days" inputMode="numeric" value={rule.openAfterDays ?? ""} onChange={(e) => set({ openAfterDays: num(e.target.value) })} /> : <span className="text-muted-foreground">at once</span>}</td>
+                    <td><Input aria-label="Escalate after days" inputMode="numeric" value={rule.escalateAfterDays ?? ""} onChange={(e) => set({ escalateAfterDays: num(e.target.value) })} /></td>
                     <td><select aria-label="Escalate to" className={`${toolbarControl} w-full`} value={rule.escalateToRole ?? ""} onChange={(e) => set({ escalateToRole: (e.target.value || null) as OwnerRole | null })}><option value="">Show it as escalated</option>{OWNER_ROLES.map((role) => <option key={role} value={role}>{OWNER_ROLE_LABELS[role]}</option>)}</select></td>
                     <td className="text-right"><Button type="button" size="sm" disabled={busy || readOnly} onClick={() => void post({ action: "save_rule", queue_type: type, owner_role: rule.ownerRole, open_after_days: type === "no_policy" ? rule.openAfterDays : null, escalate_after_days: rule.escalateAfterDays, escalate_to_role: rule.escalateToRole }, "Saved.")}>Save</Button></td>
                   </tr>
@@ -174,6 +175,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
           </table>
         </TableCard>
       )}
+      </div>
 
       <Dialog open={Boolean(current)} onOpenChange={(next) => { if (!next && !busy) setCurrent(null); }}>
         <DialogContent className="sm:max-w-xl">
@@ -187,30 +189,30 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
               {current.queueType === "initial_import" && <Link href="/app/duplicates" className="text-sm font-medium text-[var(--accent-ink)] underline-offset-2 hover:underline">Open the contact directory to check the provisional clients</Link>}
               {current.queueType === "no_deal_flow" && current.contact?.provisional && <p className="m-0 text-xs text-muted-foreground">The client was built from the carrier&apos;s file (name, date of birth, address) and nobody has checked it.</p>}
               <fieldset disabled={readOnly || busy} className="grid gap-2">
-                {current.payload?.client_blocked && <p role="status" className="m-0 text-sm text-[var(--warning-ink)]">{String(current.payload.client_blocked)}</p>}
+                {current.payload?.client_blocked && <Callout tone="warning" title={String(current.payload.client_blocked)} />}
                 {RESOLUTIONS[current.queueType].filter((r) => r !== "confirm_client" || Boolean(current.contact)).map((r) => (
                   <label key={r} className="flex items-center gap-2 text-sm"><input type="radio" name="resolution" checked={choice === r} onChange={() => setChoice(r)} />{RESOLUTION_LABELS[r]}</label>
                 ))}
                 {choice === "link_existing_client" && (
-                  <div className="grid gap-1"><Label htmlFor="q-contact">Client</Label><select id="q-contact" className={`${toolbarControl} w-full`} value={fields.contact ?? ""} onChange={(e) => setFields({ ...fields, contact: e.target.value })}><option value="">Choose a client with this surname</option>{(current.choices.contacts ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}{c.dob ? ` · ${c.dob}` : ""}</option>)}</select></div>
+                  <div className="grid gap-1"><Label htmlFor="q-contact">Client</Label><SelectMenu id="q-contact" label="Client" className="w-full" matchTriggerWidth panelAlign="start" searchPlaceholder="Search by name" value={fields.contact ?? ""} onChange={(v) => setFields({ ...fields, contact: v })} options={[{ value: "", label: "Choose a client with this surname", disabled: true }, ...(current.choices.contacts ?? []).map((c) => ({ value: c.id, label: c.name, description: c.dob ?? undefined }))]} /></div>
                 )}
                 {choice === "found_the_sale" && (
-                  <div className="grid gap-1"><Label htmlFor="q-deal">Sale</Label><select id="q-deal" className={`${toolbarControl} w-full`} value={fields.deal ?? ""} onChange={(e) => setFields({ ...fields, deal: e.target.value })}><option value="">Choose a recent sale</option>{(current.choices.deals ?? []).map((d) => <option key={d.id} value={d.id}>{d.name} · {d.date}</option>)}</select></div>
+                  <div className="grid gap-1"><Label htmlFor="q-deal">Sale</Label><SelectMenu id="q-deal" label="Sale" className="w-full" matchTriggerWidth panelAlign="start" searchPlaceholder="Search by name" value={fields.deal ?? ""} onChange={(v) => setFields({ ...fields, deal: v })} options={[{ value: "", label: "Choose a recent sale", disabled: true }, ...(current.choices.deals ?? []).map((d) => ({ value: d.id, label: d.name, description: d.date }))]} /></div>
                 )}
                 {choice === "found_the_policy" && (
                   <div className="grid gap-2 sm:grid-cols-2">
-                    <div className="grid gap-1"><Label htmlFor="q-carrier">Carrier</Label><select id="q-carrier" className={`${toolbarControl} w-full`} value={fields.carrier ?? current.carrierId ?? ""} onChange={(e) => setFields({ ...fields, carrier: e.target.value })}>{carriers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
-                    <div className="grid gap-1"><Label htmlFor="q-policy">Policy number</Label><Input id="q-policy" className="h-9" list="q-policies" value={fields.policy ?? ""} onChange={(e) => setFields({ ...fields, policy: e.target.value })} /><datalist id="q-policies">{(current.choices.policies ?? []).map((p) => <option key={p.policyNumber} value={p.policyNumber}>{p.label}</option>)}</datalist></div>
+                    <div className="grid gap-1"><Label htmlFor="q-carrier">Carrier</Label><SelectMenu id="q-carrier" label="Carrier" className="w-full" matchTriggerWidth panelAlign="start" searchPlaceholder="Search carriers" value={fields.carrier ?? current.carrierId ?? ""} onChange={(v) => setFields({ ...fields, carrier: v })} options={carriers.map((c) => ({ value: c.id, label: c.name }))} /></div>
+                    <div className="grid gap-1"><Label htmlFor="q-policy">Policy number</Label><Input id="q-policy" list="q-policies" value={fields.policy ?? ""} onChange={(e) => setFields({ ...fields, policy: e.target.value })} /><datalist id="q-policies">{(current.choices.policies ?? []).map((p) => <option key={p.policyNumber} value={p.policyNumber}>{p.label}</option>)}</datalist></div>
                   </div>
                 )}
                 {(choice === "another_writing_number" || choice === "raised_with_carrier") && (
-                  <div className="grid gap-1"><Label htmlFor="q-note">{choice === "raised_with_carrier" ? "What you asked the carrier" : "Note (optional)"}</Label><Input id="q-note" className="h-9" maxLength={2000} value={fields.note ?? ""} onChange={(e) => setFields({ ...fields, note: e.target.value })} /></div>
+                  <div className="grid gap-1"><Label htmlFor="q-note">{choice === "raised_with_carrier" ? "What you asked the carrier" : "Note (optional)"}</Label><Input id="q-note" maxLength={2000} value={fields.note ?? ""} onChange={(e) => setFields({ ...fields, note: e.target.value })} /></div>
                 )}
                 {choice === "never_submitted" && (
-                  <div className="grid gap-1"><Label htmlFor="q-reason">Why</Label><Input id="q-reason" className="h-9" maxLength={2000} value={fields.reason ?? ""} onChange={(e) => setFields({ ...fields, reason: e.target.value })} /><span className="text-xs text-muted-foreground">The sale&apos;s open application case is closed as abandoned, so the campaign funnel stops counting it as applied.</span></div>
+                  <div className="grid gap-1"><Label htmlFor="q-reason">Why</Label><Input id="q-reason" maxLength={2000} value={fields.reason ?? ""} onChange={(e) => setFields({ ...fields, reason: e.target.value })} /><span className="text-xs text-muted-foreground">The sale&apos;s open application case is closed as abandoned, so the campaign funnel stops counting it as applied.</span></div>
                 )}
                 {choice === "resubmitted_elsewhere" && (
-                  <div className="grid gap-1"><Label htmlFor="q-app">Attempt</Label><select id="q-app" className={`${toolbarControl} w-full`} value={fields.application ?? ""} onChange={(e) => setFields({ ...fields, application: e.target.value })}><option value="">Choose the attempt</option>{(current.choices.applications ?? []).map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}</select></div>
+                  <div className="grid gap-1"><Label htmlFor="q-app">Attempt</Label><SelectMenu id="q-app" label="Attempt" className="w-full" matchTriggerWidth panelAlign="start" value={fields.application ?? ""} onChange={(v) => setFields({ ...fields, application: v })} options={[{ value: "", label: "Choose the attempt", disabled: true }, ...(current.choices.applications ?? []).map((a) => ({ value: a.id, label: a.label }))]} /></div>
                 )}
               </fieldset>
               <DialogFooter>

@@ -5,17 +5,29 @@ import { useRouter } from "next/navigation";
 import { RotateCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { confirmAction } from "@/components/ui/confirm-dialog";
 import { notify } from "@/lib/notify";
 
 /**
- * LA-4.2 · read a carrier file again from its kept raw rows, with its carrier's current layout: after
- * a layout or a status word is fixed, a failed file is read, a read one is brought up to date.
- * Nothing is uploaded again; the run is recorded (Carrier files › Runs).
+ * LA-4.2 · "Read again" on a file's page: the file is read again from its kept raw rows with its carrier's current
+ * layout, after a layout or a status word is fixed. Nothing is uploaded again; the run is recorded (Run history).
+ *
+ * It changes the book (rows are re-linked, policies updated, cards moved), so it asks first (UI-CONSISTENCY §11:
+ * the kit's confirm, one plain line of what happens). Replaces components/app/carrier-file-reread.tsx on this page,
+ * which ran on the click.
  */
-export function CarrierFileReread({ fileId }: { fileId: string }) {
+export function FileReread({ fileId }: { fileId: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   async function reread() {
+    const ok = await confirmAction({
+      title: "Read this file again?",
+      description: "Its kept rows are read again with the carrier's current layout, and any policy, link or card they change is updated.",
+      confirmLabel: "Read again",
+      cancelLabel: "Keep as it is",
+      destructive: false,
+    });
+    if (!ok) return;
     setBusy(true);
     try {
       const response = await fetch("/api/app/carrier-files/reprocess", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ file_id: fileId }) });

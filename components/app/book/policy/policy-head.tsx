@@ -3,15 +3,15 @@ import type { ReactNode } from "react";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 
 /**
- * The top of a policy's detail page, under the frame's title (Book of business, round 2): the status chip
- * and the one line of facts ("AM-88120 · Americo · Eagle Premier"), then a quiet line of figures (the
+ * The top of a policy's detail page, under the frame's title (Book of business, round 2; round 5 moves the
+ * health chip beside the title and leaves this the muted facts line): an optional status chip and the one line of facts ("AM-88120 · Americo · Eagle Premier"), then a quiet line of figures (the
  * mockups' stat line: label over value, no tiles, so the Commissions tab's tiles stay the page's one strip).
  */
-export function PolicyLead({ status, tone, facts, notices }: { status: string; tone: StatusTone; facts: Array<string | null | undefined>; notices?: ReactNode }) {
+export function PolicyLead({ status, tone = "neutral", facts, notices }: { status?: string; tone?: StatusTone; facts: Array<string | null | undefined>; notices?: ReactNode }) {
   const line = facts.filter(Boolean).join(" · ");
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-3">
-      <StatusChip tone={tone}>{status}</StatusChip>
+      {status && <StatusChip tone={tone}>{status}</StatusChip>}
       <span className="min-w-0 truncate text-sm text-muted-foreground" title={line}>{line}</span>
       {/* Round 3: what used to be the Overview's status lines (a provisional client, the linked application,
           no client yet), as chips and links on the facts line. */}

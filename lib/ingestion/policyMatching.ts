@@ -139,3 +139,68 @@ export function accuracy(links: Array<{ confirmed: boolean; correctedByHuman: bo
   const correct = reviewed.filter((link) => link.confirmed && !link.correctedByHuman).length;
   return { reviewed: reviewed.length, correct, pct: reviewed.length ? Math.round((correct / reviewed.length) * 1000) / 10 : null };
 }
+
+/**
+ * An application number the agent recorded counts as the carrier's policy number only when the insured is
+ * the same person: the same date of birth and surname on both sides (QA 2026-11-03: American Amicable's
+ * application number becomes its policy number, and the default reference type is "Application number",
+ * so step 2 never linked it). A number alone could be another sequence's collision; a person cannot.
+ */
+export function applicationNumberIsThePolicy(carrier: { lastName: string | null; dob: string | null }, application: { lastName: string | null; dob: string | null }): boolean {
+  const surname = (name: string | null) => (name ?? "").normalize("NFKD").replace(/[^a-z]/gi, "").toLowerCase();
+  const birth = (dob: string | null) => (dob && /^\d{4}-\d\d-\d\d$/.test(dob.slice(0, 10)) ? dob.slice(0, 10) : null);
+  const dob = birth(carrier.dob);
+  return dob !== null && dob === birth(application.dob) && surname(carrier.lastName) !== "" && surname(carrier.lastName) === surname(application.lastName);
+}
+
+/** Application statuses still waiting on the carrier (applicationIssue.ts AWAITING_CARRIER: only these can close as issued). */
+const AWAITING_CARRIER_STATUSES: readonly string[] = ["submitted", "pending_carrier"];
+
+/**
+ * QA 2026-11-03 (0119990010): a person who links a policy to a SALE links it to that sale's application when
+ * the sale has exactly one application with this carrier still waiting on it — so the carrier's issue closes
+ * the application (recordCarrierIssues), as a step-2 link would. None, or two that could each be it: the sale.
+ */
+export function saleApplicationFor(apps: Array<{ id: string; carrierId: string | null; status: string | null }>, carrierId: string): string | null {
+  const open = apps.filter((app) => app.carrierId === carrierId && AWAITING_CARRIER_STATUSES.includes(app.status ?? ""));
+  return open.length === 1 ? open[0].id : null;
+}
+
+/** A no-record queue item's payload (exceptionQueuesStore noRecordPolicy) as the carrier side of a comparison. */
+export function carrierSideOfPayload(payload: { insured?: { first_name?: string | null; last_name?: string | null; dob?: string | null; phone?: string | null } | null; premium_cents?: number | null; face_cents?: number | null } | null | undefined, policyNumber: string | null, carrierName: string | null): CarrierSide | null {
+  const insured = payload?.insured ?? null;
+  if (!insured) return null;
+  const money = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
+  return { policyNumber: policyNumber ?? "", carrierName: carrierName ?? "", effectiveDate: null, firstName: insured.first_name ?? null, lastName: insured.last_name ?? null, dob: insured.dob ?? null, phone: insured.phone ?? null, premiumCents: money(payload?.premium_cents), faceCents: money(payload?.face_cents) };
+}
+
+/** The short words for the fields that agreed, strongest first: "surname, born, premium". */
+const WHY_WORDS: Record<MatchField, string> = { surname: "surname", givenName: "first name", dob: "born", phone: "phone", premium: "premium", face: "face" };
+export function matchWhy(scored: Pick<Scored, "fields">, most = 3): string | null {
+  const agreed = [...MATCH_FIELDS].filter((field) => scored.fields[field] === "match").sort((a, b) => MATCH_WEIGHTS[b] - MATCH_WEIGHTS[a]);
+  return agreed.length ? agreed.slice(0, most).map((field) => WHY_WORDS[field]).join(", ") : null;
+}
+
+export type SaleChoice = { id: string; name: string; date: string; why?: string };
+const PERSON_FIELDS: readonly MatchField[] = ["surname", "givenName", "dob", "phone"];
+
+/**
+ * QA 2026-11-03: "Link it to a sale…" lists the sales that look like the carrier's row first — scored with
+ * scoreCandidate, best first, each with the fields that agreed — then the rest by recency, as before. A sale
+ * that agrees on nothing about the person is never ranked; `sales` arrive newest first. Ranking only orders
+ * the list: a person still picks.
+ */
+export function rankSaleChoices(row: CarrierSide | null, sales: Array<Candidate & { name: string }>, limit = 25): SaleChoice[] {
+  const plain = (sale: Candidate & { name: string }): SaleChoice => ({ id: sale.id, name: sale.name, date: sale.date });
+  if (!row) return sales.slice(0, limit).map(plain);
+  const scored = sales.map((sale, order) => ({ sale, order, scored: scoreCandidate(row, sale) }));
+  const ranked = scored
+    // Ranked only on the person: a premium or face amount alone is common to many sales and moves nothing up.
+    .filter(({ scored: s }) => PERSON_FIELDS.some((field) => s.fields[field] === "match" || s.fields[field] === "partial"))
+    .sort((a, b) => b.scored.score - a.scored.score || a.order - b.order);
+  const rankedIds = new Set(ranked.map(({ sale }) => sale.id));
+  return [
+    ...ranked.map(({ sale, scored: s }) => { const why = matchWhy(s); return why ? { ...plain(sale), why: `Matches ${why}` } : plain(sale); }),
+    ...sales.filter((sale) => !rankedIds.has(sale.id)).map(plain),
+  ].slice(0, limit);
+}

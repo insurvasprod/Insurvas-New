@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Download } from "lucide-react";
+import { ChevronDown, Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { Callout } from "@/components/app/settings/primitives";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { checkboxControl } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -24,6 +26,10 @@ import { DISCREPANCY_LABELS, DISCREPANCY_TYPES, moneySummary, type DiscrepancyTy
 import { DISPUTABLE } from "@/lib/ingestion/disputeLetter";
 import type { DiscrepancyRow, DisputeRow } from "@/lib/ingestion/discrepancyStore";
 import { rowHref } from "@/lib/ingestion/trace";
+import { findingExpectedCents } from "@/lib/commissions/lineExpected";
+import { groupPayIssues, type PayIssueInput } from "@/lib/commissions/payIssueGroups";
+import { StepSlot } from "@/components/app/step-frame/step-slot";
+import { PAY_ISSUES_SLOT } from "@/components/app/commissions/slots";
 import { statementDay, statementPeriod } from "@/lib/ledger/statementConstants";
 import { notify } from "@/lib/notify";
 
@@ -75,6 +81,14 @@ const HAND_STATUS: Record<HandDiscrepancyRow["status"], { label: string; tone: S
 
 type Item = { source: "carrier"; row: DiscrepancyRow } | { source: "hand"; row: HandDiscrepancyRow };
 const carrierKey = (item: Item) => item.row.carrierId ?? `hand:${item.row.carrierName}`;
+/** One issue as the groups read it (board 13): its cause in the carrier-file vocabulary, and its difference. */
+function groupInput(item: Item): PayIssueInput {
+  if (item.source === "hand") return { type: HAND_TYPE[item.row.kind], carrierId: item.row.carrierId, carrierName: item.row.carrierName, differenceCents: item.row.owedCents };
+  const row = item.row;
+  // A chargeback still to come has nothing paid to compare: what will be taken back is its difference.
+  const coming = row.type === "missing_chargeback" && row.differenceCents === null;
+  return { type: row.type as DiscrepancyType, carrierId: row.carrierId, carrierName: row.carrierName, differenceCents: coming ? -Math.abs(row.expectedCents ?? 0) : row.differenceCents ?? 0 };
+}
 /** The status filter, read the same way for both sources. */
 function statusMatches(item: Item, status: string): boolean {
   if (!status) return true;
@@ -103,12 +117,15 @@ async function post(body: Record<string, unknown>) {
  * finding is dismissed or opened again and goes in a saved letter; a hand finding is resolved,
  * written off or reopened, marked disputed, and goes in its own letter page. A letter holds one source.
  */
-export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanWrite = false, handBlockedReason = null, initialSource = "" }: { items: DiscrepancyRow[]; readOnly: boolean; handItems?: HandDiscrepancyRow[]; handCanWrite?: boolean; handBlockedReason?: string | null; initialSource?: string }) {
+export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanWrite = false, handBlockedReason = null, initialSource = "", initialStatus = "open" }: { items: DiscrepancyRow[]; readOnly: boolean; handItems?: HandDiscrepancyRow[]; handCanWrite?: boolean; handBlockedReason?: string | null; initialSource?: string; /** The page's tab (board 13): Open or Closed. */ initialStatus?: "open" | "closed" }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [type, setType] = useState("");
   const [carrier, setCarrier] = useState("");
-  const [status, setStatus] = useState("open");
+  // The status is the page's tab (Open · Letters out · Closed, board 13), not a chip.
+  const status = initialStatus;
+  // Open issues read as groups by cause and carrier; "Group alike" off is the flat list, with every decision.
+  const [grouped, setGrouped] = useState(initialStatus === "open");
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [source, setSource] = useState(initialSource === "hand" || initialSource === "carrier" ? initialSource : "");
@@ -134,10 +151,17 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
     (!carrier || carrierKey(i) === carrier) &&
     (!query.trim() || `${i.row.policyNumber ?? ""} ${i.row.carrierName} ${"insuredName" in i.row ? i.row.insuredName ?? "" : ""}`.toLowerCase().includes(query.trim().toLowerCase())) &&
     statusMatches(i, status)), [all, source, type, carrier, status, query]);
-  // The status chips count within the other filters, so each number is what pressing it shows.
-  const statusCount = (value: string) => all.filter((i) => (!source || i.source === source) && (!type || (i.source === "hand" ? HAND_TYPE[i.row.kind] === type : i.row.type === type)) && (!carrier || carrierKey(i) === carrier) && statusMatches(i, value)).length;
+  const groups = useMemo(() => groupPayIssues(visible.map(groupInput)), [visible]);
   const pageSize = useFittingPageSize(480, 45);
   const { current, rows } = paginate(visible, page, pageSize);
+  const groupPage = paginate(groups, page, pageSize);
+  // A group's row opens its issues in the flat list; its Review button works them on the Review page.
+  const openGroup = (group: (typeof groups)[number]) => {
+    setType(group.type);
+    setCarrier(group.carrierId ?? `hand:${group.carrierName}`);
+    setGrouped(false);
+    setPage(1);
+  };
   const pickedRows = items.filter((i) => picked.includes(i.id));
   const pickedCarrier = pickedRows[0]?.carrierId ?? null;
   const canPick = (row: DiscrepancyRow) => !readOnly && handPicked.length === 0 && row.status === "open" && DISPUTABLE.has(row.type) && (!pickedCarrier || pickedCarrier === row.carrierId);
@@ -145,8 +169,8 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
   const handCarrier = handChosen[0]?.carrierId ?? null;
   const canPickHand = (row: HandDiscrepancyRow) => picked.length === 0 && row.status !== "cleared" && Boolean(row.carrierId) && (!handCarrier || handCarrier === row.carrierId);
   const handLetterHref = handChosen.length && handCarrier ? `/app/discrepancies/letter?carrier=${handCarrier}&ids=${handChosen.map((i) => i.id).join(",")}` : null;
-  const filtered = Boolean(type || carrier || source || query.trim() || status !== "open");
-  const clear = () => { setType(""); setCarrier(""); setSource(""); setQuery(""); setStatus("open"); setPage(1); };
+  const filtered = Boolean(type || carrier || source || query.trim());
+  const clear = () => { setType(""); setCarrier(""); setSource(""); setQuery(""); setPage(1); };
 
   async function run(work: () => Promise<unknown>, done: string) {
     setBusy(true);
@@ -206,7 +230,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
     const coming = row.type === "missing_chargeback" && row.differenceCents === null;
     const main = (
       <tr key={row.id}>
-        <td>{canPick(row) && <input type="checkbox" aria-label={`Put ${row.policyNumber ?? row.carrierName} on a letter`} className="size-4 accent-[var(--primary)]" checked={picked.includes(row.id)} onChange={(e) => setPicked((now) => (e.target.checked ? [...now, row.id] : now.filter((id) => id !== row.id)))} />}</td>
+        <td>{canPick(row) && <input type="checkbox" aria-label={`Put ${row.policyNumber ?? row.carrierName} on a letter`} className={checkboxControl} checked={picked.includes(row.id)} onChange={(e) => setPicked((now) => (e.target.checked ? [...now, row.id] : now.filter((id) => id !== row.id)))} />}</td>
         <td>
           <span className="inline-flex items-center gap-2"><StatusChip tone={SEVERITY_TONE[row.severity]}>{DISCREPANCY_LABELS[row.type as DiscrepancyType]?.label ?? row.type}</StatusChip></span>
           <span className="mt-0.5 block text-xs text-muted-foreground">{row.carrierName}</span>
@@ -216,7 +240,8 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
           {coming ? <span className="text-muted-foreground">—</span> : row.expectedCents === null && row.type === "missing"
             // No rate to price it: the fix is one click away (owner 2026-11-02: "help the user navigate faster").
             ? <Link href="/app/book-setup" className="text-xs font-semibold text-[var(--accent-ink)] hover:underline">Add the rate</Link>
-            : money(row.expectedCents)}
+            // A chargeback's expected is the finding's own ($0.00 for one none was expected of), never the policy's commission.
+            : money(findingExpectedCents(row.type, row.expectedCents))}
         </td>
         <td className="text-right tabular-nums" title={row.reportedEntryIds.length ? `${row.reportedEntryIds.length} ledger ${row.reportedEntryIds.length === 1 ? "line" : "lines"}` : undefined}>{coming ? <span className="text-muted-foreground">—</span> : money(row.reportedCents)}</td>
         <td className={`text-right font-semibold tabular-nums ${row.differenceCents !== null && row.differenceCents > 0 ? "text-[var(--warning-ink)]" : ""}`}>
@@ -267,13 +292,13 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
     const expanded = open === key;
     const main = (
       <tr key={key}>
-        <td>{canPickHand(row) && <input type="checkbox" aria-label={`Put ${row.policyNumber} on a letter`} className="size-4 accent-[var(--primary)]" checked={handPicked.includes(row.id)} onChange={(e) => setHandPicked((now) => (e.target.checked ? [...now, row.id] : now.filter((id) => id !== row.id)))} />}</td>
+        <td>{canPickHand(row) && <input type="checkbox" aria-label={`Put ${row.policyNumber} on a letter`} className={checkboxControl} checked={handPicked.includes(row.id)} onChange={(e) => setHandPicked((now) => (e.target.checked ? [...now, row.id] : now.filter((id) => id !== row.id)))} />}</td>
         <td>
           <span className="inline-flex items-center gap-2"><StatusChip tone={row.owedCents > 0 ? "warning" : "info"}>{DISCREPANCY_LABELS[HAND_TYPE[row.kind]].label}</StatusChip></span>
           <span className="mt-0.5 block text-xs text-muted-foreground">{row.carrierName} · statement imported by hand</span>
         </td>
         <td className="tabular-nums">{row.policyNumber}<span className="block text-xs text-muted-foreground">{row.insuredName}</span></td>
-        <td className="text-right tabular-nums">{money(row.expectedCents)}</td>
+        <td className="text-right tabular-nums">{money(findingExpectedCents(HAND_TYPE[row.kind], row.expectedCents))}</td>
         <td className="text-right tabular-nums">{money(row.receivedCents)}</td>
         <td className={`text-right font-semibold tabular-nums ${row.owedCents > 0 ? "text-[var(--warning-ink)]" : ""}`}>
           {money(row.owedCents)}
@@ -318,6 +343,8 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
         <StatTile label="Open" value={(sum.open + handWorking.length).toLocaleString("en-US")} footnote="including items in a letter" />
       </StatStrip>}
       {handItems.length > 0 && !handCanWrite && handBlockedReason && <Callout tone="warning" title={handBlockedReason} />}
+      {/* The one primary on the title line (board 13): the largest group, on the Review page. */}
+      {grouped && groups[0]?.reviewHref && <StepSlot id={PAY_ISSUES_SLOT}><Button asChild type="button"><Link href={groups[0].reviewHref}>Review the largest →</Link></Button></StepSlot>}
 
       <TableCard
         toolbar={
@@ -332,9 +359,7 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
             <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Policy, client or carrier" />
-            {([["open", "Open"], ["closed", "Closed"], ["", "All"]] as const).map(([value, label]) => (
-              <ToggleChip key={label} role="radio" selected={status === value} count={statusCount(value)} onClick={() => { setStatus(value); setPage(1); }}>{label}</ToggleChip>
-            ))}
+            <ToggleChip selected={grouped} count={grouped ? groups.length : undefined} onClick={() => { setGrouped(!grouped); setPage(1); }}>Group alike</ToggleChip>
             <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={(type ? 1 : 0) + (carrier ? 1 : 0) + (source ? 1 : 0)} aria-controls="pay-issue-filters" />
           </DataToolbar>
         }
@@ -359,12 +384,43 @@ export function CarrierDiscrepancies({ items, readOnly, handItems = [], handCanW
             )}
           </FilterPanel>
         }
-        footer={all.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "item" : "items"} /> : undefined}
+        footer={all.length ? grouped
+          ? <Pager page={groupPage.current} pageSize={pageSize} total={groups.length} onPage={setPage} noun={groups.length === 1 ? "group" : "groups"} suffix={`${visible.length.toLocaleString("en-US")} ${visible.length === 1 ? "issue" : "issues"}, largest difference first`} />
+          : <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "item" : "items"} /> : undefined}
       >
         {all.length === 0 ? (
           <EmptyState title="Nothing found yet" hint="Pay issues appear once commission files are read: pay that never came or came short, chargebacks that look wrong, held money." />
         ) : visible.length === 0 ? (
-          <NoMatches noun="items" onClear={clear} />
+          filtered ? <NoMatches noun="items" onClear={clear} /> : <EmptyState title={status === "closed" ? "Nothing closed yet" : "No open pay issues"} hint={status === "closed" ? "Resolved and dismissed issues land here, with who decided them." : "Every finding is decided. New ones appear when the next files are read."} />
+        ) : grouped ? (
+          <table className="portal-lead-table w-full text-left text-sm">
+            <thead>
+              <tr>
+                <th className="w-[220px]">Issue</th>
+                <th className="min-w-[160px]">Carrier</th>
+                <th className="w-[110px] text-right">How many</th>
+                <th className="w-[130px] text-right" title="Positive: owed to you. Negative: owed to the carrier.">Difference</th>
+                <th>Usually</th>
+                <th className="w-[110px] text-right"><span className="sr-only">Review</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {groupPage.rows.map((group) => (
+                <tr key={group.key} className="cursor-pointer" onClick={() => openGroup(group)} title="Show these issues one by one">
+                  <td><StatusChip tone={group.differenceCents < 0 ? "danger" : "warning"}>{DISCREPANCY_LABELS[group.type]?.label ?? group.type}</StatusChip></td>
+                  <td><span className="block whitespace-normal break-words leading-snug text-foreground">{group.carrierName}</span></td>
+                  <td className="text-right font-semibold tabular-nums text-foreground">{group.count.toLocaleString("en-US")}</td>
+                  <td className={`text-right font-semibold tabular-nums ${group.differenceCents < 0 ? "text-[var(--error-ink)]" : group.differenceCents > 0 ? "text-[var(--warning-ink)]" : "text-foreground"}`}>{money(group.differenceCents)}</td>
+                  <td><span className="block whitespace-normal break-words leading-snug text-muted-foreground">{group.usually}</span></td>
+                  <td className="text-right" onClick={(event) => event.stopPropagation()}>
+                    {group.reviewHref
+                      ? <Button asChild type="button" size="sm" variant="outline"><Link href={group.reviewHref}>Review</Link></Button>
+                      : <span className="text-muted-foreground" aria-hidden="true">›</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         ) : (
           <table className="portal-lead-table w-full text-left text-sm">
             <thead>
@@ -432,6 +488,13 @@ const DISPUTE_TONE: Record<string, StatusTone> = { draft: "action", sent: "info"
  * LA-4.15 · the letters: each one as drafted, how it was sent (recorded by the agent), and how it
  * ended, with the amount credited. The per-carrier record shows which carriers are worth arguing with.
  */
+/** How a letter went out: the "I sent it by…" menu's items (mark_sent's `via`). */
+const SENT_VIA = [
+  { value: "email", label: "Email", word: "email" },
+  { value: "portal", label: "The carrier's portal", word: "the carrier's portal" },
+  { value: "post", label: "Post", word: "post" },
+] as const;
+
 export function DisputeLetters({ disputes, readOnly }: { disputes: DisputeRow[]; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
@@ -496,9 +559,17 @@ export function DisputeLetters({ disputes, readOnly }: { disputes: DisputeRow[];
                       <Button type="button" size="sm" variant="outline" onClick={() => setViewing(d)}>Read</Button>
                       <Button asChild type="button" size="sm" variant="outline"><a href={`/api/app/commission-discrepancies/disputes/${d.id}/pdf`}><Download aria-hidden="true" />PDF</a></Button>
                       {!readOnly && d.status === "draft" && (
-                        <select aria-label="Mark sent" className={`${toolbarControl}`} value="" disabled={busy} onChange={(e) => { if (e.target.value) void run({ action: "mark_sent", dispute_id: d.id, via: e.target.value }, "Marked sent."); }}>
-                          <option value="">I sent it by…</option><option value="email">Email</option><option value="portal">The carrier&apos;s portal</option><option value="post">Post</option>
-                        </select>
+                        // An action menu, not a select that writes on change (UI-CONSISTENCY §11): the write is the item chosen.
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button type="button" size="sm" variant="outline" disabled={busy}>I sent it by…<ChevronDown aria-hidden="true" /></Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {SENT_VIA.map((via) => (
+                              <DropdownMenuItem key={via.value} disabled={busy} onSelect={() => void run({ action: "mark_sent", dispute_id: d.id, via: via.value }, `Marked sent by ${via.word}.`)}>{via.label}</DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                       {!readOnly && d.status === "sent" && <Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void run({ action: "mark_acknowledged", dispute_id: d.id }, "Marked acknowledged.")}>Acknowledged</Button>}
                       {!readOnly && (d.status === "sent" || d.status === "acknowledged") && <Button type="button" size="sm" disabled={busy} onClick={() => setOutcome({ id: d.id, outcome: "accepted", amount: "", notes: "" })}>Record outcome</Button>}

@@ -40,8 +40,9 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
-import { useFittingPageSize } from "@/components/app/book-of-business-views";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { StatementMappingFields } from "@/components/app/statement-import";
+import { Callout } from "@/components/app/settings/primitives";
 import {
   STATEMENT_KIND_LABELS,
   statementDay,
@@ -107,9 +108,11 @@ function matchNote(line: StatementLineView): { text: string; title?: string; war
  * The statement's own actions, for the page header: Re-process (LA-4.3) and Void. Each opens its
  * dialog; a failure is shown in the dialog that caused it.
  */
-export function StatementActions({ statementId, canWrite, reprocess }: {
+export function StatementActions({ statementId, canWrite, voided = false, reprocess }: {
   statementId: string;
   canWrite: boolean;
+  /** A voided statement keeps its Void button on the title line, disabled, with the reason it cannot act (§3: no notice box). */
+  voided?: boolean;
   /** LA-4.3: present when the statement can be re-read from its stored original. */
   reprocess?: { headers: string[]; mapping: StatementMapping } | null;
 }) {
@@ -122,6 +125,7 @@ export function StatementActions({ statementId, canWrite, reprocess }: {
   const [reprocessMapping, setReprocessMapping] = useState<StatementMapping>(reprocess?.mapping ?? {});
   const reprocessProblem = reprocess ? statementMappingProblem(reprocessMapping, reprocess.headers) : null;
 
+  if (voided) return <Button type="button" variant="outline" disabled title="This statement is voided: its lines no longer post, and it stays as a record">Void statement</Button>;
   if (!canWrite) return null;
 
   async function voidIt() {
@@ -240,7 +244,6 @@ export function StatementReview({
   const [page, setPage] = useState(1);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [picking, setPicking] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [sourceOpen, setSourceOpen] = useState<string | null>(null);
@@ -275,10 +278,10 @@ export function StatementReview({
   }, [policies, query]);
 
   async function decide(decisions: StatementLineDecision[], done: string) {
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true); setError(null);
     try {
       await send(`/api/app/statements/${statementId}/lines`, "POST", { decisions });
-      setNotice(done); setPicking(null); setQuery("");
+      notify.done(done); setPicking(null); setQuery("");
       router.refresh();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "The decision was not recorded.");
@@ -288,11 +291,11 @@ export function StatementReview({
   }
 
   async function rematch() {
-    setBusy(true); setError(null); setNotice(null);
+    setBusy(true); setError(null);
     try {
       const data = (await send(`/api/app/statements/${statementId}/lines`, "POST", includeLeft ? { action: "rematch", include_left_unmatched: true } : { action: "rematch" })) as { proposed?: number };
       const proposed = data.proposed ?? 0;
-      setNotice(proposed ? `${proposed.toLocaleString("en-US")} ${proposed === 1 ? "line has" : "lines have"} a proposed match now. Check and accept ${proposed === 1 ? "it" : "them"}.` : `Still no policy in your book matches ${includeLeft ? "these lines" : "the unmatched lines"}.`);
+      notify.done(proposed ? `${proposed.toLocaleString("en-US")} ${proposed === 1 ? "line has" : "lines have"} a proposed match now. Check and accept ${proposed === 1 ? "it" : "them"}.` : `Still no policy in your book matches ${includeLeft ? "these lines" : "the unmatched lines"}.`);
       setIncludeLeft(false);
       router.refresh();
     } catch (reason) {
@@ -347,9 +350,9 @@ export function StatementReview({
 
   return (
     <div className="flex flex-col gap-4">
-      {!canWrite && writeBlockedReason && !voided && <p role="status" className="rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{writeBlockedReason}</p>}
-      {notice && <p role="status" className="rounded-md bg-[var(--success-surface)] px-3 py-2 text-sm text-[var(--success-ink)]">{notice}</p>}
-      {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+      {/* To the bell, not the page (UI-CONSISTENCY §3): Callout raises it there; a done step is a toast. */}
+      {!canWrite && writeBlockedReason && !voided && <Callout tone="warning" title={writeBlockedReason} />}
+      {error && !pickingLine && <Callout tone="error" title={error} />}
 
       <TableCard
         className="flex min-h-[calc(100dvh-var(--top-bar-h)-362px)] flex-col [&>.overflow-x-auto]:flex-1"

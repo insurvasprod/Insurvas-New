@@ -23,6 +23,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { CANONICAL_GROUPS, TIER_LABEL, type CanonicalField } from "@/lib/applications/constants";
 import { isPlausibleSsn } from "@/lib/applications/formats";
 import { orderedKeys } from "@/lib/applications/fieldSetLayout";
+import { customPrefillFromInterview } from "@/lib/applications/prefill";
 import type { FieldValue } from "@/lib/applications/types";
 import { US_STATES } from "@/lib/appointments/constants";
 import { cn } from "@/lib/utils";
@@ -97,9 +98,18 @@ function setHint(attempt: ReturnType<typeof useWorkspace>["attempt"], fieldKey: 
 }
 
 /** One of the agency's own questions (custom.*), drawn by its type; saved like any field. */
-function QuestionInput({ q }: { q: NonNullable<ReturnType<typeof useWorkspace>["attempt"]["fieldSet"]>["custom"][number] }) {
+function QuestionInput({ q, heard }: {
+  q: NonNullable<ReturnType<typeof useWorkspace>["attempt"]["fieldSet"]>["custom"][number];
+  /** What the client said to the same question in the interview, while nothing is stored here yet. */
+  heard?: string | number;
+}) {
   const { attempt, readOnly, setValue } = useWorkspace();
-  const fv = attempt.values[q.key];
+  const stored = attempt.values[q.key];
+  // Asked once (QA 2026-11-03): an empty field shows the interview's answer, warm, until it is confirmed
+  // (saved) or typed over — like height and weight carried in from the interview.
+  const fv: FieldValue | undefined = !hasContent(stored) && heard !== undefined ? { value: heard, source: "interview", reviewed: false } : stored;
+  const fromInterviewOnly = !hasContent(stored) && heard !== undefined;
+  const warm = isPrefilled(fv) ? PREFILL_SURFACE : "";
   const value = asText(fv?.value);
   const set = (v: string) => setValue(q.key, v === "" ? null : q.type === "number" || q.type === "currency" ? Number(v) : v);
   let input: ReactNode;
@@ -108,20 +118,21 @@ function QuestionInput({ q }: { q: NonNullable<ReturnType<typeof useWorkspace>["
       : q.type === "state" ? US_STATES.map(([code, name]) => ({ value: code, label: name }))
         : q.options.map((o) => ({ value: o, label: o }));
     input = (
-      <select id={q.key} className={control} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)}>
+      <select id={q.key} className={cn(control, warm)} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)}>
         <option value="">Choose…</option>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     );
   } else if (q.type === "long_text") {
-    input = <textarea id={q.key} className={cn(control, "min-h-20 py-2")} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)} />;
+    input = <textarea id={q.key} className={cn(control, "min-h-20 py-2", warm)} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)} />;
   } else {
     const kind = q.type === "phone" ? "tel" : q.type === "currency" ? "number" : q.type === "date" || q.type === "number" || q.type === "email" ? q.type : "text";
-    input = <input id={q.key} type={kind} inputMode={kind === "number" ? "decimal" : undefined} autoComplete="off" className={control} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)} />;
+    input = <input id={q.key} type={kind} inputMode={kind === "number" ? "decimal" : undefined} autoComplete="off" className={cn(control, warm)} value={value} disabled={readOnly} onChange={(e) => set(e.target.value)} />;
   }
   return (
     <Field label={q.label} htmlFor={q.key} required={q.required} hint={q.help || undefined}>
       {input}
+      <PrefillHint fv={fv} fieldKey={q.key} readOnly={readOnly} onConfirm={fromInterviewOnly ? () => setValue(q.key, heard ?? null) : undefined} />
     </Field>
   );
 }
@@ -242,10 +253,14 @@ function Coverage({ fieldKey, label, shown }: { fieldKey: string; label: string;
 }
 
 export function ApplicationStep() {
-  const { attempt, readOnly, setValue, goTo, markReviewed } = useWorkspace();
+  const { attempt, interview, readOnly, setValue, goTo, markReviewed } = useWorkspace();
   const values = attempt.values;
-  const required = new Set(attempt.requiredKeys);
+  const custom = attempt.fieldSet?.custom ?? [];
+  const required = new Set([...attempt.requiredKeys, ...custom.filter((q) => q.required).map((q) => q.key)]);
   const req = (key: string) => required.has(key);
+  // The field set's questions the interview already answered and nothing here holds yet (QA 2026-11-03).
+  const said = Object.fromEntries(Object.entries(interview?.answers ?? {}).map(([k, a]) => [k, a?.value ?? null]));
+  const heard = new Map(customPrefillFromInterview(said, custom.map((q) => q.key)).filter((v) => !hasContent(values[v.key])).map((v) => [v.key, v.value] as const));
   const sameAsInsured = values["owner.same_as_insured"]?.value !== false;
   const effectiveDateStored = FIELD.has(EFFECTIVE_DATE_KEY);
 
@@ -268,16 +283,27 @@ export function ApplicationStep() {
     owner: ["owner.same_as_insured", "cov.face_amount", "cov.monthly_premium", ...(sameAsInsured ? [] : ["owner.first_name", "owner.last_name", "owner.dob", "owner.relationship"])],
   };
   const filled = (key: string) => hasContent(values[key]) || (key === "owner.same_as_insured");
-  const unchecked = (key: string) => isPrefilled(values[key]) && !values[key]!.reviewed;
+  // A value carried in and not yet checked — stored, or shown from the interview until confirmed.
+  const unchecked = (key: string) => heard.has(key) || (isPrefilled(values[key]) && !values[key]!.reviewed);
   const progress = (keys: string[]) => {
     const needed = keys.filter((k) => req(k) || (!sameAsInsured && ["owner.first_name", "owner.last_name", "owner.relationship"].includes(k)));
     const done = needed.filter(filled).length;
     return { done, total: needed.length, complete: done === needed.length && !keys.some(unchecked) && keys.some((k) => hasContent(values[k])) };
   };
-  const pInsured = progress(groupKeys.insured);
-  const pAddress = progress(groupKeys.address);
+  const customIn = (groups: string[]) => custom.filter((q) => groups.includes(q.group));
+  // Each section counts the field set's own questions it holds too (QA 2026-11-03: "Insured · Complete
+  // 8 of 8" while the carrier's required driver's license number was empty).
+  const countKeys = {
+    insured: [...groupKeys.insured, ...customIn(["insured"]).map((q) => q.key)],
+    address: [...groupKeys.address, ...customIn(["addr", "contact"]).map((q) => q.key)],
+  };
+  const pInsured = progress(countKeys.insured);
+  const pAddress = progress(countKeys.address);
   const pOwner = progress(groupKeys.owner);
-  const toCheck = [...groupKeys.insured, ...groupKeys.address, ...groupKeys.owner].filter(unchecked);
+  const questions = customIn(["owner", "cov", "pay"]);
+  const toCheck = [...countKeys.insured, ...countKeys.address, ...groupKeys.owner, ...questions.map((q) => q.key)].filter(unchecked);
+  /** "They all look right": a stored value is marked checked; one shown from the interview is saved. */
+  const confirm = (key: string) => (heard.has(key) ? setValue(key, heard.get(key) ?? null) : markReviewed(key));
   // The field set's order for the Insured and Address sections (owner 2026-10-30); a field it does not
   // ask is left out. Height and weight share one cell, placed where the first of them comes.
   const layout = attempt.fieldSet;
@@ -294,9 +320,7 @@ export function ApplicationStep() {
   };
   // The agency's own questions sit in their section (Insured, Address and contact) at their place in the
   // set's order; those for owner, coverage or payment come together under "<carrier> questions".
-  const custom = layout?.custom ?? [];
-  const customIn = (groups: string[]) => custom.filter((q) => groups.includes(q.group));
-  for (const q of custom) insuredNode[q.key] = <QuestionInput key={q.key} q={q} />;
+  for (const q of custom) insuredNode[q.key] = <QuestionInput key={q.key} q={q} heard={heard.get(q.key)} />;
   const insuredOrder = [...new Set(orderedKeys(layout, [...groupKeys.insured, ...customIn(["insured"]).map((q) => q.key)]).map((k) => (k === "insured.weight_lb" ? "insured.height_in" : k)))];
   const addressNode: Record<string, ReactNode> = {
     "addr.line1": <Input key="addr.line1" fieldKey="addr.line1" label="Street" required={req("addr.line1")} />,
@@ -308,11 +332,10 @@ export function ApplicationStep() {
     "contact.phone": <Input key="contact.phone" fieldKey="contact.phone" required={req("contact.phone")} />,
     "contact.email": <Input key="contact.email" fieldKey="contact.email" required={req("contact.email")} />,
   };
-  for (const q of custom) addressNode[q.key] = <QuestionInput key={q.key} q={q} />;
+  for (const q of custom) addressNode[q.key] = <QuestionInput key={q.key} q={q} heard={heard.get(q.key)} />;
   const addressOrder = orderedKeys(layout, [...groupKeys.address, ...customIn(["addr", "contact"]).map((q) => q.key)]);
-  const questions = customIn(["owner", "cov", "pay"]);
-  const questionsDone = questions.filter((q) => q.required && hasContent(values[q.key])).length;
-  const questionsRequired = questions.filter((q) => q.required).length;
+  const questionsDone = questions.filter((q) => req(q.key) && hasContent(values[q.key])).length;
+  const questionsRequired = questions.filter((q) => req(q.key)).length;
 
   return (
     <section aria-label="Application record" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
@@ -324,7 +347,7 @@ export function ApplicationStep() {
         {!readOnly && toCheck.length > 0 && (
           <span className="flex flex-wrap items-center gap-2 text-sm text-[var(--body)]">
             {toCheck.length} value{toCheck.length === 1 ? "" : "s"} from the call still to check
-            <Button type="button" size="sm" variant="outline" className="border-[color-mix(in_srgb,var(--primary)_55%,transparent)] text-[var(--accent-ink)]" onClick={() => { for (const k of toCheck) markReviewed(k); }}>
+            <Button type="button" size="sm" variant="outline" className="border-[color-mix(in_srgb,var(--primary)_55%,transparent)] text-[var(--accent-ink)]" onClick={() => { for (const k of toCheck) confirm(k); }}>
               <Check aria-hidden="true" />They all look right
             </Button>
           </span>
@@ -368,8 +391,8 @@ export function ApplicationStep() {
       </FoldSection>
 
       {questions.length > 0 && (
-        <FoldSection heading={`${attempt.carrierName ?? "Carrier"} questions`} done={questionsDone} total={questionsRequired} complete={questionsDone === questionsRequired && questions.some((q) => hasContent(values[q.key]))} unit="required filled">
-          {questions.map((q) => <QuestionInput key={q.key} q={q} />)}
+        <FoldSection heading={`${attempt.carrierName ?? "Carrier"} questions`} done={questionsDone} total={questionsRequired} complete={questionsDone === questionsRequired && !questions.some((q) => unchecked(q.key)) && questions.some((q) => hasContent(values[q.key]))} unit="required filled">
+          {questions.map((q) => <QuestionInput key={q.key} q={q} heard={heard.get(q.key)} />)}
         </FoldSection>
       )}
 

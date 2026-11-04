@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { ItemDecide } from "@/components/app/book/needs-you/item-decide";
-import { ItemTabs } from "@/components/app/book/needs-you/item-tabs";
+import { ItemTabs, itemTab, type ItemTab } from "@/components/app/book/needs-you/item-tabs";
 import { RowAsSentTable } from "@/components/app/book/needs-you/row-as-sent";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -39,7 +39,7 @@ function waitsLine(detail: ItemDetail) {
  * the evidence, the choices its own API accepts, and what saving does — and the carrier's row as sent. Saving
  * opens the next item of the list it was opened from. Opening it writes nothing.
  */
-export default async function NeedsYouItemPage({ params, searchParams }: { params: Promise<{ kind: string; id: string }>; searchParams: Promise<{ from?: string }> }) {
+export default async function NeedsYouItemPage({ params, searchParams }: { params: Promise<{ kind: string; id: string }>; searchParams: Promise<{ from?: string; tab?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Needs you" description="Every decision your carrier files leave for a person." />;
   if (!actAsPagePermission(guard, "policies.view")) return <RoleGateNotice featureLabel="Needs you" detail="Decisions on your book are made by producers, bookkeepers and the account owner." />;
@@ -55,7 +55,7 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
   const [list, page] = await Promise.all([loadNeedsYou(scope), loadItemPage(scope, kind, id)]);
   const me = { userId: scope.userId, keeper: scope.keeper };
   const item = list.open.find((entry) => entry.kind === kind && entry.id === id) ?? null;
-  const { from: asked } = await searchParams;
+  const { from: asked, tab: askedTab } = await searchParams;
   // The list it was opened from; a status word cycles through the other status words.
   const fallback: Exclude<NeedsYouView, "closed"> = kind === "status-word" ? "insurvas" : scope.keeper ? "agency" : "mine";
   const chosen: Exclude<NeedsYouView, "closed"> = isNeedsYouView(asked) && asked !== "closed" && (scope.keeper || asked === "mine") ? asked : fallback;
@@ -77,12 +77,17 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
   const meta = KIND_META[kind];
   const source = page.row ? `row ${page.row.rowNumber} of ${page.row.fileName}` : meta.source;
   const waits = waitsLine(page.detail);
+  const tab = itemTab(askedTab, Boolean(page.row));
+  const tabHref = (next: ItemTab) => `${item.href}?from=${from}${next === "row" ? "&tab=row" : ""}`;
 
   return (
     <DataInPage
       step="needs-you"
       title={item.about}
-      lead={<><StatusChip tone={item.tone}>{meta.label}</StatusChip><span className="text-sm text-muted-foreground">{source}</span></>}
+      chip={<StatusChip tone={item.tone}>{meta.label}</StatusChip>}
+      facts={source}
+      // The item's parts on the title line (UI-CONSISTENCY §8a), as the other steps' tabs are.
+      lead={<ItemTabs current={tab} hasRow={Boolean(page.row)} href={tabHref} />}
       actions={nextHref ? <Button asChild variant="outline"><Link href={nextHref}>Skip</Link></Button> : undefined}
     >
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
@@ -92,10 +97,9 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
         <span>{item.why}</span>
       </div>
       {waits && <p className="m-0 text-sm text-muted-foreground">{waits}</p>}
-      <ItemTabs
-        decide={<ItemDecide detail={page.detail} nextHref={nextHref} listHref={listHref} readOnly={guard.entitlement.access === "read_only"} />}
-        row={page.row ? <RowAsSentTable row={page.row} /> : null}
-      />
+      <div id="needs-you-item-panel" role="tabpanel" aria-labelledby={`needs-you-item-panel-tab-${tab}`} className="flex min-w-0 flex-col gap-4">
+        {tab === "row" && page.row ? <RowAsSentTable row={page.row} /> : <ItemDecide detail={page.detail} nextHref={nextHref} listHref={listHref} readOnly={guard.entitlement.access === "read_only"} />}
+      </div>
     </DataInPage>
   );
 }

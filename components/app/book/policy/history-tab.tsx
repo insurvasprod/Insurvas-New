@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
@@ -10,11 +9,13 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { filterHistory, historyFields, type PolicyHistoryRow } from "@/lib/ingestion/policyPage";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 
+import { ClickRow } from "./click-row";
 import { ExportHistory } from "./policy-islands";
 
 /**
  * Policy › History (canvas board BobPolicy): every field from what to what, with the file and row that
- * changed it, newest first. Filter by field; Export saves the rows on screen.
+ * changed it, newest first. Filter by field; Export saves the rows on screen. A row with a source opens that
+ * file row (board 22).
  */
 export function PolicyHistoryTab({ rows, policyNumber, truncated }: { rows: PolicyHistoryRow[]; policyNumber: string; truncated: boolean }) {
   const [field, setField] = useState("");
@@ -38,22 +39,24 @@ export function PolicyHistoryTab({ rows, policyNumber, truncated }: { rows: Poli
         <EmptyState title="No changes yet" hint="Each carrier file that changes a field of this policy adds a row here, with the file and row that changed it." />
       ) : (
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-          <thead><tr><th className="w-[120px]">Date</th><th className="w-[180px]">Field</th><th>Change</th><th>Because of</th></tr></thead>
+          <thead><tr><th className="w-[120px]">Date</th><th className="w-[180px]">Field</th><th>Change</th><th>Because of</th><th className="w-8"><span className="sr-only">Open</span></th></tr></thead>
           <PagedBody>
-            {shown.map((row, index) => (
-              <tr key={`${row.date}-${row.field}-${index}`}>
-                <td className="tabular-nums text-muted-foreground">{fileDay(row.date)}</td>
-                <td>{row.fieldLabel}</td>
-                <td>{row.from !== null && <span className="text-muted-foreground">{row.from} → </span>}<strong className="font-semibold text-foreground">{row.to}</strong></td>
-                <td className="max-w-[360px] truncate">
-                  {row.source ? (
-                    <Link href={row.source.rowNumber ? rowHref(row.source.fileId, row.source.rowNumber) : fileHref(row.source.fileId)} className="text-[var(--accent-ink)] hover:underline" title={row.source.fileName ?? undefined}>
-                      {row.source.fileName ?? "The file"}{row.source.rowNumber ? ` · row ${row.source.rowNumber}` : ""}
-                    </Link>
-                  ) : <span className="text-muted-foreground">—</span>}
-                </td>
-              </tr>
-            ))}
+            {shown.map((row, index) => {
+              const cells = (
+                <>
+                  <td className="tabular-nums text-muted-foreground">{fileDay(row.date)}</td>
+                  <td>{row.fieldLabel}</td>
+                  <td>{row.from !== null && <span className="text-muted-foreground">{row.from} → </span>}<strong className="font-semibold text-foreground">{row.to}</strong></td>
+                  <td className="max-w-[360px] truncate text-muted-foreground" title={row.source?.fileName ?? undefined}>
+                    {row.source ? <>{row.source.fileName ?? "The file"}{row.source.rowNumber ? ` · row ${row.source.rowNumber}` : ""}</> : "—"}
+                  </td>
+                </>
+              );
+              const key = `${row.date}-${row.field}-${index}`;
+              return row.source
+                ? <ClickRow key={key} href={row.source.rowNumber ? rowHref(row.source.fileId, row.source.rowNumber) : fileHref(row.source.fileId)} label={`Open ${row.source.fileName ?? "the file"}${row.source.rowNumber ? `, row ${row.source.rowNumber}` : ""}`}>{cells}</ClickRow>
+                : <tr key={key}>{cells}<td /></tr>;
+            })}
           </PagedBody>
         </table>
       )}

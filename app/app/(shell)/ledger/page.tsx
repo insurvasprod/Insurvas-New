@@ -6,7 +6,9 @@ import { hasFeature, isDisabledForTenant } from "@/lib/entitlements/types";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { ViewTabs } from "@/components/app/book-of-business-views";
 import { CarrierAccounts } from "@/components/app/carrier-accounts";
-import { CarrierLedger } from "@/components/app/carrier-ledger";
+import { CarrierLedger, type LedgerLine } from "@/components/app/carrier-ledger";
+import { LEDGER_SLOT } from "@/components/app/commissions/slots";
+import { StepSlotTarget } from "@/components/app/step-frame/step-slot";
 import { LedgerViews } from "@/components/app/ledger-statement-sections";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementImportButton } from "@/components/app/statement-import";
@@ -18,6 +20,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { ACCOUNTS_PENDING_MESSAGE, loadAccounts } from "@/lib/ingestion/carrierAccountsStore";
 import { LEDGER_PENDING_MESSAGE, loadLedger, statementLinesAsLedger } from "@/lib/ingestion/commissionLedgerStore";
 import { getCommissionLedger } from "@/lib/ledger/service";
+import { ledgerNames } from "@/lib/commissions/ledgerNames";
 import { STATEMENT_SCHEMA_PENDING_MESSAGE, type StatementCarrierOption, type StatementMapping } from "@/lib/ledger/statementConstants";
 import { reconcileStatements, statementTotals } from "@/lib/ledger/statementMatch";
 import { getSavedStatementMappings, getStatementLedger, listStatementCarriers } from "@/lib/ledger/statementService";
@@ -44,7 +47,7 @@ import { hasTenantPermission, roleCanViewCommission } from "@/lib/tenantAuth/per
 const wholeMoney = (cents: number) => `${cents < 0 ? "−" : ""}$${Math.round(Math.abs(cents) / 100).toLocaleString("en-US")}`;
 const plural = (count: number, one: string, many: string) => `${count.toLocaleString("en-US")} ${count === 1 ? one : many}`;
 
-export default async function LedgerPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string; source?: string }> }) {
+export default async function LedgerPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string; source?: string; type?: string }> }) {
   const guard = await guardPage("commission_ledger");
   if (!guard.entitled) {
     return (
@@ -63,14 +66,16 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   // Carrier accounts are the agency's running balances with each carrier: owners and bookkeepers only.
   const seesAccounts = guard.role === "owner" || guard.role === "bookkeeper";
   const view = params.view === "accounts" && seesAccounts ? "accounts" : params.view === "expected" ? "expected" : "lines";
-  const sourceTabs = (count?: number, showExpected = true) => (
+  // The same three tabs on the title line of every view (UI-CONSISTENCY §8a): Lines · Carrier accounts (owner
+  // and bookkeeper) · Expected. Expected keeps its tab while empty; its view says why.
+  const sourceTabs = (
     <ViewTabs
       label="Ledger views"
       active={view}
       tabs={[
-        { key: "lines", label: "Lines", count, href: "/app/ledger" },
+        { key: "lines", label: "Lines", href: "/app/ledger" },
         ...(seesAccounts ? [{ key: "accounts", label: "Carrier accounts", href: "/app/ledger?view=accounts" }] : []),
-        ...(showExpected || view === "expected" ? [{ key: "expected", label: "Expected", href: "/app/ledger?view=expected" }] : []),
+        { key: "expected", label: "Expected", href: "/app/ledger?view=expected" },
       ]}
     />
   );
@@ -79,7 +84,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   if (view === "accounts") {
     const accounts = await loadAccounts(guard.context.tenantId);
     return (
-      <CommissionsPage step="ledger" lead={sourceTabs()}>
+      <CommissionsPage step="ledger" lead={sourceTabs}>
         {accounts.available
           ? <CarrierAccounts orphanDays={accounts.orphanDays} statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
           : <Callout tone="warning" title={<>{ACCOUNTS_PENDING_MESSAGE}</>} />}
@@ -123,7 +128,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const isOwner = guard.role === "owner";
   const importBlocked = importBlockedFor(statements.available);
   const importControl = importBlocked ? (
-    <Button type="button" disabled title={importBlocked}>Import statement</Button>
+    <Button type="button" disabled title={importBlocked}>Import a statement</Button>
   ) : (
     <StatementImportButton carriers={carriers} savedMappings={savedMappings} autoOpen={importParam === "1"} />
   );
@@ -144,8 +149,9 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   const expectedSummary = `${wholeMoney(totals.grossCents)} gross · ${wholeMoney(totals.advancesCents)} advanced · ${wholeMoney(totals.chargebacksCents)} charged back · ${totals.exposureCents > 0 ? `${wholeMoney(totals.exposureCents)} still exposed` : "nothing exposed"} · derived from ${plural(ledger.policiesRead, "policy", "policies")}`;
 
   const headerActions = (
-    // Statements is the step before on the rail (2026-11-02), so only the import stays here.
-    <>{importControl}</>
+    // Statements is the step before on the rail (2026-11-02), so only the import stays here. Board 12 (2026-11-03):
+    // More (Export CSV; the lines fill it through LEDGER_SLOT), then the one primary. The views are tabs.
+    <>{view === "lines" ? <StepSlotTarget id={LEDGER_SLOT} /> : null}{importControl}</>
   );
 
   const notices = (
@@ -164,13 +170,21 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
 
   if (view === "lines") {
     // Newest statement first, whichever source a line came from.
-    const lines = [...(book?.available ? book.entries : []), ...(handLines ?? [])].sort((a, b) => String(b.statementDate ?? b.transactionDate ?? "").localeCompare(String(a.statementDate ?? a.transactionDate ?? "")));
+    const sorted = [...(book?.available ? book.entries : []), ...(handLines ?? [])].sort((a, b) => String(b.statementDate ?? b.transactionDate ?? "").localeCompare(String(a.statementDate ?? a.transactionDate ?? "")));
+    // Board 12: the Client and Agent of each line, when the data has them (a column empty on every row is not drawn).
+    const names = await ledgerNames(guard.context.tenantId, sorted);
+    const insured = new Map(reported.map((entry) => [`hand:${entry.id}`, entry.insuredName]));
+    const lines: LedgerLine[] = sorted.map((row) => ({
+      ...row,
+      clientName: row.source === "hand" ? insured.get(row.id)?.trim() || null : row.account ? null : names.clientOf(row.carrierId, row.policyNumber),
+      agentName: row.account ? null : names.agentOf(row.carrierId, row.policyNumber, row.agentUserId),
+    }));
     return (
-      <CommissionsPage step="ledger" lead={sourceTabs(lines.length, showExpected)} actions={headerActions}>
+      <CommissionsPage step="ledger" lead={sourceTabs} actions={headerActions}>
         {notices}
         {book && !book.available && <Callout tone="warning" title={<>{LEDGER_PENDING_MESSAGE}</>} />}
         {book?.available && book.truncated && <Callout tone="warning" title={<>Showing the newest {book.cap.toLocaleString("en-US")} lines from carrier files; older lines, and their amounts, are left out of the list and the figures here.</>} />}
-        <CarrierLedger entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} />
+        <CarrierLedger key={`${params.type ?? ""}|${params.source ?? ""}|${params.view ?? ""}`} entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} initialType={params.type ?? ""} />
       </CommissionsPage>
     );
   }
@@ -195,7 +209,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   );
 
   return (
-    <CommissionsPage step="ledger" lead={sourceTabs(undefined, showExpected)} actions={headerActions}>
+    <CommissionsPage step="ledger" lead={sourceTabs} actions={headerActions}>
       {!showExpected ? (
         <>
           {notices}

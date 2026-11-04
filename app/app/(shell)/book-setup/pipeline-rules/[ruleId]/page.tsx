@@ -51,15 +51,11 @@ export default async function PipelineRulePage({ params, searchParams }: { param
     <DataInPage
       step="setup"
       title={rule.name}
-      lead={
-        <span className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <ModeChip mode={rule.mode} enabled={rule.enabled} />
-          <span>{EVENT_LABELS[v.event].label} · {v.carrierIds.length ? v.carrierIds.map((id) => carrierName.get(id) ?? "a carrier").join(", ") : "Every carrier"} · version {rule.currentVersion}{rule.liveSince ? ` · live since ${rule.liveSince.slice(0, 10)}` : ""}</span>
-        </span>
-      }
+      chip={<ModeChip mode={rule.mode} enabled={rule.enabled} />}
+      facts={<span>{EVENT_LABELS[v.event].label} · {v.carrierIds.length ? v.carrierIds.map((id) => carrierName.get(id) ?? "a carrier").join(", ") : "Every carrier"} · version {rule.currentVersion}{rule.liveSince ? ` · live since ${rule.liveSince.slice(0, 10)}` : ""}</span>}
+      lead={<RuleTabs active={tab} base={`/app/book-setup/pipeline-rules/${rule.id}`} counts={{ forecast: view.forecast.length, versions: view.versions.length }} />}
       actions={<RuleActions ruleId={rule.id} name={rule.name} mode={rule.mode} enabled={rule.enabled} forecast={{ days: 7, wouldMoves: view.forecast.length, right, wrong: wrong.length }} readOnly={readOnly} />}
     >
-      <RuleTabs active={tab} counts={{ forecast: view.forecast.length, versions: view.versions.length }} />
       {tab === "rule" && (
         <RuleForm
           key={v.id}

@@ -19,7 +19,7 @@ const ids = z.array(uuid).min(1, "Choose at least one item.").max(200);
 
 const body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("run") }).strict(),
-  z.object({ action: z.literal("set_status"), id: uuid, status: z.enum(["open", "dismissed", "resolved"]), note: z.string().trim().max(2000).nullable() }).strict(),
+  z.object({ action: z.literal("set_status"), id: uuid, status: z.enum(["open", "dismissed", "resolved", "accepted"]), note: z.string().trim().max(2000).nullable() }).strict(),
   z.object({ action: z.literal("preview_letter"), ids, recipient: z.string().trim().max(1000).nullable() }).strict(),
   z.object({ action: z.literal("draft_dispute"), ids, recipient: z.string().trim().max(1000).nullable() }).strict(),
   z.object({ action: z.literal("mark_sent"), dispute_id: uuid, via: z.enum(["email", "portal", "post"]) }).strict(),

@@ -1,9 +1,13 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { z } from "zod";
 
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { audit } from "@/lib/audit/log";
 import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
+import { QueueError } from "@/lib/ingestion/exceptionQueuesStore";
 import { isItemId, isNeedsYouKind } from "@/lib/needsYou/kinds";
+import { answerUnknownPolicy, UNKNOWN_POLICY_ANSWERS } from "@/lib/needsYou/raise";
 import { loadItemPage } from "@/lib/needsYou/store";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -35,4 +39,37 @@ export async function GET(request: NextRequest) {
   const page = await loadItemPage(scope, kind, id);
   if (!page) return NextResponse.json({ error: "Someone decided it, a newer file answered it, or it isn't yours to see.", closed: true }, { status: 404 });
   return NextResponse.json({ ok: true, detail: page.detail, row: page.row, readOnly: entitlement?.access === "read_only" }, { headers: { "Cache-Control": "no-store" } });
+}
+
+const answerRequest = z.object({
+  action: z.literal("answer_unknown_policy"),
+  id: z.string().min(1).max(600),
+  answer: z.enum(UNKNOWN_POLICY_ANSWERS),
+  note: z.string().trim().max(2000).nullable().optional(),
+}).strict();
+
+/**
+ * QA 2026-11-03 · "Paid on a policy we don't have" has no row of its own: an answer raises its orphan_commission
+ * queue item and resolves it with the queue's own answer (lib/needsYou/raise.ts). The owner and bookkeepers only,
+ * as the item is theirs; audited as the Exceptions route audits a resolution.
+ */
+export async function POST(request: NextRequest) {
+  const auth = await requireFeatureRole("statement_ingestion", ["owner", "bookkeeper"] as const, { write: true });
+  if (auth instanceof NextResponse) return auth;
+  const refused = await refuseNarrowInAgency(auth.context, "Needs you");
+  if (refused) return refused;
+  const parsed = answerRequest.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Check the request and try again." }, { status: 400 });
+  const body = parsed.data;
+  if (!isItemId("unknown-policy", body.id)) return NextResponse.json({ error: "Choose an item." }, { status: 400 });
+  const { tenantId, userId } = auth.context;
+  try {
+    const done = await answerUnknownPolicy({ tenantId, userId }, body.id, body.answer, body.note ?? null);
+    await audit({ actorType: "tenant", actorId: userId, action: done.resolution === "not_mine" ? "queue_item.handed_on" : "queue_item.resolved", targetType: "queue_item", targetId: done.itemId, metadata: { tenantId, queueType: done.queueType, resolution: done.resolution, ref: done.ref, raisedFrom: "needs_you.unknown_policy" }, request });
+    return NextResponse.json({ ok: true, id: done.itemId });
+  } catch (error) {
+    if (error instanceof QueueError) return NextResponse.json({ error: error.message }, { status: error.status });
+    console.error("[needs-you] answer_unknown_policy", error);
+    return NextResponse.json({ error: "That could not be saved. Try again." }, { status: 500 });
+  }
 }

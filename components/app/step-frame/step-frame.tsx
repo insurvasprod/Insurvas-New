@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import { PageHeader } from "@/components/ui/page-header";
+import type { Crumb } from "@/components/ui/breadcrumbs";
 import { StepRail, type RailStep, type RailWaiting } from "@/components/app/step-frame/step-rail";
 
 /**
@@ -12,8 +13,10 @@ import { StepRail, type RailStep, type RailWaiting } from "@/components/app/step
  * The caller decides which steps this person may open — each by the rule its own route applies — and
  * reads the rail's collapsed cookie; this only draws.
  */
-export function StepFrame({ title, titleInfo, meta, rail, lead, actions, children }: {
+export function StepFrame({ title, titleInfo, meta, rail, lead, actions, breadcrumbs, children }: {
   title: string;
+  /** A record's own trail when its parent is a record too (a row: Files › its file › Row N); else the page trail. */
+  breadcrumbs?: Crumb[];
   /** An (i) beside the title, for a word the page cannot do without (Statements: what a carrier statement is). */
   titleInfo?: ReactNode;
   /** One quiet line under the title: a record's facts on a detail page (round 3, owner 2026-11-02). */
@@ -28,7 +31,7 @@ export function StepFrame({ title, titleInfo, meta, rail, lead, actions, childre
   return (
     // One column on a phone (minmax(0,1fr), so the rail's chip row scrolls instead of widening the page).
     <div data-step-frame className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
-      <PageHeader title={title} titleInfo={titleInfo} meta={meta} lead={lead} actions={actions} className="lg:col-span-2 lg:pb-6" />
+      <PageHeader title={title} titleInfo={titleInfo} meta={meta} lead={lead} actions={actions} breadcrumbs={breadcrumbs} className="lg:col-span-2 lg:pb-6" />
       <div className="lg:col-start-1 lg:row-start-2 lg:min-h-0">
         <StepRail label={rail.label} cookie={rail.cookie} countsUrl={rail.countsUrl} waiting={rail.waiting} steps={rail.steps} step={rail.step} initialCollapsed={rail.collapsed} foot={rail.foot} />
       </div>

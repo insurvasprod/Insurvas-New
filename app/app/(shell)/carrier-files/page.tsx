@@ -15,7 +15,7 @@ import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
-import { TableCard } from "@/components/ui/table-card";
+import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { BUCKET_PENDING_MESSAGE } from "@/lib/ingestion/bucketStore";
 import { fileDay } from "@/lib/ingestion/constants";
 import { listFindings } from "@/lib/ingestion/dailyRunStore";
@@ -124,13 +124,14 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   ];
   const action = problems.find((p) => p.action)?.action;
 
+  // The table foundation (§6b): a page of late files fitted to the screen's foot, the shared Pager in the footer.
   const missingTable = (
-    <TableCard toolbar={chips}>
+    <PagedTableCard toolbar={chips} total={missing.missing.length} noun={missing.missing.length === 1 ? "late file" : "late files"} suffix="most late first">
       {!missing.available ? <EmptyState title="Missing files are not available yet" hint={BUCKET_PENDING_MESSAGE} />
         : missing.missing.length === 0 ? <EmptyState title="Nothing is late" hint="Every carrier with a cadence has sent its file on time." /> : (
           <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
             <thead><tr><th className="w-[200px]">Carrier</th><th className="w-[170px]">Cadence</th><th className="w-[200px]">Expected</th><th>Why</th><th className="w-[120px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>
+            <PagedBody>
               {missing.missing.map((item) => (
                 <tr key={item.id}>
                   <td><span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{item.carrierName}</span></td>
@@ -140,10 +141,10 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
                   <td className="text-right">{upload_({ label: "Upload", size: "sm", variant: "outline", preset: { carrierId: item.carrierId } })}</td>
                 </tr>
               ))}
-            </tbody>
+            </PagedBody>
           </table>
         )}
-    </TableCard>
+    </PagedTableCard>
   );
 
   return (
@@ -187,6 +188,7 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
                 stages={stages ?? undefined}
                 show={filter === "needs" || filter === "failed" ? filter : undefined}
                 chips={chips}
+                also={filter === "needs" && openFindings ? `and ${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found, below` : undefined}
                 emptyTitle={list.available ? "No carrier file received yet" : "Carrier files are not available yet"}
                 emptyHint={list.available ? "Upload a policy or commission file, email one to the agency's address, or have a script drop it into the bucket." : "Files appear here once the update is applied."}
               />

@@ -1,8 +1,10 @@
 "use client";
 
 import { Fragment, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { ClickRow } from "@/components/app/book/policy/click-row";
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -13,6 +15,7 @@ import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { AGENT_INFO, AGENTS, type AgentName } from "@/lib/ingestion/agents";
 import { FILE_STAGES, STAGE_LABELS } from "@/lib/ingestion/dailyRun";
 import type { FindingRow, RunRow, StageRow } from "@/lib/ingestion/dailyRunStore";
+import { findingHref } from "@/lib/ingestion/trace";
 import { notify } from "@/lib/notify";
 
 /**
@@ -122,24 +125,10 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
   const [refreshing, startRefresh] = useTransition();
   const [agent, setAgent] = useState("");
   const [status, setStatus] = useState("open");
-  const [busy, setBusy] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const visible = useMemo(() => findings.filter((f) => (!agent || f.agent === agent) && (!status || f.status === status)), [findings, agent, status]);
   const pageSize = useFittingPageSize(420, 45);
   const shown = paginate(visible, page, pageSize);
-
-  async function review(id: string, verdict: "approved" | "rejected") {
-    setBusy(id);
-    try {
-      await post({ action: "review", id, verdict });
-      notify.done(verdict === "approved" ? "Marked right." : "Marked wrong. It counts against the agent's accuracy.");
-      router.refresh();
-    } catch (error) {
-      notify.block(error instanceof Error ? error.message : "The review could not be saved.");
-    } finally {
-      setBusy(null);
-    }
-  }
 
   const clear = () => { setAgent(""); setStatus("open"); setPage(1); };
   return (
@@ -168,20 +157,18 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
               <thead><tr><th className="w-[160px]">Agent</th><th>What it saw</th><th className="w-[110px]">Severity</th><th className="w-[130px]">When</th><th className="w-[200px] text-right">Was it right?</th></tr></thead>
               <tbody>
                 {shown.rows.map((f) => (
-                  <tr key={f.id}>
+                  <ClickRow key={f.id} href={findingHref(f.id)} label={`Open the problem: ${f.reasoning}`}>
                     <td><span className="block font-semibold text-foreground">{f.agentLabel}</span><span className="block text-xs text-muted-foreground">{f.modelId ? `${f.modelId} · prompt ${f.promptVersion}` : "No model: a fixed check"}</span></td>
                     <td><span className="block text-foreground">{f.reasoning}</span>{f.fileName && <span className="block text-xs text-muted-foreground">{f.fileName}</span>}{f.confidence !== null && <span className="block text-xs text-muted-foreground">Confidence {Math.round(f.confidence * 100)}%</span>}</td>
                     <td><StatusChip tone={SEVERITY_TONE[f.severity] ?? "neutral"}>{f.severity === "blocking" ? "Blocking" : f.severity === "warning" ? "Warning" : "Note"}</StatusChip></td>
                     <td className="text-xs tabular-nums">{when(f.createdAt)}</td>
+                    {/* Round 5 (walk 2026-11-03): the question is on the problem's own page; the list only links to it. */}
                     <td className="text-right">
-                      {f.status === "open" && canReview ? (
-                        <span className="inline-flex gap-2">
-                          <Button type="button" variant="outline" disabled={busy !== null} onClick={() => void review(f.id, "approved")}>Right</Button>
-                          <Button type="button" variant="outline" disabled={busy !== null} onClick={() => void review(f.id, "rejected")}>Wrong</Button>
-                        </span>
-                      ) : <span className="text-xs text-muted-foreground">{STATUS_WORD[f.status] ?? f.status}</span>}
+                      {f.status === "open" && canReview
+                        ? <Link href={findingHref(f.id)} className="font-medium text-[var(--accent-ink)] hover:underline">Review</Link>
+                        : <span className="text-xs text-muted-foreground">{STATUS_WORD[f.status] ?? f.status}</span>}
                     </td>
-                  </tr>
+                  </ClickRow>
                 ))}
               </tbody>
             </table>

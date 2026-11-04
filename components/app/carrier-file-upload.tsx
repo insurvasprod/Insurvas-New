@@ -19,6 +19,15 @@ type Outcome =
   | { outcome: "registered"; fileId: string; status: "received" | "failed"; errorDetail: string | null; supersededFileId: string | null }
   | { outcome: "skipped" | "restored"; fileId: string };
 
+/** The day's current file an upload would replace. */
+type Clash = { id: string; name: string; receivedAt: string };
+
+class ClashError extends Error {
+  constructor(readonly existing: Clash) {
+    super("A file for this carrier, type and day is already in use.");
+  }
+}
+
 /** A file's carrier, type, day and agency, filled in for a corrected file or a missing one. */
 export type UploadPreset = { carrierId?: string | null; fileType?: CarrierFileType | null; fileDate?: string | null; agency?: string | null };
 
@@ -61,9 +70,11 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [done, setDone] = useState<Outcome | null>(null);
+  // QA 2026-11-03: the day's file this upload would replace, asked about before anything is stored.
+  const [clash, setClash] = useState<Clash | null>(null);
 
   function reset() {
-    setFile(null); setCarrierId(preset?.carrierId ?? ""); setFileType(preset?.fileType ?? ""); setFileDate(preset?.fileDate ?? ""); setAgency(preset?.agency ?? ""); setProblem(null); setDone(null);
+    setFile(null); setCarrierId(preset?.carrierId ?? ""); setFileType(preset?.fileType ?? ""); setFileDate(preset?.fileDate ?? ""); setAgency(preset?.agency ?? ""); setProblem(null); setDone(null); setClash(null);
   }
 
   function choose(next: File | undefined) {
@@ -80,13 +91,15 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
     if (filled.fileDate && !preset?.fileDate) setFileDate(filled.fileDate);
   }
 
-  async function submit() {
+  async function submit(mode: "ask" | "replace" | "separate" = "ask") {
+    const replace = mode === "replace";
     if (!file) return setProblem("Choose a file to upload.");
     if (!carrierId) return setProblem("Choose the carrier.");
     if (!fileType) return setProblem("Choose whether this is a policy file or a commission file.");
     if (!fileDate) return setProblem("Enter the file's date.");
     setBusy(true);
     setProblem(null);
+    setClash(null);
     const send = async () => {
       const form = new FormData();
       form.set("file", file);
@@ -94,8 +107,13 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
       form.set("file_type", fileType);
       form.set("file_date", fileDate);
       if (agency.trim()) form.set("agency", agency.trim());
+      // A preset is "Replace with a corrected file": replacing is the point of it.
+      if (replace || preset?.fileDate) form.set("replace", "yes");
+      // A different commission statement from the same day: kept beside it (20261103300000).
+      else if (mode === "separate") form.set("replace", "no");
       const response = await fetch("/api/app/carrier-files", { method: "POST", body: form });
-      const data = (await response.json().catch(() => ({}))) as Outcome & { error?: string };
+      const data = (await response.json().catch(() => ({}))) as Outcome & { error?: string; code?: string; existing?: Clash };
+      if (response.status === 409 && data.code === "would_replace" && data.existing) throw new ClashError(data.existing);
       if (!response.ok) throw new Error(data.error ?? "The file could not be uploaded.");
       return data;
     };
@@ -107,12 +125,14 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
         done: (result) => result.outcome !== "registered" ? "Same file as before · skipped, nothing changed"
           : result.status === "failed" ? { title: "Received, but it cannot be read", treatment: "warn", detail: result.errorDetail ?? undefined }
           : `Uploaded ${file.name}`,
+        // A refusal, and a clash (a question in the dialog), stay in the dialog: no failure toast.
         fail: null,
       });
       setDone(data);
       router.refresh();
     } catch (reason) {
-      setProblem(reason instanceof Error ? reason.message : "The file could not be uploaded.");
+      if (reason instanceof ClashError) setClash(reason.existing);
+      else setProblem(reason instanceof Error ? reason.message : "The file could not be uploaded.");
     } finally {
       setBusy(false);
     }
@@ -140,6 +160,13 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
               ) : (
                 <p className="text-[var(--body)]">Received {FILE_TYPE_LABELS[fileType as CarrierFileType].toLowerCase()} file from {carrierName}, dated {fileDay(fileDate)}. It is read in the next few seconds and shows in the list.{done.supersededFileId ? " It replaces the earlier file for that day, which is kept." : ""}</p>
               )}
+            </div>
+          ) : clash ? (
+            <div role="alert" className="grid gap-2 text-sm">
+              <p className="m-0 font-medium text-[var(--ink)]">Is this a corrected copy of {clash.name}?</p>
+              <p className="m-0 text-[var(--body)]">{fileType === "commissions"
+                ? "Replacing takes that file's lines out of the books (it stays listed). A different statement is kept beside it."
+                : <>One {FILE_TYPE_LABELS[fileType as CarrierFileType].toLowerCase()} file counts per day: replacing takes that file&apos;s lines out of the books (it stays listed). A different file? Use the date printed on it.</>}</p>
             </div>
           ) : (
             <div className="grid gap-4 text-sm">
@@ -180,6 +207,12 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
                 {openWhenDone
                   ? <Button type="button" onClick={() => { const id = done.fileId; setOpen(false); reset(); if (id) router.push(fileHref(id)); }}>Open the file</Button>
                   : <Button type="button" onClick={() => { setOpen(false); reset(); }}>Done</Button>}
+              </>
+            ) : clash ? (
+              <>
+                <Button type="button" variant="outline" disabled={busy} onClick={() => setClash(null)}>{fileType === "commissions" ? "Change the date" : "No, change the date"}</Button>
+                {fileType === "commissions" && <Button type="button" variant="outline" disabled={busy} onClick={() => void submit("separate")}>It&apos;s a different statement</Button>}
+                <Button type="button" disabled={busy} onClick={() => void submit("replace")}>{busy ? "Uploading…" : "Yes, it replaces it"}</Button>
               </>
             ) : (
               <>

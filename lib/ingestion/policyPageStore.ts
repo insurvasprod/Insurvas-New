@@ -48,7 +48,15 @@ async function fileNames(tenantId: string, ids: Array<string | null | undefined>
 
 // ─── the keys every tab hangs from ──────────────────────────────────────────────────────────────
 
-export type PolicyKeys = { applicationId: string | null; caseId: string | null; leadId: string | null; contactId: string | null; leadName: string | null };
+export type PolicyKeys = {
+  applicationId: string | null; caseId: string | null; leadId: string | null; contactId: string | null; leadName: string | null;
+  /** The current link's target and method (showsProvisional), or null when the policy is not linked. */
+  link: { type: string | null; method: string | null } | null;
+  /** The sale behind the policy (its application's case, else its Daily deal flow sale): where it came from and who sold it. */
+  sale: { source: string | null; date: string | null; agentUserId: string | null; agentName: string | null } | null;
+  /** Who the carrier's writing number maps to (carrier_agent_map, through policy_current.agent_user_id). */
+  carrierAgent: { userId: string | null; name: string | null };
+};
 
 /**
  * The policy's application, case, lead and client, by the same visibility as loadPolicy: a producer only
@@ -56,31 +64,42 @@ export type PolicyKeys = { applicationId: string | null; caseId: string | null; 
  * is not in this viewer's book.
  */
 export async function policyKeys(viewer: Viewer, carrierId: string, policyNumber: string): Promise<PolicyKeys | null> {
-  let query = db().from("policy_current").select("application_id, contact_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber);
+  let query = db().from("policy_current").select("application_id, contact_id, agent_user_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber);
   if (viewer.role === "producer") query = query.eq("agent_user_id", viewer.userId);
   const { data: row, error } = await scopeQuery(query, "agent_user_id", viewer.scope ?? null).maybeSingle();
   if (error || !row) return null;
   let leadId: string | null = null;
   let caseId: string | null = null;
+  let sale: { source: string | null; date: string | null; agentUserId: string | null } | null = null;
+  const { data: link } = await db().from("policy_match").select("matched_to_type, matched_to_id, method").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).is("superseded_by_id", null).maybeSingle();
   if (row.application_id) {
-    const { data: app } = await db().from("tenant_applications").select("lead_id, case_id").eq("tenant_id", viewer.tenantId).eq("id", row.application_id).maybeSingle();
+    const { data: app } = await db().from("tenant_applications").select("lead_id, case_id, submitted_at, created_at").eq("tenant_id", viewer.tenantId).eq("id", row.application_id).maybeSingle();
     leadId = app?.lead_id ?? null;
     caseId = app?.case_id ?? null;
-  }
-  if (!leadId) {
-    // A policy linked to a Daily deal flow sale: the sale's lead.
-    const { data: link } = await db().from("policy_match").select("matched_to_type, matched_to_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).is("superseded_by_id", null).maybeSingle();
-    if (link?.matched_to_type === "deal_flow" && link.matched_to_id) {
-      const { data: deal } = await db().from("deal_flow").select("lead_id").eq("tenant_id", viewer.tenantId).eq("id", link.matched_to_id).maybeSingle();
-      leadId = deal?.lead_id ?? null;
+    if (caseId) {
+      // AG-1.4 credits the application to whoever opened its case: the same person here.
+      const { data: c } = await db().from("tenant_application_cases").select("source, opened_by").eq("tenant_id", viewer.tenantId).eq("id", caseId).maybeSingle();
+      if (c) sale = { source: c.source ?? null, date: app?.submitted_at ?? app?.created_at ?? null, agentUserId: c.opened_by ?? null };
     }
+  }
+  if (!leadId && link?.matched_to_type === "deal_flow" && link.matched_to_id) {
+    // A policy linked to a Daily deal flow sale: the sale's lead, and who worked it.
+    const { data: deal } = await db().from("deal_flow").select("lead_id, source, local_date, worked_by").eq("tenant_id", viewer.tenantId).eq("id", link.matched_to_id).maybeSingle();
+    leadId = deal?.lead_id ?? null;
+    if (deal) sale = { source: deal.source ?? null, date: deal.local_date ?? null, agentUserId: deal.worked_by ?? null };
   }
   let leadName: string | null = null;
   if (leadId) {
     const { data: lead } = await db().from("agent_leads").select("values").eq("tenant_id", viewer.tenantId).eq("id", leadId).maybeSingle();
     leadName = leadPersonName(lead?.values);
   }
-  return { applicationId: row.application_id ?? null, caseId, leadId, contactId: row.contact_id ?? null, leadName };
+  const names = await userNames([row.agent_user_id, sale?.agentUserId]);
+  return {
+    applicationId: row.application_id ?? null, caseId, leadId, contactId: row.contact_id ?? null, leadName,
+    link: link ? { type: link.matched_to_type ?? null, method: link.method ?? null } : null,
+    sale: sale ? { ...sale, agentName: sale.agentUserId ? names.get(sale.agentUserId) ?? null : null } : null,
+    carrierAgent: { userId: row.agent_user_id ?? null, name: row.agent_user_id ? names.get(row.agent_user_id) ?? null : null },
+  };
 }
 
 // ─── the tab counts ─────────────────────────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ export default async function SetupAgentCodesPage() {
   const view = await loadMatching(guard.context.tenantId);
 
   return (
-    <DataInPage step="setup" lead={<SetupTabs active="agent-codes" counts={{ "agent-codes": view.available ? view.unmapped.length : null }} />}>
+    <DataInPage step="setup" lead={<SetupTabs active="agent-codes" tenantId={guard.context.tenantId} />}>
       {!view.available ? (
         <Callout tone="warning" title={MATCHING_PENDING_MESSAGE} />
       ) : (

@@ -22,7 +22,7 @@ import type { PipelineStage } from "@/lib/pipelines/types";
 import { pruneHiddenTemplateValues, templateFormFieldVisible } from "@/lib/templates/visibility";
 import { cn } from "@/lib/utils";
 import { LeadStageHint } from "@/components/app/applications/lead-stage-hint";
-import { DispositionPicker, ListView, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, initials, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
+import { DispositionPicker, ListView, StageWhy, StagesView, TABLE_SCOPES, TableView, dispositionGroups, durationLabel, inStageMs, initials, isOverdue, tableScopeCounts, type TableScope, type ViewContext } from "@/components/app/pipeline-views";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { useSolo } from "@/components/app/solo-context";
 import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
@@ -65,7 +65,10 @@ function FieldInput({ field, value, onChange, id, labelId }: { field: TemplateFi
   if (field.type === "multi_select") return <div id={id} role="group" aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} className="flex flex-wrap gap-2">{field.options.map((option) => { const selected = Array.isArray(value) && value.includes(option); return <label key={option} className="flex items-center gap-1 text-xs"><input type="checkbox" aria-label={option} checked={selected} onChange={(event) => onChange([...(Array.isArray(value) ? value : []).filter((item) => item !== option), ...(event.target.checked ? [option] : [])])} />{option}</label>; })}</div>;
   if (field.type === "long_text") return <textarea id={id} aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} className="lead-form-control min-h-24 py-2" value={String(value ?? "")} onChange={(event) => onChange(event.target.value || undefined)} />;
   const inputType = field.type === "number" || field.type === "currency" ? "number" : field.type === "date" ? "date" : field.type === "phone" ? "tel" : field.type === "email" ? "email" : "text";
-  return <Input id={id} aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} type={inputType} step={field.type === "currency" ? 1 : field.type === "number" ? "any" : undefined} value={value === undefined ? "" : String(value)} onChange={(event) => { const raw = event.target.value; onChange(raw === "" ? undefined : ["number", "currency"].includes(field.type) ? Number(raw) : raw); }} />;
+  // A currency field is kept in whole cents (the template's rule): the person types dollars, so it is shown
+  // as dollars and sent as cents (E2E 2026-11-03: "10000" typed was kept as $100.00).
+  if (field.type === "currency") return <Input id={id} aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} type="number" inputMode="decimal" step="0.01" min={0} value={typeof value === "number" ? String(value / 100) : ""} onChange={(event) => { const raw = event.target.value; onChange(raw === "" ? undefined : Math.round(Number(raw) * 100)); }} />;
+  return <Input id={id} aria-labelledby={labelId} aria-label={labelId ? undefined : field.label} type={inputType} step={field.type === "number" ? "any" : undefined} value={value === undefined ? "" : String(value)} onChange={(event) => { const raw = event.target.value; onChange(raw === "" ? undefined : field.type === "number" ? Number(raw) : raw); }} />;
 }
 
 /**
@@ -160,7 +163,10 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
           >
             <header className="px-3 pt-3 pb-1">
               <div className="flex items-center justify-between gap-2">
-                <h3 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{column.name}</h3>
+                <span className="flex min-w-0 items-center gap-1">
+                  <h3 className="truncate text-sm font-semibold leading-normal tracking-[-0.02em] text-foreground">{column.name}</h3>
+                  {column.stage && <StageWhy stage={column.stage} first={column.stage.id === activeStages[0]?.id} context={context} />}
+                </span>
                 <span className="text-sm font-semibold tabular-nums text-muted-foreground">{columnLeads.length.toLocaleString()}</span>
               </div>
               <div className={cn("mt-[3px] text-xs leading-normal tracking-[-0.01em] tabular-nums", late ? "font-semibold text-[var(--error-ink)]" : "text-muted-foreground")}>

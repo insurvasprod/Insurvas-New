@@ -68,7 +68,7 @@ function ItemRow({ item, level }: { item: QaItem; level: "block" | "warn" }) {
           <span className="sr-only">{level === "block" ? "Must fix: " : "Worth a look: "}</span>{item.message}
         </span>
         {item.detail && <span className="text-sm text-[var(--body)]">{item.detail}</span>}
-        {item.fieldKey && <span className="truncate font-mono text-xs text-[var(--muted)]">{item.fieldKey}</span>}
+        {/* The field is named in the message and reached by "Fix on …"; its raw key is not for agents (QA 2026-11-03). */}
       </span>
       <Button type="button" variant="ghost" onClick={() => goTo(item.step, item.fieldKey)} aria-label={`Fix on ${STEP_LABEL.get(item.step) ?? "its step"}: ${item.message}`}>
         Fix on {STEP_LABEL.get(item.step) ?? "its step"}<ArrowRight aria-hidden="true" />

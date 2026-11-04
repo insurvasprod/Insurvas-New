@@ -30,6 +30,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { STATEMENT_KIND_LABELS, STATEMENT_LINE_KINDS, type ManualStatementLine } from "@/lib/ledger/statementConstants";
 import { parseAmountCents, parseStatementDate } from "@/lib/ledger/statementParse";
 import { confirmAction } from "@/components/ui/confirm-dialog";
+import { Callout } from "@/components/app/settings/primitives";
 
 async function fileUrl(statementId: string, download: boolean): Promise<string> {
   const response = await fetch(`/api/app/statements/${statementId}/file${download ? "?download=1" : ""}`, { cache: "no-store" });
@@ -148,7 +149,8 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
   if (!canWrite) {
     return (
       <div className="flex flex-col gap-3 xl:h-[calc(100dvh-var(--top-bar-h)-210px)] xl:min-h-[520px]">
-        {writeBlockedReason && <p role="status" className="rounded-md bg-[var(--warning-surface)] px-3 py-2 text-sm text-[var(--warning-ink)]">{writeBlockedReason}</p>}
+        {/* To the bell, not the page (UI-CONSISTENCY §3). */}
+        {writeBlockedReason && <Callout tone="warning" title={writeBlockedReason} />}
         {viewer}
       </div>
     );
@@ -159,7 +161,7 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
       {viewer}
 
       <div className="flex min-h-0 min-w-0 flex-col gap-3 xl:overflow-y-auto">
-        {error && <p role="alert" className="rounded-md bg-[var(--error-surface)] px-3 py-2 text-sm text-[var(--error-ink)]">{error}</p>}
+        {error && <Callout tone="error" title={error} />}
         <TableCard
           footer={<>
             <span>{filled.length.toLocaleString("en-US")} {filled.length === 1 ? "line" : "lines"} entered</span>

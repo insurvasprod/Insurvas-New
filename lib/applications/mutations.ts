@@ -8,7 +8,7 @@ import { CANONICAL_GROUPS, isSensitiveKey, OUTCOMES_NEEDING_REASON, type Applica
 import { decryptSensitive, encryptSensitive } from "./crypto";
 import { applicableDisclosures, disclosureChanges, type AttachedDisclosure, type DisclosureClause } from "./disclosureRules";
 import { cardBrand, cardExpiryInFuture, cardNumberProblem, digitsOnly, isPlausibleSsn, isValidAbaRouting, isValidBankAccount } from "./formats";
-import { INTERVIEW_MAY_REPLACE, prefillFromInterview, prefillFromQuote, QUOTE_MAY_REPLACE } from "./prefill";
+import { customPrefillFromInterview, INTERVIEW_MAY_REPLACE, prefillFromInterview, prefillFromQuote, QUOTE_MAY_REPLACE } from "./prefill";
 import { runQa, type QaVerdict } from "./qa";
 import { normaliseRevealReason, REVEAL_REASON_REQUIRED } from "./revealReason";
 import { ApplicationError, db, isMissingSchema, rows, rpcError, SchemaPendingError } from "./db";
@@ -57,8 +57,11 @@ function fail(error: { code?: string; message?: string } | null, what: string): 
 
 export async function saveValues(actor: Actor, applicationId: string, values: { key: string; value: string | number | boolean | null }[]) {
   const a = await attemptHead(actor.tenantId, applicationId);
+  // The agency's own questions (custom.*) are fields only on the attempts whose field set asks them; the
+  // default sets ask four of them as required, so refusing them left those applications unable to submit.
+  const customKeys = values.some((v) => v.key.startsWith("custom.")) ? await customKeysFor(actor.tenantId, a) : new Set<string>();
   for (const v of values) {
-    if (!KNOWN_KEYS.has(v.key)) throw new ApplicationError("FIELD_UNKNOWN", `There is no application field called ${v.key}.`);
+    if (!KNOWN_KEYS.has(v.key) && !customKeys.has(v.key)) throw new ApplicationError("FIELD_UNKNOWN", `There is no application field called ${v.key}.`);
     if (isSensitiveKey(v.key)) throw new ApplicationError("FIELD_SENSITIVE", "Sensitive fields are saved through their own secure form.");
     if (v.key.startsWith("cov.") && v.key !== "cov.effective_date") throw new ApplicationError("FIELD_FROM_QUOTE", "Coverage comes from the selected quote — change it on the Quote step.");
   }
@@ -84,6 +87,12 @@ export async function saveValues(actor: Actor, applicationId: string, values: { 
   }
   await refreshDisclosures(actor.tenantId, a.id);
   return { saved: values.length };
+}
+
+async function customKeysFor(tenantId: string, a: AttemptHead): Promise<Set<string>> {
+  const view = await getCaseView(tenantId, a.case_id);
+  const attempt = view.attempts.find((x) => x.id === a.id);
+  return new Set((attempt?.fieldSet?.custom ?? []).map((c) => c.key));
 }
 
 export async function markReviewed(actor: Actor, applicationId: string, keys: string[]) {
@@ -425,8 +434,20 @@ export async function saveAnswers(actor: Actor, interviewId: string, answers: { 
   const apps = await client.from("tenant_applications").select("id, status").eq("tenant_id", actor.tenantId).eq("case_id", iv.data.case_id).eq("insured_role", iv.data.insured_role).neq("status", "closed");
   // Height, weight and tobacco answered on the call are the application's values too (source
   // "interview", checked by the agent who asked). A value a person typed is never replaced.
-  const fromInterview = prefillFromInterview(Object.fromEntries(toSave.map((x) => [x.key, x.value])));
+  const givenNow = Object.fromEntries(toSave.map((x) => [x.key, x.value]));
+  const builtIn = prefillFromInterview(givenNow);
+  // The field set's own questions the interview also answers (income, net worth, occupation): written
+  // only onto an attempt whose field set asks them, and left for the agent to confirm (QA 2026-11-03).
+  const customAll = customPrefillFromInterview(givenNow);
+  const askedBy = customAll.length ? await (async () => {
+    const view = await getCaseView(actor.tenantId, iv.data.case_id as string);
+    return new Map(view.attempts.map((x) => [x.id, new Set((x.fieldSet?.custom ?? []).map((c) => c.key))]));
+  })() : new Map<string, Set<string>>();
   for (const app of rows<{ id: string; status: string }>(apps.data)) {
+    const asked = askedBy.get(app.id);
+    const customHere = asked ? customAll.filter((v) => asked.has(v.key)) : [];
+    const fromInterview = [...builtIn, ...customHere];
+    const unconfirmed = new Set(customHere.map((v) => v.key));
     if (fromInterview.length) {
       const have = await client.from("tenant_application_values").select("field_key, value, source, linked_to_primary").eq("tenant_id", actor.tenantId).eq("application_id", app.id).in("field_key", fromInterview.map((v) => v.key));
       const existing = new Map(rows<{ field_key: string; value: unknown; source: string; linked_to_primary: boolean }>(have.data).map((r) => [r.field_key, r]));
@@ -435,7 +456,7 @@ export async function saveAnswers(actor: Actor, interviewId: string, answers: { 
         return !e || (!e.linked_to_primary && INTERVIEW_MAY_REPLACE.includes(e.source) && JSON.stringify(e.value) !== JSON.stringify(v.value));
       });
       if (writes.length) {
-        const up = await client.from("tenant_application_values").upsert(writes.map((v) => ({ application_id: app.id, tenant_id: actor.tenantId, field_key: v.key, value: v.value, value_ciphertext: null, value_last4: null, key_version: null, source: "interview", reviewed_at: now, reviewed_by: actor.userId, updated_by: actor.userId })), { onConflict: "application_id,field_key" });
+        const up = await client.from("tenant_application_values").upsert(writes.map((v) => ({ application_id: app.id, tenant_id: actor.tenantId, field_key: v.key, value: v.value, value_ciphertext: null, value_last4: null, key_version: null, source: "interview", reviewed_at: unconfirmed.has(v.key) ? null : now, reviewed_by: unconfirmed.has(v.key) ? null : actor.userId, updated_by: actor.userId })), { onConflict: "application_id,field_key" });
         if (up.error) fail(up.error, "Could not carry the interview's answers onto the application");
       }
     }

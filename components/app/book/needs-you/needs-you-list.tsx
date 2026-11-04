@@ -1,23 +1,20 @@
 "use client";
 
-import { Fragment, useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { BulkResolve } from "@/components/app/book/needs-you/bulk-resolve";
-import { DecideInPlace } from "@/components/app/book/needs-you/decide-in-place";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { Segmented } from "@/components/ui/view-tabs";
-import { cn } from "@/lib/utils";
 import { fileDay } from "@/lib/ingestion/constants";
-import { ageShort, GROUP_LABELS, groupCounts, KIND_META, NEEDS_YOU_GROUPS, type NeedsYouGroup, type NeedsYouItem, type NeedsYouView } from "@/lib/needsYou/kinds";
+import { ageShort, GROUP_LABELS, groupCounts, KIND_META, NEEDS_YOU_GROUPS, searchItems, searchParam, type NeedsYouGroup, type NeedsYouItem, type NeedsYouView } from "@/lib/needsYou/kinds";
 
 const EMPTY: Record<NeedsYouView, { title: string; hint: string }> = {
   mine: { title: "Nothing waits for you", hint: "When a carrier file leaves a decision that is yours — a client to pick, a sale no carrier has, money that doesn't match — it appears here." },
@@ -74,20 +71,34 @@ function linesOf(items: NeedsYouItem[], fold: boolean): Line[] {
  * page's tabs.
  *
  * Round 4 (owner 2026-11-02: "simplify … getting things done inside the other page"): an open item is decided
- * under its row (DecideInPlace), and saving opens the next one; items alike fold into one line (Group alike, on
+ * on the Review page (round 5: a line opens it narrowed to its group, an item at that item); items alike fold into one line (Group alike, on
  * by default) that opens its items in the list and, for "Policy with no sale", confirms them all at once. The
  * item page stays the address an item is shared and linked by.
  */
 /** `initialGroup`: the chip to open on (?group=, e.g. the Attribution queue's old address opens on Credit). */
-export function NeedsYouList({ items, view, fromFile = null, readOnly = false, initialGroup = "all" }: { items: NeedsYouItem[]; view: NeedsYouView; fromFile?: { name: string; clearHref: string } | null; readOnly?: boolean; initialGroup?: "all" | NeedsYouGroup }) {
+/** `initialQuery`: the search to open on (?q=), so a reload or a link back keeps it. */
+export function NeedsYouList({ items: every, view, fromFile = null, readOnly = false, initialGroup = "all", initialQuery = "" }: { items: NeedsYouItem[]; view: NeedsYouView; fromFile?: { name: string; clearHref: string } | null; readOnly?: boolean; initialGroup?: "all" | NeedsYouGroup; initialQuery?: string }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [group, setGroup] = useState<"all" | NeedsYouGroup>(initialGroup);
   const [page, setPage] = useState(1);
   const [alike, setAlike] = useState(true);
   const [folded, setFolded] = useState<string | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
-  const [saved, setSaved] = useState<ReadonlySet<string>>(new Set());
+  // QA 2026-11-03: ~3,800 items over 142 pages had no search. Policy number, client, agent code or file name;
+  // kept in ?q= (replaceState: no server round trip per key) so a reload, the Review links and "back" keep it.
+  const [query, setQuery] = useState(initialQuery);
+  const items = useMemo(() => searchItems(every, query), [every, query]);
+  const search = (next: string) => {
+    setQuery(next);
+    setPage(1);
+    setFolded(null);
+    try {
+      const url = new URL(window.location.href);
+      const q = searchParam(next);
+      if (q) url.searchParams.set("q", q); else url.searchParams.delete("q");
+      window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}`);
+    } catch { /* the list still filters */ }
+  };
   const counts = useMemo(() => groupCounts(items), [items]);
   const closed = view === "closed";
   const inGroup = useMemo(() => (group === "all" ? items : items.filter((item) => KIND_META[item.kind].group === group)), [items, group]);
@@ -97,8 +108,23 @@ export function NeedsYouList({ items, view, fromFile = null, readOnly = false, i
   const rows = paginate(shown, page, pageSize);
   const href = (item: NeedsYouItem) => (closed ? item.href : `${item.href}?from=${view}`);
   const pick = (next: "all" | NeedsYouGroup) => { setGroup(next); setPage(1); setFolded(null); };
-  const waiting = rows.rows.flatMap((line) => (line.item && !saved.has(keyOf(line.item)) ? [keyOf(line.item)] : []));
-  const nextAfter = (key: string, skip: ReadonlySet<string>) => waiting.slice(waiting.indexOf(key) + 1).find((k) => !skip.has(k)) ?? null;
+  // Round 5 (owner 2026-11-03): decisions are made on the Review page, never under a row. A line opens it narrowed
+  // to its group; an item opens it at that item (a status word, which waits on Insurvas, opens its own page).
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const here = `${pathname}${params.size ? `?${params.toString()}` : ""}`;
+  // The search goes with them: the Review queue opens narrowed the same way (?q=).
+  const q = searchParam(query);
+  const reviewItem = (item: NeedsYouItem) => (item.kind === "status-word" ? href(item) : `/app/needs-you/review?kind=${item.kind}&id=${encodeURIComponent(item.id)}${q ? `&q=${encodeURIComponent(q)}` : ""}&from=${encodeURIComponent(here)}`);
+  const reviewOf = (f: Fold) => {
+    const first = f.items[0];
+    const query = new URLSearchParams({ kind: first.kind, from: here });
+    if (q) query.set("q", q);
+    if (first.ref?.carrierId) query.set("carrier", first.ref.carrierId);
+    if (first.kind === "no-sale" && first.ref?.fileDate) query.set("date", first.ref.fileDate);
+    if (first.kind === "pick-client" && first.ref?.fileId) query.set("file", first.ref.fileId);
+    return `/app/needs-you/review?${query.toString()}`;
+  };
   const noSaleIds = (list: NeedsYouItem[]) => list.filter((item) => item.kind === "no-sale").map((item) => item.id);
 
   const toolbar = (
@@ -106,25 +132,26 @@ export function NeedsYouList({ items, view, fromFile = null, readOnly = false, i
       {fold && !readOnly && noSaleIds(fold.items).length > 0 && <BulkResolve ids={noSaleIds(fold.items)} resolution="confirm_client" noun="clients" size="default" />}
       <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
     </>}>
+      {every.length > 0 && <ToolbarSearch value={query} onChange={search} placeholder="Policy, client, agent code or file" label="Search Needs you" />}
       {/* Files › "Open all in Needs you": only what that file left; removing the chip shows everything. */}
       {fromFile && <ToggleChip selected onRemove={() => router.push(fromFile.clearHref)}>{`From ${fromFile.name}`}</ToggleChip>}
-      {items.length > 0 && (
-        <Segmented
-          label="Kinds of decision"
-          value={group}
-          onChange={pick}
-          options={[{ key: "all" as const, label: "All", count: items.length }, ...NEEDS_YOU_GROUPS.filter((g) => counts[g] > 0).map((g) => ({ key: g, label: GROUP_LABELS[g], count: counts[g] }))]}
-        />
+      {every.length > 0 && (
+        // Up to seven groups: a pick-one filter row is ToggleChips (UI-CONSISTENCY §5b, §16), not a Segmented.
+        <span role="radiogroup" aria-label="Kinds of decision" className="flex flex-wrap items-center gap-2">
+          {[{ key: "all" as const, label: "All", count: items.length }, ...NEEDS_YOU_GROUPS.filter((g) => counts[g] > 0).map((g) => ({ key: g, label: GROUP_LABELS[g], count: counts[g] }))].map((option) => (
+            <ToggleChip key={option.key} role="radio" selected={group === option.key} count={option.count} onClick={() => pick(option.key)}>{option.label}</ToggleChip>
+          ))}
+        </span>
       )}
       {fold ? <ToggleChip selected onRemove={() => { setFolded(null); setPage(1); }}>{`${fold.label} · ${fold.where}`}</ToggleChip>
-        : !closed && items.length > 0 && <span title="Items of one kind from one file as one line"><ToggleChip selected={alike} onClick={() => { setAlike(!alike); setPage(1); }}>Group alike</ToggleChip></span>}
+        : !closed && every.length > 0 && <span title="Items of one kind from one file as one line"><ToggleChip selected={alike} onClick={() => { setAlike(!alike); setPage(1); }}>Group alike</ToggleChip></span>}
     </DataToolbar>
   );
 
   return (
     <TableCard toolbar={toolbar} footer={shown.length ? <Pager page={rows.current} pageSize={pageSize} total={shown.length} noun={closed ? "closed items" : fold ? "items" : "lines"} onPage={setPage} /> : undefined}>
-      {items.length === 0 ? <EmptyState title={EMPTY[view].title} hint={EMPTY[view].hint} />
-        : shown.length === 0 ? <NoMatches noun="items" onClear={() => pick("all")} />
+      {every.length === 0 ? <EmptyState title={EMPTY[view].title} hint={EMPTY[view].hint} />
+        : shown.length === 0 ? <NoMatches noun="items" onClear={() => { pick("all"); search(""); }} />
         : (
           <table className="portal-lead-table w-full min-w-[860px] table-fixed text-left text-sm">
             <thead>
@@ -142,9 +169,8 @@ export function NeedsYouList({ items, view, fromFile = null, readOnly = false, i
                 if (line.fold) {
                   const f = line.fold;
                   const first = f.items[0];
-                  const ids = noSaleIds(f.items);
                   return (
-                    <tr key={f.key}>
+                    <tr key={f.key} className="cursor-pointer" onClick={() => router.push(reviewOf(f))}>
                       <td><StatusChip tone={first.tone}>{KIND_META[first.kind].label}</StatusChip></td>
                       <td className="truncate font-semibold text-foreground" title={f.where}>{f.label} <span className="font-normal text-muted-foreground">· {f.where}</span></td>
                       <td className="truncate text-foreground" title={first.kind === "no-sale" ? "No sale or application on record: a new client was made from each row" : first.why}>{first.kind === "no-sale" ? "No sale on record" : "A person picks the client"}</td>
@@ -152,8 +178,8 @@ export function NeedsYouList({ items, view, fromFile = null, readOnly = false, i
                       <td className="tabular-nums text-foreground">{ageShort(Math.max(...f.items.map((i) => i.ageDays)))}</td>
                       <td className="text-right">
                         <span className="inline-flex gap-2">
-                          <Button type="button" variant="outline" size="sm" onClick={() => { setFolded(f.key); setPage(1); }}>Open</Button>
-                          {!readOnly && ids.length > 0 && <BulkResolve ids={ids} resolution="confirm_client" noun="clients" label="Confirm all" variant="outline" />}
+                          <Button type="button" variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); setFolded(f.key); setPage(1); }}>List</Button>
+                          <Button asChild variant="outline" size="sm"><Link href={reviewOf(f)} onClick={(event) => event.stopPropagation()}>Review</Link></Button>
                         </span>
                       </td>
                     </tr>
@@ -161,46 +187,18 @@ export function NeedsYouList({ items, view, fromFile = null, readOnly = false, i
                 }
                 const item = line.item;
                 const key = keyOf(item);
-                const isOpen = open === key && !closed;
-                const done = saved.has(key);
+                const go = closed ? href(item) : reviewItem(item);
                 return (
-                  <Fragment key={key}>
-                    <tr className={cn(!closed && !done && "cursor-pointer", done && "opacity-60", isOpen && "bg-[var(--surface-alt)]")} onClick={closed ? () => router.push(href(item)) : done ? undefined : () => setOpen(isOpen ? null : key)}>
-                      <td><StatusChip tone={done ? "good" : item.tone}>{done ? "Saved" : KIND_META[item.kind].label}</StatusChip></td>
-                      <td className="truncate font-semibold text-foreground" title={item.about}>{item.about}</td>
-                      <td className="truncate text-foreground" title={closed ? item.closedAs ?? "Closed" : item.why}>{closed ? item.closedAs ?? "Closed" : item.why}</td>
-                      <td className="text-foreground"><span className="inline-flex flex-wrap items-center gap-2">{item.who}{item.escalated && !closed && <StatusChip tone="danger">Escalated</StatusChip>}</span></td>
-                      <td className="tabular-nums text-foreground">{closed ? fileDay(item.closedAt ?? null) : ageShort(item.ageDays)}</td>
-                      <td className="text-right" onClick={(event) => event.stopPropagation()}>
-                        {closed ? <Button asChild variant="outline" size="sm"><Link href={href(item)}>Open</Link></Button>
-                          : done ? null
-                          : <Button type="button" variant="outline" size="sm" aria-expanded={isOpen} aria-controls={`decide-${item.id}`} onClick={() => setOpen(isOpen ? null : key)}>{isOpen ? "Close" : "Decide"}</Button>}
-                      </td>
-                    </tr>
-                    {isOpen && (
-                      <tr id={`decide-${item.id}`}>
-                        <td colSpan={6} className="!h-auto border-b border-[var(--border)] bg-[var(--surface-alt)] !p-0">
-                          {/* The panel takes the row's width and adds none, so the columns above never move. */}
-                          <div className="w-0 min-w-full">
-                            <DecideInPlace
-                              kind={item.kind}
-                              id={item.id}
-                              onClose={() => setOpen(null)}
-                              inline={{
-                                hasNext: nextAfter(key, saved) !== null,
-                                onSkip: () => setOpen(nextAfter(key, saved)),
-                                onDone: (how) => {
-                                  const next = new Set(saved).add(key);
-                                  setSaved(next);
-                                  setOpen(how === "next" ? nextAfter(key, next) : null);
-                                },
-                              }}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                  <tr key={key} className="cursor-pointer" onClick={() => router.push(go)}>
+                    <td><StatusChip tone={item.tone}>{KIND_META[item.kind].label}</StatusChip></td>
+                    <td className="truncate font-semibold text-foreground" title={item.about}>{item.about}</td>
+                    <td className="truncate text-foreground" title={closed ? item.closedAs ?? "Closed" : item.why}>{closed ? item.closedAs ?? "Closed" : item.why}</td>
+                    <td className="text-foreground"><span className="inline-flex flex-wrap items-center gap-2">{item.who}{item.escalated && !closed && <StatusChip tone="danger">Escalated</StatusChip>}</span></td>
+                    <td className="tabular-nums text-foreground">{closed ? fileDay(item.closedAt ?? null) : ageShort(item.ageDays)}</td>
+                    <td className="text-right">
+                      <Link href={go} onClick={(event) => event.stopPropagation()} className={closed ? "text-muted-foreground hover:text-foreground" : "font-semibold text-[var(--accent-ink)] hover:underline"}>{closed ? "›" : item.kind === "status-word" ? "Open" : "Review"}</Link>
+                    </td>
+                  </tr>
                 );
               })}
             </tbody>

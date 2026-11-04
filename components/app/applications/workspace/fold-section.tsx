@@ -39,23 +39,56 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
   children?: ReactNode;
 }) {
   const [reopened, setReopened] = useState(false);
-  // Never fold under the agent's cursor: while they are typing in a field here, the section stays open
-  // until they leave it ("Done", Enter, or a click elsewhere).
-  const [typing, setTyping] = useState(false);
+  // Never fold under the agent's cursor (QA 2026-11-03: a section that folded as its last field was
+  // filled swallowed what was being typed next): while focus is anywhere in its rows — a field, a
+  // select, a chip — the section stays open, and it folds once focus leaves it.
+  const [focused, setFocused] = useState(false);
+  // A deep link to a field in here (Review's "Fix on Application", a pasted #field URL) opens it.
+  const [asked, setAsked] = useState(false);
   const controlled = foldedProp !== undefined;
-  const folded = controlled ? foldedProp : complete && !keepOpen && !reopened && !typing;
+  const folded = controlled ? foldedProp : complete && !keepOpen && !reopened && !focused && !asked;
   const foldable = controlled || complete;
-  const isTyped = (el: EventTarget | null) => el instanceof HTMLElement && (el.tagName === "TEXTAREA" || (el.tagName === "INPUT" && !["checkbox", "radio", "button"].includes((el as HTMLInputElement).type)));
   const rows = Children.toArray(children);
   const id = `fold-${heading.toLowerCase().replace(/[^\w-]+/g, "-")}`;
+  const ref = useRef<HTMLElement>(null);
+  const body = useRef<HTMLDivElement>(null);
+
+  // Focus is read from the document, not only this section's own blur: a focused button that goes away
+  // (a "Confirm" pressed) fires no blur, and the header button sits outside the rows on purpose.
+  useEffect(() => {
+    const check = () => setFocused(Boolean(body.current?.contains(document.activeElement)));
+    const later = () => window.setTimeout(check, 0);
+    document.addEventListener("focusin", check);
+    document.addEventListener("focusout", later);
+    return () => { document.removeEventListener("focusin", check); document.removeEventListener("focusout", later); };
+  }, []);
+
+  useEffect(() => {
+    const open = (raw: unknown) => {
+      const fieldId = typeof raw === "string" ? raw : "";
+      if (!fieldId) return;
+      const el = document.getElementById(fieldId);
+      if (el && body.current?.contains(el)) setAsked(true);
+    };
+    const fromHash = () => open(decodeURIComponent(window.location.hash.slice(1)));
+    const onField = (e: Event) => open((e as CustomEvent).detail);
+    // The step holding the field mounts as the URL moves: check the hash now and once more after it settles.
+    const t1 = window.setTimeout(fromHash, 0);
+    const t2 = window.setTimeout(fromHash, 300);
+    window.addEventListener("workspace:field", onField);
+    window.addEventListener("hashchange", fromHash);
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); window.removeEventListener("workspace:field", onField); window.removeEventListener("hashchange", fromHash); };
+  }, []);
 
   // Finished just now (not already finished when the step opened): once it has folded, bring the next
   // section into view, so the agent is led on rather than left looking at a closed header (owner 2026-10-28).
-  const ref = useRef<HTMLElement>(null);
+  // Not when the agent is already in another field: the page does not move under them.
   const wasFolded = useRef(folded);
   useEffect(() => {
     if (folded && !wasFolded.current) {
       const t = window.setTimeout(() => {
+        const active = document.activeElement;
+        if (active && active !== document.body && !ref.current?.contains(active)) return;
         let next = ref.current?.nextElementSibling ?? null;
         while (next && !(next instanceof HTMLElement && next.tagName === "SECTION")) next = next.nextElementSibling;
         const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -74,7 +107,12 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
         aria-expanded={!folded}
         aria-controls={id}
         disabled={!foldable}
-        onClick={() => (controlled ? onFoldedChange?.(!folded) : setReopened((r) => !r))}
+        onClick={() => {
+          if (controlled) { onFoldedChange?.(!folded); return; }
+          // Open → closed also lets go of a deep link's hold; closed → open holds it open.
+          if (folded) setReopened(true);
+          else { setReopened(false); setAsked(false); }
+        }}
         className={cn(
           "flex w-full items-center justify-between gap-3 rounded-[10px] px-3.5 py-2.5 text-left outline-none transition-colors duration-300 focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default",
           complete ? "bg-[var(--primary-soft)] hover:bg-[color-mix(in_srgb,var(--primary)_18%,transparent)]" : "bg-[color-mix(in_srgb,var(--ink)_4%,transparent)]",
@@ -92,9 +130,8 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
       {/* grid-rows 1fr → 0fr animates the real height; closing waits a beat so the last answer is seen. */}
       <div
         id={id}
+        ref={body}
         inert={folded}
-        onFocus={(e) => { if (isTyped(e.target)) setTyping(true); }}
-        onBlur={(e) => { if (isTyped(e.target)) setTyping(false); }}
         className={cn(
           "grid transition-[grid-template-rows,opacity] duration-500 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none",
           folded ? "grid-rows-[0fr] opacity-0 delay-300" : "grid-rows-[1fr] opacity-100",

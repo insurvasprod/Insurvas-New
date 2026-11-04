@@ -13,7 +13,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { useFittingPageSize } from "@/components/app/book-of-business-views";
+import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { StageStrip } from "@/components/app/book/files/stage-strip";
 import {
   FILE_SOURCE_LABELS,
@@ -64,7 +64,7 @@ function shortReason(text: string): string {
   return head.length > 60 ? `${head.slice(0, 57).trimEnd()}…` : head;
 }
 
-export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, chips }: { files: CarrierFileRow[]; stages?: Record<string, FileStageView>; emptyTitle: string; emptyHint: string; show?: "needs" | "failed"; chips?: ReactNode }) {
+export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, chips, also }: { files: CarrierFileRow[]; stages?: Record<string, FileStageView>; emptyTitle: string; emptyHint: string; show?: "needs" | "failed"; chips?: ReactNode; /** What the chip counts beside the files, said in the footer (walk 2026-11-03: "Needs you 21" over "12 files"). */ also?: string }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [query, setQuery] = useState("");
@@ -145,7 +145,7 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
           </select>
         </DataToolbar>
       </div>}
-      footer={files.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "file" : "files"} suffix="newest first" /> : undefined}
+      footer={files.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "file" : "files"} suffix={also ? `newest first · ${also}` : "newest first"} /> : undefined}
     >
       {/* To the bell, not the page (owner 2026-11-02): Callout raises it there. */}
       {problem && <Callout tone="error" title={problem} />}

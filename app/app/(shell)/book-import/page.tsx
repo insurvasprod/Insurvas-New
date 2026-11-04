@@ -1,44 +1,18 @@
-import Link from "next/link";
-
-import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
-import { BookImport } from "@/components/app/book-import";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { buttonVariants } from "@/components/ui/button";
-import { SetupTabs } from "@/components/app/book/setup/setup-tabs";
-import { DataInPage } from "@/components/app/data-in/data-in-page";
-import { StatStrip, StatTile } from "@/components/ui/stat";
-import { BOOK_IMPORT_PENDING_MESSAGE, loadBookImport } from "@/lib/ingestion/bookImport";
-import { bookAdvanceAtRisk } from "@/lib/ingestion/commissionLedgerStore";
-import { moneyOrUnknown } from "@/lib/ingestion/policyCurrent";
+import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
+
+import SetupFilesInPage from "../book-setup/how-files-arrive/page";
 
 /**
- * Book of Business › Import your book (LA-4.10, Notion sprint): the latest policy file from each
- * carrier portal, through the ordinary pipeline, so the book is there on day one. Owner and
- * bookkeeper. Opening the page writes nothing.
+ * Book of Business › Import your book (LA-4.10): since the Setup redesign (board 8) "Bring your existing book" is a
+ * section of Setup › Files in. This older address renders that same page, so every link, checklist step and email
+ * that names /app/book-import still lands on it. The gate is written here too (the producer-isolation audit reads
+ * the page's own gate): owner and bookkeeper, like every Setup tab and the import's API. Opening it writes nothing.
  */
-export default async function BookImportPage() {
+export default async function BookImportPage(props: { searchParams: Promise<{ date?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Import your book" description="Bring in your existing book from each carrier's latest policy file." />;
-  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Import your book" detail="The book is imported by the account owner or a bookkeeper." />;
-  const [view, advance] = await Promise.all([loadBookImport(guard.context.tenantId), bookAdvanceAtRisk(guard.context.tenantId).catch(() => ({ cents: null, policies: 0, unknown: 0 }))]);
-
-  return (
-    <DataInPage step="setup" lead={<SetupTabs active="existing-book" />} actions={view.available && view.totals.policies > 0 ? <Link href="/app/exceptions" className={buttonVariants({ variant: "outline" })}>Look over imported clients</Link> : undefined}>
-      {!view.available ? (
-        <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{BOOK_IMPORT_PENDING_MESSAGE}</div>
-      ) : (
-        <>
-          <StatStrip label="Your book so far">
-            <StatTile label="Carriers done" value={`${view.done} of ${view.carriers.length}`} footnote="imported or skipped for now" />
-            <StatTile label="Policies" value={view.totals.policies.toLocaleString("en-US")} footnote="in your book now" />
-            <StatTile label="Premium a month" value={`$${Math.round(view.totals.monthlyPremiumCents / 100).toLocaleString("en-US")}`} footnote={`${view.totals.atRisk.toLocaleString("en-US")} ${view.totals.atRisk === 1 ? "policy" : "policies"} at risk`} valueTone={view.totals.atRisk ? "warning" : undefined} />
-            <StatTile label="Persistency" value={view.persistency.ready ? "Ready" : "Building"} footnote={view.persistency.ready ? "enough months of files" : view.persistency.label.replace(/^building — /, "")} />
-            <StatTile label="Advances at risk" value={moneyOrUnknown(advance.cents)} footnote={advance.cents === null ? "until commission statements arrive" : `unearned, on ${advance.policies} ${advance.policies === 1 ? "policy" : "policies"} with an advance${advance.unknown ? ` · ${advance.unknown} more not known yet` : ""}`} />
-          </StatStrip>
-          <BookImport carriers={view.carriers} processing={view.processing} readOnly={guard.entitlement.access === "read_only"} />
-        </>
-      )}
-    </DataInPage>
-  );
+  if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Import your book" detail="The book is imported by the account owner or a bookkeeper." />;
+  return <SetupFilesInPage {...props} />;
 }
