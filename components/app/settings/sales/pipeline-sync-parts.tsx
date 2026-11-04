@@ -13,7 +13,6 @@ import { Check, ChevronDown, ChevronRight, ChevronUp, ListChecks, Plus } from "l
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { StatusChip } from "@/components/ui/status-chip";
 import { control } from "@/components/app/settings/primitives";
 import { PIPELINE_SYNC_KEYS, type PipelineSyncKey } from "@/lib/applications/settingsFixtures";
 import { copyByName, statesByStage, type StateMap } from "@/lib/salesSettings/stageMapChecks";
@@ -63,10 +62,11 @@ export function PipelineList({ rows, value, onPick }: { rows: PipelineRow[]; val
               {/* The name on its own line, the facts under it: a long pipeline name is never cut. */}
               <span className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <span className={cn("break-words", on && "font-semibold")}>{row.name}</span>
-                <span className="flex flex-wrap gap-1.5">
-                  {row.noStages ? <StatusChip>No stages</StatusChip> : row.mapped ? <StatusChip tone="good">{row.mapped} of {PIPELINE_SYNC_KEYS.length} states</StatusChip> : <StatusChip>Moves nothing</StatusChip>}
-                  {row.checks > 0 && <StatusChip tone="warning">{row.checks} to check</StatusChip>}
-                  {row.dirty && <StatusChip tone="info">Unsaved</StatusChip>}
+                {/* One quiet line of facts, not a row of chips (owner 2026-11-04); only what needs a look is coloured. */}
+                <span className="text-xs leading-[1.4] text-[var(--muted)]">
+                  {row.noStages ? "No stages" : row.mapped ? `${row.mapped} of ${PIPELINE_SYNC_KEYS.length} states` : "Moves nothing"}
+                  {row.checks > 0 && <> · <span className="text-[var(--warning-ink)]">{row.checks} to check</span></>}
+                  {row.dirty && <> · <span className="text-[var(--accent-ink)]">Unsaved</span></>}
                 </span>
               </span>
               <ChevronRight aria-hidden="true" className="size-4 shrink-0 text-[var(--muted)] md:hidden" />
