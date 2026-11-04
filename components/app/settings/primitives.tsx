@@ -270,13 +270,15 @@ export function DashedCard({ icon, title, children, action }: { icon?: ReactNode
 
 /* ── table card ─────────────────────────────────────────────────────────── */
 
-export function SettingsTableCard({ title, actions, children, className, headerClassName }: { title: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; /** e.g. a see-through header on a glass card. */ headerClassName?: string }) {
+export function SettingsTableCard({ title, actions, children, className, headerClassName }: { title?: ReactNode; actions?: ReactNode; children: ReactNode; className?: string; /** e.g. a see-through header on a glass card. */ headerClassName?: string }) {
   return (
     <section className={cn("m-glass flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border)]", className)}>
-      <div className={cn("m-glass-head flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3", headerClassName)}>
-        <span className="text-card-title text-[var(--ink)]">{title}</span>
-        {actions && <span className="flex flex-wrap items-center gap-2.5">{actions}</span>}
-      </div>
+      {(title || actions) && (
+        <div className={cn("m-glass-head flex flex-wrap items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3", headerClassName)}>
+          {title && <span className="text-card-title text-[var(--ink)]">{title}</span>}
+          {actions && <span className="flex flex-wrap items-center gap-2.5">{actions}</span>}
+        </div>
+      )}
       <div className="min-w-0 overflow-x-auto">{children}</div>
     </section>
   );
