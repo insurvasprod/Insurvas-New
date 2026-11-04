@@ -59,6 +59,10 @@ jobs:
       # optional @emnapi/* entries Linux needs, which breaks this job on the next run.
       - name: Install
         run: npm ci
+        # onnxruntime-node (via @huggingface/transformers) downloads extra CUDA binaries from a
+        # Microsoft CDN on install; CI needs none of them and the download times out (2026-11-04).
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
 
       - name: Typecheck
         run: npm run typecheck
@@ -92,6 +96,10 @@ jobs:
 
       - name: Install
         run: npm ci
+        # onnxruntime-node (via @huggingface/transformers) downloads extra CUDA binaries from a
+        # Microsoft CDN on install; CI needs none of them and the download times out (2026-11-04).
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
 
       # Every verify script is declared as `node --env-file=.env.local`, so CI materialises one from
       # secrets rather than each script learning a second way to find configuration.
