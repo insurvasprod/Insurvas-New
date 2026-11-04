@@ -17,7 +17,6 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Download,
   Edit3,
   MapPin,
   MessagesSquare,
@@ -68,7 +67,7 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
 import { ActiveFilters, type ActiveFilter, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { SelectMenu } from "@/components/ui/select-menu";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
@@ -320,20 +319,17 @@ const STATUS_DOT: Record<PartnerStatus, string> = {
  * One limit of the plan, said once ("1 of 5"), with a thin bar. Four of these share one strip: the
  * ring cards before said each number three times ("1/5 · 1 of 5 · 1 of 5 live transfer sources").
  */
-function PlanRoom({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+/** One plan limit as a standard stat card: the count in use, what the plan allows, and a meter. */
+function PlanCard({ label, used, limit }: { label: string; used: number; limit: number | null }) {
   const full = limit != null && used >= limit;
   return (
-    <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-xs text-muted-foreground">{label}</span>
-        <span className={cn("text-sm font-semibold tabular-nums", full ? "text-[var(--warning-ink)]" : "text-foreground")}>{limit == null ? `${used} active` : `${used} of ${limit}`}</span>
-      </div>
-      {limit != null && (
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
-          <div className={cn("h-full rounded-full", full ? "bg-[var(--warning)]" : "bg-[var(--primary)]")} style={{ width: `${limit ? Math.min(100, (used / limit) * 100) : 0}%` }} />
-        </div>
-      )}
-    </div>
+    <StatCard
+      label={label}
+      value={used}
+      tone={full ? "warn" : "default"}
+      fact={{ label: limit == null ? "No limit on your plan" : full ? `Plan limit of ${limit} reached` : `of ${limit} on your plan` }}
+      meter={limit != null ? { value: used, max: limit, tone: full ? "warning" : "primary", label: `${label}: ${used} of ${limit}` } : undefined}
+    />
   );
 }
 
@@ -850,10 +846,6 @@ export function PartnersWorkspace({
             ) : undefined
           ) : (
             <>
-              {/* A real link, not a button with a handler: the browser owns the download, so
-                  middle-click and "Save link as" work, and a large directory does not have to be
-                  held in memory first. Same pattern as the deal-flow export. */}
-              <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
               <Button data-guide="publisher-add" type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus aria-hidden="true" />
                 Add publisher
@@ -865,12 +857,12 @@ export function PartnersWorkspace({
       {/* Only when the plan sets a limit: four bare counts of active sources read as wrong beside the
           table (owner's demo account, 2026-10-29). */}
       {!detailOnly && partners.length > 0 && [limits.max_publishers, limits.max_marketing_partners, limits.max_affiliates, limits.max_partner_users].some((limit) => limit != null) && (
-        <section aria-label="Room on your plan" className="m-glass grid grid-cols-2 gap-x-6 gap-y-3 rounded-[12px] border border-border px-4 py-3 lg:grid-cols-4">
-          <PlanRoom label="Live transfer sources" used={usage.publishers} limit={limits.max_publishers} />
-          <PlanRoom label="Lead sellers" used={usage.marketing} limit={limits.max_marketing_partners} />
-          <PlanRoom label="Referral partners" used={usage.affiliates} limit={limits.max_affiliates} />
-          <PlanRoom label="Partner logins" used={usage.partnerUsers} limit={limits.max_partner_users} />
-        </section>
+        <StatRow label="Room on your plan">
+          <PlanCard label="Live transfer sources" used={usage.publishers} limit={limits.max_publishers} />
+          <PlanCard label="Lead sellers" used={usage.marketing} limit={limits.max_marketing_partners} />
+          <PlanCard label="Referral partners" used={usage.affiliates} limit={limits.max_affiliates} />
+          <PlanCard label="Partner logins" used={usage.partnerUsers} limit={limits.max_partner_users} />
+        </StatRow>
       )}
       {!detailOnly && selectedPartner && (
         <div className="flex justify-end lg:hidden">
@@ -1070,23 +1062,18 @@ export function PartnersWorkspace({
                 what-kind teaches the eye to skip all five. The two facts now sit on the identity
                 line under the title; "Last lead" is what this month's figure is doing, so it is its
                 footnote. Sales joins it: the list has shown that column all along. */}
-            <StatStrip label="This publisher's month">
-              <StatTile
-                label={selectedPartner.partner_type === "publisher" ? "Calls This Month" : "Leads This Month"}
+            <StatRow label="This publisher's month">
+              <StatCard
+                label={selectedPartner.partner_type === "publisher" ? "Calls this month" : "Leads this month"}
                 value={(selectedPartner.partner_type === "publisher" ? selectedPartner.transfers_this_month : selectedPartner.lead_volume_this_month).toLocaleString()}
-                footnote={selectedPartner.last_submission ? `Last: ${dateLabel(selectedPartner.last_submission)}` : "None yet"}
+                fact={{ label: selectedPartner.last_submission ? `Last: ${dateLabel(selectedPartner.last_submission)}` : "None yet" }}
               />
-              <StatTile
-                label="Sales This Month"
-                value={selectedPartner.completed_this_month.toLocaleString()}
-                reserveFootnote
-              />
-              <StatTile
-                label="Approved Products"
+              <StatCard label="Sales this month" value={selectedPartner.completed_this_month.toLocaleString()} />
+              <StatCard
+                label="Approved products"
                 value={selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}
-                reserveFootnote
               />
-            </StatStrip>
+            </StatRow>
 
             <div className="flex min-w-0 flex-col gap-6">
               <ViewTabs
