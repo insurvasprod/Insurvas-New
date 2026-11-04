@@ -4,9 +4,8 @@
  * The plain-language rows of the Money & compliance settings (Accounting, Retention, Compliance;
  * owner pick A, 2026-11-03, docs/settings/MONEY-COMPLIANCE-SETTINGS.md).
  *
- *   <SettingRow>     a setting's name on the left, its control on the right, and under the control
- *                    what the setting changes. That line stays on screen: it says what an edit will
- *                    do (UI-CONSISTENCY §15), which is why these pages exist.
+ *   <SettingRow>     a setting's name on the left, its control on the right, and behind an (i)
+ *                    what the setting changes (UI-CONSISTENCY §15).
  *   <LockedNote>     a safety limit, beside the setting it guards, with the lock.
  *   <SectionTabs>    the page's tabs on the Settings frame's title line; a link to a section's
  *                    anchor (#tax) opens the tab that holds it.
@@ -15,6 +14,7 @@
 import { useEffect, type ReactNode } from "react";
 
 import { LockIcon, SettingsSectionHeader } from "@/components/app/settings/primitives";
+import { InfoTip } from "@/components/ui/info-tip";
 import { ViewTabs, type ViewTab } from "@/components/ui/view-tabs";
 import { cn } from "@/lib/utils";
 
@@ -33,12 +33,15 @@ export function SettingRow({ id, label, sub, change, platform, children, classNa
   return (
     <div id={id} className={cn("grid min-w-0 scroll-mt-24 gap-x-6 gap-y-2 border-t border-[var(--border)] pt-4 first:border-t-0 first:pt-0 @3xl:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]", className)}>
       <div className="min-w-0">
-        <p className="m-0 text-sm font-medium text-[var(--ink)]">{label}</p>
+        <p className="m-0 flex items-center gap-1 text-sm font-medium text-[var(--ink)]">
+          {label}
+          {/* What the setting changes sits behind an (i), not under every control (owner 2026-11-05). */}
+          {change && <InfoTip label={typeof label === "string" ? `What ${label.toLowerCase()} changes` : "What this changes"}>{change}</InfoTip>}
+        </p>
         {sub && <p className="m-0 text-xs text-[var(--muted)]">{sub}</p>}
       </div>
       <div className="flex min-w-0 flex-col gap-2">
         {children}
-        {change && <p className="m-0 max-w-[68ch] text-sm text-[var(--body)]"><span className="text-[var(--muted)]">What this changes: </span>{change}</p>}
         {platform != null && <p className="m-0 text-xs text-[var(--muted)]">Insurvas: {platform}</p>}
       </div>
     </div>

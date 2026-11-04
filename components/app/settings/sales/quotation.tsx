@@ -32,7 +32,8 @@ import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { Segmented } from "@/components/ui/view-tabs";
+import { toolbarControl } from "@/components/ui/data-toolbar";
+import { InfoTip } from "@/components/ui/info-tip";
 import { notify } from "@/lib/notify";
 import type { StoredDefinition } from "@/lib/applications/templates";
 import { pickQuotationTemplate } from "@/lib/quotes/quotationTemplate";
@@ -289,14 +290,16 @@ export function SalesQuotationTemplates() {
           type="button"
           aria-pressed={isOpen}
           aria-label={`${label}: add a template`}
+          title="Not in this carrier's Contracting yet"
           onClick={() => pickCell(c)}
           className={cn(
-            "flex min-h-[60px] w-full min-w-0 flex-col items-start justify-center gap-1 rounded-[12px] border border-dashed px-3 py-2 text-left outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
-            isOpen ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border-strong)] hover:border-[var(--primary)] hover:bg-[var(--brand-50)]",
+            "flex min-h-[44px] w-full min-w-0 items-center gap-1.5 rounded-[10px] border px-2 py-1.5 text-left text-sm text-[var(--muted)] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
+            isOpen ? "border-[var(--primary)] bg-[var(--brand-50)] text-[var(--ink)]" : "border-transparent hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]",
           )}
         >
-          <span className="inline-flex items-center gap-1.5 text-sm font-semibold tracking-[-0.02em] text-[var(--ink)]"><Plus aria-hidden="true" className="size-4 text-[var(--accent-ink)]" />Add a template</span>
-          <span className="text-xs leading-[1.5] tracking-[-0.01em] text-[var(--body)]">Not in this carrier&apos;s Contracting yet</span>
+          <Plus aria-hidden="true" className="size-4" />
+          Add
+          <span className="sr-only"> a template: not in this carrier&apos;s Contracting yet</span>
         </button>
       );
     }
@@ -312,8 +315,8 @@ export function SalesQuotationTemplates() {
         aria-label={`${label}: ${t ? `${statusOf(t)} v${t.version}` : "on the default"}`}
         onClick={() => pickCell(c)}
         className={cn(
-          "flex min-h-[60px] w-full min-w-0 flex-col items-start justify-center gap-1 rounded-[12px] border px-3 py-2 text-left outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
-          isOpen ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
+          "flex min-h-[44px] w-full min-w-0 flex-col items-start justify-center gap-0.5 rounded-[10px] border px-2 py-1.5 text-left outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
+          isOpen ? "border-[var(--primary)] bg-[var(--brand-50)]" : "border-transparent hover:bg-[var(--surface-alt)]",
         )}
       >
         {chip}
@@ -393,30 +396,19 @@ export function SalesQuotationTemplates() {
       ) : !cell || !current ? (
         <>
           {!canEdit && <ReadOnlyNotice what="quotation templates" />}
-          <ol aria-label="How this page works" className="m-0 flex list-none flex-wrap gap-x-6 gap-y-2 p-0 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-            {["Pick a carrier and product", "Choose what the agent is asked", "Publish — new quotes use it, old ones keep theirs"].map((s, i) => (
-              <li key={s} className="flex items-center gap-2">
-                <span aria-hidden="true" className={cn("inline-grid size-6 place-items-center rounded-full text-xs", i === 0 ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--ink)]")}>{i + 1}</span>
-                {s}
-              </li>
-            ))}
-          </ol>
-
           <TableCard
-            title="Which template each pair uses"
-            info="A quote is typed on the pair's own template, or on your default when it has none — the same choice the Quote step makes. A quote keeps the version it was made with."
             toolbar={lines.length > 0 && (
-              <Segmented
-                label="Show"
-                value={gridFilter}
-                onChange={setGridFilter}
-                options={[
-                  { key: "all", label: "All", count: squares.length },
-                  { key: "own", label: "Own template", count: squares.filter((q) => matches(q, "own")).length },
-                  { key: "default", label: "On the default", count: squares.filter((q) => matches(q, "default")).length },
-                  { key: "drafts", label: "Drafts", count: squares.filter((q) => matches(q, "drafts")).length },
-                ]}
-              />
+              <div className="flex w-full items-center gap-2">
+                <select aria-label="Show" className={toolbarControl} value={gridFilter} onChange={(e) => setGridFilter(e.target.value as GridFilter)}>
+                  <option value="all">All pairs · {squares.length}</option>
+                  <option value="own">Own template · {squares.filter((q) => matches(q, "own")).length}</option>
+                  <option value="default">On the default · {squares.filter((q) => matches(q, "default")).length}</option>
+                  <option value="drafts">Drafts · {squares.filter((q) => matches(q, "drafts")).length}</option>
+                </select>
+                <InfoTip label="About these templates" className="ml-auto" side="bottom">
+                  A quote is typed on the pair&apos;s own template, or on your default when it has none: the same choice the Quote step makes. A quote keeps the version it was made with.
+                </InfoTip>
+              </div>
             )}
           >
             {lines.length === 0 ? (

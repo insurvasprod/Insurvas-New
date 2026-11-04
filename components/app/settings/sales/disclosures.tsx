@@ -29,13 +29,13 @@ import { ReviewChip } from "@/components/app/settings/defaults";
 import { Callout, Field, SettingsCard, SettingsStack, control, st, pillTone } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, confirmAction } from "@/components/ui/confirm-dialog";
-import { ToolbarSearch } from "@/components/ui/data-toolbar";
+import { ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
-import { Segmented, UnderlineTabs, ViewTabs } from "@/components/ui/view-tabs";
+import { UnderlineTabs, ViewTabs } from "@/components/ui/view-tabs";
 import { DISCLOSURES, SALES_CARRIERS } from "@/lib/applications/settingsFixtures";
 import { attention as needsYou, callCoverage, docMatches, documents, duplicateCode, readAloudLine, searchDocs, versionChanges, wordDiff, type CallProduct, type DocFilter, type LibraryDoc } from "@/lib/salesSettings/disclosureLibrary";
 import type { Clause } from "@/lib/salesSettings/editing";
@@ -94,7 +94,7 @@ function lifecycleOf(item: DisclosureItem): Lifecycle {
 function StatusCell({ doc }: { doc: LibraryDoc }) {
   if (doc.live && !doc.live.platform) return <LifecyclePill state="live" />;
   // Insurvas wording is a starting point, never final legal text (docs/settings/DEFAULTS.md §2.5).
-  if (doc.shown.platform) return <span className="flex flex-wrap items-center gap-2"><LifecyclePill state="platform" /><ReviewChip /></span>;
+  if (doc.shown.platform) return <span className="flex flex-col items-start gap-1"><LifecyclePill state="platform" /><span className="text-xs text-[var(--muted)]">Needs legal review</span></span>;
   if (doc.draft && !doc.live) return <LifecyclePill state="draft" />;
   if (doc.draft && doc.live?.platform) return <span className="flex flex-wrap items-center gap-2"><LifecyclePill state="draft" /><span className="text-xs text-[var(--muted)]">Insurvas v{doc.live.version} in use</span></span>;
   return <LifecyclePill state="retired" />;
@@ -914,18 +914,13 @@ export function SalesDisclosures() {
               toolbar={
                 <>
                   <ToolbarSearch value={query} onChange={setQuery} placeholder="Search title, code or wording" />
-                  <Segmented<DocFilter>
-                    label="Show"
-                    value={filter}
-                    onChange={setFilter}
-                    options={[
-                      { key: "all", label: "All", count: docs.length },
-                      { key: "live", label: "Live", count: docs.filter((d) => docMatches(d, "live")).length },
-                      { key: "draft", label: "Drafts", count: needs.drafts.length },
-                      { key: "platform", label: "Insurvas", count: docs.filter((d) => docMatches(d, "platform")).length },
-                      { key: "retired", label: "Retired", count: docs.filter((d) => docMatches(d, "retired")).length },
-                    ]}
-                  />
+                  <select aria-label="Show" className={toolbarControl} value={filter} onChange={(e) => setFilter(e.target.value as DocFilter)}>
+                    <option value="all">All · {docs.length}</option>
+                    <option value="live">Live · {docs.filter((d) => docMatches(d, "live")).length}</option>
+                    <option value="draft">Drafts · {needs.drafts.length}</option>
+                    <option value="platform">Insurvas · {docs.filter((d) => docMatches(d, "platform")).length}</option>
+                    <option value="retired">Retired · {docs.filter((d) => docMatches(d, "retired")).length}</option>
+                  </select>
                 </>
               }
             >
@@ -963,13 +958,12 @@ export function SalesDisclosures() {
                       );
                     })}
                   </PagedBody>
-                  <table className={cn(st.table, "hidden min-w-[980px] md:table")}>
+                  <table className={cn(st.table, "hidden min-w-[900px] md:table")}>
                     <thead>
                       <tr className={st.headRow}>
-                        <th scope="col" className={st.th}>Document</th>
-                        <th scope="col" className={cn(st.th, "w-[200px]")}>Applies to</th>
+                        <th scope="col" className={cn(st.th, "min-w-[300px]")}>Document</th>
+                        <th scope="col" className={cn(st.th, "w-[170px]")}>Applies to</th>
                         <th scope="col" className={cn(st.th, "w-[230px]")}>Required when</th>
-                        <th scope="col" className={cn(st.th, "w-[110px]")}>Version</th>
                         <th scope="col" className={cn(st.th, "w-[170px]")}>Status</th>
                         <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Acknowledged</th>
                         <th scope="col" className={cn(st.th, "w-[170px] text-right")}><span className="sr-only">Actions</span></th>
@@ -984,18 +978,13 @@ export function SalesDisclosures() {
                           <tr key={d.code} className="m-row cursor-pointer" onClick={(e) => { if (!(e.target as HTMLElement).closest("button, a, [role=menu], [role=menuitem]")) openItem(d.draft && canEdit ? d.draft : d.shown); }}>
                             <td className={st.td}>
                               <span className={cn(st.strong, "block")}>{d.shown.title}</span>
-                              <span className={cn(st.sub, "font-mono")}>{d.code}{d.shown.hasAttachment ? " · PDF" : ""}</span>
+                              <span className={st.sub}><span className="font-mono">{d.code}</span>{d.shown.hasAttachment ? " · PDF" : ""} · v{ref.version}{d.draft && d.live ? ` · draft v${d.draft.version} waiting` : ""} · changed {shortDay(d.shown.updatedAt)}</span>
                             </td>
                             <td className={cn(st.td, "text-sm")}>{scopeLine(ref)}</td>
                             <td className={cn(st.td, "text-sm")}>
                               {rules.length === 0
-                                ? (d.live ? <StatusChip tone="warning" dot={false}>Never — no rule</StatusChip> : <span className="text-[var(--muted)]">No rule</span>)
+                                ? <span className="text-[var(--muted)]">{d.live ? "Never required: no rule" : "No rule"}</span>
                                 : <span className="line-clamp-2">{rules.map((r) => ruleSentence(r.clauses, library)).join(" · or ")}</span>}
-                            </td>
-                            <td className={st.td}>
-                              <StatusChip dot={false} tone={pillTone(d.shown.platform ? "neutral" : "brand")}>v{ref.version}</StatusChip>
-                              {d.draft && d.live && <span className={cn(st.sub, "block")}>draft v{d.draft.version} waiting</span>}
-                              <span className={cn(st.sub, "block")}>Changed {shortDay(d.shown.updatedAt)}</span>
                             </td>
                             <td className={st.td}><StatusCell doc={d} /></td>
                             <td className={cn(st.td, "text-right tabular-nums")}>{d.live ? d.live.acknowledged.toLocaleString("en-US") : "—"}</td>

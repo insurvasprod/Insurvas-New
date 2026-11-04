@@ -13,7 +13,6 @@ import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/pri
 import { PageHeader } from "@/components/ui/page-header";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LoadingRows } from "@/components/ui/page-states";
-import { SectionLastChanged } from "@/components/app/settings/last-changed";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
@@ -430,10 +429,8 @@ export function AgentSettingsTabs({
           infoDescription
           hideTitle
           breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: titleCase(active.label) }]}
-          // Who last changed something here (LA-8.8), under the purpose line; owners only, like the log.
-          // With tabs on the title line the note wraps inside the title column instead of widening it,
-          // so the tabs still start on the cards' edge.
-          meta={role === "owner" ? <div className={routeSection ? "lg:[contain:inline-size]" : undefined}><SectionLastChanged key={active.id} sectionKey={active.id} /></div> : undefined}
+          // The "Last changed by" note under the breadcrumb is hidden on every section (owner, 2026-11-04);
+          // the log itself is still on Settings history, and each section's changes can be read there.
           lead={routeSection ? <div ref={setLeadSlot} data-settings-lead="" className="flex min-w-0 items-center empty:hidden" /> : undefined}
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
         />
@@ -585,7 +582,7 @@ export function AgentSettingsTabs({
             tabIndex={-1}
             key={active.id}
           >
-            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: role === "owner", framed: !guiding, actionsSlot, leadSlot }}>
+            <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: false, framed: !guiding, actionsSlot, leadSlot }}>
               {/* A routed section's board handles its own read-only state. */}
               {readOnly && !routeSection && !READ_ONLY_EXEMPT.has(active.id) ? (
                 <>

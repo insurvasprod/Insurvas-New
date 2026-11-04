@@ -107,7 +107,7 @@ The pages also broke the foundation rules:
   - The frame sets `--frame-rail-w`, so the tabs start on the cards' left edge.
   - The "Last changed · History" note wraps inside the title column instead of widening it.
 - **`components/app/settings/setting-row.tsx`** is new:
-  - `SettingRow`: the name, the control, and "What this changes", with Insurvas's value shown only
+  - `SettingRow`: the name, the control, and "What this changes" behind an (i), with Insurvas's value shown only
     where yours differs.
   - `LockedNote`: a safety limit with its lock, beside the setting it guards.
   - `SectionTabs`: the tabs on the title line.

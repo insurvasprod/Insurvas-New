@@ -15,7 +15,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { PagedBody, PagedPager, PagedProvider, PagedTableCard } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, Field, SettingsCard, SettingsGrid, SettingsSectionHeader, SettingsStack, ToggleRow, control, st } from "@/components/app/settings/primitives";
-import { DefaultChip, ResetToDefault, ReviewChip } from "@/components/app/settings/defaults";
+import { DefaultChip, ResetToDefault, REVIEW_LABEL } from "@/components/app/settings/defaults";
 import {
   FEDERAL_MINUTES,
   INSURVAS_DEFAULT_WINDOW,
@@ -240,12 +240,12 @@ export function CallingWindowSettingsPanel() {
           action={defaultLive ? (
             <span className="flex flex-wrap items-center justify-end gap-2">
               {(loaded.tenantIsDefault || loaded.optionsAreDefault) && <DefaultChip />}
-              <ReviewChip />
+              <span className="text-xs text-[var(--muted)]" title="Insurvas wording, not legal advice. Have your compliance lead or counsel approve it before you rely on it.">{REVIEW_LABEL}</span>
             </span>
           ) : undefined}
         >
-          <div className="grid grid-cols-2 gap-4">
-            <Field label="Earliest" htmlFor="window-start">
+          <div className="grid grid-cols-2 items-end gap-4 @lg:grid-cols-[1fr_1fr_auto]">
+            <Field label="Earliest" htmlFor="window-start" info={<>Set both hours, or neither.{tenantWindow ? ` In force now: ${minuteLabel(tenantWindow.start)}–${minuteLabel(tenantWindow.end)}${loaded.tenantIsDefault ? ", the Insurvas default" : ""}.` : " Empty: only the federal and state limits apply."}</>}>
               <input
                 id="window-start"
                 type="time"
@@ -267,37 +267,28 @@ export function CallingWindowSettingsPanel() {
                 onChange={(event) => setDraft({ ...draft, end: event.target.value })}
               />
             </Field>
+            {!readOnly && defaultLive && !(loaded.tenantIsDefault && loaded.optionsAreDefault) && (
+                <ResetToDefault
+                  variant="outline"
+                  what="your agency’s calling hours and switches"
+                  kept={`Back to ${compact(INSURVAS_DEFAULT_WINDOW.start)}–${compact(INSURVAS_DEFAULT_WINDOW.end)}, no Sundays, no federal holidays. Campaign narrowing stays.`}
+                  disabled={busy}
+                  onReset={async () => {
+                    try {
+                      const next = await put({ scope: "reset" });
+                      if (next) { setLoaded(next); setDraft(draftFrom(next)); }
+                      notify.done("Calling windows are back on the Insurvas default");
+                      return true;
+                    } catch (cause) {
+                      notify.block(cause instanceof Error ? cause.message : "Could not reset the calling window");
+                      return false;
+                    }
+                  }}
+                />
+            )}
           </div>
-          {check.problem ? (
+          {check.problem && (
             <p role="alert" className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--error-ink)]">{check.problem}</p>
-          ) : (
-            <p className="mt-3 mb-0 text-xs leading-[1.5] text-[var(--muted)]">
-              Set both hours, or neither.
-              {tenantWindow
-                ? ` In force now: ${minuteLabel(tenantWindow.start)}–${minuteLabel(tenantWindow.end)}${loaded.tenantIsDefault ? ", the Insurvas default" : ""}.`
-                : " Empty: only the federal and state limits apply."}
-            </p>
-          )}
-          {!readOnly && defaultLive && !(loaded.tenantIsDefault && loaded.optionsAreDefault) && (
-            <div className="mt-3">
-              <ResetToDefault
-                variant="outline"
-                what="your agency’s calling hours and switches"
-                kept={`Back to ${compact(INSURVAS_DEFAULT_WINDOW.start)}–${compact(INSURVAS_DEFAULT_WINDOW.end)}, no Sundays, no federal holidays. Campaign narrowing stays.`}
-                disabled={busy}
-                onReset={async () => {
-                  try {
-                    const next = await put({ scope: "reset" });
-                    if (next) { setLoaded(next); setDraft(draftFrom(next)); }
-                    notify.done("Calling windows are back on the Insurvas default");
-                    return true;
-                  } catch (cause) {
-                    notify.block(cause instanceof Error ? cause.message : "Could not reset the calling window");
-                    return false;
-                  }
-                }}
-              />
-            </div>
           )}
           {!readOnly && !defaultLive && loaded.tenant && (
             <Button type="button" variant="outline" className="mt-3" disabled={busy} onClick={() => void saveAgency(true)}>
@@ -414,12 +405,12 @@ export function CallingWindowSettingsPanel() {
                     Narrow a campaign
                   </Button>
                 )}
-                <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
+                <RefreshButton onClick={() => void refresh()} refreshing={refreshing} labelClassName="sr-only" className="px-2.5" />
               </>
             }
           >
-            <ToolbarSearch value={campaignQuery} onChange={setCampaignQuery} placeholder="Search campaigns" />
-            {!loaded.options.campaignOverrides && <StatusChip dot={false} tone="warning">Overrides off &mdash; none applied</StatusChip>}
+            {narrowing.length > 0 && <ToolbarSearch value={campaignQuery} onChange={setCampaignQuery} placeholder="Search campaigns" />}
+            {!loaded.options.campaignOverrides && <span className="text-xs text-[var(--muted)]">Overrides are off, so none apply.</span>}
           </DataToolbar>
         }
       >
