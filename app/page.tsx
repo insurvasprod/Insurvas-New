@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
 import { LandingHero } from "@/components/marketing/landing-hero";
+import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
 import { LandingStack } from "@/components/marketing/landing-stack";
 import { LandingBento } from "@/components/marketing/landing-bento";
 import { LandingAudience, LandingBuiltFor } from "@/components/marketing/landing-audience";
@@ -41,6 +42,7 @@ export default async function Home() {
         <LandingStack />
         <LandingAudience />
         <LandingBento />
+        <LandingRoadmap />
         <LandingPricingTeaser plans={plans} />
         <LandingFaq />
       </main>
