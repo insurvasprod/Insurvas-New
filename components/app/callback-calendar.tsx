@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection, type RowSelection } from "@/components/ui/bulk-bar";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
-import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, type ActiveFilter, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
 import { MoreMenu } from "@/components/ui/more-menu";
@@ -16,7 +16,6 @@ import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { st } from "@/components/app/settings/primitives";
 import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
 import { cn } from "@/lib/utils";
@@ -32,7 +31,6 @@ import { GiveToDialog, type Assignee } from "@/components/app/callbacks/give-to-
 import { useSolo } from "@/components/app/solo-context";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
-import { Segmented } from "@/components/ui/view-tabs";
 import { durationShort, localParts, longTime, shortTime, zoneAbbreviation, zonedToUtc } from "@/components/app/callbacks/time";
 
 /**
@@ -536,50 +534,49 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   // The toolbar: search, the quick "when" filter, the date, saved views, Clear, Refresh. Below lg the
   // search takes the first row and the "when" filter and the date are the same controls behind a
   // Filters button, opening in the toolbar band (2026-10-09 mobile); saved views stay in the row.
-  const scopeToggle = viewer && !solo && (
-    <Segmented label="Whose callbacks" value={scope ?? "all"} onChange={setScope} options={[{ key: "mine", label: "Mine" }, { key: "all", label: "All" }]} />
-  );
   const searchBox = <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search customer, phone, note" label="Search callbacks by customer, phone, source, note or agent" />;
+  // The filters sit in one inline panel, as on every other list (UI-CONSISTENCY §6a): when, the day and whose.
+  const showScope = Boolean(viewer && !solo);
   const whenFilter = (
-    <span role="radiogroup" aria-label="When" className={cn("inline-flex max-w-full min-w-0 flex-wrap gap-1.5", (compact || !wide) && "w-full")}>
-      {(Object.keys(WHEN_LABEL) as WhenFilter[]).map((key) => (
-        <ToggleChip key={key} role="radio" selected={when === key} onClick={() => { setWhen(key); setListPage(1); }} count={byWhen[key].length} className="shrink-0">
-          {WHEN_LABEL[key]}
-        </ToggleChip>
-      ))}
-    </span>
+    <FilterField label="Show" htmlFor="callbacks-when">
+      <select id="callbacks-when" className={cn(toolbarControl, "w-full min-w-0")} value={when} onChange={(event) => { setWhen(event.target.value as WhenFilter); setListPage(1); }}>
+        {(Object.keys(WHEN_LABEL) as WhenFilter[]).map((key) => <option key={key} value={key}>{WHEN_LABEL[key]} ({byWhen[key].length})</option>)}
+      </select>
+    </FilterField>
   );
-  const dateFilter = <input type="date" aria-label="Due on" className={wide ? toolbarControl : cn(toolbarControl, "w-full")} value={day} onChange={(event) => { setDay(event.target.value); setListPage(1); }} />;
+  const dateFilter = (
+    <FilterField label="Due on" htmlFor="callbacks-day">
+      <input id="callbacks-day" type="date" className={cn(toolbarControl, "w-full min-w-0")} value={day} onChange={(event) => { setDay(event.target.value); setListPage(1); }} />
+    </FilterField>
+  );
+  const scopeFilter = showScope && (
+    <FilterField label="Whose" htmlFor="callbacks-scope">
+      <select id="callbacks-scope" className={cn(toolbarControl, "w-full min-w-0")} value={scope ?? "all"} onChange={(event) => setScope(event.target.value as Scope)}>
+        <option value="all">Everyone’s</option>
+        <option value="mine">Mine</option>
+      </select>
+    </FilterField>
+  );
+  const activeFilters: ActiveFilter[] = [
+    when !== "open" && { key: "when", label: "Show", value: WHEN_LABEL[when], onRemove: () => { setWhen("open"); setListPage(1); } },
+    day && { key: "day", label: "Due on", value: day, onRemove: () => { setDay(""); setListPage(1); } },
+    mineOnly && { key: "mine", label: "Whose", value: "Mine", onRemove: () => setScope("all") },
+  ].filter((entry): entry is ActiveFilter => Boolean(entry));
   const savedViews = <SavedViews storageKey="callbacks" current={viewState} builtIns={builtInViews} onApply={applyView} />;
   const refreshActions = <>
-    {filtersOn && <ClearFiltersButton onClick={clearFilters} />}
     <RefreshButton onClick={() => void load()} />
   </>;
-  const toolbar = wide ? (
-    <DataToolbar actions={refreshActions}>
-      {searchBox}
-      {scopeToggle}
-      {whenFilter}
-      {dateFilter}
-      {savedViews}
-    </DataToolbar>
-  ) : (
+  const toolbar = (
     <>
-      <DataToolbar
-        className={COMPACT_TOOLBAR}
-        actions={<>
-          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={(when !== "open" ? 1 : 0) + (day ? 1 : 0)} aria-controls="callbacks-filters" />
-          {savedViews}
-          <span className="ml-auto flex flex-wrap items-center gap-2">{refreshActions}</span>
-        </>}
-      >
+      <DataToolbar className={wide ? undefined : COMPACT_TOOLBAR} actions={refreshActions}>
         {searchBox}
-        {scopeToggle}
+        <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeFilters.length} controls="callbacks-filters" />
+        {savedViews}
       </DataToolbar>
-      <FilterPanel id="callbacks-filters" open={filtersOpen} className="w-full min-w-0 border-b-0 px-0 py-0">{whenFilter}{dateFilter}</FilterPanel>
+      <FilterPanel id="callbacks-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">{whenFilter}{dateFilter}{scopeFilter}</FilterPanel>
+      <ActiveFilters filters={activeFilters} onClear={() => { clearFilters(); setScope("all"); }} className="-mx-4 w-[calc(100%+2rem)] border-b-0 pb-0" />
     </>
   );
-
 
   // 36px below lg, for a thumb.
   const smallSize = wide ? "sm" : "default";
