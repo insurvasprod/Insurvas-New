@@ -26,7 +26,8 @@ import { ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
+import { InfoTip } from "@/components/ui/info-tip";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { dayMonth, viewerTimeZone } from "@/lib/format/dates";
 import { notify } from "@/lib/notify";
 import { changesSummary, inUseNow, scopeOf, templateChanges, usesOf, type ProductUse } from "@/lib/salesSettings/templateCoverage";
@@ -462,16 +463,13 @@ export function SalesUnderwritingTemplates() {
           ) : (
             <>
             {!hasOwn && firstLine && <StartPanel all={all} productCode={firstLine.productCode} productName={firstLine.productName} canEdit={canEdit} onStart={(init) => setDialog({ kind: "new", init })} />}
-            <StepsBar current={picked ? 1 : 0} />
             <PagedTableCard
               key={product}
               total={rows.length}
               noun="templates"
-              title={picked ? `${picked.name} templates` : "Every template, by product"}
-              info="A call loads the template made for its product and carrier, else the product's own, else Insurvas's — the same choice the interview makes. An interview keeps the version it started on."
               toolbar={
-                /* One row (owner 2026-10-30): search (an icon until it is used), status, then the product
-                   chips, which scroll sideways in their own strip rather than wrap onto a second line. */
+                /* One row (owner 2026-11-04): search (an icon until it is used), then status and product as dropdowns;
+                   the product chips became a menu. */
                 <div className="flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
                   {searchOpen || query ? (
                     <span ref={searchRef} className="w-full shrink-0 sm:w-48" onBlur={(e) => { if (!query && !e.currentTarget.contains(e.relatedTarget as Node | null)) setSearchOpen(false); }}>
@@ -489,14 +487,13 @@ export function SalesUnderwritingTemplates() {
                     <option value="retired">Retired · {counts.retired}</option>
                     <option value="insurvas">Insurvas · {counts.insurvas}</option>
                   </select>
-                  <div className="w-full min-w-0 py-0.5 sm:flex-1 sm:overflow-x-auto sm:[scrollbar-width:thin] sm:[&_[role=radiogroup]]:flex-nowrap">
-                    <Segmented
-                      label="Product"
-                      value={picked ? picked.code : "all"}
-                      onChange={setProduct}
-                      options={[{ key: "all", label: "All", count: byFilter[filter].length }, ...productTabs.map((t) => ({ key: t.code, label: t.name, count: t.count }))]}
-                    />
-                  </div>
+                  <select aria-label="Product" className={cn(toolbarControl, "w-full shrink-0 sm:w-auto")} value={picked ? picked.code : "all"} onChange={(e) => setProduct(e.target.value)}>
+                    <option value="all">All products · {byFilter[filter].length}</option>
+                    {productTabs.map((t) => <option key={t.code} value={t.code}>{t.name} · {t.count}</option>)}
+                  </select>
+                  <InfoTip label="About these templates" className="ml-auto" side="bottom">
+                    A call loads the template made for its product and carrier, else the product&apos;s own, else Insurvas&apos;s: the same choice the interview makes. An interview keeps the version it started on.
+                  </InfoTip>
                 </div>
               }
             >
@@ -525,14 +522,11 @@ export function SalesUnderwritingTemplates() {
                 )
               ) : (
                 <>
-                  <table className={cn(st.table, "hidden sm:table", picked ? "min-w-[880px]" : "min-w-[1000px]")}>
+                  <table className={cn(st.table, "hidden sm:table", picked ? "min-w-[680px]" : "min-w-[780px]")}>
                     <thead>
                       <tr className={st.headRow}>
                         <th scope="col" className={st.th}>Template</th>
                         {!picked && <th scope="col" className={cn(st.th, "w-[130px]")}>Product</th>}
-                        <th scope="col" className={cn(st.th, st.num, "w-[96px]")}>Questions</th>
-                        <th scope="col" className={cn(st.th, st.num, "w-[96px]")}>Knockouts</th>
-                        <th scope="col" className={cn(st.th, "w-[72px]")}>Version</th>
                         <th scope="col" className={cn(st.th, "w-[150px]")}>Status</th>
                         <th scope="col" className={cn(st.th, picked ? "w-[170px]" : "w-[140px]")}>Last changed</th>
                         <th scope="col" className={cn(st.th, "w-[1%] text-right")}><span className="sr-only">Actions</span></th>
@@ -543,16 +537,13 @@ export function SalesUnderwritingTemplates() {
                             <tr key={t.id} className="m-row cursor-pointer" onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a, [role=menu]")) open(t); }}>
                               <td className={st.td}>
                                 <span className={cn(st.strong, "block")}>{t.name}</span>
-                                <span className={st.sub}>{rowSub(t)}</span>
+                                <span className={st.sub}>{`v${t.version} · ${plural(questionCount(t.definition), "question")} · ${plural(knockoutCount(t.definition), "knockout")} · ${rowSub(t)}`}</span>
                               </td>
                               {!picked && (
                                 <td className={st.td}>
                                   <button type="button" className="rounded-[6px] text-left text-[var(--ink)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]" onClick={() => setProduct(t.productCode)}>{t.productName}</button>
                                 </td>
                               )}
-                              <td className={cn(st.td, st.num)}>{questionCount(t.definition)}</td>
-                              <td className={cn(st.td, st.num)}>{knockoutCount(t.definition)}</td>
-                              <td className={st.td}><VersionPill version={t.version} live={isLive(t)} /></td>
                               <td className={st.td}><StatusPill t={t} /></td>
                               <td className={cn(st.td, "whitespace-nowrap")}>{lastChanged(t)}</td>
                               <td className={cn(st.td, "whitespace-nowrap text-right")}>
