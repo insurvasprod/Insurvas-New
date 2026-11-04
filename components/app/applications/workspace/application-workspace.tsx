@@ -187,7 +187,7 @@ function InboundRail({ onFinish, collapsed, onToggle }: { onFinish: () => void; 
         {collapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
       </Button>
       {/* Room on every side so the step on screen — its pill and its glow — is never cut by the scroll box. */}
-      <nav aria-label="Application steps" className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto py-1.5", collapsed ? "px-0" : "-mx-2 px-3")}>
+      <nav aria-label="Application steps" className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto py-1.5", collapsed ? "w-full items-center overflow-x-hidden px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "-mx-2 px-3")}>
 
         {/* Owner 2026-10-28 (round 3, /ui-taste): no stage names — ten steps, one line, one state each. */}
         <ol className="m-0 flex min-h-full list-none flex-col p-0">
@@ -195,14 +195,14 @@ function InboundRail({ onFinish, collapsed, onToggle }: { onFinish: () => void; 
                   const on = step === key;
                   const open = i <= Math.max(reach, here) || done[i];
                   return (
-                    <li key={key} className="flex min-h-[40px] flex-1">
+                    <li key={key} className={cn("flex flex-1", collapsed ? "min-h-[32px]" : "min-h-[40px]")}>
                       <button
                         type="button"
                         aria-current={on ? "step" : undefined}
                         disabled={!open}
                         title={open ? STEP_LABEL.get(key) : "Finish the steps before it first"}
                         onClick={() => goTo(key)}
-                        className="group relative flex w-full items-stretch gap-3 text-left outline-none disabled:cursor-not-allowed"
+                        className={cn("group relative flex items-stretch text-left outline-none disabled:cursor-not-allowed", collapsed ? "w-[30px] gap-0" : "w-full gap-3")}
                       >
                         {/* The step on screen is one pill, dot and name together (owner 2026-10-28: not split in two). */}
                         {on && !collapsed && <span aria-hidden="true" className="absolute top-1/2 -left-[5px] right-0 h-[2.5rem] -translate-y-1/2 rounded-full bg-[var(--primary-soft)] ring-1 ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]" />}
