@@ -34,7 +34,6 @@ export function LandingRoadmap() {
       <div className={styles.inner}>
         <header className={styles.head}>
           <div>
-            <p className={styles.eyebrow}>Roadmap</p>
             <h2 id="roadmap-title" className={styles.heading}>See what we are building next.</h2>
           </div>
           <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>

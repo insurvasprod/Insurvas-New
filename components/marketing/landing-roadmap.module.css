@@ -4,8 +4,6 @@
 .inner { position: absolute; inset: 0 0 auto; z-index: 3; width: min(100% - 64px, 1320px); margin: 0 auto; padding-top: clamp(48px, 5vw, 72px); pointer-events: none; }
 .inner a { pointer-events: auto; }
 .head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 32px; }
-.eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--accent-ink); font-size: 15px; font-weight: 650; }
-.eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
 .heading { margin: 0; color: var(--ink); font: 600 clamp(28px, 3.2vw, 44px)/1.1 var(--font-brand); letter-spacing: -.025em; text-wrap: balance; }
 .link { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-ink); font-size: 15px; font-weight: 600; text-decoration: none; }
 .link:hover { text-decoration: underline; }
