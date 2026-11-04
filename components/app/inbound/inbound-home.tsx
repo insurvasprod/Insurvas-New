@@ -247,7 +247,6 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
             </TableCard>
           )}
           {floor.truncated && <Callout tone="warning" title="Showing the 500 callers who have waited longest." />}
-          <p className="m-0 text-xs text-[var(--muted)]" role="status">{liveLabel} · updated {updated}</p>
         </div>
 
         <aside aria-label="You and your team" className="flex min-w-0 flex-col gap-4">
@@ -282,6 +281,8 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
               <Button type="button" variant="outline" size="sm" className="mt-1 self-start" disabled={saving === `nudge:${next.id}`} onClick={() => void sendNudge(next.id, null)}>{saving === `nudge:${next.id}` ? "Asking…" : "Ask the team to help"}</Button>
             )}
             <p className="m-0 text-xs text-[var(--muted)]">When a caller waits too long, everyone taking calls is asked.</p>
+            {/* The live-connection note sits with the team numbers it describes. */}
+            <p className="m-0 border-t border-[var(--border)] pt-2.5 text-xs text-[var(--muted)]" role="status">{liveLabel} · updated {updated}</p>
           </section>
         </aside>
       </div>
