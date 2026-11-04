@@ -568,10 +568,12 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   </>;
   const toolbar = (
     <>
-      <DataToolbar className={wide ? undefined : COMPACT_TOOLBAR} actions={refreshActions}>
-        {searchBox}
+      <DataToolbar className={wide ? undefined : COMPACT_TOOLBAR} actions={<>
         <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeFilters.length} controls="callbacks-filters" />
         {savedViews}
+        {refreshActions}
+      </>}>
+        {searchBox}
       </DataToolbar>
       <FilterPanel id="callbacks-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">{whenFilter}{dateFilter}{scopeFilter}</FilterPanel>
       <ActiveFilters filters={activeFilters} onClear={() => { clearFilters(); setScope("all"); }} className="-mx-4 w-[calc(100%+2rem)] border-b-0 pb-0" />
