@@ -10,7 +10,7 @@ import styles from "@/components/marketing/landing-roadmap.module.css";
 
 /**
  * A glimpse of /roadmap on the landing page (2026-11-04, owner): a real road, photographed from
- * above (public/marketing/README.md has the source and licence), with a pin on it for each stop,
+ * above and running edge to edge as the section's background (public/marketing/README.md has the source and licence), with a pin on it for each stop,
  * Shipped to Exploring, in the order the road runs. Pointing at a pin (or focusing it) opens its
  * label to show the detail; Now is open to start. They are pressed buttons, not tabs, because they sit on the photo rather than in a row.
  *
@@ -39,33 +39,33 @@ export function LandingRoadmap() {
           </div>
           <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
         </header>
-
-        <div className={styles.map}>
-          <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="(max-width: 1320px) 100vw, 1320px" className={styles.photo} />
-          <div className={styles.shade} aria-hidden="true" />
-          <div className={styles.pins} role="group" aria-label="Roadmap stops">
-            {stops.map((stop, i) => (
-              <button
-                key={stop.status}
-                type="button"
-                aria-pressed={active === i}
-                className={styles.pin}
-                data-status={stop.status}
-                data-tag={stop.tag}
-                data-align={stop.align}
-                style={{ left: `${stop.x}%`, top: `${stop.y}%` }}
-                onClick={() => setActive(i)}
-                onMouseEnter={() => setActive(i)}
-                onFocus={() => setActive(i)}
-              >
-                <span className={styles.node} aria-hidden="true" />
-                <span className={styles.tag}><b>{stop.label} · {stop.item!.when}</b><span>{stop.item!.title}</span><span className={styles.detail}><span>{stop.item!.text}</span></span></span>
-              </button>
-            ))}
-          </div>
-        </div>
-
       </div>
+
+      <div className={styles.map}>
+        <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
+        <div className={styles.shade} aria-hidden="true" />
+        <div className={styles.pins} role="group" aria-label="Roadmap stops">
+          {stops.map((stop, i) => (
+            <button
+              key={stop.status}
+              type="button"
+              aria-pressed={active === i}
+              className={styles.pin}
+              data-status={stop.status}
+              data-tag={stop.tag}
+              data-align={stop.align}
+              style={{ left: `${stop.x}%`, top: `${stop.y}%` }}
+              onClick={() => setActive(i)}
+              onMouseEnter={() => setActive(i)}
+              onFocus={() => setActive(i)}
+            >
+              <span className={styles.node} aria-hidden="true" />
+              <span className={styles.tag}><b>{stop.label} · {stop.item!.when}</b><span>{stop.item!.title}</span><span className={styles.detail}><span>{stop.item!.text}</span></span></span>
+            </button>
+          ))}
+        </div>
+      </div>
+
     </section>
   );
 }
