@@ -1,24 +1,38 @@
-/* The roadmap glimpse on the landing page (owner, 4 Nov). */
-.section { border-top: 1px solid var(--border); background: var(--canvas); }
+/* The roadmap glimpse on the landing page (owner, 4 Nov): a track filled up to "now", one item per stop. */
+.section { background: var(--canvas); }
 .inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0; }
-.head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 32px; margin-bottom: clamp(24px, 3vw, 36px); }
-.eyebrow { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0; color: var(--accent-ink); font-size: 15px; font-weight: 650; }
+.head { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px 32px; margin-bottom: clamp(36px, 4vw, 52px); }
+.eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--accent-ink); font-size: 15px; font-weight: 650; }
 .eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
 .heading { margin: 0; color: var(--ink); font: 600 clamp(28px, 3.2vw, 44px)/1.1 var(--font-brand); letter-spacing: -.025em; text-wrap: balance; }
 .link { display: inline-flex; align-items: center; gap: 6px; color: var(--accent-ink); font-size: 15px; font-weight: 600; text-decoration: none; }
 .link:hover { text-decoration: underline; }
-.link svg { width: 16px; height: 16px; }
+.link svg { width: 16px; height: 16px; transition: transform .2s; }
+.link:hover svg { transform: translateX(3px); }
 .link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 
-.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
-.card { display: grid; align-content: start; gap: 6px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); padding: 20px; }
-.card strong { color: var(--ink); font-size: 18px; font-weight: 600; letter-spacing: -.015em; }
-.card > span { color: var(--muted); font-size: 15px; line-height: 1.5; }
-.status { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; color: var(--ink); font-size: 13px; font-weight: 600; }
-.status span { margin-left: auto; color: var(--muted); font-weight: 400; }
-.status i { width: 10px; height: 10px; border: 2px solid var(--muted); border-radius: 50%; }
-.card[data-status="progress"] .status i { border-color: var(--warning); background: var(--warning); }
-.card[data-status="exploring"] .status i { border-style: dashed; }
+.track { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 28px; margin: 0; padding: 0; list-style: none; }
+.stop { position: relative; display: grid; align-content: start; gap: 6px; padding-top: 34px; }
+/* the rail: each stop draws the segment to the next one */
+.stop:not(:last-child)::after { position: absolute; top: 8px; left: 18px; right: -28px; height: 3px; border-radius: 2px; background: var(--border); content: ""; }
+.stop[data-status="shipped"]::after { background: var(--primary); }
+.node { position: absolute; top: 2px; left: 0; z-index: 1; width: 15px; height: 15px; border: 2px solid var(--muted); border-radius: 50%; background: var(--canvas); }
+.stop[data-status="shipped"] .node { border-color: var(--primary); background: var(--primary); }
+.stop[data-status="progress"] .node { top: 0; width: 19px; height: 19px; border-color: var(--warning); background: var(--warning); box-shadow: 0 0 0 6px color-mix(in srgb, var(--warning) 22%, transparent); animation: pulse 2.4s ease-in-out infinite; }
+.stop[data-status="exploring"] .node { border-style: dashed; }
 
-@media (max-width: 900px) { .cards { grid-template-columns: minmax(0, 1fr); } }
+.when { margin: 0; color: var(--muted); font-size: 13px; font-weight: 600; }
+.when span { font-weight: 400; }
+.stop[data-status="shipped"] .when { color: var(--accent-ink); }
+.stop[data-status="progress"] .when { color: var(--warning); }
+.stop strong { color: var(--ink); font-size: 18px; font-weight: 600; letter-spacing: -.015em; line-height: 1.3; }
+.text { color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+
+@keyframes pulse { 50% { box-shadow: 0 0 0 10px color-mix(in srgb, var(--warning) 8%, transparent); } }
+@media (max-width: 900px) {
+  .track { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+  .stop { padding: 0 0 0 36px; }
+  .stop:not(:last-child)::after { top: 22px; left: 7px; right: auto; bottom: -26px; width: 3px; height: auto; }
+}
 @media (max-width: 640px) { .inner { width: calc(100% - 32px); } }
+@media (prefers-reduced-motion: reduce) { .stop[data-status="progress"] .node { animation: none; } }
