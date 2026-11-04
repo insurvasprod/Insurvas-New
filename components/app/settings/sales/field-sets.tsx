@@ -233,6 +233,17 @@ export function SalesFieldSets() {
     if (!(await leaveEdits())) return;
     setSelectedKey(null);
   };
+  // Owner 2026-11-04: on a wide screen the first carrier opens by itself, once, so the set's pane is never
+  // an empty "Pick a carrier". A phone keeps the list first, and closing a set is not undone.
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (autoOpened.current || selectedKey || !listed.length) return;
+    if (!window.matchMedia("(min-width: 1024px)").matches) return;
+    const timer = window.setTimeout(() => { autoOpened.current = true; load(listed[0]); }, 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listed.length, selectedKey]);
+
   const discard = () => { if (selected) { setEntries(entriesOf(selected.own ?? selected.inUse)); setSaveError(null); } };
   /**
    * Every edit goes through here. On the agency's own set it edits the draft in hand; on a platform
@@ -478,17 +489,16 @@ export function SalesFieldSets() {
           <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
             {/* The carriers. On a phone the list gives way to the picked set. */}
             <section aria-label="Carriers" className={cn("m-glass flex min-w-0 flex-col gap-3 rounded-lg border p-3.5", selected && "max-lg:hidden")}>
-              <label className="relative block">
-                <span className="sr-only">Search carriers</span>
-                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--body)]" aria-hidden="true" />
-                <input type="search" className={cn(control, "mt-0 pl-9")} placeholder="Search carriers or products" value={query} onChange={(e) => setQuery(e.target.value)} />
-              </label>
-              <Segmented
-                label="Show"
-                value={activeFilter.key}
-                onChange={setFilter}
-                options={filters.map((f) => ({ key: f.key, label: f.label, count: rows.filter(f.test).length, tone: f.key === "gaps" ? "danger" as const : undefined }))}
-              />
+              <div className="flex items-center gap-2">
+                <label className="relative block min-w-0 flex-1">
+                  <span className="sr-only">Search carriers</span>
+                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--body)]" aria-hidden="true" />
+                  <input type="search" className={cn(control, "mt-0 pl-9")} placeholder="Search carriers or products" value={query} onChange={(e) => setQuery(e.target.value)} />
+                </label>
+                <select aria-label="Show" className={cn(control, "mt-0 w-auto shrink-0")} value={activeFilter.key} onChange={(e) => setFilter(e.target.value as Filter)}>
+                  {filters.map((f) => <option key={f.key} value={f.key}>{f.label} · {rows.filter(f.test).length}</option>)}
+                </select>
+              </div>
               {rows.length === 0 ? (
                 <EmptyState title="No carriers yet" hint="Add a carrier in Carriers. It uses the platform Final Expense set until you give it its own." />
               ) : listed.length === 0 ? (
@@ -512,7 +522,7 @@ export function SalesFieldSets() {
                                 onClick={() => { void open(r); }}
                                 className={cn(
                                   "flex w-full flex-col gap-1 rounded-md border px-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-                                  on ? "border-[var(--brand-500)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:bg-[var(--surface-alt)]",
+                                  on ? "border-[var(--brand-500)] bg-[var(--primary-soft)]" : "border-transparent hover:bg-[var(--surface-alt)]",
                                 )}
                               >
                                 <span className="flex items-center justify-between gap-2">
