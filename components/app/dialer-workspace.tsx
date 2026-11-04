@@ -15,7 +15,7 @@ import { localClock, returnWindowLine, zoneShort } from "@/lib/dialerScripts/dis
 import { APPLICATION_OUTCOME, outcomeButtonLabel, outcomeHotkey } from "@/lib/dialerScripts/outcomes";
 import { CALLBACK_OUTCOME, DNC_OUTCOME, Kbd, body14, card, fieldClass, fieldLabel, instantInZone, label, outcomeIcon, small } from "@/components/app/dialer/model";
 import { useDialer } from "@/components/app/dialer/use-dialer";
-import { DialerQueueTable, QueuePriorityChips } from "@/components/app/dialer/queue-table";
+import { DialerQueueTable } from "@/components/app/dialer/queue-table";
 import { DialerLeadNotes } from "@/components/app/dialer/lead-notes";
 import { DialerLeadColumn } from "@/components/app/dialer/lead-column";
 import { useNow } from "@/components/app/applications/outcome/use-now";
@@ -206,7 +206,6 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
           actions on the right. Today's dial and contact counts are gone from here. The search and
           the campaign live in the queue table's toolbar (owner 2026-10-29). */}
       {(!searchMode || canCheckNumber || !readOnly) && <div className="flex flex-wrap items-center gap-2">
-        {!searchMode && <QueuePriorityChips d={dialer} />}
         <span className="ml-auto flex flex-wrap items-center gap-2">
           {/* Owners and producers (sales.use) may check a number; auto-next serves the next lead as soon as an outcome is recorded (on by default). Both sit under More (owner 2026-11-05). */}
           <MoreMenu items={[

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { FolderOpen, Phone, User, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, FilterButton, FilterField, FilterPanel, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -35,6 +35,10 @@ const ROW_HEIGHT = 45;
 export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDialer>; readOnly: boolean }) {
   const { isSetter, search, setSearch, searchMode, searching, searchLeads, clearLeadSearch, visibleLeads, selectedId, selectLead, queue, queueError, queueFilter, setQueueFilter, attempt, picking, pickRefusals, pickLead, served, panel } = d;
   const [campaign, setCampaign] = useState(ALL);
+  const [usState, setUsState] = useState(ALL);
+  const [tries, setTries] = useState<"all" | "first" | "retry">("all");
+  const [mine, setMine] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const pageSize = useRowsThatFit(box);
 
@@ -50,22 +54,35 @@ export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDial
     return [...counts.entries()].map(([key, entry]) => ({ key, ...entry })).sort((a, b) => (a.key === NO_CAMPAIGN ? 1 : b.key === NO_CAMPAIGN ? -1 : a.name.localeCompare(b.name)));
   }, [allRows]);
 
+  const states = useMemo(() => [...new Set(allRows.map((row) => row.state).filter((value): value is string => Boolean(value)))].sort(), [allRows]);
+
   // Typing narrows the loaded queue at once: a name, or three or more digits of the number.
   const needle = search.trim().toLocaleLowerCase();
   const digits = needle.replace(/\D/g, "");
   const rows = useMemo(() => allRows.filter((row) =>
     (campaign === ALL || (row.campaignId ?? NO_CAMPAIGN) === campaign)
+    && (usState === ALL || row.state === usState)
+    && (tries === "all" || (tries === "first" ? row.attemptsMade === 0 : row.attemptsMade > 0))
+    && (!mine || row.assignedToYou)
     && (searchMode || !needle || (row.name ?? "").toLocaleLowerCase().includes(needle) || (digits.length >= 3 && (row.phone ?? "").replace(/\D/g, "").includes(digits))),
-  ), [allRows, campaign, needle, digits, searchMode]);
+  ), [allRows, campaign, usState, tries, mine, needle, digits, searchMode]);
 
   // The page goes back to 1 whenever what is listed changes.
-  const listKey = `${searchMode}|${needle}|${campaign}|${queueFilter}|${pageSize}`;
+  const listKey = `${searchMode}|${needle}|${campaign}|${usState}|${tries}|${mine}|${queueFilter}|${pageSize}`;
   const [paging, setPaging] = useState({ key: listKey, page: 1 });
   const page = paging.key === listKey ? paging.page : 1;
   const setPage = (to: number) => setPaging({ key: listKey, page: to });
 
   const total = searchMode ? visibleLeads.length : rows.length;
-  const clearFilters = () => { setCampaign(ALL); setQueueFilter("all"); setSearch(""); };
+  const clearFilters = () => { setCampaign(ALL); setUsState(ALL); setTries("all"); setMine(false); setQueueFilter("all"); setSearch(""); };
+  const priorityLabel = (key: string) => (FILTERS.find((filter) => filter.key === key)?.label ?? key).replace(/ priority$/, "");
+  const active: ActiveFilter[] = [
+    queueFilter !== "all" && { key: "priority", label: "Priority", value: priorityLabel(queueFilter), onRemove: () => setQueueFilter("all") },
+    campaign !== ALL && { key: "campaign", label: "Campaign", value: campaigns.find((entry) => entry.key === campaign)?.name ?? "This campaign", onRemove: () => setCampaign(ALL) },
+    usState !== ALL && { key: "state", label: "State", value: usState, onRemove: () => setUsState(ALL) },
+    tries !== "all" && { key: "tries", label: "Attempts", value: tries === "first" ? "First call" : "Retries", onRemove: () => setTries("all") },
+    mine && { key: "mine", label: "Assigned", value: "To me", onRemove: () => setMine(false) },
+  ].filter((entry): entry is ActiveFilter => Boolean(entry));
   const pickable = !readOnly && !attempt && picking === null;
   // The table lists the next 100 (the preview's ceiling); the count says how many more wait behind them.
   const more = queue?.available && (queue.capped || queue.count > allRows.length)
@@ -84,16 +101,7 @@ export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDial
         )}
         {!isSetter && <Button type="submit" variant="outline" disabled={searching || search.trim().length < 2}>{searching ? "Searching…" : "Search"}</Button>}
       </form>
-      {!searchMode && (
-        <>
-          <label className="sr-only" htmlFor="dialer-campaign">Campaign</label>
-          <select id="dialer-campaign" className={cn(toolbarControl, "max-w-36 @2xl:max-w-56")} value={campaign} onChange={(event) => setCampaign(event.target.value)}>
-            <option value={ALL}>All campaigns ({allRows.length.toLocaleString()})</option>
-            {campaigns.map((entry) => <option key={entry.key} value={entry.key}>{entry.name} ({entry.count.toLocaleString()})</option>)}
-            {campaign !== ALL && !campaigns.some((entry) => entry.key === campaign) && <option value={campaign}>This campaign (0)</option>}
-          </select>
-        </>
-      )}
+      {!searchMode && <FilterButton open={filtersOpen} count={active.length} controls="dialer-filters" onClick={() => setFiltersOpen((open) => !open)} />}
     </>
   );
 
@@ -146,8 +154,8 @@ export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDial
         ? null
         : <EmptyState title="Nothing in this priority is servable to you right now" hint="Other priorities may still have leads." action={<Button type="button" variant="outline" onClick={() => setQueueFilter("all")}>Show every priority</Button>} />;
   } else if (rows.length === 0) {
-    content = campaign !== ALL
-      ? <EmptyState title="No lead in this campaign is ready now" hint="Try another campaign or priority." action={<Button type="button" variant="outline" onClick={clearFilters}>Clear filters</Button>} />
+    content = active.length > 0
+      ? <EmptyState title="No lead matches these filters" hint="Try fewer filters." action={<Button type="button" variant="outline" onClick={clearFilters}>Clear filters</Button>} />
       : <NoMatches noun="leads" by={queueFilter === "all" ? "search" : "filters"} onClear={clearFilters} />;
   } else {
     const shown = paginate(rows, page, pageSize).rows;
@@ -197,7 +205,48 @@ export function DialerQueueTable({ d, readOnly }: { d: ReturnType<typeof useDial
     // At least four rows' room (toolbar 62 + heads 40 + pager 53 + borders + 4 × 49 = 353): the open
     // lead's card gives way and scrolls inside itself before the queue does.
     <div ref={box} className="@container flex min-h-0 flex-col lg:min-h-89 lg:flex-1 lg:basis-0 lg:overflow-hidden">
-      <TableCard toolbar={toolbar} footer={footer}>
+      <TableCard
+        toolbar={toolbar}
+        footer={footer}
+        filters={searchMode ? undefined : (
+          <>
+            <FilterPanel id="dialer-filters" open={filtersOpen} className="grid-cols-2 gap-y-2.5 py-3 @2xl:grid-cols-3">
+              <FilterField label="Priority" htmlFor="dialer-priority">
+                <select id="dialer-priority" className={cn(toolbarControl, "w-full min-w-0")} value={queueFilter} onChange={(event) => setQueueFilter(event.target.value as typeof queueFilter)}>
+                  {FILTERS.map((filter) => <option key={filter.key} value={filter.key}>{filter.key === "all" ? "Any priority" : priorityLabel(filter.key)}</option>)}
+                </select>
+              </FilterField>
+              <FilterField label="Campaign" htmlFor="dialer-campaign">
+                <select id="dialer-campaign" className={cn(toolbarControl, "w-full min-w-0")} value={campaign} onChange={(event) => setCampaign(event.target.value)}>
+                  <option value={ALL}>All campaigns ({allRows.length.toLocaleString()})</option>
+                  {campaigns.map((entry) => <option key={entry.key} value={entry.key}>{entry.name} ({entry.count.toLocaleString()})</option>)}
+                  {campaign !== ALL && !campaigns.some((entry) => entry.key === campaign) && <option value={campaign}>This campaign (0)</option>}
+                </select>
+              </FilterField>
+              <FilterField label="State" htmlFor="dialer-state">
+                <select id="dialer-state" className={cn(toolbarControl, "w-full min-w-0")} value={usState} onChange={(event) => setUsState(event.target.value)}>
+                  <option value={ALL}>Any state</option>
+                  {states.map((value) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </FilterField>
+              <FilterField label="Attempts" htmlFor="dialer-tries">
+                <select id="dialer-tries" className={cn(toolbarControl, "w-full min-w-0")} value={tries} onChange={(event) => setTries(event.target.value as typeof tries)}>
+                  <option value="all">Any</option>
+                  <option value="first">First call</option>
+                  <option value="retry">Retries</option>
+                </select>
+              </FilterField>
+              <FilterField label="Assigned" htmlFor="dialer-mine">
+                <select id="dialer-mine" className={cn(toolbarControl, "w-full min-w-0")} value={mine ? "mine" : "all"} onChange={(event) => setMine(event.target.value === "mine")}>
+                  <option value="all">Anyone</option>
+                  <option value="mine">To me</option>
+                </select>
+              </FilterField>
+            </FilterPanel>
+            <ActiveFilters filters={active} onClear={clearFilters} />
+          </>
+        )}
+      >
         {content}
       </TableCard>
     </div>
