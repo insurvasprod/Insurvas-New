@@ -134,7 +134,7 @@ export function VerifyStep() {
           );
         })}
       </FoldSection>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
         <span className="text-xs text-[var(--muted)]">
           {verification?.complete ? "Verified on the call." : onCall.size ? "Confirmed on the call where marked; the call's verification is not finished." : workItemId ? "The call's verification is not finished." : "Read each one back and confirm it."}
         </span>

@@ -167,7 +167,7 @@ function StepNav() {
  * agent works from step 1: a step opens once every step before it is done (or it was reached before).
  * Finish the call is always at the foot.
  */
-function InboundRail({ name, onFinish }: { name: string; onFinish: () => void }) {
+function InboundRail({ onFinish }: { onFinish: () => void }) {
   const ws = useWorkspace();
   const { step, goTo } = ws;
   const keys = NUMBERED.map((s) => s.key);
@@ -175,8 +175,6 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
   const firstOpen = done.indexOf(false);
   const reach = firstOpen === -1 ? keys.length - 1 : firstOpen;
   const here = keys.indexOf(step as (typeof keys)[number]);
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
-  const doneCount = done.filter(Boolean).length;
   // Owner 2026-10-28: the rail stands the column's full height — every row shares the space — and the
   // line runs unbroken from step 1 to After submit, filling green as each step is finished. Steps not
   // reachable yet are dimmed (their title says why) rather than each wearing a lock.
@@ -185,17 +183,6 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
   );
   return (
     <aside aria-label="The client and the application steps" className="m-glass flex min-h-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_30%,var(--border))] p-4 lg:h-full">
-      <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="inline-grid size-11 shrink-0 place-items-center rounded-[12px] bg-[var(--primary-soft)] text-sm font-bold text-[var(--accent-ink)]">{initials || "?"}</span>
-        <span className="min-w-0 flex-1">
-          <strong className="block truncate text-base font-semibold text-[var(--ink)]">{name}</strong>
-          <span className="text-xs text-[var(--body)]">{doneCount} of {keys.length} steps done</span>
-        </span>
-      </div>
-      <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_10%,transparent)]">
-        <span className="block h-full rounded-full bg-[var(--primary)] transition-[width] duration-700 ease-[cubic-bezier(.2,.8,.2,1)]" style={{ width: `${(doneCount / keys.length) * 100}%` }} />
-      </span>
-
       {/* Room on every side so the step on screen — its pill and its glow — is never cut by the scroll box. */}
       <nav aria-label="Application steps" className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-1.5">
 
@@ -250,7 +237,7 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
 
 function InboundWorkspace({ onFinish }: { onFinish: () => void }) {
   const ws = useWorkspace();
-  const { caseView, step, sample, seatReadOnly } = ws;
+  const { step, sample, seatReadOnly } = ws;
   const Step = STEP_COMPONENT[step];
   // Owner 2026-10-28: inside the call there is no title, attempt picker, portal, timeline or spouse
   // button, and no status or product tags — the call page's own bar and this rail are the whole frame.
@@ -260,9 +247,10 @@ function InboundWorkspace({ onFinish }: { onFinish: () => void }) {
       {sample && <SampleDataNotice />}
       {seatReadOnly && <p role="status" className="m-0 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]">Your plan is read-only: you can read this case, not change it.</p>}
       <div className="grid min-w-0 items-start gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-stretch">
-        <InboundRail name={caseView.clientName} onFinish={onFinish} />
+        <InboundRail onFinish={onFinish} />
         <div role="region" aria-label={STEP_LABEL.get(step)} className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-          <div key={step} className="flex min-w-0 flex-col gap-4 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both]">
+          {/* A step that is one card fills the column down to the rail's foot, so the two end level (owner 2026-11-05). */}
+          <div key={step} className="flex min-w-0 flex-col gap-4 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:flex-1 lg:[&>*:only-child]:flex-1">
             <Step />
           </div>
         </div>
