@@ -1116,10 +1116,8 @@ export function PartnersWorkspace({
               {detailTab === "terms" && (
                 <div className="space-y-8">
                 <section className="space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-muted-foreground">
-                      New rates apply from their effective date. Past leads keep their original terms.
-                    </p>
+                  {selectedPartner.terms.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-end gap-3">
                     {!readOnly && selectedPartner.status !== "offboarded" && (
                       <Button
                         type="button"
@@ -1134,6 +1132,7 @@ export function PartnersWorkspace({
                       </Button>
                     )}
                   </div>
+                  )}
                   {selectedPartner.terms.length > 0 ? (
                     <div className="overflow-x-auto rounded-lg border border-border">
                       <table className="portal-lead-table w-full min-w-[520px]! text-left text-sm">
@@ -1161,12 +1160,9 @@ export function PartnersWorkspace({
                     />
                   )}
                 </section>
-                {extraTabs.payouts && (
+                {extraTabs.payouts && selectedPartner.terms.length > 0 && (
                   <section aria-labelledby="partner-payouts-title" className="space-y-3 border-t border-border pt-6">
-                    <div>
-                      <h3 id="partner-payouts-title" className="text-base font-semibold">Payouts</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">Review draft, published, and paid runs for this partner.</p>
-                    </div>
+                    <h3 id="partner-payouts-title" className="text-base font-semibold">Payouts</h3>
                     {extraTabs.payouts}
                   </section>
                 )}
@@ -1175,10 +1171,7 @@ export function PartnersWorkspace({
               {detailTab === "people" && (
                 <div id="partner-section-team" className="space-y-6">
                   <section aria-labelledby="partner-users-title" className="space-y-3">
-                    <div>
-                      <h3 id="partner-users-title" className="text-base font-semibold">Portal users</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">Manage who can access this partner’s portal.</p>
-                    </div>
+                    <h3 id="partner-users-title" className="text-base font-semibold">Portal users</h3>
                     <PartnerUsersPanel
                       key={selectedPartner.id}
                       partnerId={selectedPartner.id}
@@ -1225,25 +1218,17 @@ export function PartnersWorkspace({
               {detailTab === "products" && (
                 <div className="space-y-6">
                   <section aria-labelledby="partner-product-access-title" className="space-y-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 id="partner-product-access-title" className="text-card-title">Product access</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Choose which products {selectedPartner.name} can submit. Only products your agency sells can be approved.
-                        </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 id="partner-product-access-title" className="text-card-title">Product access</h3>
+                      <div className="flex items-center gap-2">
+                        {canManageProductConfig && partnerProducts[selectedPartner.id] && (
+                          <StatusChip tone="info">
+                            {selectedProducts.filter((product) => product.approved).length} of {selectedProducts.length} approved
+                          </StatusChip>
+                        )}
+                        {canManageProductConfig && <Button asChild variant="outline" size="sm"><Link href="/app/settings#products">Agency products</Link></Button>}
                       </div>
-                      {canManageProductConfig && partnerProducts[selectedPartner.id] && (
-                        <StatusChip tone="info">
-                          {selectedProducts.filter((product) => product.approved).length} of {selectedProducts.length} approved
-                        </StatusChip>
-                      )}
                     </div>
-                    {canManageProductConfig && (
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/40 px-3 py-2.5 text-sm">
-                        <span className="text-muted-foreground">Manage the products available across your agency.</span>
-                        <Button asChild variant="outline" size="sm"><Link href="/app/settings#products">Agency products</Link></Button>
-                      </div>
-                    )}
                     {canManageProductConfig && partnerProducts[selectedPartner.id] ? (
                       selectedProducts.some((product) => product.is_enabled) ? (
                         <div className="grid gap-2 sm:grid-cols-2">
@@ -1251,7 +1236,7 @@ export function PartnersWorkspace({
                             <label
                               key={product.code}
                               className={cn(
-                                "flex min-h-16 items-center gap-3 rounded-lg border border-border px-3 py-2.5 transition-colors",
+                                "flex min-h-12 items-center gap-3 rounded-lg border border-border px-3 py-2 transition-colors",
                                 product.approved && "border-[var(--primary)] bg-[var(--primary-soft)]",
                                 !product.is_enabled && "opacity-60",
                               )}
@@ -1268,16 +1253,7 @@ export function PartnersWorkspace({
                                 }
                                 onChange={() => void togglePartnerProduct(selectedPartner.id, product)}
                               />
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-sm font-medium">{product.name}</span>
-                                <span className="mt-0.5 block text-xs text-muted-foreground">
-                                  {!product.is_enabled
-                                    ? "Not sold by your agency"
-                                    : product.approved
-                                      ? "Available to this partner"
-                                      : "Not available to this partner"}
-                                </span>
-                              </span>
+                              <span className="min-w-0 flex-1 text-sm font-medium">{product.name}</span>
                               <StatusChip tone={product.approved ? "good" : "neutral"}>
                                 {product.approved ? "Approved" : product.is_enabled ? "Not approved" : "Agency disabled"}
                               </StatusChip>
@@ -1300,15 +1276,11 @@ export function PartnersWorkspace({
                     )}
                   </section>
 
+                  {(approvedFormProducts?.length ?? 0) > 0 && <>
                   <div className="border-t border-border" />
 
                   <section aria-labelledby="partner-form-setup-title" className="space-y-3">
-                    <div>
-                      <h3 id="partner-form-setup-title" className="text-card-title">Form setup</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Choose an approved product to configure the fields partners complete when they send a lead.
-                      </p>
-                    </div>
+                    <h3 id="partner-form-setup-title" className="text-card-title">Form setup</h3>
                     <PartnerFormStudio
                       embedded
                       partnerId={selectedPartner.id}
@@ -1316,6 +1288,7 @@ export function PartnersWorkspace({
                       readOnly={readOnly || selectedPartner.status === "offboarded"}
                     />
                   </section>
+                  </>}
                 </div>
               )}
               {detailTab === "markets" && (
