@@ -264,9 +264,12 @@ export function CadenceSettings() {
           footnote={loaded.usingDefaults && campaignId && fallback.length > 0 ? "tenant default for this campaign" : `${runningSummary.total} attempts running`}
         />
         <StatTile label="Planned attempts" value={plannedSummary.total} footnote={`over ${plannedSummary.days} ${plannedSummary.days === 1 ? "day" : "days"}`} />
-        <StatTile label="First 72 hours" value={plannedSummary.first72} footnote={plannedSummary.first72 === 1 ? "attempt" : "attempts"} />
-        <StatTile label="Days 4–7" value={plannedSummary.week} footnote={plannedSummary.week === 1 ? "attempt" : "attempts"} />
-        <StatTile label={plannedSummary.lastDay > 7 ? `Days 8–${plannedSummary.lastDay}` : "After day 7"} value={plannedSummary.later} footnote={plannedSummary.later === 1 ? "attempt" : "attempts"} />
+        {/* The spread of the attempts is one tile, not three (owner 2026-11-04). */}
+        <StatTile
+          label="Spread"
+          value={`${plannedSummary.first72} · ${plannedSummary.week} · ${plannedSummary.later}`}
+          footnote={`first 72 hours · days 4–7 · ${plannedSummary.lastDay > 7 ? `days 8–${plannedSummary.lastDay}` : "after day 7"}`}
+        />
       </StatStrip>
 
       {saveError && <Callout tone="error" title={saveError} />}
@@ -278,7 +281,6 @@ export function CadenceSettings() {
       )}
 
       <TableCard
-        title="Attempt ladder"
         toolbar={
           <DataToolbar
             actions={
@@ -344,10 +346,10 @@ export function CadenceSettings() {
         <table className={st.table}>
           <thead>
             <tr className={st.headRow}>
-              <th scope="col" className={cn(st.th, "w-[110px]")}>Attempt</th>
-              <th scope="col" className={cn(st.th, "w-[220px]")}>Wait from previous</th>
-              <th scope="col" className={cn(st.th, "w-[230px]")}>Preferred time</th>
-              <th scope="col" className={st.th}>Applies after</th>
+              <th scope="col" className={cn(st.th, "w-[90px]")}>Attempt</th>
+              <th scope="col" className={cn(st.th, "w-[170px]")}>Wait from previous</th>
+              <th scope="col" className={cn(st.th, "w-[190px]")}>Preferred time</th>
+              <th scope="col" className={cn(st.th, "min-w-[150px]")}>Applies after</th>
               <th scope="col" className={cn(st.th, st.num, "w-[110px]")}><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
