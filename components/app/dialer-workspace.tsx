@@ -196,7 +196,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
        are on opens in place at the head of the list — its facts, the call and the outcome — and the
        rest of the queue (or the search results) follows as rows. */
     <div className="flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
-      <PageHeader title="Dialer" />
+      <PageHeader title="Dialer" hideTitle />
       {canCheckNumber && <DialerPreflightDialog open={checkOpen} onOpenChange={setCheckOpen} readOnly={readOnly} />}
 
       {readOnly && <Callout tone="info" title="Read-only access — review only, no calls." />}
@@ -221,18 +221,18 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       {/* Outcomes on the left, the list in the middle, the lead's notes on the right; the two
           side columns run the full height of the screen and stay put while the list scrolls. */}
       <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
-      {panel && <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:w-[300px] lg:shrink-0 lg:overflow-y-auto")}>
+      {panel && <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:w-[260px] lg:shrink-0 lg:overflow-y-auto lg:overflow-x-hidden")}>
         {outcomePanel}
       </aside>}
       {/* The middle column (owner 2026-10-29): the lead you are on, then the queue as a table that
           fills what is left of the column and pages the rest, so neither the page nor the card scrolls. */}
       <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1 lg:h-full lg:min-h-0">
-        <section className={cn(card, "overflow-hidden lg:min-h-0 lg:overflow-y-auto")} aria-label="Lead on your screen">
+        <section className={cn(card, "overflow-hidden lg:max-h-[60%] lg:shrink-0 lg:overflow-y-auto")} aria-label="Lead on your screen">
           {current}
         </section>
         <DialerQueueTable d={dialer} readOnly={readOnly} />
       </div>
-      {panel && <aside aria-label="Lead notes" className="flex min-w-0 flex-col max-lg:order-3 lg:h-full lg:w-[320px] lg:shrink-0">
+      {panel && <aside aria-label="Lead notes" className="flex min-w-0 flex-col max-lg:order-3 lg:h-full lg:w-[280px] lg:shrink-0">
         {!isSetter
           ? <DialerLeadNotes key={panel.lead.id} leadId={panel.lead.id} canWrite={!readOnly} />
           : <div className={cn(card, "h-full p-4")}><p className={cn(small, "m-0")}>Lead notes are kept by the agents who sell; your notes go on the booking.</p></div>}
