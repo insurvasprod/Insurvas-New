@@ -170,7 +170,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
                     return (
                       <tr key={r.regulator} className="cursor-pointer hover:bg-[var(--surface-alt)]" onClick={() => router.push(href)}>
                         <td className={st.td}><RowLink href={href}>{regulatorName(r.regulator)}</RowLink></td>
-                        <td className={cn(st.td, st.num)}>{r.responseDays === null ? <StatusChip tone="warning">Not set</StatusChip> : r.responseDays}</td>
+                        <td className={cn(st.td, st.num)}>{r.responseDays === null ? <span className="text-[var(--muted)]">Not set</span> : r.responseDays}</td>
                         <td className={st.td}>{r.notes ?? <span className="text-[var(--muted)]">—</span>}</td>
                         <td className={cn(st.td, "text-right text-[var(--muted)]")}><ChevronRight aria-hidden="true" className="ml-auto size-4" /></td>
                       </tr>
@@ -195,7 +195,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
       {tab === "records" && (
         <FormSections>
           <div id="retention" className="scroll-mt-24">
-            <SettingsTableCard title="How long records are kept" actions={<span className="text-sm text-[var(--muted)]">Your rule for a state beats your all-states rule, which beats Insurvas&apos;s</span>}>
+            <SettingsTableCard title="How long records are kept">
               <table className={st.table}>
                 <thead><tr className={st.headRow}><th className={st.th}>Record</th><th className={st.th}>Kept for</th><th className={st.th}>Then</th><th className={st.th}>Basis</th><th className={st.th}>Rule</th><th className={cn(st.th, "w-10")} aria-label="Open" /></tr></thead>
                 <tbody>{RECORD_TYPES.map((t) => {
@@ -210,13 +210,13 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
                       <td className={st.td}>{shown ? describeDays(shown.retainDays) : <span className="text-[var(--muted)]">—</span>}{own.some((r) => r.state) ? <span className={st.sub}>{own.filter((r) => r.state).length} state rule{own.filter((r) => r.state).length === 1 ? "" : "s"}</span> : null}</td>
                       <td className={st.td}>{shown ? ACTION_LABELS[shown.action as RetentionAction] ?? shown.action : <span className="text-[var(--muted)]">—</span>}</td>
                       <td className={st.td}>{shown ? BASIS_LABELS[shown.basis as RetentionBasis] ?? shown.basis : <span className="text-[var(--muted)]">—</span>}</td>
-                      <td className={st.td}>{isLocked ? <StatusChip tone="neutral">Locked: never deleted</StatusChip> : own.length ? <StatusChip tone="good">Yours · {own.length} rule{own.length === 1 ? "" : "s"}</StatusChip> : p ? <StatusChip tone="neutral" dot={false}>Insurvas</StatusChip> : <StatusChip tone="warning">No rule: never deleted</StatusChip>}</td>
+                      <td className={st.td}>{isLocked ? <StatusChip tone="neutral">Locked: never deleted</StatusChip> : own.length ? <StatusChip tone="good">Yours · {own.length} rule{own.length === 1 ? "" : "s"}</StatusChip> : p ? <StatusChip tone="neutral" dot={false}>Insurvas</StatusChip> : <span className="text-[var(--muted)]">No rule: never deleted</span>}</td>
                       <td className={cn(st.td, "text-right text-[var(--muted)]")}><ChevronRight aria-hidden="true" className="ml-auto size-4" /></td>
                     </tr>
                   );
                 })}</tbody>
               </table>
-              <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-xs text-[var(--muted)]">{NOT_LEGAL_ADVICE} A record type with no rule is never deleted. Insurvas keeps each carrier&apos;s retention windows.</p>
+              <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-xs text-[var(--muted)]">{NOT_LEGAL_ADVICE} Your rule for a state beats your all-states rule, which beats Insurvas&apos;s. A record type with no rule is never deleted. Insurvas keeps each carrier&apos;s retention windows.</p>
             </SettingsTableCard>
           </div>
           <FormSection id="purge" title="Scheduled purge" info="A dry run first, every time. A live run needs a dry run inside the window.">
@@ -230,7 +230,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
               <Recipients team={data.team} value={v<string[]>("purge.recipients") ?? []} disabled={dis} onChange={(ids) => set("purge.recipients", ids)} label="Dry-run summary recipients" />
             </SettingRow>
           </FormSection>
-          <SettingsTableCard title="Runs" actions={<span className="text-sm text-[var(--muted)]">Matched, held and deleted, per run</span>}>
+          <SettingsTableCard title="Runs">
             {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Start with a dry run: it deletes nothing and shows what a live run would." /> : (
               <table className={st.table}>
                 <thead><tr className={st.headRow}><th className={st.th}>When</th><th className={st.th}>Mode</th><th className={cn(st.th, "text-right")}>Matched</th><th className={cn(st.th, "text-right")}>Held</th><th className={cn(st.th, "text-right")}>Deleted</th><th className={st.th}>Unruled</th><th className={cn(st.th, "w-10")} aria-label="Open" /></tr></thead>
