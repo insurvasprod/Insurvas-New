@@ -15,6 +15,7 @@ import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
 import { Callout, control, Field, SettingsCard, SettingsMeter, SettingsSectionHeader, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
@@ -240,9 +241,12 @@ export function LeadPostKeysSettings() {
   const vendorKeys = selectedKey ? (loaded?.keys ?? []).filter((key) => key.vendorId === selectedKey.vendorId) : [];
   const vendorMapsDiffer = vendorKeys.some((key) => !same(canonicalFieldMap(readFieldMap(key.fieldMap)), canonicalFieldMap(readFieldMap(selectedKey?.fieldMap))));
   const inverted = selectedKey ? readFieldMap(selectedKey.fieldMap).filter((entry) => entry.inverted).length : 0;
-  const dirty =
-    selectedKey !== null &&
-    (!same(draftMap, selectedKey.fieldMap) || (loaded?.schemaReady === true && !same(notesOf(draft), selectedKey.fieldNotes)));
+  // Only the owner's own changes count (owner 2026-11-04): a map stored the wrong way round is read, shown
+  // the right way round and flagged with its own "Fix" button, not announced as an unsaved edit on arrival.
+  const storedMap = selectedKey ? canonicalFieldMap(readFieldMap(selectedKey.fieldMap)) : {};
+  // Notes are kept per field of ours; a note filed under a name that is not in the map is never shown, so it is not a change.
+  const storedNotes = Object.fromEntries(Object.entries(selectedKey?.fieldNotes ?? {}).filter(([field]) => field in storedMap));
+  const dirty = selectedKey !== null && (!same(draftMap, storedMap) || (loaded?.schemaReady === true && !same(notesOf(draft), storedNotes)));
 
   async function selectKey(id: string) {
     if (id === selectedKeyId) return;
@@ -497,14 +501,15 @@ export function LeadPostKeysSettings() {
         title={key.vendorName}
         sub={<span className="flex flex-wrap items-center gap-2"><StatusChip tone={pillTone(panelState.tone)} dot>{panelState.label}</StatusChip>{campaignName(key)}</span>}
         action={<Button type="button" variant="ghost" size="icon" aria-label="Close the vendor" onClick={() => void closePanel()}><X aria-hidden="true" /></Button>}
-        className="lg:sticky lg:top-4"
+        className="xl:sticky xl:top-4"
       >
         <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${key.vendorName}'s sections`}>
-            {TABS.map((item) => (
-              <ToggleChip key={item.key} selected={tab === item.key} onClick={() => setTab(item.key)} count={item.key === "rejections" && vendorRejected ? vendorRejected : undefined}>{item.label}</ToggleChip>
-            ))}
-          </div>
+          <UnderlineTabs
+            label={`${key.vendorName}'s sections`}
+            tabs={TABS.map((item) => ({ key: item.key, label: item.label, count: item.key === "rejections" && vendorRejected ? vendorRejected : null }))}
+            value={tab}
+            onChange={setTab}
+          />
 
           {tab === "key" && (
             <div className="flex flex-col gap-4">
@@ -586,7 +591,9 @@ export function LeadPostKeysSettings() {
                 <Callout tone="warning" title={`${key.vendorName}'s keys have different maps — saving applies this one to all of them.`} />
               )}
               {inverted > 0 && (
-                <Callout tone="warning" title={`${inverted} ${inverted === 1 ? "field was" : "fields were"} stored the wrong way round — saving fixes ${inverted === 1 ? "it" : "them"}.`} />
+                <Callout tone="warning" title={`${inverted} ${inverted === 1 ? "field was" : "fields were"} stored the wrong way round.`}>
+                  <Button type="button" variant="outline" size="sm" className="mt-2" disabled={saving || draftProblems.size > 0} onClick={() => void save()}>{saving ? "Saving…" : `Fix ${inverted === 1 ? "it" : "them"}`}</Button>
+                </Callout>
               )}
               {saveError && <Callout tone="error" title="The field map was not saved">{saveError}</Callout>}
               <datalist id="lead-post-our-fields">
@@ -742,7 +749,7 @@ export function LeadPostKeysSettings() {
         <StatTile label="Dialed inside a minute" labelTitle="Of every lead a vendor has posted, the share whose first Dial came within 60 seconds of arriving." value={speed === null ? "…" : posted ? `${Math.round((within / posted) * 100)}%` : "—"} valueTone={posted ? "good" : undefined} footnote={posted ? `${fmt(posted)} posted leads` : "No posted lead yet"} />
       </StatStrip>
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
         <div className="flex min-w-0 flex-col gap-3">
           <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} labelClassName="sr-only" className="px-2.5" />}>
             <ToolbarSearch value={keyQuery} onChange={setKeyQuery} placeholder="Search vendors or keys" />
@@ -792,21 +799,10 @@ export function LeadPostKeysSettings() {
             </TableCard>
           )}
 
-          <SettingsCard title="Live posts" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
-            {activityError ? (
-              <Callout tone="error" title={activityError} />
-            ) : !activity ? (
-              <SectionLoading label="Loading recent posts" />
-            ) : activity.recent.length === 0 ? (
-              <p className="m-0 text-sm text-[var(--muted)]">No vendor has posted yet.</p>
-            ) : (
-              <TableCard>{postsTable(activity.recent.slice(0, 12), true)}</TableCard>
-            )}
-          </SettingsCard>
         </div>
 
         {panel || (
-          <SettingsCard title={`Rejections, last ${loaded.windowDays} days`} info="Across every vendor. Open a vendor for its key, field map and posts." className="lg:sticky lg:top-4">
+          <SettingsCard title={`Rejections, last ${loaded.windowDays} days`} info="Across every vendor. Open a vendor for its key, field map and posts." className="xl:sticky xl:top-4">
             {loaded.rejections.length === 0 ? (
               <p className="m-0 text-sm text-[var(--muted)]">No posts were rejected in the last {loaded.windowDays} days.</p>
             ) : (
@@ -831,6 +827,18 @@ export function LeadPostKeysSettings() {
           </SettingsCard>
         )}
       </div>
+
+      <SettingsCard title="Live posts" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
+        {activityError ? (
+          <Callout tone="error" title={activityError} />
+        ) : !activity ? (
+          <SectionLoading label="Loading recent posts" />
+        ) : activity.recent.length === 0 ? (
+          <p className="m-0 text-sm text-[var(--muted)]">No vendor has posted yet.</p>
+        ) : (
+          <TableCard>{postsTable(activity.recent.slice(0, 12), true)}</TableCard>
+        )}
+      </SettingsCard>
 
       {/* Connect a vendor: 1 vendor and campaign, 2 the key shown once, 3 check a sample post. */}
       <Dialog open={connectStep > 0} onOpenChange={(next) => { if (!next) closeConnect(); }}>
