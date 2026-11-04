@@ -34,9 +34,14 @@ export function LandingStack() {
   return (
     <section aria-labelledby="stack-title" className={styles.section}>
       <div className={styles.inner}>
+        {/* The heading and the line that explains it share one row, so the header is two lines tall
+            instead of a narrow column of four with the rest of the row empty. */}
         <header className={styles.head}>
-          <p className={styles.eyebrow}>Sound like your agency?</p>
-          <h2 id="stack-title" className={styles.heading}>Most Final Expense agencies run on five tools that don’t talk to each other.</h2>
+          <div>
+            <p className={styles.eyebrow}>Sound like your agency?</p>
+            <h2 id="stack-title" className={styles.heading}>Most Final Expense agencies run on five tools that don’t talk to each other.</h2>
+          </div>
+          <p className={styles.leak}>Every handoff between them is where leads, hours and money leak.</p>
         </header>
 
         <ol className={styles.tools}>
@@ -47,7 +52,6 @@ export function LandingStack() {
             </li>
           ))}
         </ol>
-        <p className={styles.leak}>Every handoff between them is where leads, hours and money leak.</p>
 
         <div className={styles.split}>
           <figure className={styles.quote}>
