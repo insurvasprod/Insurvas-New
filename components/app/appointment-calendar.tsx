@@ -2,11 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowUpRight, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ArrowUpRight, Clock, ChevronDown, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
-import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, type ActiveFilter, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { inputControl } from "@/components/ui/field";
 import { PageHeader } from "@/components/ui/page-header";
@@ -17,7 +17,8 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { RebookButton } from "@/components/app/appointment-rebook";
 import { ViewTabs } from "@/components/ui/view-tabs";
-import { MiniMonth, type YearMonth } from "@/components/app/calendar/mini-month";
+import { MoreMenu } from "@/components/ui/more-menu";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { faceLabel } from "@/lib/appointments/appointmentFacts";
 import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type BlockRepeat, type PickerContext } from "@/lib/appointments/calendarMath";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -282,7 +283,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   const { setNode: setFillNode, height: fillHeight } = useFillHeight();
   const [showCallbacks, setShowCallbacks] = useState(true);
   const [showBlocked, setShowBlocked] = useState(true);
-  const [monthShown, setMonthShown] = useState<YearMonth | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [callbacks, setCallbacks] = useState<DiaryCallback[] | null>(null);
   const [anchor, setAnchor] = useState<number | null>(null);
   const [now, setNow] = useState<number | null>(null);
@@ -549,6 +550,10 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
   }
 
   const filtered = Boolean(needle || status || agentId);
+  const activeFilters: ActiveFilter[] = [
+    agentId && { key: "agent", label: "Calendar of", value: agents.find(([id]) => id === agentId)?.[1] ?? "Another calendar", onRemove: () => { setAgentId(""); setListPage(1); } },
+    status && { key: "status", label: "Status", value: STATUS_LABEL[status] ?? status, onRemove: () => { setStatus(""); setListPage(1); } },
+  ].filter((entry): entry is ActiveFilter => Boolean(entry));
   const clearFilters = () => { setSearch(""); setStatus(""); setAgentId(""); setListPage(1); };
   const { current: listCurrent, rows: listPageRows } = paginate(listRows, listPage, pageSize);
 
@@ -584,17 +589,13 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
 
   const needConfirming = weekLive.filter((item) => item.status === "booked" && now != null && Date.parse(item.startsAtUtc) > now).length;
   const freeToday = today ? [...cellsFor(today).values()].filter((cell) => cell.kind === "free" && !cell.past).length : 0;
-  const busyDays = new Set(mine.filter((item) => LIVE.has(item.status)).map((item) => { const clock = wallClock(item.startsAtUtc, zone); return `${clock.year}-${clock.month}-${clock.day}`; }));
   const step = (days: number) => { if (anchor != null) { setAnchor(anchor + days * DAY_MS); setListPage(1); } };
-
-  const SIDE = "m-glass rounded-xl border border-border p-4";
-  const SIDE_RULE = "border-t border-border pt-3";
-  const sideLabel = "block text-xs font-semibold text-muted-foreground";
 
   return (
     <div className="m-stagger flex flex-col gap-6">
       <PageHeader
         title="Calendar"
+        hideTitle
         // Owner 2026-10-29: Week / Day / List on the right, just left of "Book an appointment".
         actions={<>
           <ViewTabs
@@ -608,6 +609,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
               { key: "list", label: "List", count: listRows.length },
             ]}
           />
+          {holdsCalendar && <MoreMenu items={[{ label: "Hours & blocks", icon: Clock, href: "/app/settings#calendar" }]} />}
           <Button type="button" disabled={!context} onClick={() => setBooking({ agentUserId: selected, startIso: null })}><Plus aria-hidden="true" />Book an appointment</Button>
         </>}
       />
@@ -619,68 +621,23 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
         </div>
       )}
 
-      {/* Calendar B (owner pick 2026-10-25): month and filters on the left, the day on the right. */}
-      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
-        {/* One card (2026-10-28): month, filters and figures, ruled apart, so the column is no taller
-            than the grid beside it; on a short window it scrolls on its own. */}
-        <aside className={`${SIDE} flex w-full shrink-0 flex-col gap-3 xl:max-h-[var(--fill-h)] xl:w-[280px] xl:overflow-y-auto`} style={{ "--fill-h": `${fillHeight}px` } as React.CSSProperties} aria-label="Month and filters">
-          <section>
-            <MiniMonth
-              shown={monthShown ?? (shownDay ? { year: shownDay.year, month: shownDay.month } : { year: 2026, month: 1 })}
-              onShown={setMonthShown}
-              picked={shownDay ?? null}
-              today={today}
-              busy={busyDays}
-              onPick={(day) => { setAnchor(zonedInstant(day.year, day.month, day.day, 720, zone)); setListPage(1); }}
-            />
-          </section>
-          <section className={`${SIDE_RULE} flex flex-col gap-3`}>
-            <label className="flex flex-col gap-1.5">
-              <span className={sideLabel}>Calendar of</span>
-              <select aria-label="Calendar of" value={agentId} onChange={(event) => { setAgentId(event.target.value); setListPage(1); }} className={toolbarControl}>
-                <option value="">{me && agents.some(([id]) => id === me) ? "My calendar" : "First with hours"}</option>
-                {agents.map(([id, name]) => <option key={id} value={id}>{name}{id === me ? " (you)" : ""}</option>)}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className={sideLabel}>Status</span>
-              <select aria-label="Status" value={status} onChange={(event) => { setStatus(event.target.value); setListPage(1); }} className={toolbarControl}>
-                <option value="">Every status</option>
-                {Object.entries(STATUS_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
-              </select>
-            </label>
-            <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-              <legend className={`${sideLabel} mb-1.5`}>Show</legend>
-              <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked disabled className="size-4 accent-[var(--primary)]" />Appointments</label>
-              {callbacks && <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={showCallbacks} onChange={(event) => setShowCallbacks(event.target.checked)} className="size-4 accent-[var(--primary)]" />Callbacks</label>}
-              <label className="flex items-center gap-2.5 text-sm"><input type="checkbox" checked={showBlocked} onChange={(event) => setShowBlocked(event.target.checked)} className="size-4 accent-[var(--primary)]" />Blocked time</label>
-            </fieldset>
-          </section>
-          <section className={`${SIDE_RULE} flex flex-col gap-1.5`} aria-label="Calendar figures">
-            <span className={sideLabel}>This week</span>
-            {([
-              ["Appointments", weekLive.length, ""],
-              ["Need confirming", needConfirming, needConfirming ? "text-[var(--warning-ink)]" : ""],
-              ["No-shows last week", noShows, noShows ? "text-[var(--error-ink)]" : ""],
-              ["Showed last week", showRate == null ? "—" : `${showRate}%`, ""],
-              ["Free slots today", noHours ? "—" : freeToday, freeToday ? "text-[var(--accent-ink)]" : ""],
-            ] as const).map(([label, value, tone]) => (
-              <div key={label} className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="text-[var(--body)]">{label}</span>
-                <strong className={`tabular-nums ${tone}`}>{value}</strong>
-              </div>
-            ))}
-            {holdsCalendar && <Link href="/app/settings#calendar" className="mt-1 text-sm font-semibold text-[var(--accent-ink)] hover:underline">Hours &amp; blocks</Link>}
-          </section>
-        </aside>
+      {/* The figures as the shared strip; the month, the calendar and the status live in Filters and the toolbar (owner 2026-11-05). */}
+      <StatRow label="Calendar at a glance">
+        <StatCard label="This week" value={weekLive.length} fact={{ label: noHours ? "No hours set" : `${freeToday} free ${freeToday === 1 ? "slot" : "slots"} today` }} />
+        <StatCard label="Need confirming" value={needConfirming} tone={needConfirming ? "warn" : "default"} fact={{ label: "Booked, not confirmed" }} />
+        <StatCard label="No-shows" period="last week" value={noShows} fact={{ label: noShows ? "Worth a follow-up" : "None" }} />
+        <StatCard label="Showed" period="last week" value={showRate == null ? "—" : showRate} unit={showRate == null ? undefined : "%"} fact={{ label: "Of appointments held" }} />
+      </StatRow>
 
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-start">
         <div ref={setFillNode} className={`flex min-h-[420px] min-w-0 flex-1 flex-col ${FILL_H}`} style={{ "--fill-h": `${fillHeight}px` } as React.CSSProperties}>
         <TableCard
           className={FILL}
           toolbar={
+            <>
             <DataToolbar
               actions={<>
-                {filtered && <ClearFiltersButton onClick={clearFilters} />}
+                <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeFilters.length} controls="calendar-filters" />
                 <RefreshButton onClick={refresh} refreshing={loading} />
               </>}
             >
@@ -702,6 +659,30 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
               </span>
               <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search by customer" />
             </DataToolbar>
+            <FilterPanel id="calendar-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">
+              <FilterField label="Calendar of" htmlFor="calendar-of">
+                <select id="calendar-of" value={agentId} onChange={(event) => { setAgentId(event.target.value); setListPage(1); }} className={`${toolbarControl} w-full min-w-0`}>
+                  <option value="">{me && agents.some(([id]) => id === me) ? "My calendar" : "First with hours"}</option>
+                  {agents.map(([id, name]) => <option key={id} value={id}>{name}{id === me ? " (you)" : ""}</option>)}
+                </select>
+              </FilterField>
+              <FilterField label="Status" htmlFor="calendar-status">
+                <select id="calendar-status" value={status} onChange={(event) => { setStatus(event.target.value); setListPage(1); }} className={`${toolbarControl} w-full min-w-0`}>
+                  <option value="">Every status</option>
+                  {Object.entries(STATUS_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+                </select>
+              </FilterField>
+              <fieldset className="m-0 flex min-w-0 flex-col gap-1.5 border-0 p-0">
+                <legend className="mb-1.5 p-0 text-xs font-medium text-muted-foreground">Show</legend>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pt-1.5">
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked disabled className="size-4 accent-[var(--primary)]" />Appointments</label>
+                  {callbacks && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showCallbacks} onChange={(event) => setShowCallbacks(event.target.checked)} className="size-4 accent-[var(--primary)]" />Callbacks</label>}
+                  <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={showBlocked} onChange={(event) => setShowBlocked(event.target.checked)} className="size-4 accent-[var(--primary)]" />Blocked time</label>
+                </div>
+              </fieldset>
+            </FilterPanel>
+            <ActiveFilters filters={activeFilters} onClear={clearFilters} className="-mx-4 w-[calc(100%+2rem)] border-b-0 pb-0" />
+            </>
           }
           footer={view === "list"
             ? <Pager page={listCurrent} total={listRows.length} pageSize={pageSize} noun={listRows.length === 1 ? "appointment" : "appointments"} suffix={`this ${range ? "week" : "range"} · times in ${zone}`} onPage={setListPage} />
