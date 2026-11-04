@@ -22,6 +22,7 @@ import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
 import { callHref, secondsSince, shortDuration, useFloor, type Availability, type FloorData, type Lead, type Member } from "@/components/app/inbound/use-floor";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -136,14 +137,15 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
   const restShown = paginate(rest, linePage, linePageSize);
   const takeReason = readOnly ? "Your agency’s account is paused." : !ready ? "Start taking calls first." : undefined;
 
+  // Two buttons at most (UI-CONSISTENCY §2): the status, one break button, and the rest under More.
   const headerActions = (
     <>
       <AvailabilityStatus availability={availability} onCall={onCall} />
       {ready && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("on_break")}>Take a break</Button>}
-      {ready && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("off")}>Stop taking calls</Button>}
-      {canSeeTeam && (solo
-        ? <Button asChild variant="outline"><Link href="/app/inbound/team?tab=all">All callers</Link></Button>
-        : <Button asChild variant="outline"><Link href="/app/inbound/team">Team</Link></Button>)}
+      <MoreMenu items={[
+        ready && { label: "Stop taking calls", onSelect: () => setAvailability("off"), disabled: statusLocked },
+        canSeeTeam && (solo ? { label: "All callers", href: "/app/inbound/team?tab=all" } : { label: "Team", href: "/app/inbound/team" }),
+      ]} />
     </>
   );
 
@@ -249,21 +251,26 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
 
         <aside aria-label="You and your team" className="flex min-w-0 flex-col gap-4">
           <section className="m-glass flex flex-col gap-3 rounded-xl border border-border p-4">
-            <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your open calls</h2>
+            <h2 className="m-0 flex items-center gap-2 text-xs font-semibold text-[var(--muted)]">Your open calls{myCalls.length > 0 && <StatusChip tone="neutral" dot={false}>{myCalls.length}</StatusChip>}</h2>
             {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">None. Every call you took is finished.</p>}
-            {myCalls.map((call) => {
-              const age = secondsSince(call.startedAt, now);
-              const forgotten = age >= 4 * 3600;
-              return (
-                <div key={call.id} className={cn("flex items-center justify-between gap-3 rounded-lg px-3 py-2.5", forgotten ? "bg-[var(--warning-surface)]" : "bg-[var(--surface-alt)]")}>
-                  <span className="min-w-0 text-sm">
-                    <strong className="block truncate font-semibold text-[var(--ink)]">{call.customer}</strong>
-                    <span className={forgotten ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"}>{forgotten ? `Taken ${shortDuration(age)} ago, no outcome` : `On the call ${shortDuration(age)}`}</span>
-                  </span>
-                  <Button asChild variant="outline" size="sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id, "verify")}>{forgotten ? "Finish it" : "Back to it"}</Link></Button>
-                </div>
-              );
-            })}
+            {myCalls.length > 0 && (
+              <ul className="m-0 flex list-none flex-col p-0">
+                {myCalls.slice(0, 6).map((call) => {
+                  const age = secondsSince(call.startedAt, now);
+                  const forgotten = age >= 4 * 3600;
+                  return (
+                    <li key={call.id} className="flex items-center justify-between gap-3 border-t border-[var(--border)] py-2.5 first:border-t-0 first:pt-0">
+                      <span className="min-w-0 text-sm">
+                        <strong className="block truncate font-semibold text-[var(--ink)]">{call.customer}</strong>
+                        <span className="text-xs text-[var(--muted)]">{forgotten ? `Taken ${shortDuration(age)} ago · no outcome` : `On the call ${shortDuration(age)}`}</span>
+                      </span>
+                      <Button asChild variant="outline" size="sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id, "verify")}>{forgotten ? "Finish it" : "Back to it"}</Link></Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {myCalls.length > 6 && <p className="m-0 text-xs text-[var(--muted)]">and {myCalls.length - 6} more, the oldest first</p>}
           </section>
           <section className="m-glass flex flex-col gap-2.5 rounded-xl border border-border p-4">
             <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your team now</h2>
