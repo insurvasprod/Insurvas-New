@@ -644,7 +644,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
               <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search by customer" />
               <span className="inline-flex items-center gap-1.5">
                 <Button type="button" size="icon-sm" variant="outline" aria-label={view === "day" ? "Previous day" : "Previous week"} onClick={() => step(view === "day" ? -1 : -7)}><ChevronLeft aria-hidden="true" /></Button>
-                <label className={`${toolbarControl} relative inline-flex cursor-pointer items-center gap-2 font-semibold`}>
+                <label title={`Times in ${zone}${context && !noHours ? ` · ${agentName}` : ""}`} className={`${toolbarControl} relative inline-flex cursor-pointer items-center gap-2 font-semibold`}>
                   {rangeLabel}<ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" />
                   {/* The native picker sits over the control, so the whole label opens it. */}
                   <input
@@ -686,7 +686,7 @@ export function AppointmentCalendar({ highlightId }: { highlightId?: string }) {
           }
           footer={view === "list"
             ? <Pager page={listCurrent} total={listRows.length} pageSize={pageSize} noun={listRows.length === 1 ? "appointment" : "appointments"} suffix={`this ${range ? "week" : "range"} · times in ${zone}`} onPage={setListPage} />
-            : <span>Times in {zone}{context && !noHours ? ` · ${agentName}` : ""}</span>}
+            : undefined}
         >
         {/* The views fade in on switch, like every tab panel (2026-10-09). */}
         <div key={view} id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-panel-tab-${view}`}>
