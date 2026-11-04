@@ -1056,24 +1056,6 @@ export function PartnersWorkspace({
         )}
         {detailOnly && selectedPartner && (
           <div className="flex min-w-0 flex-col gap-6" aria-label={`${selectedPartner.name} details`}>
-            {/* Figures only, in the kit's strip (UI-CONSISTENCY §4). Until 2026-10-29 this was five
-                hand-rolled tiles of which three held no figure at all — "You pay", "Since" and
-                "Last lead" are facts about the publisher, and a strip that mixes how-many with
-                what-kind teaches the eye to skip all five. The two facts now sit on the identity
-                line under the title; "Last lead" is what this month's figure is doing, so it is its
-                footnote. Sales joins it: the list has shown that column all along. */}
-            <StatRow label="This publisher's month">
-              <StatCard
-                label={selectedPartner.partner_type === "publisher" ? "Calls this month" : "Leads this month"}
-                value={(selectedPartner.partner_type === "publisher" ? selectedPartner.transfers_this_month : selectedPartner.lead_volume_this_month).toLocaleString()}
-                fact={{ label: selectedPartner.last_submission ? `Last: ${dateLabel(selectedPartner.last_submission)}` : "None yet" }}
-              />
-              <StatCard label="Sales this month" value={selectedPartner.completed_this_month.toLocaleString()} />
-              <StatCard
-                label="Approved products"
-                value={selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}
-              />
-            </StatRow>
 
             <div className="flex min-w-0 flex-col gap-6">
               <ViewTabs
@@ -1091,6 +1073,18 @@ export function PartnersWorkspace({
             <div key={detailTab} role="tabpanel" id="partner-detail-view" aria-labelledby={`partner-detail-tab-${detailTab}`} className="space-y-5 p-5">
               {detailTab === "overview" && (
                 <div className="flex min-w-0 flex-col gap-6">
+                <StatRow label="This publisher's month">
+                  <StatCard
+                    label={selectedPartner.partner_type === "publisher" ? "Calls this month" : "Leads this month"}
+                    value={(selectedPartner.partner_type === "publisher" ? selectedPartner.transfers_this_month : selectedPartner.lead_volume_this_month).toLocaleString()}
+                    fact={{ label: selectedPartner.last_submission ? `Last: ${dateLabel(selectedPartner.last_submission)}` : "None yet" }}
+                  />
+                  <StatCard label="Sales this month" value={selectedPartner.completed_this_month.toLocaleString()} />
+                  <StatCard
+                    label="Approved products"
+                    value={selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}
+                  />
+                </StatRow>
                   <PartnerOnboarding
                     partnerId={selectedPartner.id}
                     hasTerm={Boolean(selectedPartner.active_term)}
