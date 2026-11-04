@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Mic, MicOff, NotebookPen } from "lucide-react";
+import { Loader2, Mic, MicOff, NotebookPen, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { InfoTip } from "@/components/ui/info-tip";
@@ -20,7 +20,7 @@ type Note = { id: string; body: string | null; visibility: "internal" | "shared"
  * (/api/app/leads/[id]/notes, team-only here); sharing a note with the partner stays on that page.
  * Owners, producers and assistants, as the notes route admits; a setter sees why it is not there.
  */
-export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite: boolean }) {
+export function DialerLeadNotes({ leadId, canWrite, folded = false, onFold }: { leadId: string; canWrite: boolean; folded?: boolean; onFold?: (folded: boolean) => void }) {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState("");
@@ -56,11 +56,20 @@ export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite
   const shown = (notes ?? []).filter((note) => !note.deletedAt && note.body);
   return (
     <section aria-label="Lead notes" className="m-glass flex h-full min-h-0 min-w-0 flex-col gap-3 rounded-[16px] border border-[var(--border)] p-4">
-      <div className="flex items-center gap-2">
+      {folded && (
+        <div className="flex flex-col items-center gap-3">
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Show the notes" title="Show the notes" onClick={() => onFold?.(false)}><PanelRightOpen aria-hidden="true" /></Button>
+          <NotebookPen aria-hidden="true" className="size-4 text-[var(--muted)]" />
+          {notes && <span className={cn(small, "tabular-nums")}>{shown.length}</span>}
+        </div>
+      )}
+      <div className={cn("flex items-center gap-2", folded && "hidden")}>
         <NotebookPen aria-hidden="true" className="size-4 text-[var(--muted)]" />
         <p className={cn(label, "m-0 flex flex-1 items-center gap-1")}>Lead notes<InfoTip label="Who sees notes">Your team sees a note on this lead.</InfoTip></p>
         {notes && <span className={cn(small, "tabular-nums")}>{shown.length}</span>}
+        {onFold && <Button type="button" variant="ghost" size="icon-sm" aria-label="Fold the notes" title="Fold the notes" onClick={() => onFold(true)}><PanelRightClose aria-hidden="true" /></Button>}
       </div>
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", folded && "hidden")}>
       {canWrite && (
         <div className="flex flex-col gap-2">
           <label htmlFor={`dialer-note-${leadId}`} className="sr-only">Add a note for whoever calls this lead next</label>
@@ -115,6 +124,7 @@ export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite
             ))}
           </ol>
         )}
+      </div>
     </section>
   );
 }
