@@ -42,9 +42,9 @@ export default async function Home() {
         <LandingStack />
         <LandingAudience />
         <LandingBento />
-        <LandingRoadmap />
         <LandingPricingTeaser plans={plans} />
         <LandingFaq />
+        <LandingRoadmap />
       </main>
       <SiteFooter />
     </div>
