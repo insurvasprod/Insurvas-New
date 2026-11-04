@@ -1,49 +1,56 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Users } from "lucide-react";
+import { ArrowRight, Check, Users, X } from "lucide-react";
 
 import { Reveal } from "@/components/marketing/motion";
 import styles from "@/components/marketing/landing-pricing.module.css";
 import { featuresByModule, type PublicFeature, type PublicPlan } from "@/lib/publicPlans/types";
 
 /**
- * The pricing teaser (2026-11-03): the owner's reference layout. The middle plan starts lifted; click
- * (or Enter on) any plan and it comes to the front while the others settle back. Since 2026-11-04 each
- * card names what the plan adds, and the trial is said once, under the heading. Every price, plan name, blurb, module and trial length
- * is read from the live catalog — nothing is typed in (UI-CONSISTENCY §13) — so the teaser can never
- * promise what a plan does not grant. Each step lists only the modules it adds to the one below.
+ * The pricing teaser. Since 2026-11-04 (owner's reference, a three-card pricing page): each card
+ * has a tab cut into its top corner, a large price with how it is billed beneath, the plan's blurb,
+ * and the same list of features on every card, ticked where the plan has it and crossed where it
+ * does not, so the step from one plan to the next reads straight across. The recommended plan is the
+ * raised card with the hatched edge.
+ *
+ * Every price, plan name, blurb, feature and trial length is read from the live catalog — nothing
+ * is typed in (UI-CONSISTENCY §13) — so the teaser can never promise what a plan does not grant.
  */
 function monthlyNumber(plan: PublicPlan) {
   const n = plan.price_monthly ? Number(plan.price_monthly.replace(/[^0-9.]/g, "")) : Number.NaN;
   return Number.isFinite(n) && n > 0 ? n : Number.POSITIVE_INFINITY;
 }
 
-/** "2499.00" → { whole: "$2,499", cents: ".00" }, the way /pricing shows the same plan. */
-function price(value: string) {
+/** "2499.00" → "$2,499", the way the cards show a whole-dollar price. */
+function dollars(value: string) {
   const n = Number(value.replace(/[^0-9.]/g, ""));
-  if (!Number.isFinite(n)) return { whole: value, cents: "" };
-  const [whole, cents] = n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).split(".");
-  return { whole: `$${whole}`, cents: `.${cents}` };
+  if (!Number.isFinite(n)) return value;
+  return `$${n.toLocaleString("en-US", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 })}`;
 }
 
 /**
- * What a plan adds, by name (2026-11-04, owner): "Sell · 8 features" told a visitor nothing. Takes the
- * features this plan has and the one below does not, one module at a time so the list shows breadth,
- * and stops at `limit`. The rest are counted, never invented.
+ * The rows every card shares: the top plan's features, one from each module in turn, so the list
+ * shows the whole product and the lower plans' crosses show what they leave out.
  */
-function addedFeatures(plan: PublicPlan, below: PublicPlan | null, limit: number) {
-  const had = new Set(below?.features.map((feature) => feature.key) ?? []);
-  const groups = featuresByModule(plan.features.filter((feature) => !had.has(feature.key)));
-  const picked: PublicFeature[] = [];
-  for (let round = 0; picked.length < limit && groups.some((group) => group.features.length > round); round += 1) {
+function comparisonRows(top: PublicPlan, limit: number) {
+  const groups = featuresByModule(top.features);
+  const rows: PublicFeature[] = [];
+  for (let round = 0; rows.length < limit && groups.some((group) => group.features.length > round); round += 1) {
     for (const group of groups) {
-      if (picked.length < limit && group.features[round]) picked.push(group.features[round]);
+      if (rows.length < limit && group.features[round]) rows.push(group.features[round]);
     }
   }
-  const total = groups.reduce((sum, group) => sum + group.features.length, 0);
-  return { picked, more: total - picked.length };
+  // Read top to bottom in the catalog order, not the order they were picked in.
+  return rows.sort((a, b) => a.moduleOrder - b.moduleOrder || a.order - b.order);
+}
+
+/** The tab in each card's corner. */
+function tabLabel(index: number, count: number, recommended: number) {
+  if (index === recommended) return "Recommended";
+  if (index === 0) return "Start here";
+  if (index === count - 1) return "Everything";
+  return null;
 }
 
 export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
@@ -52,10 +59,8 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
   const ladder = plans.filter((plan) => plan.audience === "individual").sort((a, b) => monthlyNumber(a) - monthlyNumber(b));
   const agencyFrom = plans.filter((plan) => plan.audience === "agency").sort((a, b) => monthlyNumber(a) - monthlyNumber(b))[0] ?? null;
   const trialDays = ladder.find((plan) => plan.trial_days > 0)?.trial_days ?? null;
-  // The lifted plan: the middle one of three to start with (the reference layout), then whichever
-  // plan the visitor picks. Picking moves the lift and the bright button across; the Recommended badge stays put.
   const recommended = ladder.length === 3 ? 1 : Math.max(0, ladder.findIndex((plan) => plan.is_default));
-  const [picked, setPicked] = useState(recommended);
+  const rows = ladder.length ? comparisonRows(ladder[ladder.length - 1], 10) : [];
 
   return (
     <section id="pricing" aria-labelledby="pricing-title" className={styles.section}>
@@ -70,43 +75,42 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
         {ladder.length > 0 && (
           <div className={styles.ladder} data-count={ladder.length}>
             {ladder.map((plan, index) => {
-              const added = addedFeatures(plan, index > 0 ? ladder[index - 1] : null, index > 0 ? 3 : 4);
-              const featured = index === picked;
-              const amount = plan.price_monthly ? price(plan.price_monthly) : null;
-              const highlights = [
-                ...(index > 0 ? [`Everything in ${ladder[index - 1].name}`] : []),
-                ...added.picked.map((feature) => feature.label),
-              ];
+              const featured = index === recommended;
+              const has = new Set(plan.features.map((feature) => feature.key));
+              const tab = tabLabel(index, ladder.length, recommended);
               return (
                 <Reveal key={plan.code} variant="rise" delay={index * 110} className={styles.cell}>
-                  <article
-                    className={`${styles.card} ${featured ? styles.featured : ""}`}
-                    tabIndex={0}
-                    aria-current={featured ? "true" : undefined}
-                    aria-label={`${plan.name} plan${featured ? ", selected" : ", select to compare"}`}
-                    onClick={(event) => { if (!(event.target as HTMLElement).closest("a")) setPicked(index); }}
-                    onKeyDown={(event) => { if ((event.key === "Enter" || event.key === " ") && event.target === event.currentTarget) { event.preventDefault(); setPicked(index); } }}
-                  >
-                    {index === recommended && <span className={styles.badge}>Recommended</span>}
+                  <article className={`${styles.card} ${featured ? styles.featured : ""}`} aria-label={`${plan.name} plan`}>
+                    {tab && <span className={styles.tab}>{tab}<i aria-hidden="true" /></span>}
                     <header className={styles.cardHead}>
-                      <p className={styles.tier}>{plan.name}</p>
-                      {amount ? (
-                        <div className={styles.price}><span className={styles.whole}>{amount.whole}</span><span className={styles.per}>/month</span></div>
-                      ) : (
-                        <div className={styles.whole}>{plan.name}</div>
-                      )}
+                      <h3 className={styles.tier}>{plan.name}</h3>
+                      {plan.price_monthly ? (
+                        <div className={styles.price}>
+                          <span className={styles.whole}>{dollars(plan.price_monthly)}</span>
+                          <span className={styles.per}>
+                            <span>/ month (USD)</span>
+                            <span>{plan.price_yearly ? `${dollars(plan.price_yearly)} billed yearly` : plan.trial_days > 0 ? `${plan.trial_days}-day free trial` : "Billed monthly"}</span>
+                          </span>
+                        </div>
+                      ) : null}
                       {plan.blurb && <p className={styles.blurb}>{plan.blurb}</p>}
                     </header>
-                    <div className={styles.highlights}>
-                      <ul className={styles.modules}>
-                        {highlights.map((text) => (
-                          <li key={text}><Check aria-hidden="true" /><span>{text}</span></li>
-                        ))}
-                        {added.more > 0 && <li className={styles.more}>And {added.more} more</li>}
-                      </ul>
-                    </div>
+                    <ul className={styles.rows}>
+                      {rows.map((row) => {
+                        const included = has.has(row.key);
+                        return (
+                          <li key={row.key} data-included={included}>
+                            <span className={styles.mark} aria-hidden="true">{included ? <Check /> : <X />}</span>
+                            <span>{row.label}</span>
+                            {!included && <span className="sr-only"> (not included)</span>}
+                          </li>
+                        );
+                      })}
+                    </ul>
                     <footer className={styles.cardFoot}>
-                      <Link href={`/signup?plan=${encodeURIComponent(plan.code)}`} className={`${styles.planCta} ${featured ? styles.planCtaFeatured : ""}`}>Start free trial</Link>
+                      <Link href={`/signup?plan=${encodeURIComponent(plan.code)}`} className={`${styles.planCta} ${featured ? styles.planCtaFeatured : ""}`}>
+                        {plan.trial_days > 0 ? `Start ${plan.trial_days}-day free trial` : "Start free trial"}
+                      </Link>
                     </footer>
                   </article>
                 </Reveal>
@@ -121,7 +125,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
               <span className={styles.agencyIcon} aria-hidden="true"><Users /></span>
               <span>
                 Running an agency? One flat price for the whole team, from{" "}
-                <b>{agencyFrom.price_monthly ? `${price(agencyFrom.price_monthly).whole}/month` : "a flat band"}</b>
+                <b>{agencyFrom.price_monthly ? `${dollars(agencyFrom.price_monthly)}/month` : "a flat band"}</b>
                 {agencyFrom.max_seats ? ` for up to ${agencyFrom.max_seats} seats` : ""}.
               </span>
               <Link href="/pricing?for=agency">See agency pricing<ArrowRight aria-hidden="true" /></Link>
