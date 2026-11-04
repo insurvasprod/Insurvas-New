@@ -33,6 +33,7 @@ const COLUMNS: Array<{ title: string; links: Array<{ href: string; label: string
       { href: "/#industries", label: "Who it's for" },
       { href: "/#features", label: "Features" },
       { href: "/pricing", label: "Pricing" },
+      { href: "/roadmap", label: "Roadmap" },
       { href: "/#faq", label: "Questions" },
     ],
   },

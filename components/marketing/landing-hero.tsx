@@ -11,7 +11,8 @@ import styles from "@/components/marketing/landing-hero.module.css";
  * Copy is the homepage baseline, verbatim
  * (docs/design/landing-page-research/homepage-copy-source-snapshot.md).
  */
-const HEADLINE = ["Know", "what", "every", "lead", "really", "cost", "you."];
+const HEADLINE = ["The", "Complete", "OS", "for", "life", "insurance", "sales", "teams."];
+const ACCENT = new Set(["Complete", "OS"]);
 
 export function LandingHero() {
   return (
@@ -21,12 +22,12 @@ export function LandingHero() {
         <h1 className={styles.title}>
           {HEADLINE.map((word, i) => (
             <Fragment key={word}>
-              <span className={styles.wordWrap}><span className={`${styles.word} ${word === "really" ? styles.really : ""}`} data-word="">{word}</span></span>
+              <span className={styles.wordWrap}><span className={`${styles.word} ${ACCENT.has(word) ? styles.really : ""}`} data-word="">{word}</span></span>
               {i < HEADLINE.length - 1 ? " " : null}
             </Fragment>
           ))}
         </h1>
-        <p className={styles.description} data-enter="">Live transfers, dialing, applications and commissions in one workspace — and every issued policy traced back to the campaign that paid for it.</p>
+        <p className={styles.description} data-enter="">Leads, calls, applications, commissions, chargebacks and compliance on one ledger. See every dollar while there is still time to save it.</p>
         <div className={styles.actions} data-enter="">
           <MarketingCta href="/signup">Start your free trial</MarketingCta>
           <MarketingCta href="#features" variant="onDark" icon="down">See how it works</MarketingCta>

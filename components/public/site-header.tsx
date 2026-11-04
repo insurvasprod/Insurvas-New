@@ -39,6 +39,7 @@ const NAV: Array<{ href: string; label: string; key?: "home" | "pricing" }> = [
   { href: "/#industries", label: "Who it's for" },
   { href: "/#features", label: "Features" },
   { href: "/pricing", label: "Pricing", key: "pricing" },
+  { href: "/roadmap", label: "Roadmap" },
   { href: "/#faq", label: "FAQ" },
 ];
 
