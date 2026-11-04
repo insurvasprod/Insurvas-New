@@ -109,7 +109,6 @@ export async function SiteFooter() {
 
         <div className="relative mt-10 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
           <span>© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</span>
-          <span>Insurvas is software. It does not give insurance, legal or tax advice, and is not affiliated with any carrier.</span>
         </div>
       </div>
     </footer>
