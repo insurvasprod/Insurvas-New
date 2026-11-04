@@ -8,7 +8,7 @@ import { Check, Copy, FlaskConical, Plus, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { dayMonthYear } from "@/lib/format/dates";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
@@ -148,6 +148,8 @@ export function LeadPostKeysSettings() {
   const [tab, setTab] = useState<Tab>("key");
   const [sampleFor, setSampleFor] = useState<PostKey | null>(null);
 
+  // Which keys the table lists (owner 2026-11-04): the live ones by default, so a pile of disabled keys stays out of the way.
+  const [keyFilter, setKeyFilter] = useState<"" | "active" | "disabled" | "all">("");
   const [selectedKeyId, setSelectedKeyIdState] = useState("");
   // Mirrors selectedKeyId for `load`, which runs from an effect and must not close over state.
   const selectedRef = useRef("");
@@ -427,7 +429,9 @@ export function LeadPostKeysSettings() {
   const totalPosts = loaded.stats.reduce((sum, row) => sum + row.posts + row.earlierPosts, 0);
   const mintCampaigns = campaignsByVendor(mintVendor);
   const keyNeedle = keyQuery.trim().toLowerCase();
-  const shownKeys = loaded.keys.filter((key) => !keyNeedle || key.vendorName.toLowerCase().includes(keyNeedle) || key.keyPrefix.toLowerCase().includes(keyNeedle));
+  const activeKeys = loaded.keys.filter((key) => key.isActive).length;
+  const keysShown = keyFilter || (activeKeys > 0 ? "active" : "all");
+  const shownKeys = loaded.keys.filter((key) => (keysShown === "all" || (keysShown === "active") === key.isActive) && (!keyNeedle || key.vendorName.toLowerCase().includes(keyNeedle) || key.keyPrefix.toLowerCase().includes(keyNeedle)));
   const posted = (speed ?? []).reduce((sum, row) => sum + row.postedLeads, 0);
   const within = (speed ?? []).reduce((sum, row) => sum + row.dialledWithin60s, 0);
   const vendorSpeed = selectedKey ? (speed ?? []).filter((row) => row.vendorId === selectedKey.vendorId && row.postedLeads > 0) : [];
@@ -738,10 +742,15 @@ export function LeadPostKeysSettings() {
         <StatTile label="Dialed inside a minute" labelTitle="Of every lead a vendor has posted, the share whose first Dial came within 60 seconds of arriving." value={speed === null ? "…" : posted ? `${Math.round((within / posted) * 100)}%` : "—"} valueTone={posted ? "good" : undefined} footnote={posted ? `${fmt(posted)} posted leads` : "No posted lead yet"} />
       </StatStrip>
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)]">
+      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
         <div className="flex min-w-0 flex-col gap-3">
-          <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
+          <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} labelClassName="sr-only" className="px-2.5" />}>
             <ToolbarSearch value={keyQuery} onChange={setKeyQuery} placeholder="Search vendors or keys" />
+            <select aria-label="Show keys" className={toolbarControl} value={keysShown} onChange={(event) => setKeyFilter(event.target.value as typeof keyFilter)}>
+              <option value="active">Active · {activeKeys}</option>
+              <option value="disabled">Disabled · {loaded.keys.length - activeKeys}</option>
+              <option value="all">All keys · {loaded.keys.length}</option>
+            </select>
           </DataToolbar>
 
           {loaded.vendors.length === 0 ? (
@@ -751,47 +760,36 @@ export function LeadPostKeysSettings() {
           ) : shownKeys.length === 0 ? (
             <NoMatches noun="keys" onClear={() => setKeyQuery("")} />
           ) : (
-            <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Posting keys">
-              {shownKeys.map((key) => {
-                const stats = statsByKey.get(key.id);
-                const posts = stats?.posts ?? 0;
-                const rejected = stats?.rejected ?? 0;
-                const state = keyState(key);
-                const on = key.id === selectedKeyId;
-                const acceptedPct = posts ? Math.round(((posts - rejected) / posts) * 100) : 0;
-                return (
-                  <li key={key.id}>
-                    <button
-                      type="button"
-                      onClick={() => void selectKey(key.id)}
-                      aria-pressed={on}
-                      aria-label={`Open ${key.vendorName}`}
-                      className={cn(
-                        "m-glass flex w-full flex-col gap-2 rounded-[12px] border px-4 py-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
-                        on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
-                        !key.isActive && "opacity-70",
-                      )}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--ink)]">{key.vendorName}</span>
-                        <StatusChip tone={pillTone(state.tone)} dot>{state.label}</StatusChip>
-                      </span>
-                      <span className="truncate text-xs text-[var(--muted)]">
-                        {campaignName(key)} · <code className="font-mono">{key.keyPrefix}&hellip;</code>
-                      </span>
-                      <span className="flex h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
-                        {posts > 0 && <span className="bg-[var(--success)]" style={{ width: `${acceptedPct}%` }} />}
-                        {posts > 0 && <span className="bg-[var(--error)]" style={{ width: `${100 - acceptedPct}%` }} />}
-                      </span>
-                      <span className="flex items-center justify-between gap-3 text-xs text-[var(--muted)]">
-                        <span className="tabular-nums"><strong className="text-[var(--ink)]">{fmt(posts)}</strong> posts · {fmt(rejected)} rejected</span>
-                        <span>{key.lastUsedAt ? `last post ${when(key.lastUsedAt)}` : "never used"}</span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <TableCard>
+              <table className={st.table} aria-label="Posting keys">
+                <thead>
+                  <tr className={st.headRow}>
+                    <th scope="col" className={st.th}>Vendor</th>
+                    <th scope="col" className={cn(st.th, "w-[78px]")} title={`Posts / rejected, ${loaded.windowDays} days`}>Posts</th>
+                    <th scope="col" className={cn(st.th, "w-[104px]")}>Last post</th>
+                    <th scope="col" className={cn(st.th, "w-[92px]")}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shownKeys.map((key) => {
+                    const stats = statsByKey.get(key.id);
+                    const state = keyState(key);
+                    const on = key.id === selectedKeyId;
+                    return (
+                      <tr key={key.id} className={cn("cursor-pointer", on && "bg-[var(--primary-soft)]", !key.isActive && "opacity-70")} onClick={() => void selectKey(key.id)}>
+                        <td className={st.td}>
+                          <button type="button" aria-pressed={on} aria-label={`Open ${key.vendorName}`} className="block max-w-full truncate rounded-[4px] text-left font-semibold text-[var(--ink)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" onClick={(event) => { event.stopPropagation(); void selectKey(key.id); }}>{key.vendorName}</button>
+                          <span className={cn(st.sub, "block truncate")}>{campaignName(key)} · <code className="font-mono">{key.keyPrefix}&hellip;</code></span>
+                        </td>
+                        <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>{fmt(stats?.posts ?? 0)} / {fmt(stats?.rejected ?? 0)}</td>
+                        <td className={cn(st.td, "whitespace-nowrap text-[var(--muted)]")}>{key.lastUsedAt ? when(key.lastUsedAt) : "never used"}</td>
+                        <td className={st.td}><StatusChip tone={pillTone(state.tone)} dot>{state.label}</StatusChip></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </TableCard>
           )}
 
           <SettingsCard title="Live posts" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
