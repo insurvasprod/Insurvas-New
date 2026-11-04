@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { ADMIN_SESSION_COOKIE, verifyAdminSessionToken } from "@/lib/adminAuth/session";
 import { refuseAdminOnThisHost } from "@/lib/adminAuth/adminHost";
 import { configuredHosts, CROSS_SITE_REFUSED, refuseCrossSite } from "@/lib/security/originCheck";
+import { siteHostMove } from "@/lib/security/siteHosts";
 import { TENANT_SESSION_COOKIE, verifyTenantSessionToken } from "@/lib/tenantAuth/session";
 import { PARTNER_SESSION_COOKIE, verifyPartnerSessionToken } from "@/lib/partnerAuth/session";
 import { APP_PATH_HEADER } from "@/lib/tenantAuth/teamAccess";
@@ -57,8 +58,19 @@ export async function proxy(request: NextRequest) {
   }
   // --- end maintenance gate ---
 
-  // `/` is the landing page on every host, app.insurvas.com included (owner, 2026-11-04). It used to
-  // be sent to /app/login there; sign-in is one click away from the landing page's header.
+  // The landing page on insurvas.com, sign-in and the product on app.insurvas.com (owner, 2026-11-04).
+  // With SITE_HOST and APP_HOST set, an /app or /partner address on insurvas.com moves to app.insurvas.com
+  // (path and query kept), and `/` on app.insurvas.com is the sign-in page. Unset, every host serves
+  // everything. Rules: lib/security/siteHosts.ts.
+  const move = siteHostMove(hostname, pathname, process.env);
+  if (move?.kind === "to_app_host") {
+    const url = request.nextUrl.clone();
+    url.host = move.host;
+    url.protocol = "https:";
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
+  if (move?.kind === "sign_in") return redirectTo(request, "/app/login");
 
   if (pathname.startsWith("/admin/login")) {
     return NextResponse.next();
