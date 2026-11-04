@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, Mic, MicOff, NotebookPen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { SectionLoading } from "@/components/ui/page-states";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -57,7 +58,7 @@ export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite
     <section aria-label="Lead notes" className="m-glass flex h-full min-h-0 min-w-0 flex-col gap-3 rounded-[16px] border border-[var(--border)] p-4">
       <div className="flex items-center gap-2">
         <NotebookPen aria-hidden="true" className="size-4 text-[var(--muted)]" />
-        <p className={cn(label, "m-0 flex-1")}>Lead notes</p>
+        <p className={cn(label, "m-0 flex flex-1 items-center gap-1")}>Lead notes<InfoTip label="Who sees notes">Your team sees a note on this lead.</InfoTip></p>
         {notes && <span className={cn(small, "tabular-nums")}>{shown.length}</span>}
       </div>
       {canWrite && (
@@ -89,12 +90,11 @@ export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite
             </p>
           )}
           <div className="flex items-center justify-between gap-2">
-            <span className={small}>Your team sees it on this lead.</span>
-            <span className="flex items-center gap-2">
+            <span className="ml-auto flex items-center gap-2">
               {!dictation.supported && <span className={small} title="This browser cannot record from the microphone.">No dictation in this browser</span>}
               {dictation.supported && (
-                <Button type="button" size="sm" variant={dictation.listening ? "default" : "outline"} onClick={() => (dictation.listening ? dictation.stop() : dictation.start())} disabled={busy || dictation.transcribing} aria-pressed={dictation.listening} title={dictation.listening ? "Stop dictating" : dictation.engine === "device" ? "Speak the note; it is written on this computer when you press Stop" : "Speak the note instead of typing it"}>
-                  {dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}{dictation.listening ? "Stop" : "Dictate"}
+                <Button type="button" size="icon-sm" variant={dictation.listening ? "default" : "outline"} aria-label={dictation.listening ? "Stop dictating" : "Dictate"} onClick={() => (dictation.listening ? dictation.stop() : dictation.start())} disabled={busy || dictation.transcribing} aria-pressed={dictation.listening} title={dictation.listening ? "Stop dictating" : dictation.engine === "device" ? "Speak the note; it is written on this computer when you press Stop" : "Speak the note instead of typing it"}>
+                  {dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
                 </Button>
               )}
               <Button type="button" size="sm" onClick={() => { dictation.stop(); void save(); }} disabled={busy || !body.trim()}>{busy ? "Saving…" : "Save note"}</Button>

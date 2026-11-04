@@ -14,7 +14,7 @@ import { body14, label, small, value } from "@/components/app/dialer/model";
 import type { useDialer } from "@/components/app/dialer/use-dialer";
 import { useNow } from "@/components/app/applications/outcome/use-now";
 import { useState } from "react";
-import { ChevronDown, Clock, Flame, Lock, MapPin, Megaphone, Package, Phone, Repeat, ShieldAlert, ShieldCheck, Store, Tag, User, type LucideIcon } from "lucide-react";
+import { ChevronDown, Clock, Flame, Lock, MapPin, Phone, Repeat, ShieldAlert, ShieldCheck, User, type LucideIcon } from "lucide-react";
 
 /** One fact as an icon and a few words; the full sentence is its tooltip. */
 function Fact({ icon: Icon, children, title, tone = "neutral" }: { icon: LucideIcon; children: ReactNode; title?: string; tone?: "neutral" | "good" | "warn" | "bad" }) {
@@ -69,6 +69,8 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
   const why = servedHere && served
     ? `Served to you${served.tierName ? ` · ${served.tierName.replaceAll("_", " ")}` : ""}: ${[reasonParts.join(" · ") || served.selectionReason || "from the queue", served.lockedUntil ? `locked to you until ${new Date(served.lockedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "held by you"].join(" · ")}`
     : reasonParts.length > 0 ? `Last chosen: ${reasonParts.join(" · ")}` : undefined;
+
+  const allClear = Boolean(panel.consent.hasCertificate) && !dncBad && licence?.status === "live" && windowOpen && panel.disclosure.configured && !disclosureUnapproved;
 
   // Every check in full and the suppression stack: what Details opens.
   const complianceDetail = (
@@ -171,33 +173,34 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
         </div>
       </div>
 
-      {/* Where the lead came from: four chips. */}
-      <div className="flex flex-wrap items-center gap-1.5 @max-2xl:order-2" aria-label="Where this lead came from">
-        <Fact icon={Megaphone} title="Campaign">{panel.campaign?.name ?? "No campaign"}</Fact>
-        <Fact icon={Store} title="Vendor">{panel.campaign?.vendorName ?? "No vendor"}</Fact>
-        <Fact icon={Tag} title="Source">{panel.campaign ? sourceLabel(panel.campaign.leadType) : "—"}</Fact>
-        <Fact icon={Package} title="Product">{productLineLabel(panel.lead.productCode)}</Fact>
-      </div>
+      {/* Where the lead came from: one quiet line, not four chips. */}
+      <p className="m-0 truncate text-xs leading-[1.5] text-[var(--muted)] @max-2xl:order-2" aria-label="Where this lead came from" title="Campaign · vendor · source · product">
+        {[panel.campaign?.name ?? "No campaign", panel.campaign?.vendorName ?? "No vendor", panel.campaign ? sourceLabel(panel.campaign.leadType) : null, productLineLabel(panel.lead.productCode)].filter(Boolean).join(" · ")}
+      </p>
       {/* The setter's notes for this booking stay: they are what the agent says next. */}
       {servedHere && served?.appointmentNotes && <p className={cn(body14, "m-0 @max-2xl:order-2")}><span className="font-semibold text-[var(--ink)]">Setter notes: </span>{served.appointmentNotes}</p>}
 
       {/* May they be called: one tick per rule; Details opens every check and the suppression stack. */}
       <section aria-label="Eligibility and compliance" className="flex flex-col gap-2 @max-2xl:order-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <Fact icon={panel.consent.hasCertificate ? ShieldCheck : ShieldAlert} tone={panel.consent.hasCertificate ? "good" : "warn"} title={`Consent on file: ${consentLabel(panel.consent)}`}>Consent</Fact>
-          <Fact icon={dncBad ? ShieldAlert : ShieldCheck} tone={dncBad ? "bad" : "good"} title={eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}>DNC</Fact>
-          <Fact icon={licence && licence.status !== "live" ? ShieldAlert : ShieldCheck} tone={licence ? (licence.status === "live" ? "good" : "bad") : "neutral"} title={licence ? (licence.message ?? `${licence.state} licence ${licence.status}`) : "Checked when you call"}>{licence ? `${licence.state} licence` : "Licence"}</Fact>
-          <Fact icon={windowOpen ? Clock : Lock} tone={windowOpen ? "good" : "bad"} title="The calling window, in the customer's time">
+          {allClear
+            ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success-ink)]"><ShieldCheck aria-hidden="true" className="size-3.5" />Cleared to call</span>
+            : <>
+          {!panel.consent.hasCertificate && <Fact icon={panel.consent.hasCertificate ? ShieldCheck : ShieldAlert} tone={panel.consent.hasCertificate ? "good" : "warn"} title={`Consent on file: ${consentLabel(panel.consent)}`}>Consent</Fact>}
+          {dncBad && <Fact icon={dncBad ? ShieldAlert : ShieldCheck} tone={dncBad ? "bad" : "good"} title={eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}>DNC</Fact>}
+          {licence?.status !== "live" && <Fact icon={licence ? ShieldAlert : ShieldCheck} tone={licence ? "bad" : "neutral"} title={licence ? (licence.message ?? `${licence.state} licence ${licence.status}`) : "Checked when you call"}>{licence ? `${licence.state} licence` : "Licence"}</Fact>}
+          {!windowOpen && <Fact icon={windowOpen ? Clock : Lock} tone={windowOpen ? "good" : "bad"} title="The calling window, in the customer's time">
             {panel.window
               ? panel.window.allowed && panel.window.endMinute !== null ? `Open till ${minuteLabel(panel.window.endMinute)}` : windowClosedLabel(panel.window.reason, panel.window.startMinute, panel.window.zone)
               : eligibility?.reason === "outside_window" ? "Window closed" : "Window"}
-          </Fact>
-          <Fact icon={!panel.disclosure.configured || disclosureUnapproved ? ShieldAlert : ShieldCheck} tone={!panel.disclosure.configured ? "bad" : disclosureUnapproved ? "warn" : "good"} title="The state's disclosure wording">{!panel.disclosure.configured ? "No disclosure" : disclosureUnapproved ? "Placeholder disclosure" : "Disclosure"}</Fact>
+          </Fact>}
+          {(!panel.disclosure.configured || disclosureUnapproved) && <Fact icon={!panel.disclosure.configured || disclosureUnapproved ? ShieldAlert : ShieldCheck} tone={!panel.disclosure.configured ? "bad" : disclosureUnapproved ? "warn" : "good"} title="The state's disclosure wording">{!panel.disclosure.configured ? "No disclosure" : disclosureUnapproved ? "Placeholder disclosure" : "Disclosure"}</Fact>}
+            </>}
           {/* Details and the state's disclosure on the same line as the checks (owner 2026-10-30). Each
               opens over the page, so the card keeps its shape when they are read. */}
           <Popover open={complianceOpen} onOpenChange={setComplianceOpen}>
             <PopoverTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
+              <Button type="button" variant="ghost" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
                 Details<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", complianceOpen && "rotate-180")} />
               </Button>
             </PopoverTrigger>
@@ -211,7 +214,7 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
           {panel.disclosure.configured && (
             <Popover open={disclosureOpen} onOpenChange={setDisclosureOpen}>
               <PopoverTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
+                <Button type="button" variant="ghost" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
                   {`${stateName ?? panel.disclosure.state} disclosure`}<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", disclosureOpen && "rotate-180")} />
                 </Button>
               </PopoverTrigger>

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Callout } from "@/components/app/settings/primitives";
 import { DialerPreflightDialog } from "@/components/app/dialer-preflight";
 import { windowSummary } from "@/lib/callbacks/windowFacts";
@@ -89,15 +90,15 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
     <div className="flex flex-1 flex-col gap-4">
       {/* The outcomes as tiles, every one with its key; Interested starts the application. */}
       <div role="group" aria-label="Outcome" id="dialer-disposition" className="flex flex-1 flex-col gap-2">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className="flex items-center gap-1">
           <p className={cn(label, "m-0")}>Outcome</p>
-          <p className={cn(small, "m-0")}>
+          <InfoTip label="Keyboard keys">
             {!dialled ? "Key: C calls." : searchMode ? "Record the result of this call." : `Keys 1–${Math.min(9, dispositions.length)}${dispositions.length >= 10 ? " and 0" : ""} choose a disposition; N serves the next lead.`}
             {searchMode && " An inbound return call does not use one of this lead’s outbound attempts."}
-          </p>
+          </InfoTip>
         </div>
         {/* The tiles share the column's full height (owner 2026-10-27), never shorter than a control. */}
-        <div className="grid flex-1 auto-rows-fr gap-2">
+        <div className="grid flex-1 auto-rows-fr grid-cols-[minmax(0,1fr)] gap-2">
           {outcomes.map((item, index) => (
             <OutcomeButton key={item.key} icon={outcomeIcon(item.key)} label={outcomeButtonLabel(item)} hotkey={searchMode ? null : outcomeHotkey(index)} tone={item.key === APPLICATION_OUTCOME ? "primary" : item.key === DNC_OUTCOME ? "danger" : "default"} pressed={(pendingCallback && item.key === CALLBACK_OUTCOME) || (pendingDnc && item.key === DNC_OUTCOME)} disabled={!dialled || working} onClick={() => choose(item.key)} />
           ))}
@@ -221,7 +222,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       {/* Outcomes on the left, the list in the middle, the lead's notes on the right; the two
           side columns run the full height of the screen and stay put while the list scrolls. */}
       <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
-      {panel && <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:w-[260px] lg:shrink-0 lg:overflow-y-auto lg:overflow-x-hidden")}>
+      {panel && <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:w-[260px] lg:shrink-0 lg:overflow-y-auto")}>
         {outcomePanel}
       </aside>}
       {/* The middle column (owner 2026-10-29): the lead you are on, then the queue as a table that
