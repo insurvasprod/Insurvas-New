@@ -7,7 +7,7 @@
   z-index: 0;
   width: 100%;
   aspect-ratio: 931.86 / 217.52;
-  transform: translateY(-62%);
+  transform: translateY(-30%);
   background: linear-gradient(180deg, color-mix(in srgb, var(--nav-ink) 12%, transparent), color-mix(in srgb, var(--nav-ink) 4%, transparent));
   -webkit-mask: url("/brand/insurvas-logo-on-dark.svg") center / 100% 100% no-repeat;
   mask: url("/brand/insurvas-logo-on-dark.svg") center / 100% 100% no-repeat;
