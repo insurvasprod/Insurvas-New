@@ -46,21 +46,21 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
       <div className="flex flex-col items-stretch gap-2 max-lg:hidden">
         {!attempt && needsDnc ? (
           // Owner 2026-10-29: check the number first; the Call button appears once it is clear.
-          <Button type="button" onClick={() => void checkDnc()} disabled={readOnly || checkingDnc || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"} className="h-12 px-6 text-base">
+          <Button type="button" onClick={() => void checkDnc()} disabled={readOnly || checkingDnc || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
             <ShieldCheck aria-hidden="true" />{readOnly ? "Read-only account" : checkingDnc ? "Checking…" : "DNC / TCPA check"}{!readOnly && <Kbd>C</Kbd>}
           </Button>
         ) : !attempt ? (
-          <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={readOnly || working || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"} className="h-12 px-6 text-base">
+          <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={readOnly || working || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
             <Phone aria-hidden="true" />{readOnly ? "Read-only account" : searchMode ? "Log inbound return call" : working ? "Calling…" : `Call ${panel.lead.firstName || "now"}`}{!readOnly && <Kbd>C</Kbd>}
           </Button>
         ) : !confirmed ? (
-          <Button type="button" onClick={() => void confirmRead()} disabled={readOnly || working || confirmed || panel.disclosure.blocking} aria-keyshortcuts="R" className="h-12 px-6 text-base">
+          <Button type="button" onClick={() => void confirmRead()} disabled={readOnly || working || confirmed || panel.disclosure.blocking} aria-keyshortcuts="R">
             <Check aria-hidden="true" />I read this disclosure<Kbd>R</Kbd>
           </Button>
         ) : dialled ? (
-          <Button type="button" disabled title="The call has started; record what happened." className="h-12 px-6 text-base"><PhoneCall aria-hidden="true" />Call started</Button>
+          <Button type="button" disabled title="The call has started; record what happened."><PhoneCall aria-hidden="true" />Call started</Button>
         ) : (
-          <Button type="button" disabled={!confirmed || !eligibility?.allowed || !panel.lead.phone || working} aria-describedby="dial-status" aria-keyshortcuts="D" onClick={() => void dial()} className="h-12 px-6 text-base">
+          <Button type="button" disabled={!confirmed || !eligibility?.allowed || !panel.lead.phone || working} aria-describedby="dial-status" aria-keyshortcuts="D" onClick={() => void dial()}>
             <PhoneCall aria-hidden="true" />{working ? "Checking…" : eligibility?.allowed ? "Start call" : "Dialing blocked"}<Kbd>D</Kbd>
           </Button>
         )}

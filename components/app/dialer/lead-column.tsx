@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Callout } from "@/components/app/settings/primitives";
 import { productLineLabel } from "@/lib/format/productLine";
@@ -14,7 +15,7 @@ import { body14, label, small, value } from "@/components/app/dialer/model";
 import type { useDialer } from "@/components/app/dialer/use-dialer";
 import { useNow } from "@/components/app/applications/outcome/use-now";
 import { useState } from "react";
-import { ChevronDown, Clock, Flame, Lock, MapPin, Phone, Repeat, ShieldAlert, ShieldCheck, User, type LucideIcon } from "lucide-react";
+import { FileText, ListChecks, Clock, Flame, Lock, MapPin, Phone, Repeat, ShieldAlert, ShieldCheck, User, type LucideIcon } from "lucide-react";
 
 /** One fact as an icon and a few words; the full sentence is its tooltip. */
 function Fact({ icon: Icon, children, title, tone = "neutral" }: { icon: LucideIcon; children: ReactNode; title?: string; tone?: "neutral" | "good" | "warn" | "bad" }) {
@@ -162,21 +163,18 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="m-0 text-title-md leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{name}</h2>
             {priority && <Fact icon={Flame} tone={priority === "High" ? "bad" : priority === "Medium" ? "warn" : "neutral"} title={why}>{priority}</Fact>}
+            <InfoTip label="Where this lead came from">{[panel.campaign?.name ?? "No campaign", panel.campaign?.vendorName ?? "No vendor", panel.campaign ? sourceLabel(panel.campaign.leadType) : null, productLineLabel(panel.lead.productCode)].filter(Boolean).join(" · ")}</InfoTip>
           </div>
-          <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] tabular-nums">
+          <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[13px] leading-[1.5] tracking-[-0.01em] text-[var(--body)] tabular-nums">
             <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--ink)]"><Phone aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{phoneLabel ?? "No phone number"}</span>
             <span className="inline-flex items-center gap-1.5" title="Where they are"><MapPin aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{cityState || "state missing"}</span>
-            <span className="inline-flex items-center gap-1.5" title="Their local time"><Clock aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{eligibility?.timezone ? `${localClock(eligibility.checkedAt, eligibility.timezone)} their time (${zoneShort(eligibility.timezone)})` : "Local time unknown"}</span>
-            {panel.lead.age && <span className="inline-flex items-center gap-1.5" title="Age"><User aria-hidden="true" className="size-3.5 text-[var(--muted)]" />age {panel.lead.age}</span>}
-            <span className="inline-flex items-center gap-1.5" title="Attempts"><Repeat aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{attemptOfCeiling(panel.lead.attemptsMade ?? 0, panel.lead.attemptCeiling).toLowerCase()}</span>
+            <span className="inline-flex items-center gap-1.5" title="Their local time"><Clock aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{eligibility?.timezone ? `${localClock(eligibility.checkedAt, eligibility.timezone)} ${zoneShort(eligibility.timezone)}` : "Time unknown"}</span>
+            {panel.lead.age && <span className="inline-flex items-center gap-1.5" title="Age"><User aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{panel.lead.age}</span>}
+            <span className="inline-flex items-center gap-1.5" title="Attempts"><Repeat aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{attemptOfCeiling(panel.lead.attemptsMade ?? 0, panel.lead.attemptCeiling).replace(/^attempts*/i, "")}</span>
           </p>
         </div>
       </div>
 
-      {/* Where the lead came from: one quiet line, not four chips. */}
-      <p className="m-0 truncate text-xs leading-[1.5] text-[var(--muted)] @max-2xl:order-2" aria-label="Where this lead came from" title="Campaign · vendor · source · product">
-        {[panel.campaign?.name ?? "No campaign", panel.campaign?.vendorName ?? "No vendor", panel.campaign ? sourceLabel(panel.campaign.leadType) : null, productLineLabel(panel.lead.productCode)].filter(Boolean).join(" · ")}
-      </p>
       {/* The setter's notes for this booking stay: they are what the agent says next. */}
       {servedHere && served?.appointmentNotes && <p className={cn(body14, "m-0 @max-2xl:order-2")}><span className="font-semibold text-[var(--ink)]">Setter notes: </span>{served.appointmentNotes}</p>}
 
@@ -200,8 +198,8 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
               opens over the page, so the card keeps its shape when they are read. */}
           <Popover open={complianceOpen} onOpenChange={setComplianceOpen}>
             <PopoverTrigger asChild>
-              <Button type="button" variant="ghost" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
-                Details<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", complianceOpen && "rotate-180")} />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="Compliance details" title="Compliance details" className="data-[state=open]:bg-[var(--surface-alt)]">
+                <ListChecks aria-hidden="true" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="max-h-[min(70dvh,560px)] w-[min(92vw,560px)] overflow-y-auto p-0">
@@ -214,8 +212,8 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
           {panel.disclosure.configured && (
             <Popover open={disclosureOpen} onOpenChange={setDisclosureOpen}>
               <PopoverTrigger asChild>
-                <Button type="button" variant="ghost" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
-                  {`${stateName ?? panel.disclosure.state} disclosure`}<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", disclosureOpen && "rotate-180")} />
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`${stateName ?? panel.disclosure.state} disclosure`} title={`${stateName ?? panel.disclosure.state} disclosure`} className="data-[state=open]:bg-[var(--surface-alt)]">
+                  <FileText aria-hidden="true" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="start" className="max-h-[min(70dvh,480px)] w-[min(92vw,480px)] overflow-y-auto">
