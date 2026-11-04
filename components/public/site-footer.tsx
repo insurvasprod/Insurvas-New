@@ -72,7 +72,7 @@ export async function SiteFooter() {
   const legalLinks = await publishedLegalLinks();
   const columns = legalLinks.length > 0 ? [...COLUMNS, { title: "Legal", links: legalLinks }] : COLUMNS;
   return (
-    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pt-20 sm:px-6 lg:px-16">
+    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-8 pt-20 sm:px-6 lg:px-16">
       <div className="relative mx-auto max-w-7xl">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
           <div>
@@ -105,17 +105,12 @@ export async function SiteFooter() {
           ))}
         </div>
 
-        <div className="mt-14 grid gap-2 border-t border-[var(--nav-line)] pt-6 sm:flex sm:flex-wrap sm:items-start sm:justify-between sm:gap-6">
-          <span className="text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
-            © {new Date().getFullYear()} Insurvas Inc. All rights reserved.
-          </span>
-          <div className="grid gap-1 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)] sm:text-right">
-            <span>Insurvas is software. It does not give insurance, legal or tax advice, and is not affiliated with any carrier.</span>
-            <span>Pre-dial screening uses the checks and vendors your agency configures. Subscription payments are taken on our payment provider&rsquo;s hosted page.</span>
-          </div>
+        {/* The wordmark, wide and faded, above the bottom bar (owner, 2026-11-04). */}
+        <div aria-hidden="true" className={styles.watermark} />
+        <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 border-t border-[var(--nav-line)] pt-6 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
+          <span>© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</span>
+          <span>Insurvas is software. It does not give insurance, legal or tax advice, and is not affiliated with any carrier.</span>
         </div>
-        {/* The wordmark, smaller and cropped by the bottom edge (owner, 2026-11-04). */}
-        <div aria-hidden="true" className={styles.crop}><div className={styles.watermark} /></div>
       </div>
     </footer>
   );

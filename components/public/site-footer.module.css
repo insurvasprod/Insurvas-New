@@ -1,11 +1,11 @@
 /* The full logo (public/brand/insurvas-logo-on-dark.svg: the mark and the wordmark), used as a mask
-   so it can fade. Since 2026-11-04 it sits under the bottom bar and the footer's edge crops it. */
-.crop { height: clamp(56px, 9vw, 128px); margin-top: 32px; overflow: hidden; }
+   so it can fade. It sits between the link columns and the bottom bar (owner, 2026-11-04). */
 .watermark {
   width: 100%;
   aspect-ratio: 931.86 / 217.52;
-  background: linear-gradient(180deg, color-mix(in srgb, var(--nav-ink) 16%, transparent), color-mix(in srgb, var(--nav-ink) 4%, transparent));
-  -webkit-mask: url("/brand/insurvas-logo-on-dark.svg") center top / 100% 100% no-repeat;
-  mask: url("/brand/insurvas-logo-on-dark.svg") center top / 100% 100% no-repeat;
+  margin: clamp(40px, 5vw, 64px) 0 clamp(24px, 3vw, 40px);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--nav-ink) 22%, transparent), color-mix(in srgb, var(--nav-ink) 6%, transparent));
+  -webkit-mask: url("/brand/insurvas-logo-on-dark.svg") center / 100% 100% no-repeat;
+  mask: url("/brand/insurvas-logo-on-dark.svg") center / 100% 100% no-repeat;
   pointer-events: none;
 }
