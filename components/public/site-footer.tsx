@@ -72,7 +72,7 @@ export async function SiteFooter() {
   const legalLinks = await publishedLegalLinks();
   const columns = legalLinks.length > 0 ? [...COLUMNS, { title: "Legal", links: legalLinks }] : COLUMNS;
   return (
-    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-6 pt-12 sm:px-6 lg:px-16">
+    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-12 pt-12 sm:px-6 lg:px-16">
       <div className="relative mx-auto max-w-7xl">
         {/* The wordmark, wide and faded, behind the brand block and the link columns (owner, 2026-11-04). */}
         <div aria-hidden="true" className={styles.watermark} />
@@ -87,6 +87,7 @@ export async function SiteFooter() {
             <div className="mt-6">
               <MarketingCta href="/signup">Start free trial</MarketingCta>
             </div>
+            <p className="mt-6 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</p>
           </div>
 
           {columns.map((column) => (
@@ -105,10 +106,6 @@ export async function SiteFooter() {
               </div>
             </div>
           ))}
-        </div>
-
-        <div className="relative mt-10 flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
-          <span>© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</span>
         </div>
       </div>
     </footer>
