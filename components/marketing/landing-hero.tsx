@@ -11,8 +11,8 @@ import styles from "@/components/marketing/landing-hero.module.css";
  * Copy is the homepage baseline, verbatim
  * (docs/design/landing-page-research/homepage-copy-source-snapshot.md).
  */
-const HEADLINE = ["The", "OS", "for", "life", "insurance", "sales", "teams."];
-const ACCENT = new Set(["OS"]);
+const HEADLINE = ["The", "Complete", "OS", "for", "life", "insurance", "sales", "teams."];
+const ACCENT = new Set(["Complete", "OS"]);
 
 export function LandingHero() {
   return (
