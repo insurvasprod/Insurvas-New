@@ -94,7 +94,6 @@ export function LandingFaq() {
     <section id="faq" aria-labelledby="faq-title" className={styles.section}>
       <div className={styles.inner}>
         <div className={styles.side}>
-          <p className={styles.eyebrow}>Questions</p>
           <h2 id="faq-title" className={styles.title}>The ones people actually ask</h2>
           <QuestionsMark />
         </div>
