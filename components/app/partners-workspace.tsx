@@ -66,7 +66,7 @@ import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
 import { PartnerOnboarding } from "@/components/app/partner-onboarding";
 import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
-import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { ActiveFilters, type ActiveFilter, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
@@ -734,6 +734,11 @@ export function PartnersWorkspace({
   const { current: listCurrent, rows: listRows } = paginate(filteredPartners, listPage, listPageSize);
   const listFiltered = search.trim() !== "" || typeFilter !== "all" || statusFilter !== "all";
   const clearListFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setListPage(1); };
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeListFilters: ActiveFilter[] = [
+    typeFilter !== "all" && { key: "type", label: "Type", value: SOURCE_TYPE_SHORT[typeFilter as PartnerType] ?? String(typeFilter), onRemove: () => { setTypeFilter("all"); setListPage(1); } },
+    statusFilter !== "all" && { key: "status", label: "Status", value: PARTNER_STATUS_LABELS[statusFilter as PartnerStatus] ?? String(statusFilter), onRemove: () => { setStatusFilter("all"); setListPage(1); } },
+  ].filter((entry): entry is ActiveFilter => Boolean(entry));
   // What each filter would leave, shown on its option (owner, 2026-10-29). Counted against every
   // publisher, not the filtered list, so the numbers do not move as you narrow them down.
   const filterCounts = useMemo(() => {
@@ -790,6 +795,7 @@ export function PartnersWorkspace({
       )}
       <PageHeader
         visible
+        hideTitle={!detailOnly}
         title={detailOnly ? (selectedPartner?.name ?? "Publisher") : "Publishers"}
         // The list's one line is an explanation, so it goes behind the (i) and gives the row back to
         // the table (owner, 2026-10-29). A partner's own line is not: it says which partner and whose
@@ -881,17 +887,18 @@ export function PartnersWorkspace({
       <div className="flex min-w-0 flex-col gap-4">
         {!detailOnly && <TableCard
           className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-164px)] min-w-0`}
-          toolbar={
+          toolbar={<>
             <DataToolbar actions={<>
-              {listFiltered && <ClearFiltersButton onClick={clearListFilters} />}
+              {!selectedPartner && <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeListFilters.length} controls="publishers-filters" />}
               <RefreshButton onClick={() => void load()} refreshing={refreshing} />
             </>}>
               <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search publishers" />
-              {/* The kit's SelectMenu, not a native <select> (owner, 2026-10-29: the plain dropdowns,
-                  with a search at the top of the panel). Each option carries what it would leave, and
-                  the trigger tints while it holds anything but "all", so a narrowed list says so. */}
-              {!selectedPartner && (
-                <SelectMenu
+            </DataToolbar>
+            {!selectedPartner && (
+              <>
+                <FilterPanel id="publishers-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">
+                  <FilterField label="Type" htmlFor="publishers-type">
+                    <SelectMenu
                   label="Filter by partner type"
                   value={typeFilter}
                   defaultValue="all"
@@ -900,7 +907,7 @@ export function PartnersWorkspace({
                   searchPlaceholder="Search types"
                   // The panel takes the trigger's own width (owner, 2026-10-29: the design is right,
                   // the widths were not): a menu wider than the control it hangs off reads as loose.
-                  className="w-52"
+                  className="w-full"
                   panelClassName="w-[var(--radix-popover-trigger-width)]"
                   options={[
                     { value: "all" as const, label: "All Types", count: partners.length, group: "Type" },
@@ -913,16 +920,16 @@ export function PartnersWorkspace({
                     })),
                   ]}
                 />
-              )}
-              {!selectedPartner && (
-                <SelectMenu
+                  </FilterField>
+                  <FilterField label="Status" htmlFor="publishers-status">
+                    <SelectMenu
                   label="Filter by partner status"
                   value={statusFilter}
                   defaultValue="all"
                   onChange={(next) => { setStatusFilter(next); setListPage(1); }}
                   icon={<SlidersHorizontal className="size-4" />}
                   searchPlaceholder="Search statuses"
-                  className="w-52"
+                  className="w-full"
                   panelClassName="w-[var(--radix-popover-trigger-width)]"
                   options={[
                     { value: "all" as const, label: "All Statuses", count: partners.length, group: "Status" },
@@ -936,9 +943,12 @@ export function PartnersWorkspace({
                     })),
                   ]}
                 />
-              )}
-            </DataToolbar>
-          }
+                  </FilterField>
+                </FilterPanel>
+                <ActiveFilters filters={activeListFilters} onClear={clearListFilters} className="-mx-4 w-[calc(100%+2rem)] border-b-0 pb-0" />
+              </>
+            )}
+          </>}
           footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="publishers" onPage={setListPage} suffix={`${partners.length} publisher${partners.length === 1 ? "" : "s"} in all`} />}
         >
             {partners.length === 0 && !listFiltered ? (
