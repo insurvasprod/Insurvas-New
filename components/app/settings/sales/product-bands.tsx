@@ -125,6 +125,15 @@ export function ProductBands({ agencyBand }: { agencyBand: Band }) {
     await load();
   }
 
+  // Nothing switched on yet: one muted line, not a card with its own title and button (owner 2026-11-04).
+  if (data !== null && all.length === 0) {
+    return (
+      <p className="m-0 px-1 text-sm text-[var(--muted)]">
+        No products are switched on yet, so none can have its own band. <Link href="/app/settings#carriers" className="font-semibold text-[var(--accent-ink)] hover:underline">Open Contracting</Link>
+      </p>
+    );
+  }
+
   return (
     <SettingsTableCard
       title="Products with their own band"
