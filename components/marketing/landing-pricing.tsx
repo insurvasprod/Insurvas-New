@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Check, Users, X } from "lucide-react";
+import { Check, X } from "lucide-react";
 
 import { Reveal } from "@/components/marketing/motion";
 import styles from "@/components/marketing/landing-pricing.module.css";
@@ -12,7 +13,8 @@ import { featuresByModule, type PublicFeature, type PublicPlan } from "@/lib/pub
  * has a tab cut into its top corner, a large price with how it is billed beneath, the plan's blurb,
  * and the same list of features on every card, ticked where the plan has it and crossed where it
  * does not, so the step from one plan to the next reads straight across. The recommended plan is the
- * raised card with the hatched edge.
+ * raised card with the hatched edge. A switch on top shows the independent agent's plans or the
+ * team (agency) seat bands in the same cards.
  *
  * Every price, plan name, blurb, feature and trial length is read from the live catalog — nothing
  * is typed in (UI-CONSISTENCY §13) — so the teaser can never promise what a plan does not grant.
@@ -54,13 +56,17 @@ function tabLabel(index: number, count: number, recommended: number) {
 }
 
 export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
-  // The ladder is the individual-agent plans; agencies get one line under it, to their own view of
-  // /pricing (2026-10-22: the agency seat bands are a different purchase, not a fourth rung).
-  const ladder = plans.filter((plan) => plan.audience === "individual").sort((a, b) => monthlyNumber(a) - monthlyNumber(b));
-  const agencyFrom = plans.filter((plan) => plan.audience === "agency").sort((a, b) => monthlyNumber(a) - monthlyNumber(b))[0] ?? null;
+  // One ladder at a time: the independent agent's plans, or the team's seat bands (2026-11-04, owner).
+  const audiences = (["individual", "agency"] as const).filter((who) => plans.some((plan) => plan.audience === who));
+  const [audience, setAudience] = useState<"individual" | "agency">("individual");
+  const ladder = plans.filter((plan) => plan.audience === audience).sort((a, b) => monthlyNumber(a) - monthlyNumber(b));
   const trialDays = ladder.find((plan) => plan.trial_days > 0)?.trial_days ?? null;
-  const recommended = ladder.length === 3 ? 1 : Math.max(0, ladder.findIndex((plan) => plan.is_default));
-  const rows = ladder.length ? comparisonRows(ladder[ladder.length - 1], 10) : [];
+  // The team bands are one product at three sizes: nothing to recommend between them, so no tabs.
+  const recommended = audience === "agency" ? -1 : ladder.length === 3 ? 1 : Math.max(0, ladder.findIndex((plan) => plan.is_default));
+  // Team cards lead with what only a team gets (the Agency module), then the product around it.
+  const top = ladder.length ? ladder[ladder.length - 1] : null;
+  const teamOnly = audience === "agency" && top ? top.features.filter((feature) => feature.moduleLabel === "Agency").slice(0, 6) : [];
+  const rows = top ? [...teamOnly, ...comparisonRows({ ...top, features: top.features.filter((feature) => !teamOnly.includes(feature)) }, 10 - teamOnly.length)] : [];
 
   return (
     <section id="pricing" aria-labelledby="pricing-title" className={styles.section}>
@@ -70,20 +76,29 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
           <p className={styles.lede}>
             {trialDays ? <><b>{trialDays} days free on every plan.</b> Nothing charged until the trial ends.</> : "Start with your book, and add the floor and the dialer when you are ready."}
           </p>
+          {audiences.length > 1 && (
+            <div className={styles.switch} role="group" aria-label="Plans for">
+              {audiences.map((who) => (
+                <button key={who} type="button" aria-pressed={audience === who} onClick={() => setAudience(who)}>
+                  {who === "individual" ? "Independent agent" : "Team"}
+                </button>
+              ))}
+            </div>
+          )}
         </Reveal>
 
         {ladder.length > 0 && (
-          <div className={styles.ladder} data-count={ladder.length}>
+          <div className={styles.ladder} data-count={ladder.length} key={audience}>
             {ladder.map((plan, index) => {
               const featured = index === recommended;
               const has = new Set(plan.features.map((feature) => feature.key));
-              const tab = tabLabel(index, ladder.length, recommended);
+              const tab = audience === "agency" ? null : tabLabel(index, ladder.length, recommended);
               return (
                 <Reveal key={plan.code} variant="rise" delay={index * 110} className={styles.cell}>
                   <article className={`${styles.card} ${featured ? styles.featured : ""}`} aria-label={`${plan.name} plan`}>
                     {tab && <span className={styles.tab}>{tab}<i aria-hidden="true" /></span>}
                     <header className={styles.cardHead}>
-                      <h3 className={styles.tier}>{plan.name}</h3>
+                      <h3 className={styles.tier}>{plan.name.includes(" · ") ? plan.name.split(" · ").slice(1).join(" · ") : plan.name}</h3>
                       {plan.price_monthly ? (
                         <div className={styles.price}>
                           <span className={styles.whole}>{dollars(plan.price_monthly)}</span>
@@ -119,21 +134,6 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
           </div>
         )}
 
-        <div className={styles.foot}>
-          {agencyFrom && (
-            <p className={styles.agency}>
-              <span className={styles.agencyIcon} aria-hidden="true"><Users /></span>
-              <span>
-                Running an agency? One flat price for the whole team, from{" "}
-                <b>{agencyFrom.price_monthly ? `${dollars(agencyFrom.price_monthly)}/month` : "a flat band"}</b>
-                {agencyFrom.max_seats ? ` for up to ${agencyFrom.max_seats} seats` : ""}.
-              </span>
-              <Link href="/pricing?for=agency">See agency pricing<ArrowRight aria-hidden="true" /></Link>
-            </p>
-          )}
-          <Link href="/pricing" className={styles.compare}>Compare every plan<ArrowRight aria-hidden="true" /></Link>
-          <p className={styles.fine}>Add-ons and usage above a plan’s allowance are priced separately.</p>
-        </div>
       </div>
     </section>
   );
