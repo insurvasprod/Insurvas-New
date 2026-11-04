@@ -48,10 +48,10 @@ function comparisonRows(top: PublicPlan, limit: number) {
 }
 
 /** The tab in each card's corner. */
-function tabLabel(index: number, count: number, recommended: number) {
+function tabLabel(index: number, count: number, recommended: number, audience: "individual" | "agency") {
   if (index === recommended) return "Recommended";
-  if (index === 0) return "Start here";
-  if (index === count - 1) return "Everything";
+  if (index === 0) return audience === "agency" ? "Small team" : "Start here";
+  if (index === count - 1) return audience === "agency" ? "Large floor" : "Everything";
   return null;
 }
 
@@ -61,8 +61,8 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
   const [audience, setAudience] = useState<"individual" | "agency">("individual");
   const ladder = plans.filter((plan) => plan.audience === audience).sort((a, b) => monthlyNumber(a) - monthlyNumber(b));
   const trialDays = ladder.find((plan) => plan.trial_days > 0)?.trial_days ?? null;
-  // The team bands are one product at three sizes: nothing to recommend between them, so no tabs.
-  const recommended = audience === "agency" ? -1 : ladder.length === 3 ? 1 : Math.max(0, ladder.findIndex((plan) => plan.is_default));
+  // Both views look the same (owner, 2026-11-04): the middle card is recommended and every card has its tab.
+  const recommended = ladder.length === 3 ? 1 : Math.max(0, ladder.findIndex((plan) => plan.is_default));
   // Team cards lead with what only a team gets (the Agency module), then the product around it.
   const top = ladder.length ? ladder[ladder.length - 1] : null;
   const teamOnly = audience === "agency" && top ? top.features.filter((feature) => feature.moduleLabel === "Agency").slice(0, 6) : [];
@@ -92,7 +92,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
             {ladder.map((plan, index) => {
               const featured = index === recommended;
               const has = new Set(plan.features.map((feature) => feature.key));
-              const tab = audience === "agency" ? null : tabLabel(index, ladder.length, recommended);
+              const tab = tabLabel(index, ladder.length, recommended, audience);
               return (
                 <Reveal key={plan.code} variant="rise" delay={index * 110} className={styles.cell}>
                   <article className={`${styles.card} ${featured ? styles.featured : ""}`} aria-label={`${plan.name} plan`}>
