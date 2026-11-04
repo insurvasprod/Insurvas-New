@@ -91,7 +91,7 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
   const notes = caller?.notes ?? null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
+    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-stretch">
       <aside aria-label="The caller" className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:w-[320px] lg:shrink-0">
         <CallerCard workItemId={workItemId} facts={facts} now={now} />
       </aside>
