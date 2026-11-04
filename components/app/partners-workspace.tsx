@@ -301,9 +301,6 @@ const termText = (term: Term | null) =>
     : term.payout_model === "revenue_share"
       ? `${((term.rate_pct_bp ?? 0) / 100).toFixed(2)}% revenue share`
       : `${PARTNER_PAYOUT_MODEL_LABELS[term.payout_model]} · ${money(term.rate_cents)}`;
-/** The first commercial terms ever recorded: when the relationship started paying. */
-const earliestTerm = (partner: Partner) =>
-  partner.terms.reduce<string | null>((min, term) => (!min || term.effective_from < min ? term.effective_from : min), null);
 const statusTone = (status: PartnerStatus) =>
   status === "active" ? "good" : status === "paused" ? "warning" : "neutral";
 /** The same meaning as the row's chip, as a dot in the status filter's list (UI-CONSISTENCY §12). */
@@ -797,7 +794,7 @@ export function PartnersWorkspace({
         // contact this is, so it stays on screen.
         infoDescription={!detailOnly}
         description={detailOnly
-          ? (selectedPartner ? `${SOURCE_TYPE_SHORT[selectedPartner.partner_type]}${selectedPartner.contact_name ? ` · ${selectedPartner.contact_name}` : ""}` : undefined)
+          ? undefined
           : "Everyone who sends you leads or live calls: what you pay them, and how they are doing this month."}
         breadcrumbs={detailOnly
           ? [{ label: "Partners" }, { label: "Publishers", href: "/app/publishers" }, { label: selectedPartner?.name ?? "Publisher" }]
@@ -808,8 +805,6 @@ export function PartnersWorkspace({
         meta={detailOnly && selectedPartner ? (
           <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <StatusChip tone={statusTone(selectedPartner.status)}>{PARTNER_STATUS_LABELS[selectedPartner.status]}</StatusChip>
-            <span className="text-xs text-muted-foreground">{termText(selectedPartner.active_term)}</span>
-            {earliestTerm(selectedPartner) && <span className="text-xs text-muted-foreground">Since {dateLabel(earliestTerm(selectedPartner))}</span>}
           </span>
         ) : undefined}
         actions={
