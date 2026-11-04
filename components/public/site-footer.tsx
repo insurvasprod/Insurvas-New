@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MarketingCta } from "@/components/marketing/cta";
 import styles from "@/components/public/site-footer.module.css";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
@@ -30,11 +31,11 @@ const COLUMNS: Array<{ title: string; links: Array<{ href: string; label: string
     // Page order, like the header nav (2026-11-03). The True CPA link went with the section it
     // pointed at, which the owner removed on 3 Nov.
     links: [
-      { href: "/#industries", label: "Who it's for" },
+      { href: "/#industries", label: "What’s broken" },
       { href: "/#features", label: "Features" },
       { href: "/pricing", label: "Pricing" },
       { href: "/roadmap", label: "Roadmap" },
-      { href: "/#faq", label: "Questions" },
+      { href: "/#faq", label: "FAQ" },
     ],
   },
   {
@@ -71,21 +72,24 @@ export async function SiteFooter() {
   const legalLinks = await publishedLegalLinks();
   const columns = legalLinks.length > 0 ? [...COLUMNS, { title: "Legal", links: legalLinks }] : COLUMNS;
   return (
-    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-8 pt-24 sm:px-6 lg:px-16">
+    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pt-20 sm:px-6 lg:px-16">
       <div className="relative mx-auto max-w-7xl">
         <div className="grid gap-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
           <div>
             <Link href="/" className="inline-flex no-underline">
               <InsurvasLogo size="auth" tone="dark" alt="Insurvas" />
             </Link>
-            <p className="mt-4 max-w-[260px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)]">
-              The operating system for insurance teams that buy leads and write policies.
+            <p className="mt-4 max-w-[280px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)]">
+              The Complete OS for life insurance sales teams.
             </p>
+            <div className="mt-6">
+              <MarketingCta href="/signup">Start free trial</MarketingCta>
+            </div>
           </div>
 
           {columns.map((column) => (
             <div key={column.title}>
-              <div className="text-xs font-semibold uppercase leading-[1.33] tracking-[0.02em] text-[var(--nav-ink)]">{column.title}</div>
+              <div className="text-sm font-semibold leading-normal tracking-[-0.01em] text-[var(--nav-ink)]">{column.title}</div>
               <div className="mt-3">
                 {column.links.map((item) => (
                   <Link
@@ -101,16 +105,17 @@ export async function SiteFooter() {
           ))}
         </div>
 
-        {/* The full logo, wide and faded, above the bottom bar (2026-11-03). */}
-        <div aria-hidden="true" className={styles.watermark} />
-        <div className="flex flex-wrap items-center justify-between gap-6 border-t border-[var(--nav-line)] pt-6">
+        <div className="mt-14 grid gap-2 border-t border-[var(--nav-line)] pt-6 sm:flex sm:flex-wrap sm:items-start sm:justify-between sm:gap-6">
           <span className="text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
             © {new Date().getFullYear()} Insurvas Inc. All rights reserved.
           </span>
-          <span className="text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">
-            Pre-dial screening uses the checks and vendors your agency configures · Subscription payments are taken on our payment provider&rsquo;s hosted page
-          </span>
+          <div className="grid gap-1 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)] sm:text-right">
+            <span>Insurvas is software. It does not give insurance, legal or tax advice, and is not affiliated with any carrier.</span>
+            <span>Pre-dial screening uses the checks and vendors your agency configures. Subscription payments are taken on our payment provider&rsquo;s hosted page.</span>
+          </div>
         </div>
+        {/* The wordmark, smaller and cropped by the bottom edge (owner, 2026-11-04). */}
+        <div aria-hidden="true" className={styles.crop}><div className={styles.watermark} /></div>
       </div>
     </footer>
   );
