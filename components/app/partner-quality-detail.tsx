@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react
 import Link from "next/link";
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { FramedLoading } from "@/components/app/reports/reports-slot";
@@ -82,6 +82,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<LeadFilter>("all");
+  const [leadFiltersOpen, setLeadFiltersOpen] = useState(false);
   const [leadPage, setLeadPage] = useState(1);
   const [dayPage, setDayPage] = useState(1);
   const [teamPage, setTeamPage] = useState(1);
@@ -140,7 +141,6 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
   const { current: teamCurrent, pages: teamPages, rows: teamRows } = paginate(data.team, teamPage, pageSize);
   const { current: agentCurrent, rows: agentRows } = paginate(data.agents, agentPage, pageSize);
   const section = (content: ReactNode, columns = 4) => loading ? <SectionLoading rows={4} columns={columns} /> : content;
-  const leadsFiltered = filter !== "all" || search.trim() !== "";
   const clearLeadFilters = () => { setSearch(""); setFilter("all"); setLeadPage(1); };
 
   function exportLeads() {
@@ -149,6 +149,7 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
       shownLeads.map((lead) => [lead.date, lead.full_name, lead.phone, lead.state, lead.product, lead.screening, lead.duplicate ? "Yes" : "No", lead.submitted_by, lead.agent_name, leadStatus(lead, labels)]));
   }
 
+  const leadActive: ActiveFilter[] = filter === "all" ? [] : [{ key: "show", label: "Show", value: LEAD_FILTERS.find((option) => option.value === filter)?.label ?? filter, onRemove: () => { setFilter("all"); setLeadPage(1); } }];
   const dispositioned = data.dispositions.reduce((sum, item) => sum + item.count, 0);
   const screeningRows: { label: string; value: number; prior: number; metric?: PartnerQualityMetric }[] = [
     { label: "Passed", value: now.sent - screeningFlags(now.screening), prior: prev.sent - screeningFlags(prev.screening) },
@@ -198,19 +199,24 @@ export function PartnerQualityDetailWorkspace({ partnerId, initialPeriod, embedd
     {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09). */}
     <div key={tab} role="tabpanel" id="partner-view" aria-labelledby={`partner-tab-${tab}`} className="flex min-w-0 flex-col gap-6">
     {tab === "leads" && <TableCard
-      toolbar={
+      toolbar={<>
         <DataToolbar actions={<>
-          {leadsFiltered && <ClearFiltersButton onClick={clearLeadFilters} />}
-          <Button type="button" variant="outline" onClick={exportLeads} disabled={shownLeads.length === 0}><Download aria-hidden="true" />Export</Button>
+          <Button type="button" variant="outline" size="icon" onClick={exportLeads} disabled={shownLeads.length === 0} aria-label="Export the leads as CSV" title="Export the leads as CSV"><Download aria-hidden="true" /></Button>
+          <FilterButton open={leadFiltersOpen} count={leadActive.length} controls="partner-lead-filters" onClick={() => setLeadFiltersOpen((open) => !open)} />
           {refreshTool}
         </>}>
           <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setLeadPage(1); }} placeholder="Search leads" />
           {periodTool}
-          <select aria-label="Show leads" className={toolbarControl} value={filter} onChange={(event) => { setFilter(event.target.value as LeadFilter); setLeadPage(1); }}>
-            {LEAD_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
         </DataToolbar>
-      }
+        <FilterPanel id="partner-lead-filters" open={leadFiltersOpen}>
+          <FilterField label="Show" htmlFor="partner-lead-show">
+            <select id="partner-lead-show" className={toolbarControl} value={filter} onChange={(event) => { setFilter(event.target.value as LeadFilter); setLeadPage(1); }}>
+              {LEAD_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+          </FilterField>
+        </FilterPanel>
+        <ActiveFilters filters={leadActive} onClear={clearLeadFilters} />
+      </>}
       footer={<Pager page={leadCurrent} total={shownLeads.length} pageSize={pageSize} noun="leads" onPage={setLeadPage} suffix={data.leads_truncated ? `newest ${count(data.leads.length)} of ${count(now.sent)} listed` : undefined} />}
     >
       {section(data.leads.length === 0
