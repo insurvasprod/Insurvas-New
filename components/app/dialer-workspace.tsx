@@ -43,7 +43,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
 
   // The Call button, on the right of the lead's facts (owner 2026-10-27).
   const callButton = panel ? (
-      <div className="flex flex-col items-stretch gap-2 max-lg:hidden">
+      <div className="flex items-center gap-2 max-lg:hidden">
         {!attempt && needsDnc ? (
           // Owner 2026-10-29: check the number first; the Call button appears once it is clear.
           <Button type="button" onClick={() => void checkDnc()} disabled={readOnly || checkingDnc || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
@@ -202,7 +202,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
   ) : null;
 
   // The lead you are on, above the queue table.
-  const current = <div className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={callButton}>{callArea}</DialerLeadColumn></div>;
+  const current = <div className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly}>{callArea}</DialerLeadColumn></div>;
 
   return (
     /* The list is the page (Dialer A round 2, owner 2026-10-27): one centred column. The lead you
@@ -224,7 +224,8 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
             canCheckNumber && { label: "Check a number", icon: ShieldCheck, onSelect: () => setCheckOpen(true) },
             !searchMode && !readOnly && { label: autoNext ? "Turn auto-next off" : "Turn auto-next on", icon: SkipForward, onSelect: () => setAutoNext(!autoNext) },
           ]} />
-          {!readOnly && <Button data-guide="dialer-next" type="button" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
+          {callButton}
+          {!readOnly && <Button data-guide="dialer-next" type="button" variant={panel ? "outline" : "default"} onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
             {serving ? "Serving…" : "Serve next lead"}
           </Button>}
         </span>
