@@ -319,9 +319,12 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
       {tab === "holdout" && (
         <FormSections>
           <FormSection id="holdout" title="Holdout" info="A measured way to know whether working the save queue saves policies.">
-            <div className="flex max-w-[78ch] flex-col gap-2 text-sm text-[var(--ink)]">
-              {HOLDOUT_EXPLANATION.map((p, i) => <p key={i} className="m-0">{p}</p>)}
-            </div>
+            {/* Four paragraphs open by default buried the switch; the text is one click away. */}
+            <Advanced summary="How the holdout works" hint={saved.holdoutEnabled || acknowledged ? undefined : "Read this before switching it on"}>
+              <div className="flex max-w-[78ch] flex-col gap-2 text-sm text-[var(--ink)]">
+                {HOLDOUT_EXPLANATION.map((p, i) => <p key={i} className="m-0">{p}</p>)}
+              </div>
+            </Advanced>
             {!saved.holdoutEnabled && canEdit && (
               <label className="flex items-center gap-2 text-sm text-[var(--ink)]">
                 <input type="checkbox" className={checkboxControl} checked={acknowledged} onChange={(e) => { setAcknowledged(e.target.checked); if (!e.target.checked) set("holdoutEnabled", false); }} />

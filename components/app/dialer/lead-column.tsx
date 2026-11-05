@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Callout } from "@/components/app/settings/primitives";
 import { productLineLabel } from "@/lib/format/productLine";
@@ -14,7 +15,7 @@ import { body14, label, small, value } from "@/components/app/dialer/model";
 import type { useDialer } from "@/components/app/dialer/use-dialer";
 import { useNow } from "@/components/app/applications/outcome/use-now";
 import { useState } from "react";
-import { ChevronDown, Clock, Flame, Lock, MapPin, Megaphone, Package, Phone, Repeat, ShieldAlert, ShieldCheck, Store, Tag, User, type LucideIcon } from "lucide-react";
+import { FileText, ListChecks, Clock, Flame, Lock, MapPin, Phone, Repeat, ShieldAlert, ShieldCheck, User, type LucideIcon } from "lucide-react";
 
 /** One fact as an icon and a few words; the full sentence is its tooltip. */
 function Fact({ icon: Icon, children, title, tone = "neutral" }: { icon: LucideIcon; children: ReactNode; title?: string; tone?: "neutral" | "good" | "warn" | "bad" }) {
@@ -39,11 +40,11 @@ function Fact({ icon: Icon, children, title, tone = "neutral" }: { icon: LucideI
  * screen showed is still here; most of it moved into tooltips and the Details / History toggles.
  */
 /** `call`: the Call button (and Book appointment), drawn on the right of the facts. */
-export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnType<typeof useDialer>; readOnly: boolean; call?: ReactNode; children?: ReactNode }) {
+export function DialerLeadColumn({ d, call, children }: { d: ReturnType<typeof useDialer>; readOnly: boolean; call?: ReactNode; children?: ReactNode }) {
   const now = useNow();
   const [complianceOpen, setComplianceOpen] = useState(false);
   const [disclosureOpen, setDisclosureOpen] = useState(false);
-  const { searchMode, panel, panelError, loading, served, serving, serveNext, loadingPanel, eligibility, callReady, reasonParts, stateName, stackHits, phoneLabel, cityState, disclosureUnapproved } = d;
+  const { searchMode, panel, panelError, loading, served, loadingPanel, eligibility, callReady, reasonParts, stateName, stackHits, phoneLabel, cityState, disclosureUnapproved } = d;
 
   if (panelError) return <div className="p-4"><Callout tone="error" title={`Could not load this lead: ${panelError}`} /></div>;
   if (loading || loadingPanel) return <div aria-label="Lead"><SectionLoading rows={5} columns={4} label={loading ? "Serving your next lead" : "Loading call guidance"} /></div>;
@@ -51,9 +52,10 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
     if (searchMode) return <EmptyState title="Open a search result" hint="Pick a lead from the results." />;
     // No explanation under the title (owner 2026-10-30): the title and Serve next lead say enough.
     return (
-      <div className="flex flex-col items-center gap-3 px-6 py-8 text-center">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
         <p className="m-0 text-sm font-semibold text-[var(--ink)]">No lead on your screen</p>
-        {!readOnly && <Button type="button" onClick={() => void serveNext()} disabled={serving}>{serving ? "Serving…" : "Serve next lead"}</Button>}
+        {/* Serve next lead is one button, in the page header (owner 2026-11-05); the queue is below. */}
+        <span className="flex items-center gap-3"><span className="text-xs text-[var(--muted)]">Serve the next lead, or pick one below.</span>{call}</span>
       </div>
     );
   }
@@ -68,6 +70,8 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
   const why = servedHere && served
     ? `Served to you${served.tierName ? ` · ${served.tierName.replaceAll("_", " ")}` : ""}: ${[reasonParts.join(" · ") || served.selectionReason || "from the queue", served.lockedUntil ? `locked to you until ${new Date(served.lockedUntil).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "held by you"].join(" · ")}`
     : reasonParts.length > 0 ? `Last chosen: ${reasonParts.join(" · ")}` : undefined;
+
+  const allClear = Boolean(panel.consent.hasCertificate) && !dncBad && licence?.status === "live" && windowOpen && panel.disclosure.configured && !disclosureUnapproved;
 
   // Every check in full and the suppression stack: what Details opens.
   const complianceDetail = (
@@ -152,52 +156,47 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
       <div className="flex min-w-0 flex-1 flex-col gap-4 @max-2xl:contents">
       {/* Who: the name, the number, and their place, clock, age and attempt as icons. */}
       <div className="flex items-start gap-4">
-        <span className="inline-flex size-12 shrink-0 items-center justify-center rounded-2xl bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">
-          {(name ?? "?").split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}
-        </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="m-0 text-title-md leading-[1.21] font-semibold tracking-[-0.02em] text-[var(--ink)]">{name}</h2>
             {priority && <Fact icon={Flame} tone={priority === "High" ? "bad" : priority === "Medium" ? "warn" : "neutral"} title={why}>{priority}</Fact>}
+            <InfoTip label="Where this lead came from">{[panel.campaign?.name ?? "No campaign", panel.campaign?.vendorName ?? "No vendor", panel.campaign ? sourceLabel(panel.campaign.leadType) : null, productLineLabel(panel.lead.productCode)].filter(Boolean).join(" · ")}</InfoTip>
           </div>
-          <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] tabular-nums">
+          <p className="m-0 mt-1.5 flex flex-wrap items-center gap-x-3.5 gap-y-1 text-sm leading-[1.5] tracking-[-0.02em] text-[var(--body)] tabular-nums">
             <span className="inline-flex items-center gap-1.5 font-semibold text-[var(--ink)]"><Phone aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{phoneLabel ?? "No phone number"}</span>
             <span className="inline-flex items-center gap-1.5" title="Where they are"><MapPin aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{cityState || "state missing"}</span>
-            <span className="inline-flex items-center gap-1.5" title="Their local time"><Clock aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{eligibility?.timezone ? `${localClock(eligibility.checkedAt, eligibility.timezone)} their time (${zoneShort(eligibility.timezone)})` : "Local time unknown"}</span>
-            {panel.lead.age && <span className="inline-flex items-center gap-1.5" title="Age"><User aria-hidden="true" className="size-3.5 text-[var(--muted)]" />age {panel.lead.age}</span>}
-            <span className="inline-flex items-center gap-1.5" title="Attempts"><Repeat aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{attemptOfCeiling(panel.lead.attemptsMade ?? 0, panel.lead.attemptCeiling).toLowerCase()}</span>
+            <span className="inline-flex items-center gap-1.5" title="Their local time"><Clock aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{eligibility?.timezone ? `${localClock(eligibility.checkedAt, eligibility.timezone)} ${zoneShort(eligibility.timezone)}` : "Time unknown"}</span>
+            {panel.lead.age && <span className="inline-flex items-center gap-1.5" title="Age"><User aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{panel.lead.age}</span>}
+            <span className="inline-flex items-center gap-1.5" title="Attempts"><Repeat aria-hidden="true" className="size-3.5 text-[var(--muted)]" />{attemptOfCeiling(panel.lead.attemptsMade ?? 0, panel.lead.attemptCeiling).replace(/^attempts*/i, "")}</span>
           </p>
         </div>
       </div>
 
-      {/* Where the lead came from: four chips. */}
-      <div className="flex flex-wrap items-center gap-1.5 @max-2xl:order-2" aria-label="Where this lead came from">
-        <Fact icon={Megaphone} title="Campaign">{panel.campaign?.name ?? "No campaign"}</Fact>
-        <Fact icon={Store} title="Vendor">{panel.campaign?.vendorName ?? "No vendor"}</Fact>
-        <Fact icon={Tag} title="Source">{panel.campaign ? sourceLabel(panel.campaign.leadType) : "—"}</Fact>
-        <Fact icon={Package} title="Product">{productLineLabel(panel.lead.productCode)}</Fact>
-      </div>
       {/* The setter's notes for this booking stay: they are what the agent says next. */}
       {servedHere && served?.appointmentNotes && <p className={cn(body14, "m-0 @max-2xl:order-2")}><span className="font-semibold text-[var(--ink)]">Setter notes: </span>{served.appointmentNotes}</p>}
 
       {/* May they be called: one tick per rule; Details opens every check and the suppression stack. */}
       <section aria-label="Eligibility and compliance" className="flex flex-col gap-2 @max-2xl:order-2">
         <div className="flex flex-wrap items-center gap-1.5">
-          <Fact icon={panel.consent.hasCertificate ? ShieldCheck : ShieldAlert} tone={panel.consent.hasCertificate ? "good" : "warn"} title={`Consent on file: ${consentLabel(panel.consent)}`}>Consent</Fact>
-          <Fact icon={dncBad ? ShieldAlert : ShieldCheck} tone={dncBad ? "bad" : "good"} title={eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}>DNC</Fact>
-          <Fact icon={licence && licence.status !== "live" ? ShieldAlert : ShieldCheck} tone={licence ? (licence.status === "live" ? "good" : "bad") : "neutral"} title={licence ? (licence.message ?? `${licence.state} licence ${licence.status}`) : "Checked when you call"}>{licence ? `${licence.state} licence` : "Licence"}</Fact>
-          <Fact icon={windowOpen ? Clock : Lock} tone={windowOpen ? "good" : "bad"} title="The calling window, in the customer's time">
+          {allClear
+            ? <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success-ink)]"><ShieldCheck aria-hidden="true" className="size-3.5" />Cleared to call</span>
+            : <>
+          {!panel.consent.hasCertificate && <Fact icon={panel.consent.hasCertificate ? ShieldCheck : ShieldAlert} tone={panel.consent.hasCertificate ? "good" : "warn"} title={`Consent on file: ${consentLabel(panel.consent)}`}>Consent</Fact>}
+          {dncBad && <Fact icon={dncBad ? ShieldAlert : ShieldCheck} tone={dncBad ? "bad" : "good"} title={eligibility?.dncCheck === "unavailable" ? "Your stored lists could not be read · dialing refused" : "Checked when you call"}>DNC</Fact>}
+          {licence?.status !== "live" && <Fact icon={licence ? ShieldAlert : ShieldCheck} tone={licence ? "bad" : "neutral"} title={licence ? (licence.message ?? `${licence.state} licence ${licence.status}`) : "Checked when you call"}>{licence ? `${licence.state} licence` : "Licence"}</Fact>}
+          {!windowOpen && <Fact icon={windowOpen ? Clock : Lock} tone={windowOpen ? "good" : "bad"} title="The calling window, in the customer's time">
             {panel.window
               ? panel.window.allowed && panel.window.endMinute !== null ? `Open till ${minuteLabel(panel.window.endMinute)}` : windowClosedLabel(panel.window.reason, panel.window.startMinute, panel.window.zone)
               : eligibility?.reason === "outside_window" ? "Window closed" : "Window"}
-          </Fact>
-          <Fact icon={!panel.disclosure.configured || disclosureUnapproved ? ShieldAlert : ShieldCheck} tone={!panel.disclosure.configured ? "bad" : disclosureUnapproved ? "warn" : "good"} title="The state's disclosure wording">{!panel.disclosure.configured ? "No disclosure" : disclosureUnapproved ? "Placeholder disclosure" : "Disclosure"}</Fact>
+          </Fact>}
+          {(!panel.disclosure.configured || disclosureUnapproved) && <Fact icon={!panel.disclosure.configured || disclosureUnapproved ? ShieldAlert : ShieldCheck} tone={!panel.disclosure.configured ? "bad" : disclosureUnapproved ? "warn" : "good"} title="The state's disclosure wording">{!panel.disclosure.configured ? "No disclosure" : disclosureUnapproved ? "Placeholder disclosure" : "Disclosure"}</Fact>}
+            </>}
           {/* Details and the state's disclosure on the same line as the checks (owner 2026-10-30). Each
               opens over the page, so the card keeps its shape when they are read. */}
           <Popover open={complianceOpen} onOpenChange={setComplianceOpen}>
             <PopoverTrigger asChild>
-              <Button type="button" variant="outline" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
-                Details<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", complianceOpen && "rotate-180")} />
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="Compliance details" title="Compliance details" className="data-[state=open]:bg-[var(--surface-alt)]">
+                <ListChecks aria-hidden="true" />
               </Button>
             </PopoverTrigger>
             <PopoverContent align="start" className="max-h-[min(70dvh,560px)] w-[min(92vw,560px)] overflow-y-auto p-0">
@@ -210,8 +209,8 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
           {panel.disclosure.configured && (
             <Popover open={disclosureOpen} onOpenChange={setDisclosureOpen}>
               <PopoverTrigger asChild>
-                <Button type="button" variant="outline" size="sm" className="data-[state=open]:border-[var(--border-strong)]">
-                  {`${stateName ?? panel.disclosure.state} disclosure`}<ChevronDown aria-hidden="true" className={cn("size-3.5 transition-transform", disclosureOpen && "rotate-180")} />
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`${stateName ?? panel.disclosure.state} disclosure`} title={`${stateName ?? panel.disclosure.state} disclosure`} className="data-[state=open]:bg-[var(--surface-alt)]">
+                  <FileText aria-hidden="true" />
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="start" className="max-h-[min(70dvh,480px)] w-[min(92vw,480px)] overflow-y-auto">
@@ -224,7 +223,7 @@ export function DialerLeadColumn({ d, readOnly, call, children }: { d: ReturnTyp
       </section>
 
       </div>
-      {call && <div className="flex shrink-0 flex-col items-stretch gap-2 @max-2xl:order-1">{call}</div>}
+      {call && <div className="flex shrink-0 flex-wrap items-center gap-2 @2xl:flex-col @2xl:items-stretch @max-2xl:order-1">{call}</div>}
       </div>
 
       {!panel.disclosure.configured && (

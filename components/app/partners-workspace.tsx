@@ -17,9 +17,7 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
-  Download,
   Edit3,
-  MapPin,
   MessagesSquare,
   MoreHorizontal,
   Pause,
@@ -66,9 +64,9 @@ import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
 import { PartnerOnboarding } from "@/components/app/partner-onboarding";
 import { PageLoading } from "@/components/ui/page-loading";
 import { TableCard } from "@/components/ui/table-card";
-import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { ActiveFilters, type ActiveFilter, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { SelectMenu } from "@/components/ui/select-menu";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
@@ -303,9 +301,6 @@ const termText = (term: Term | null) =>
     : term.payout_model === "revenue_share"
       ? `${((term.rate_pct_bp ?? 0) / 100).toFixed(2)}% revenue share`
       : `${PARTNER_PAYOUT_MODEL_LABELS[term.payout_model]} · ${money(term.rate_cents)}`;
-/** The first commercial terms ever recorded: when the relationship started paying. */
-const earliestTerm = (partner: Partner) =>
-  partner.terms.reduce<string | null>((min, term) => (!min || term.effective_from < min ? term.effective_from : min), null);
 const statusTone = (status: PartnerStatus) =>
   status === "active" ? "good" : status === "paused" ? "warning" : "neutral";
 /** The same meaning as the row's chip, as a dot in the status filter's list (UI-CONSISTENCY §12). */
@@ -320,20 +315,17 @@ const STATUS_DOT: Record<PartnerStatus, string> = {
  * One limit of the plan, said once ("1 of 5"), with a thin bar. Four of these share one strip: the
  * ring cards before said each number three times ("1/5 · 1 of 5 · 1 of 5 live transfer sources").
  */
-function PlanRoom({ label, used, limit }: { label: string; used: number; limit: number | null }) {
+/** One plan limit as a standard stat card: the count in use, what the plan allows, and a meter. */
+function PlanCard({ label, used, limit }: { label: string; used: number; limit: number | null }) {
   const full = limit != null && used >= limit;
   return (
-    <div className="min-w-0">
-      <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-xs text-muted-foreground">{label}</span>
-        <span className={cn("text-sm font-semibold tabular-nums", full ? "text-[var(--warning-ink)]" : "text-foreground")}>{limit == null ? `${used} active` : `${used} of ${limit}`}</span>
-      </div>
-      {limit != null && (
-        <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
-          <div className={cn("h-full rounded-full", full ? "bg-[var(--warning)]" : "bg-[var(--primary)]")} style={{ width: `${limit ? Math.min(100, (used / limit) * 100) : 0}%` }} />
-        </div>
-      )}
-    </div>
+    <StatCard
+      label={label}
+      value={used}
+      tone={full ? "warn" : "default"}
+      fact={{ label: limit == null ? "No limit on your plan" : full ? `Plan limit of ${limit} reached` : `of ${limit} on your plan` }}
+      meter={limit != null ? { value: used, max: limit, tone: full ? "warning" : "primary", label: `${label}: ${used} of ${limit}` } : undefined}
+    />
   );
 }
 
@@ -734,6 +726,11 @@ export function PartnersWorkspace({
   const { current: listCurrent, rows: listRows } = paginate(filteredPartners, listPage, listPageSize);
   const listFiltered = search.trim() !== "" || typeFilter !== "all" || statusFilter !== "all";
   const clearListFilters = () => { setSearch(""); setTypeFilter("all"); setStatusFilter("all"); setListPage(1); };
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeListFilters: ActiveFilter[] = [
+    typeFilter !== "all" && { key: "type", label: "Type", value: SOURCE_TYPE_SHORT[typeFilter as PartnerType] ?? String(typeFilter), onRemove: () => { setTypeFilter("all"); setListPage(1); } },
+    statusFilter !== "all" && { key: "status", label: "Status", value: PARTNER_STATUS_LABELS[statusFilter as PartnerStatus] ?? String(statusFilter), onRemove: () => { setStatusFilter("all"); setListPage(1); } },
+  ].filter((entry): entry is ActiveFilter => Boolean(entry));
   // What each filter would leave, shown on its option (owner, 2026-10-29). Counted against every
   // publisher, not the filtered list, so the numbers do not move as you narrow them down.
   const filterCounts = useMemo(() => {
@@ -790,13 +787,14 @@ export function PartnersWorkspace({
       )}
       <PageHeader
         visible
+        hideTitle={!detailOnly}
         title={detailOnly ? (selectedPartner?.name ?? "Publisher") : "Publishers"}
         // The list's one line is an explanation, so it goes behind the (i) and gives the row back to
         // the table (owner, 2026-10-29). A partner's own line is not: it says which partner and whose
         // contact this is, so it stays on screen.
         infoDescription={!detailOnly}
         description={detailOnly
-          ? (selectedPartner ? `${SOURCE_TYPE_SHORT[selectedPartner.partner_type]}${selectedPartner.contact_name ? ` · ${selectedPartner.contact_name}` : ""}` : undefined)
+          ? undefined
           : "Everyone who sends you leads or live calls: what you pay them, and how they are doing this month."}
         breadcrumbs={detailOnly
           ? [{ label: "Partners" }, { label: "Publishers", href: "/app/publishers" }, { label: selectedPartner?.name ?? "Publisher" }]
@@ -807,22 +805,12 @@ export function PartnersWorkspace({
         meta={detailOnly && selectedPartner ? (
           <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <StatusChip tone={statusTone(selectedPartner.status)}>{PARTNER_STATUS_LABELS[selectedPartner.status]}</StatusChip>
-            <span className="text-xs text-muted-foreground">{termText(selectedPartner.active_term)}</span>
-            {earliestTerm(selectedPartner) && <span className="text-xs text-muted-foreground">Since {dateLabel(earliestTerm(selectedPartner))}</span>}
           </span>
         ) : undefined}
         actions={
           detailOnly ? (
             selectedPartner ? (
               <>
-                {messageHref && (
-                  <Button asChild type="button" variant="outline">
-                    <Link href={messageHref}><MessagesSquare data-icon="inline-start" aria-hidden="true" />Message</Link>
-                  </Button>
-                )}
-                <Button type="button" variant="outline" onClick={() => openEdit(selectedPartner)} disabled={readOnly || selectedPartner.status === "offboarded"}>
-                  <Edit3 data-icon="inline-start" aria-hidden="true" />Edit publisher
-                </Button>
                 {!readOnly && selectedPartner.status !== "offboarded" && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -832,6 +820,8 @@ export function PartnersWorkspace({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-48">
                       <DropdownMenuGroup>
+                        <DropdownMenuItem onSelect={() => openEdit(selectedPartner)}><Edit3 aria-hidden="true" />Edit publisher</DropdownMenuItem>
+                        {messageHref && <DropdownMenuItem asChild><Link href={messageHref}><MessagesSquare aria-hidden="true" />Message</Link></DropdownMenuItem>}
                         {selectedPartner.status === "active" && <DropdownMenuItem onSelect={() => void changeStatus(selectedPartner, "paused")} disabled={busy !== null}><Pause aria-hidden="true" />Pause partner</DropdownMenuItem>}
                         {selectedPartner.status === "paused" && <DropdownMenuItem onSelect={() => void changeStatus(selectedPartner, "active")} disabled={busy !== null}><Play aria-hidden="true" />Resume partner</DropdownMenuItem>}
                         {selectedPartner.status === "draft" && <DropdownMenuItem onSelect={() => void changeStatus(selectedPartner, "active")} disabled={busy !== null}><Check aria-hidden="true" />Activate partner</DropdownMenuItem>}
@@ -844,10 +834,6 @@ export function PartnersWorkspace({
             ) : undefined
           ) : (
             <>
-              {/* A real link, not a button with a handler: the browser owns the download, so
-                  middle-click and "Save link as" work, and a large directory does not have to be
-                  held in memory first. Same pattern as the deal-flow export. */}
-              <Button asChild type="button" variant="outline"><a href="/api/app/partners/export" download aria-label="Export the partner directory as CSV"><Download aria-hidden="true" />Export</a></Button>
               <Button data-guide="publisher-add" type="button" onClick={openCreate} disabled={readOnly} title={everyTypeAtCap ? "Your plan's publisher, marketing partner and affiliate limits are all in use. Upgrade your plan to add another partner." : undefined}>
                 <Plus aria-hidden="true" />
                 Add publisher
@@ -859,12 +845,12 @@ export function PartnersWorkspace({
       {/* Only when the plan sets a limit: four bare counts of active sources read as wrong beside the
           table (owner's demo account, 2026-10-29). */}
       {!detailOnly && partners.length > 0 && [limits.max_publishers, limits.max_marketing_partners, limits.max_affiliates, limits.max_partner_users].some((limit) => limit != null) && (
-        <section aria-label="Room on your plan" className="m-glass grid grid-cols-2 gap-x-6 gap-y-3 rounded-[12px] border border-border px-4 py-3 lg:grid-cols-4">
-          <PlanRoom label="Live transfer sources" used={usage.publishers} limit={limits.max_publishers} />
-          <PlanRoom label="Lead sellers" used={usage.marketing} limit={limits.max_marketing_partners} />
-          <PlanRoom label="Referral partners" used={usage.affiliates} limit={limits.max_affiliates} />
-          <PlanRoom label="Partner logins" used={usage.partnerUsers} limit={limits.max_partner_users} />
-        </section>
+        <StatRow label="Room on your plan">
+          <PlanCard label="Live transfer sources" used={usage.publishers} limit={limits.max_publishers} />
+          <PlanCard label="Lead sellers" used={usage.marketing} limit={limits.max_marketing_partners} />
+          <PlanCard label="Referral partners" used={usage.affiliates} limit={limits.max_affiliates} />
+          <PlanCard label="Partner logins" used={usage.partnerUsers} limit={limits.max_partner_users} />
+        </StatRow>
       )}
       {!detailOnly && selectedPartner && (
         <div className="flex justify-end lg:hidden">
@@ -881,17 +867,18 @@ export function PartnersWorkspace({
       <div className="flex min-w-0 flex-col gap-4">
         {!detailOnly && <TableCard
           className={`${FILL_CARD} min-h-[calc(100dvh-var(--top-bar-h)-164px)] min-w-0`}
-          toolbar={
+          toolbar={<>
             <DataToolbar actions={<>
-              {listFiltered && <ClearFiltersButton onClick={clearListFilters} />}
+              {!selectedPartner && <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeListFilters.length} controls="publishers-filters" />}
               <RefreshButton onClick={() => void load()} refreshing={refreshing} />
             </>}>
               <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search publishers" />
-              {/* The kit's SelectMenu, not a native <select> (owner, 2026-10-29: the plain dropdowns,
-                  with a search at the top of the panel). Each option carries what it would leave, and
-                  the trigger tints while it holds anything but "all", so a narrowed list says so. */}
-              {!selectedPartner && (
-                <SelectMenu
+            </DataToolbar>
+            {!selectedPartner && (
+              <>
+                <FilterPanel id="publishers-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">
+                  <FilterField label="Type" htmlFor="publishers-type">
+                    <SelectMenu
                   label="Filter by partner type"
                   value={typeFilter}
                   defaultValue="all"
@@ -900,7 +887,7 @@ export function PartnersWorkspace({
                   searchPlaceholder="Search types"
                   // The panel takes the trigger's own width (owner, 2026-10-29: the design is right,
                   // the widths were not): a menu wider than the control it hangs off reads as loose.
-                  className="w-52"
+                  className="w-full"
                   panelClassName="w-[var(--radix-popover-trigger-width)]"
                   options={[
                     { value: "all" as const, label: "All Types", count: partners.length, group: "Type" },
@@ -913,16 +900,16 @@ export function PartnersWorkspace({
                     })),
                   ]}
                 />
-              )}
-              {!selectedPartner && (
-                <SelectMenu
+                  </FilterField>
+                  <FilterField label="Status" htmlFor="publishers-status">
+                    <SelectMenu
                   label="Filter by partner status"
                   value={statusFilter}
                   defaultValue="all"
                   onChange={(next) => { setStatusFilter(next); setListPage(1); }}
                   icon={<SlidersHorizontal className="size-4" />}
                   searchPlaceholder="Search statuses"
-                  className="w-52"
+                  className="w-full"
                   panelClassName="w-[var(--radix-popover-trigger-width)]"
                   options={[
                     { value: "all" as const, label: "All Statuses", count: partners.length, group: "Status" },
@@ -936,9 +923,12 @@ export function PartnersWorkspace({
                     })),
                   ]}
                 />
-              )}
-            </DataToolbar>
-          }
+                  </FilterField>
+                </FilterPanel>
+                <ActiveFilters filters={activeListFilters} onClear={clearListFilters} className="-mx-4 w-[calc(100%+2rem)] border-b-0 pb-0" />
+              </>
+            )}
+          </>}
           footer={<Pager page={listCurrent} total={filteredPartners.length} pageSize={listPageSize} noun="publishers" onPage={setListPage} suffix={`${partners.length} publisher${partners.length === 1 ? "" : "s"} in all`} />}
         >
             {partners.length === 0 && !listFiltered ? (
@@ -1054,29 +1044,6 @@ export function PartnersWorkspace({
         )}
         {detailOnly && selectedPartner && (
           <div className="flex min-w-0 flex-col gap-6" aria-label={`${selectedPartner.name} details`}>
-            {/* Figures only, in the kit's strip (UI-CONSISTENCY §4). Until 2026-10-29 this was five
-                hand-rolled tiles of which three held no figure at all — "You pay", "Since" and
-                "Last lead" are facts about the publisher, and a strip that mixes how-many with
-                what-kind teaches the eye to skip all five. The two facts now sit on the identity
-                line under the title; "Last lead" is what this month's figure is doing, so it is its
-                footnote. Sales joins it: the list has shown that column all along. */}
-            <StatStrip label="This publisher's month">
-              <StatTile
-                label={selectedPartner.partner_type === "publisher" ? "Calls This Month" : "Leads This Month"}
-                value={(selectedPartner.partner_type === "publisher" ? selectedPartner.transfers_this_month : selectedPartner.lead_volume_this_month).toLocaleString()}
-                footnote={selectedPartner.last_submission ? `Last: ${dateLabel(selectedPartner.last_submission)}` : "None yet"}
-              />
-              <StatTile
-                label="Sales This Month"
-                value={selectedPartner.completed_this_month.toLocaleString()}
-                reserveFootnote
-              />
-              <StatTile
-                label="Approved Products"
-                value={selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}
-                reserveFootnote
-              />
-            </StatStrip>
 
             <div className="flex min-w-0 flex-col gap-6">
               <ViewTabs
@@ -1094,6 +1061,18 @@ export function PartnersWorkspace({
             <div key={detailTab} role="tabpanel" id="partner-detail-view" aria-labelledby={`partner-detail-tab-${detailTab}`} className="space-y-5 p-5">
               {detailTab === "overview" && (
                 <div className="flex min-w-0 flex-col gap-6">
+                <StatRow label="This publisher's month">
+                  <StatCard
+                    label={selectedPartner.partner_type === "publisher" ? "Calls this month" : "Leads this month"}
+                    value={(selectedPartner.partner_type === "publisher" ? selectedPartner.transfers_this_month : selectedPartner.lead_volume_this_month).toLocaleString()}
+                    fact={{ label: selectedPartner.last_submission ? `Last: ${dateLabel(selectedPartner.last_submission)}` : "None yet" }}
+                  />
+                  <StatCard label="Sales this month" value={selectedPartner.completed_this_month.toLocaleString()} />
+                  <StatCard
+                    label="Approved products"
+                    value={selectedProducts.length ? `${selectedProducts.filter((product) => product.approved).length} of ${selectedProducts.length}` : "—"}
+                  />
+                </StatRow>
                   <PartnerOnboarding
                     partnerId={selectedPartner.id}
                     hasTerm={Boolean(selectedPartner.active_term)}
@@ -1119,10 +1098,9 @@ export function PartnersWorkspace({
               {detailTab === "terms" && (
                 <div className="space-y-8">
                 <section className="space-y-4">
+                  {selectedPartner.terms.length > 0 && (
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <p className="text-sm text-muted-foreground">
-                      New rates apply from their effective date. Past leads keep their original terms.
-                    </p>
+                    <h3 className="text-base font-semibold">Commercial terms</h3>
                     {!readOnly && selectedPartner.status !== "offboarded" && (
                       <Button
                         type="button"
@@ -1137,6 +1115,7 @@ export function PartnersWorkspace({
                       </Button>
                     )}
                   </div>
+                  )}
                   {selectedPartner.terms.length > 0 ? (
                     <div className="overflow-x-auto rounded-lg border border-border">
                       <table className="portal-lead-table w-full min-w-[520px]! text-left text-sm">
@@ -1164,12 +1143,9 @@ export function PartnersWorkspace({
                     />
                   )}
                 </section>
-                {extraTabs.payouts && (
-                  <section aria-labelledby="partner-payouts-title" className="space-y-3 border-t border-border pt-6">
-                    <div>
-                      <h3 id="partner-payouts-title" className="text-base font-semibold">Payouts</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">Review draft, published, and paid runs for this partner.</p>
-                    </div>
+                {extraTabs.payouts && selectedPartner.terms.length > 0 && (
+                  <section aria-labelledby="partner-payouts-title" className="space-y-3">
+                    <h3 id="partner-payouts-title" className="text-base font-semibold">Payouts</h3>
                     {extraTabs.payouts}
                   </section>
                 )}
@@ -1178,10 +1154,7 @@ export function PartnersWorkspace({
               {detailTab === "people" && (
                 <div id="partner-section-team" className="space-y-6">
                   <section aria-labelledby="partner-users-title" className="space-y-3">
-                    <div>
-                      <h3 id="partner-users-title" className="text-base font-semibold">Portal users</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">Manage who can access this partner’s portal.</p>
-                    </div>
+                    <h3 id="partner-users-title" className="text-base font-semibold">Portal users</h3>
                     <PartnerUsersPanel
                       key={selectedPartner.id}
                       partnerId={selectedPartner.id}
@@ -1194,59 +1167,22 @@ export function PartnersWorkspace({
                       onSeatsChanged={() => void refreshCapacity()}
                     />
                   </section>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <section aria-labelledby="partner-contact-title" className="rounded-lg border border-border p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 id="partner-contact-title" className="text-sm font-semibold">Primary contact</h3>
-                        {!readOnly && selectedPartner.status !== "offboarded" && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>Edit</Button>
-                        )}
-                      </div>
-                      <div className="mt-2 space-y-1.5 text-sm">
-                        {selectedPartner.contact_name ? <p className="font-medium">{selectedPartner.contact_name}</p> : <p className="text-muted-foreground">No contact name added.</p>}
-                        {selectedPartner.contact_email ? <p className="break-all text-muted-foreground">{selectedPartner.contact_email}</p> : <p className="text-muted-foreground">No email added.</p>}
-                        <p className="flex items-center gap-2 text-muted-foreground">
-                          <MapPin className="size-3.5" aria-hidden="true" />
-                          {countryName(selectedPartner.country)} · {zonesFor(selectedPartner.country).find(([value]) => value === selectedPartner.timezone)?.[1] ?? selectedPartner.timezone} time
-                        </p>
-                      </div>
-                    </section>
-                    <section aria-labelledby="partner-notes-title" className="rounded-lg border border-border p-4">
-                      <div className="flex items-center justify-between gap-2">
-                        <h3 id="partner-notes-title" className="text-sm font-semibold">Internal notes</h3>
-                        {!readOnly && selectedPartner.status !== "offboarded" && (
-                          <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(selectedPartner)}>{selectedPartner.notes ? "Edit" : "Add note"}</Button>
-                        )}
-                      </div>
-                      <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground" title={selectedPartner.notes ?? undefined}>
-                        {selectedPartner.notes || "No internal notes yet."}
-                      </p>
-                    </section>
-                  </div>
                 </div>
               )}
               {detailTab === "products" && (
                 <div className="space-y-6">
                   <section aria-labelledby="partner-product-access-title" className="space-y-3">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <h3 id="partner-product-access-title" className="text-card-title">Product access</h3>
-                        <p className="mt-1 text-sm text-muted-foreground">
-                          Choose which products {selectedPartner.name} can submit. Only products your agency sells can be approved.
-                        </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <h3 id="partner-product-access-title" className="text-card-title">Product access</h3>
+                      <div className="flex items-center gap-2">
+                        {canManageProductConfig && partnerProducts[selectedPartner.id] && (
+                          <StatusChip tone="info">
+                            {selectedProducts.filter((product) => product.approved).length} of {selectedProducts.length} approved
+                          </StatusChip>
+                        )}
+                        {canManageProductConfig && <Button asChild variant="outline" size="sm"><Link href="/app/settings#products">Agency products</Link></Button>}
                       </div>
-                      {canManageProductConfig && partnerProducts[selectedPartner.id] && (
-                        <StatusChip tone="info">
-                          {selectedProducts.filter((product) => product.approved).length} of {selectedProducts.length} approved
-                        </StatusChip>
-                      )}
                     </div>
-                    {canManageProductConfig && (
-                      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background/40 px-3 py-2.5 text-sm">
-                        <span className="text-muted-foreground">Manage the products available across your agency.</span>
-                        <Button asChild variant="outline" size="sm"><Link href="/app/settings#products">Agency products</Link></Button>
-                      </div>
-                    )}
                     {canManageProductConfig && partnerProducts[selectedPartner.id] ? (
                       selectedProducts.some((product) => product.is_enabled) ? (
                         <div className="grid gap-2 sm:grid-cols-2">
@@ -1254,7 +1190,7 @@ export function PartnersWorkspace({
                             <label
                               key={product.code}
                               className={cn(
-                                "flex min-h-16 items-center gap-3 rounded-lg border border-border px-3 py-2.5 transition-colors",
+                                "flex min-h-12 items-center gap-3 rounded-lg border border-border px-3 py-2 transition-colors",
                                 product.approved && "border-[var(--primary)] bg-[var(--primary-soft)]",
                                 !product.is_enabled && "opacity-60",
                               )}
@@ -1271,16 +1207,7 @@ export function PartnersWorkspace({
                                 }
                                 onChange={() => void togglePartnerProduct(selectedPartner.id, product)}
                               />
-                              <span className="min-w-0 flex-1">
-                                <span className="block text-sm font-medium">{product.name}</span>
-                                <span className="mt-0.5 block text-xs text-muted-foreground">
-                                  {!product.is_enabled
-                                    ? "Not sold by your agency"
-                                    : product.approved
-                                      ? "Available to this partner"
-                                      : "Not available to this partner"}
-                                </span>
-                              </span>
+                              <span className="min-w-0 flex-1 text-sm font-medium">{product.name}</span>
                               <StatusChip tone={product.approved ? "good" : "neutral"}>
                                 {product.approved ? "Approved" : product.is_enabled ? "Not approved" : "Agency disabled"}
                               </StatusChip>
@@ -1303,15 +1230,11 @@ export function PartnersWorkspace({
                     )}
                   </section>
 
+                  {(approvedFormProducts?.length ?? 0) > 0 && <>
                   <div className="border-t border-border" />
 
                   <section aria-labelledby="partner-form-setup-title" className="space-y-3">
-                    <div>
-                      <h3 id="partner-form-setup-title" className="text-card-title">Form setup</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Choose an approved product to configure the fields partners complete when they send a lead.
-                      </p>
-                    </div>
+                    <h3 id="partner-form-setup-title" className="text-card-title">Form setup</h3>
                     <PartnerFormStudio
                       embedded
                       partnerId={selectedPartner.id}
@@ -1319,6 +1242,7 @@ export function PartnersWorkspace({
                       readOnly={readOnly || selectedPartner.status === "offboarded"}
                     />
                   </section>
+                  </>}
                 </div>
               )}
               {detailTab === "markets" && (

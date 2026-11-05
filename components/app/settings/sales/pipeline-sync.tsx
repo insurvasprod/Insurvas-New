@@ -26,7 +26,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowRight, ChevronLeft, Hand, Layers, Lock } from "lucide-react";
+import { AlertTriangle, ChevronLeft } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
@@ -52,7 +52,6 @@ import { BoardPreview, CopyDialog, FillMenu, mappedCount, PIPELINES_HREF, Pipeli
 import { PipelineSyncActivity } from "./pipeline-sync-activity";
 
 const EMPTY = Object.fromEntries(PIPELINE_SYNC_KEYS.map((k) => [k.key, null])) as Mapping;
-const STATES = PIPELINE_SYNC_KEYS.length;
 /** Before 20261029100000 the agency has one map over every pipeline's stages: drawn as one "pipeline". */
 const AGENCY = "__agency";
 
@@ -358,7 +357,6 @@ function PipelineCard({ pipeline, map, saved, checks, ro, legacy, dirty, tab, on
           {checks.length > 0 && <StatusChip tone="warning">{checks.length} to check</StatusChip>}
           {/* Nothing saved: the sync runs on the Insurvas default (stage names). */}
           {!legacy && mappedCount(saved) === 0 && <DefaultChip />}
-          {count ? <StatusChip tone="good" title={`${count} of ${STATES} application states move a card`}>{count} of {STATES} states</StatusChip> : <StatusChip>Moves nothing</StatusChip>}
         </span>
       </div>
 
@@ -416,7 +414,6 @@ function PipelineCard({ pipeline, map, saved, checks, ro, legacy, dirty, tab, on
               })}
             </ul>
           </div>
-          <div className="shrink-0 rounded-b-[15px] border-t border-[var(--border)] bg-[color-mix(in_srgb,var(--canvas)_45%,transparent)] px-4 py-2.5"><RulesLine /></div>
         </>
       )}
     </section>
@@ -453,16 +450,4 @@ function useFitHeight(ref: React.RefObject<HTMLElement | null>, reserve: number)
     return () => window.removeEventListener("resize", measure);
   }, [ref, reserve]);
   return height;
-}
-
-/** Mockup A's line under the map: how the sync behaves, one short fact each, where the choices are made. */
-function RulesLine() {
-  return (
-    <ul className="m-0 flex list-none flex-wrap gap-x-5 gap-y-1.5 p-0 text-xs text-[var(--ink)]" aria-label="How cards move">
-      <li className="flex items-center gap-1.5"><ArrowRight aria-hidden="true" className="size-3.5 text-[var(--accent-ink)]" />Moves forward only (back to quoting is the one step back)</li>
-      <li className="flex items-center gap-1.5"><Hand aria-hidden="true" className="size-3.5 text-[var(--accent-ink)]" />A card a person moved stays put</li>
-      <li className="flex items-center gap-1.5"><Layers aria-hidden="true" className="size-3.5 text-[var(--accent-ink)]" />Follows the furthest open attempt</li>
-      <li className="flex items-center gap-1.5"><Lock aria-hidden="true" className="size-3.5 text-[var(--accent-ink)]" />Never changes the application</li>
-    </ul>
-  );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronDown, MoreHorizontal } from "lucide-react";
+import { ChevronDown, MoreHorizontal, type LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -11,7 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
  * buttons and the rest sit here. An item opens a page (`href`), downloads a file (an `/api/` address) or
  * runs `onSelect` (a confirm pop-up, a file picker). `row` draws the icon-only trigger a table row uses.
  */
-export type MoreItem = { label: string; href?: string; onSelect?: () => void; disabled?: boolean };
+export type MoreItem = { label: string; /** A small icon before the label. */ icon?: LucideIcon; href?: string; onSelect?: () => void; disabled?: boolean };
 
 /** Items may be written `cond && { … }`, so any falsy value (false, null, undefined, "", 0) is skipped. */
 export function MoreMenu({ items, label = "More", row = false }: { items: Array<MoreItem | null | false | undefined | "" | 0>; label?: string; row?: boolean }) {
@@ -28,10 +28,10 @@ export function MoreMenu({ items, label = "More", row = false }: { items: Array<
         {shown.map((item) => item.href ? (
           <DropdownMenuItem key={item.label} asChild disabled={item.disabled}>
             {/* A file from an API route downloads; it is never a page to route or prefetch. */}
-            {item.href.startsWith("/api/") ? <a href={item.href} download>{item.label}</a> : <Link href={item.href}>{item.label}</Link>}
+            {item.href.startsWith("/api/") ? <a href={item.href} download>{item.icon && <item.icon aria-hidden="true" />}{item.label}</a> : <Link href={item.href}>{item.icon && <item.icon aria-hidden="true" />}{item.label}</Link>}
           </DropdownMenuItem>
         ) : (
-          <DropdownMenuItem key={item.label} disabled={item.disabled} onSelect={() => item.onSelect?.()}>{item.label}</DropdownMenuItem>
+          <DropdownMenuItem key={item.label} disabled={item.disabled} onSelect={() => item.onSelect?.()}>{item.icon && <item.icon aria-hidden="true" />}{item.label}</DropdownMenuItem>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

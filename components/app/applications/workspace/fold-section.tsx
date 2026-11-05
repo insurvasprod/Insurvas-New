@@ -139,7 +139,7 @@ export function FoldSection({ heading, done, total, complete, keepOpen = false, 
       >
         <div className="min-h-0 overflow-hidden">
           {rows.length > 0 && (
-            <div className="grid gap-1.5 pt-1.5 md:grid-cols-2">
+            <div className="grid items-start gap-1.5 pt-1.5 md:grid-cols-2">
               {rows.map((row, i) => (
                 <div key={i} className={cn("min-w-0", rows.length % 2 === 1 && i === rows.length - 1 && "md:col-span-2")}>{row}</div>
               ))}

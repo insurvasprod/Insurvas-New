@@ -1,11 +1,12 @@
 import Link from "next/link";
 
 import { RebookButton } from "@/components/app/appointment-rebook";
+import { SettersTabs } from "@/components/app/setters/setters-tabs";
+import { parseSettersTab } from "@/lib/setters/tab";
 import { SetterRanking } from "@/components/app/setters/setter-ranking";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
@@ -75,7 +76,7 @@ const KIND_LABEL: Record<DayRowKind, string> = {
   past: "Past",
 };
 
-export default async function SettersPage() {
+export default async function SettersPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const guard = await guardPage("outbound_dialing");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Appointments & setters" description="Setters book into your real availability." />;
   if (!actAsPage(guard, ["owner", "producer"]))
@@ -84,6 +85,7 @@ export default async function SettersPage() {
   if (await isSoloWorkspace(guard.context.tenantId))
     return <RoleGateNotice reason="solo" featureLabel="Appointments & setters" detail="You work alone, so nobody books appointments for you." action={{ href: "/app/calendar", label: "Open the calendar" }} />;
 
+  const tab = parseSettersTab((await searchParams).tab);
   const view = await getSettersOverview({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
   const t = view.tiles;
   const showRate = t.closedThisMonth ? (t.showedThisMonth / t.closedThisMonth) * 100 : null;
@@ -91,15 +93,8 @@ export default async function SettersPage() {
   const noShows = booked.filter((row) => row.detail?.status === "no_show");
 
   // On the dashboard's static stage backdrop, its cards frosted over it (owner ask 2026-10-26).
-  return (
+  const overview = (
     <>
-    <div className="m-stagger flex flex-col gap-6">
-      <PageHeader
-        title="Appointments & setters"
-        description="Your setters book into your real availability."
-        actions={<Button variant="outline" asChild><Link href="/app/settings#calendar">Hours &amp; blocks</Link></Button>}
-      />
-
       <StatStrip label="Appointment totals">
         <StatTile label="Booked today" value={t.bookedToday} footnote={[t.nextAt ? `next at ${t.nextAt}` : "nothing still to come", t.shownToday || t.noShowToday ? `${t.shownToday} shown · ${t.noShowToday} no-show` : null].filter(Boolean).join(" · ")} />
         <StatTile label="Open slots left" value={t.openLeft} footnote={`of ${t.slotsToday} today`} />
@@ -111,7 +106,7 @@ export default async function SettersPage() {
       {!view.bookable && (
         <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
           <strong className="font-semibold">Add your working hours so setters can book you.</strong>{" "}
-          <Link className="font-semibold underline underline-offset-2" href="/app/settings#calendar">Open Settings › Calendar</Link>
+          <Link className="font-semibold underline underline-offset-2" href="/app/setters?tab=setup">Open Settings › Calendar</Link>
         </p>
       )}
 
@@ -121,9 +116,9 @@ export default async function SettersPage() {
       <TableCard
         title={`Your hours today · ${view.dateLabel}`}
         description={`All times your local · ${booked.length} booked · ${view.day.filter((row) => row.kind === "open").length} open`}
-        action={<Button variant="outline" size="sm" asChild><Link href="/app/settings#calendar">Edit hours &amp; blocks</Link></Button>}
+        action={<Button variant="outline" size="sm" asChild><Link href="/app/setters?tab=setup">Edit hours &amp; blocks</Link></Button>}
       >
-        {view.day.length === 0 ? <EmptyState title="Nothing today" hint="No hours set and nothing booked." action={<Button asChild variant="outline"><Link href="/app/settings#calendar">Set availability</Link></Button>} /> : (
+        {view.day.length === 0 ? <EmptyState title="Nothing today" hint="No hours set and nothing booked." action={<Button asChild variant="outline"><Link href="/app/setters?tab=setup">Set availability</Link></Button>} /> : (
           <div className="flex flex-col gap-4 p-4">
             <ol className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(120px,1fr))] gap-2 p-0">
               {view.day.map((row) => (
@@ -158,7 +153,7 @@ export default async function SettersPage() {
           </div>
         )}
       </TableCard>
-    </div>
     </>
   );
+  return <SettersTabs key={tab} initial={tab} overview={overview} />;
 }

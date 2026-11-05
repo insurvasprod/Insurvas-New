@@ -9,9 +9,9 @@
  * Inbound, outbound and lead-detail all open this same page (build it once).
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowRight, Check, ExternalLink, History, UserPlus } from "lucide-react";
+import { ArrowRight, Check, ExternalLink, History, PanelLeftClose, PanelLeftOpen, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
@@ -167,7 +167,7 @@ function StepNav() {
  * agent works from step 1: a step opens once every step before it is done (or it was reached before).
  * Finish the call is always at the foot.
  */
-function InboundRail({ name, onFinish }: { name: string; onFinish: () => void }) {
+function InboundRail({ onFinish, collapsed, onToggle }: { onFinish: () => void; collapsed: boolean; onToggle: () => void }) {
   const ws = useWorkspace();
   const { step, goTo } = ws;
   const keys = NUMBERED.map((s) => s.key);
@@ -175,8 +175,6 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
   const firstOpen = done.indexOf(false);
   const reach = firstOpen === -1 ? keys.length - 1 : firstOpen;
   const here = keys.indexOf(step as (typeof keys)[number]);
-  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
-  const doneCount = done.filter(Boolean).length;
   // Owner 2026-10-28: the rail stands the column's full height — every row shares the space — and the
   // line runs unbroken from step 1 to After submit, filling green as each step is finished. Steps not
   // reachable yet are dimmed (their title says why) rather than each wearing a lock.
@@ -184,20 +182,12 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
     <span aria-hidden="true" className={cn("w-[3px] flex-1 rounded-full transition-colors duration-700", hidden ? "opacity-0" : green ? "bg-[var(--primary)]" : "bg-[color-mix(in_srgb,var(--ink)_12%,transparent)]")} />
   );
   return (
-    <aside aria-label="The client and the application steps" className="m-glass flex min-h-0 flex-col gap-4 rounded-xl border border-[color-mix(in_srgb,var(--primary)_30%,var(--border))] p-4 lg:h-full">
-      <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="inline-grid size-11 shrink-0 place-items-center rounded-[12px] bg-[var(--primary-soft)] text-sm font-bold text-[var(--accent-ink)]">{initials || "?"}</span>
-        <span className="min-w-0 flex-1">
-          <strong className="block truncate text-base font-semibold text-[var(--ink)]">{name}</strong>
-          <span className="text-xs text-[var(--body)]">{doneCount} of {keys.length} steps done</span>
-        </span>
-      </div>
-      <span aria-hidden="true" className="block h-1.5 overflow-hidden rounded-full bg-[color-mix(in_srgb,var(--ink)_10%,transparent)]">
-        <span className="block h-full rounded-full bg-[var(--primary)] transition-[width] duration-700 ease-[cubic-bezier(.2,.8,.2,1)]" style={{ width: `${(doneCount / keys.length) * 100}%` }} />
-      </span>
-
+    <aside aria-label="The client and the application steps" className={cn("m-glass flex min-h-0 flex-col gap-3 rounded-xl border border-[color-mix(in_srgb,var(--primary)_30%,var(--border))] lg:h-full", collapsed ? "items-center p-2" : "p-4")}>
+      <Button type="button" variant="ghost" size="icon-sm" className={collapsed ? "" : "-mb-1 self-end"} aria-expanded={!collapsed} aria-label={collapsed ? "Show the step names" : "Hide the step names"} title={collapsed ? "Show the step names" : "Hide the step names"} onClick={onToggle}>
+        {collapsed ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+      </Button>
       {/* Room on every side so the step on screen — its pill and its glow — is never cut by the scroll box. */}
-      <nav aria-label="Application steps" className="-mx-2 flex min-h-0 flex-1 flex-col overflow-y-auto px-3 py-1.5">
+      <nav aria-label="Application steps" className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto py-1.5", collapsed ? "w-full items-center overflow-x-hidden px-0 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" : "-mx-2 px-3")}>
 
         {/* Owner 2026-10-28 (round 3, /ui-taste): no stage names — ten steps, one line, one state each. */}
         <ol className="m-0 flex min-h-full list-none flex-col p-0">
@@ -205,17 +195,17 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
                   const on = step === key;
                   const open = i <= Math.max(reach, here) || done[i];
                   return (
-                    <li key={key} className="flex min-h-[40px] flex-1">
+                    <li key={key} className={cn("flex flex-1", collapsed ? "min-h-[32px]" : "min-h-[40px]")}>
                       <button
                         type="button"
                         aria-current={on ? "step" : undefined}
                         disabled={!open}
                         title={open ? STEP_LABEL.get(key) : "Finish the steps before it first"}
                         onClick={() => goTo(key)}
-                        className="group relative flex w-full items-stretch gap-3 text-left outline-none disabled:cursor-not-allowed"
+                        className={cn("group relative flex items-stretch text-left outline-none disabled:cursor-not-allowed", collapsed ? "w-[30px] gap-0" : "w-full gap-3")}
                       >
                         {/* The step on screen is one pill, dot and name together (owner 2026-10-28: not split in two). */}
-                        {on && <span aria-hidden="true" className="absolute top-1/2 -left-[5px] right-0 h-[2.5rem] -translate-y-1/2 rounded-full bg-[var(--primary-soft)] ring-1 ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]" />}
+                        {on && !collapsed && <span aria-hidden="true" className="absolute top-1/2 -left-[5px] right-0 h-[2.5rem] -translate-y-1/2 rounded-full bg-[var(--primary-soft)] ring-1 ring-[color-mix(in_srgb,var(--primary)_45%,transparent)]" />}
                         <span className="relative flex w-[30px] shrink-0 flex-col items-center">
                           {seg(i > 0 && done[i - 1], false)}
                           <span aria-hidden="true" className={cn(
@@ -231,6 +221,7 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
                         </span>
                         <span className={cn(
                           "relative my-auto flex min-w-0 flex-1 items-center justify-between gap-2 rounded-full py-1.5 pr-1.5 pl-1 transition-colors group-focus-visible:ring-2 group-focus-visible:ring-ring",
+                          collapsed && "sr-only",
                           !on && open && "group-hover:bg-[color-mix(in_srgb,var(--ink)_5%,transparent)]",
                         )}>
                           <span className={cn("truncate text-sm", on ? "font-semibold text-[var(--ink)]" : open ? "font-medium text-[var(--ink)]" : "font-medium text-[var(--body)] opacity-60")}>{STEP_LABEL.get(key) ?? key}</span>
@@ -243,15 +234,27 @@ function InboundRail({ name, onFinish }: { name: string; onFinish: () => void })
           })}
         </ol>
       </nav>
-      <Button type="button" className="shrink-0" onClick={onFinish}>Finish the call<ArrowRight aria-hidden="true" /></Button>
+      {collapsed
+        ? <Button type="button" size="icon" className="shrink-0" onClick={onFinish} aria-label="Finish the call" title="Finish the call"><ArrowRight aria-hidden="true" /></Button>
+        : <Button type="button" className="shrink-0" onClick={onFinish}>Finish the call<ArrowRight aria-hidden="true" /></Button>}
     </aside>
   );
 }
 
 function InboundWorkspace({ onFinish }: { onFinish: () => void }) {
   const ws = useWorkspace();
-  const { caseView, step, sample, seatReadOnly } = ws;
+  const { step, sample, seatReadOnly } = ws;
   const Step = STEP_COMPONENT[step];
+  // The rail folds to its dots to give the step the width (owner 2026-11-05); the choice is kept in this browser.
+  const [railCollapsed, setRailCollapsed] = useState(false);
+  useEffect(() => {
+    // Read once after mount, so the server and the first paint agree.
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      if (window.localStorage.getItem("insurvas.call.rail") === "collapsed") setRailCollapsed(true);
+    } catch { /* not kept */ }
+  }, []);
+  const toggleRail = () => setRailCollapsed((current) => { const next = !current; try { window.localStorage.setItem("insurvas.call.rail", next ? "collapsed" : "open"); } catch { /* not kept */ } return next; });
   // Owner 2026-10-28: inside the call there is no title, attempt picker, portal, timeline or spouse
   // button, and no status or product tags — the call page's own bar and this rail are the whole frame.
   return (
@@ -259,10 +262,11 @@ function InboundWorkspace({ onFinish }: { onFinish: () => void }) {
     <div className="flex flex-col gap-4 lg:h-full lg:min-h-0">
       {sample && <SampleDataNotice />}
       {seatReadOnly && <p role="status" className="m-0 rounded-lg border border-border bg-[var(--surface-alt)] px-4 py-2.5 text-sm text-[var(--body)]">Your plan is read-only: you can read this case, not change it.</p>}
-      <div className="grid min-w-0 items-start gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[300px_minmax(0,1fr)] lg:items-stretch">
-        <InboundRail name={caseView.clientName} onFinish={onFinish} />
+      <div className={cn("grid min-w-0 items-start gap-5 transition-[grid-template-columns] duration-300 lg:min-h-0 lg:flex-1 lg:items-stretch", railCollapsed ? "lg:grid-cols-[64px_minmax(0,1fr)]" : "lg:grid-cols-[300px_minmax(0,1fr)]")}>
+        <InboundRail onFinish={onFinish} collapsed={railCollapsed} onToggle={toggleRail} />
         <div role="region" aria-label={STEP_LABEL.get(step)} className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
-          <div key={step} className="flex min-w-0 flex-col gap-4 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both]">
+          {/* A step that is one card fills the column down to the rail's foot, so the two end level (owner 2026-11-05). */}
+          <div key={step} className="flex min-w-0 flex-col gap-4 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:flex-1 lg:[&>*:only-child]:flex-1">
             <Step />
           </div>
         </div>

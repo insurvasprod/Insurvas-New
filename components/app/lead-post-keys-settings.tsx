@@ -8,13 +8,14 @@ import { Check, Copy, FlaskConical, Plus, X } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { dayMonthYear } from "@/lib/format/dates";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { SettingsSaveBar } from "@/components/ui/settings-layout";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { UnderlineTabs } from "@/components/ui/view-tabs";
 import { Callout, control, Field, SettingsCard, SettingsMeter, SettingsSectionHeader, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
@@ -148,6 +149,8 @@ export function LeadPostKeysSettings() {
   const [tab, setTab] = useState<Tab>("key");
   const [sampleFor, setSampleFor] = useState<PostKey | null>(null);
 
+  // Which keys the table lists (owner 2026-11-04): the live ones by default, so a pile of disabled keys stays out of the way.
+  const [keyFilter, setKeyFilter] = useState<"" | "active" | "disabled" | "all">("");
   const [selectedKeyId, setSelectedKeyIdState] = useState("");
   // Mirrors selectedKeyId for `load`, which runs from an effect and must not close over state.
   const selectedRef = useRef("");
@@ -238,9 +241,12 @@ export function LeadPostKeysSettings() {
   const vendorKeys = selectedKey ? (loaded?.keys ?? []).filter((key) => key.vendorId === selectedKey.vendorId) : [];
   const vendorMapsDiffer = vendorKeys.some((key) => !same(canonicalFieldMap(readFieldMap(key.fieldMap)), canonicalFieldMap(readFieldMap(selectedKey?.fieldMap))));
   const inverted = selectedKey ? readFieldMap(selectedKey.fieldMap).filter((entry) => entry.inverted).length : 0;
-  const dirty =
-    selectedKey !== null &&
-    (!same(draftMap, selectedKey.fieldMap) || (loaded?.schemaReady === true && !same(notesOf(draft), selectedKey.fieldNotes)));
+  // Only the owner's own changes count (owner 2026-11-04): a map stored the wrong way round is read, shown
+  // the right way round and flagged with its own "Fix" button, not announced as an unsaved edit on arrival.
+  const storedMap = selectedKey ? canonicalFieldMap(readFieldMap(selectedKey.fieldMap)) : {};
+  // Notes are kept per field of ours; a note filed under a name that is not in the map is never shown, so it is not a change.
+  const storedNotes = Object.fromEntries(Object.entries(selectedKey?.fieldNotes ?? {}).filter(([field]) => field in storedMap));
+  const dirty = selectedKey !== null && (!same(draftMap, storedMap) || (loaded?.schemaReady === true && !same(notesOf(draft), storedNotes)));
 
   async function selectKey(id: string) {
     if (id === selectedKeyId) return;
@@ -427,7 +433,9 @@ export function LeadPostKeysSettings() {
   const totalPosts = loaded.stats.reduce((sum, row) => sum + row.posts + row.earlierPosts, 0);
   const mintCampaigns = campaignsByVendor(mintVendor);
   const keyNeedle = keyQuery.trim().toLowerCase();
-  const shownKeys = loaded.keys.filter((key) => !keyNeedle || key.vendorName.toLowerCase().includes(keyNeedle) || key.keyPrefix.toLowerCase().includes(keyNeedle));
+  const activeKeys = loaded.keys.filter((key) => key.isActive).length;
+  const keysShown = keyFilter || (activeKeys > 0 ? "active" : "all");
+  const shownKeys = loaded.keys.filter((key) => (keysShown === "all" || (keysShown === "active") === key.isActive) && (!keyNeedle || key.vendorName.toLowerCase().includes(keyNeedle) || key.keyPrefix.toLowerCase().includes(keyNeedle)));
   const posted = (speed ?? []).reduce((sum, row) => sum + row.postedLeads, 0);
   const within = (speed ?? []).reduce((sum, row) => sum + row.dialledWithin60s, 0);
   const vendorSpeed = selectedKey ? (speed ?? []).filter((row) => row.vendorId === selectedKey.vendorId && row.postedLeads > 0) : [];
@@ -493,14 +501,15 @@ export function LeadPostKeysSettings() {
         title={key.vendorName}
         sub={<span className="flex flex-wrap items-center gap-2"><StatusChip tone={pillTone(panelState.tone)} dot>{panelState.label}</StatusChip>{campaignName(key)}</span>}
         action={<Button type="button" variant="ghost" size="icon" aria-label="Close the vendor" onClick={() => void closePanel()}><X aria-hidden="true" /></Button>}
-        className="lg:sticky lg:top-4"
+        className="xl:sticky xl:top-4"
       >
         <div className="flex flex-col gap-4">
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label={`${key.vendorName}'s sections`}>
-            {TABS.map((item) => (
-              <ToggleChip key={item.key} selected={tab === item.key} onClick={() => setTab(item.key)} count={item.key === "rejections" && vendorRejected ? vendorRejected : undefined}>{item.label}</ToggleChip>
-            ))}
-          </div>
+          <UnderlineTabs
+            label={`${key.vendorName}'s sections`}
+            tabs={TABS.map((item) => ({ key: item.key, label: item.label, count: item.key === "rejections" && vendorRejected ? vendorRejected : null }))}
+            value={tab}
+            onChange={setTab}
+          />
 
           {tab === "key" && (
             <div className="flex flex-col gap-4">
@@ -582,7 +591,9 @@ export function LeadPostKeysSettings() {
                 <Callout tone="warning" title={`${key.vendorName}'s keys have different maps — saving applies this one to all of them.`} />
               )}
               {inverted > 0 && (
-                <Callout tone="warning" title={`${inverted} ${inverted === 1 ? "field was" : "fields were"} stored the wrong way round — saving fixes ${inverted === 1 ? "it" : "them"}.`} />
+                <Callout tone="warning" title={`${inverted} ${inverted === 1 ? "field was" : "fields were"} stored the wrong way round.`}>
+                  <Button type="button" variant="outline" size="sm" className="mt-2" disabled={saving || draftProblems.size > 0} onClick={() => void save()}>{saving ? "Saving…" : `Fix ${inverted === 1 ? "it" : "them"}`}</Button>
+                </Callout>
               )}
               {saveError && <Callout tone="error" title="The field map was not saved">{saveError}</Callout>}
               <datalist id="lead-post-our-fields">
@@ -738,10 +749,15 @@ export function LeadPostKeysSettings() {
         <StatTile label="Dialed inside a minute" labelTitle="Of every lead a vendor has posted, the share whose first Dial came within 60 seconds of arriving." value={speed === null ? "…" : posted ? `${Math.round((within / posted) * 100)}%` : "—"} valueTone={posted ? "good" : undefined} footnote={posted ? `${fmt(posted)} posted leads` : "No posted lead yet"} />
       </StatStrip>
 
-      <div className="grid min-w-0 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,520px)]">
+      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
         <div className="flex min-w-0 flex-col gap-3">
-          <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} />}>
+          <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} labelClassName="sr-only" className="px-2.5" />}>
             <ToolbarSearch value={keyQuery} onChange={setKeyQuery} placeholder="Search vendors or keys" />
+            <select aria-label="Show keys" className={toolbarControl} value={keysShown} onChange={(event) => setKeyFilter(event.target.value as typeof keyFilter)}>
+              <option value="active">Active · {activeKeys}</option>
+              <option value="disabled">Disabled · {loaded.keys.length - activeKeys}</option>
+              <option value="all">All keys · {loaded.keys.length}</option>
+            </select>
           </DataToolbar>
 
           {loaded.vendors.length === 0 ? (
@@ -751,64 +767,42 @@ export function LeadPostKeysSettings() {
           ) : shownKeys.length === 0 ? (
             <NoMatches noun="keys" onClear={() => setKeyQuery("")} />
           ) : (
-            <ul className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Posting keys">
-              {shownKeys.map((key) => {
-                const stats = statsByKey.get(key.id);
-                const posts = stats?.posts ?? 0;
-                const rejected = stats?.rejected ?? 0;
-                const state = keyState(key);
-                const on = key.id === selectedKeyId;
-                const acceptedPct = posts ? Math.round(((posts - rejected) / posts) * 100) : 0;
-                return (
-                  <li key={key.id}>
-                    <button
-                      type="button"
-                      onClick={() => void selectKey(key.id)}
-                      aria-pressed={on}
-                      aria-label={`Open ${key.vendorName}`}
-                      className={cn(
-                        "m-glass flex w-full flex-col gap-2 rounded-[12px] border px-4 py-3 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--primary)]",
-                        on ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:border-[var(--border-strong)]",
-                        !key.isActive && "opacity-70",
-                      )}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-[var(--ink)]">{key.vendorName}</span>
-                        <StatusChip tone={pillTone(state.tone)} dot>{state.label}</StatusChip>
-                      </span>
-                      <span className="truncate text-xs text-[var(--muted)]">
-                        {campaignName(key)} · <code className="font-mono">{key.keyPrefix}&hellip;</code>
-                      </span>
-                      <span className="flex h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
-                        {posts > 0 && <span className="bg-[var(--success)]" style={{ width: `${acceptedPct}%` }} />}
-                        {posts > 0 && <span className="bg-[var(--error)]" style={{ width: `${100 - acceptedPct}%` }} />}
-                      </span>
-                      <span className="flex items-center justify-between gap-3 text-xs text-[var(--muted)]">
-                        <span className="tabular-nums"><strong className="text-[var(--ink)]">{fmt(posts)}</strong> posts · {fmt(rejected)} rejected</span>
-                        <span>{key.lastUsedAt ? `last post ${when(key.lastUsedAt)}` : "never used"}</span>
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+            <TableCard>
+              <table className={st.table} aria-label="Posting keys">
+                <thead>
+                  <tr className={st.headRow}>
+                    <th scope="col" className={st.th}>Vendor</th>
+                    <th scope="col" className={cn(st.th, "w-[78px]")} title={`Posts / rejected, ${loaded.windowDays} days`}>Posts</th>
+                    <th scope="col" className={cn(st.th, "w-[104px]")}>Last post</th>
+                    <th scope="col" className={cn(st.th, "w-[92px]")}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shownKeys.map((key) => {
+                    const stats = statsByKey.get(key.id);
+                    const state = keyState(key);
+                    const on = key.id === selectedKeyId;
+                    return (
+                      <tr key={key.id} className={cn("cursor-pointer", on && "bg-[var(--primary-soft)]", !key.isActive && "opacity-70")} onClick={() => void selectKey(key.id)}>
+                        <td className={st.td}>
+                          <button type="button" aria-pressed={on} aria-label={`Open ${key.vendorName}`} className="block max-w-full truncate rounded-[4px] text-left font-semibold text-[var(--ink)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" onClick={(event) => { event.stopPropagation(); void selectKey(key.id); }}>{key.vendorName}</button>
+                          <span className={cn(st.sub, "block truncate")}>{campaignName(key)} · <code className="font-mono">{key.keyPrefix}&hellip;</code></span>
+                        </td>
+                        <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>{fmt(stats?.posts ?? 0)} / {fmt(stats?.rejected ?? 0)}</td>
+                        <td className={cn(st.td, "whitespace-nowrap text-[var(--muted)]")}>{key.lastUsedAt ? when(key.lastUsedAt) : "never used"}</td>
+                        <td className={st.td}><StatusChip tone={pillTone(state.tone)} dot>{state.label}</StatusChip></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </TableCard>
           )}
 
-          <SettingsCard title="Live posts" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
-            {activityError ? (
-              <Callout tone="error" title={activityError} />
-            ) : !activity ? (
-              <SectionLoading label="Loading recent posts" />
-            ) : activity.recent.length === 0 ? (
-              <p className="m-0 text-sm text-[var(--muted)]">No vendor has posted yet.</p>
-            ) : (
-              <TableCard>{postsTable(activity.recent.slice(0, 12), true)}</TableCard>
-            )}
-          </SettingsCard>
         </div>
 
         {panel || (
-          <SettingsCard title={`Rejections, last ${loaded.windowDays} days`} info="Across every vendor. Open a vendor for its key, field map and posts." className="lg:sticky lg:top-4">
+          <SettingsCard title={`Rejections, last ${loaded.windowDays} days`} info="Across every vendor. Open a vendor for its key, field map and posts." className="xl:sticky xl:top-4">
             {loaded.rejections.length === 0 ? (
               <p className="m-0 text-sm text-[var(--muted)]">No posts were rejected in the last {loaded.windowDays} days.</p>
             ) : (
@@ -833,6 +827,18 @@ export function LeadPostKeysSettings() {
           </SettingsCard>
         )}
       </div>
+
+      <SettingsCard title="Live posts" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
+        {activityError ? (
+          <Callout tone="error" title={activityError} />
+        ) : !activity ? (
+          <SectionLoading label="Loading recent posts" />
+        ) : activity.recent.length === 0 ? (
+          <p className="m-0 text-sm text-[var(--muted)]">No vendor has posted yet.</p>
+        ) : (
+          <TableCard>{postsTable(activity.recent.slice(0, 12), true)}</TableCard>
+        )}
+      </SettingsCard>
 
       {/* Connect a vendor: 1 vendor and campaign, 2 the key shown once, 3 check a sample post. */}
       <Dialog open={connectStep > 0} onOpenChange={(next) => { if (!next) closeConnect(); }}>

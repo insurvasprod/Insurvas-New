@@ -84,7 +84,7 @@ export function VerifyStep() {
 
   return (
     <section aria-label="Verify who you are talking to" className="m-glass flex min-w-0 flex-col gap-3 rounded-xl border border-[var(--border)] p-[18px]">
-      <FoldSection heading="Who you are talking to" done={count} total={items.length} complete={count === items.length} unit="confirmed">
+      <FoldSection heading="Who you are talking to" done={count} total={items.length} complete={count === items.length} keepOpen unit="confirmed">
         {items.map((item, i) => {
           const ok = confirmed[i];
           const fromCall = ok && item.keys.filter((k) => hasContent(attempt.values[k])).every((k) => onCall.has(k));
@@ -134,7 +134,7 @@ export function VerifyStep() {
           );
         })}
       </FoldSection>
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-3">
         <span className="text-xs text-[var(--muted)]">
           {verification?.complete ? "Verified on the call." : onCall.size ? "Confirmed on the call where marked; the call's verification is not finished." : workItemId ? "The call's verification is not finished." : "Read each one back and confirm it."}
         </span>

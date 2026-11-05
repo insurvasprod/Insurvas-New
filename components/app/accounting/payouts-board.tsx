@@ -258,11 +258,11 @@ export function PayoutsBoard({ runs, partners, readOnly, status: initialStatus, 
   const canDraft = !readOnly && openPartners.length > 0;
   return (
     <>
-      <StatStrip label="Payout totals">
+      {!(partnerFixed && runs.length === 0) && <StatStrip label="Payout totals">
         <StatTile label="Drafts to review" value={String(drafts.length)} valueTone={drafts.length ? "warning" : undefined} footnote="the partner cannot see these" href={partnerFixed ? undefined : "/app/payouts?status=draft"} />
         <StatTile label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} run${owed.length === 1 ? "" : "s"} owed`} href={partnerFixed ? undefined : "/app/payouts?status=published"} />
         <StatTile label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} run${paid.length === 1 ? "" : "s"}`} href={partnerFixed ? undefined : "/app/payouts?status=paid"} />
-      </StatStrip>
+      </StatStrip>}
       <TableCard
         // No runs at all: the empty state's one button is the whole page; filters over nothing are noise.
         toolbar={runs.length === 0 ? undefined :

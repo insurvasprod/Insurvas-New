@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronLeft, Loader2, PhoneCall, Repeat, ShieldCheck, StickyNote } from "lucide-react";
+import { ArrowRight, ChevronLeft, Loader2, PhoneCall, Repeat, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -28,6 +28,14 @@ type Caller = {
 };
 
 const shown = (value: unknown) => (Array.isArray(value) ? value.join(", ") : value === null || value === undefined || value === "" ? null : typeof value === "boolean" ? (value ? "Yes" : "No") : String(value));
+/** What the caller card on the left already says: not repeated in the partner's list. */
+const ON_THE_CARD = /^(full_?name|name|first_?name|last_?name|date_?of_?birth|dob|birth_?date|city|state|zip|zip_?code|postal_?code|address.*|street.*|email.*|phone.*|mobile.*|cell.*)$/i;
+/** A value as a person reads it: dollars for an amount, a date for an ISO date. */
+function readable(key: string, label: string, value: string) {
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) { const d = new Date(value); if (!Number.isNaN(d.getTime())) return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); }
+  if (/amount|premium|coverage|income|salary|benefit/i.test(`${key} ${label}`) && /^\d+(\.\d+)?$/.test(value)) return Number(value).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  return value;
+}
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 
 function Stat({ icon: Icon, label, value, detail }: { icon: typeof PhoneCall; label: string; value: string; detail?: string | null }) {
@@ -78,12 +86,12 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
   const values = panel.lead.values;
   // Every detail the partner sent, in the template's order, once each; empty ones are left out.
   const seen = new Set<string>();
-  const details = panel.sections.flatMap((section) => section.fields).filter((f) => { if (seen.has(f.field_key)) return false; seen.add(f.field_key); return shown(values[f.field_key]) !== null; });
+  const details = panel.sections.flatMap((section) => section.fields).filter((f) => { if (seen.has(f.field_key)) return false; seen.add(f.field_key); return !ON_THE_CARD.test(f.field_key) && shown(values[f.field_key]) !== null; });
   const calls = caller?.calls ?? null;
   const notes = caller?.notes ?? null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-start">
+    <div className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-stretch">
       <aside aria-label="The caller" className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)] lg:w-[320px] lg:shrink-0">
         <CallerCard workItemId={workItemId} facts={facts} now={now} />
       </aside>
@@ -101,22 +109,21 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
           </span>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <Stat icon={PhoneCall} label="Times we called them" value={caller === null ? "…" : calls ? String(calls.count) : "—"} detail={calls?.last ? `Last ${ago(calls.last.at, now)}${calls.last.outcome ? ` · ${calls.last.outcome.replace(/_/g, " ")}` : ""}` : calls ? "Never called" : null} />
           <Stat icon={Repeat} label="Transferred in" value={caller === null ? "…" : caller?.transfers != null ? String(caller.transfers) : "—"} detail={caller?.transfers && caller.transfers > 1 ? "They have called in before" : caller?.transfers === 1 ? "First time in" : null} />
-          <Stat icon={StickyNote} label="Notes" value={caller === null ? "…" : notes ? String(notes.length) : "—"} detail={notes && notes.length ? `Newest ${day(notes[0].createdAt)}` : notes ? "None yet" : null} />
         </div>
 
         <div className="flex flex-col gap-2">
           <h3 className="m-0 text-sm font-semibold text-[var(--ink)]">What the partner sent</h3>
           {details.length === 0 ? (
-            <p className="m-0 text-sm text-[var(--body)]">No details came with this caller.</p>
+            <p className="m-0 text-sm text-[var(--body)]">Nothing more than what is on the left.</p>
           ) : (
             <dl className="m-0 grid gap-x-6 gap-y-2.5 sm:grid-cols-2">
               {details.map((f) => (
                 <div key={f.field_key} className="flex min-w-0 flex-col border-b border-[var(--border)] pb-2">
                   <dt className="text-xs text-[var(--body)]">{f.label}</dt>
-                  <dd className="m-0 truncate text-sm font-semibold text-[var(--ink)]" title={shown(values[f.field_key]) ?? undefined}>{shown(values[f.field_key])}</dd>
+                  <dd className="m-0 truncate text-sm font-semibold text-[var(--ink)]" title={shown(values[f.field_key]) ?? undefined}>{readable(f.field_key, f.label, shown(values[f.field_key]) ?? "")}</dd>
                 </div>
               ))}
             </dl>
@@ -124,7 +131,7 @@ export function TransferCheck({ workItemId, onNext }: { workItemId: string; onNe
         </div>
 
         <div className="flex flex-col gap-2">
-          <h3 className="m-0 text-sm font-semibold text-[var(--ink)]">Notes</h3>
+          <h3 className="m-0 flex items-center gap-2 text-sm font-semibold text-[var(--ink)]">Notes{notes && notes.length > 0 && <span className="text-xs font-normal text-[var(--body)]">{notes.length} · newest {day(notes[0].createdAt)}</span>}</h3>
           {notes === null ? (
             <p className="m-0 text-sm text-[var(--body)]">{caller === null ? "Loading the notes…" : "The notes could not be read."}</p>
           ) : notes.length === 0 ? (

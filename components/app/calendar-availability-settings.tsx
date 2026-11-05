@@ -337,7 +337,6 @@ export function CalendarAvailabilitySettings() {
 
   const zone = draft.timezone;
   const { appointmentMinutes: length, bufferMinutes: buffer } = draft.policy;
-  const openDays = new Set(draft.hours.map((hour) => hour.weekday)).size;
   const busy = !editable || saving;
   // The usual list in its own order; the saved zone and this browser's zone follow it when they are not on it.
   const zoneOptions = [...new Set([...ZONES, ...(zone ? [zone] : []), Intl.DateTimeFormat().resolvedOptions().timeZone])].filter(Boolean);
@@ -349,7 +348,7 @@ export function CalendarAvailabilitySettings() {
     { label: "Mon–Sat, 9–5", days: [1, 2, 3, 4, 5, 6], from: "09:00", to: "17:00" },
   ];
   const tabs: Array<ViewTab<CalendarTab>> = [
-    { key: "hours", label: "Working hours", count: openDays },
+    { key: "hours", label: "Working hours" },
     { key: "appointments", label: "Appointments" },
     { key: "blocks", label: "Time off & breaks", count: draft.blocks.length },
     { key: "rules", label: "Booking rules" },
@@ -366,25 +365,19 @@ export function CalendarAvailabilitySettings() {
       {saveError && <Callout tone="error" title={saveError} />}
 
       {members.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Whose calendar">
-          <span className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">Whose calendar</span>
-          {members.map((member) => {
-            const current = member.userId === draft.userId;
-            const days = new Set((edits[member.userId] ?? member).hours.map((hour) => hour.weekday)).size;
-            return (
-              <Button
-                key={member.userId}
-                type="button"
-                aria-pressed={current}
-                variant="outline" size="sm" className={current ? "border-[var(--primary)] bg-[var(--brand-50)] text-[var(--accent-ink)]" : ""}
-                onClick={() => { setSelected(member.userId); setSaveError(""); }}
-              >
-                {member.name}
-                <span className={cn("text-xs font-normal", days ? "text-[var(--muted)]" : "text-[var(--warning-ink)]")}>{days ? `${days} ${days === 1 ? "day" : "days"}` : "No hours"}</span>
-                {edits[member.userId] && <span className="sr-only">, unsaved changes</span>}
-              </Button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="calendar-whose" className="text-xs leading-[1.33] font-semibold text-[var(--muted)]">Whose calendar</label>
+          <select
+            id="calendar-whose"
+            className={cn(control, "w-auto min-w-[240px]")}
+            value={draft.userId}
+            onChange={(event) => { setSelected(event.target.value); setSaveError(""); }}
+          >
+            {members.map((member) => {
+              const days = new Set((edits[member.userId] ?? member).hours.map((hour) => hour.weekday)).size;
+              return <option key={member.userId} value={member.userId}>{member.name} · {days ? `${days} ${days === 1 ? "day" : "days"}` : "no hours"}{edits[member.userId] ? " · unsaved" : ""}</option>;
+            })}
+          </select>
         </div>
       )}
 
@@ -401,49 +394,48 @@ export function CalendarAvailabilitySettings() {
           <SettingsTableCard
             className={glass}
             headerClassName={cardHead}
-            title="Working hours"
-            actions={
-              <span className="relative inline-flex">
-                <label htmlFor="calendar-timezone" className="sr-only">Timezone</label>
-                <select
-                  id="calendar-timezone"
-                  value={zone ?? ""}
-                  disabled={busy}
-                  onChange={(event) => setDraft({ ...draft, timezone: event.target.value || null })}
-                  className={cn(control, "w-[240px]")}
-                >
-                  <option value="">Choose a timezone…</option>
-                  {zoneOptions.map((option) => <option key={option} value={option}>{zoneName(option)}</option>)}
-                </select>
-              </span>
-            }
           >
             {/* A line, not a card (owner, 2026-10-27): an unset week still has to say what it does. */}
             {draft.hours.length === 0 && (
-              <p role="status" className="m-0 border-b border-[var(--border)] px-4 py-3 text-xs leading-[1.5] text-[var(--warning-ink)]">
+              <p role="status" className="m-0 border-b border-[var(--border)] px-4 py-3 text-xs leading-[1.5] text-[var(--muted)]">
                 No hours set. Until they are, an appointment can be booked at any time of day that is legal for the
                 customer, and {draft.name} will not appear in the roster or in the dialer&rsquo;s booking panel.
               </p>
             )}
-            {editable && (
-              <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3">
-                <span className="text-xs text-[var(--muted)]">Quick start</span>
-                {presets.map((preset) => (
-                  <Button
-                    key={preset.label}
-                    type="button"
-                    variant="outline" size="sm"
+            <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-3">
+              <label htmlFor="calendar-timezone" className="sr-only">Timezone</label>
+              <select
+                id="calendar-timezone"
+                value={zone ?? ""}
+                disabled={busy || !editable}
+                onChange={(event) => setDraft({ ...draft, timezone: event.target.value || null })}
+                className={cn(control, "w-[220px]")}
+              >
+                <option value="">Choose a timezone…</option>
+                {zoneOptions.map((option) => <option key={option} value={option}>{zoneName(option)}</option>)}
+              </select>
+              {editable && (
+                <>
+                  <label htmlFor="calendar-quick" className="sr-only">Quick start</label>
+                  <select
+                    id="calendar-quick"
+                    value=""
                     disabled={busy}
-                    onClick={() => setHours(preset.days.map((weekday) => ({ weekday, startTime: preset.from, endTime: preset.to })))}
+                    className={cn(control, "w-[190px]")}
+                    onChange={(event) => {
+                      const preset = presets[Number(event.target.value)];
+                      if (preset) setHours(preset.days.map((weekday) => ({ weekday, startTime: preset.from, endTime: preset.to })));
+                    }}
                   >
-                    {preset.label}
-                  </Button>
-                ))}
-                {draft.hours.length > 0 && (
-                  <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setHours([])}>Clear all</Button>
-                )}
-              </div>
-            )}
+                    <option value="">Quick start…</option>
+                    {presets.map((preset, index) => <option key={preset.label} value={index}>{preset.label}</option>)}
+                  </select>
+                  {draft.hours.length > 0 && (
+                    <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => setHours([])}>Clear all</Button>
+                  )}
+                </>
+              )}
+            </div>
             <div>
               {WEEK_ORDER.map((weekday) => {
                 const spans = draft.hours
@@ -879,12 +871,12 @@ function DayRow({
   const open = spans.length > 0;
   const inverted = spans.some(({ hour }) => hour.startTime >= hour.endTime);
   return (
-    <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0 xl:grid-cols-[170px_1fr_110px]">
+    <div className="grid grid-cols-[1fr_auto] items-center gap-3 border-t border-[var(--border)] px-4 py-2.5 first:border-t-0 @lg:grid-cols-[140px_minmax(0,1fr)_72px]">
       <div className="flex items-center gap-3">
         <Switch id={`day-${weekday}-open`} checked={open} disabled={disabled || !editable} onChange={onOpen} label={`${day} open`} />
         <label htmlFor={`day-${weekday}-open`} className="text-sm font-semibold text-[var(--ink)]">{day}</label>
       </div>
-      <div className="order-3 col-span-2 flex flex-wrap items-center gap-2 xl:order-none xl:col-span-1">
+      <div className="order-3 col-span-2 flex flex-wrap items-center gap-2 @lg:order-none @lg:col-span-1">
         {!open && <span className="text-sm text-[var(--muted)]">Closed — nothing can be booked</span>}
         {spans.map(({ hour, index }) => (
           <span key={index} className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-1">
@@ -927,7 +919,7 @@ function DayRow({
         )}
         {inverted && <p role="alert" className="m-0 w-full text-xs text-[var(--error-ink)]">Hours have to close after they open.</p>}
       </div>
-      <span className={cn("order-2 text-right text-sm tabular-nums xl:order-none", open ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>
+      <span className={cn("order-2 text-right text-sm tabular-nums @lg:order-none", open ? "text-[var(--accent-ink)]" : "text-[var(--muted)]")}>
         {slots == null ? "—" : `${slots} ${slots === 1 ? "slot" : "slots"}`}
       </span>
     </div>

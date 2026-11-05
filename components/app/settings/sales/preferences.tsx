@@ -32,7 +32,7 @@ import { cn } from "@/lib/utils";
 
 import { PanelState, useSalesSettings } from "./prefs-settings";
 import { ProductBands } from "./product-bands";
-import { DiscardSave, ReadOnlyNotice, SalesPanelTop, plural } from "./shared";
+import { DiscardSave, ReadOnlyNotice, SalesPanelTop } from "./shared";
 
 type Draft = { min: string; max: string; appointmentBlocks: boolean; buffer: 2 | 3 | 4; ageing: string; autoSend: boolean };
 
@@ -132,10 +132,10 @@ function Editor({ saved, canEdit, sample, save, reload }: {
       <FormSections className="gap-5">
       <FormSection id="qa-quote" title="Quote check" info="A quote's monthly premium divided by its face amount, in thousands. A quote outside the band gets a warning on the case, so the agent checks the tier and face they typed. It never stops the case. It covers final expense and whole life; a term quote is checked only by its product's own band.">
         <FieldRow>
-          <Field label="Lowest per $1,000" htmlFor="qa-band-min" error={bandError ?? undefined} hint={`Insurvas default ${DEFAULTS.min}`}>
+          <Field label="Lowest per $1,000" htmlFor="qa-band-min" error={bandError ?? undefined} info={`Insurvas default ${DEFAULTS.min}`}>
             <input id="qa-band-min" type="number" min={0} max={100} step="0.01" inputMode="decimal" className={cn(control, "tabular-nums")} value={draft.min} disabled={ro} aria-invalid={Boolean(bandError) || undefined} onChange={(e) => set({ min: e.target.value })} />
           </Field>
-          <Field label="Highest per $1,000" htmlFor="qa-band-max" hint={`Insurvas default ${DEFAULTS.max}`}>
+          <Field label="Highest per $1,000" htmlFor="qa-band-max" info={`Insurvas default ${DEFAULTS.max}`}>
             <input id="qa-band-max" type="number" min={0} max={100} step="0.01" inputMode="decimal" className={cn(control, "tabular-nums")} value={draft.max} disabled={ro} aria-invalid={Boolean(bandError) || undefined} onChange={(e) => set({ max: e.target.value })} />
           </Field>
         </FieldRow>
@@ -177,49 +177,39 @@ function Editor({ saved, canEdit, sample, save, reload }: {
 
       <FormSections className="gap-5">
       <FormSection
-        id="qa-appointment-section" title="Carrier appointment"
-        info="An agent can pick any carrier on a quote. This decides what the check does when that carrier has no active appointment in the client's state."
-        aside={<Link href="/app/settings#carriers" className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">See appointments</Link>}
+        id="qa-application" title="Application rules"
+        info="What the check does at each step of a case. The draft-day helper on the Payment step aims the first draft the buffer's days after the client's deposit, so the money is there when the carrier pulls it. Four suits a bank that holds a deposit overnight."
       >
-        <Field label="When the carrier is not appointed in the client's state" hint={draft.appointmentBlocks ? "The case stops at the Quote step until the appointment is active." : undefined}>
+        <Field
+          label="When the carrier is not appointed in the client's state"
+          info={<>An agent can pick any carrier on a quote. This decides what the check does when that carrier has no active appointment in the client&apos;s state.{draft.appointmentBlocks ? " Blocking stops the case at the Quote step until the appointment is active." : ""} <Link href="/app/settings#carriers" className="font-semibold text-[var(--accent-ink)] hover:underline">See appointments</Link></>}
+        >
           <div id="qa-appointment" className="mt-1.5">
             <Choice label="When the carrier is not appointed" disabled={ro} value={draft.appointmentBlocks ? "block" : "warn"} onChange={(value) => set({ appointmentBlocks: value === "block" })} options={[{ key: "warn", label: "Warn" }, { key: "block", label: "Block" }]} />
           </div>
         </Field>
-      </FormSection>
-
-      <FormSection id="qa-payment" title="Payment" info="The draft-day helper on the Payment step aims the first draft this many days after the client's deposit, so the money is there when the carrier pulls it. Four suits a bank that holds a deposit overnight.">
-        <Field label="Draft-date buffer after the deposit" hint={`Insurvas default ${DEFAULTS.buffer} days`}>
+        <FieldDivider />
+        <Field label="Draft-date buffer after the deposit" info={`Insurvas default ${DEFAULTS.buffer} days`}>
           <div id="qa-buffer" className="mt-1.5">
             <Choice label="Draft-date buffer" disabled={ro} value={String(draft.buffer)} onChange={(value) => set({ buffer: Number(value) as Draft["buffer"] })} options={[{ key: "2", label: "2 days" }, { key: "3", label: "3 days" }, { key: "4", label: "4 days" }]} />
           </div>
         </Field>
         <BufferExample buffer={draft.buffer} />
-      </FormSection>
-
-      <FormSection
-        id="qa-after-submit" title="After submit"
-        info="What happens once a case is with the carrier: when an open requirement on the Pending page is flagged, and whether the client's welcome pack goes on its own."
-        aside={<Link href="/app/pending" className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">See pending cases</Link>}
-      >
-        {/* Side by side, except in a half-width column where the welcome-pack choice would wrap. */}
-        <div className="grid min-w-0 gap-4 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
-          <Field label="Flag open requirements after (days)" htmlFor="qa-ageing" error={ageingError ?? undefined}>
-            <input id="qa-ageing" type="number" min={1} max={60} step={1} className={cn(control, "block max-w-40 tabular-nums")} value={draft.ageing} disabled={ro} aria-invalid={Boolean(ageingError) || undefined} onChange={(e) => set({ ageing: e.target.value })} />
-            {!ageingError && (
-              <span className="mt-2 flex flex-wrap gap-1.5">
-                <StatusChip tone="neutral" dot>Under {plural(ageing, "day")}: on time</StatusChip>
-                <StatusChip tone="warning">Day {ageing}: amber</StatusChip>
-                <StatusChip tone="danger">Day {ageing * 2}: red</StatusChip>
-              </span>
-            )}
-          </Field>
-          <Field label="Welcome pack" hint={draft.autoSend ? undefined : "Waits in the agent's queue; nothing goes out until someone opens and sends it."}>
-            <div id="qa-welcome" className="mt-1.5">
-              <Choice label="Welcome pack" disabled={ro} value={draft.autoSend ? "auto" : "hold"} onChange={(value) => set({ autoSend: value === "auto" })} options={[{ key: "auto", label: "Send automatically" }, { key: "hold", label: "Hold for review" }]} />
-            </div>
-          </Field>
-        </div>
+        <FieldDivider />
+        <Field
+          label="Flag open requirements after (days)"
+          htmlFor="qa-ageing"
+          error={ageingError ?? undefined}
+          info={<>When an open requirement on the Pending page turns amber, and when it turns red. <Link href="/app/pending" className="font-semibold text-[var(--accent-ink)] hover:underline">See pending cases</Link></>}
+        >
+          <input id="qa-ageing" type="number" min={1} max={60} step={1} className={cn(control, "block max-w-40 tabular-nums")} value={draft.ageing} disabled={ro} aria-invalid={Boolean(ageingError) || undefined} onChange={(e) => set({ ageing: e.target.value })} />
+          {!ageingError && <span className="mt-1.5 block text-xs text-[var(--muted)]">Amber on day {ageing}, red on day {ageing * 2}.</span>}
+        </Field>
+        <Field label="Welcome pack" info={draft.autoSend ? "Goes to the client on its own once the case is submitted." : "Waits in the agent's queue; nothing goes out until someone opens and sends it."}>
+          <div id="qa-welcome" className="mt-1.5">
+            <Choice label="Welcome pack" disabled={ro} value={draft.autoSend ? "auto" : "hold"} onChange={(value) => set({ autoSend: value === "auto" })} options={[{ key: "auto", label: "Send automatically" }, { key: "hold", label: "Hold for review" }]} />
+          </div>
+        </Field>
       </FormSection>
       </FormSections>
       </div>
