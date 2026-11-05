@@ -11,11 +11,15 @@
  */
 
 export const RULE_EVENTS = [
+  "submitted",
   "issued",
   "waiting_first_payment",
   "first_payment_missed",
   "later_payment_missed",
   "paid_again",
+  "in_force",
+  "at_risk",
+  "paid_up",
   "lapsed",
   "not_taken",
   "cancelled",
@@ -29,7 +33,11 @@ export type RuleEvent = (typeof RULE_EVENTS)[number];
 
 /** Each event in the words the pages use, and what makes it happen (the Rule tab says it under the picker). */
 export const EVENT_LABELS: Record<RuleEvent, { label: string; meaning: string }> = {
+  submitted: { label: "Submitted (carrier file)", meaning: "The carrier's file shows the policy submitted: sent, and the carrier has not decided." },
   issued: { label: "Issued", meaning: "The carrier's file shows the policy issued (its first day issued)." },
+  in_force: { label: "In force", meaning: "The carrier's file shows the policy active: in force, premiums being paid." },
+  at_risk: { label: "At risk", meaning: "The carrier's file shows the policy at risk: in force but behind on payment (the carrier's own word, or derived from the paid-to date)." },
+  paid_up: { label: "Paid up", meaning: "The carrier's file shows the policy paid up: fully paid, no premiums due." },
   waiting_first_payment: { label: "Waiting for first payment", meaning: "Approved, and the first premium has not been drawn yet." },
   first_payment_missed: { label: "First payment missed", meaning: "Missed means: issued, and the first premium is late by more than the carrier's first-payment grace (Carrier rules). Checked every morning, even when no file arrives." },
   later_payment_missed: { label: "Later payment missed", meaning: "A paying policy whose paid-to date is behind by more than the carrier's grace after a missed payment (Carrier rules). Checked every morning, even when no file arrives." },
@@ -82,9 +90,23 @@ const DUE: FillIn[] = [...POLICY, "days_past_due", "days_left"];
 const LEDGER: FillIn[] = [...POLICY, "amount"];
 /** Which fill-ins each event can fill. */
 export const EVENT_FILL_INS: Record<RuleEvent, FillIn[]> = {
-  issued: POLICY, waiting_first_payment: DUE, first_payment_missed: DUE, later_payment_missed: DUE, paid_again: POLICY,
+  submitted: POLICY, issued: POLICY, waiting_first_payment: DUE, first_payment_missed: DUE, later_payment_missed: DUE, paid_again: POLICY,
+  in_force: POLICY, at_risk: POLICY, paid_up: POLICY,
   lapsed: POLICY, not_taken: POLICY, cancelled: POLICY, declined: POLICY, withdrawn: POLICY,
   advance_received: LEDGER, commission_credited: LEDGER, chargeback_received: LEDGER,
+};
+
+/**
+ * Where each event sits in a policy's life (owner 2026-11-04, from the carrier-rules spec: a closed outcome
+ * beats a risk state, which beats a status mapping). When two rules want one card in different places on the
+ * same run, the event furthest along decides and the others are skipped; two events of the same rank that
+ * disagree are still held for a person. A policy first seen Active fires both Issued and In force, so without
+ * this every new sale would be held.
+ */
+export const EVENT_RANK: Record<RuleEvent, number> = {
+  submitted: 10, issued: 20, waiting_first_payment: 20, advance_received: 25, commission_credited: 25,
+  in_force: 40, paid_again: 40, first_payment_missed: 45, later_payment_missed: 45, at_risk: 50, paid_up: 60,
+  not_taken: 70, declined: 70, withdrawn: 70, cancelled: 80, lapsed: 80, chargeback_received: 90,
 };
 
 /** A note template's problems, said plainly; empty when it can be saved. */

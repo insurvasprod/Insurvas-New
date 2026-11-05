@@ -146,11 +146,16 @@ export function accuracy(links: Array<{ confirmed: boolean; correctedByHuman: bo
  * application number becomes its policy number, and the default reference type is "Application number",
  * so step 2 never linked it). A number alone could be another sequence's collision; a person cannot.
  */
-export function applicationNumberIsThePolicy(carrier: { lastName: string | null; dob: string | null }, application: { lastName: string | null; dob: string | null }): boolean {
-  const surname = (name: string | null) => (name ?? "").normalize("NFKD").replace(/[^a-z]/gi, "").toLowerCase();
+export function applicationNumberIsThePolicy(carrier: { lastName: string | null; dob: string | null; firstName?: string | null }, application: { lastName: string | null; dob: string | null; firstName?: string | null }): boolean {
+  const letters = (name: string | null | undefined) => (name ?? "").normalize("NFKD").replace(/[^a-z]/gi, "").toLowerCase();
+  const firstWord = (name: string | null | undefined) => letters((name ?? "").trim().split(/\s+/)[0]);
   const birth = (dob: string | null) => (dob && /^\d{4}-\d\d-\d\d$/.test(dob.slice(0, 10)) ? dob.slice(0, 10) : null);
+  if (letters(carrier.lastName) === "" || letters(carrier.lastName) !== letters(application.lastName)) return false;
   const dob = birth(carrier.dob);
-  return dob !== null && dob === birth(application.dob) && surname(carrier.lastName) !== "" && surname(carrier.lastName) === surname(application.lastName);
+  if (dob !== null) return dob === birth(application.dob);
+  // Real files 2026-10-01: Aetna, Aflac and AHL leave the birth date empty, and Americo and Sentinel carry none.
+  // Then the whole first name must agree as well (not an initial): the number and the full name, never a number alone.
+  return firstWord(carrier.firstName) !== "" && firstWord(carrier.firstName) === firstWord(application.firstName);
 }
 
 /** Application statuses still waiting on the carrier (applicationIssue.ts AWAITING_CARRIER: only these can close as issued). */
