@@ -121,7 +121,8 @@ export type SaveQueue = {
   showOwners: boolean;
   settings: RetentionSettings;
   weightSetVersion: number;
-  stats: { scored: number; highOrAbove: number; critical: number; atRiskCents: number; atRiskUnknown: number; held: number; incomeKnown: number; affordabilityWeight: number };
+  /** `critical`: across every scored policy; `queueCritical`: on the queue (the tile beside "In the queue"). */
+  stats: { scored: number; highOrAbove: number; critical: number; queueCritical: number; atRiskCents: number; atRiskUnknown: number; held: number; incomeKnown: number; affordabilityWeight: number };
   computedAt: string | null;
 };
 
@@ -280,6 +281,7 @@ export async function loadSaveQueue(viewer: Viewer, sort?: QueueSort): Promise<S
       scored: rows.length,
       highOrAbove: highOrAbove.length,
       critical: rows.filter((r) => r.band === "critical").length,
+      queueCritical: queue.critical,
       atRiskCents: queue.cards.reduce((sum, c) => sum + (c.atRiskCents ?? 0), 0),
       atRiskUnknown: queue.cards.filter((c) => c.atRiskCents === null).length,
       held: rows.filter((r) => r.hold).length,
@@ -335,6 +337,57 @@ async function cardFor(viewer: Viewer, carrierId: string, policyNumber: string):
   // LA-5.9: a held-out policy is left alone on purpose; it is not worked from here.
   if ((await openHoldoutKeys(viewer.tenantId).catch(() => new Set<string>())).has(card.key)) throw new SaveQueueError("This policy is in the holdout, so it is not worked unless it falls past due.", 409);
   return { ...card, today: loaded.today };
+}
+
+/** Why a scored card is or isn't on the queue now, for its page. */
+export type CardState = "on_queue" | "emergency" | "holdout" | "held" | "worked" | "low_confidence" | "below_band";
+
+export type CallLogEntry = { id: string; at: string; outcome: ContactOutcome; actionTaken: ActionTaken; clientReason: ClientReason | null; note: string | null; by: string | null; servicingRequestId: string | null; score: number | null };
+
+export type SaveCardPage = { card: SaveCard; today: string; state: CardState; settings: RetentionSettings; calls: CallLogEntry[]; hold: { kind: HoldKind; until: string | null; reason: string | null } | null };
+
+/**
+ * One card for its own page (the pick of 2026-11-05, docs/retention/CRITIQUE.md: queue → call page). Unlike
+ * cardFor it never refuses a card for being off the queue — a card just worked, snoozed, past due or held
+ * out still opens, and `state` says why it is not on the queue. It refuses only what this person may not see:
+ * another producer's policy, a narrower scope, or a retention rep's card assigned to someone else.
+ */
+export async function loadSaveCard(viewer: Viewer, carrierId: string, policyNumber: string): Promise<SaveCardPage | null> {
+  const loaded = await candidates(viewer, { carrierId, policyNumber }).catch((error) => {
+    if (isSchemaGap(error)) return null;
+    throw error;
+  });
+  const card = loaded?.rows[0];
+  if (!loaded || !card) return null;
+  if (viewer.role === "retention" && !ownsCard(viewer, (await ownerOf(viewer.tenantId, "save_queue", carrierId, policyNumber)) ?? undefined)) return null;
+  const [heldOut, attempts, hold] = await Promise.all([
+    openHoldoutKeys(viewer.tenantId).catch(() => new Set<string>()),
+    db().from("save_attempt").select("id, attempted_at, contact_outcome, action_taken, client_reason, note, attempted_by, servicing_request_id, risk_score_at_attempt")
+      .eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("attempted_at", { ascending: false }).limit(50),
+    db().from("save_queue_hold").select("kind, until_date, reason").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).is("released_at", null).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (attempts.error && !isSchemaGap(attempts.error)) throw attempts.error;
+  const rows = (attempts.data ?? []) as Loose[];
+  const byIds = [...new Set(rows.map((r) => r.attempted_by).filter(Boolean))] as string[];
+  const users = byIds.length ? await db().from("users").select("id, name, email").in("id", byIds) : { data: [] };
+  const userName = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
+  const settings = loaded.config.settings;
+  const inHoldout = heldOut.has(card.key);
+  const state: CardState = isEmergency(card) ? "emergency"
+    : inHoldout ? "holdout"
+      : card.hold && isHeld({ ...card, lastAttempt: null }, loaded.today, settings.workedCooldownDays) ? "held"
+        : isHeld(card, loaded.today, settings.workedCooldownDays) ? "worked"
+          : buildQueue([{ ...card, inHoldout: false }], { ...settings, maxCards: 1 }, loaded.today).total ? "on_queue"
+            : reachesQueue(card) ? "below_band" : "low_confidence";
+  const h = hold.data as Loose;
+  return {
+    card, today: loaded.today, state, settings,
+    hold: h ? { kind: h.kind, until: h.until_date ?? null, reason: h.reason ?? null } : null,
+    calls: rows.map((r) => ({
+      id: r.id, at: r.attempted_at, outcome: r.contact_outcome, actionTaken: r.action_taken, clientReason: r.client_reason ?? null, note: r.note ?? null,
+      by: r.attempted_by ? userName.get(r.attempted_by) ?? "Someone no longer here" : null, servicingRequestId: r.servicing_request_id ?? null, score: r.risk_score_at_attempt ?? null,
+    })),
+  };
 }
 
 /** Log a worked card, capturing the score, band, weight version and exposure at this moment (LA-5.9 needs them). */

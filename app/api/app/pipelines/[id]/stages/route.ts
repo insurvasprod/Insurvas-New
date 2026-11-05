@@ -3,12 +3,16 @@ import { audit } from "@/lib/audit/log";
 import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { createStage } from "@/lib/pipelines/service";
+import { addStageToStarterRules } from "@/lib/pipelineRules/store";
 import { SchemaPendingError } from "@/lib/pipelines/schemaGap";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireFeatureRole("book_of_business", ["owner"], { write: true });
   if (auth instanceof NextResponse) return auth;
   const body = await request.json().catch(() => null) as { name?: unknown; stage_type?: unknown; color?: unknown; description?: unknown } | null;
-  try { const pipelineId = (await params).id; const stage = await createStage(auth.context.tenantId, pipelineId, { name: body?.name, stage_type: body?.stage_type, color: body?.color, description: body?.description }); await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.pipeline_stage_created", targetType: "pipeline_stage", targetId: stage.id, metadata: { pipelineId, name: stage.name }, request }); await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "pipelines", changes: [{ key: `stage:${stage.id}`, label: `Stage “${stage.name}”`, from: null, to: "added" }] }); return NextResponse.json({ stage }, { status: 201 }); }
+  try { const pipelineId = (await params).id; const stage = await createStage(auth.context.tenantId, pipelineId, { name: body?.name, stage_type: body?.stage_type, color: body?.color, description: body?.description });
+    // The starter pipeline rules move from the new stage too (owner 2026-11-05). Never fails the stage itself.
+    await addStageToStarterRules({ tenantId: auth.context.tenantId, userId: auth.context.userId }, stage.id).catch((error) => console.error("[pipelines] starter rules not widened to the new stage", error));
+    await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.pipeline_stage_created", targetType: "pipeline_stage", targetId: stage.id, metadata: { pipelineId, name: stage.name }, request }); await recordSettingsChanges({ tenantId: auth.context.tenantId, actorId: auth.context.userId, section: "pipelines", changes: [{ key: `stage:${stage.id}`, label: `Stage “${stage.name}”`, from: null, to: "added" }] }); return NextResponse.json({ stage }, { status: 201 }); }
   catch (error) { if (error instanceof SchemaPendingError) return NextResponse.json({ error: error.message }, { status: 503 }); return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create stage" }, { status: 400 }); }
 }

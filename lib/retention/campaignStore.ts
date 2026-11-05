@@ -232,6 +232,35 @@ export async function loadCampaign(viewer: Viewer): Promise<Campaign | { availab
   };
 }
 
+export type ConversionCall = { at: string; outcome: ConversionOutcome; declineReason: string | null; note: string | null; by: string | null; servicingRequestId: string | null };
+
+/**
+ * One campaign policy for its call page (the pick of 2026-11-05, "PbA"): its row as the list shows it (the
+ * list's own visibility rules), where it sits in the list, and every call on it, newest first. Writes nothing.
+ */
+export async function loadCampaignPolicy(viewer: Viewer, carrierId: string, policyNumber: string): Promise<{ campaign: Campaign; row: CampaignRow; position: number; next: CampaignRow | null; calls: ConversionCall[] } | null> {
+  const campaign = await loadCampaign(viewer);
+  if (!campaign.available) return null;
+  const key = `${carrierId}|${policyNumber}`;
+  const index = campaign.rows.findIndex((r) => r.key === key);
+  if (index < 0) return null;
+  const row = campaign.rows[index];
+  // The next one to call after this: the same order as the list, still to call, with a phone first.
+  const after = [...campaign.rows.slice(index + 1), ...campaign.rows.slice(0, index)].filter((r) => r.state === "remaining");
+  const next = after.find((r) => r.phone) ?? after[0] ?? null;
+  const read = await db().from("conversion_attempt").select("outcome, attempted_at, attempted_by, decline_reason, note, servicing_request_id")
+    .eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber).order("attempted_at", { ascending: false }).limit(50);
+  if (read.error && !isSchemaGap(read.error)) throw new Error(read.error.message);
+  const rows = (read.data ?? []) as Loose[];
+  const ids = [...new Set(rows.map((r) => r.attempted_by).filter(Boolean))] as string[];
+  const users = ids.length ? await db().from("users").select("id, name, email").in("id", ids) : { data: [] };
+  const name = new Map<string, string>(((users.data ?? []) as Loose[]).map((u) => [u.id, u.name || u.email]));
+  return {
+    campaign, row, position: index + 1, next,
+    calls: rows.map((r) => ({ at: r.attempted_at, outcome: r.outcome, declineReason: r.decline_reason ?? null, note: r.note ?? null, by: r.attempted_by ? name.get(r.attempted_by) ?? "Someone no longer here" : null, servicingRequestId: r.servicing_request_id ?? null })),
+  };
+}
+
 /** Log a call that did not open a request: no answer, call back, said no (with a reason), no bank account. */
 export async function logConversionCall(viewer: Viewer, input: { carrierId: string; policyNumber: string; outcome: Exclude<ConversionOutcome, "converted">; declineReason: string | null; note: string | null }) {
   const { data: p, error } = await db().from("policy_current").select("agent_user_id, status_normalized, payment_method").eq("tenant_id", viewer.tenantId).eq("carrier_id", input.carrierId).eq("policy_number", input.policyNumber).maybeSingle();

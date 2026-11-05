@@ -100,7 +100,7 @@ export function compareCards(sort: QueueSort) {
 export const reachesQueue = (c: Pick<QueueCandidate, "confidence">) => c.confidence !== "low";
 
 /** The queue: eligible cards in order, capped. With nothing at the queue band, medium fills it when the setting says so. */
-export function buildQueue<T extends QueueCandidate>(everything: T[], settings: RetentionSettings, today: string, sort: QueueSort = "value"): { cards: T[]; total: number; usedMedium: boolean; lowConfidence: number; heldOut: number } {
+export function buildQueue<T extends QueueCandidate>(everything: T[], settings: RetentionSettings, today: string, sort: QueueSort = "value"): { cards: T[]; total: number; critical: number; usedMedium: boolean; lowConfidence: number; heldOut: number } {
   // LA-5.9: a held-out policy is not worked — not even a failed fix or a no-bank hand-over. Counted.
   const heldOut = everything.filter((c) => c.inHoldout && !isEmergency(c)).length;
   const all = everything.filter((c) => !c.inHoldout);
@@ -124,5 +124,6 @@ export function buildQueue<T extends QueueCandidate>(everything: T[], settings: 
     usedMedium = cards.length > 0;
   }
   const sorted = [...failed.sort(compareCards(sort)), ...[...cards].sort(compareCards(sort))];
-  return { cards: sorted.slice(0, settings.maxCards), total: sorted.length, usedMedium, lowConfidence, heldOut };
+  // `critical`: on the queue, not across the book (QA 2026-11-05: the tile read 309 beside 13 in the queue).
+  return { cards: sorted.slice(0, settings.maxCards), total: sorted.length, critical: sorted.filter((c) => c.band === "critical").length, usedMedium, lowConfidence, heldOut };
 }

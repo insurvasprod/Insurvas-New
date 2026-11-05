@@ -202,12 +202,13 @@ async function sameNumberApplications(tenantId: string, carrier: { id: string },
   if (!subs.length) return [];
   const [snapshots, values] = await Promise.all([
     latestSnapshots(tenantId, carrier.id, [...new Set(subs.map((row: Loose) => row.carrier_reference as string))]),
-    db().from("tenant_application_values").select("application_id, field_key, value").eq("tenant_id", tenantId).in("application_id", [...new Set(subs.map((row: Loose) => row.application_id))]).in("field_key", ["insured.dob", "insured.last_name"]),
+    db().from("tenant_application_values").select("application_id, field_key, value").eq("tenant_id", tenantId).in("application_id", [...new Set(subs.map((row: Loose) => row.application_id))]).in("field_key", ["insured.dob", "insured.last_name", "insured.first_name"]),
   ]);
-  const insured = new Map<string, { lastName: string | null; dob: string | null }>();
+  const insured = new Map<string, { lastName: string | null; dob: string | null; firstName: string | null }>();
   for (const row of rowsOrFail(values, "Could not read the submitted applications' insured")) {
-    const person = insured.get(row.application_id) ?? { lastName: null, dob: null };
+    const person = insured.get(row.application_id) ?? { lastName: null, dob: null, firstName: null };
     if (row.field_key === "insured.dob") person.dob = str(row.value);
+    else if (row.field_key === "insured.first_name") person.firstName = str(row.value);
     else person.lastName = str(row.value);
     insured.set(row.application_id, person);
   }

@@ -14,11 +14,35 @@ import { ToggleChip } from "@/components/ui/toggle-chip";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { ReportsSlot, useUrlTab } from "@/components/app/reports/reports-slot";
 import { BAND_LABELS, type Band } from "@/lib/retention/constants";
-import { MIN_RATE_SAMPLE, PERIOD_LABELS, PERIODS, VERDICT_TEXT, type ArmComparison, type Cell, type Period } from "@/lib/retention/effectiveness";
+import { MIN_RATE_SAMPLE, PERIOD_LABELS, PERIODS, VERDICT_TEXT, type ArmComparison, type Cell, type Period, type Verdict } from "@/lib/retention/effectiveness";
 import type { Effectiveness } from "@/lib/retention/effectivenessStore";
 
 const cellText = (c: Cell) => (c.n === 0 ? "—" : c.rate === null ? `${c.lapsed} of ${c.n}` : `${Math.round(c.rate * 100)}%`);
 const capital = (s: string) => s[0].toUpperCase() + s.slice(1);
+/** The answer to "do the bands come true?", in a word (the sentence is the tile's title). */
+const VERDICT_WORD: Record<Verdict, string> = { separates: "Yes", mixed: "Partly", noise: "No", too_early: "Too soon" };
+const bandsFootnote = (bands: Array<Cell & { band: Band }>) => {
+  const top = bands.find((b) => b.band === "critical");
+  const low = bands.find((b) => b.band === "low");
+  return top && low && top.n && low.n ? `critical ${cellText(top)} lapsed · low ${cellText(low)}` : "on policies nobody worked";
+};
+type Holdout = Effectiveness["holdout"];
+/** "Does working it help?": only a difference beyond chance is an answer; anything else says why not yet. */
+const holdoutWord = (h: Holdout) => {
+  const o = h.comparison.overall;
+  if (!h.enabled && !h.drawn) return "Off";
+  if (o.worked.rate === null || o.holdout.rate === null) return "Too soon";
+  if (!o.meaningful) return "Not yet";
+  return o.worked.rate < o.holdout.rate ? "Yes" : "No";
+};
+const holdoutFootnote = (h: Holdout) => {
+  const o = h.comparison.overall;
+  if (!h.enabled && !h.drawn) return "switch it on in Retention settings";
+  // Name the side that is short (walk 2026-11-05: "24 held back · needs 20" when the worked side was the short one).
+  if (o.holdout.rate === null) return `${o.holdout.n.toLocaleString("en-US")} held back checked · needs ${MIN_RATE_SAMPLE}`;
+  if (o.worked.rate === null) return `${o.worked.n.toLocaleString("en-US")} worked checked · needs ${MIN_RATE_SAMPLE}`;
+  return `worked ${cellText(o.worked)} lapsed · held back ${cellText(o.holdout)}`;
+};
 
 /**
  * LA-5.9 (Notion sprint) · does the radar work. Two views: the predictions (on policies nobody worked,
@@ -44,11 +68,13 @@ export function RetentionResultsBoard({ data }: { data: Effectiveness }) {
 
   return (
     <>
+      {/* ReA (owner pick 2026-11-05): the page's two questions are its first two tiles, answered in a word and
+          linking to their table; the verdict sentence is the tile's title, no longer a line under the table. */}
       <StatStrip label="Measuring the radar">
-        <StatTile label="Predictions checked" href={viewHref("predictions")} value={accuracy.total.toLocaleString("en-US")} footnote={`unworked, at ${data.horizonDays} days`} />
-        <StatTile label="Still to check" value={data.awaitingPredictions.toLocaleString("en-US")} footnote="waiting for their horizon" />
-        <StatTile label="Holdout" href={viewHref("holdout")} value={holdout.enabled ? `On · ${holdout.shareBp / 100}%` : "Off"} footnote={holdout.enabled ? `${holdout.heldNow.toLocaleString("en-US")} held back now` : "off in Retention settings"} />
-        <StatTile label="Left on past due" value={holdout.leftPastDue.toLocaleString("en-US")} labelTitle="Held-back policies that fell past due: they left the holdout at once and went on the Lapse risk board like any other." footnote="an emergency is never withheld" />
+        <StatTile label="Do the bands come true?" href={viewHref("predictions")} value={VERDICT_WORD[accuracy.verdict]} valueTone={accuracy.verdict === "separates" ? "good" : accuracy.verdict === "noise" ? "danger" : accuracy.verdict === "mixed" ? "warning" : undefined} labelTitle={VERDICT_TEXT[accuracy.verdict]} footnote={bandsFootnote(accuracy.byBand)} />
+        <StatTile label="Does working beat the holdout?" href={viewHref("holdout")} value={holdoutWord(holdout)} valueTone={holdout.comparison.overall.meaningful ? (holdout.comparison.overall.worked.rate !== null && holdout.comparison.overall.holdout.rate !== null && holdout.comparison.overall.worked.rate < holdout.comparison.overall.holdout.rate ? "good" : "danger") : undefined} labelTitle={holdout.sentence.join(" ")} footnote={holdoutFootnote(holdout)} />
+        <StatTile label="Predictions checked" href={viewHref("predictions")} value={accuracy.total.toLocaleString("en-US")} footnote={`unworked, at ${data.horizonDays} days · ${data.awaitingPredictions.toLocaleString("en-US")} waiting`} />
+        <StatTile label="Holdout" href={holdout.enabled ? viewHref("holdout") : "/app/retention-settings#holdout"} value={holdout.enabled ? `On · ${holdout.shareBp / 100}%` : "Off"} labelTitle="Held-back policies that fall past due leave the holdout at once and go on the Lapse risk board like any other." footnote={holdout.enabled ? `${holdout.heldNow.toLocaleString("en-US")} held back · ${holdout.leftPastDue.toLocaleString("en-US")} left on past due` : "off in Retention settings"} />
       </StatStrip>
 
       {/* The two questions are the view's tabs, on the title line (Reports frame, owner 2026-11-02). */}
@@ -64,7 +90,7 @@ export function RetentionResultsBoard({ data }: { data: Effectiveness }) {
               </div>
             </DataToolbar>
           }
-          footer={<span>{VERDICT_TEXT[accuracy.verdict]}</span>}
+          footer={<span>{accuracy.total.toLocaleString("en-US")} unworked {accuracy.total === 1 ? "policy" : "policies"} checked {data.horizonDays} days after the prediction</span>}
         >
           {accuracy.total === 0 ? (
             <EmptyState title="Nothing to check yet" hint={`A prediction is checked ${data.horizonDays} days after it is made, on policies nobody worked. ${data.awaitingPredictions ? `${data.awaitingPredictions.toLocaleString("en-US")} are waiting.` : "Predictions start with the next radar run."}`} />

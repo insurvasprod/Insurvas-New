@@ -4,7 +4,6 @@ import { useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
 import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
@@ -42,8 +41,13 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
   };
   const card = data.cards.find((c) => c.userId === (selected ?? (isOwner ? data.cards[0]?.userId : viewerId))) ?? null;
   const team = isOwner && data.cards.length > 1;
-  const { tab, setTab } = useUrlTab(["reasons", "people"] as const, "reasons");
+  // ScA (owner pick 2026-11-05): an owner with a team lands on everyone, one row per person, and a name opens
+  // that person's reasons; anyone else lands on their own reasons.
+  const { tab, setTab } = useUrlTab(["people", "reasons"] as const, team ? (selected ? "reasons" : "people") : "reasons");
   const shown = team ? tab : "reasons";
+  const sum = (pick: (c: Scorecard["cards"][number]) => number) => data.cards.reduce((total, c) => total + pick(c), 0);
+  const teamReached = sum((c) => c.reached);
+  const teamAttempts = sum((c) => c.attempts);
   const repHref = (rep: string) => { const params = new URLSearchParams(); if (period !== "180") params.set("period", period); params.set("rep", rep); params.set("tab", "reasons"); return `${pathname}?${params}`; };
   const span = <>{reportPeriod(data.from, data.to)}{data.holdoutExcluded ? ` · ${data.holdoutExcluded.toLocaleString("en-US")} held-out ${data.holdoutExcluded === 1 ? "policy" : "policies"} left out` : ""}</>;
   const toolbar = (
@@ -69,8 +73,17 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
 
   return (
     <>
-      {team && <ReportsSlot slot="lead"><ViewTabs label="Retention scorecard views" value={shown} onChange={setTab} tabs={[{ key: "reasons", label: card ? `${card.name}'s save rate` : "Save rate by reason" }, { key: "people", label: "Everyone", count: data.cards.length }]} /></ReportsSlot>}
-      {card && (
+      {team && <ReportsSlot slot="lead"><ViewTabs label="Retention scorecard views" value={shown} onChange={setTab} tabs={[{ key: "people", label: "Everyone", count: data.cards.length }, { key: "reasons", label: card ? `${card.name}'s save rate` : "Save rate by reason" }]} /></ReportsSlot>}
+      {shown === "people" && (
+        <StatStrip label="The team's retention">
+          <StatTile label="Policies worked" value={sum((c) => c.policiesWorked).toLocaleString("en-US")} footnote={`${teamAttempts.toLocaleString("en-US")} calls`} />
+          <StatTile label="Contact rate" value={pct(teamAttempts ? teamReached / teamAttempts : null)} footnote={`${teamReached.toLocaleString("en-US")} reached a person`} />
+          <StatTile label="Conversions" value={sum((c) => c.conversions).toLocaleString("en-US")} footnote="paper bill → bank, verified" />
+          <StatTile label="Reinstatements" value={sum((c) => c.reinstatements).toLocaleString("en-US")} footnote="confirmed by a carrier file" />
+          <StatTile label="Premium protected" value={money(sum((c) => c.premiumProtectedCents))} labelTitle={`Annual premium of the policies still in force ${SAVED_AFTER_DAYS} days after being worked.`} footnote={`advance protected ${money(sum((c) => c.advanceProtectedCents))}`} />
+        </StatStrip>
+      )}
+      {card && shown === "reasons" && (
         <StatStrip label={`${card.name}'s retention`}>
           <StatTile label="Policies worked" value={card.policiesWorked.toLocaleString("en-US")} footnote={`${card.attempts.toLocaleString("en-US")} calls`} />
           <StatTile label="Contact rate" value={pct(card.contactRate)} labelTitle="Calls that reached a person, of all calls. Voicemails and wrong numbers are a data problem, not a failure: they are kept out of the save rate." footnote={`${card.reached.toLocaleString("en-US")} reached a person`} />
@@ -88,28 +101,33 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
 
       {shown === "people" && (
         <TableCard toolbar={toolbar} footer={<span>{span}</span>}>
-          <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
+          <table className="portal-lead-table w-full text-left text-sm">
             <thead>
               <tr>
                 <th>Person</th>
-                <th className="text-right">Policies worked</th>
+                <th className="text-right">Worked</th>
                 <th className="text-right">Contact rate</th>
+                <th className="text-right">Saved</th>
+                <th className="text-right">Lost</th>
+                <th className="text-right">Unreachable</th>
+                <th className="text-right">Too soon</th>
                 <th className="text-right">Conversions</th>
-                <th className="text-right">Reinstatements</th>
-                <th className="text-right">Advance protected</th>
-                <th className="w-[110px] text-right"><span className="sr-only">Open</span></th>
+                <th className="text-right">Premium protected</th>
               </tr>
             </thead>
             <tbody>
+              {/* Counts, never a blended save rate: that lives only in a person's by-reason table (LA-5.8). */}
               {data.cards.map((c) => (
                 <tr key={c.userId}>
-                  <td className="font-semibold text-foreground">{c.name}</td>
+                  <td><Link href={repHref(c.userId)} className="font-semibold text-foreground underline-offset-2 hover:underline">{c.name}</Link></td>
                   <td className="text-right tabular-nums">{c.policiesWorked.toLocaleString("en-US")}</td>
                   <td className="text-right tabular-nums">{pct(c.contactRate)}</td>
+                  <td className="text-right tabular-nums">{c.blended.saved.toLocaleString("en-US")}</td>
+                  <td className="text-right tabular-nums">{c.blended.lost.toLocaleString("en-US")}</td>
+                  <td className="text-right tabular-nums">{c.blended.unreachable.toLocaleString("en-US")}</td>
+                  <td className="text-right tabular-nums">{c.blended.pending.toLocaleString("en-US")}</td>
                   <td className="text-right tabular-nums">{c.conversions.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{c.reinstatements.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{money(c.advanceProtectedCents)}</td>
-                  <td className="text-right"><Button asChild size="sm" variant="outline"><Link href={repHref(c.userId)}>Save rate</Link></Button></td>
+                  <td className="text-right tabular-nums">{money(c.premiumProtectedCents)}</td>
                 </tr>
               ))}
             </tbody>

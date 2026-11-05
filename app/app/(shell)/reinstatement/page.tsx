@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { loadReinstatement, REINSTATEMENT_PENDING_MESSAGE } from "@/lib/retention/reinstatementStore";
@@ -7,6 +9,7 @@ import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { ReinstatementBoard } from "@/components/app/reinstatement-board";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { WinbackBoard } from "@/components/app/winback-board";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { RetentionPage } from "@/components/app/retention/retention-page";
@@ -17,7 +20,8 @@ import { RetentionPage } from "@/components/app/retention/retention-page";
  *     Opening it asks the database to open, reinstate, expire and alert.
  *   · Win-back (LA-5.7): clients past reinstatement, classified by why they lapsed, each with its
  *     cooling-off; at its end a client goes to the agency's Win-back lead list (then the scrub gate).
- *     Opening it runs the classification and releases what is due.
+ *     Opening it runs the classification and releases what is due. Its title line opens the agency's
+ *     Win-back lead list (the campaign ensure_winback_list made; Source › Campaigns before it exists).
  */
 export default async function ReinstatementPage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
   const guard = await guardPage("winback");
@@ -34,9 +38,12 @@ export default async function ReinstatementPage({ searchParams }: { searchParams
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const readOnly = guard.entitlement.access === "read_only";
   const [cases, winback] = winbackView ? [null, await loadWinback(viewer, { release: !readOnly })] : [await loadReinstatement(viewer), null];
+  const listAction = winback?.available ? (
+    <Button asChild variant="outline"><Link href={winback.listId ? `/app/campaigns/${winback.listId}` : "/app/campaigns"}>Open the Win-back list</Link></Button>
+  ) : undefined;
 
   return (
-    <RetentionPage step="reinstatement" lead={canWinback ? (
+    <RetentionPage step="reinstatement" actions={listAction} lead={canWinback ? (
         <ViewTabs
           label="Reinstatement views"
           active={winbackView ? "winback" : "cases"}

@@ -18,10 +18,11 @@ export const RETENTION_STEPS: { key: RetentionStep; label: string; href: string;
   { key: "reinstatement", label: "Reinstatement", href: "/app/reinstatement", icon: "heart-handshake" },
 ];
 
+// A record under a step (a save card, a request, a case: detail pages since 2026-11-05) belongs to its step.
 const STEP_PATHS: [RegExp, RetentionStep][] = [
-  [/^\/app\/save-queue\/?$/, "save"],
-  [/^\/app\/servicing\/?$/, "servicing"],
-  [/^\/app\/reinstatement\/?$/, "reinstatement"],
+  [/^\/app\/save-queue(\/.*)?$/, "save"],
+  [/^\/app\/servicing(\/.*)?$/, "servicing"],
+  [/^\/app\/reinstatement(\/.*)?$/, "reinstatement"],
 ];
 
 export function retentionStepOf(pathname: string): RetentionStep | null {

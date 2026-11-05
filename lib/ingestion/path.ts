@@ -191,12 +191,17 @@ export function prefillFromFilename(filename: string, carriers: CarrierChoice[])
     const code = compact(carrier.code);
     const name = compact(carrier.name);
     const first = compact(carrier.name.split(/[\s/&,-]+/)[0] ?? "");
-    return (code.length >= 3 && flat.includes(code)) || (name.length >= 4 && flat.includes(name)) || (first.length >= 5 && flat.includes(first));
+    // The agencies' own short name: the first two letters of each word ("AMAM" for American Amicable, E2E 2026-11-05).
+    const words = carrier.name.split(/[\s/&,-]+/).filter(Boolean);
+    const short = words.length >= 2 ? compact(words.map((w) => w.slice(0, 2)).join("")) : "";
+    const shortHit = short.length >= 4 && new RegExp(`(^|[^a-z])${short}([^a-z]|$)`).test(base.toLowerCase());
+    return (code.length >= 3 && flat.includes(code)) || (name.length >= 4 && flat.includes(name)) || (first.length >= 5 && flat.includes(first)) || shortHit;
   });
   const lower = base.toLowerCase();
   // Underscores and digits separate words in file names, so no \b here.
   const policies = /polic/.test(lower);
-  const commissions = /commission|statement|(^|[^a-z])(comm|comp)([^a-z]|$)/.test(lower);
+  // Carriers name commission files many ways: AMAM's is "advances" (E2E 2026-11-05: the type stayed empty).
+  const commissions = /commission|statement|advance|chargeback|earned|payout|(^|[^a-z])(comm|comp)([^a-z]|$)/.test(lower);
   return {
     fileDate: dateInName(base),
     carrierId: matches.length === 1 ? matches[0].id : null,

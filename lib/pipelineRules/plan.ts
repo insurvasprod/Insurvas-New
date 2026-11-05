@@ -12,13 +12,14 @@
  *   6. from-stage       the card is not in a stage the rule moves from → skipped
  *   7. by hand          a person moved the card in the last N days (7) → skipped
  *   8. another policy   the lead has another open policy → skipped
- *   9. disagree         two rules want one card in different places → held, for a person (Needs you)
+ *   9. disagree         two rules want one card in different places → the event furthest along in the
+ *                       policy's life decides (EVENT_RANK); the same rank still disagreeing → held, for a person
  *  10. the cap          more moves than the cap (25) in one run → the rest stop, not recorded, for a person to look
  *
  * Forecast and live are counted apart: a forecast "would move" never stops a live move, and the cap
  * applies to each. Pure; relative imports only.
  */
-import { fillNote, type RuleEvent, type RuleMode } from "./rules.ts";
+import { EVENT_RANK, fillNote, type RuleEvent, type RuleMode } from "./rules.ts";
 import { policyKey, type RuleEventFact } from "./events.ts";
 
 export type RuleSpec = {
@@ -143,15 +144,26 @@ export function planRun(input: PlanInput): Plan {
     }
   }
 
-  // Two rules, one card, different places: hold them all for a person. The same place: one move.
+  // Two rules, one card, different places: the event furthest along in the policy's life decides (EVENT_RANK), the
+  // rest are skipped; events of one rank that still disagree are held for a person. The same place: one move.
   const byCard = new Map<string, Decision[]>();
   for (const d of passing) {
     const card = `${d.mode}|${d.leadId}`;
     byCard.set(card, [...(byCard.get(card) ?? []), d]);
   }
   const moves: Decision[] = [];
-  for (const group of byCard.values()) {
-    const targets = new Set(group.map((d) => d.toStageId));
+  for (let group of byCard.values()) {
+    let targets = new Set(group.map((d) => d.toStageId));
+    if (targets.size > 1) {
+      const top = Math.max(...group.map((d) => EVENT_RANK[d.event]));
+      const leading = group.filter((d) => EVENT_RANK[d.event] === top);
+      const behind = group.filter((d) => EVENT_RANK[d.event] < top);
+      if (new Set(leading.map((d) => d.toStageId)).size === 1) {
+        for (const d of behind) decisions.push({ ...d, outcome: "skip", reason: `${leading[0].ruleName} comes later in the policy's life, so it decides` });
+        group = leading;
+        targets = new Set(group.map((d) => d.toStageId));
+      }
+    }
     if (targets.size > 1) {
       const said = group.map((d) => `${d.ruleName} → ${stageLabel(input.stages, d.toStageId)}`).join("; ");
       for (const d of group) decisions.push({ ...d, outcome: "hold", reason: `Rules disagree: ${said}` });

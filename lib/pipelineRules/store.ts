@@ -9,7 +9,7 @@ import { agencyToday } from "@/lib/ingestion/agencyDay";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import type { RuleRow } from "@/lib/ingestion/carrierRules";
 
-import { computeEvents, OPEN_STATUSES, policyKey, addDays, type ChangeFact, type LedgerFact, type PolicyFacts, type RuleEventFact } from "./events";
+import { computeEvents, OPEN_STATUSES, STATUS_EVENT_NAMES, policyKey, addDays, type ChangeFact, type LedgerFact, type PolicyFacts, type RuleEventFact } from "./events";
 import { countOutcomes, doneKey, planRun, type Decision, type LeadState, type RuleSpec, type StageInfo } from "./plan";
 import { DEFAULT_CAP_PER_RUN, DEFAULT_HAND_MOVE_DAYS, EVENT_LOOKBACK_DAYS, noteProblems, PIPELINE_RULES_PENDING_MESSAGE, RULE_EVENTS, type RuleEvent, type RuleMode } from "./rules";
 
@@ -363,6 +363,31 @@ export async function saveVersion(scope: Scope, ruleId: string, input: { name: s
   return next;
 }
 
+/**
+ * A stage a person adds joins the starter rules' from-stages (owner 2026-11-05: "a new stage plus a rule… does
+ * that lead go there automatically?" — and a card waiting on a new stage must still be moved on by Issued, In
+ * force, Declined…). Starter rules move from every open stage, and from the sold stages of the other pipelines
+ * (20261105120000); an owner's own rule is theirs and is left alone. Each change is a new version, never an edit.
+ */
+export async function addStageToStarterRules(scope: Scope, stageId: string): Promise<number> {
+  const stage = (await db().from("tenant_pipeline_stages").select("id, pipeline_id, stage_type, is_archived, tenant_pipelines!inner(tenant_id, partner_type, is_default)").eq("id", stageId).eq("tenant_pipelines.tenant_id", scope.tenantId).maybeSingle()).data as Loose;
+  if (!stage || stage.is_archived) return 0;
+  const pipeline = Array.isArray(stage.tenant_pipelines) ? stage.tenant_pipelines[0] : stage.tenant_pipelines;
+  const main = pipeline?.is_default && pipeline?.partner_type === null;
+  if (!(stage.stage_type === "open" || (!main && stage.stage_type === "won"))) return 0;
+  const { data: starters, error } = await db().from("pipeline_rule").select("id").eq("tenant_id", scope.tenantId).is("created_by", null);
+  if (error) fail(error, "Could not read the starter rules");
+  if (!starters?.length) return 0;
+  let changed = 0;
+  for (const rule of await readRules(scope.tenantId, { ids: ((starters ?? []) as Loose[]).map((r) => r.id) })) {
+    const v = rule.current;
+    if (!v || v.targetStageId === stageId || v.fromStageIds.includes(stageId)) continue;
+    await saveVersion(scope, rule.id, { name: rule.name, content: { event: v.event, carrierIds: v.carrierIds, fromStageIds: [...v.fromStageIds, stageId], targetPipelineId: v.targetPipelineId, targetStageId: v.targetStageId, noteOn: v.noteOn, noteTemplate: v.noteTemplate } });
+    changed++;
+  }
+  return changed;
+}
+
 const normal = (c: RuleContent) => ({ event: c.event, carrierIds: [...new Set(c.carrierIds)].sort(), fromStageIds: [...new Set(c.fromStageIds)].sort(), targetPipelineId: c.targetPipelineId, targetStageId: c.targetStageId, noteOn: c.noteOn, noteTemplate: c.noteTemplate?.trim() || null });
 const contentOf = (v: RuleVersionRow) => normal({ event: v.event, carrierIds: v.carrierIds, fromStageIds: v.fromStageIds, targetPipelineId: v.targetPipelineId, targetStageId: v.targetStageId, noteOn: v.noteOn, noteTemplate: v.noteTemplate });
 
@@ -455,23 +480,26 @@ const toCarrierRule = (row: Loose): RuleRow => ({ id: row.id, tenantId: row.tena
 async function readWorld(tenantId: string, wanted: Set<RuleEvent>, handMoveDays: number): Promise<World> {
   const asOf = await agencyToday(tenantId);
   const since = addDays(asOf, -EVENT_LOOKBACK_DAYS);
-  const needChanges = [...wanted].some((e) => ["paid_again", "lapsed", "not_taken", "cancelled", "declined", "withdrawn"].includes(e));
+  const needStatus = [...wanted].some((e) => STATUS_EVENT_NAMES.includes(e));
+  const needChanges = needStatus || [...wanted].some((e) => ["paid_again", "cancelled"].includes(e));
   const needLedger = [...wanted].some((e) => ["advance_received", "commission_credited", "chargeback_received"].includes(e));
 
-  const [open, issued, changes, ledger, carrierRules, carriers, board] = await Promise.all([
+  const [open, issued, seen, changes, ledger, carrierRules, carriers, board] = await Promise.all([
     allPages((from, to) => db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).in("status_normalized", [...OPEN_STATUSES]).order("carrier_id").order("policy_number").range(from, to)),
     // Issued in the look-back by a change (issued_on), or first seen already issued (the carrier's issue date): issuedDay().
     wanted.has("issued") ? allPages((from, to) => db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).or(`issued_on.gte.${since},issue_date.gte.${since}`).order("carrier_id").order("policy_number").range(from, to)) : Promise.resolve({ data: [], error: null }),
+    // First seen in the look-back, at any status (closed ones included): the file that brought the policy is its status event.
+    needStatus ? allPages((from, to) => db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).gte("first_seen_date", since).order("carrier_id").order("policy_number").range(from, to)) : Promise.resolve({ data: [], error: null }),
     needChanges ? allPages((from, to) => db().from("policy_change").select("carrier_id, policy_number, field_name, old_value, new_value, from_snapshot_date, to_snapshot_date").eq("tenant_id", tenantId).gte("to_snapshot_date", since).in("field_name", ["status_normalized", "paid_to_date", "termination_date", "carrier_status_raw"]).order("to_snapshot_date", { ascending: false }).order("id").range(from, to)) : Promise.resolve({ data: [], error: null }),
     needLedger ? allPages((from, to) => db().from("commission_entry").select("id, carrier_id, policy_number, entry_type, amount_cents, transaction_date, statement_date, created_at, reverses_entry_id").eq("tenant_id", tenantId).gte("created_at", `${since}T00:00:00Z`).in("entry_type", ["advance", "earned", "chargeback", "reversal"]).order("created_at").order("id").range(from, to)) : Promise.resolve({ data: [], error: null }),
     db().from("carrier_retention_rule").select("*").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(5000),
     db().from("carriers").select("id, name"),
     loadBoard(tenantId),
   ]);
-  for (const read of [open, issued, changes, ledger]) if (read.error && !isSchemaGap(read.error)) throw new Error(`Could not read the book for the pipeline rules: ${read.error.message}`);
+  for (const read of [open, issued, seen, changes, ledger]) if (read.error && !isSchemaGap(read.error)) throw new Error(`Could not read the book for the pipeline rules: ${read.error.message}`);
 
   const policies = new Map<string, PolicyFacts>();
-  for (const r of [...open.data, ...issued.data]) policies.set(policyKey(r.carrier_id, r.policy_number), toPolicy(r));
+  for (const r of [...open.data, ...issued.data, ...seen.data]) policies.set(policyKey(r.carrier_id, r.policy_number), toPolicy(r));
   const changeFacts: ChangeFact[] = (changes.data as Loose[]).map((c) => ({ carrierId: c.carrier_id, policyNumber: c.policy_number, field: c.field_name, oldValue: c.old_value, newValue: c.new_value, fromDate: c.from_snapshot_date, toDate: c.to_snapshot_date }));
   const ledgerFacts: LedgerFact[] = (ledger.data as Loose[]).map((l) => ({ id: l.id, carrierId: l.carrier_id, policyNumber: l.policy_number, entryType: l.entry_type, amountCents: Number(l.amount_cents), date: l.transaction_date ?? l.statement_date ?? String(l.created_at).slice(0, 10), reversesEntryId: l.reverses_entry_id }));
 
@@ -481,6 +509,17 @@ async function readWorld(tenantId: string, wanted: Set<RuleEvent>, handMoveDays:
     if (policies.has(policyKey(f.carrierId, f.policyNumber))) continue;
     missing.set(f.carrierId, [...new Set([...(missing.get(f.carrierId) ?? []), f.policyNumber])]);
   }
+  // Links made inside the look-back: a policy linked to its lead after its file was read raises its status then.
+  const linked = needStatus
+    ? await allPages((from, to) => db().from("policy_match").select("carrier_id, policy_number, created_at").eq("tenant_id", tenantId).is("superseded_by_id", null).in("matched_to_type", ["application", "deal_flow"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").order("id").range(from, to))
+    : { data: [], error: null };
+  if (linked.error && !isSchemaGap(linked.error)) throw new Error(`Could not read the policy links for the pipeline rules: ${linked.error.message}`);
+  const linkedOn = new Map<string, string>();
+  for (const l of (linked.data ?? []) as Loose[]) {
+    const k = policyKey(l.carrier_id, l.policy_number);
+    linkedOn.set(k, String(l.created_at).slice(0, 10));
+    if (!policies.has(k)) missing.set(l.carrier_id, [...new Set([...(missing.get(l.carrier_id) ?? []), l.policy_number])]);
+  }
   for (const [carrierId, numbers] of missing) {
     for (const part of chunks(numbers)) {
       const { data } = await db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", tenantId).eq("carrier_id", carrierId).in("policy_number", part);
@@ -489,7 +528,7 @@ async function readWorld(tenantId: string, wanted: Set<RuleEvent>, handMoveDays:
   }
 
   const computed = computeEvents({
-    tenantId, asOf, policies: [...policies.values()], changes: changeFacts, ledger: ledgerFacts,
+    tenantId, asOf, policies: [...policies.values()].map((p) => ({ ...p, linkedOn: linkedOn.get(policyKey(p.carrierId, p.policyNumber)) ?? null })), changes: changeFacts, ledger: ledgerFacts,
     carrierRules: carrierRules.error ? [] : ((carrierRules.data ?? []) as Loose[]).map(toCarrierRule),
     carrierNames: new Map(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name])),
   });
@@ -512,7 +551,33 @@ async function readWorld(tenantId: string, wanted: Set<RuleEvent>, handMoveDays:
     const { data } = await db().from("tenant_applications").select("id, lead_id").eq("tenant_id", tenantId).in("id", part);
     for (const a of (data ?? []) as Loose[]) if (a.lead_id) appLead.set(a.id, a.lead_id);
   }
-  const leadOf = (p: PolicyFacts) => (p.caseId && caseLead.get(p.caseId)) || (p.applicationId && appLead.get(p.applicationId)) || null;
+  // A policy linked to the sale (deal_flow) rather than the application — by a person in the review queue, or by
+  // our own issued-policy number (ladder step 2) — carries no case or application on its snapshot. Its lead is
+  // the sale's (E2E 2026-11-05: Quinn Testmore, linked by hand, was never seen by any rule).
+  const linkLead = new Map<string, string>();
+  const unresolved = linkSource.filter((p) => !((p.caseId && caseLead.get(p.caseId)) || (p.applicationId && appLead.get(p.applicationId))));
+  if (unresolved.length) {
+    const wanted = new Set(unresolved.map((p) => policyKey(p.carrierId, p.policyNumber)));
+    const links: Loose[] = [];
+    for (const part of chunks([...new Set(unresolved.map((p) => p.policyNumber))])) {
+      const { data, error } = await db().from("policy_match").select("carrier_id, policy_number, matched_to_type, matched_to_id").eq("tenant_id", tenantId).is("superseded_by_id", null).in("matched_to_type", ["deal_flow", "application"]).in("policy_number", part);
+      if (error) fail(error, "Could not read the policy links");
+      for (const l of (data ?? []) as Loose[]) if (wanted.has(policyKey(l.carrier_id, l.policy_number)) && l.matched_to_id) links.push(l);
+    }
+    const leadById = new Map<string, string>();
+    for (const [table, type] of [["deal_flow", "deal_flow"], ["tenant_applications", "application"]] as const) {
+      const ids = [...new Set(links.filter((l) => l.matched_to_type === type).map((l) => l.matched_to_id as string))];
+      for (const part of chunks(ids)) {
+        const { data } = await db().from(table).select("id, lead_id").eq("tenant_id", tenantId).in("id", part);
+        for (const r of (data ?? []) as Loose[]) if (r.lead_id) leadById.set(`${type}:${r.id}`, r.lead_id);
+      }
+    }
+    for (const l of links) {
+      const lead = leadById.get(`${l.matched_to_type}:${l.matched_to_id}`);
+      if (lead) linkLead.set(policyKey(l.carrier_id, l.policy_number), lead);
+    }
+  }
+  const leadOf = (p: PolicyFacts) => (p.caseId && caseLead.get(p.caseId)) || (p.applicationId && appLead.get(p.applicationId)) || linkLead.get(policyKey(p.carrierId, p.policyNumber)) || null;
   const openByLead = new Map<string, string[]>();
   for (const p of openPolicies) {
     const lead = leadOf(p);
