@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -24,7 +24,12 @@ import { notify } from "@/lib/notify";
 const money = (cents: number | null) => (cents === null ? "—" : `$${(cents / 100).toFixed(2)}`);
 const TONE: Record<WinbackBand, StatusTone> = { strong: "good", fair: "info", poor: "warning", never: "danger" };
 const VIEWS = { waiting: "Cooling off", released: "On the list", blocked: "Stuck", never: "Never call", all: "All" } as const;
-type View = keyof typeof VIEWS;
+type State = keyof typeof VIEWS;
+/** The chips, and "claims": a possible claim is one more view (WbA 2026-11-05), not a second table under this one. */
+type View = State | "claims";
+const isView = (v: string | null): v is View => v === "claims" || (v !== null && (Object.keys(VIEWS) as string[]).includes(v));
+/** A view's address, so a tile can link to it. */
+const winbackViewHref = (view: View) => `/app/reinstatement?view=winback&show=${view}`;
 
 /**
  * LA-5.7 (Notion sprint) · win-back. Who lapsed past reinstatement, why (and how we know), the band
@@ -33,21 +38,36 @@ type View = keyof typeof VIEWS;
  *
  * 2026-11-02 tidy (owner): the views are chips with their counts, a search finds a client, each fact is one
  * line and the table fits its card; a possible claim and an unscrubbed list go to the bell, not the page.
+ *
+ * WbA (2026-11-05): the view follows the address (`&show=`), every tile links to its view, and Possible
+ * claims is a chip with a red count; its rows keep "Mark handled", a confirm with a note.
  */
 export function WinbackBoard({ data, readOnly }: { data: Winback; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
-  const [view, setView] = useState<View>("waiting");
+  const params = useSearchParams();
+  const asked = params.get("show");
+  const view: View = isView(asked) ? asked : "waiting";
+  // The chip writes the address in place (no server round trip); a tile's link lands on the same view.
+  const setView = (next: View) => {
+    const query = new URLSearchParams(params.toString());
+    if (next === "waiting") query.delete("show");
+    else query.set("show", next);
+    window.history.replaceState(null, "", `?${query.toString()}`);
+  };
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [resolving, setResolving] = useState<ClaimRow | null>(null);
   const rows = data.rows;
-  const stateOf = (r: WinbackRow): View => (r.band === "never" ? "never" : r.releasedAt ? "released" : r.blockedReason ? "blocked" : "waiting");
+  const stateOf = (r: WinbackRow): State => (r.band === "never" ? "never" : r.releasedAt ? "released" : r.blockedReason ? "blocked" : "waiting");
   const needle = search.trim().toLowerCase();
-  const visible = useMemo(() => rows.filter((r) => (view === "all" || stateOf(r) === view) && (!needle || [r.clientName, r.policyNumber, r.carrierName].some((v) => v?.toLowerCase().includes(needle)))), [rows, view, needle]);
+  const visible = useMemo(() => (view === "claims" ? [] : rows.filter((r) => (view === "all" || stateOf(r) === view) && (!needle || [r.clientName, r.policyNumber, r.carrierName].some((v) => v?.toLowerCase().includes(needle))))), [rows, view, needle]);
+  const claims = useMemo(() => (view === "claims" ? data.claims.filter((c) => !needle || [c.clientName, c.policyNumber, c.carrierName].some((v) => v?.toLowerCase().includes(needle))) : []), [data.claims, view, needle]);
   const pageSize = useFittingPageSize(480, 57);
   const shown = paginate(visible, page, pageSize);
-  const count = (v: View) => rows.filter((r) => stateOf(r) === v).length;
+  const shownClaims = paginate(claims, page, pageSize);
+  const total = view === "claims" ? claims.length : visible.length;
+  const count = (v: State) => rows.filter((r) => stateOf(r) === v).length;
 
   return (
     <>
@@ -55,10 +75,10 @@ export function WinbackBoard({ data, readOnly }: { data: Winback; readOnly: bool
       {data.listScrub && data.listScrub !== "scrubbed" && count("released") > 0 && <Callout tone="warning" title={<>The Win-back list needs a scrub before anyone is dialled. <Link href="/app/campaigns" className="font-semibold underline">Run it</Link></>} />}
       {rows.length > 0 && (
         <StatStrip label="Win-back">
-          <StatTile label="Cooling off" value={count("waiting").toLocaleString("en-US")} footnote="back on a list when it ends" />
-          <StatTile label="On the Win-back list" value={count("released").toLocaleString("en-US")} footnote={data.lastRun?.released ? `${data.lastRun.released} added just now` : "dialled once scrubbed"} />
-          <StatTile label="Never call" value={count("never").toLocaleString("en-US")} valueTone={count("never") ? "danger" : undefined} footnote="do-not-call, or deceased" />
-          <StatTile label="Couldn't be released" value={count("blocked").toLocaleString("en-US")} valueTone={count("blocked") ? "warning" : undefined} footnote={count("blocked") ? "see the reason on each" : "nothing stuck"} />
+          <StatTile href={winbackViewHref("waiting")} label="Cooling off" value={count("waiting").toLocaleString("en-US")} footnote="back on a list when it ends" />
+          <StatTile href={winbackViewHref("released")} label="On the Win-back list" value={count("released").toLocaleString("en-US")} footnote={data.lastRun?.released ? `${data.lastRun.released} added just now` : "dialled once scrubbed"} />
+          <StatTile href={winbackViewHref("never")} label="Never call" value={count("never").toLocaleString("en-US")} valueTone={count("never") ? "danger" : undefined} footnote="do-not-call, or deceased" />
+          <StatTile href={winbackViewHref("blocked")} label="Couldn't be released" value={count("blocked").toLocaleString("en-US")} valueTone={count("blocked") ? "warning" : undefined} footnote={count("blocked") ? "see the reason on each" : "nothing stuck"} />
         </StatStrip>
       )}
 
@@ -69,14 +89,34 @@ export function WinbackBoard({ data, readOnly }: { data: Winback; readOnly: bool
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Client or policy" />
-            {(Object.keys(VIEWS) as View[]).map((v) => (
+            {(Object.keys(VIEWS) as State[]).map((v) => (
               <ToggleChip key={v} role="radio" selected={view === v} count={v === "all" ? rows.length : count(v)} countTone={v === "blocked" && count("blocked") ? "warning" : undefined} onClick={() => { setView(v); setPage(1); }}>{VIEWS[v]}</ToggleChip>
             ))}
+            {(data.claims.length > 0 || view === "claims") && (
+              <ToggleChip role="radio" selected={view === "claims"} count={data.claims.length} countTone="danger" onClick={() => { setView("claims"); setPage(1); }}>Possible claims</ToggleChip>
+            )}
           </DataToolbar>
         }
-        footer={visible.length ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="clients" onPage={setPage} /> : undefined}
+        footer={total ? <Pager page={view === "claims" ? shownClaims.current : shown.current} pageSize={pageSize} total={total} noun={view === "claims" ? "claims" : "clients"} onPage={setPage} /> : undefined}
       >
-        {rows.length === 0 ? (
+        {view === "claims" ? (
+          claims.length === 0 ? (
+            needle ? <NoMatches noun="claims" onClear={() => { setSearch(""); setPage(1); }} /> : <EmptyState title="No possible claims" hint="A policy that lapsed after a reported death shows here: help the family claim, or mark it handled." />
+          ) : (
+            <table className="portal-lead-table w-full text-left text-sm">
+              <thead><tr><th>Client</th><th>What the carrier reported</th><th className="w-[160px] text-right"><span className="sr-only">Handle it</span></th></tr></thead>
+              <tbody className="m-seq">
+                {shownClaims.rows.map((c) => (
+                  <tr key={c.id} className="m-row">
+                    <td><span className="block truncate font-semibold text-foreground">{c.clientName ? personName(c.clientName) : "No client linked"}</span><span className="block truncate text-xs text-muted-foreground">{c.carrierName} · {c.policyNumber}</span></td>
+                    <td className="text-muted-foreground"><span className="block truncate" title={c.reason}>{c.reason}</span></td>
+                    <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" onClick={() => setResolving(c)}>Mark handled</Button>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )
+        ) : rows.length === 0 ? (
           <EmptyState title="No lapsed clients yet" hint="A client shows here once their policy is past the carrier's reinstatement window." />
         ) : visible.length === 0 ? (
           <NoMatches noun="clients" onClear={() => { setView("all"); setSearch(""); setPage(1); }} />
@@ -126,23 +166,6 @@ export function WinbackBoard({ data, readOnly }: { data: Winback; readOnly: bool
         )}
       </TableCard>
 
-      {data.claims.length > 0 && (
-        <TableCard title="Possible claims" description="Lapsed after a reported death: help the family claim, or mark it handled.">
-          <table className="portal-lead-table w-full text-left text-sm">
-            <thead><tr><th>Client</th><th>What the carrier reported</th><th className="w-[160px] text-right"><span className="sr-only">Handle it</span></th></tr></thead>
-            <tbody>
-              {data.claims.map((c) => (
-                <tr key={c.id}>
-                  <td><span className="block font-semibold text-foreground">{c.clientName ? personName(c.clientName) : "No client linked"}</span><span className="block text-xs text-muted-foreground">{c.carrierName} · {c.policyNumber}</span></td>
-                  <td className="text-muted-foreground">{c.reason}</td>
-                  <td className="text-right">{!readOnly && <Button type="button" variant="outline" onClick={() => setResolving(c)}>Mark handled</Button>}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </TableCard>
-      )}
-
       {resolving && <ResolveDialog claim={resolving} onClose={() => setResolving(null)} onDone={() => { setResolving(null); router.refresh(); }} />}
     </>
   );
@@ -171,7 +194,7 @@ function ResolveDialog({ claim, onClose, onDone }: { claim: ClaimRow; onClose: (
     <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogContent className="sm:max-w-[460px]">
         <DialogHeader>
-          <DialogTitle>Mark handled: {claim.clientName ?? claim.policyNumber}</DialogTitle>
+          <DialogTitle>Mark handled: {claim.clientName ? personName(claim.clientName) : claim.policyNumber}</DialogTitle>
           <DialogDescription>{claim.carrierName} · {claim.policyNumber}. This policy is never sent to a win-back list. The phone number is not blocked, because the household may share it.</DialogDescription>
         </DialogHeader>
         <label htmlFor="claim-note" className="grid gap-1.5 text-sm font-medium text-foreground">

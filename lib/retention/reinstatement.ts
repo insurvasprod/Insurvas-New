@@ -36,6 +36,23 @@ export function canMove(from: CaseStatus, to: CaseStatus): boolean {
   return b > a;
 }
 
+/**
+ * One open case per policy (QA 2026-11-05). The database opens a case per lapse date, so a carrier file
+ * that moves a policy's lapse date (a correction, or a second lapse with no in-force file between) leaves
+ * the older case open beside the new one, and the client shows twice. Only the newest lapse is the one
+ * being worked: an older open case of the same policy is dropped from the open list. Closed cases are kept.
+ */
+export function newestOpenPerPolicy<T extends { carrier_id: string; policy_number: string; lapsed_on: string; status: string }>(cases: T[]): T[] {
+  const newest = new Map<string, string>();
+  for (const c of cases) {
+    if (!OPEN_CASE_STATUSES.includes(c.status as CaseStatus)) continue;
+    const key = `${c.carrier_id}|${c.policy_number}`;
+    const seen = newest.get(key);
+    if (!seen || c.lapsed_on > seen) newest.set(key, c.lapsed_on);
+  }
+  return cases.filter((c) => !OPEN_CASE_STATUSES.includes(c.status as CaseStatus) || newest.get(`${c.carrier_id}|${c.policy_number}`) === c.lapsed_on);
+}
+
 const dayNumber = (iso: string) => Math.floor(Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / 86_400_000);
 
 export const daysRemaining = (deadline: string | null, today: string): number | null => (deadline ? dayNumber(deadline) - dayNumber(today) : null);

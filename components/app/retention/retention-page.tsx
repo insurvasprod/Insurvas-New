@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { StepFrame } from "@/components/app/step-frame/step-frame";
 import type { RailStep } from "@/components/app/step-frame/step-rail";
+import type { Crumb } from "@/components/ui/breadcrumbs";
+import { InfoTip } from "@/components/ui/info-tip";
 import { RETENTION_RAIL_COOKIE, RETENTION_STEPS, retentionStepLabel, type RetentionStep } from "@/lib/retention/steps";
 
 /**
@@ -24,8 +26,24 @@ async function openSteps(): Promise<RailStep[]> {
   return RETENTION_STEPS.filter((item) => open.has(item.key));
 }
 
-/** The frame: the shared StepFrame with this page's steps and rail. `lead`: the step's own tabs. */
-export async function RetentionPage({ step, lead, actions, children }: { step: RetentionStep; lead?: ReactNode; actions?: ReactNode; children: ReactNode }) {
+/**
+ * The frame: the shared StepFrame with this page's steps and rail. `lead`: the step's own tabs.
+ *
+ * A record under a step (a save card, a servicing request, a reinstatement case; the pick of 2026-11-05,
+ * docs/retention/CRITIQUE.md) passes its `title`, its status `chip`, one muted line of `facts` and its trail,
+ * as Accounting's records do; `actions` holds at most two buttons and a More menu.
+ */
+export async function RetentionPage({ step, title, info, chip, facts, breadcrumbs, lead, actions, children }: {
+  step: RetentionStep;
+  title?: string;
+  info?: ReactNode;
+  chip?: ReactNode;
+  facts?: ReactNode;
+  breadcrumbs?: Crumb[];
+  lead?: ReactNode;
+  actions?: ReactNode;
+  children: ReactNode;
+}) {
   const [steps, jar] = await Promise.all([openSteps(), cookies()]);
   // The step on screen is always offered: its route already let this person in.
   if (!steps.some((item) => item.key === step)) {
@@ -33,9 +51,13 @@ export async function RetentionPage({ step, lead, actions, children }: { step: R
     const at = steps.filter((item) => RETENTION_STEPS.findIndex((s) => s.key === item.key) < RETENTION_STEPS.indexOf(own)).length;
     steps.splice(at, 0, own);
   }
+  const heading = title ?? retentionStepLabel(step);
   return (
     <StepFrame
-      title={retentionStepLabel(step)}
+      title={heading}
+      titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${heading}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
+      meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
+      breadcrumbs={breadcrumbs}
       lead={lead}
       actions={actions}
       rail={{ label: "Retention", cookie: RETENTION_RAIL_COOKIE, steps, step, collapsed: jar.get(RETENTION_RAIL_COOKIE)?.value === "collapsed" }}
@@ -43,4 +65,10 @@ export async function RetentionPage({ step, lead, actions, children }: { step: R
       {children}
     </StepFrame>
   );
+}
+
+/** The trail of a record under a Retention step: Retention › the step › the record. */
+export function retentionTrail(step: RetentionStep, label: string, middle?: Crumb): Crumb[] {
+  const own = RETENTION_STEPS.find((item) => item.key === step)!;
+  return [{ label: "Retention" }, { label: own.label, href: own.href }, ...(middle ? [middle] : []), { label }];
 }

@@ -4,7 +4,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 
-import type { ContactOutcome, PaymentMethod } from "./constants";
+import { SCORED_STATUSES, type ContactOutcome, type PaymentMethod } from "./constants";
 import { mapLimit, READ_CONCURRENCY } from "./batch";
 import { assertQueueCard, logSaveAttempt, SaveQueueError } from "./queueStore";
 import { computeRadar } from "./radarStore";
@@ -307,6 +307,125 @@ export async function loadServicing(viewer: Viewer): Promise<ServicingList | { a
       } satisfies ServicingRow;
     }),
   };
+}
+
+/** One request on its own page: the list's row plus what its timeline shows. */
+export type ServicingRequest = ServicingRow & { formRef: string | null; failedAt: string | null; cancelledAt: string | null };
+
+/** Can this viewer see requests on this policy? The list's rules: a producer only their own, a narrowed scope only its producers'. */
+async function policyVisibleTo(viewer: Viewer, carrierId: string, policyNumber: string): Promise<boolean> {
+  if (viewer.role !== "producer" && (viewer.scope ?? null) === null) return true;
+  let query = db().from("policy_current").select("agent_user_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", carrierId).eq("policy_number", policyNumber);
+  if (viewer.role === "producer") query = query.eq("agent_user_id", viewer.userId);
+  const { data, error } = await scopeQuery(query, "agent_user_id", viewer.scope ?? null).limit(1);
+  if (error) throw new Error(`Could not read the policy: ${error.message}`);
+  return ((data ?? []) as Loose[]).length > 0;
+}
+
+/**
+ * One request as this viewer may see it (the same rules as loadServicing), or null. An open one is checked
+ * against its carrier's latest file first, as the list does.
+ */
+export async function loadRequest(viewer: Viewer, id: string): Promise<ServicingRequest | null> {
+  const COLUMNS = `${ROW_COLUMNS}, carrier_form_ref, failed_at, cancelled_at`;
+  const read = () => db().from("servicing_request").select(COLUMNS).eq("tenant_id", viewer.tenantId).eq("id", id).maybeSingle();
+  const first = await read();
+  if (first.error) {
+    if (isSchemaGap(first.error)) return null;
+    throw new Error(first.error.message);
+  }
+  let r: Loose = first.data;
+  if (!r) return null;
+  if (!(await policyVisibleTo(viewer, r.carrier_id, r.policy_number))) return null;
+  if ((OPEN_STATUSES as readonly string[]).includes(r.status)) {
+    try {
+      const checked = await runServicingVerification(viewer.tenantId, r.carrier_id);
+      if (checked) r = (await read()).data;
+    } catch (e) {
+      console.error("[servicing] verification could not run", e);
+    }
+    if (!r) return null;
+  }
+  const [contact, user, carrier] = await Promise.all([
+    r.contact_id ? db().from("contacts").select("first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).eq("id", r.contact_id).maybeSingle() : { data: null },
+    r.requested_by ? db().from("users").select("name, email").eq("id", r.requested_by).maybeSingle() : { data: null },
+    db().from("carriers").select("name").eq("id", r.carrier_id).maybeSingle(),
+  ]);
+  const c = contact.data as Loose;
+  const u = user.data as Loose;
+  return {
+    id: r.id, carrierId: r.carrier_id, carrierName: (carrier.data as Loose)?.name ?? "Carrier not known", policyNumber: r.policy_number,
+    clientName: c ? [c.first_name, c.last_name].filter(Boolean).join(" ") || null : null, phone: c?.primary_phone ?? null,
+    type: r.request_type, origin: r.origin, changes: r.field_changes_json ?? [], targetDraftReason: r.target_draft_reason, status: r.status,
+    carrierMethod: r.carrier_method, carrierReference: r.carrier_reference, submittedAt: r.submitted_at, confirmedAt: r.carrier_confirmed_at,
+    expectedEffectiveDate: r.expected_effective_date, verifiedAt: r.verified_at, verifiedSnapshotDate: r.verified_snapshot_date,
+    failureReason: r.failure_reason, checkedSnapshotDate: r.checked_snapshot_date, unprovable: r.unprovable_fields ?? [],
+    requestedBy: r.requested_by ? (u ? u.name || u.email : "Someone no longer here") : null, createdAt: r.created_at, note: r.note,
+    formRef: r.carrier_form_ref ?? null, failedAt: r.failed_at ?? null, cancelledAt: r.cancelled_at ?? null,
+  };
+}
+
+export type PolicyMatch = { carrierId: string; carrierName: string; policyNumber: string; clientName: string | null; phone: string | null; status: string | null };
+
+/** `%a%b%c%`: a phone's digits match however the number was written. */
+const digitsPattern = (digits: string) => `%${digits.split("").join("%")}%`;
+const escapeLike = (text: string) => text.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+
+/**
+ * New request, step 1: the policies this viewer may open a request on, by client name, phone or policy number.
+ * At most 20. Read only.
+ */
+export async function searchPolicies(viewer: Viewer, raw: string): Promise<PolicyMatch[]> {
+  const q = raw.trim().replace(/\s+/g, " ").slice(0, 80);
+  if (q.length < 2) return [];
+  const digits = q.replace(/\D/g, "");
+  const isPhone = /^[\d\s()+.-]+$/.test(q) && digits.length >= 4;
+  // Names: letters, spaces, apostrophes and hyphens only (the words go into a PostgREST or= filter).
+  const words = q.replace(/[^\p{L}\s'-]/gu, " ").trim().split(/\s+/).filter((w) => w.length >= 2).slice(0, 3);
+  const policies = () => {
+    // In force only (walk 2026-11-05: withdrawn, declined and not-taken policies came back): nothing else can be serviced.
+    let query = db().from("policy_current").select("carrier_id, policy_number, contact_id, status_normalized").eq("tenant_id", viewer.tenantId).in("status_normalized", [...SCORED_STATUSES]);
+    if (viewer.role === "producer") query = query.eq("agent_user_id", viewer.userId);
+    return scopeQuery(query, "agent_user_id", viewer.scope ?? null);
+  };
+  const [byNumber, contactHits] = await Promise.all([
+    /^[A-Za-z0-9-]{3,}$/.test(q) ? policies().ilike("policy_number", `${escapeLike(q)}%`).limit(20) : { data: [] },
+    isPhone
+      ? db().from("contacts").select("id").eq("tenant_id", viewer.tenantId).ilike("primary_phone", digitsPattern(digits.replace(/^1(?=\d{10}$)/, ""))).limit(40)
+      : words.length
+        ? db().from("contacts").select("id, first_name, last_name").eq("tenant_id", viewer.tenantId).or(`first_name.ilike.%${words[0]}%,last_name.ilike.%${words[0]}%`).limit(200)
+        : { data: [] },
+  ]);
+  if ((byNumber as Loose).error) throw new Error(`Could not search the policies: ${(byNumber as Loose).error.message}`);
+  if ((contactHits as Loose).error) throw new Error(`Could not search the clients: ${(contactHits as Loose).error.message}`);
+  // Every word of a name must appear in the first or last name.
+  const people = ((contactHits.data ?? []) as Loose[]).filter((c) => isPhone || words.every((w) => `${c.first_name ?? ""} ${c.last_name ?? ""}`.toLowerCase().includes(w.toLowerCase())));
+  const contactIds = [...new Set(people.map((c) => c.id as string))].slice(0, 40);
+  const byContact = contactIds.length ? await policies().in("contact_id", contactIds).limit(20) : { data: [] };
+  if ((byContact as Loose).error) throw new Error(`Could not search the policies: ${(byContact as Loose).error.message}`);
+  const seen = new Set<string>();
+  const found = ([...(byNumber.data ?? []), ...(byContact.data ?? [])] as Loose[]).filter((p) => {
+    const key = `${p.carrier_id}|${p.policy_number}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 20);
+  if (!found.length) return [];
+  const ids = [...new Set(found.map((p) => p.contact_id).filter(Boolean))] as string[];
+  const carrierIds = [...new Set(found.map((p) => p.carrier_id))] as string[];
+  const [contacts, carriers] = await Promise.all([
+    ids.length ? db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", ids) : { data: [] },
+    db().from("carriers").select("id, name").in("id", carrierIds),
+  ]);
+  const contactOf = new Map<string, Loose>(((contacts.data ?? []) as Loose[]).map((c) => [c.id, c]));
+  const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
+  return found.map((p) => {
+    const c = p.contact_id ? contactOf.get(p.contact_id) : null;
+    return {
+      carrierId: p.carrier_id, carrierName: carrierName.get(p.carrier_id) ?? "Carrier not known", policyNumber: p.policy_number,
+      clientName: c ? [c.first_name, c.last_name].filter(Boolean).join(" ") || null : null, phone: c?.primary_phone ?? null, status: p.status_normalized ?? null,
+    };
+  });
 }
 
 /**

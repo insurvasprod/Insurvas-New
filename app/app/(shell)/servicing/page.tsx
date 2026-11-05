@@ -27,7 +27,8 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
   if (!actAsPage(guard, ["owner", "producer", "retention"])) {
     return <RoleGateNotice featureLabel="Servicing" detail="Only owners, producers and retention reps can open servicing requests." />;
   }
-  const { status, view } = await searchParams;
+  // The Requests view's chip (`?status=`) is read by the board itself, so it follows the address.
+  const { view } = await searchParams;
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const readOnly = guard.entitlement.access === "read_only";
   const campaignView = view === "campaign";
@@ -46,7 +47,7 @@ export default async function ServicingPage({ searchParams }: { searchParams: Pr
       {campaign ? (
         campaign.available ? <PaperBillCampaign campaign={campaign} isOwner={guard.role === "owner"} readOnly={readOnly} /> : <TableCard><EmptyState title="Not switched on yet" hint={CAMPAIGN_PENDING_MESSAGE} /></TableCard>
       ) : list && list.available ? (
-        <ServicingBoard rows={list.rows} carriers={list.carriers} verifiedLast30={list.verifiedLast30} initialStatus={status === "failed" || status === "verified" || status === "all" ? status : "open"} readOnly={readOnly} />
+        <ServicingBoard rows={list.rows} verifiedLast30={list.verifiedLast30} readOnly={readOnly} />
       ) : (
         <TableCard>
           <EmptyState title="Not switched on yet" hint={SERVICING_PENDING_MESSAGE} />

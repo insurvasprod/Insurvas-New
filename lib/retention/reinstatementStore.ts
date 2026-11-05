@@ -7,7 +7,7 @@ import { rowVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibil
 
 import { agencyToday } from "./agencyDay";
 import { settingsFromRow, type RetentionSettings } from "./constants";
-import { canMove, caseOrder, compare, daysRemaining, estimateOwed, OPEN_CASE_STATUSES, urgencyOf, type CaseStatus, type Comparison, type Urgency } from "./reinstatement";
+import { canMove, caseOrder, compare, daysRemaining, estimateOwed, newestOpenPerPolicy, OPEN_CASE_STATUSES, urgencyOf, type CaseStatus, type Comparison, type Urgency } from "./reinstatement";
 import { ownsCard } from "./assignment";
 import { ensureOwners, ownerOf, readOwnerInputs, type Owner } from "./assignmentStore";
 import { mapLimit, READ_CONCURRENCY } from "./batch";
@@ -138,7 +138,8 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
       everyRow(() => db().from("reinstatement_case").select("*").eq("tenant_id", viewer.tenantId).or(`status.in.(${OPEN_CASE_STATUSES.join(",")}),resolved_at.gte.${since}`).order("created_at", { ascending: false }).order("id")),
       db().from("retention_settings").select("*").eq("tenant_id", viewer.tenantId).maybeSingle(),
     ]);
-    cases = c;
+    // A policy whose lapse date moved has an older case still open: only the newest lapse is worked.
+    cases = newestOpenPerPolicy(c);
     settingsRow = s.data;
   } catch (error) {
     if (isSchemaGap(error as Loose)) return { available: false };
@@ -229,6 +230,16 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
   };
 }
 
+/**
+ * One case for its page (RiA 2026-11-05): the same read as the list (sync, scope, owners, newest lapse per
+ * policy), so a case the list would not show is not found here either. null = not this viewer's case.
+ */
+export async function loadCase(viewer: Viewer, id: string): Promise<{ available: false } | { available: true; row: CaseRow | null; data: Reinstatement }> {
+  const data = await loadReinstatement(viewer);
+  if (!data.available) return data;
+  return { available: true, row: data.open.find((r) => r.id === id) ?? data.closed.find((r) => r.id === id) ?? null, data };
+}
+
 export type CasePatch = {
   status?: CaseStatus;
   declineReason?: string | null;
@@ -291,7 +302,7 @@ export async function updateCase(viewer: Viewer, id: string, patch: CasePatch) {
 /** Open cases whose window closes inside the pin threshold (for the pinned line on the save queue). */
 export async function closingSoon(viewer: Viewer): Promise<number | null> {
   const [cases, settings, day] = await Promise.all([
-    db().from("reinstatement_case").select("deadline, carrier_id, policy_number").eq("tenant_id", viewer.tenantId).in("status", [...OPEN_CASE_STATUSES]).not("deadline", "is", null).limit(1000),
+    db().from("reinstatement_case").select("deadline, carrier_id, policy_number, lapsed_on, status").eq("tenant_id", viewer.tenantId).in("status", [...OPEN_CASE_STATUSES]).not("deadline", "is", null).limit(1000),
     db().from("retention_settings").select("*").eq("tenant_id", viewer.tenantId).maybeSingle(),
     settle(agencyToday(viewer.tenantId)),
   ]);
@@ -299,7 +310,7 @@ export async function closingSoon(viewer: Viewer): Promise<number | null> {
   if (cases.error) return null;
   const pin = settingsFromRow(settings.data).reinstatementPinDays;
   const today = unwrap(day);
-  let rows = (cases.data ?? []) as Loose[];
+  let rows = newestOpenPerPolicy((cases.data ?? []) as Loose[]);
   if (viewer.role === "producer" && rows.length) {
     const mine = await inChunks([...new Set(rows.map((r) => r.policy_number))], (part) => db().from("policy_current").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("agent_user_id", viewer.userId).in("policy_number", part));
     const keys = new Set(mine.map(keyOf));

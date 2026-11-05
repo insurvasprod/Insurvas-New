@@ -2,15 +2,11 @@
 
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { MoreHorizontal } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { ToggleChip } from "@/components/ui/toggle-chip";
-import { Callout } from "@/components/app/settings/primitives";
+import { ActiveFilters, ClearFiltersButton, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { personName } from "@/lib/format/personName";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -18,19 +14,17 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
-import { ACTION_TAKEN, BANDS, CLIENT_REASON_LABELS, CLIENT_REASONS, CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, MISSING_LABELS, SIGNAL_LABELS, SNOOZE_DAYS, type ActionTaken, type Band, type ClientReason, type ContactOutcome, type Signal } from "@/lib/retention/constants";
+import { BANDS, MISSING_LABELS, SIGNAL_LABELS, type Band, type Signal } from "@/lib/retention/constants";
 import { SORT_LABELS, SORTS, type QueueSort } from "@/lib/retention/queue";
 import { REQUEST_FOR_FIX, REQUEST_LABELS, STATUS_LABELS, type RequestType } from "@/lib/retention/servicing";
-import { ServicingRequestDialog } from "@/components/app/servicing-request-dialog";
-import { IncomeCapture } from "@/components/app/retention/income-capture";
 import { coverageText } from "@/lib/retention/income";
 import type { SaveCard, SaveQueue } from "@/lib/retention/queueStore";
-import { notify } from "@/lib/notify";
+import { cardHref, HoldDialog } from "@/components/app/retention/save-card";
 
+// Whole dollars, rounded (it used to cut the cents off: $0.99 read $0).
 const money = (cents: number | null) => {
   if (cents === null) return null;
-  const digits = String(Math.abs(cents)).padStart(3, "0");
-  return `$${Number(digits.slice(0, -2)).toLocaleString("en-US")}`;
+  return `$${Math.round(Math.abs(cents) / 100).toLocaleString("en-US")}`;
 };
 const phoneText = (raw: string) => {
   const d = raw.replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
@@ -41,44 +35,44 @@ const breakdownText = (card: SaveCard) =>
   ["A prediction from the chargeback radar, not something the carrier reported.", ...card.contributions.map((c) => `${SIGNAL_LABELS[c.signal]}: +${c.contribution}`), `Score ${card.score}`].join("\n");
 
 const BAND_INK: Record<Band, string> = { critical: "text-[var(--error-ink)]", high: "text-[var(--warning-ink)]", medium: "text-[var(--info-ink)]", low: "text-muted-foreground" };
-const ACTION_LABELS: Record<ActionTaken, string> = {
-  none: "Nothing changed",
-  move_draft_date: "Agreed to move the payment date",
-  convert_to_draft: "Agreed to switch to bank payment",
-  confirm_card_funded: "Confirmed the card will be funded",
-  confirm_account: "Confirmed the account",
-  review_coverage: "Reviewed the coverage",
-  courtesy_call: "Courtesy check-in",
-};
-const field = `${toolbarControl} w-full`;
-const labelClass = "grid gap-1.5 text-sm font-medium text-foreground";
+const capital = (s: string) => s[0].toUpperCase() + s.slice(1);
 
 /** What a card still needs before it can be worked well (owner 2026-11-02: "help the agent if there's things to fix"). */
 type Need = "failed" | "phone" | "income";
+const NEEDS: Need[] = ["failed", "phone", "income"];
 const NEED_LABELS: Record<Need, string> = { failed: "Fix not in the file", phone: "No phone", income: "No income" };
 const needsOf = (card: SaveCard): Need[] => [...(card.failedFix ? ["failed" as const] : []), ...(card.phone ? [] : ["phone" as const]), ...(card.incomeKnown ? [] : ["income" as const])];
 
 /**
  * LA-5.3 (Notion sprint) · the save queue. A prediction, drawn as one: the risk sits in a dashed
  * outline and always says how many signals it rests on, so it can never be taken for Lapse risk's
- * observed facts. Phone on the row; the reason is the opening line; the first fix starts from the row.
+ * observed facts. Phone on the row; the reason is the opening line.
  *
- * 2026-11-02 tidy (owner): one line per fact, the table fits its card, "Log call" is the row's button and
- * the rest (snooze, income, the other fix) is in its ⋯ menu; chips find the cards that still need something.
+ * The pick of 2026-11-05 ("SqA", docs/retention/CRITIQUE.md): the row's button is the fix itself, and the
+ * name opens the card's page, where the call is logged, the fix is sent, income is kept. Snooze or dismiss
+ * stays a confirm (⋯). Filters sit behind one Filters button and live in the address (`band`, `carrier`,
+ * `need`), so every tile is a link to its slice of the queue.
  */
 export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: SaveQueue; sort: QueueSort; readOnly: boolean; canStartFix: boolean }) {
   const router = useRouter();
   const pathname = usePathname();
+  const params = useSearchParams();
   const [refreshing, startRefresh] = useTransition();
-  const [band, setBand] = useState("");
-  const [carrier, setCarrier] = useState("");
-  const [need, setNeed] = useState<Need | "">("");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [logging, setLogging] = useState<SaveCard | null>(null);
   const [holding, setHolding] = useState<SaveCard | null>(null);
-  const [fixing, setFixing] = useState<{ card: SaveCard; type: RequestType } | null>(null);
-  const [incomeFor, setIncomeFor] = useState<string | null>(null);
+
+  const band = (BANDS as readonly string[]).includes(params.get("band") ?? "") ? (params.get("band") as Band) : "";
+  const carrier = params.get("carrier") ?? "";
+  const need = (NEEDS as string[]).includes(params.get("need") ?? "") ? (params.get("need") as Need) : "";
+  /** One filter changed, the address follows (the sort and the others are kept). */
+  const hrefWith = (changes: Record<string, string | null>) => {
+    const next = new URLSearchParams(params.toString());
+    for (const [key, value] of Object.entries(changes)) if (value) next.set(key, value); else next.delete(key);
+    return next.size ? `${pathname}?${next}` : pathname;
+  };
+  const setParam = (changes: Record<string, string | null>) => { setPage(1); router.replace(hrefWith(changes), { scroll: false }); };
 
   const cards = queue.cards;
   const carriers = useMemo(() => [...new Map(cards.map((c) => [c.carrierId, c.carrierName])).entries()].sort((a, b) => a[1].localeCompare(b[1])), [cards]);
@@ -93,54 +87,65 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
   const pageSize = useFittingPageSize(480, 57);
   const shown = paginate(visible, page, pageSize);
   const { stats } = queue;
-  const filtered = Boolean(band || carrier || need || needle);
-  const clear = () => { setBand(""); setCarrier(""); setNeed(""); setSearch(""); setPage(1); };
+  const chips: ActiveFilter[] = [
+    ...(band ? [{ key: "band", label: "Risk", value: capital(band), onRemove: () => setParam({ band: null }) }] : []),
+    ...(carrier ? [{ key: "carrier", label: "Carrier", value: carriers.find(([id]) => id === carrier)?.[1] ?? "Carrier", onRemove: () => setParam({ carrier: null }) }] : []),
+    ...(need ? [{ key: "need", label: "Still needs", value: NEED_LABELS[need], onRemove: () => setParam({ need: null }) }] : []),
+  ];
+  const clear = () => { setSearch(""); setParam({ band: null, carrier: null, need: null }); };
   const fixesOf = (card: SaveCard) => card.fixes.filter((f) => !(card.noBankAccount && f.action === "convert_to_draft"));
   // A column every card leaves empty says nothing (owner 2026-11-02 critique): drawn only once one card has it.
   const showWorth = cards.some((c) => c.atRiskCents !== null);
   const showDraft = cards.some((c) => c.nextDraftDays !== null);
-  const cols = 4 + (showWorth ? 1 : 0) + (showDraft ? 1 : 0);
   const startable = (card: SaveCard, action: string): RequestType | null => {
     const type = (REQUEST_FOR_FIX as Record<string, RequestType | undefined>)[action];
     return type && canStartFix && !readOnly && !card.openRequests.some((r) => r.type === type) ? type : null;
   };
+  const known = cards.length - stats.atRiskUnknown;
 
   return (
     <>
+      {/* Every tile opens its slice of the queue (owner rule: figures are links). */}
       {stats.scored > 0 && <StatStrip label="Save queue">
-        <StatTile label="In the queue" value={queue.total.toLocaleString("en-US")} footnote={queue.total > cards.length ? `first ${cards.length} shown` : `of ${stats.scored.toLocaleString("en-US")} scored`} />
-        <StatTile label="Critical" value={stats.critical.toLocaleString("en-US")} valueTone={stats.critical ? "danger" : undefined} footnote={`${stats.highOrAbove.toLocaleString("en-US")} high or critical`} />
-        <StatTile label="Advance at risk" value={cards.length && stats.atRiskUnknown < cards.length ? money(stats.atRiskCents) : "—"} footnote={!cards.length ? "nothing in the queue" : stats.atRiskUnknown === cards.length ? "no advance on file yet" : stats.atRiskUnknown ? `${stats.atRiskUnknown} with no advance on file` : "unearned, in the queue"} />
-        <StatTile label="Too little known" value={queue.lowConfidence.toLocaleString("en-US")} labelTitle="High or critical, but scored on under half the signals. They stay off the queue until more is known: income, the carrier's grace rule, a second carrier file, the draft day." footnote={queue.lowConfidence ? "kept off the queue" : "every score rests on enough"} />
-        <StatTile label="Income known" value={`${stats.incomeKnown.toLocaleString("en-US")} of ${stats.scored.toLocaleString("en-US")}`} labelTitle={coverageText(stats.incomeKnown, stats.scored, stats.affordabilityWeight)} footnote={`worth up to ${stats.affordabilityWeight} points`} />
+        <StatTile label="In the queue" href={pathname} value={queue.total.toLocaleString("en-US")} footnote={queue.total > cards.length ? `first ${cards.length} shown` : `of ${stats.scored.toLocaleString("en-US")} scored`} />
+        <StatTile label="Critical" href={hrefWith({ band: "critical" })} value={stats.queueCritical.toLocaleString("en-US")} valueTone={stats.queueCritical ? "danger" : undefined} labelTitle="Critical cards on the queue. Across the book, past-due and worked policies included, the radar scores more; past-due ones are in Lapse risk." footnote={`${stats.critical.toLocaleString("en-US")} across the book`} />
+        {/* When most of the queue has no advance on file, the unknown leads: "$0" alone read as nothing at stake. */}
+        <StatTile label="Advance at risk" href={hrefWith({ sort: "exposure" })} value={!cards.length ? "—" : known === 0 ? "Not on file" : stats.atRiskUnknown > known ? `${stats.atRiskUnknown} unknown` : money(stats.atRiskCents)} valueTone={cards.length && stats.atRiskUnknown > known ? "warning" : undefined}
+          footnote={!cards.length ? "nothing in the queue" : known === 0 ? "no advance from these carriers yet" : stats.atRiskUnknown > known ? `${money(stats.atRiskCents)} on the ${known} with an advance` : stats.atRiskUnknown ? `${stats.atRiskUnknown} with no advance on file` : "unearned, in the queue"} />
+        <StatTile label="Too little known" href="/app/retention-settings" value={queue.lowConfidence.toLocaleString("en-US")} labelTitle="High or critical, but scored on under half the signals. They stay off the queue until more is known: income, the carrier's grace rule, a second carrier file, the draft day." footnote={queue.lowConfidence ? "kept off the queue" : "every score rests on enough"} />
+        <StatTile label="Income known" href={hrefWith({ need: "income" })} value={`${stats.incomeKnown.toLocaleString("en-US")} of ${stats.scored.toLocaleString("en-US")}`} labelTitle={coverageText(stats.incomeKnown, stats.scored, stats.affordabilityWeight)} footnote={`worth up to ${stats.affordabilityWeight} points`} />
       </StatStrip>}
 
       <TableCard
         toolbar={
           <DataToolbar actions={<>
-            {filtered && <ClearFiltersButton onClick={clear} />}
+            {(chips.length > 0 || needle) && <ClearFiltersButton onClick={clear} />}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
             <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Client, policy or phone" />
-            <select aria-label="Sort the queue" className={toolbarControl} value={sort} onChange={(e) => router.push(e.target.value === queue.settings.queueDefaultSort ? pathname : `${pathname}?sort=${e.target.value}`)}>
+            <FilterButton open={filtersOpen} count={chips.length} controls="save-queue-filters" onClick={() => setFiltersOpen(!filtersOpen)} />
+            <select aria-label="Sort the queue" className={toolbarControl} value={sort} onChange={(e) => router.push(hrefWith({ sort: e.target.value === queue.settings.queueDefaultSort ? null : e.target.value }))}>
               {SORTS.map((s) => <option key={s} value={s}>{SORT_LABELS[s]}</option>)}
             </select>
-            <select aria-label="Filter by risk" className={toolbarControl} value={band} onChange={(e) => { setBand(e.target.value); setPage(1); }}>
-              <option value="">Every risk level</option>
-              {BANDS.filter((b) => b !== "low").map((b) => <option key={b} value={b}>{b[0].toUpperCase() + b.slice(1)}</option>)}
-            </select>
-            {carriers.length > 1 && (
-              <select aria-label="Filter by carrier" className={toolbarControl} value={carrier} onChange={(e) => { setCarrier(e.target.value); setPage(1); }}>
-                <option value="">All carriers</option>
-                {carriers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-              </select>
-            )}
-            {/* What still needs doing, as chips with their counts; only the ones that hold a card. */}
-            {(Object.keys(NEED_LABELS) as Need[]).filter((n) => needCounts[n] > 0).map((n) => (
-              <ToggleChip key={n} selected={need === n} count={needCounts[n]} countTone={n === "failed" ? "danger" : "warning"} onClick={() => { setNeed(need === n ? "" : n); setPage(1); }}>{NEED_LABELS[n]}</ToggleChip>
-            ))}
           </DataToolbar>
         }
+        filters={<>
+          <FilterPanel id="save-queue-filters" open={filtersOpen}>
+            <FilterField label="Risk" htmlFor="sq-band"><select id="sq-band" className={toolbarControl} value={band} onChange={(e) => setParam({ band: e.target.value || null })}>
+              <option value="">Every risk level</option>
+              {BANDS.filter((b) => b !== "low").map((b) => <option key={b} value={b}>{capital(b)}</option>)}
+            </select></FilterField>
+            {carriers.length > 1 && <FilterField label="Carrier" htmlFor="sq-carrier"><select id="sq-carrier" className={toolbarControl} value={carrier} onChange={(e) => setParam({ carrier: e.target.value || null })}>
+              <option value="">All carriers</option>
+              {carriers.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+            </select></FilterField>}
+            <FilterField label="Still needs" htmlFor="sq-need"><select id="sq-need" className={toolbarControl} value={need} onChange={(e) => setParam({ need: e.target.value || null })}>
+              <option value="">Anything</option>
+              {NEEDS.map((n) => <option key={n} value={n} disabled={!needCounts[n]}>{NEED_LABELS[n]} · {needCounts[n]}</option>)}
+            </select></FilterField>
+          </FilterPanel>
+          <ActiveFilters filters={chips} onClear={clear} />
+        </>}
         footer={visible.length ? (
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             <span className="text-xs text-muted-foreground">
@@ -165,19 +170,20 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                 <th>Why, and the fix</th>
                 {showWorth && <th className="w-[96px] text-right" title="Unearned advance the carrier takes back if this policy dies (from the commission ledger)">Worth</th>}
                 {showDraft && <th className="w-[96px] text-right">Next draft</th>}
-                <th className="w-[148px] text-right"><span className="sr-only">Work the card</span></th>
+                <th className="w-[160px] text-right"><span className="sr-only">Work the card</span></th>
               </tr>
             </thead>
             <tbody className="m-seq">
-              {shown.rows.flatMap((card) => {
+              {shown.rows.map((card) => {
                 const fixes = fixesOf(card);
                 const first = fixes[0];
                 const firstType = first ? startable(card, first.action) : null;
                 const name = card.clientName ? personName(card.clientName) : "No client linked";
-                return [
+                const href = cardHref(card);
+                return (
                   <tr key={card.key} className="m-row">
                     <td>
-                      <span className="block max-w-[220px] truncate font-semibold text-foreground" title={queue.showOwners && card.owner ? `Owner: ${card.owner.name}` : undefined}>{name}</span>
+                      <Link href={href} className="block max-w-[220px] truncate font-semibold text-foreground underline-offset-2 hover:underline" title={queue.showOwners && card.owner ? `Owner: ${card.owner.name}` : undefined}>{name}</Link>
                       <span className="block max-w-[220px] truncate text-xs text-muted-foreground" title={`${card.carrierName} ${card.policyNumber}`}>
                         {card.phone ? <span className="select-all tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(card.phone)}</span> : "No phone"}
                         {" · "}
@@ -186,7 +192,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                     </td>
                     <td>
                       <span className={`inline-flex items-baseline gap-1 rounded-full border border-dashed border-current px-2.5 py-0.5 text-xs font-semibold tabular-nums ${BAND_INK[card.band]}`} title={breakdownText(card)}>
-                        {card.score} · {card.band[0].toUpperCase() + card.band.slice(1)}
+                        {card.score} · {capital(card.band)}
                       </span>
                       <span className="mt-1 block text-xs text-muted-foreground" title={`Predicted, ${card.confidence} confidence.${card.missing.length ? ` Not known: ${card.missing.map((m) => MISSING_LABELS[m as Signal] ?? m).join(", ")}.` : " Every signal is known."}`}>
                         predicted · {card.signalsAvailable} of 7 signals
@@ -200,11 +206,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                       {card.openRequests.length > 0 ? (
                         <span className="mt-1 block truncate text-xs text-muted-foreground">In progress: {card.openRequests.map((r) => `${REQUEST_LABELS[r.type]} (${STATUS_LABELS[r.status].toLowerCase()})`).join(", ")}</span>
                       ) : first ? (
-                        <span className="mt-1 flex min-w-0 items-baseline gap-2 text-xs">
-                          <span className="truncate text-[var(--accent-ink)]" title={first.reason}>→ {first.label}</span>
-                          {firstType && <button type="button" className="shrink-0 font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline" onClick={() => setFixing({ card, type: firstType })}>Start the fix</button>}
-                          {fixes.length > 1 && <span className="shrink-0 text-muted-foreground">+{fixes.length - 1} in ⋯</span>}
-                        </span>
+                        <span className="mt-1 block truncate text-xs text-[var(--accent-ink)]" title={first.reason}>→ {first.label}{fixes.length > 1 ? <span className="text-muted-foreground"> · +{fixes.length - 1} more</span> : null}</span>
                       ) : null}
                     </td>
                     {showWorth && <td className="text-right tabular-nums">{money(card.atRiskCents) ?? <span className="text-muted-foreground" title="No advance from this carrier on file yet">—</span>}</td>}
@@ -216,179 +218,29 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                     <td className="text-right">
                       {!readOnly && (
                         <span className="inline-flex items-center justify-end gap-1">
-                          <Button type="button" variant="outline" size="sm" onClick={() => setLogging(card)}>Log call</Button>
-                          <DropdownMenu modal={false}>
-                            <DropdownMenuTrigger asChild>
-                              <Button type="button" variant="ghost" size="icon-sm" aria-label={`More for ${name}`} title="More"><MoreHorizontal aria-hidden="true" /></Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              {fixes.slice(1).map((f) => {
-                                const type = startable(card, f.action);
-                                return type ? <DropdownMenuItem key={f.action} onSelect={() => setFixing({ card, type })}>Start: {f.label}</DropdownMenuItem> : null;
-                              })}
-                              {/* A known income can be corrected or removed too (live test 2026-11-02: there was no way back). */}
-                              <DropdownMenuItem onSelect={() => setIncomeFor(card.key)}>{card.incomeKnown ? "Change income" : "Add income"}</DropdownMenuItem>
-                              <DropdownMenuItem onSelect={() => setHolding(card)}>Snooze or dismiss</DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          {/* The fix is the row's job (spec card: [Call] [Start the fix]); without one, the call. */}
+                          {firstType
+                            ? <Button asChild size="sm"><Link href={`${href}?tab=fix&fix=${firstType}`}>Start the fix</Link></Button>
+                            : <Button asChild size="sm" variant="outline"><Link href={`${href}?tab=calls`}>Log call</Link></Button>}
+                          <MoreMenu row label={`More for ${name}`} items={[
+                            ...fixes.slice(1).map((f) => { const type = startable(card, f.action); return type ? { label: `Start: ${f.label}`, href: `${href}?tab=fix&fix=${type}` } : null; }),
+                            firstType && { label: "Log call", href: `${href}?tab=calls` },
+                            // A known income can be corrected or removed too (live test 2026-11-02: there was no way back).
+                            { label: card.incomeKnown ? "Change income" : "Add income", href: `${href}?tab=income` },
+                            { label: "Snooze or dismiss", onSelect: () => setHolding(card) },
+                          ]} />
                         </span>
                       )}
                     </td>
-                  </tr>,
-                  incomeFor === card.key ? (
-                    <tr key={`${card.key}-income`}>
-                      <td colSpan={cols}>
-                        <div className="flex max-w-[640px] items-start gap-3 py-1">
-                          <div className="min-w-0 flex-1">
-                            <IncomeCapture
-                              compact
-                              readUrl={`/api/app/retention/income?carrier_id=${card.carrierId}&policy_number=${encodeURIComponent(card.policyNumber)}`}
-                              save={(income) => fetch("/api/app/retention/income", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ carrier_id: card.carrierId, policy_number: card.policyNumber, income }) })}
-                              onSaved={() => { setIncomeFor(null); router.refresh(); }}
-                            />
-                          </div>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => setIncomeFor(null)}>Close</Button>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null,
-                ];
+                  </tr>
+                );
               })}
             </tbody>
           </table>
         )}
       </TableCard>
 
-      {logging && <LogDialog card={logging} onClose={() => setLogging(null)} onDone={() => { setLogging(null); router.refresh(); }} />}
-      {fixing && <ServicingRequestDialog carrierId={fixing.card.carrierId} policyNumber={fixing.card.policyNumber} type={fixing.type} origin="save_queue" fromQueue onClose={() => setFixing(null)} onDone={() => { setFixing(null); router.refresh(); }} />}
       {holding && <HoldDialog card={holding} onClose={() => setHolding(null)} onDone={() => { setHolding(null); router.refresh(); }} />}
     </>
-  );
-}
-
-async function post(body: Record<string, unknown>) {
-  const response = await fetch("/api/app/retention/save-queue", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const data = (await response.json().catch(() => ({}))) as { error?: string };
-  if (!response.ok) throw new Error(data.error ?? "That could not be saved.");
-  return data;
-}
-
-function LogDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => void; onDone: () => void }) {
-  const [outcome, setOutcome] = useState<ContactOutcome | "">("");
-  const [clientReason, setClientReason] = useState<ClientReason | "">("");
-  const [action, setAction] = useState<ActionTaken>("none");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const suggested = card.fixes.map((f) => f.action as ActionTaken);
-  const actions = [...new Set<ActionTaken>([...suggested, ...ACTION_TAKEN])];
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      await post({ action: "log_attempt", carrier_id: card.carrierId, policy_number: card.policyNumber, outcome, action_taken: action, note: note.trim() || null, client_reason: outcome === "reached_refused" && clientReason ? clientReason : null });
-      notify.done("Logged. It leaves the queue until the cooldown ends, or the risk rises.");
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "That could not be saved.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>Log the call to {card.clientName ? personName(card.clientName) : card.policyNumber}</DialogTitle>
-          <DialogDescription>Risk {card.score} · {card.band}, recorded as it is now.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <label htmlFor="save-outcome" className={labelClass}>
-            What happened
-            <select id="save-outcome" className={field} value={outcome} onChange={(e) => { const next = e.target.value as ContactOutcome; setOutcome(next); if (next === "reached_agreed" && action === "none" && suggested[0]) setAction(suggested[0]); }}>
-              <option value="">Choose…</option>
-              {CONTACT_OUTCOMES.map((o) => <option key={o} value={o}>{CONTACT_OUTCOME_LABELS[o]}</option>)}
-            </select>
-          </label>
-          {outcome === "reached_refused" && (
-            <label htmlFor="save-client-reason" className={labelClass}>
-              Why they said no
-              <select id="save-client-reason" className={field} value={clientReason} onChange={(e) => setClientReason(e.target.value as ClientReason | "")}>
-                <option value="">They didn&apos;t say, or something else</option>
-                {CLIENT_REASONS.map((r) => <option key={r} value={r}>{CLIENT_REASON_LABELS[r]}</option>)}
-              </select>
-            </label>
-          )}
-          <label htmlFor="save-action" className={labelClass}>
-            What you did
-            <select id="save-action" className={field} value={action} onChange={(e) => setAction(e.target.value as ActionTaken)}>
-              {actions.map((a) => <option key={a} value={a}>{ACTION_LABELS[a]}{suggested.includes(a) ? " (suggested)" : ""}</option>)}
-            </select>
-          </label>
-          <label htmlFor="save-note" className={labelClass}>
-            Note
-            <textarea id="save-note" className={`${field} min-h-20 py-2`} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} />
-          </label>
-          {error && <Callout tone="error" title={error} />}
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="button" disabled={!outcome || busy} onClick={() => void save()}>{busy ? "Saving…" : "Log the call"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function HoldDialog({ card, onClose, onDone }: { card: SaveCard; onClose: () => void; onDone: () => void }) {
-  const [kind, setKind] = useState<"snooze" | "dismiss">("snooze");
-  const [days, setDays] = useState<number>(SNOOZE_DAYS[0]);
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      await post({ action: "hold", carrier_id: card.carrierId, policy_number: card.policyNumber, kind, reason: reason.trim(), days: kind === "snooze" ? days : null });
-      notify.done(kind === "snooze" ? `Snoozed for ${days} days. It comes back sooner if the risk rises.` : "Dismissed. It comes back only if the risk rises.");
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "That could not be saved.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader>
-          <DialogTitle>Take {card.clientName ? personName(card.clientName) : card.policyNumber} off the queue</DialogTitle>
-          <DialogDescription>Say why, so it is known next time.</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <label htmlFor="hold-kind" className={labelClass}>
-            For how long
-            <select id="hold-kind" className={field} value={kind === "dismiss" ? "dismiss" : String(days)} onChange={(e) => { if (e.target.value === "dismiss") setKind("dismiss"); else { setKind("snooze"); setDays(Number(e.target.value)); } }}>
-              {SNOOZE_DAYS.map((d) => <option key={d} value={d}>Snooze {d} days</option>)}
-              <option value="dismiss">Dismiss until the risk rises</option>
-            </select>
-          </label>
-          <label htmlFor="hold-reason" className={labelClass}>
-            Reason
-            <textarea id="hold-reason" className={`${field} min-h-20 py-2`} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} />
-          </label>
-          {error && <Callout tone="error" title={error} />}
-        </div>
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="button" disabled={reason.trim().length < 3 || busy} onClick={() => void save()}>{busy ? "Saving…" : kind === "snooze" ? "Snooze" : "Dismiss"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
