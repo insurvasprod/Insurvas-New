@@ -15,13 +15,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Phone } from "lucide-react";
+import { ClipboardCheck, Coffee, Headset, PhoneCall, PhoneIncoming, PhoneOff, Phone, Users } from "lucide-react";
 
 import { Callout, st } from "@/components/app/settings/primitives";
 import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
-import { callHref, secondsSince, shortDuration, useFloor, type Availability, type FloorData, type Lead, type Member } from "@/components/app/inbound/use-floor";
+import { callHref, secondsSince, shortDuration, useFloor, type Availability, type FloorData, type Lead } from "@/components/app/inbound/use-floor";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -78,12 +79,8 @@ function AvailabilityStatus({ availability, onCall }: { availability: Availabili
   return <StatusChip tone={tone} dot>{label}</StatusChip>;
 }
 
-function isPresent(member: Member, now: number) {
-  return Boolean(member.lastSeenAt) && now - new Date(member.lastSeenAt!).getTime() <= 60_000;
-}
-
 export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false }: { currentUserId: string; readOnly: boolean; canSeeTeam: boolean; /** Solo mode: no Team page; All callers instead. */ solo?: boolean }) {
-  const { floor, error, now, saving, availability, setAvailability, liveLabel, updated, refresh, claim, accept, sendNudge } = useFloor({ readOnly });
+  const { floor, error, now, saving, availability, setAvailability, refresh, claim, accept, sendNudge } = useFloor({ readOnly });
   const [pop, setPop] = useState<Pop>("none");
   useEffect(() => {
     // The browser's pop-up permission, read once after mount.
@@ -105,14 +102,6 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
 
   const line = useMemo(() => [...(floor?.waiting ?? [])].sort((a, b) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime()), [floor?.waiting]);
   const myCalls = useMemo(() => (floor?.onCalls ?? []).filter((call) => call.agentId === currentUserId).sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime()), [floor?.onCalls, currentUserId]);
-  const team = useMemo(() => {
-    const members = (floor?.members ?? []).filter((member) => member.id !== currentUserId);
-    return {
-      taking: members.filter((member) => member.availability === "ready" && isPresent(member, now)).length,
-      onCall: members.filter((member) => member.availability === "on_call").length,
-      onBreak: members.filter((member) => member.availability === "on_break" && isPresent(member, now)).length,
-    };
-  }, [floor?.members, currentUserId, now]);
 
   const [linePage, setLinePage] = useState(1);
   const linePageSize = useFittingPageSize(560, 65);
@@ -136,14 +125,15 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
   const restShown = paginate(rest, linePage, linePageSize);
   const takeReason = readOnly ? "Your agency’s account is paused." : !ready ? "Start taking calls first." : undefined;
 
+  // The status, then everything else under More with an icon each (owner 2026-11-05).
   const headerActions = (
     <>
       <AvailabilityStatus availability={availability} onCall={onCall} />
-      {ready && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("on_break")}>Take a break</Button>}
-      {ready && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("off")}>Stop taking calls</Button>}
-      {canSeeTeam && (solo
-        ? <Button asChild variant="outline"><Link href="/app/inbound/team?tab=all">All callers</Link></Button>
-        : <Button asChild variant="outline"><Link href="/app/inbound/team">Team</Link></Button>)}
+      <MoreMenu items={[
+        ready && { label: "Take a break", icon: Coffee, onSelect: () => setAvailability("on_break"), disabled: statusLocked },
+        ready && { label: "Stop taking calls", icon: PhoneOff, onSelect: () => setAvailability("off"), disabled: statusLocked },
+        canSeeTeam && (solo ? { label: "All callers", icon: Users, href: "/app/inbound/team?tab=all" } : { label: "Team", icon: Users, href: "/app/inbound/team" }),
+      ]} />
     </>
   );
 
@@ -177,6 +167,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
             {saving === next.id ? "Taking…" : "Take this call"}
           </Button>
           <span className="text-sm text-[var(--body)]">{takeReason ?? "Opens the call: what we know about them, then verification."}</span>
+          {!readOnly && <Button type="button" variant="ghost" size="sm" className="ml-auto" disabled={saving === `nudge:${next.id}`} onClick={() => void sendNudge(next.id, null)}>{saving === `nudge:${next.id}` ? "Asking…" : "Ask the team to help"}</Button>}
         </div>
       </section>
     );
@@ -216,10 +207,11 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           ))}
 
           {next ? nextCard : (
-            <section aria-label="Nobody in line" className="m-glass flex flex-col gap-1 rounded-xl border border-border p-5">
-              <h2 className="m-0 text-base font-semibold text-[var(--ink)]">Nobody is waiting</h2>
-              <p className="m-0 text-sm text-[var(--muted)]">{ready ? "We chime and show the caller here the moment one arrives." : "When you are taking calls, we chime and show the caller here the moment one arrives."}</p>
-              {floor.callbacks.some((item) => item.isDueToday || item.isOverdue) && <Link href="/app/callbacks" className="mt-1 text-sm font-semibold text-[var(--accent-ink)] hover:underline">Meanwhile: callbacks due today ›</Link>}
+            <section aria-label="Nobody in line" className="m-glass flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl border border-border p-8 text-center">
+              <span aria-hidden="true" className="grid size-12 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--accent-ink)]"><PhoneIncoming className="size-6" /></span>
+              <h2 className="m-0 text-base font-semibold text-[var(--ink)]">{ready ? "You're all caught up" : "You're not taking calls"}</h2>
+              <p className="m-0 max-w-[44ch] text-sm leading-[1.5] text-[var(--muted)]">{ready ? "No one is waiting. When a caller joins the line, you'll hear a chime and their details will appear right here." : "Start taking calls and the next caller in line is offered to you with a chime."}</p>
+              {floor.callbacks.some((item) => item.isDueToday || item.isOverdue) && <Button asChild variant="outline" size="sm" className="mt-1"><Link href="/app/callbacks"><PhoneCall aria-hidden="true" />Callbacks due today</Link></Button>}
             </section>
           )}
 
@@ -244,36 +236,30 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
             </TableCard>
           )}
           {floor.truncated && <Callout tone="warning" title="Showing the 500 callers who have waited longest." />}
-          <p className="m-0 text-xs text-[var(--muted)]" role="status">{liveLabel} · updated {updated}</p>
         </div>
 
         <aside aria-label="You and your team" className="flex min-w-0 flex-col gap-4">
           <section className="m-glass flex flex-col gap-3 rounded-xl border border-border p-4">
-            <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your open calls</h2>
-            {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">None. Every call you took is finished.</p>}
-            {myCalls.map((call) => {
-              const age = secondsSince(call.startedAt, now);
-              const forgotten = age >= 4 * 3600;
-              return (
-                <div key={call.id} className={cn("flex items-center justify-between gap-3 rounded-lg px-3 py-2.5", forgotten ? "bg-[var(--warning-surface)]" : "bg-[var(--surface-alt)]")}>
-                  <span className="min-w-0 text-sm">
-                    <strong className="block truncate font-semibold text-[var(--ink)]">{call.customer}</strong>
-                    <span className={forgotten ? "text-[var(--warning-ink)]" : "text-[var(--muted)]"}>{forgotten ? `Taken ${shortDuration(age)} ago, no outcome` : `On the call ${shortDuration(age)}`}</span>
-                  </span>
-                  <Button asChild variant="outline" size="sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id, "verify")}>{forgotten ? "Finish it" : "Back to it"}</Link></Button>
-                </div>
-              );
-            })}
-          </section>
-          <section className="m-glass flex flex-col gap-2.5 rounded-xl border border-border p-4">
-            <h2 className="m-0 text-xs font-semibold text-[var(--muted)]">Your team now</h2>
-            {([["Taking calls", team.taking, "bg-[var(--primary)]"], ["On a call", team.onCall, "bg-[var(--info)]"], ["On break", team.onBreak, "bg-[var(--warning)]"]] as const).map(([label, value, dot]) => (
-              <span key={label} className="flex items-center justify-between text-sm text-[var(--body)]"><span className="flex items-center gap-2"><span aria-hidden="true" className={cn("size-2 rounded-full", dot)} />{label}</span><strong className="font-semibold text-[var(--ink)] tabular-nums">{value}</strong></span>
-            ))}
-            {next && !readOnly && (
-              <Button type="button" variant="outline" size="sm" className="mt-1 self-start" disabled={saving === `nudge:${next.id}`} onClick={() => void sendNudge(next.id, null)}>{saving === `nudge:${next.id}` ? "Asking…" : "Ask the team to help"}</Button>
+            <h2 className="m-0 flex items-center gap-2 text-card-title text-[var(--ink)]"><Headset className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />Calls to wrap up{myCalls.length > 0 && <StatusChip tone="neutral" dot={false}>{myCalls.length}</StatusChip>}</h2>
+            {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">All wrapped up. Every call you took has an outcome.</p>}
+            {myCalls.length > 0 && (
+              <ul className="m-0 flex list-none flex-col p-0">
+                {myCalls.slice(0, 6).map((call) => {
+                  const age = secondsSince(call.startedAt, now);
+                  const forgotten = age >= 4 * 3600;
+                  return (
+                    <li key={call.id} className="flex items-center justify-between gap-3 border-t border-[var(--border)] py-2.5 first:border-t-0 first:pt-0">
+                      <span className="min-w-0 text-sm">
+                        <strong className="block truncate font-semibold text-[var(--ink)]">{call.customer}</strong>
+                        <span className="text-xs text-[var(--muted)]">{forgotten ? `Answered ${shortDuration(age)} ago · needs an outcome` : `On the call for ${shortDuration(age)}`}</span>
+                      </span>
+                      <Button asChild variant="outline" size="icon-sm"><Link href={forgotten ? callHref(call.id, "finish") : callHref(call.id, "verify")} aria-label={`${forgotten ? "Log the outcome for" : "Return to the call with"} ${call.customer}`} title={forgotten ? "Log outcome" : "Back to the call"}>{forgotten ? <ClipboardCheck aria-hidden="true" /> : <Phone aria-hidden="true" />}</Link></Button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-            <p className="m-0 text-xs text-[var(--muted)]">When a caller waits too long, everyone taking calls is asked.</p>
+            {myCalls.length > 6 && <p className="m-0 text-xs text-[var(--muted)]">{myCalls.length - 6} more, oldest first</p>}
           </section>
         </aside>
       </div>

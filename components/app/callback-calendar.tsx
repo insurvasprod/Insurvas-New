@@ -2,20 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlarmClock, CalendarClock, CheckCircle2, CircleAlert, Download, ExternalLink, Phone, Plus, Shuffle, UserRoundPlus, Users } from "lucide-react";
+import { AlarmClock, CalendarClock, CheckCircle2, CircleAlert, Download, ExternalLink, ListOrdered, Phone, Plus, Shuffle, UserRoundPlus, Users } from "lucide-react";
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { BulkBar, RowCheckbox, SelectAllCheckbox, useRowSelection, type RowSelection } from "@/components/ui/bulk-bar";
 import { SavedViews, type BuiltInView, type ViewState } from "@/components/ui/saved-views";
 import { downloadCsv } from "@/components/app/partner-quality-parts";
-import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ActiveFilters, type ActiveFilter, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { DetailPanel } from "@/components/ui/detail-panel";
 import { PageHeader } from "@/components/ui/page-header";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { st } from "@/components/app/settings/primitives";
 import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,6 @@ import { GiveToDialog, type Assignee } from "@/components/app/callbacks/give-to-
 import { useSolo } from "@/components/app/solo-context";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
-import { Segmented } from "@/components/ui/view-tabs";
 import { durationShort, localParts, longTime, shortTime, zoneAbbreviation, zonedToUtc } from "@/components/app/callbacks/time";
 
 /**
@@ -155,7 +154,9 @@ function CallbackTableRow({ compact, rowHeight, quietStatus = false, ...props }:
       <td className={st.td}>{quietStatus ? <span className="block max-w-[200px] truncate text-xs text-muted-foreground" title={callback.sourceName ?? undefined}>{callback.sourceName ?? "—"}</span> : <Chip tone={status.tone}>{status.label}</Chip>}</td>
       {!compact && <td className={cn(st.td, "whitespace-nowrap")}>{agent}</td>}
       <td className={cn(st.td, "whitespace-nowrap text-right")}>
-        {callAction && <ActionButton action={callAction} size="sm" />}
+        {callAction && callAction.href && callAction.key !== "open"
+          ? <Button asChild size="icon-sm" variant={callAction.primary ? "default" : "outline"}><Link href={callAction.href} aria-label={`${String(callAction.label)} · ${callback.customerName}`} title={typeof callAction.title === "string" ? callAction.title : String(callAction.label)}><Phone aria-hidden="true" /></Link></Button>
+          : callAction && <ActionButton action={callAction} size="sm" />}
       </td>
     </tr>
   );
@@ -534,50 +535,53 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   // search takes the first row and the "when" filter and the date are the same controls behind a
   // Filters button, opening in the toolbar band (2026-10-09 mobile); saved views stay in the row.
   const searchBox = <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search customer, phone, note" label="Search callbacks by customer, phone, source, note or agent" />;
+  // The filters sit in one inline panel, as on every other list (UI-CONSISTENCY §6a): when, the day and whose.
+  const showScope = Boolean(viewer && !solo);
   const whenFilter = (
-    <span role="radiogroup" aria-label="When" className={cn("inline-flex max-w-full min-w-0 gap-1.5 overflow-x-auto", (compact || !wide) && "w-full")}>
-      {(Object.keys(WHEN_LABEL) as WhenFilter[]).map((key) => (
-        <ToggleChip key={key} role="radio" selected={when === key} onClick={() => { setWhen(key); setListPage(1); }} count={byWhen[key].length} className="shrink-0">
-          {WHEN_LABEL[key]}
-        </ToggleChip>
-      ))}
-    </span>
+    <FilterField label="Show" htmlFor="callbacks-when">
+      <select id="callbacks-when" className={cn(toolbarControl, "w-full min-w-0")} value={when} onChange={(event) => { setWhen(event.target.value as WhenFilter); setListPage(1); }}>
+        {(Object.keys(WHEN_LABEL) as WhenFilter[]).map((key) => <option key={key} value={key}>{WHEN_LABEL[key]} ({byWhen[key].length})</option>)}
+      </select>
+    </FilterField>
   );
-  const dateFilter = <input type="date" aria-label="Due on" className={wide ? toolbarControl : cn(toolbarControl, "w-full")} value={day} onChange={(event) => { setDay(event.target.value); setListPage(1); }} />;
+  const dateFilter = (
+    <FilterField label="Due on" htmlFor="callbacks-day">
+      <input id="callbacks-day" type="date" className={cn(toolbarControl, "w-full min-w-0")} value={day} onChange={(event) => { setDay(event.target.value); setListPage(1); }} />
+    </FilterField>
+  );
+  const scopeFilter = showScope && (
+    <FilterField label="Whose" htmlFor="callbacks-scope">
+      <select id="callbacks-scope" className={cn(toolbarControl, "w-full min-w-0")} value={scope ?? "all"} onChange={(event) => setScope(event.target.value as Scope)}>
+        <option value="all">Everyone’s</option>
+        <option value="mine">Mine</option>
+      </select>
+    </FilterField>
+  );
+  const activeFilters: ActiveFilter[] = [
+    when !== "open" && { key: "when", label: "Show", value: WHEN_LABEL[when], onRemove: () => { setWhen("open"); setListPage(1); } },
+    day && { key: "day", label: "Due on", value: day, onRemove: () => { setDay(""); setListPage(1); } },
+    mineOnly && { key: "mine", label: "Whose", value: "Mine", onRemove: () => setScope("all") },
+  ].filter((entry): entry is ActiveFilter => Boolean(entry));
   const savedViews = <SavedViews storageKey="callbacks" current={viewState} builtIns={builtInViews} onApply={applyView} />;
   const refreshActions = <>
-    {filtersOn && <ClearFiltersButton onClick={clearFilters} />}
     <RefreshButton onClick={() => void load()} />
   </>;
-  const toolbar = wide ? (
-    <DataToolbar actions={refreshActions}>
-      {searchBox}
-      {whenFilter}
-      {dateFilter}
-      {savedViews}
-    </DataToolbar>
-  ) : (
+  const toolbar = (
     <>
-      <DataToolbar
-        className={COMPACT_TOOLBAR}
-        actions={<>
-          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={(when !== "open" ? 1 : 0) + (day ? 1 : 0)} aria-controls="callbacks-filters" />
-          {savedViews}
-          <span className="ml-auto flex flex-wrap items-center gap-2">{refreshActions}</span>
-        </>}
-      >
+      <DataToolbar className={wide ? undefined : COMPACT_TOOLBAR} actions={<>
+        <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeFilters.length} controls="callbacks-filters" />
+        {savedViews}
+        {refreshActions}
+      </>}>
         {searchBox}
       </DataToolbar>
-      <FilterPanel id="callbacks-filters" open={filtersOpen} className="w-full min-w-0 border-b-0 px-0 py-0">{whenFilter}{dateFilter}</FilterPanel>
+      <FilterPanel id="callbacks-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">{whenFilter}{dateFilter}{scopeFilter}</FilterPanel>
+      <ActiveFilters filters={activeFilters} onClear={() => { clearFilters(); setScope("all"); }} className="-mx-4 w-[calc(100%+2rem)] border-b-0 pb-0" />
     </>
   );
 
-
   // 36px below lg, for a thumb.
   const smallSize = wide ? "sm" : "default";
-  const scopeToggle = viewer && !solo && (
-    <Segmented label="Whose callbacks" value={scope ?? "all"} onChange={setScope} options={[{ key: "mine", label: "Mine" }, { key: "all", label: "All" }]} />
-  );
   const canAdd = !readOnly;
   const openAdd = (lead: LeadPick | null) => setAdding({ lead });
   // Offered in Add callback before anything is typed: the people waiting longest for their call.
@@ -701,7 +705,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   );
 
   // The work list (when = "open"): every open callback in the order to call it, in four groups.
-  const grouped = when === "open";
+  const grouped = false; // one flat, paged list (owner 2026-11-05): no group rows, the standard pager
   const groupDueNow = rows.filter((item) => !item.isOverdue && item.isDueToday && soon(item));
   const groupLater = rows.filter((item) => !item.isOverdue && item.isDueToday && !soon(item));
   const groupOverdue = rows.filter((item) => item.isOverdue);
@@ -723,7 +727,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
       {groupLater.length > 0 && <GroupRow label="Later today" count={groupLater.length} columns={tableColumns} />}
       {groupLater.map((callback) => <CallbackTableRow key={callback.id} compact={compact} quietStatus {...rowProps(callback)} />)}
       {groupOverdue.length > 0 && <GroupRow label="Overdue" count={`${groupOverdue.length} · oldest first`} tone="error" columns={tableColumns}
-        action={canSpread && spreadable(groupOverdue).length > 0 ? <Button type="button" size="sm" variant="outline" onClick={() => setSpreadIds(spreadable(groupOverdue))}><Shuffle aria-hidden="true" />Clear the overdue…</Button> : undefined} />}
+        />}
       {groupOverdue.slice(0, overdueShown).map((callback) => <CallbackTableRow key={callback.id} compact={compact} {...rowProps(callback)} />)}
       {groupOverdue.length > overdueShown && moreRow(`Show ${Math.min(20, groupOverdue.length - overdueShown)} more overdue · ${groupOverdue.length - overdueShown} left`, () => setOverdueShown((count) => count + 20))}
       {groupComing.length > 0 && <GroupRow label="Coming up" count={groupComing.length} columns={tableColumns} />}
@@ -743,9 +747,12 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
     <main className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Callbacks"
+        hideTitle
         actions={<div className="flex flex-wrap items-center gap-2">
-          {scopeToggle}
-          <Button variant="outline" asChild><Link href="/app/dialer">Open the queue</Link></Button>
+          <MoreMenu items={[
+            { label: "Open the queue", icon: ListOrdered, href: "/app/dialer" },
+            canSpread && spreadable(groupOverdue).length > 0 && { label: "Clear the overdue…", icon: Shuffle, onSelect: () => setSpreadIds(spreadable(groupOverdue)) },
+          ]} />
           {/* The page's one primary action. */}
           <Button type="button" disabled={!canAdd} onClick={() => openAdd(null)}><Plus aria-hidden="true" />Add callback</Button>
         </div>}
@@ -811,10 +818,12 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
               noun={["callback", "callbacks"]}
               onClear={selection.clear}
               actions={<>
-                {canSpread && <Button type="button" variant="outline" disabled={spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setSpreadIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><Shuffle aria-hidden="true" />Spread into open times</Button>}
+                {canSpread && <Button type="button" variant="outline" title="Spread these callbacks into the next open times" disabled={spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setSpreadIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><Shuffle aria-hidden="true" />Spread out</Button>}
                 {canSpread && !solo && <Button type="button" variant="outline" disabled={handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id))).length === 0} onClick={() => setGiveIds(spreadable(rows.filter((item) => selection.selected.has(item.id))))}><UserRoundPlus aria-hidden="true" />Give to…</Button>}
-                {canSpread && !solo && <Button type="button" variant="outline" disabled={handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)).length === 0} onClick={() => void toQueue(spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)))}><Users aria-hidden="true" />Put in shared queue</Button>}
-                <Button type="button" variant="outline" onClick={exportSelected}><Download aria-hidden="true" />Export selected</Button>
+                <MoreMenu items={[
+                  canSpread && !solo && { label: "Put in shared queue", icon: Users, disabled: handingOver || spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt)).length === 0, onSelect: () => void toQueue(spreadable(rows.filter((item) => selection.selected.has(item.id) && !item.inbound && !item.releasedAt))) },
+                  { label: "Export selected", icon: Download, onSelect: exportSelected },
+                ]} />
               </>}
             />
           </>}

@@ -145,8 +145,8 @@ export function PartnerMarketAccessPanel({
 
   return (
     <Card className={cn(compact && "border-0 shadow-none")}>
-      <CardHeader
-        className={cn("border-b bg-muted/10", compact && "px-0 pb-3 pt-0")}
+      {!compact && <CardHeader
+        className="border-b bg-muted/10"
       >
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
@@ -161,11 +161,11 @@ export function PartnerMarketAccessPanel({
               : `Inherited from ${source.replace("_", " ")}`}
           </StatusChip>
         </div>
-      </CardHeader>
-      <CardContent className={cn("space-y-4 p-4", compact && "p-0 pt-3")}>
+      </CardHeader>}
+      <CardContent className={cn("space-y-4 p-4", compact && "p-0")}>
         {eligible.length > 0 && (
-          <div className="flex items-start gap-2 rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-xs text-[var(--color-accent-ink)]">
-            <MapPin className="mt-0.5 size-4 shrink-0" />
+          <div className={cn("flex items-start gap-2 text-xs", compact ? "text-muted-foreground" : "rounded-md border border-[var(--color-brand)]/20 bg-[var(--color-brand-faint)] p-3 text-[var(--color-accent-ink)]")}>
+            {!compact && <MapPin className="mt-0.5 size-4 shrink-0" />}
             <p>
               Partners must select <strong>Product, Carrier, and State</strong>{" "}
               before submitting. The Partner Portal receives only the pairs saved

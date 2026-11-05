@@ -96,11 +96,11 @@ export function PartnerOnboarding({ partnerId, termText, hasTerm, approved, last
           <span className="text-sm font-semibold tabular-nums text-[var(--ink)]">{done} of {steps.length}</span>
         </div>
       </div>
-      <ol className="mt-3.5 flex list-none flex-col overflow-hidden rounded-lg border border-border p-0">
+      <ol className="mt-3 grid list-none grid-cols-1 gap-2 p-0 md:grid-cols-2">
         {steps.map((step, index) => {
           const isDone = step.state === "Done";
           return (
-            <li key={step.step} className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border px-4 py-3 first:border-t-0">
+            <li key={step.step} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2.5">
               <span
                 aria-hidden="true"
                 className={cn(

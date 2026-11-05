@@ -3,7 +3,9 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { toolbarControl } from "@/components/ui/data-toolbar";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { PageHeader } from "@/components/ui/page-header";
+import { InfoTip } from "@/components/ui/info-tip";
 import { Callout } from "@/components/app/settings/primitives";
 import { DialerPreflightDialog } from "@/components/app/dialer-preflight";
 import { windowSummary } from "@/lib/callbacks/windowFacts";
@@ -13,43 +15,52 @@ import { localClock, returnWindowLine, zoneShort } from "@/lib/dialerScripts/dis
 import { APPLICATION_OUTCOME, outcomeButtonLabel, outcomeHotkey } from "@/lib/dialerScripts/outcomes";
 import { CALLBACK_OUTCOME, DNC_OUTCOME, Kbd, body14, card, fieldClass, fieldLabel, instantInZone, label, outcomeIcon, small } from "@/components/app/dialer/model";
 import { useDialer } from "@/components/app/dialer/use-dialer";
-import { DialerQueueTable, QueuePriorityChips } from "@/components/app/dialer/queue-table";
+import { DialerQueueTable } from "@/components/app/dialer/queue-table";
 import { DialerLeadNotes } from "@/components/app/dialer/lead-notes";
 import { DialerLeadColumn } from "@/components/app/dialer/lead-column";
 import { useNow } from "@/components/app/applications/outcome/use-now";
 import { BookAppointmentDialog } from "@/components/app/dialer/book-appointment-dialog";
 import { ScheduleDialog } from "@/components/app/dialer/schedule-dialog";
 import { CallbackPicker } from "@/components/app/callbacks/callback-picker";
-import { CalendarPlus, Check, Phone, PhoneCall, ShieldCheck, SkipForward, type LucideIcon } from "lucide-react";
-import { useState } from "react";
+import { CalendarPlus, Check, PanelLeftClose, PanelLeftOpen, Phone, PhoneCall, ShieldCheck, SkipForward, type LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 
 export function DialerWorkspace({ readOnly = false, role = "producer", canCheckNumber = false, requestedLeadId = null }: { readOnly?: boolean; role?: string; canCheckNumber?: boolean; requestedLeadId?: string | null }) {
   const dialer = useDialer({ readOnly, role, canCheckNumber, requestedLeadId });
   const now = useNow();
   const { needsDnc, checkingDnc, checkDnc, isSetter, searchMode, panel, attempt, working, dialled, serving, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, serveNext, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, blockers, callReady, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep, confirmed, calendar, autoNext, setAutoNext } = dialer;
   const [bookOpen, setBookOpen] = useState(false);
+  // The outcomes and the notes fold to a thin rail, each kept per browser (owner 2026-11-05).
+  const [outcomesFolded, setOutcomesFolded] = useState(false);
+  const [notesFolded, setNotesFolded] = useState(false);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- read the saved choice after hydration
+  useEffect(() => { try { setOutcomesFolded(localStorage.getItem("insurvas.dialer.outcomes") === "1"); setNotesFolded(localStorage.getItem("insurvas.dialer.notes") === "1"); } catch { /* storage blocked: stay open */ } }, []);
+  const fold = (key: "outcomes" | "notes", folded: boolean) => {
+    (key === "outcomes" ? setOutcomesFolded : setNotesFolded)(folded);
+    try { localStorage.setItem(`insurvas.dialer.${key}`, folded ? "1" : "0"); } catch { /* not saved */ }
+  };
   const canBook = !readOnly && Boolean(calendar && calendar.agents.length > 0);
 
   // The Call button, on the right of the lead's facts (owner 2026-10-27).
   const callButton = panel ? (
-      <div className="flex flex-col items-stretch gap-2 max-lg:hidden">
+      <div className="flex flex-wrap items-center gap-2 @2xl:flex-col @2xl:items-stretch max-lg:hidden">
         {!attempt && needsDnc ? (
           // Owner 2026-10-29: check the number first; the Call button appears once it is clear.
-          <Button type="button" onClick={() => void checkDnc()} disabled={readOnly || checkingDnc || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"} className="h-12 px-6 text-base">
+          <Button type="button" onClick={() => void checkDnc()} disabled={readOnly || checkingDnc || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
             <ShieldCheck aria-hidden="true" />{readOnly ? "Read-only account" : checkingDnc ? "Checking…" : "DNC / TCPA check"}{!readOnly && <Kbd>C</Kbd>}
           </Button>
         ) : !attempt ? (
-          <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={readOnly || working || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"} className="h-12 px-6 text-base">
+          <Button type="button" onClick={() => void prepareAttempt(searchMode)} disabled={readOnly || working || !callReady} aria-describedby={!callReady ? "dialer-blockers" : undefined} aria-keyshortcuts={readOnly ? undefined : "C"}>
             <Phone aria-hidden="true" />{readOnly ? "Read-only account" : searchMode ? "Log inbound return call" : working ? "Calling…" : `Call ${panel.lead.firstName || "now"}`}{!readOnly && <Kbd>C</Kbd>}
           </Button>
         ) : !confirmed ? (
-          <Button type="button" onClick={() => void confirmRead()} disabled={readOnly || working || confirmed || panel.disclosure.blocking} aria-keyshortcuts="R" className="h-12 px-6 text-base">
+          <Button type="button" onClick={() => void confirmRead()} disabled={readOnly || working || confirmed || panel.disclosure.blocking} aria-keyshortcuts="R">
             <Check aria-hidden="true" />I read this disclosure<Kbd>R</Kbd>
           </Button>
         ) : dialled ? (
-          <Button type="button" disabled title="The call has started; record what happened." className="h-12 px-6 text-base"><PhoneCall aria-hidden="true" />Call started</Button>
+          <Button type="button" disabled title="The call has started; record what happened."><PhoneCall aria-hidden="true" />Call started</Button>
         ) : (
-          <Button type="button" disabled={!confirmed || !eligibility?.allowed || !panel.lead.phone || working} aria-describedby="dial-status" aria-keyshortcuts="D" onClick={() => void dial()} className="h-12 px-6 text-base">
+          <Button type="button" disabled={!confirmed || !eligibility?.allowed || !panel.lead.phone || working} aria-describedby="dial-status" aria-keyshortcuts="D" onClick={() => void dial()}>
             <PhoneCall aria-hidden="true" />{working ? "Checking…" : eligibility?.allowed ? "Start call" : "Dialing blocked"}<Kbd>D</Kbd>
           </Button>
         )}
@@ -59,6 +70,11 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
         )}
       </div>
   ) : null;
+
+  // Serve next lead sits in the lead card, under the call step (owner 2026-11-05).
+  const serveButton = readOnly ? null : <Button data-guide="dialer-next" type="button" variant={panel ? "outline" : "default"} onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
+            {serving ? "Serving…" : "Serve next lead"}
+          </Button>;
 
   // What the call needs below the facts: why it is blocked, and the booking dialog.
   const callArea = panel ? (
@@ -88,17 +104,20 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
     <div className="flex flex-1 flex-col gap-4">
       {/* The outcomes as tiles, every one with its key; Interested starts the application. */}
       <div role="group" aria-label="Outcome" id="dialer-disposition" className="flex flex-1 flex-col gap-2">
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <p className={cn(label, "m-0")}>Outcome</p>
-          <p className={cn(small, "m-0")}>
+        <div className={cn("flex items-center gap-1", outcomesFolded && "justify-center")}>
+          {!outcomesFolded && <><p className={cn(label, "m-0")}>Outcome</p>
+          <InfoTip label="Keyboard keys">
             {!dialled ? "Key: C calls." : searchMode ? "Record the result of this call." : `Keys 1–${Math.min(9, dispositions.length)}${dispositions.length >= 10 ? " and 0" : ""} choose a disposition; N serves the next lead.`}
             {searchMode && " An inbound return call does not use one of this lead’s outbound attempts."}
-          </p>
+          </InfoTip></>}
+          <Button type="button" variant="ghost" size="icon-sm" className={cn(!outcomesFolded && "ml-auto")} aria-label={outcomesFolded ? "Show the outcomes" : "Fold the outcomes"} title={outcomesFolded ? "Show the outcomes" : "Fold the outcomes"} onClick={() => fold("outcomes", !outcomesFolded)}>
+            {outcomesFolded ? <PanelLeftOpen aria-hidden="true" /> : <PanelLeftClose aria-hidden="true" />}
+          </Button>
         </div>
         {/* The tiles share the column's full height (owner 2026-10-27), never shorter than a control. */}
-        <div className="grid flex-1 auto-rows-fr gap-2">
+        <div className="grid flex-1 auto-rows-fr grid-cols-[minmax(0,1fr)] gap-2">
           {outcomes.map((item, index) => (
-            <OutcomeButton key={item.key} icon={outcomeIcon(item.key)} label={outcomeButtonLabel(item)} hotkey={searchMode ? null : outcomeHotkey(index)} tone={item.key === APPLICATION_OUTCOME ? "primary" : item.key === DNC_OUTCOME ? "danger" : "default"} pressed={(pendingCallback && item.key === CALLBACK_OUTCOME) || (pendingDnc && item.key === DNC_OUTCOME)} disabled={!dialled || working} onClick={() => choose(item.key)} />
+            <OutcomeButton key={item.key} icon={outcomeIcon(item.key)} label={outcomeButtonLabel(item)} hotkey={searchMode ? null : outcomeHotkey(index)} compact={outcomesFolded} tone={item.key === APPLICATION_OUTCOME ? "primary" : item.key === DNC_OUTCOME ? "danger" : "default"} pressed={(pendingCallback && item.key === CALLBACK_OUTCOME) || (pendingDnc && item.key === DNC_OUTCOME)} disabled={!dialled || working} onClick={() => choose(item.key)} />
           ))}
         </div>
         {searchMode && outcomes.length === 0 && <p className={small}>Restore the inbound return call in Settings › Dispositions to log it here.</p>}
@@ -188,57 +207,41 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
   ) : null;
 
   // The lead you are on, above the queue table.
-  const current = <div className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={callButton}>{callArea}</DialerLeadColumn></div>;
+  const current = <div className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={<>{callButton}{serveButton}</>}>{callArea}</DialerLeadColumn></div>;
 
   return (
     /* The list is the page (Dialer A round 2, owner 2026-10-27): one centred column. The lead you
        are on opens in place at the head of the list — its facts, the call and the outcome — and the
        rest of the queue (or the search results) follows as rows. */
     <div className="flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
-      <PageHeader title="Dialer" />
+      <PageHeader title="Dialer" hideTitle />
       {canCheckNumber && <DialerPreflightDialog open={checkOpen} onOpenChange={setCheckOpen} readOnly={readOnly} />}
 
       {readOnly && <Callout tone="info" title="Read-only access — review only, no calls." />}
 
-      {/* One row above the list (owner 2026-10-30): the priority filter on the left, the page's
-          actions on the right. Today's dial and contact counts are gone from here. The search and
-          the campaign live in the queue table's toolbar (owner 2026-10-29). */}
-      {(!searchMode || canCheckNumber || !readOnly) && <div className="flex flex-wrap items-center gap-2">
-        {!searchMode && <QueuePriorityChips d={dialer} />}
-        <span className="ml-auto flex flex-wrap items-center gap-2">
-          {/* Owners and producers (sales.use), as the check route admits; a setter dials what the queue serves. */}
-          {canCheckNumber && <Button type="button" variant="outline" onClick={() => setCheckOpen(true)}><ShieldCheck aria-hidden="true" />Check a number</Button>}
-          {/* Auto-next: serve the next lead as soon as an outcome is recorded (on by default). */}
-          {!searchMode && !readOnly && (
-            <Button type="button" variant="outline" onClick={() => setAutoNext(!autoNext)} aria-pressed={autoNext} title={autoNext ? "The next lead is served as soon as you record an outcome." : "After an outcome the screen clears; serve the next lead when you are ready."} className={autoNext ? "border-[var(--primary)] text-[var(--accent-ink)]" : undefined}>
-              <SkipForward aria-hidden="true" />Auto-next {autoNext ? "on" : "off"}
-            </Button>
-          )}
-          {!readOnly && <Button data-guide="dialer-next" type="button" onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
-            {serving ? "Serving…" : "Serve next lead"}
-          </Button>}
-        </span>
-      </div>}
 
       {/* Outcomes on the left, the list in the middle, the lead's notes on the right; the two
           side columns run the full height of the screen and stay put while the list scrolls. */}
       <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1 lg:flex-row">
-      <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:w-[300px] lg:shrink-0 lg:overflow-y-auto")}>
-        {outcomePanel ?? <p className={cn(small, "m-0")}>The outcomes appear here when a lead is open.</p>}
-      </aside>
+      {panel && <aside data-guide="disposition-open" aria-label="Call outcome" className={cn(card, "flex flex-col gap-3 p-4 max-lg:order-2 lg:h-full lg:shrink-0 lg:overflow-y-auto", outcomesFolded ? "lg:w-[64px] lg:items-stretch lg:px-2" : "lg:w-[260px]")}>
+        {outcomePanel}
+      </aside>}
       {/* The middle column (owner 2026-10-29): the lead you are on, then the queue as a table that
           fills what is left of the column and pages the rest, so neither the page nor the card scrolls. */}
       <div className="flex min-w-0 flex-1 flex-col gap-4 max-lg:order-1 lg:h-full lg:min-h-0">
-        <section className={cn(card, "overflow-hidden lg:min-h-0 lg:overflow-y-auto")} aria-label="Lead on your screen">
+        <section className={cn(card, "overflow-hidden lg:max-h-[60%] lg:shrink-0 lg:overflow-y-auto")} aria-label="Lead on your screen">
           {current}
         </section>
-        <DialerQueueTable d={dialer} readOnly={readOnly} />
+        <DialerQueueTable d={dialer} readOnly={readOnly} extra={<MoreMenu row label="Dialer options" items={[
+            canCheckNumber && { label: "Check a number", icon: ShieldCheck, onSelect: () => setCheckOpen(true) },
+            !searchMode && !readOnly && { label: autoNext ? "Turn auto-next off" : "Turn auto-next on", icon: SkipForward, onSelect: () => setAutoNext(!autoNext) },
+          ]} />} />
       </div>
-      <aside aria-label="Lead notes" className="flex min-w-0 flex-col max-lg:order-3 lg:h-full lg:w-[320px] lg:shrink-0">
-        {panel && !isSetter
-          ? <DialerLeadNotes key={panel.lead.id} leadId={panel.lead.id} canWrite={!readOnly} />
-          : <div className={cn(card, "h-full p-4")}><p className={cn(small, "m-0")}>{isSetter ? "Lead notes are kept by the agents who sell; your notes go on the booking." : "The lead's notes appear here when a lead is open."}</p></div>}
-      </aside>
+      {panel && <aside aria-label="Lead notes" className={cn("flex min-w-0 flex-col max-lg:order-3 lg:h-full lg:shrink-0", notesFolded ? "lg:w-[64px]" : "lg:w-[280px]")}>
+        {!isSetter
+          ? <DialerLeadNotes key={panel.lead.id} leadId={panel.lead.id} canWrite={!readOnly} folded={notesFolded} onFold={(folded) => fold("notes", folded)} />
+          : <div className={cn(card, "h-full p-4")}><p className={cn(small, "m-0")}>Lead notes are kept by the agents who sell; your notes go on the booking.</p></div>}
+      </aside>}
       </div>
 
       {/* LA-2.23-5 · below 1024px: the number and the call's next step, stuck to the bottom of the
@@ -282,7 +285,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
  * One outcome tile (Dialer A round 2, 2026-10-27): its icon, the label and its key, in a grid so
  * every outcome is one glance and one key away. Interested is filled; Do not call is red.
  */
-function OutcomeButton({ icon: Icon, label: text, hotkey, tone, pressed, disabled, onClick }: { icon: LucideIcon; label: string; hotkey: string | null; tone: "primary" | "danger" | "default"; pressed?: boolean; disabled: boolean; onClick: () => void }) {
+function OutcomeButton({ icon: Icon, label: text, hotkey, tone, pressed, disabled, onClick, compact = false }: { compact?: boolean; icon: LucideIcon; label: string; hotkey: string | null; tone: "primary" | "danger" | "default"; pressed?: boolean; disabled: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -290,8 +293,10 @@ function OutcomeButton({ icon: Icon, label: text, hotkey, tone, pressed, disable
       disabled={disabled}
       aria-pressed={pressed || undefined}
       aria-keyshortcuts={hotkey ?? undefined}
+      aria-label={compact ? text : undefined}
+      title={compact ? `${text}${hotkey ? ` (${hotkey})` : ""}` : undefined}
       className={cn(
-        "flex h-full min-h-9 w-full items-center gap-2.5 rounded-lg border px-3 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45",
+        compact && "justify-center px-0", "flex h-full min-h-9 w-full items-center gap-2.5 rounded-lg border px-3 text-left text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-70",
         tone === "primary"
           ? "border-transparent bg-primary text-primary-foreground hover:bg-[var(--accent-hover)]"
           : tone === "danger"
@@ -301,8 +306,8 @@ function OutcomeButton({ icon: Icon, label: text, hotkey, tone, pressed, disable
       )}
     >
       <Icon aria-hidden="true" className="size-4 shrink-0" />
-      <span className="min-w-0 flex-1 truncate">{text}</span>
-      {hotkey && <kbd aria-hidden="true" className="shrink-0 rounded-[4px] border border-current px-1.5 font-sans text-xs leading-[1.4] font-semibold opacity-60">{hotkey}</kbd>}
+      {!compact && <span className="min-w-0 flex-1 truncate">{text}</span>}
+      {hotkey && !compact && <kbd aria-hidden="true" className="shrink-0 rounded-[4px] border border-current px-1.5 font-sans text-xs leading-[1.4] font-semibold opacity-60">{hotkey}</kbd>}
     </button>
   );
 }

@@ -29,6 +29,7 @@ export function StatCard({
   meter,
   fact,
   action,
+  href,
   tone = "default",
   className,
 }: {
@@ -45,6 +46,8 @@ export function StatCard({
   /** The line under the figure: "Top source · Facebook 38". */
   fact?: { label: ReactNode; value?: ReactNode };
   action?: ReactNode;
+  /** The whole card opens this page. */
+  href?: string;
   /** "warn" colours the figure amber: it needs action. One per row at most. */
   tone?: "default" | "warn";
   className?: string;
@@ -62,6 +65,7 @@ export function StatCard({
       meter={meter}
       footnote={footnote}
       action={action}
+      href={href}
       valueTone={tone === "warn" ? "warning" : undefined}
       className={className}
     />

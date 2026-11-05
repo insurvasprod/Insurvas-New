@@ -80,7 +80,7 @@ export function InboundCall({ workItemId, phase, readOnly, canHandoff, canFinish
   const fill = phase === "verify" || (phase === "underwriting" && underwriting?.kind === "case");
   return (
     <div className={cn("flex w-full min-w-0 flex-col gap-4", fill && "lg:h-[calc(100dvh-var(--top-bar-h)-56px)]")}>
-      <PageHeader title="Call" />
+      <PageHeader title="Call" hideTitle />
       <InboundStepBar current={phaseIndex(phase) as 1 | 2 | 3 | 4} onPick={(index) => go(CALL_PHASES[index - 1])} />
       <div key={phase} className={cn("flex min-w-0 flex-col motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both]", fill && "lg:min-h-0 lg:flex-1")}>
         {body}

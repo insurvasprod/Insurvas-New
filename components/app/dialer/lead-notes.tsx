@@ -1,9 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Mic, MicOff, NotebookPen } from "lucide-react";
+import { Loader2, Mic, MicOff, NotebookPen, PanelRightClose, PanelRightOpen } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { InfoTip } from "@/components/ui/info-tip";
+import { Pager, paginate } from "@/components/ui/pager";
+import { ToolbarSearch } from "@/components/ui/data-toolbar";
 import { SectionLoading } from "@/components/ui/page-states";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
@@ -19,11 +22,13 @@ type Note = { id: string; body: string | null; visibility: "internal" | "shared"
  * (/api/app/leads/[id]/notes, team-only here); sharing a note with the partner stays on that page.
  * Owners, producers and assistants, as the notes route admits; a setter sees why it is not there.
  */
-export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite: boolean }) {
+export function DialerLeadNotes({ leadId, canWrite, folded = false, onFold }: { leadId: string; canWrite: boolean; folded?: boolean; onFold?: (folded: boolean) => void }) {
   const [notes, setNotes] = useState<Note[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
+  const [query, setQuery] = useState("");
+  const [paging, setPaging] = useState({ key: "", page: 1 });
   const path = `/api/app/leads/${encodeURIComponent(leadId)}/notes`;
   // Each finished sentence is added to whatever is already typed.
   const dictation = useDictation(useCallback((text: string) => { if (text) setBody((current) => (current.trim() ? `${current.replace(/\s+$/, "")} ${text}` : text)); }, []));
@@ -53,13 +58,27 @@ export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite
   }
 
   const shown = (notes ?? []).filter((note) => !note.deletedAt && note.body);
+  const needle = query.trim().toLocaleLowerCase();
+  const matching = needle ? shown.filter((note) => `${note.body ?? ""} ${note.author.name}`.toLocaleLowerCase().includes(needle)) : shown;
+  const pageSize = 5;
+  const pageKey = `${leadId}|${needle}`;
+  const page = paging.key === pageKey ? paging.page : 1;
   return (
     <section aria-label="Lead notes" className="m-glass flex h-full min-h-0 min-w-0 flex-col gap-3 rounded-[16px] border border-[var(--border)] p-4">
-      <div className="flex items-center gap-2">
+      {folded && (
+        <div className="flex flex-col items-center gap-3">
+          <Button type="button" variant="ghost" size="icon-sm" aria-label="Show the notes" title="Show the notes" onClick={() => onFold?.(false)}><PanelRightOpen aria-hidden="true" /></Button>
+          <NotebookPen aria-hidden="true" className="size-4 text-[var(--muted)]" />
+          {notes && <span className={cn(small, "tabular-nums")}>{shown.length}</span>}
+        </div>
+      )}
+      <div className={cn("flex items-center gap-2", folded && "hidden")}>
         <NotebookPen aria-hidden="true" className="size-4 text-[var(--muted)]" />
-        <p className={cn(label, "m-0 flex-1")}>Lead notes</p>
+        <p className={cn(label, "m-0 flex flex-1 items-center gap-1")}>Lead notes<InfoTip label="Who sees notes">Your team sees a note on this lead.</InfoTip></p>
         {notes && <span className={cn(small, "tabular-nums")}>{shown.length}</span>}
+        {onFold && <Button type="button" variant="ghost" size="icon-sm" aria-label="Fold the notes" title="Fold the notes" onClick={() => onFold(true)}><PanelRightClose aria-hidden="true" /></Button>}
       </div>
+      <div className={cn("flex min-h-0 flex-1 flex-col gap-3", folded && "hidden")}>
       {canWrite && (
         <div className="flex flex-col gap-2">
           <label htmlFor={`dialer-note-${leadId}`} className="sr-only">Add a note for whoever calls this lead next</label>
@@ -89,12 +108,11 @@ export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite
             </p>
           )}
           <div className="flex items-center justify-between gap-2">
-            <span className={small}>Your team sees it on this lead.</span>
-            <span className="flex items-center gap-2">
+            <span className="ml-auto flex items-center gap-2">
               {!dictation.supported && <span className={small} title="This browser cannot record from the microphone.">No dictation in this browser</span>}
               {dictation.supported && (
-                <Button type="button" size="sm" variant={dictation.listening ? "default" : "outline"} onClick={() => (dictation.listening ? dictation.stop() : dictation.start())} disabled={busy || dictation.transcribing} aria-pressed={dictation.listening} title={dictation.listening ? "Stop dictating" : dictation.engine === "device" ? "Speak the note; it is written on this computer when you press Stop" : "Speak the note instead of typing it"}>
-                  {dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}{dictation.listening ? "Stop" : "Dictate"}
+                <Button type="button" size="icon-sm" variant={dictation.listening ? "default" : "outline"} aria-label={dictation.listening ? "Stop dictating" : "Dictate"} onClick={() => (dictation.listening ? dictation.stop() : dictation.start())} disabled={busy || dictation.transcribing} aria-pressed={dictation.listening} title={dictation.listening ? "Stop dictating" : dictation.engine === "device" ? "Speak the note; it is written on this computer when you press Stop" : "Speak the note instead of typing it"}>
+                  {dictation.listening ? <MicOff aria-hidden="true" /> : <Mic aria-hidden="true" />}
                 </Button>
               )}
               <Button type="button" size="sm" onClick={() => { dictation.stop(); void save(); }} disabled={busy || !body.trim()}>{busy ? "Saving…" : "Save note"}</Button>
@@ -106,15 +124,21 @@ export function DialerLeadNotes({ leadId, canWrite }: { leadId: string; canWrite
         : !notes ? <SectionLoading rows={2} columns={1} label="Loading the notes" />
         : shown.length === 0 ? <p className={cn(small, "m-0")}>No notes yet.</p>
         : (
+          <>
+          {shown.length > pageSize && <ToolbarSearch value={query} onChange={setQuery} placeholder="Search notes" label="Search this lead’s notes" className="sm:w-full" />}
+          {matching.length === 0 && <p className={cn(small, "m-0")}>No note matches.</p>}
           <ol className="m-0 flex min-h-0 flex-1 list-none flex-col gap-2 overflow-y-auto p-0">
-            {shown.map((note) => (
+            {paginate(matching, page, pageSize).rows.map((note) => (
               <li key={note.id} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2">
                 <p className="m-0 text-sm leading-[1.5] tracking-[-0.02em] whitespace-pre-line text-[var(--body)]">{note.body}</p>
                 <p className={cn(small, "m-0 mt-1")}>{note.author.name} · {dateTime(note.createdAt, viewerTimeZone(), { clock: "12h" })}{note.visibility === "shared" ? " · shared with the partner" : ""}</p>
               </li>
             ))}
           </ol>
+          {matching.length > pageSize && <Pager page={page} total={matching.length} pageSize={pageSize} noun="notes" layout="stepper" onPage={(to) => setPaging({ key: pageKey, page: to })} />}
+          </>
         )}
+      </div>
     </section>
   );
 }
