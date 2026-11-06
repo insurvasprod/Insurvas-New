@@ -190,3 +190,25 @@ line "recorded but not sent" proves the path); keyboard-only submit works
 
 ### Checkpoint D
 - [ ] ui-taste polish pass; full verification; PR opened with the open questions
+
+---
+
+## Added 2026-11-06 (owner, after seeing the work in progress)
+
+### Task 17: Pricing cards: press one and it comes forward (replaces Task 11's first pass)
+**Acceptance criteria:**
+- [ ] Clicking (or tabbing into) a card selects it: it rises and comes forward, the others settle back
+- [ ] The corner tabs keep their earlier cut-out look, with no hatched green lines on any card
+- [ ] The selected card has its own finished look: brand edge, a filled tab dot and a filled button
+- [ ] Motion: transform and opacity only, ease-out under 300ms, press feedback, hover only on fine pointers
+**Files:** `landing-pricing.tsx`, `landing-pricing.module.css` · **Scope:** S
+
+### Task 18: "What's broken today" photo row: arrows only, auto-scroll, faded edges
+**Acceptance criteria:**
+- [ ] No scrollbar under the photos; the ‹ › arrows at the top are the only controls
+- [ ] The row advances to the right on its own, one card every few seconds, with a smooth scroll,
+      and wraps to the start at the end; it pauses on hover, focus, touch and when off screen
+- [ ] The left and right edges fade out
+- [ ] Reduced motion: no auto-advance; arrows still work
+- [ ] Swipe still works on phones; checked at 360, 390, 430 and 768
+**Files:** `landing-broken.tsx`, `landing-broken.module.css` · **Scope:** S

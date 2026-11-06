@@ -5,15 +5,36 @@
 .count { margin: 0; color: var(--muted); font-size: 14px; }
 .count b { color: var(--ink); font-weight: 600; }
 .arrows { display: flex; gap: 8px; }
-.arrows button { display: grid; width: 40px; height: 40px; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--ink); cursor: pointer; transition: border-color .2s; }
-.arrows button:hover { border-color: var(--border-strong); }
+.arrows button { display: grid; width: 44px; height: 44px; place-items: center; border: 1px solid var(--border); border-radius: 50%; background: var(--surface); color: var(--ink); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+@media (hover: hover) and (pointer: fine) { .arrows button:hover { border-color: var(--border-strong); } }
+.arrows button { transition: border-color .2s, transform 160ms cubic-bezier(.23, 1, .32, 1); }
+.arrows button:active { transform: scale(.94); }
 .arrows button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .arrows svg { width: 16px; height: 16px; }
 
 /* the row */
-.row { display: grid; grid-auto-columns: minmax(260px, 300px); grid-auto-flow: column; gap: 16px; overflow-x: auto; margin-inline: -4px; padding: 4px 4px 12px; scroll-snap-type: x mandatory; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+.row {
+  --fade-l: 0px;
+  --fade-r: 56px;
+  display: grid;
+  grid-auto-columns: minmax(260px, 300px);
+  grid-auto-flow: column;
+  gap: 16px;
+  overflow-x: auto;
+  margin-inline: -4px;
+  padding: 4px 4px 12px;
+  scroll-snap-type: x mandatory;
+  /* No scrollbar (owner, 6 Nov): the arrows and a swipe move the row. */
+  scrollbar-width: none;
+  /* The edges fade where there is more to see. */
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+}
+.row::-webkit-scrollbar { display: none; }
+.row[data-start="false"] { --fade-l: 56px; }
+.row[data-end="true"] { --fade-r: 0px; }
 .card { display: grid; align-content: start; gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; transition: border-color .2s, transform .25s ease, box-shadow .25s ease; }
-.card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -24px rgb(0 0 0 / 70%); }
+@media (hover: hover) and (pointer: fine) { .card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -24px rgb(0 0 0 / 70%); } }
 .card:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .card[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), 0 18px 40px -24px color-mix(in srgb, var(--primary) 60%, transparent); }
 .photo { position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden; }
@@ -41,5 +62,6 @@
 
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (max-width: 860px) { .panel { grid-template-columns: minmax(0, 1fr); } }
-@media (max-width: 640px) { .row { grid-auto-columns: 78%; } .arrows { display: none; } }
+/* Phones: one card and a peek of the next; the arrows stay (owner, 6 Nov), beside the count. */
+@media (max-width: 640px) { .row { grid-auto-columns: 78%; --fade-r: 28px; } .row[data-start="false"] { --fade-l: 28px; } .row[data-end="true"] { --fade-r: 0px; } }
 @media (prefers-reduced-motion: reduce) { .card, .photo img, .panel { transition: none; animation: none; } }

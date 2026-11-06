@@ -12,9 +12,13 @@ import { featuresByModule, type PublicFeature, type PublicPlan } from "@/lib/pub
  * The pricing teaser. Since 2026-11-04 (owner's reference, a three-card pricing page): each card
  * has a tab cut into its top corner, a large price with how it is billed beneath, the plan's blurb,
  * and the same list of features on every card, ticked where the plan has it and crossed where it
- * does not, so the step from one plan to the next reads straight across. The recommended plan is the
- * raised card with the hatched edge. A switch on top shows the independent agent's plans or the
- * team (agency) seat bands in the same cards.
+ * does not, so the step from one plan to the next reads straight across. A switch on top shows the
+ * agent's plans or the team (agency) seat bands in the same cards.
+ *
+ * Umar's review (4 Nov, A6.1, A6.2): the hatched edge is gone, and the cards are selectable. The
+ * recommended plan starts selected; clicking a card, or moving focus into it, selects it, and the
+ * selected card lifts with a brand edge and a filled button. The card is not itself a button (it holds
+ * a link), so keyboard users select it by tabbing to its link.
  *
  * Every price, plan name, blurb, feature and trial length is read from the live catalog — nothing
  * is typed in (UI-CONSISTENCY §13) — so the teaser can never promise what a plan does not grant.
@@ -59,10 +63,12 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
   // One ladder at a time: the independent agent's plans, or the team's seat bands (2026-11-04, owner).
   const audiences = (["individual", "agency"] as const).filter((who) => plans.some((plan) => plan.audience === who));
   const [audience, setAudience] = useState<"individual" | "agency">("individual");
+  const [picked, setPicked] = useState<number | null>(null);
   const ladder = plans.filter((plan) => plan.audience === audience).sort((a, b) => monthlyNumber(a) - monthlyNumber(b));
   const trialDays = ladder.find((plan) => plan.trial_days > 0)?.trial_days ?? null;
   // Both views look the same (owner, 2026-11-04): the middle card is recommended and every card has its tab.
   const recommended = ladder.length === 3 ? 1 : Math.max(0, ladder.findIndex((plan) => plan.is_default));
+  const selected = picked ?? recommended;
   // Team cards lead with what only a team gets (the Agency module), then the product around it.
   const top = ladder.length ? ladder[ladder.length - 1] : null;
   const teamOnly = audience === "agency" && top ? top.features.filter((feature) => feature.moduleLabel === "Agency").slice(0, 6) : [];
@@ -79,7 +85,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
           {audiences.length > 1 && (
             <div className={styles.switch} role="group" aria-label="Plans for">
               {audiences.map((who) => (
-                <button key={who} type="button" aria-pressed={audience === who} onClick={() => setAudience(who)}>
+                <button key={who} type="button" aria-pressed={audience === who} onClick={() => { setAudience(who); setPicked(null); }}>
                   {who === "individual" ? "Agent workspace" : "Team workspace"}
                 </button>
               ))}
@@ -91,11 +97,18 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
           <div className={styles.ladder} data-count={ladder.length} key={audience}>
             {ladder.map((plan, index) => {
               const featured = index === recommended;
+              const isSelected = index === selected;
               const has = new Set(plan.features.map((feature) => feature.key));
               const tab = tabLabel(index, ladder.length, recommended, audience);
               return (
                 <Reveal key={plan.code} variant="rise" delay={index * 110} className={styles.cell}>
-                  <article className={`${styles.card} ${featured ? styles.featured : ""}`} aria-label={`${plan.name} plan`}>
+                  <article
+                    className={`${styles.card} ${featured ? styles.featured : ""}`}
+                    data-selected={isSelected}
+                    aria-label={`${plan.name} plan`}
+                    onClick={() => setPicked(index)}
+                    onFocus={() => setPicked(index)}
+                  >
                     {tab && <span className={styles.tab}>{tab}<i aria-hidden="true" /></span>}
                     <header className={styles.cardHead}>
                       <h3 className={styles.tier}>{plan.name.includes(" · ") ? plan.name.split(" · ").slice(1).join(" · ") : plan.name}</h3>
@@ -123,7 +136,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
                       })}
                     </ul>
                     <footer className={styles.cardFoot}>
-                      <Link href={`/signup?plan=${encodeURIComponent(plan.code)}`} className={`${styles.planCta} ${featured ? styles.planCtaFeatured : ""}`}>
+                      <Link href={`/signup?plan=${encodeURIComponent(plan.code)}`} className={`${styles.planCta} ${isSelected ? styles.planCtaFeatured : ""}`}>
                         {plan.trial_days > 0 ? `Start ${plan.trial_days}-day free trial` : "Start free trial"}
                       </Link>
                     </footer>

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import styles from "@/components/marketing/landing-broken.module.css";
@@ -11,7 +11,15 @@ import styles from "@/components/marketing/landing-broken.module.css";
  * row of photo cards you can scroll. Each card is a real photograph (public/marketing/README.md has
  * the sources and licences) and the problem in one line; choosing a card opens what Insurvas does
  * about it, and on which plan, underneath. The cards are pressed buttons, not tabs: they scroll.
+ *
+ * Owner, 6 Nov: no scrollbar, the arrows at the top are the controls, the row glides one card to
+ * the right on its own every few seconds (wrapping to the start at the end), and its edges fade.
+ * The glide waits while the row is pointed at, focused, touched, off screen, or the tab is hidden,
+ * and never runs under reduced motion. It only scrolls: the open leak changes when you choose one.
  */
+const ADVANCE_MS = 4000;
+/** How long after a touch, a click or an arrow the glide waits before it starts again. */
+const RESUME_MS = 7000;
 const LEAKS = [
   {
     key: "lapse",
@@ -120,24 +128,70 @@ export function LandingBroken() {
   const rowRef = useRef<HTMLDivElement>(null);
   const leak = LEAKS[index];
 
-  const scroll = (by: number) => {
+  const holdUntil = useRef(0);
+  const hovering = useRef(false);
+  const visible = useRef(false);
+
+  /** One card on (or back); past either end it wraps to the other. */
+  const scroll = useCallback((by: number) => {
     const row = rowRef.current;
     const card = row?.querySelector("button");
     if (!row || !card) return;
-    row.scrollBy({ left: by * (card.getBoundingClientRect().width + 16), behavior: "smooth" });
-  };
+    const step = card.getBoundingClientRect().width + 16;
+    const end = row.scrollWidth - row.clientWidth - 8;
+    if (by > 0 && row.scrollLeft >= end) row.scrollTo({ left: 0, behavior: "smooth" });
+    else if (by < 0 && row.scrollLeft <= 8) row.scrollTo({ left: row.scrollWidth, behavior: "smooth" });
+    else row.scrollBy({ left: by * step, behavior: "smooth" });
+  }, []);
+
+  const hold = () => { holdUntil.current = Date.now() + RESUME_MS; };
+
+  // The edge fades show only where there is more to see.
+  const updateEdges = useCallback(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    row.dataset.start = String(row.scrollLeft <= 8);
+    row.dataset.end = String(row.scrollLeft >= row.scrollWidth - row.clientWidth - 8);
+  }, []);
+
+  useEffect(() => {
+    const row = rowRef.current;
+    if (!row) return;
+    updateEdges();
+    const io = new IntersectionObserver(([entry]) => { visible.current = Boolean(entry?.isIntersecting); }, { threshold: 0.5 });
+    io.observe(row);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const timer = window.setInterval(() => {
+      if (reduce.matches || !visible.current || hovering.current || document.hidden) return;
+      if (Date.now() < holdUntil.current || row.contains(document.activeElement)) return;
+      scroll(1);
+    }, ADVANCE_MS);
+    window.addEventListener("resize", updateEdges);
+    return () => { io.disconnect(); window.clearInterval(timer); window.removeEventListener("resize", updateEdges); };
+  }, [scroll, updateEdges]);
 
   return (
     <div className={styles.broken}>
       <div className={styles.controls}>
         <p className={styles.count}>{index + 1} of {LEAKS.length} · <b>{leak.tab}</b></p>
         <div className={styles.arrows}>
-          <button type="button" onClick={() => scroll(-1)} aria-label="Scroll back"><ArrowLeft aria-hidden="true" /></button>
-          <button type="button" onClick={() => scroll(1)} aria-label="Scroll on"><ArrowRight aria-hidden="true" /></button>
+          <button type="button" onClick={() => { hold(); scroll(-1); }} aria-label="Scroll back"><ArrowLeft aria-hidden="true" /></button>
+          <button type="button" onClick={() => { hold(); scroll(1); }} aria-label="Scroll on"><ArrowRight aria-hidden="true" /></button>
         </div>
       </div>
 
-      <div ref={rowRef} className={styles.row} role="group" aria-label="What’s broken today">
+      <div
+        ref={rowRef}
+        className={styles.row}
+        role="group"
+        aria-label="What’s broken today"
+        data-start="true"
+        data-end="false"
+        onScroll={updateEdges}
+        onPointerEnter={(event) => { if (event.pointerType === "mouse") hovering.current = true; }}
+        onPointerLeave={() => { hovering.current = false; }}
+        onPointerDown={hold}
+      >
         {LEAKS.map((item, i) => (
           <button
             key={item.key}
@@ -145,7 +199,7 @@ export function LandingBroken() {
             aria-pressed={i === index}
             aria-controls="leak-panel"
             className={styles.card}
-            onClick={() => setIndex(i)}
+            onClick={() => { hold(); setIndex(i); }}
           >
             <span className={styles.photo}>
               <Image src={item.photo} alt="" fill sizes="(max-width: 640px) 80vw, 320px" />
