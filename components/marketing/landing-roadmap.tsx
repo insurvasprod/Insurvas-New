@@ -19,19 +19,19 @@ import styles from "@/components/marketing/landing-roadmap.module.css";
  * so the pins (percentages of the photo) stay on the asphalt at every width. Re-place them by eye if
  * the photo changes.
  *
- * Phones (owner, 6 Nov: one screen, no scrolling sideways, a road you climb to get somewhere) have
- * their own photo, a tall one of Trollstigen whose road winds up from the foot of the screen to the
- * mountains: the stops sit on its bends in the order the road climbs, shipped at the bottom and what
- * we are exploring near the top. The `p` fields place them there. Every few seconds the next stop's
+ * Phones (owner, 6 Nov: one screen, no scrolling sideways, a road you have to travel to get
+ * somewhere) have their own cut of the same top-down photo, tall, so the road snakes through the
+ * whole screen: the stops sit on it in the order the road runs, shipped on the lowest pass and what
+ * we are exploring on the climb out at the top. The `p` fields place them there. Every few seconds the next stop's
  * label opens, until the visitor touches the photo.
  */
 type Tag = "above" | "below";
 type Align = "start" | "center" | "end";
 const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: Tag; align: Align; px: number; py: number; ptag: Tag; palign: Align }[] = [
-  { status: "shipped", label: "Shipped", x: 20, y: 63.5, tag: "below", align: "start", px: 74.5, py: 89, ptag: "above", palign: "end" },
-  { status: "progress", label: "Now", x: 46, y: 83, tag: "above", align: "center", px: 66.2, py: 52.4, ptag: "below", palign: "end" },
-  { status: "planned", label: "Next", x: 94, y: 51, tag: "below", align: "end", px: 34.5, py: 66, ptag: "above", palign: "start" },
-  { status: "exploring", label: "Exploring", x: 64, y: 65.5, tag: "above", align: "center", px: 45.2, py: 38.4, ptag: "below", palign: "center" },
+  { status: "shipped", label: "Shipped", x: 20, y: 63.5, tag: "below", align: "start", px: 42.9, py: 80, ptag: "above", palign: "center" },
+  { status: "progress", label: "Now", x: 46, y: 83, tag: "above", align: "center", px: 54.8, py: 66, ptag: "above", palign: "center" },
+  { status: "planned", label: "Next", x: 94, y: 51, tag: "below", align: "end", px: 35.7, py: 41.8, ptag: "below", palign: "start" },
+  { status: "exploring", label: "Exploring", x: 64, y: 65.5, tag: "above", align: "center", px: 78.6, py: 43, ptag: "below", palign: "end" },
 ];
 const NOW = 1;
 const TOUR_MS = 4_000;
@@ -79,7 +79,7 @@ export function LandingRoadmap() {
       <div ref={mapRef} className={styles.map} onPointerDown={stopTour}>
         <div className={styles.stage}>
           <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
-          <Image src="/marketing/roadmap-road-tall.webp" alt="" fill sizes="100vw" className={styles.photoTall} />
+          <Image src="/marketing/roadmap-road-phone.webp" alt="" fill sizes="100vw" className={styles.photoTall} />
         </div>
         <div className={styles.shade} aria-hidden="true" />
         {/* A second stage of the same shape holds the pins, so they sit above the shade. */}
