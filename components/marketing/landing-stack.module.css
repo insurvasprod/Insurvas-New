@@ -46,11 +46,19 @@
 .layer[data-side="problem"] .kind svg { color: var(--warning); }
 .layer[data-side="fix"] .card { border-color: color-mix(in srgb, var(--primary) 38%, transparent); background: color-mix(in srgb, var(--primary) 9%, color-mix(in srgb, var(--footer-bg) 48%, black)); }
 .layer[data-side="fix"] .kind { color: var(--primary); }
+/* Just fixed: a green light at the gate's exit that a card passes through as it comes out, fading
+   further right. And the way in dims towards the gate, as if the problem is being taken in. */
+.layer[data-side="fix"]::after { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 50%, color-mix(in srgb, var(--primary) 26%, transparent) 53%, color-mix(in srgb, var(--primary) 8%, transparent) 62%, transparent 74%); content: ""; mix-blend-mode: screen; pointer-events: none; }
+.layer[data-side="problem"]::after { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 34%, color-mix(in srgb, var(--warning) 10%, transparent) 50%); content: ""; mix-blend-mode: screen; pointer-events: none; }
 
 /* ── The gate: a tall column over the seam, the beam through it, the Insurvas tile in its middle. ── */
 .gate { position: absolute; z-index: 4; top: 22px; bottom: -6px; left: 50%; display: grid; width: var(--gate); place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 28px; background: linear-gradient(180deg, color-mix(in srgb, var(--footer-bg) 70%, black), color-mix(in srgb, var(--footer-bg) 52%, black)); box-shadow: 0 0 0 10px color-mix(in srgb, var(--footer-bg) 62%, black), 0 30px 60px -20px rgb(0 0 0 / 80%); transform: translateX(-50%); }
 .beam { position: absolute; top: 12%; bottom: 12%; left: calc(50% - 1px); width: 2px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary) 70%, transparent) 25%, color-mix(in srgb, var(--primary) 70%, transparent) 75%, transparent); opacity: 0; transition: opacity 600ms ease; }
 .stage[data-state="resolved"] .beam { opacity: 1; }
+/* A light running down the beam, always, so the gate reads as working. */
+.beam { overflow: hidden; }
+.beam::after { position: absolute; top: -30%; left: -2px; width: 6px; height: 30%; border-radius: 6px; background: linear-gradient(180deg, transparent, var(--primary), transparent); content: ""; animation: scan 2.2s cubic-bezier(.65, 0, .35, 1) infinite; }
+@keyframes scan { to { transform: translateY(440%); } }
 .tile { position: relative; z-index: 2; display: grid; width: 104px; height: 104px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 60%, transparent); border-radius: 28px; background: color-mix(in srgb, var(--footer-bg) 55%, black); box-shadow: 0 24px 56px -22px rgb(0 0 0 / 85%); }
 .mark { position: relative; display: block; width: 54px; height: 54px; }
 
@@ -91,4 +99,5 @@
 @media (prefers-reduced-motion: reduce) {
   .track { animation: none; }
   .lanes, .labels, .beam { transition: none; }
+  .beam::after { animation: none; display: none; }
 }

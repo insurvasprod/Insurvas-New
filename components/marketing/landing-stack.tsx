@@ -174,7 +174,8 @@ export function LandingStack() {
       <div ref={stageRef} className={styles.stage} data-state="stacked" aria-hidden="true">
         <div className={styles.labels}><span data-side="problem">Coming in</span><span data-side="fix">Coming out</span></div>
         <div className={styles.lanes}>
-          {LANES.map((pairs, i) => <Lane key={i} pairs={pairs} speed={36 + i * 5} delay={-i * 7} />)}
+          {/* Visibly moving (owner, 6 Nov): about 85px a second, each lane a little different. */}
+          {LANES.map((pairs, i) => <Lane key={i} pairs={pairs} speed={[17, 21, 19][i]} delay={-i * 5} />)}
         </div>
         {/* The gate: every card passes through it and comes out fixed. */}
         <div className={styles.gate}>
