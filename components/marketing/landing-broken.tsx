@@ -201,7 +201,14 @@ export function LandingBroken() {
       });
       // The gate wakes as the first card reaches it and rests once the last is through.
       tl.to(gate, { "--glow": 1, duration: 0.06 }, 0.33).to(gate, { "--glow": 0.25, duration: 0.1 }, 0.66);
-      return () => { delete section.dataset.mode; };
+      // Re-measure the paths whenever the section's layout changes (late fonts and images, a live
+      // reload, a resized window), so the cards always land on their solved places.
+      let pending = 0;
+      const remeasure = () => { window.clearTimeout(pending); pending = window.setTimeout(() => ScrollTrigger.refresh(), 120); };
+      const watch = new ResizeObserver(remeasure);
+      watch.observe(section);
+      document.fonts?.ready.then(remeasure);
+      return () => { watch.disconnect(); window.clearTimeout(pending); delete section.dataset.mode; };
     });
     return () => mm.revert();
   }, []);
