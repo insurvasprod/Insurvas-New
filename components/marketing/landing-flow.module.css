@@ -2,7 +2,7 @@
    nodes for the module's pages, curved connectors a record travels along. Drawn at a fixed size and
    scaled to fit, like the hero's device. Until the run starts (and under reduced motion) every node
    shows done and every connector drawn, so the still canvas is the finished workflow. */
-.wrap { position: relative; width: 100%; max-width: 560px; }
+.wrap { position: relative; width: 100%; max-width: 600px; }
 /* Scales the fixed-size canvas to the column; the perspective lives here so the scale does not flatten it. */
 .fit { position: absolute; top: 0; left: 0; transform-origin: 0 0; perspective: 1300px; perspective-origin: 50% 20%; }
 /* The canvas leans back and turns a little towards the pointer (owner, 6 Nov: 3D). preserve-3d lets the
@@ -31,7 +31,7 @@
 .bar { position: absolute; inset: 0 0 auto; display: flex; height: 40px; align-items: center; justify-content: space-between; border-bottom: 1px solid rgb(234 246 242 / 8%); background: rgb(234 246 242 / 3%); padding: 0 14px; }
 .barTitle { display: flex; align-items: center; gap: 8px; color: var(--nav-ink); font-size: 12.5px; font-weight: 600; }
 .barTitle svg { width: 15px; height: 15px; color: var(--primary); }
-.barStep { border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent); border-radius: 999px; padding: 2px 9px; color: var(--primary); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.barStep { flex: none; white-space: nowrap; border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent); border-radius: 999px; padding: 2px 9px; color: var(--primary); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .wires { position: absolute; inset: 0; overflow: visible; }
 .wire { fill: none; stroke: rgb(234 246 242 / 16%); stroke-width: 1.5; stroke-dasharray: 3 5; }
@@ -41,9 +41,9 @@
 .node {
   position: absolute;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 30px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
+  gap: 9px;
   box-sizing: border-box;
   border: 1px solid rgb(234 246 242 / 12%);
   border-radius: 14px;
@@ -60,11 +60,12 @@
 }
 /* The lit edge, faded in when the record arrives. */
 .ring { position: absolute; inset: -1px; border: 1.5px solid var(--primary); border-radius: 14px; pointer-events: none; }
-.icon { display: grid; width: 34px; height: 34px; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
 .icon svg { width: 17px; height: 17px; }
 .text { display: grid; min-width: 0; gap: 2px; }
 .text b { overflow: hidden; color: var(--nav-ink); font-size: 13px; font-weight: 600; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
-.text small { overflow: hidden; color: var(--nav-muted); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+/* Up to two lines, so a sub-line is never cut off mid-word. */
+.text small { display: -webkit-box; overflow: hidden; color: var(--nav-muted); font-size: 11.5px; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .done { position: absolute; top: -7px; right: -7px; display: grid; width: 18px; height: 18px; place-items: center; border: 2px solid color-mix(in srgb, var(--footer-bg) 42%, black); border-radius: 50%; background: var(--primary); color: var(--on-primary); }
 .done svg { width: 10px; height: 10px; stroke-width: 3.5; }
 

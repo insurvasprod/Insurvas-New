@@ -74,7 +74,7 @@ const MODULES: Module[] = [
         { id: "verify", icon: IdCard, label: "Identity verified", sub: "Ruth A. · on the line", col: 0, row: 0, kind: "source" },
         { id: "interview", icon: Stethoscope, label: "Interview", sub: "Health questions", col: 0, row: 1 },
         { id: "quote", icon: Receipt, label: "Quote", sub: "$70.00 a month", col: 0, row: 2 },
-        { id: "review", icon: ClipboardCheck, label: "Application review", sub: "0 blockers · 1 to confirm", col: 1, row: 1 },
+        { id: "review", icon: ClipboardCheck, label: "Review", sub: "0 blockers · 1 to confirm", col: 1, row: 1 },
         { id: "draft", icon: CalendarClock, label: "Draft date", sub: "After the deposit", col: 2, row: 0 },
         { id: "submitted", icon: BadgeCheck, label: "Submitted", sub: "submitted this week", col: 2, row: 2, kind: "outcome", value: { to: 23 } },
       ],
@@ -94,7 +94,7 @@ const MODULES: Module[] = [
         { id: "statement", icon: FileText, label: "Carrier statement", sub: "Line 14 · $84.00", col: 0, row: 2, kind: "source" },
         { id: "match", icon: Link2, label: "Line matched", sub: "A person accepts it", col: 1, row: 1 },
         { id: "book", icon: BookOpen, label: "Book of business", sub: "Status moves to Paid", col: 2, row: 0 },
-        { id: "ledger", icon: BadgeDollarSign, label: "Commission ledger", sub: "matched this month", col: 2, row: 2, kind: "outcome", value: { to: 63816.8, prefix: "$", decimals: 2 } },
+        { id: "ledger", icon: BadgeDollarSign, label: "Commissions", sub: "matched this month", col: 2, row: 2, kind: "outcome", value: { to: 63816.8, prefix: "$", decimals: 2 } },
       ],
       steps: [[["policy", "match"], ["statement", "match"]], [["match", "book"], ["match", "ledger"]]],
     },
@@ -146,7 +146,7 @@ const MODULES: Module[] = [
     graph: {
       nodes: [
         { id: "consent", icon: FileCheck, label: "Consent locker", sub: "Certificate on the lead", col: 0, row: 1, kind: "source" },
-        { id: "checks", icon: ShieldCheck, label: "TCPA / DNC checks", sub: "Before every dial", col: 1, row: 1 },
+        { id: "checks", icon: ShieldCheck, label: "DNC checks", sub: "TCPA, before every dial", col: 1, row: 1 },
         { id: "refused", icon: Ban, label: "Dial refused", sub: "Outside the window", col: 2, row: 0, kind: "branch" },
         { id: "placed", icon: PhoneCall, label: "Dial placed", sub: "4 of 4 passed", col: 2, row: 1 },
         { id: "evidence", icon: ScrollText, label: "Evidence report", sub: "records, one export", col: 2, row: 2, kind: "outcome", value: { to: 214 } },

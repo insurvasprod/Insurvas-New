@@ -44,10 +44,10 @@ export type FlowNode = {
 /** Each step is the connectors that run together, as [from, to] node ids. */
 export type FlowGraph = { nodes: FlowNode[]; steps: Array<Array<[string, string]>> };
 
-const W = 560;
-const NODE_W = 156;
+const W = 600;
+const NODE_W = 172;
 const NODE_H = 72;
-const COL_X = [10, 202, 394];
+const COL_X = [8, 214, 420];
 const ROW_Y = [58, 162, 266];
 const WIDE_H = 360;
 // One column on a narrow screen.
@@ -208,7 +208,8 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
       <div className={styles.fit} style={{ width: stageW, height: stageH, transform: `scale(${scale})` } as CSSProperties}>
       <div ref={stageRef} className={styles.stage} style={{ width: stageW, height: stageH }}>
         <div className={styles.bar}>
-          <span className={styles.barTitle}><Workflow />{title}</span>
+          {/* Narrow canvases name no module: the card's heading, just above, already does. */}
+          <span className={styles.barTitle}><Workflow />{narrow ? "Workflow" : title}</span>
           <span className={styles.barStep} data-step="">{steps.length} steps</span>
         </div>
         <svg className={styles.wires} width={stageW} height={stageH} viewBox={`0 0 ${stageW} ${stageH}`}>
