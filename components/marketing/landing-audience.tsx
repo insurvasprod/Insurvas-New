@@ -4,7 +4,7 @@ import styles from "@/components/marketing/landing-audience.module.css";
 /**
  * "Who it's for" (2026-11-03, docs/design/landing-who-its-for-spec.md), in two parts:
  *
- * `LandingBuiltFor` — the trust band between the hero and the split (owner, 3–4 Nov). `LandingAudience` — the full-bleed split, one half per audience. The product
+ * `LandingBuiltFor`: the trust band under the hero. `LandingAudience`: what is broken today. The product
  * sells to exactly two, `individual` and `agency` in the plan catalog, so each half is a real
  * thing with a real pricing view behind it rather than a visual device.
  *
@@ -15,12 +15,19 @@ import styles from "@/components/marketing/landing-audience.module.css";
  */
 
 /**
- * The trust band (2026-11-04, owner): who built it and who runs on it, as drawn in the approved
- * mockup. The counts are the owner's figures for now; swap in the real
- * numbers (and photographs, if they are supplied) here and nowhere else.
+ * The trust band. Umar's review (4 Nov, A2.1): "This design is just basic … you just build some
+ * credibility here", who built it, how long it has run, who uses it, before the page says why.
+ * So it is a statement, the origin in one line, and three facts. The placeholder avatar dots are
+ * gone: they stood in for faces we do not have.
+ *
+ * TO CONFIRM (Umar): every figure here. The agent, agency and commission counts are the owner's
+ * figures from 4 Nov; "two years" is from the review call. Change them here and nowhere else.
  */
-const TRUST = { agents: "2,400+", agencies: "180+", matched: "$48M" };
-const AVATARS = [0, 1, 2, 3];
+const PROOF = [
+  { figure: "2 years", caption: "running a live-transfer final expense floor before we built Insurvas" },
+  { figure: "2,400+", caption: "agents across 180+ agencies work in it" },
+  { figure: "$48M", caption: "in commission matched to the leads that earned it" },
+];
 
 export function LandingBuiltFor() {
   return (
@@ -29,23 +36,16 @@ export function LandingBuiltFor() {
         <div className={styles.trustCopy}>
           <p className={styles.bandLabel}>Built by industry experts</p>
           <h2 id="landing-trust-heading" className={styles.trustTitle}>Made by people who sold final expense and ran live-transfer floors.</h2>
-          <div className={styles.trustRow}>
-            <span className={styles.avatars} aria-hidden="true">
-              {AVATARS.map((n) => <i key={n} />)}
-            </span>
-            <p className={styles.trustLine}>Trusted by {TRUST.agents} agents and {TRUST.agencies} agencies</p>
-          </div>
+          <p className={styles.trustLine}>Every screen started as a problem we had on our own floor: leads bought twice, drafts that missed, statements nobody could match.</p>
         </div>
-        <div className={styles.trustStats}>
-          <div className={styles.trustStat}>
-            <p className={styles.trustNumber}>{TRUST.agents}</p>
-            <p className={styles.trustCaption}>agents and {TRUST.agencies} agencies run on Insurvas</p>
-          </div>
-          <div className={styles.trustStat}>
-            <p className={styles.trustNumber}>{TRUST.matched}</p>
-            <p className={styles.trustCaption}>in commission matched to the leads that earned it</p>
-          </div>
-        </div>
+        <dl className={styles.trustStats}>
+          {PROOF.map((item) => (
+            <div key={item.figure} className={styles.trustStat}>
+              <dt className={styles.trustNumber}>{item.figure}</dt>
+              <dd className={styles.trustCaption}>{item.caption}</dd>
+            </div>
+          ))}
+        </dl>
       </div>
     </section>
   );
