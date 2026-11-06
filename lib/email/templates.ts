@@ -33,6 +33,8 @@ export const EMAIL_TEMPLATE_KEYS = [
   "compliance.complaint_deadline",
   "compliance.retention_dry_run",
   "compliance.monthly_digest",
+  // A visitor's request from the landing page's contact form, to the Insurvas inbox.
+  "marketing.contact_request",
 ] as const;
 
 export type EmailTemplateKey = (typeof EMAIL_TEMPLATE_KEYS)[number];
@@ -487,5 +489,21 @@ export function workspaceReadyEmail(facts: { name: string; planName: string; sig
     text:
       `Hi ${facts.name},\n\nYour ${facts.planName} plan is active and nothing was charged. Sign in:\n${facts.signInUrl}\n\n` +
       "Your dashboard opens with a short setup checklist: your carriers, your licences, your lead sources and your phone number.\n",
+  };
+}
+
+/**
+ * A request from the landing page's contact form (Umar, 4 Nov: "How will people contact us?"), to
+ * the Insurvas inbox. Everything in it was typed by a stranger, so every value is escaped and the
+ * subject keeps to one line. Reply-To is set to the visitor by the sender, so answering is one click.
+ */
+export function contactRequestEmail(facts: { name: string; email: string; agency: string | null; message: string }): RenderedEmail {
+  const oneLine = (value: string) => value.replace(/[\r\n]+/g, " ").trim();
+  const from = facts.agency ? `${oneLine(facts.name)}, ${oneLine(facts.agency)}` : oneLine(facts.name);
+  const paragraphs = facts.message.split(/\n{2,}/).map((part) => `<p>${escapeHtml(part).replace(/\n/g, "<br>")}</p>`).join("");
+  return {
+    subject: `Contact request from ${from}`.slice(0, 160),
+    html: layout("A new contact request", `${factList([["Name", facts.name], ["Email", facts.email], ["Agency", facts.agency ?? ""]])}${paragraphs}`, { eyebrow: "From the landing page", preheader: oneLine(facts.message).slice(0, 120) }),
+    text: `A new contact request from the landing page.\n\nName: ${facts.name}\nEmail: ${facts.email}\n${facts.agency ? `Agency: ${facts.agency}\n` : ""}\n${facts.message}\n`,
   };
 }

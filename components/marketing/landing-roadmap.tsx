@@ -2,66 +2,179 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { ArrowRight } from "lucide-react";
+import { createTimeline, svg } from "animejs";
 
 import { ROADMAP, type RoadmapStatus } from "@/lib/marketing/roadmap";
 import styles from "@/components/marketing/landing-roadmap.module.css";
 
 /**
- * A glimpse of /roadmap on the landing page (2026-11-04, owner): a real road, photographed from
- * above and running edge to edge as the section's background (public/marketing/README.md has the source and licence), with a pin on it for each stop,
- * Shipped to Exploring, in the order the road runs. Pointing at a pin (or focusing it) opens its
- * label to show the detail; Now is open to start. They are pressed buttons, not tabs, because they sit on the photo rather than in a row.
+ * A glimpse of /roadmap (owner, 4 Nov), reworked after Umar's review (4 Nov, A8.3–A8.5): the road
+ * photo stays, for the energy an image gives the page, but it is a short band now rather than a
+ * full screen, pushed back under a dark green shade, with the heading and why we build over it. The
+ * contact form follows on the same ground (`LandingContact`).
  *
- * Pin positions are percentages of the cropped photo, placed on the asphalt by eye. Re-place them if
- * the photo or its crop changes.
+ * The photo sits in a stage that keeps its proportions and is anchored to the band's bottom edge,
+ * so the pins (percentages of the photo) stay on the asphalt at every width. Re-place them by eye if
+ * the photo changes.
+ *
+ * Phones (owner, 6 Nov: one screen, no scrolling sideways, a road you have to travel to get
+ * somewhere) have their own cut of the same top-down photo, tall, so the road snakes through the
+ * whole screen: the stops sit on it in the order the road runs, shipped on the lowest pass and what
+ * we are exploring on the climb out at the top. The `p` fields place them there. Every few seconds the next stop's
+ * label opens, until the visitor touches the photo.
  */
-const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: "above" | "below"; align: "start" | "center" | "end" }[] = [
-  { status: "shipped", label: "Shipped", x: 6.8, y: 45.8, tag: "above", align: "start" },
-  { status: "progress", label: "Now", x: 31.5, y: 75.8, tag: "above", align: "center" },
-  { status: "planned", label: "Next", x: 93.6, y: 52.5, tag: "below", align: "end" },
-  { status: "exploring", label: "Exploring", x: 65.7, y: 32.6, tag: "below", align: "center" },
+type Tag = "above" | "below";
+type Align = "start" | "center" | "end";
+const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: Tag; align: Align; px: number; py: number; ptag: Tag; palign: Align }[] = [
+  // Placed by the owner, 6 Nov, in the order the road runs: the lower road, the hairpin on the
+  // right, back along the upper road to the hairpin on the left, and up through the loop.
+  { status: "shipped", label: "Shipped", x: 20.1, y: 63.3, tag: "below", align: "start", px: 42.9, py: 80, ptag: "above", palign: "center" },
+  { status: "progress", label: "Now", x: 95.5, y: 50.9, tag: "below", align: "end", px: 54.8, py: 66, ptag: "above", palign: "center" },
+  { status: "planned", label: "Next", x: 33.9, y: 38.7, tag: "above", align: "center", px: 35.7, py: 41.8, ptag: "below", palign: "start" },
+  { status: "exploring", label: "Exploring", x: 66.1, y: 35.3, tag: "below", align: "center", px: 78.6, py: 43, ptag: "below", palign: "end" },
 ];
+
+/**
+ * The road between the stops on the computer's photo, traced by eye in the photo's own pixels
+ * (1600 x 864): one list per stretch, from one stop to the next. Re-trace if the photo changes.
+ */
+const ROUTE: Array<Array<[number, number]>> = [
+  [[322, 547], [400, 575], [480, 618], [560, 662], [650, 698], [750, 718], [850, 718], [950, 702], [1050, 668], [1150, 632], [1250, 592], [1350, 548], [1440, 500], [1500, 468], [1528, 440]],
+  [[1528, 440], [1515, 415], [1470, 405], [1400, 425], [1300, 460], [1200, 497], [1100, 535], [1000, 568], [900, 578], [800, 552], [700, 492], [620, 440], [565, 385], [542, 334]],
+  [[542, 334], [560, 308], [620, 298], [720, 282], [800, 250], [860, 205], [910, 182], [945, 195], [958, 235], [930, 268], [880, 295], [852, 335], [862, 385], [905, 420], [980, 440], [1040, 428], [1075, 395], [1080, 350], [1058, 305]],
+];
+
+/** A smooth path through the points (Catmull-Rom as cubic Béziers), so the line follows the curves. */
+function smooth(points: Array<[number, number]>): string {
+  let d = `M${points[0][0]},${points[0][1]}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const [p0, p1, p2, p3] = [points[i - 1] ?? points[i], points[i], points[i + 1], points[i + 2] ?? points[i + 1]];
+    const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+    const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+    d += ` C${c1[0].toFixed(1)},${c1[1].toFixed(1)} ${c2[0].toFixed(1)},${c2[1].toFixed(1)} ${p2[0]},${p2[1]}`;
+  }
+  return d;
+}
+const ROUTE_D = ROUTE.map(smooth);
 const NOW = 1;
+const TOUR_MS = 4_000;
 
 export function LandingRoadmap() {
   const stops = STOPS.map((stop) => ({ ...stop, item: ROADMAP.find((item) => item.status === stop.status) })).filter((stop) => stop.item !== undefined);
   const [active, setActive] = useState(NOW);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const touched = useRef(false);
+  const [wait, setWait] = useState(0);
+
+  // Phones: tour the stops, one label at a time, until the visitor touches the photo.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.matchMedia("(max-width: 760px)").matches) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || touched.current) return;
+    const next = window.setTimeout(() => {
+      const rect = map.getBoundingClientRect();
+      // Only while the strip is on screen; otherwise check again later.
+      if (rect.bottom > 0 && rect.top < window.innerHeight) setActive((i) => (i + 1) % STOPS.length);
+      else setWait((n) => n + 1);
+    }, TOUR_MS);
+    return () => window.clearTimeout(next);
+  }, [active, wait]);
+  const stopTour = () => { touched.current = true; };
+
+  // The computer: once the band is in view, the first stop shows, then a dashed line runs along the
+  // road to the next, which shows as it arrives, and so on to the last (owner, 6 Nov). Then the
+  // dashes keep moving along the road. Phones and reduced motion show it all at once.
+  const sectionRef = useRef<HTMLElement>(null);
+  const maskId = `route-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || window.matchMedia("(max-width: 760px), (prefers-reduced-motion: reduce)").matches) return;
+    const pins = [...section.querySelectorAll<HTMLElement>("[data-pin]")];
+    const reveals = [...section.querySelectorAll<SVGPathElement>("[data-reveal]")];
+    section.dataset.route = "waiting";
+    let timeline: ReturnType<typeof createTimeline> | null = null;
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting || timeline) return;
+      io.disconnect();
+      const SEG_MS = 1400;
+      const tl = createTimeline({ defaults: { ease: "inOutSine" }, onComplete: () => { section.dataset.route = "done"; } });
+      reveals.forEach((el) => { tl.set(svg.createDrawable(el), { draw: "0 0" }, 0); });
+      tl.call(() => { pins[0]?.setAttribute("data-shown", ""); }, 150);
+      reveals.forEach((el, i) => {
+        const at = 550 + i * (SEG_MS + 350);
+        tl.add(svg.createDrawable(el), { draw: ["0 0", "0 1"], duration: SEG_MS }, at)
+          .call(() => { pins[i + 1]?.setAttribute("data-shown", ""); }, at + SEG_MS - 120);
+      });
+      timeline = tl;
+    }, { threshold: 0.35 });
+    io.observe(section);
+    return () => { io.disconnect(); timeline?.revert(); delete section.dataset.route; pins.forEach((pin) => pin.removeAttribute("data-shown")); };
+  }, []);
 
   return (
-    <section aria-labelledby="roadmap-title" className={styles.section}>
-      <div className={styles.inner}>
-        <header className={styles.head}>
-          <div>
+    <section ref={sectionRef} id="roadmap" aria-labelledby="roadmap-title" className={styles.section}>
+        {/* The white of the section above melts into the band (owner, 6 Nov). */}
+        <div className={styles.fadeIn} aria-hidden="true" />
+        {/* The header: the heading on the left, the why and the link on the right, on one baseline
+            on a row of its own over the photo's faded top edge, so the pins below have the road to
+            themselves (owner, 6 Nov). */}
+        <div className={styles.over}>
+          <div className={styles.titleBlock}>
+            <p className={styles.eyebrow}>Roadmap</p>
             <h2 id="roadmap-title" className={styles.heading}>See what we are building next.</h2>
           </div>
-          <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
-        </header>
-      </div>
-
-      <div className={styles.map}>
-        <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
+          <div className={styles.aside}>
+            {/* TO CONFIRM (Umar): the why. Same claim as the trust band, in one line. */}
+            <p className={styles.why}>Insurvas is built by people who ran a final expense floor, and it grows from what agencies ask us for.</p>
+            <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
+          </div>
+        </div>
+      <div ref={mapRef} className={styles.map} onPointerDown={stopTour}>
+        <div className={styles.stage}>
+          <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
+          <Image src="/marketing/roadmap-road-phone.webp" alt="" fill sizes="100vw" className={styles.photoTall} />
+        </div>
         <div className={styles.shade} aria-hidden="true" />
-        <div className={styles.pins} role="group" aria-label="Roadmap stops">
-          {stops.map((stop, i) => (
-            <button
-              key={stop.status}
-              type="button"
-              aria-pressed={active === i}
-              className={styles.pin}
-              data-status={stop.status}
-              data-tag={stop.tag}
-              data-align={stop.align}
-              style={{ left: `${stop.x}%`, top: `${stop.y}%` }}
-              onClick={() => setActive(i)}
-              onMouseEnter={() => setActive(i)}
-              onFocus={() => setActive(i)}
-            >
-              <span className={styles.node} aria-hidden="true" />
-              <span className={styles.tag}><b>{stop.label} · {stop.item!.when}</b><span>{stop.item!.title}</span><span className={styles.detail}><span>{stop.item!.text}</span></span></span>
-            </button>
-          ))}
+        {/* A second stage of the same shape holds the pins, so they sit above the shade. */}
+        <div className={styles.stage}>
+          {/* The road from stop to stop, dashed, drawn on as the band comes into view. */}
+          <svg className={styles.route} viewBox="0 0 1600 864" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="864">
+                {ROUTE_D.map((d) => <path key={d} d={d} className={styles.routeMask} data-reveal="" />)}
+              </mask>
+            </defs>
+            <g mask={`url(#${maskId})`}>
+              {ROUTE_D.map((d) => <path key={d} d={d} className={styles.routeCase} />)}
+              {ROUTE_D.map((d) => <path key={d} d={d} className={styles.routeLine} />)}
+            </g>
+          </svg>
+          <div className={styles.pins} role="group" aria-label="Roadmap stops">
+            {stops.map((stop, i) => (
+              <button
+                key={stop.status}
+                type="button"
+                aria-pressed={active === i}
+                className={styles.pin}
+                data-status={stop.status}
+                data-tag={stop.tag}
+                data-align={stop.align}
+                data-ptag={stop.ptag}
+                data-palign={stop.palign}
+                data-pin=""
+                style={{ "--x": `${stop.x}%`, "--y": `${stop.y}%`, "--px": `${stop.px}%`, "--py": `${stop.py}%` } as CSSProperties}
+                onClick={() => { stopTour(); setActive(i); }}
+                onMouseEnter={() => setActive(i)}
+                onFocus={() => setActive(i)}
+              >
+                <span className={styles.node} aria-hidden="true" />
+                <span className={styles.tag}><b>{stop.label} · {stop.item!.when}</b><span>{stop.item!.title}</span><span className={styles.detail}><span>{stop.item!.text}</span></span></span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

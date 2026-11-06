@@ -71,7 +71,7 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
       >
         {/* No aria-current here since 2026-11-03: the nav carries an explicit Home item, and marking
             both it and the logo would announce the current page twice. */}
-        <Link href="/" className="flex shrink-0 items-center no-underline">
+        <Link href="/" className="flex min-h-11 shrink-0 items-center no-underline">
           {/* Named, so it glides into the sign-in form's logo (AuthBrand). */}
           <ViewTransition name="brand-logo" share="ribbon-morph" default="none">
             <InsurvasLogo size="public" alt="Insurvas" className={styles.introLogo} />
