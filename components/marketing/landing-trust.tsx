@@ -15,9 +15,8 @@ import styles from "@/components/marketing/landing-trust.module.css";
  * along its foot: who uses it. Right, the statement and a short line from the floor it came from
  * to today: who built it and how long it has run, one sentence a stop.
  *
- * On first sight the photo opens upwards and the figures count up. The line is tied to the scroll
- * (owner, 6 Nov): Year one shows first, green flows down the line as the page scrolls, and each stop
- * lights up and rises when the flow reaches it, back again on the way up. Without
+ * On first sight the photo opens upwards and the figures count up, and the line plays once by itself
+ * (owner, 6 Nov): Year one shows, green flows down to Year two and reveals it, then on to Today. Without
  * a script, or under reduced motion, it is the finished band. The photo is CC0
  * (public/marketing/README.md).
  *
@@ -62,33 +61,41 @@ export function LandingTrust() {
     return () => { io.disconnect(); timeline?.revert(); root.dataset.state = "done"; };
   }, []);
 
-  // The line follows the scroll: the fill grows down it, and a stop turns on when the fill reaches it.
+  // The line plays by itself, once, when the band comes into view (owner, 6 Nov: not tied to the
+  // scroll): Year one shows, the green flows down to Year two and reveals it, then on to Today.
   const lineRef = useRef<HTMLOListElement>(null);
   useEffect(() => {
     const line = lineRef.current;
     if (!line || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const fill = line.querySelector<HTMLElement>("[data-fill]");
     const stops = [...line.querySelectorAll<HTMLElement>("[data-stop]")];
+    if (!fill || stops.length === 0) return;
     line.dataset.scroll = "true";
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const rect = line.getBoundingClientRect();
-      // 0 when the line's top is at 88% of the screen, 1 when its foot is at 70%: the whole story plays while the band is in view.
-      const start = window.innerHeight * 0.88;
-      const end = window.innerHeight * 0.7;
-      const progress = Math.min(1, Math.max(0, (start - rect.top) / (start - end + rect.height)));
-      if (fill) fill.style.transform = `scaleY(${progress})`;
-      stops.forEach((stop) => {
-        const at = (stop.offsetTop + 8) / Math.max(1, rect.height);
-        stop.dataset.on = String(progress >= at - 0.02);
+    const timers: number[] = [];
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return;
+      io.disconnect();
+      // Where each stop sits on the line, as a share of the fill's length.
+      const length = Math.max(1, fill.offsetHeight);
+      const at = stops.map((stop) => Math.min(1, Math.max(0, stop.offsetTop / length)));
+      const FLOW_MS = 900;
+      const HOLD_MS = 500;
+      let t = 250;
+      stops.forEach((stop, i) => {
+        if (i > 0) {
+          const from = at[i - 1];
+          const to = i === stops.length - 1 ? 1 : at[i];
+          timers.push(window.setTimeout(() => {
+            animate(fill, { scaleY: [from, to], duration: FLOW_MS, ease: "inOutQuart" });
+          }, t));
+          t += FLOW_MS - 120;
+        }
+        timers.push(window.setTimeout(() => { stop.dataset.on = "true"; }, t));
+        t += HOLD_MS;
       });
-    };
-    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
-    update();
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule);
-    return () => { window.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); window.cancelAnimationFrame(frame); delete line.dataset.scroll; };
+    }, { threshold: 0.5 });
+    io.observe(line);
+    return () => { io.disconnect(); timers.forEach((id) => window.clearTimeout(id)); delete line.dataset.scroll; };
   }, []);
 
   return (
