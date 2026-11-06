@@ -96,9 +96,11 @@
      the road whatever the phone's proportions. */
   .stage { top: 50%; left: 50%; width: max(100cqw, 60cqh); aspect-ratio: 1200 / 2000; transform: translate(-50%, -50%); }
   .photo { display: none; }
-  .photoTall { display: block; object-fit: cover; opacity: .78; filter: saturate(.85); }
-  /* Dark behind the header, clear over the road, into the band at the foot. */
-  .shade { background: linear-gradient(180deg, var(--band) 0%, color-mix(in srgb, var(--band) 80%, transparent) 24%, transparent 44%, transparent 86%, var(--band) 100%); }
+  /* The computer's treatment (owner, 6 Nov): faded to half and a little desaturated, under the green. */
+  .photoTall { display: block; object-fit: cover; opacity: .5; filter: saturate(.75); }
+  /* As on the computer: the green shade over the whole photo, darkest behind the header, and into
+     the band at the foot. */
+  .shade { background: linear-gradient(180deg, var(--band) 0%, color-mix(in srgb, var(--band) 72%, transparent) 28%, color-mix(in srgb, var(--band) 30%, transparent) 52%, color-mix(in srgb, var(--band) 30%, transparent) 84%, var(--band) 100%); }
   /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
   .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 84px 0 0; text-align: center; }
   .titleBlock { justify-items: center; }
