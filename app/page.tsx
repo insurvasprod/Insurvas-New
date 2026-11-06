@@ -40,8 +40,9 @@ export default async function Home() {
             without a call to action. */}
         <LandingHero />
         <LandingBuiltFor />
-        <LandingStack />
+        {/* What is broken comes first, then how Insurvas takes it in and fixes it (owner, 6 Nov). */}
         <LandingAudience />
+        <LandingStack />
         <LandingBento />
         <LandingPricingTeaser plans={plans} />
         <LandingFaq />

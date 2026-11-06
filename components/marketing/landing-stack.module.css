@@ -14,49 +14,51 @@
 .heading { margin: 0; font: 600 clamp(28px, 3.2vw, 44px)/1.08 var(--font-brand); letter-spacing: -.028em; text-wrap: balance; }
 .lede { max-width: 60ch; margin: 16px auto 0; color: var(--nav-muted); font-size: clamp(16px, 1.3vw, 18px); line-height: 1.55; text-wrap: balance; }
 
-/* ── The stage ───────────────────────────────────────────────────────────────────────────────── */
-.stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 240px minmax(0, 1fr); height: 400px; margin-top: clamp(20px, 3vw, 40px); perspective: 1200px; }
-/* The two sides lean in towards the middle, like the inside of a curve, and fade at both ends so
-   the cards appear out of nowhere and vanish into the tile. */
-.side { display: grid; align-content: center; gap: 16px; overflow: hidden; transition: opacity 700ms ease; }
-.side[data-side="in"] { transform: rotateY(22deg); transform-origin: 100% 50%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 80%, transparent); mask-image: linear-gradient(90deg, transparent, #000 22%, #000 80%, transparent); }
-.side[data-side="out"] { transform: rotateY(-22deg); transform-origin: 0 50%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 78%, transparent); mask-image: linear-gradient(90deg, transparent, #000 20%, #000 78%, transparent); }
-
-.row { overflow: visible; }
-/* Four copies of a row's cards; moving it by half a track is one seamless loop. Both sides drift
+/* ── The stage (reworked 6 Nov): problems coming in on the left, the tools and Insurvas in the
+   middle, outcomes coming out on the right. Flat cards, so the text stays sharp. ──────────────── */
+.stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); align-items: center; margin-top: clamp(28px, 3.4vw, 48px); }
+.side { display: grid; min-width: 0; gap: 14px; }
+.sideLabel { margin: 0 0 4px; padding-inline: clamp(24px, 4vw, 64px); font-size: 13px; font-weight: 600; }
+.side[data-side="in"] .sideLabel { color: var(--warning); }
+.side[data-side="out"] .sideLabel { padding-left: 28px; color: var(--primary); }
+/* Each row fades at the page edge and runs right up to the middle, so cards vanish into the tile on
+   the left and come out of it on the right. */
+.row { overflow: hidden; }
+.side[data-side="in"] .row { -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 94%, transparent); }
+.side[data-side="out"] .row { -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 82%, transparent); }
+/* Four copies of a row's cards; moving it by half a track is one seamless loop. Both sides move
    right: into the tile on the left, away from it on the right. */
-.track { display: flex; width: max-content; gap: 14px; animation: drift linear infinite; animation-play-state: paused; }
-.row:nth-child(2) .track { animation-delay: -14s; }
-.row:nth-child(3) .track { animation-delay: -27s; }
+.track { display: flex; width: max-content; gap: 14px; animation: drift linear infinite; animation-play-state: paused; will-change: transform; }
 .stage[data-run="true"] .track { animation-play-state: running; }
-@keyframes drift { from { transform: translateX(-50%); } to { transform: translateX(0); } }
+@keyframes drift { from { transform: translate3d(-50%, 0, 0); } to { transform: translate3d(0, 0, 0); } }
 
-.card { display: grid; flex: none; width: 236px; gap: 3px; border: 1px solid rgb(234 246 242 / 10%); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 50%, black); padding: 12px 14px 13px; }
+.card { display: grid; flex: none; width: 250px; gap: 3px; border: 1px solid rgb(234 246 242 / 10%); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 50%, black); padding: 12px 14px 13px; }
 .kind { display: flex; align-items: center; gap: 7px; color: var(--nav-muted); font-size: 12px; font-weight: 600; }
-.kind svg { width: 14px; height: 14px; }
-.card b { overflow: hidden; font-size: 15px; font-weight: 600; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
-.card small { color: var(--nav-muted); font-size: 12.5px; }
+.kind svg { width: 14px; height: 14px; flex: none; }
+.card b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
+.card small { color: var(--nav-muted); font-size: 12.5px; white-space: nowrap; }
 .row[data-tone="mess"] .kind svg { color: var(--warning); }
 .row[data-tone="clean"] .card { border-color: color-mix(in srgb, var(--primary) 32%, transparent); }
 .row[data-tone="clean"] .kind { color: var(--primary); }
 
-/* ── The middle: the beam, the five tools, the Insurvas tile ─────────────────────────────────── */
-.core { position: relative; display: grid; place-items: center; }
-.beam { position: absolute; top: 0; bottom: 0; left: calc(50% - 1px); width: 2px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary) 70%, transparent) 35%, color-mix(in srgb, var(--primary) 70%, transparent) 65%, transparent); }
-.tile { position: relative; z-index: 2; display: grid; width: 112px; height: 112px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 55%, transparent); border-radius: 28px; background: color-mix(in srgb, var(--footer-bg) 55%, black); box-shadow: 0 20px 50px -20px rgb(0 0 0 / 80%); }
-.mark { position: relative; display: block; width: 58px; height: 58px; }
-
-/* The stack: five cards in an isometric pile, the top one first. */
-.deck { position: absolute; z-index: 3; top: 50%; left: 50%; width: 220px; height: 74px; margin: -37px 0 0 -110px; transform-style: preserve-3d; transform: rotateX(56deg) rotateZ(-34deg); pointer-events: none; }
-.tool { position: absolute; inset: 0; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; column-gap: 10px; border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 72%, black); padding: 0 16px; opacity: 0; transform: translateZ(var(--z)); box-shadow: 0 14px 30px -12px rgb(0 0 0 / 70%); }
+/* ── The middle: the five tools, then the Insurvas tile in front of them ───────────────────── */
+.core { position: relative; display: grid; height: 360px; place-items: center; }
+.beam { position: absolute; top: 0; bottom: 0; left: calc(50% - 1px); width: 2px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary) 60%, transparent) 30%, color-mix(in srgb, var(--primary) 60%, transparent) 70%, transparent); opacity: 0; transition: opacity 600ms ease; }
+.stage[data-state="resolved"] .beam { opacity: 1; }
+/* The tools sit on the whole stage, in 3D, so they can start far apart. */
+.deck { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; perspective: 1100px; pointer-events: none; }
+.tool { position: absolute; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; column-gap: 10px; width: 236px; height: 52px; border: 1px solid color-mix(in srgb, var(--primary) 34%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 78%, black); padding: 0 16px; opacity: 0; transform-style: preserve-3d; box-shadow: 0 12px 26px -14px rgb(0 0 0 / 80%); }
 .tool svg { grid-row: span 2; width: 20px; height: 20px; color: var(--primary); }
-.tool b { font-size: 15px; font-weight: 600; }
-.tool small { color: var(--nav-muted); font-size: 12px; }
+.tool b { font-size: 15px; font-weight: 600; line-height: 1.2; }
+.tool small { color: var(--nav-muted); font-size: 12px; line-height: 1.2; }
 .tool:last-child { border-color: color-mix(in srgb, var(--warning) 60%, transparent); }
 .tool:last-child svg { color: var(--warning); }
+.tile { position: relative; z-index: 10; display: grid; width: 120px; height: 120px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 60%, transparent); border-radius: 30px; background: color-mix(in srgb, var(--footer-bg) 55%, black); box-shadow: 0 24px 56px -22px rgb(0 0 0 / 85%); }
+.mark { position: relative; display: block; width: 60px; height: 60px; }
 
-/* Before the take-over, only when a script will run it: the pile shows, the tile and the drift wait.
-   Without a script, or under reduced motion, the stage is simply the resolved one. */
+/* Before the take-over, only when a script will run it: the five tools stand in a column, the tile
+   and the two flows wait. Without a script, or under reduced motion, the stage is the resolved one. */
+.side { transition: opacity 700ms ease; }
 @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
   .stage[data-state="stacked"] .tool { opacity: 1; }
   .stage[data-state="stacked"] .tile { opacity: 0; }
@@ -67,21 +69,23 @@
 .story b { color: var(--nav-ink); font-weight: 600; }
 
 @media (max-width: 1000px) {
-  .stage { grid-template-columns: minmax(0, 1fr) 180px minmax(0, 1fr); }
-  .side[data-side="in"], .side[data-side="out"] { transform: none; }
+  .stage { grid-template-columns: minmax(0, 1fr) 240px minmax(0, 1fr); }
 }
-/* Phones: mess on top, the tile, outcomes below; two rows each, flat. */
+/* Phones and small tablets: coming in on top, the middle, coming out below; two rows each. */
 @media (max-width: 760px) {
   .inner { width: calc(100% - 32px); }
-  .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 170px auto; height: auto; }
-  .side { gap: 12px; }
-  .side[data-side="in"], .side[data-side="out"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
-  .row:nth-child(3) { display: none; }
-  .card { width: 210px; }
-  .tile { width: 92px; height: 92px; border-radius: 24px; }
+  .stage { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .core { order: 0; height: 250px; }
+  .side[data-side="in"] { order: -1; }
+  .side[data-side="out"] { order: 1; }
+  .sideLabel, .side[data-side="out"] .sideLabel { padding-inline: 16px; }
+  .side[data-side="in"] .row, .side[data-side="out"] .row { -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
+  .row:nth-of-type(3) { display: none; }
+  .card { width: 220px; }
+  .tile { width: 96px; height: 96px; border-radius: 24px; }
   .mark { width: 48px; height: 48px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .track { animation: none; }
-  .side { transition: none; }
+  .side, .beam { transition: none; }
 }
