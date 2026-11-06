@@ -213,3 +213,16 @@ line "recorded but not sent" proves the path); keyboard-only submit works
 - [ ] Reduced motion: no auto-advance; arrows still work
 - [ ] Swipe still works on phones; checked at 360, 390, 430 and 768
 **Files:** `landing-broken.tsx`, `landing-broken.module.css` · **Scope:** S
+
+### Task 19: The seven module cards, as Umar named them (owner, 6 Nov; replaces Task 7's names)
+**Description:** Umar's seven (10:23 in the call), in his order and wording, each card carrying the
+main information for that module: a one-line promise, three or four points, and the real app pages
+the module is made of, plus its flow diagram.
+**Acceptance criteria:**
+- [ ] 1 Partnerships & lead flow · 2 Outbound dialer & lead management · 3 Interview and submit in
+      one window · 4 Commissions, book of business & automations · 5 Accounting · 6 Retention ·
+      7 Compliance (sentence case, marketing README)
+- [ ] Each card lists "Inside" chips that are real menu pages (lib/menu/definition.ts)
+- [ ] Long titles fit on two lines at 1366 and 1536; cards stay one screen tall; phone layout holds
+**Verification:** screenshots of cards 1, 2, 4 at 1536×826 and 390×844; design tests green
+**Files:** `components/marketing/landing-bento.tsx`, `landing-features.module.css` · **Scope:** S

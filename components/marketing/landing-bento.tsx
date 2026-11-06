@@ -3,12 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import {
-  ArrowRight, BadgeCheck, BadgeDollarSign, Ban, CalendarClock, ClipboardCheck, CopyX, FileCheck, FileSpreadsheet,
-  FileText, Handshake, HeartHandshake, IdCard, Link2, ListOrdered, PhoneCall, PhoneIncoming, Receipt, ScrollText,
-  ShieldCheck, Stethoscope, Tag, TrendingUp, TriangleAlert, UserCheck, Wallet,
+  ArrowRight, BadgeCheck, BadgeDollarSign, Ban, BookOpen, CalendarClock, ClipboardCheck, CopyX, FileCheck, FileSpreadsheet, FileText, Handshake, HeartHandshake, IdCard, Link2, ListOrdered, PhoneCall, PhoneIncoming, Receipt, Route, ScrollText, ShieldAlert, ShieldCheck, Stethoscope, Tag, TrendingUp, TriangleAlert, UserCheck, Wallet,
 } from "lucide-react";
 
-import { LandingFlow, type FlowStep } from "@/components/marketing/landing-flow";
+import { LandingFlow, type FlowGraph } from "@/components/marketing/landing-flow";
 import styles from "@/components/marketing/landing-features.module.css";
 
 /**
@@ -21,103 +19,140 @@ import styles from "@/components/marketing/landing-features.module.css";
  * `LandingFlow`). Behaviour described is the CRM's as observed
  * (docs/design/landing-page-research/crm-workflow-observations-production-2026-11-03.md).
  *
- * TO CONFIRM (Umar): the seven names are his first pass, spoken while thinking.
+ * Owner, 6 Nov: the seven are Umar's, in his order and wording (10:23 in the call), each card carrying
+ * that module's main information: the promise, four points, and the app pages it is made of
+ * ("Inside", real menu pages from lib/menu/definition.ts).
  */
-type Module = { key: string; title: string; lede: string; points: string[]; cta: string; flow: FlowStep[] };
+type Module = { key: string; title: string; lede: string; points: string[]; inside: string[]; cta: string; graph: FlowGraph };
 
 const MODULES: Module[] = [
   {
     key: "partners",
     title: "Partnerships & lead flow",
-    lede: "Partners and vendors send leads and live transfers into one queue, each with its source and cost.",
-    points: ["Partners sign in to see only their own leads", "Live transfers land in one queue, with the wait shown", "Lead cost recorded on every lead"],
+    lede: "Set up every partner and lead source once; their leads and live transfers arrive in one queue, each with its source and cost.",
+    points: ["Partners and publishers with their own sign-in, chat and terms", "Live transfers claimed once, with the wait shown", "Lead cost recorded on every lead and transfer", "Partners see only their own leads and results"],
+    inside: ["Partners", "Publishers", "Lead routing", "Inbound", "Partner chat"],
     cta: "Set up a partner",
-    flow: [
-      { icon: Handshake, label: "Partner sends a lead", sub: "Summit Data · Final expense" },
-      { icon: Tag, label: "Source and cost attached", sub: "Lead cost $38.00" },
-      { icon: PhoneIncoming, label: "Live transfer queued", sub: "Waiting 0:14" },
-      { icon: UserCheck, label: "Claimed by an agent", sub: "The first claim wins" },
-    ],
+    graph: {
+      nodes: [
+        { id: "summit", icon: Handshake, label: "Summit Data", sub: "Partner posts a lead", col: 0, row: 0, kind: "source" },
+        { id: "bayview", icon: PhoneIncoming, label: "Bayview Data", sub: "Publisher live transfer", col: 0, row: 2, kind: "source" },
+        { id: "routing", icon: Route, label: "Lead routing", sub: "Source and cost $38.00", col: 1, row: 1 },
+        { id: "queue", icon: PhoneCall, label: "Inbound queue", sub: "Waiting 0:14", col: 2, row: 0 },
+        { id: "claimed", icon: UserCheck, label: "Claimed once", sub: "transfers today", col: 2, row: 2, kind: "outcome", value: { to: 38 } },
+      ],
+      steps: [[["summit", "routing"], ["bayview", "routing"]], [["routing", "queue"]], [["queue", "claimed"]]],
+    },
   },
   {
     key: "dialer",
-    title: "Outbound dialer & leads",
-    lede: "Every list you buy is imported once, cleaned, and screened before a single dial.",
-    points: ["Import a vendor’s CSV and map its columns once", "Duplicates set aside for a person to review", "Consent, DNC, suppression and calling window re-checked before every dial"],
+    title: "Outbound dialer & lead management",
+    lede: "Import the lists you buy, clean them once, and dial them with every call screened first.",
+    points: ["Map a vendor’s CSV once; duplicates set aside for review", "Consent, DNC, suppression and calling window checked before every dial", "Queue scored by priority; leads recycled on your cadence", "Callbacks booked in the client’s own time"],
+    inside: ["Dialer", "Lead workspace", "List import", "Lead recycling", "Callbacks"],
     cta: "Import your first list",
-    flow: [
-      { icon: FileSpreadsheet, label: "Vendor list imported", sub: "cobalt-media.csv · 600 rows" },
-      { icon: CopyX, label: "Duplicates set aside", sub: "16 for a person to review" },
-      { icon: ShieldCheck, label: "Screened before the dial", sub: "Consent · DNC · calling window" },
-      { icon: PhoneCall, label: "Dial placed", sub: "Ruth A. · clear to dial" },
-      { icon: CalendarClock, label: "Callback booked", sub: "Thursday 10:30, her time" },
-    ],
+    graph: {
+      nodes: [
+        { id: "import", icon: FileSpreadsheet, label: "List import", sub: "cobalt-media.csv · 600 rows", col: 0, row: 1, kind: "source" },
+        { id: "dupes", icon: CopyX, label: "Duplicate check", sub: "16 set aside for review", col: 1, row: 0, kind: "branch" },
+        { id: "screen", icon: ShieldCheck, label: "Screened first", sub: "Consent · DNC · window", col: 1, row: 2 },
+        { id: "dial", icon: PhoneCall, label: "Dialer", sub: "Ruth A. · clear to dial", col: 2, row: 0 },
+        { id: "callback", icon: CalendarClock, label: "Callback booked", sub: "contacts today", col: 2, row: 2, kind: "outcome", value: { to: 61 } },
+      ],
+      steps: [[["import", "dupes"], ["import", "screen"]], [["screen", "dial"]], [["dial", "callback"]]],
+    },
   },
   {
     key: "apps",
-    title: "Applications",
-    lede: "The application is filled and submitted while the client is still on the line.",
-    points: ["Verify, interview, quote, beneficiaries and payment in one flow", "Review separates hard blockers from soft checks", "Draft dates and pending cases tracked"],
+    title: "Interview and submit in one window",
+    lede: "Verify, interview, quote, name beneficiaries and take payment in one flow, while the client is still on the line.",
+    points: ["One window from identity check to submitted application", "Review separates hard blockers from soft checks", "Draft dates checked against the deposit before you submit", "Pending cases tracked until the carrier decides"],
+    inside: ["Applications", "Quotes", "Application review", "Draft dates", "Pending cases"],
     cta: "See an application",
-    flow: [
-      { icon: IdCard, label: "Identity verified", sub: "Ruth A. · on the line" },
-      { icon: Stethoscope, label: "Interview", sub: "Health questions answered" },
-      { icon: Receipt, label: "Quote", sub: "$70.00 a month" },
-      { icon: ClipboardCheck, label: "Beneficiaries & payment", sub: "2 named · draft on the 3rd" },
-      { icon: BadgeCheck, label: "Submitted", sub: "0 blockers · 1 to confirm" },
-    ],
+    graph: {
+      nodes: [
+        { id: "verify", icon: IdCard, label: "Identity verified", sub: "Ruth A. · on the line", col: 0, row: 0, kind: "source" },
+        { id: "interview", icon: Stethoscope, label: "Interview", sub: "Health questions", col: 0, row: 1 },
+        { id: "quote", icon: Receipt, label: "Quote", sub: "$70.00 a month", col: 0, row: 2 },
+        { id: "review", icon: ClipboardCheck, label: "Application review", sub: "0 blockers · 1 to confirm", col: 1, row: 1 },
+        { id: "draft", icon: CalendarClock, label: "Draft date", sub: "After the deposit", col: 2, row: 0 },
+        { id: "submitted", icon: BadgeCheck, label: "Submitted", sub: "submitted this week", col: 2, row: 2, kind: "outcome", value: { to: 23 } },
+      ],
+      steps: [[["verify", "interview"]], [["interview", "quote"]], [["quote", "review"]], [["review", "draft"]], [["draft", "submitted"]]],
+    },
   },
   {
     key: "money",
-    title: "Commissions & book",
-    lede: "Every carrier statement line meets the policy you wrote, with what was owed beside what was paid.",
-    points: ["Carrier statements by upload or email", "Each line matched to a policy, and a person accepts it", "True CPA by vendor and campaign"],
+    title: "Commissions, book of business & automations",
+    lede: "Everything after the submission: every policy in one book, every statement line matched, and the routine work done for you.",
+    points: ["Carrier statements by upload or email, each line matched to a policy", "Expected commission from your rate card, beside what was paid", "Splits and overrides worked out per producer", "Policy status changes move the book on their own"],
+    inside: ["Book of business", "Policies", "Statements", "Commission ledger", "Rate card"],
     cta: "Match a statement",
-    flow: [
-      { icon: FileCheck, label: "Policy issued", sub: "SAMPLE-0482 · Ruth A." },
-      { icon: FileText, label: "Carrier statement in", sub: "Line 14 · $84.00" },
-      { icon: Link2, label: "Line matched", sub: "A person accepts it" },
-      { icon: BadgeDollarSign, label: "Commission booked", sub: "Owed $84.00 · paid $84.00" },
-    ],
+    graph: {
+      nodes: [
+        { id: "policy", icon: FileCheck, label: "Policy issued", sub: "SAMPLE-0482 · Ruth A.", col: 0, row: 0, kind: "source" },
+        { id: "statement", icon: FileText, label: "Carrier statement", sub: "Line 14 · $84.00", col: 0, row: 2, kind: "source" },
+        { id: "match", icon: Link2, label: "Line matched", sub: "A person accepts it", col: 1, row: 1 },
+        { id: "book", icon: BookOpen, label: "Book of business", sub: "Status moves to Paid", col: 2, row: 0 },
+        { id: "ledger", icon: BadgeDollarSign, label: "Commission ledger", sub: "matched this month", col: 2, row: 2, kind: "outcome", value: { to: 63816.8, prefix: "$", decimals: 2 } },
+      ],
+      steps: [[["policy", "match"], ["statement", "match"]], [["match", "book"], ["match", "ledger"]]],
+    },
   },
   {
     key: "accounting",
     title: "Accounting",
-    lede: "Lead spend, commission and publisher payouts in one ledger, so profit is a number, not a guess.",
-    points: ["Lead spend from every list and transfer", "Publisher payouts worked out per period", "Profit and loss by campaign and month"],
+    lede: "Lead spend, commission, payouts and expenses in one ledger, so profit is a number, not a guess.",
+    points: ["Vendor bills and lead spend from every list", "Publisher payout runs worked out per period", "Profit and loss by campaign, vendor and month", "True CPA from your own linked data"],
+    inside: ["Profit & loss", "Payout runs", "Vendor bills", "Expenses", "True CPA"],
     cta: "See the ledger",
-    flow: [
-      { icon: Tag, label: "Lead spend", sub: "Cobalt Media · $10,236" },
-      { icon: BadgeDollarSign, label: "Commission received", sub: "$63,816.80 this month" },
-      { icon: Wallet, label: "Publisher payouts", sub: "Summit Data · per period" },
-      { icon: TrendingUp, label: "Profit by campaign", sub: "P&L for the month" },
-    ],
+    graph: {
+      nodes: [
+        { id: "bills", icon: Receipt, label: "Vendor bills", sub: "Lead spend $10,236", col: 0, row: 0, kind: "source" },
+        { id: "commission", icon: BadgeDollarSign, label: "Commission in", sub: "$63,816.80", col: 0, row: 1, kind: "source" },
+        { id: "payouts", icon: Wallet, label: "Payout runs", sub: "Summit Data · October", col: 0, row: 2, kind: "source" },
+        { id: "ledger", icon: BookOpen, label: "One ledger", sub: "Every dollar to a policy", col: 1, row: 1 },
+        { id: "cpa", icon: Tag, label: "True CPA", sub: "$56.00 per policy", col: 2, row: 0 },
+        { id: "pnl", icon: TrendingUp, label: "Profit & loss", sub: "this month", col: 2, row: 2, kind: "outcome", value: { to: 41180, prefix: "+$" } },
+      ],
+      steps: [[["bills", "ledger"], ["commission", "ledger"], ["payouts", "ledger"]], [["ledger", "cpa"], ["ledger", "pnl"]]],
+    },
   },
   {
     key: "retention",
     title: "Retention",
-    lede: "Missed drafts and lapse notices become a save queue, worked before the policy is lost.",
-    points: ["Missed drafts and lapse notices go to a save queue", "Ranked by risk times money", "Servicing and reinstatement tracked"],
+    lede: "Missed drafts and lapse notices become a save queue, worked before the policy and its commission are lost.",
+    points: ["A save queue ranked by risk times money", "Lapse risk flagged before the draft date", "Servicing and reinstatement tracked to the carrier", "Retention results by producer and vendor"],
+    inside: ["Save queue", "Lapse risk", "Servicing", "Reinstatement", "Retention results"],
     cta: "Start keeping more",
-    flow: [
-      { icon: TriangleAlert, label: "Draft missed", sub: "SAMPLE-0533 · lapse notice" },
-      { icon: ListOrdered, label: "Into the save queue", sub: "Ranked by risk × money" },
-      { icon: PhoneCall, label: "Agent calls the client", sub: "New bank details taken" },
-      { icon: HeartHandshake, label: "Policy saved", sub: "$1,240 a year kept" },
-    ],
+    graph: {
+      nodes: [
+        { id: "missed", icon: TriangleAlert, label: "Draft missed", sub: "SAMPLE-0533 · notice", col: 0, row: 1, kind: "branch" },
+        { id: "risk", icon: ShieldAlert, label: "Lapse risk", sub: "$1,240 at risk", col: 1, row: 0 },
+        { id: "queue", icon: ListOrdered, label: "Save queue", sub: "Risk × money, first", col: 1, row: 2 },
+        { id: "call", icon: PhoneCall, label: "Servicing call", sub: "New bank details", col: 2, row: 0 },
+        { id: "saved", icon: HeartHandshake, label: "Policy saved", sub: "a year kept", col: 2, row: 2, kind: "outcome", value: { to: 1240, prefix: "$" } },
+      ],
+      steps: [[["missed", "risk"]], [["risk", "queue"]], [["queue", "call"]], [["call", "saved"]]],
+    },
   },
   {
     key: "compliance",
     title: "Compliance",
-    lede: "Consent, screening and every refused dial are recorded as the work happens, not reconstructed later.",
-    points: ["Consent kept on every lead", "A refused dial is logged with its reason", "Complaints tracked to their regulator deadline"],
+    lede: "Consent, screening and every refused dial are recorded as the work happens, not reconstructed when a letter arrives.",
+    points: ["Consent certificates kept on every lead", "TCPA and DNC screening, with refusals logged and their reason", "Complaints tracked to their regulator deadline", "An evidence report for any contact, in one export"],
+    inside: ["Compliance", "TCPA / DNC", "Consent locker", "Complaints", "Evidence report"],
     cta: "See the checks",
-    flow: [
-      { icon: FileCheck, label: "Consent on file", sub: "Certificate on the lead" },
-      { icon: ShieldCheck, label: "Checked before the dial", sub: "DNC · suppression · window" },
-      { icon: Ban, label: "Dial refused", sub: "Outside the calling window" },
-      { icon: ScrollText, label: "Logged with the reason", sub: "Who, when and why" },
-    ],
+    graph: {
+      nodes: [
+        { id: "consent", icon: FileCheck, label: "Consent locker", sub: "Certificate on the lead", col: 0, row: 1, kind: "source" },
+        { id: "checks", icon: ShieldCheck, label: "TCPA / DNC checks", sub: "Before every dial", col: 1, row: 1 },
+        { id: "refused", icon: Ban, label: "Dial refused", sub: "Outside the window", col: 2, row: 0, kind: "branch" },
+        { id: "placed", icon: PhoneCall, label: "Dial placed", sub: "4 of 4 passed", col: 2, row: 1 },
+        { id: "evidence", icon: ScrollText, label: "Evidence report", sub: "records, one export", col: 2, row: 2, kind: "outcome", value: { to: 214 } },
+      ],
+      steps: [[["consent", "checks"]], [["checks", "refused"], ["checks", "placed"]], [["placed", "evidence"]]],
+    },
   },
 ];
 
@@ -157,7 +192,7 @@ export function LandingBento() {
         <header className={styles.head}>
           <p className={styles.eyebrow}>What it does</p>
           <h2 id="features-title" className={styles.title}>Built for the way insurance is <em>really</em> sold.</h2>
-          <p className={styles.lede}>Seven modules, one workspace: from the partner’s lead to the policy you keep.</p>
+          <p className={styles.lede}>Seven modules in one workspace, from the partner’s first lead to the policy you keep.</p>
         </header>
 
         <div className={styles.stack}>
@@ -174,10 +209,14 @@ export function LandingBento() {
                 <h3 id={`feature-${module.key}`}>{module.title}</h3>
                 <p>{module.lede}</p>
                 <ul>{module.points.map((point) => <li key={point}>{point}</li>)}</ul>
+                <div className={styles.inside}>
+                  <span>Inside</span>
+                  <ul aria-label={`Pages in ${module.title}`}>{module.inside.map((page) => <li key={page}>{page}</li>)}</ul>
+                </div>
                 <a href="/signup" className={styles.cta}>{module.cta}<ArrowRight aria-hidden="true" /></a>
               </div>
               <div className={styles.scene}>
-                <LandingFlow steps={module.flow} playing={active === i} />
+                <LandingFlow graph={module.graph} title={module.title} playing={active === i} />
               </div>
             </article>
           ))}
