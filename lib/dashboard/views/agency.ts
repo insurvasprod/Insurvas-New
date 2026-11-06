@@ -111,7 +111,7 @@ export function issuedYearToDate(rows: readonly PolicyLite[], year: string, toda
   return rows.reduce((sum, row) => (row.issueDate && row.issueDate >= `${year}-01-01` && row.issueDate <= end ? sum + (row.annualCents ?? 0) : sum), 0);
 }
 
-export type GoalRow = { userId: string; name: string; cents: number; goalCents: number };
+export type GoalRow = { userId: string; name: string; cents: number; goalCents: number; /** Policies issued this month. */ count: number };
 
 /**
  * Each producer's issued premium this month against a goal. No goal is stored, so the goal is what they issued
@@ -122,8 +122,8 @@ export function producerGoals(rows: readonly PolicyLite[], month: string, previo
   for (const row of rows) {
     const key = row.issueDate?.slice(0, 7);
     if (!row.agentUserId || (key !== month && key !== previous)) continue;
-    const entry = by.get(row.agentUserId) ?? { userId: row.agentUserId, name: row.agentName ?? "Producer", cents: 0, goalCents: 0 };
-    if (key === month) entry.cents += row.annualCents ?? 0;
+    const entry = by.get(row.agentUserId) ?? { userId: row.agentUserId, name: row.agentName ?? "Producer", cents: 0, goalCents: 0, count: 0 };
+    if (key === month) { entry.cents += row.annualCents ?? 0; entry.count += 1; }
     else entry.goalCents += row.annualCents ?? 0;
     by.set(row.agentUserId, entry);
   }

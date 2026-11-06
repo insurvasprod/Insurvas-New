@@ -96,7 +96,7 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   // Every producer on the roster, not only those with a policy this month or last: their policies and placement too.
   const roster = new Map((agency?.producers ?? []).map((row) => [row.producerUserId, row]));
   const goalRows = goals ? [...goals] : [];
-  for (const row of roster.values()) if (!goalRows.some((goal) => goal.userId === row.producerUserId)) goalRows.push({ userId: row.producerUserId, name: row.name, cents: 0, goalCents: 0 });
+  for (const row of roster.values()) if (!goalRows.some((goal) => goal.userId === row.producerUserId)) goalRows.push({ userId: row.producerUserId, name: row.name, cents: 0, goalCents: 0, count: 0 });
   const goalsCard = goals && links.producers ? (
     <DashGoals
       title="Producer goals"
@@ -104,7 +104,8 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
       link={{ label: "Producers", href: links.producers }}
       rows={goalRows.map((row) => {
         const record = roster.get(row.userId);
-        const facts = [period === "this" ? `${left} ${left === 1 ? "day" : "days"} left` : name, record ? `${n(record.issued)} issued` : null, record && record.submitted ? `${record.placement} placed` : null].filter(Boolean);
+        // The policies counted from the same book rows as the premium, so the two always agree.
+        const facts = [period === "this" ? `${left} ${left === 1 ? "day" : "days"} left` : name, row.count ? `${n(row.count)} ${row.count === 1 ? "policy" : "policies"}` : null].filter(Boolean);
         return {
           key: row.userId,
           name: row.name,
@@ -181,7 +182,8 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
     events.push({ key: `m-${item.key}`, mark: "$", tone: "info" as DashTone, title: item.title, detail: item.detail, value: `+${dollars(item.cents)}`, when: item.on.slice(5).replace("-", "/"), href: item.href, on: item.on });
   }
   for (const row of rows ?? []) {
-    if (!row.issueDate || row.issueDate.slice(0, 7) !== month) continue;
+    // Issued this month up to today (a carrier file can carry an issue date still to come).
+    if (!row.issueDate || row.issueDate.slice(0, 7) !== month || row.issueDate > today) continue;
     events.push({ key: `p-${row.carrierId}-${row.policyNumber}`, mark: "✓", tone: "good", title: "Policy issued", detail: `${row.agentName ?? row.clientName ?? "Policy"} · ${row.carrierName}`, value: row.annualCents ? `+${dollars(row.annualCents)}/yr` : undefined, when: row.issueDate.slice(5).replace("-", "/"), href: row.href ?? `${policiesHref ?? "/app/policies"}?q=${encodeURIComponent(row.policyNumber)}`, on: row.issueDate });
   }
   events.sort((a, b) => (a.on < b.on ? 1 : a.on > b.on ? -1 : 0));

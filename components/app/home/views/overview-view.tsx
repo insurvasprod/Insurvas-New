@@ -121,7 +121,8 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
     if (todaySales && deals?.quotes) bars.push({ key: "quotes", label: "Quotes", value: todaySales.quotes, shown: count(todaySales.quotes), tone: "info", note: contacts ? `${pct(todaySales.quotes, contacts)} of contacts` : "No contacts yet", href: sales?.href });
     if (todaySales) {
       const quoted = deals?.quotes ? todaySales.quotes : 0;
-      const note = todaySales.sales && quoted ? `1 in ${Math.max(1, Math.round(quoted / todaySales.sales))} quotes` : quoted ? `0 of ${quoted} quotes` : "Submitted today";
+      // "1 in N quotes" only when today's quotes outnumber its sales; many of today's sales were quoted on earlier days.
+      const note = todaySales.sales && quoted > todaySales.sales ? `1 in ${Math.round(quoted / todaySales.sales)} quotes` : todaySales.sales ? "Submitted today" : quoted ? `${quoted} quoted today` : "Submitted today";
       bars.push({ key: "sales", label: "Sales", value: todaySales.sales, shown: count(todaySales.sales), tone: "good", note, href: sales?.href });
     } else bars.push({ key: "appointments", label: "Appointments", value: data.appointmentsToday ?? 0, shown: count(data.appointmentsToday), tone: "good", note: "Booked for today", href: calendarHref ?? undefined });
     const best = data.insights?.heat?.best ?? null;
