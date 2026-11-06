@@ -68,6 +68,9 @@ const unwrap = <T,>(read: { ok: true; value: T } | { ok: false; error: unknown }
   return read.value;
 };
 
+/** In force again by the latest file (not "approved_unpaid": a lapse cannot go back to never paid). */
+const BACK_IN_FORCE = new Set(["active", "at_risk", "paid_up"]);
+
 export type CaseRow = {
   id: string;
   key: string;
@@ -85,6 +88,8 @@ export type CaseRow = {
   monthlyPremiumCents: number | null;
   faceCents: number | null;
   advanceCents: number | null;
+  /** The latest chargeback on the policy (commission file): the advance already taken back, so "revives: $0" is not the whole story. */
+  chargeback: { cents: number; on: string } | null;
   comparison: Comparison;
   requiresHealthQuestions: boolean | null;
   requiresSignedForm: boolean | null;
@@ -106,7 +111,7 @@ export type Reinstatement = {
   settings: RetentionSettings;
   /** LA-5.8: owners are shown only when more than one person owns cases. */
   showOwners: boolean;
-  counts: { open: number; pinned: number; noWindow: number; reinstated90: number; expired90: number; declined90: number; advanceOpenCents: number; advanceUnknown: number };
+  counts: { open: number; pinned: number; noWindow: number; reinstated90: number; expired90: number; declined90: number; advanceOpenCents: number; advanceUnknown: number; inForceNow: number };
 };
 
 /** Ask the database to open, reinstate, expire and alert. Idempotent. */
@@ -147,9 +152,17 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
   }
   const settings = settingsFromRow(settingsRow);
   const numbers = [...new Set(cases.map((c) => c.policy_number))];
-  const policies = (await inChunks(numbers, (part) => db().from("policy_current").select("carrier_id, policy_number, agent_user_id, contact_id, paid_to_date, premium_cents, premium_mode, annualised_premium_cents, face_amount_cents, months_paid, product_code, as_of, issue_date, issued_on, effective_date").eq("tenant_id", viewer.tenantId).in("policy_number", part)))
+  const policies = (await inChunks(numbers, (part) => db().from("policy_current").select("carrier_id, policy_number, agent_user_id, contact_id, status_normalized, paid_to_date, premium_cents, premium_mode, annualised_premium_cents, face_amount_cents, months_paid, product_code, as_of, issue_date, issued_on, effective_date").eq("tenant_id", viewer.tenantId).in("policy_number", part)))
     .filter((p: Loose) => cases.some((c) => keyOf(c) === keyOf(p)));
   const policyOf = new Map<string, Loose>(policies.map((p: Loose) => [keyOf(p), p]));
+  // An open case whose latest file shows the policy in force and paid past the lapse is not worked here: Cases
+  // leaves it off too, so the two lists agree (critique A3). It is counted, so the page can say why.
+  const inForceNow = cases.filter((c) => {
+    if (!OPEN_CASE_STATUSES.includes(c.status)) return false;
+    const p = policyOf.get(keyOf(c));
+    return Boolean(p && BACK_IN_FORCE.has(p.status_normalized) && p.paid_to_date && c.lapsed_on && p.paid_to_date > c.lapsed_on);
+  });
+  if (inForceNow.length) cases = cases.filter((c) => !inForceNow.includes(c));
   // The agency's day — the same one the banner and the database's expiry count from.
   const today = unwrap(await dayRead);
   // LA-5.8: every open case has an owner, resolved across the agency before anyone filters. The
@@ -170,7 +183,16 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
     inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, primary_phone, dob").eq("tenant_id", viewer.tenantId).in("id", part)),
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
   ]));
+  // The newest chargeback per open case's policy: shown beside the advance (critique A4: "revives: $0" after a $276 chargeback).
+  const chargebackRead = settle(inChunks([...new Set(allOpen.map((c) => c.policy_number))], (part) => db().from("commission_entry").select("carrier_id, policy_number, statement_date, amount_cents").eq("tenant_id", viewer.tenantId).eq("entry_type", "chargeback").in("policy_number", part)));
   const advanceMap = await advanceAtRisk(viewer.tenantId, allOpen.map((c) => policyOf.get(keyOf(c))).filter(Boolean));
+  const chargebackOf = new Map<string, { cents: number; on: string }>();
+  const chargebackRows = await chargebackRead;
+  for (const e of (chargebackRows.ok ? chargebackRows.value : []) as Loose[]) {
+    const key = keyOf(e);
+    const was = chargebackOf.get(key);
+    if (!was || e.statement_date > was.on) chargebackOf.set(key, { cents: Math.abs(Number(e.amount_cents)), on: e.statement_date });
+  }
   const owners = await ensureOwners(viewer.tenantId, "reinstatement", allOpen.map((c) => ({
     key: keyOf(c), carrierId: c.carrier_id, writingAgentId: policyOf.get(keyOf(c))?.agent_user_id ?? null, exposureCents: advanceMap.get(keyOf(c)) ?? null, daysToDeadline: daysRemaining(c.deadline, today),
   })), settings, { keep: new Set(allOpen.map(keyOf)), inputs: ownerInputs }).catch((error) => {
@@ -197,6 +219,7 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
       agentName: p.agent_user_id ? userName.get(p.agent_user_id) ?? null : null,
       lapsedOn: c.lapsed_on, deadline: c.deadline, daysRemaining: days, urgency: urgencyOf(days, settings), status: c.status,
       monthlyPremiumCents: monthly, faceCents: p.face_amount_cents == null ? null : Number(p.face_amount_cents), advanceCents: advance,
+      chargeback: OPEN_CASE_STATUSES.includes(c.status) ? chargebackOf.get(key) ?? null : null,
       comparison: compare({
         enteredOwedCents: c.amount_owed_cents == null ? null : Number(c.amount_owed_cents), enteredMonths: c.months_owed,
         estimate: estimateOwed(p.paid_to_date ?? null, today, monthly), advanceCents: advance, needsHealthQuestions: c.requires_health_questions,
@@ -226,6 +249,7 @@ export async function loadReinstatement(viewer: Viewer): Promise<Reinstatement |
       declined90: closed.filter((r) => r.status === "declined_by_client" || r.status === "declined_by_carrier").length,
       advanceOpenCents: open.reduce((sum, r) => sum + (r.advanceCents ?? 0), 0),
       advanceUnknown: open.filter((r) => r.advanceCents === null).length,
+      inForceNow: inForceNow.length,
     },
   };
 }

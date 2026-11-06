@@ -4,12 +4,11 @@ import { ArrowLeftRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { TableCard } from "@/components/ui/table-card";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { fileDay } from "@/lib/ingestion/constants";
 import { changeClientHref, LINK_TARGET_WORDS, linkMethodWord } from "@/lib/ingestion/policyPage";
 import type { PolicyLink } from "@/lib/ingestion/policyPageStore";
 
-import { FactGrid } from "./policy-head";
 import { UnlinkClient } from "./policy-islands";
 
 /**
@@ -30,13 +29,9 @@ export function PolicyClientTab({ link, carrierId, policyNumber, clientName, can
   if (!link.available) return <EmptyState title="Client links aren't available yet" hint={pendingMessage} />;
   const current = link.current;
   const sale = link.sale;
-  const saleText = sale
-    ? [sale.kind === "deal_flow" ? "Daily deal flow" : "Application", fileDay(sale.date), sale.agentName, sale.status ? sale.status.replaceAll("_", " ") : null].filter((part) => part && part !== "—").join(" · ")
-    : "No sale on record";
-  // Board 22: the link this one replaced, in one line.
+  // Board 22: the link this one replaced (its own row in Link history; the How tile says one was replaced).
   const before = current ? link.history.find((entry) => !entry.current) ?? null : null;
   const beforeText = before ? [before.clientName ?? (before.type === "provisional" ? "A client made from the carrier's file" : LINK_TARGET_WORDS[before.type] ?? "A sale"), linkMethodWord(before.method).toLowerCase(), `superseded ${fileDay(current?.at ?? null)}`].join(" · ") : null;
-  const issuedText = link.submittedNumber && link.submittedNumber !== policyNumber ? policyNumber : `${policyNumber}${link.submittedNumber ? " (same)" : ""}`;
   const actions = canEdit ? (
     <div className="flex flex-wrap items-center gap-2">
       {current && <UnlinkClient matchId={current.id} clientName={current.clientName ?? clientName} disabledReason={editBlocked} />}
@@ -48,25 +43,19 @@ export function PolicyClientTab({ link, carrierId, policyNumber, clientName, can
     </div>
   ) : undefined;
 
+  // Round 6 (board 3): the link as the mockups' strip; why it was made behind How's (i); the link it replaced is the
+  // second row of Link history (and the How tile's footnote); the buttons on Link history's head.
+  const sold = sale ? [fileDay(sale.date), sale.agentName, sale.status ? sale.status.replaceAll("_", " ") : null].filter((part) => part && part !== "—").join(" · ") : "no sale on record";
   return (
     <>
-      <TableCard title="Client" action={actions}>
-        {current ? (
-          <FactGrid items={[
-            ["Linked to", `${current.clientName ?? clientName ?? "No client yet"}${current.dob ? ` · born ${fileDay(current.dob)}` : ""}`],
-            ["How", `${linkMethodWord(current.method)}${current.type && LINK_TARGET_WORDS[current.type] ? `, to ${LINK_TARGET_WORDS[current.type]}` : ""} · ${fileDay(current.at)}`],
-            ["Before", beforeText ?? "No earlier link"],
-            ["Sale", saleText],
-            ["Submitted number", link.submittedNumber ?? "Not recorded"],
-            ["Issued number", issuedText],
-          ]} />
-        ) : (
-          <p className="m-0 px-4 pb-4 text-sm text-muted-foreground">No client is linked to this policy yet.{canEdit ? " Link one, or decide it in Needs you." : " The owner or a bookkeeper links it."}</p>
-        )}
-        {current?.reason && <p className="m-0 border-t border-border px-4 py-3 text-sm text-muted-foreground">Why: <span className="text-foreground">{current.reason}</span></p>}
-      </TableCard>
+      <StatStrip label="This policy's client">
+        <StatTile label="Linked to" valueSize="text" value={current ? current.clientName ?? clientName ?? "No client yet" : "No client yet"} valueTone={current ? undefined : "warning"} footnote={current ? (current.dob ? `born ${fileDay(current.dob)}` : current.type === "provisional" ? "made from the carrier's file" : "date of birth not known") : canEdit ? "link one, or decide it in Needs you" : "the owner or a bookkeeper links it"} />
+        <StatTile label="How" labelTitle={[current?.reason ? `Why: ${current.reason}` : null, beforeText ? `Before: ${beforeText}` : null].filter(Boolean).join("\n") || undefined} valueSize="text" value={current ? linkMethodWord(current.method) : "—"} footnote={current ? [current.type && LINK_TARGET_WORDS[current.type] ? `to ${LINK_TARGET_WORDS[current.type]}` : null, fileDay(current.at), beforeText ? "replaced an earlier link" : null].filter(Boolean).join(" · ") : "not linked"} />
+        <StatTile label="Sale" valueSize="text" value={sale ? (sale.kind === "deal_flow" ? "Daily deal flow" : "Application") : "None"} footnote={sold} />
+        <StatTile label="Policy number" valueSize="text" value={<span className="font-mono">{policyNumber}</span>} footnote={link.submittedNumber ? (link.submittedNumber === policyNumber ? "submitted as the same" : `submitted as ${link.submittedNumber}`) : "submitted number not recorded"} />
+      </StatStrip>
 
-      <PagedTableCard total={link.history.length} noun="links" title="Link history">
+      <PagedTableCard total={link.history.length} noun="links" title="Link history" action={actions}>
         {link.history.length === 0 ? (
           <EmptyState title="No links yet" hint="Each time this policy is linked to a client, by Insurvas or a person, it shows here." />
         ) : (

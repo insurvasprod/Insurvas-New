@@ -5,7 +5,7 @@ import { audit } from "@/lib/audit/log";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { CONTACT_OUTCOMES, PAYMENT_METHODS } from "@/lib/retention/constants";
 import { CARRIER_METHODS, ORIGINS } from "@/lib/retention/servicing";
-import { createRequest, loadPrefill, ServicingError, stepRequest } from "@/lib/retention/servicingStore";
+import { addRequestNote, createRequest, loadPrefill, ServicingError, stepRequest } from "@/lib/retention/servicingStore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
 
@@ -54,6 +54,7 @@ const body = z.discriminatedUnion("action", [
     confirmed_on: isoDate.nullable(),
     note: z.string().trim().max(500).nullable(),
   }).strict(),
+  z.object({ action: z.literal("note"), id: z.string().refine(isRecordUuid, "Choose the request."), note: z.string().trim().min(1, "Write the note first.").max(1000) }).strict(),
 ]);
 
 export async function GET(request: NextRequest) {
@@ -98,6 +99,11 @@ export async function POST(request: NextRequest) {
       });
       await audit({ actorType: "tenant", actorId: userId, action: "retention.servicing_requested", targetType: "policy", targetId: `${b.carrier_id}:${b.policy_number}`, metadata: { tenantId, requestId: created.id, type: c.type, origin: b.origin, sent: Boolean(b.send) }, request });
       return NextResponse.json({ ok: true, id: created.id });
+    }
+    if (b.action === "note") {
+      await addRequestNote(viewer, b.id, b.note);
+      await audit({ actorType: "tenant", actorId: userId, action: "retention.servicing_noted", targetType: "servicing_request", targetId: b.id, metadata: { tenantId }, request });
+      return NextResponse.json({ ok: true });
     }
     await stepRequest(viewer, b.id, b.to, { send: sendDetails(b.send) ?? undefined, reference: b.reference, confirmedOn: b.confirmed_on, note: b.note });
     await audit({ actorType: "tenant", actorId: userId, action: "retention.servicing_stepped", targetType: "servicing_request", targetId: b.id, metadata: { tenantId, to: b.to }, request });

@@ -6,7 +6,7 @@ import { StepFrame } from "@/components/app/step-frame/step-frame";
 import type { RailStep } from "@/components/app/step-frame/step-rail";
 import type { Crumb } from "@/components/ui/breadcrumbs";
 import { InfoTip } from "@/components/ui/info-tip";
-import { RETENTION_RAIL_COOKIE, RETENTION_STEPS, retentionStepLabel, type RetentionStep } from "@/lib/retention/steps";
+import { RETENTION_RAIL_COOKIE, RETENTION_STEPS, retentionStepLabel, stepItem, type RetentionStep } from "@/lib/retention/steps";
 
 /**
  * Retention, one page (owner 2026-11-02, as Commissions and Reports): Save queue, Servicing and Reinstatement
@@ -20,9 +20,10 @@ async function openSteps(): Promise<RailStep[]> {
   const [radar, servicing, winback] = await Promise.all([guardPage("chargeback_radar"), guardPage("payment_repair"), guardPage("winback")]);
   const open = new Set<RetentionStep>();
   const worker = ["owner", "producer", "retention"] as const;
-  if (radar.entitled && actAsPage(radar, worker)) open.add("save");
+  if (radar.entitled && actAsPage(radar, worker)) open.add("cases");
   if (servicing.entitled && actAsPage(servicing, worker)) open.add("servicing");
-  if (winback.entitled && actAsPage(winback, worker)) open.add("reinstatement");
+  // Win-back calls are not a retention rep's (LA-5.8); their lapses are on Cases.
+  if (winback.entitled && actAsPage(winback, ["owner", "producer"])) open.add("reinstatement");
   return RETENTION_STEPS.filter((item) => open.has(item.key));
 }
 
@@ -46,9 +47,11 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
 }) {
   const [steps, jar] = await Promise.all([openSteps(), cookies()]);
   // The step on screen is always offered: its route already let this person in.
+  // A retired step (the predictive Save queue) still answers at its address, at the rail's end.
   if (!steps.some((item) => item.key === step)) {
-    const own = RETENTION_STEPS.find((item) => item.key === step)!;
-    const at = steps.filter((item) => RETENTION_STEPS.findIndex((s) => s.key === item.key) < RETENTION_STEPS.indexOf(own)).length;
+    const own = stepItem(step);
+    const index = RETENTION_STEPS.indexOf(own);
+    const at = index < 0 ? steps.length : steps.filter((item) => RETENTION_STEPS.findIndex((s) => s.key === item.key) < index).length;
     steps.splice(at, 0, own);
   }
   const heading = title ?? retentionStepLabel(step);
@@ -69,6 +72,6 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
 
 /** The trail of a record under a Retention step: Retention › the step › the record. */
 export function retentionTrail(step: RetentionStep, label: string, middle?: Crumb): Crumb[] {
-  const own = RETENTION_STEPS.find((item) => item.key === step)!;
+  const own = stepItem(step);
   return [{ label: "Retention" }, { label: own.label, href: own.href }, ...(middle ? [middle] : []), { label }];
 }

@@ -76,7 +76,7 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
       {pinned.length > 0 && <Callout tone="error" title={`${pinned.length === 1 ? "1 reinstatement window closes" : `${pinned.length} reinstatement windows close`} within ${data.settings.reinstatementPinDays} days. After that the policy is gone for good.`} />}
       {(data.open.length > 0 || data.closed.length > 0) && (
         <StatStrip label="Reinstatement">
-          <StatTile href="/app/reinstatement" label="Open cases" value={counts.open.toLocaleString("en-US")} footnote={counts.noWindow ? `${counts.noWindow} with no carrier window` : "every one has a deadline"} />
+          <StatTile href="/app/retention?step=lapsed" label="Open cases" value={counts.open.toLocaleString("en-US")} footnote={[counts.noWindow ? `${counts.noWindow} with no carrier window` : "every one has a deadline", counts.inForceNow ? `${counts.inForceNow} left off: the latest file says in force` : null].filter(Boolean).join(" · ")} />
           <StatTile href="/app/reinstatement" label={`Within ${data.settings.reinstatementRedDays} days`} value={data.open.filter((r) => r.urgency === "pinned" || r.urgency === "red").length.toLocaleString("en-US")} valueTone={pinned.length ? "danger" : undefined} footnote={`${pinned.length} within ${data.settings.reinstatementPinDays}`} />
           <StatTile label="Advance that revives" value={counts.advanceOpenCents > 0 ? advance : "Unknown"} footnote={counts.advanceUnknown ? `${counts.advanceUnknown} with no advance on file` : "if every case comes back"} />
           <StatTile href="/app/reinstatement?cases=closed" label="Last 90 days" value={`${counts.reinstated90} back`} footnote={`${counts.expired90} window closed · ${counts.declined90} declined`} />
@@ -138,9 +138,13 @@ export function ReinstatementBoard({ data, readOnly }: { data: Reinstatement; re
                     </td>
                     <td>
                       <span className="block truncate text-foreground">{c.owedCents === null ? "Ask the carrier what is owed" : `Owes ${c.owedIsEstimate ? "about " : ""}${money(c.owedCents)}${c.months ? ` · ${c.months} ${c.months === 1 ? "month" : "months"}` : ""}`}</span>
-                      {(c.advanceRevivesCents !== null || r.comparison.sellNew.olderNow) && (
+                      {(c.advanceRevivesCents !== null || r.chargeback || r.comparison.sellNew.olderNow) && (
                         <span className="block truncate text-xs text-muted-foreground" title={r.comparison.sellNew.olderNow ? `A new policy prices at ${r.comparison.sellNew.ageNow}, not ${r.comparison.sellNew.ageThen}` : undefined}>
-                          {[c.advanceRevivesCents !== null ? `${money(c.advanceRevivesCents)} advance revives` : null, r.comparison.sellNew.olderNow ? `new policy at age ${r.comparison.sellNew.ageNow}` : null].filter(Boolean).join(" · ")}
+                          {[
+                            // A chargeback already took the advance back: say so, never "$0 advance revives" (critique A4).
+                            r.chargeback && !c.advanceRevivesCents ? `${money(r.chargeback.cents)} charged back ${fileDay(r.chargeback.on)}` : c.advanceRevivesCents !== null ? `${money(c.advanceRevivesCents)} advance revives` : null,
+                            r.comparison.sellNew.olderNow ? `new policy at age ${r.comparison.sellNew.ageNow}` : null,
+                          ].filter(Boolean).join(" · ")}
                         </span>
                       )}
                     </td>

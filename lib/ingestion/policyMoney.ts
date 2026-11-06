@@ -258,7 +258,7 @@ export function whatsNext(facts: MoneyFacts & { carrierName: string; premiumCent
   const atRisk = facts.atRiskCents;
   if (facts.status === "lapsed") {
     const until = facts.daysLeft !== null && facts.daysLeft > 0 && facts.asOf ? addDays(facts.asOf, facts.daysLeft) : null;
-    lines.push({ date: until ?? "", text: until ? `Lapsed · can be reinstated until ${shortDay(until)}` : "Lapsed · no reinstatement window is set in Carrier rules", tone: "danger" });
+    lines.push({ date: until ?? "", text: until ? `Lapsed · can be reinstated until ${shortDay(until)}` : "Lapsed · no reinstatement window is set in Carrier terms", tone: "danger" });
     if (atRisk) lines.push({ date: "", text: `${cents(atRisk)} of the advance can be charged back`, tone: "danger" });
     return { lines, graceMissing: false };
   }

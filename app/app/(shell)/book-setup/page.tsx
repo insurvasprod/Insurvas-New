@@ -2,8 +2,8 @@ import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RateCardWorkspace } from "@/components/app/rate-card";
-import { SetupTabs } from "@/components/app/book/setup/setup-tabs";
 import { Callout } from "@/components/app/settings/primitives";
+import { InfoTip } from "@/components/ui/info-tip";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { EXPECTED_PENDING_MESSAGE, loadRateCard } from "@/lib/ingestion/expectedCommissionStore";
@@ -17,14 +17,14 @@ const whole = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-
  */
 export default async function BookSetupPage() {
   const guard = await guardPage("statement_ingestion");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Setup" description="Rates, carrier rules and pipeline rules for your book." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Setup" description="Rates, carrier terms and card-move rules for your book." />;
   if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Setup" detail="Setup is for the account owner and bookkeepers." />;
   if (!actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Rate card" detail="Rates and contract levels are set by the account owner or a bookkeeper." />;
   const view = await loadRateCard(guard.context.tenantId);
   const today = new Date().toISOString().slice(0, 10);
 
   return (
-    <DataInPage step="setup" lead={<SetupTabs active="rate-card" tenantId={guard.context.tenantId} />}>
+    <DataInPage step="rate-card" chip={<InfoTip label="About the rate card" side="right">What each carrier pays you: your contract level and the commission rate per product. With a rate, Insurvas works out what every policy should pay and flags the payments that come in short. Work down the list: a carrier whose policies can&apos;t all be checked has <b>Add rates</b>; open it and add the rate for each product family.</InfoTip>}>
       {!view.available ? (
         <Callout tone="warning" title={EXPECTED_PENDING_MESSAGE} />
       ) : (

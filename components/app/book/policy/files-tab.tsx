@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { StatusChip } from "@/components/ui/status-chip";
 import { fileDay } from "@/lib/ingestion/constants";
 import type { PolicyFile } from "@/lib/ingestion/policyPageStore";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
@@ -22,7 +23,8 @@ export function PolicyFilesTab({ files }: { files: PolicyFile[] }) {
               <ClickRow key={file.fileId} href={fileHref(file.fileId)} label={`Open ${file.name}`}>
                 <td className="tabular-nums text-muted-foreground">{fileDay(file.date)}</td>
                 <td className="max-w-[360px] truncate font-medium text-foreground" title={file.name}>{file.name}</td>
-                <td className="text-muted-foreground">{file.kind === "commissions" ? "Commission statement" : "Policy file"}</td>
+                {/* Round 6 (board 6): the kind as a chip, so policy files and statements part at a glance. */}
+                <td><StatusChip tone={file.kind === "commissions" ? "info" : "neutral"}>{file.kind === "commissions" ? "Commission statement" : "Policy file"}</StatusChip></td>
                 <td className="text-muted-foreground">
                   {file.rowNumbers.length === 0 ? "—" : file.rowNumbers.slice(0, 4).map((n, index) => (
                     <span key={n}>{index > 0 ? ", " : ""}<Link href={rowHref(file.fileId, n)} className="text-[var(--accent-ink)] hover:underline">{file.kind === "commissions" ? "line" : "row"} {n}</Link></span>

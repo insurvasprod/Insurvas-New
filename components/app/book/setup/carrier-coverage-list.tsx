@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
+import { buttonVariants } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { ToggleChip } from "@/components/ui/toggle-chip";
@@ -40,6 +42,11 @@ export function RuleDots({ dots }: { dots: Record<RuleType, DotState> }) {
       {RULE_TYPES.map((type) => <span key={type} title={`${RULE_TYPE_LABELS[type].label}: ${DOT[dots[type]].label}`} className={cn("inline-block size-2.5 rounded-full", DOT[dots[type]].className)} />)}
     </span>
   );
+}
+
+/** A column head with an (i) that says what the column means and what to do about it. */
+function Head({ tip, text, children }: { tip: string; text: string; children: ReactNode }) {
+  return <span className="inline-flex items-center gap-1">{children}<InfoTip label={`About ${tip}`}>{text}</InfoTip></span>;
 }
 
 function Legend() {
@@ -92,27 +99,33 @@ export function CarrierCoverageList({ rows }: { rows: CoverageListRow[] }) {
       {shown.length === 0 ? (
         <NoMatches noun="carriers" onClear={() => { setQuery(""); setFilter("all"); }} />
       ) : (
-        <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
+        // Owner 2026-11-06: the columns share the width evenly (table-fixed), each data head carries an (i) saying what it means.
+        <table className="portal-lead-table w-full min-w-[960px] table-fixed text-left text-sm">
           <thead>
-            <tr><th>Carrier</th><th className="text-right">In force</th><th>Windows set</th><th>The biggest gap</th><th>Money</th><th>Files</th><th className="w-10"><span className="sr-only">Open</span></th></tr>
+            <tr>
+              <th>Carrier</th>
+              <th><Head tip="In force" text="Policies with this carrier that are in force today: how many a missing window leaves without a countdown.">In force</Head></th>
+              <th><Head tip="Windows set" text="A carrier has five windows: first payment, a missed payment, reinstatement, conservation and a cancellation request. A filled green dot is verified, grey was seen in the carrier's files but not checked, a red ring is not set yet.">Windows set</Head></th>
+              <th><Head tip="The biggest gap" text="The missing window that leaves the most policies without a countdown. Set it on the carrier's page so we can tell you how long you have to save them.">The biggest gap</Head></th>
+              <th><Head tip="Money · files" text="How the carrier pays (when commission starts and how long after) and how its files arrive (the format and the layout we read them with).">Money · files</Head></th>
+              <th className="w-[150px] text-right">What to do</th>
+            </tr>
           </thead>
           <PagedBody>
             {shown.map((row) => (
               <LinkRow key={row.carrierId} href={carrierRulesHref(row.carrierId)}>
                 <td><Link href={carrierRulesHref(row.carrierId)} className="font-semibold text-foreground hover:underline">{row.carrierName}</Link></td>
-                <td className="text-right tabular-nums">{row.inForce.toLocaleString("en-US")}</td>
+                <td className="tabular-nums">{row.inForce.toLocaleString("en-US")}</td>
                 <td>
                   <span className="inline-flex items-center gap-2">
                     <RuleDots dots={row.dots} />
                     <span className="text-muted-foreground tabular-nums">{RULE_TYPES.length - row.missing} of {RULE_TYPES.length}</span>
                   </span>
                 </td>
-                <td className="max-w-[300px] whitespace-normal">
+                <td className="whitespace-normal">
+                  {/* Owner 2026-11-06: the gap alone, no "N policies in force have…" line under it (In force says it). */}
                   {row.gap ? (
-                    <span className="block leading-snug">
-                      <span className="block font-medium text-[var(--error-ink)]">{row.gap.words}</span>
-                      <span className="block text-xs text-muted-foreground">{row.gap.cost}</span>
-                    </span>
+                    <span className="block whitespace-normal font-medium leading-snug text-[var(--error-ink)]" title={row.gap.cost}>{row.gap.words}</span>
                   ) : (
                     <span className="block leading-snug">
                       <span className="block text-foreground">Nothing missing</span>
@@ -120,9 +133,17 @@ export function CarrierCoverageList({ rows }: { rows: CoverageListRow[] }) {
                     </span>
                   )}
                 </td>
-                <td className="max-w-[160px] truncate text-muted-foreground" title={row.money}>{row.money}</td>
-                <td className="max-w-[160px] truncate text-muted-foreground" title={row.files}>{row.files}</td>
-                <RowChevron />
+                {/* Round 6: money and files in one cell, two lines, so the row's next step fits on a 1440 screen. */}
+                <td className="leading-snug text-muted-foreground">
+                  <span className="block truncate" title={row.money}>{row.money}</span>
+                  <span className="block truncate text-xs" title={row.files}>{row.files}</span>
+                </td>
+                {/* Round 6 (owner 2026-11-06): the row's next step as a verb; a carrier with nothing to do keeps the plain ›. */}
+                {row.missing > 0 || row.unverified > 0 ? (
+                  <td className="text-right">
+                    <Link href={carrierRulesHref(row.carrierId)} className={buttonVariants({ variant: row.missing > 0 ? "outline" : "ghost", size: "sm" })}>{row.missing > 0 ? `Set ${row.missing === 1 ? "the window" : `${row.missing} windows`}` : "Verify"}</Link>
+                  </td>
+                ) : <RowChevron />}
               </LinkRow>
             ))}
           </PagedBody>

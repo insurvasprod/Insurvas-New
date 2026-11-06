@@ -1,9 +1,9 @@
+import { InfoTip } from "@/components/ui/info-tip";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { AgentCodes } from "@/components/app/book/setup/agent-codes";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
-import { SetupTabs } from "@/components/app/book/setup/setup-tabs";
 import { Callout } from "@/components/app/settings/primitives";
 import { loadMatching, MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
 
@@ -14,13 +14,13 @@ import { loadMatching, MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMa
  */
 export default async function SetupAgentCodesPage() {
   const guard = await guardPage("statement_ingestion");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Agent codes" description="Rates, carrier rules and pipeline rules for your book." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Agent codes" description="Rates, carrier terms and card-move rules for your book." />;
   // Owner and bookkeeper, like every Setup tab and its API.
   if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Agent codes" detail="Setup is for the account owner and bookkeepers." />;
   const view = await loadMatching(guard.context.tenantId);
 
   return (
-    <DataInPage step="setup" lead={<SetupTabs active="agent-codes" tenantId={guard.context.tenantId} />}>
+    <DataInPage step="agent-codes" chip={<InfoTip label="About agent codes" side="right">The writing-agent code a carrier prints on each policy, and the person in your agency it belongs to. A code nobody owns leaves its policies unassigned: no producer gets the credit, and their commissions can&apos;t be split. Pick the person on each code <b>To map</b> and press <b>Map</b>.</InfoTip>}>
       {!view.available ? (
         <Callout tone="warning" title={MATCHING_PENDING_MESSAGE} />
       ) : (

@@ -203,7 +203,7 @@ function PickClient({ detail, nav }: { detail: Extract<ItemDetail, { kind: "pick
         </ChoicesCard>
         <WhenYouSave>
           {choice === null ? "Pick who this policy belongs to."
-            : picked ? <>{detail.policyNumber} links to <strong>{picked.name}</strong> and the {saleWord(picked.type)} of {fileDay(picked.date)}. The policy’s waiting stages then run once: its card moves by your pipeline rules, and its next commission lines post to that client.</>
+            : picked ? <>{detail.policyNumber} links to <strong>{picked.name}</strong> and the {saleWord(picked.type)} of {fileDay(picked.date)}. The policy’s waiting stages then run once: its card moves by your card-move rules, and its next commission lines post to that client.</>
             : <>{detail.policyNumber} keeps a provisional client made from the carrier’s file, and a “Policy with no sale” item goes to the writing agent to confirm the client.</>}
         </WhenYouSave>
       </Grid>
@@ -224,9 +224,9 @@ const QUEUE_HINTS: Partial<Record<Resolution, string>> = {
 const QUEUE_EFFECT: Record<Resolution, string> = {
   confirm_client: "The client made from the carrier’s file becomes a confirmed client, and the policy stays linked to them.",
   link_existing_client: "The policy links to the client you pick; the provisional client made from the file is folded into them if nothing else points at it.",
-  found_the_sale: "The policy links to the sale you pick and its client. Its waiting stages run once: the card moves by your pipeline rules and its commission lines post to that client.",
+  found_the_sale: "The policy links to the sale you pick and its client. Its waiting stages run once: the card moves by your card-move rules and its commission lines post to that client.",
   not_mine: "The item leaves your list and goes to operations (a bookkeeper), or to the owner if operations already had it.",
-  found_the_policy: "The carrier’s policy links to this sale. The policy’s waiting stages run once, and the card moves by your pipeline rules.",
+  found_the_policy: "The carrier’s policy links to this sale. The policy’s waiting stages run once, and the card moves by your card-move rules.",
   never_submitted: "The sale’s open application case closes as never submitted, with your reason kept on it.",
   resubmitted_elsewhere: "The item closes, pointing at the application attempt that replaced it. That attempt waits for its own carrier file.",
   same_person: "Every policy of the first client moves to the second, and the first is folded into the second if it was made from a carrier file.",

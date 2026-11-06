@@ -7,16 +7,27 @@
 // copied row that point at another copied row are remapped. The SSN is not copied (it is encrypted to its own
 // application), so the copy has none — it is already submitted, so nothing asks for it.
 //
-//   node --env-file=.env.local scripts/seed-submitted-application.mjs --first Nora --last Testwell --dob 1958-04-12 --policy 0119990020
+//   node --env-file=.env.local --experimental-strip-types scripts/seed-submitted-application.mjs --first Nora --last Testwell --dob 1958-04-12 --policy 0119990020 [--phone 8135550312]
+//
+// `--policy` is the APPLICATION number the agent recorded (reference kind "application_no"); the submission holds
+// no policy number. Give the carrier file a different policy number and the policy links by the person instead
+// (linkByIdentity: writing agent, name, date of birth, premium or face).
+//
+// 2026-11-06 (power-policies demo): the interview's answers and medications come too, re-sealed to the copy's
+// interview (a sealed answer only opens on its own interview); the submission's health snapshot is re-sealed to
+// the copy's application; the payment keeps its method and last four digits, but not the copied bank or card
+// ciphertext (bound to the template's application, so it would not open); `--phone` replaces the phone on the
+// lead, the application and the sale; and the card is put on Sales pipeline › Submitted.
 //
 // Writes to the tenant of the template only (Ellery & Fields demo). Prints what it made; changes nothing else.
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { openAnswer, openMedication, openSnapshot, sealAnswer, sealMedication, sealSnapshot } from "../lib/applications/healthSealCore.ts";
 
 const arg = (name) => { const i = process.argv.indexOf(`--${name}`); return i > 0 ? process.argv[i + 1] : undefined; };
-const first = arg("first"), last = arg("last"), dob = arg("dob"), policy = arg("policy");
-if (!first || !last || !/^\d{4}-\d\d-\d\d$/.test(dob ?? "") || !/^\d{6,20}$/.test(policy ?? "")) {
-  console.error("Usage: --first <name> --last <name> --dob YYYY-MM-DD --policy <application number>"); process.exit(1);
+const first = arg("first"), last = arg("last"), dob = arg("dob"), policy = arg("policy"), phone = arg("phone");
+if (!first || !last || !/^\d{4}-\d\d-\d\d$/.test(dob ?? "") || !/^\d{6,20}$/.test(policy ?? "") || (phone !== undefined && !/^\d{10}$/.test(phone))) {
+  console.error("Usage: --first <name> --last <name> --dob YYYY-MM-DD --policy <application number> [--phone <10 digits>]"); process.exit(1);
 }
 const TEMPLATE = { lead: "d6b59950-f954-426b-a032-20b353155f41", case: "b0de71bd-72bd-4d90-93ea-d4bb3e13323f", application: "91fbc555-65c3-417e-9d85-dc3f3a225013" };
 const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
@@ -76,7 +87,7 @@ const stamp = (row) => ({ ...("created_at" in row ? { created_at: now } : {}), .
 // instead of making a second lead (2026-11-03: the first run stopped at the quote).
 // The lead keeps the person in `values`: a copy carries this person, and the age their birth date gives.
 const age = Math.floor((Date.now() - Date.parse(`${dob}T00:00:00Z`)) / (365.25 * 86_400_000));
-const leadValues = { ...(lead.values ?? {}), first_name: first, last_name: last, date_of_birth: dob, age };
+const leadValues = { ...(lead.values ?? {}), first_name: first, last_name: last, date_of_birth: dob, age, ...(phone ? { phone } : {}) };
 // The first version of this script left the template's name in a copy's `values`: such a copy (made in the
 // last two days, still named as the template) is the earlier lead too.
 const sameName = must(await db.from("agent_leads").select("id").eq("tenant_id", lead.tenant_id).eq("values->>first_name", first).eq("values->>last_name", last).neq("id", lead.id).order("created_at", { ascending: false }).limit(1), "earlier lead");
@@ -109,11 +120,51 @@ if (earlier) {
 const [madeApp] = await copy("tenant_applications", [app], (row) => ({ ...stamp(row), submitted_at: now, quote_id: null }));
 await copy("tenant_quotes", quotes, stamp);
 if (app.quote_id) must(await db.from("tenant_applications").update({ quote_id: remap.get(app.quote_id) ?? null }).eq("id", madeApp.id), "set the application's quote");
-const person = { "insured.first_name": first, "insured.last_name": last, "insured.dob": dob };
+const person = { "insured.first_name": first, "insured.last_name": last, "insured.dob": dob, ...(phone ? { "contact.phone": phone } : {}) };
 await copy("tenant_application_values", values, (row) => ({ ...stamp(row), ...(row.field_key in person ? { value: person[row.field_key] } : {}) }));
 await copy("tenant_application_beneficiaries", beneficiaries, stamp);
-await copy("tenant_application_payment_methods", payments, stamp);
+// The method and its last four digits; the ciphertext is the template's and would not open on the copy.
+await copy("tenant_application_payment_methods", payments, (row) => ({ ...stamp(row), routing_ciphertext: null, account_ciphertext: null, card_ciphertext: null }));
 await copy("tenant_application_disclosures", disclosures, stamp);
-await copy("tenant_application_submissions", submissions, (row) => ({ ...stamp(row), carrier_reference: policy, reference_kind: "application_no", policy_number: null, submitted_at: now, confirmation_path: null }));
-await copy("deal_flow", deals, (row) => ({ ...stamp(row), ...("customer_name" in row ? { customer_name: `${first} ${last}` } : {}) }));
-console.log(`Done. Lead ${remap.get(lead.id)} · application ${remap.get(app.id)} · submitted with application number ${policy}.`);
+const tenant = lead.tenant_id;
+const madeAppId = remap.get(app.id);
+await copy("tenant_application_submissions", submissions, (row) => ({
+  ...stamp(row), carrier_reference: policy, reference_kind: "application_no", policy_number: null, submitted_at: now, confirmation_path: null,
+  health_snapshot: row.health_snapshot && Object.keys(row.health_snapshot).length ? sealSnapshot(tenant, madeAppId, openSnapshot(tenant, app.id, row.health_snapshot) ?? {}) : row.health_snapshot,
+}));
+await copy("deal_flow", deals, (row) => ({ ...stamp(row), ...("customer_name" in row ? { customer_name: `${first} ${last}` } : {}), ...("insured_name" in row ? { insured_name: `${first} ${last}` } : {}), ...(phone && "phone" in row ? { phone } : {}) }));
+
+// The interview's answers and medications, opened from the template's interview and sealed to the copy's.
+for (const iv of interviews) {
+  const target = remap.get(iv.id);
+  if (must(await db.from("tenant_uw_answers").select("question_key").eq("interview_id", target).limit(1), "copy's answers").length) continue;
+  const answers = must(await db.from("tenant_uw_answers").select("*").eq("interview_id", iv.id), "template answers");
+  const rows = answers.map((a) => {
+    const plain = openAnswer(tenant, a);
+    if (plain.unreadable) throw new Error(`Answer ${a.question_key} cannot be opened with this key`);
+    const { id: _id, ...rest } = a;
+    return { ...rest, interview_id: target, ...sealAnswer(tenant, target, a.question_key, plain.value, plain.notes), ...("answered_at" in a ? { answered_at: now } : {}) };
+  });
+  if (rows.length) { must(await db.from("tenant_uw_answers").insert(rows), "insert answers"); console.log(`  tenant_uw_answers: ${rows.length}`); }
+  const meds = must(await db.from("tenant_medications").select("*").eq("interview_id", iv.id), "template medications");
+  const medRows = meds.map((m) => {
+    const plain = openMedication(tenant, m);
+    if (plain.unreadable) throw new Error("A medication cannot be opened with this key");
+    const { unreadable: _u, ...med } = plain;
+    return { ...m, id: randomUUID(), interview_id: target, ...sealMedication(tenant, target, med), ...stamp(m) };
+  });
+  if (medRows.length) { must(await db.from("tenant_medications").insert(medRows), "insert medications"); console.log(`  tenant_medications: ${medRows.length}`); }
+}
+
+// The card on Sales pipeline › Submitted, as the application sync puts a submitted sale.
+const newLead = remap.get(lead.id);
+const sales = must(await db.from("tenant_pipelines").select("id").eq("tenant_id", tenant).is("partner_type", null).eq("is_default", true), "sales pipeline")[0];
+const submitted = sales ? must(await db.from("tenant_pipeline_stages").select("id").eq("pipeline_id", sales.id).eq("is_archived", false).eq("name", "Submitted"), "Submitted stage")[0] : null;
+if (submitted) {
+  const at = { pipeline_id: sales.id, stage_id: submitted.id };
+  must(await db.from("agent_leads").update(at).eq("id", newLead), "card to Submitted");
+  must(await db.from("lead_queue").update(at).eq("tenant_id", tenant).eq("lead_id", newLead), "work item to Submitted");
+  must(await db.from("deal_flow").update(at).eq("tenant_id", tenant).eq("lead_id", newLead), "sale to Submitted");
+  must(await db.from("tenant_lead_stage_events").insert({ tenant_id: tenant, lead_id: newLead, from_pipeline_id: sales.id, from_stage_id: submitted.id, to_pipeline_id: sales.id, to_stage_id: submitted.id, source: "application_sync" }), "card history");
+}
+console.log(`Done. Lead ${newLead} · application ${madeAppId} · submitted with application number ${policy}, no policy number${submitted ? " · card on Submitted" : ""}.`);

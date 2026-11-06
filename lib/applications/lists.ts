@@ -35,7 +35,7 @@ export function scopeByCase<Q extends { in(column: string, values: readonly stri
 
 type Attempt = {
   id: string; case_id: string; lead_id: string; insured_role: InsuredRole; attempt_no: number; carrier_id: string | null; product_code: string | null;
-  carrier_product_id: string | null; quote_id: string | null; status: ApplicationStatus; outcome: ApplicationOutcome | null; updated_at: string; submitted_at: string | null; created_at: string;
+  carrier_product_id: string | null; quote_id: string | null; status: ApplicationStatus; outcome: ApplicationOutcome | null; updated_at: string; submitted_at: string | null; created_at: string; closed_at?: string | null;
 };
 type Submission = { application_id: string; carrier_reference: string | null; policy_number: string | null; qa_verdict: { verdict?: ApplicationRow["qaVerdict"]; blocking?: unknown[]; warnings?: unknown[] } | null; submitted_at: string };
 
@@ -124,7 +124,7 @@ async function latestSubmissions(tenantId: string, applicationIds: string[]) {
 export async function listApplicationRows(tenantId: string, scope: ProducerScope = null): Promise<ApplicationRow[]> {
   const client = db();
   const q = await scopeByCase(client.from("tenant_applications")
-    .select(caseScopedColumns("id, case_id, lead_id, insured_role, attempt_no, carrier_id, product_code, carrier_product_id, quote_id, status, outcome, updated_at, submitted_at, created_at", scope))
+    .select(caseScopedColumns("id, case_id, lead_id, insured_role, attempt_no, carrier_id, product_code, carrier_product_id, quote_id, status, outcome, updated_at, submitted_at, created_at, closed_at", scope))
     .eq("tenant_id", tenantId), scope).order("updated_at", { ascending: false }).limit(2000);
   if (isMissingSchema(q.error)) throw new SchemaPendingError("The application record");
   if (q.error) throw new ApplicationError("APPLICATION_UNAVAILABLE", q.error.message, 500);
@@ -150,7 +150,7 @@ export async function listApplicationRows(tenantId: string, scope: ProducerScope
       qaBlocking: Array.isArray(verdict?.blocking) ? verdict.blocking.length : null,
       qaWarnings: Array.isArray(verdict?.warnings) ? verdict.warnings.length : null,
       reference: sub?.carrier_reference ?? null, policyNumber: sub?.policy_number ?? null,
-      updatedAt: a.updated_at, submittedAt: a.submitted_at ?? sub?.submitted_at ?? null,
+      updatedAt: a.updated_at, submittedAt: a.submitted_at ?? sub?.submitted_at ?? null, closedAt: a.closed_at ?? null,
     };
   });
 }

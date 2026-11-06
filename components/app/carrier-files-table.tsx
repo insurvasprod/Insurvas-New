@@ -1,13 +1,14 @@
 "use client";
 
-import { useMemo, useState, useTransition, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { Download } from "lucide-react";
 
-import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { ClearFiltersButton, DataToolbar, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { notify } from "@/lib/notify";
 import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -39,6 +40,10 @@ const STATUS_TONE: Record<CarrierFileStatus, StatusTone> = {
 
 
 const PERIODS = { all: "Any time", "7": "Last 7 days", "30": "Last 30 days", "90": "Last 90 days" } as const;
+/** While a file is being read: ask again this often, for at most this long, and light a finished row this long. */
+const LIVE_EVERY_MS = 3000;
+const LIVE_FOR_MS = 5 * 60_000;
+const LIT_FOR_MS = 4000;
 
 /**
  * LA-4.1 (Notion sprint) · every carrier file the agency holds, however it arrived. A failed file
@@ -66,7 +71,6 @@ function shortReason(text: string): string {
 
 export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, chips, also }: { files: CarrierFileRow[]; stages?: Record<string, FileStageView>; emptyTitle: string; emptyHint: string; show?: "needs" | "failed"; chips?: ReactNode; /** What the chip counts beside the files, said in the footer (walk 2026-11-03: "Needs you 21" over "12 files"). */ also?: string }) {
   const router = useRouter();
-  const [refreshing, startRefresh] = useTransition();
   const [query, setQuery] = useState("");
   const [carrier, setCarrier] = useState("");
   const [type, setType] = useState<"all" | CarrierFileType>("all");
@@ -82,6 +86,43 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
   const pageSize = useFittingPageSize(540, 45);
 
   const whereOf = (file: CarrierFileRow) => fileWhere(file, stages?.[file.id]);
+
+  // Live (owner 2026-11-05: "updated automatically, not to click refresh … see when the reading has been done or
+  // failed"). While a file is still being read the list asks the server again every few seconds, and stops once
+  // nothing is moving (or after a few minutes, so a stuck file never polls for ever). A file that finishes while
+  // the list is open says so in a toast and its row lights up for a moment.
+  const reading = useMemo(() => files.filter((file) => whereOf(file) === "running"), // eslint-disable-next-line react-hooks/exhaustive-deps
+    [files, stages]);
+  const [lit, setLit] = useState<Record<string, true>>({});
+  const seen = useRef<Map<string, string> | null>(null);
+  const pollingSince = useRef<number | null>(null);
+  useEffect(() => {
+    if (!reading.length) { pollingSince.current = null; return; }
+    pollingSince.current ??= Date.now();
+    if (Date.now() - pollingSince.current > LIVE_FOR_MS) return;
+    const timer = window.setTimeout(() => router.refresh(), LIVE_EVERY_MS);
+    return () => window.clearTimeout(timer);
+  }, [reading, router, files]);
+  useEffect(() => {
+    const now = new Map(files.map((file) => [file.id, whereOf(file)]));
+    const before = seen.current;
+    seen.current = now;
+    if (!before) return;
+    const finished = files.filter((file) => before.get(file.id) === "running" && now.get(file.id) !== "running");
+    if (!finished.length) return;
+    for (const file of finished) {
+      const where = now.get(file.id);
+      const label = stages?.[file.id]?.where.label;
+      if (where === "failed") notify.warn(`${file.originalFilename} could not be read`, { detail: file.errorDetail ? shortReason(file.errorDetail) : label });
+      else if (where === "needs") notify.arrive(`${file.originalFilename} is read`, { detail: label ?? "Some rows need you." });
+      else notify.done(`${file.originalFilename} is read`, { detail: label && label !== "Done" ? label : file.rowCount !== null ? `${file.rowCount.toLocaleString("en-US")} ${file.rowCount === 1 ? "row" : "rows"}` : undefined });
+    }
+    setLit((current) => ({ ...current, ...Object.fromEntries(finished.map((file) => [file.id, true as const])) }));
+    const timer = window.setTimeout(() => setLit((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !finished.some((file) => file.id === id)))), LIT_FOR_MS);
+    return () => window.clearTimeout(timer);
+    // whereOf reads `stages`, listed here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files, stages]);
 
   const carriers = useMemo(() => [...new Set(files.map((file) => file.carrierName).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b)), [files]);
   const visible = useMemo(() => {
@@ -124,7 +165,14 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
         {chips}
         <DataToolbar actions={<>
           {filtered && <ClearFiltersButton onClick={clear} />}
-          <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} labelClassName="max-2xl:sr-only" />
+          {/* No Refresh button: the list keeps itself current while anything is being read (owner 2026-11-05). */}
+          <span role="status" aria-live="polite" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+            {reading.length ? (
+              <><span aria-hidden="true" className="size-2 rounded-full bg-[var(--primary)] motion-safe:animate-pulse" />Reading {reading.length === 1 ? "1 file" : `${reading.length} files`}…</>
+            ) : (
+              <><span aria-hidden="true" className="size-2 rounded-full bg-[var(--border-strong)]" />Up to date</>
+            )}
+          </span>
         </>}>
           <ToolbarSearch value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="File, carrier or sender" className="sm:w-52" />
           <select aria-label="Filter files by carrier" className={`${toolbarControl} w-[150px]`} value={carrier} onChange={(event) => { setCarrier(event.target.value); setPage(1); }}>
@@ -171,7 +219,7 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
               const from = file.source === "upload" ? file.uploadedByName ?? "A former member" : file.source === "email" ? file.emailFrom ?? "Unknown sender" : file.agency ?? "A script";
               const view = stages?.[file.id];
               return (
-                <tr key={file.id} className="m-row">
+                <tr key={file.id} className={`m-row transition-colors duration-700 ${lit[file.id] ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)]" : ""}`}>
                   <td className="tabular-nums" title={`Arrived ${fileDay(file.receivedAt)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{fileDay(file.fileDate)}</td>
                   <td>{file.carrierName ? <span className="block truncate font-semibold text-foreground" title={file.carrierName}>{file.carrierName}</span> : <span className="text-muted-foreground">No carrier yet</span>}</td>
                   <td className="truncate">{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">—</span>}</td>
@@ -182,7 +230,7 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
                     {file.status !== "failed" && file.rawError && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{shortReason(file.rawError)}</span>}
                     {file.status !== "failed" && !file.rawError && file.rowCount !== null && <span className="block truncate text-xs tabular-nums text-muted-foreground" title="Rows kept exactly as they arrived">{file.rowCount.toLocaleString("en-US")} {file.rowCount === 1 ? "row" : "rows"}</span>}
                   </td>
-                  <td>{view ? <StageStrip stages={view.stages} fileType={file.fileType} /> : <span className="text-muted-foreground">—</span>}</td>
+                  <td>{view ? <StageStrip stages={view.stages} fileType={file.fileType} reading={whereOf(file) === "running"} /> : <span className="text-muted-foreground">—</span>}</td>
                   <td className="truncate">
                     {view ? (
                       <StatusChip tone={view.where.tone}>{view.where.label}</StatusChip>

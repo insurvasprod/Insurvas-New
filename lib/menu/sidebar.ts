@@ -23,6 +23,8 @@ export const NAV_GROUPS: readonly { section: string; icon: string }[] = [
   { section: "Sales", icon: "file-check" },
   // An open book: the agency's book of policies (owner 2026-11-02; it kept Data in's folder icon).
   { section: "Book of business", icon: "book-open" },
+  // Carrier sync (owner 2026-11-05): Needs you and Setup, what keeps the carrier files in step with the book.
+  { section: "Carrier sync", icon: "refresh-cw" },
   { section: "Retention", icon: "life-buoy" },
   { section: "Commissions", icon: "receipt" },
   { section: "Accounting", icon: "landmark" },
@@ -36,7 +38,12 @@ export const NAV_GROUPS: readonly { section: string; icon: string }[] = [
 export const NAV_STANDALONE = { home: "Home", settings: "Settings" } as const;
 const FALLBACK_GROUP_ICON = "briefcase-business";
 
-export type SidebarGroup = { label: string; icon: string; items: MenuItem[] };
+/**
+ * `steps`: a merged group's pages (Compliance, Reports, Book of business…), which the rail shows as
+ * one link. The collapsed rail lists them when that link is hovered (owner 2026-11-06), as it lists a
+ * group's pages. Only on a merged group; the server-filtered menu decides which steps are there.
+ */
+export type SidebarGroup = { label: string; icon: string; items: MenuItem[]; steps?: MenuItem[] };
 
 export type SidebarTree = {
   home: MenuItem[];
@@ -59,11 +66,16 @@ export function buildSidebarTree(menu: MenuSection[], moduleAccess?: ModuleAcces
   return {
     home: all.filter((item) => item.section === NAV_STANDALONE.home),
     groups: sections
-      .map((section) => ({
-        label: section,
-        icon: NAV_GROUPS.find((group) => group.section === section)?.icon ?? FALLBACK_GROUP_ICON,
-        items: grouped.filter((item) => item.section === section),
-      }))
+      .map((section) => {
+        const items = grouped.filter((item) => item.section === section);
+        const group: SidebarGroup = { label: section, icon: NAV_GROUPS.find((entry) => entry.section === section)?.icon ?? FALLBACK_GROUP_ICON, items };
+        // A merged group keeps every page it stands for, stand-ins included, for the collapsed rail's hover.
+        if (items.length === 1 && items[0].groupLink && !standalone.has(section)) {
+          const steps = shown.filter((item) => item.section === section);
+          if (steps.length > 1) group.steps = steps;
+        }
+        return group;
+      })
       .filter((group) => group.items.length > 0),
     settings: all.filter((item) => item.section === NAV_STANDALONE.settings),
   };
@@ -80,7 +92,7 @@ export const NAV_AREAS: readonly { label: string; icon: string; sections: readon
   { label: "Leads", icon: "users", sections: ["Leads"] },
   // Its own area (owner 2026-10-28): partners are not a kind of lead.
   { label: "Partners", icon: "handshake", sections: ["Partners"] },
-  { label: "Book", icon: "book-open", sections: ["Book of business", "Book"] },
+  { label: "Book", icon: "book-open", sections: ["Book of business", "Carrier sync", "Book"] },
   { label: "Money", icon: "dollar-sign", sections: ["Commissions", "Accounting"] },
   { label: "Reports", icon: "building", sections: ["Reports"] },
   { label: "Compliance", icon: "shield-check", sections: ["Compliance"] },

@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Policy Page R6</title>
+<style>
+
+:root{--canvas:#0d1412;--surface:#151e1b;--raised:#1d2824;--hi:#24322d;--text:#f2f6f4;--muted:#9fb0a7;--faint:#6f8079;--border:#2a3631;--primary:#35d6aa;--pfg:#0b2119;--psoft:#173a30;--good:#6be3c1;--goodbg:#173a30;--info:#a4c0f8;--infobg:#172a4a;--warn:#f3c266;--warnbg:#3a2b0c;--bad:#f7a1a1;--badbg:#3f1a1a;--r:12px}
+*{box-sizing:border-box}html,body{margin:0;background:#080d0b;color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif}
+a{color:var(--primary);text-decoration:none}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}h2{font-size:15px;margin:0}h3{font-size:13px;margin:0}
+.wrap{max-width:1480px;margin:0 auto;padding:24px 16px 80px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 28px}.toc a{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted)}
+.board{margin:40px 0}.cap{display:flex;gap:12px;align-items:baseline;margin:0 0 10px}.cap b{font-size:13px;letter-spacing:.04em;color:var(--primary)}.cap span{color:var(--muted);font-size:13px}
+.frame{background:var(--canvas);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.app{display:grid;grid-template-columns:56px 200px 1fr;min-height:620px}
+.side{border-right:1px solid var(--border);background:#0a110f}.side i{display:block;width:22px;height:22px;border-radius:6px;background:var(--raised);margin:14px auto}
+.rail{border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px}.rail div{padding:9px 10px;border-radius:9px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between}.rail .on{background:var(--psoft);color:var(--text);border:1px solid #1f5a49}.rail small{font-size:11px;background:var(--warnbg);color:var(--warn);border-radius:6px;padding:0 6px}
+.main{padding:16px 20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.trail{font-size:12px;color:var(--muted)}.trail b{color:var(--text);font-weight:600}
+.tl{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.tl .sp{flex:1}
+.tabs{display:flex;gap:4px;border-left:1px solid var(--border);padding-left:12px}.tab{padding:6px 11px;border-radius:8px;font-weight:600;color:var(--muted);font-size:13px}.tab.on{background:var(--raised);color:var(--text);border:1px solid var(--border)}
+.n{font-size:11px;background:var(--raised);border-radius:6px;padding:1px 6px;margin-left:5px;color:var(--muted)}.n.w{color:var(--warn);background:var(--warnbg)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--pfg);border-color:var(--primary)}.btn.sm{height:30px;padding:0 10px;font-size:12px}.btn.g{background:none;border-color:transparent;color:var(--muted)}.btn.big{height:52px;font-size:14px;justify-content:space-between;width:100%;padding:0 16px}
+kbd{font:600 11px ui-monospace,Consolas,monospace;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--muted);background:var(--canvas)}
+.btn.p kbd{color:var(--pfg);border-color:#1b7a60;background:#5ee3bf}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
+.hd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}.hd .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border);font-weight:600;font-size:13px}.chip.on{border-color:var(--primary);background:var(--psoft)}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}.st:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.w{color:var(--warn);background:var(--warnbg)}.g1{color:var(--good);background:var(--goodbg)}.i{color:var(--info);background:var(--infobg)}.b{color:var(--bad);background:var(--badbg)}.z{color:var(--muted);background:var(--raised)}
+.m{color:var(--muted)}.f{color:var(--faint)}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+table{width:100%;border-collapse:collapse}th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}td{padding:0 14px;height:44px;border-bottom:1px solid var(--border)}.r{text-align:right}
+tr.sel td{background:var(--psoft)}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px}.toolbar .sp{flex:1}
+.input{height:36px;border:1px solid var(--border);background:var(--canvas);border-radius:8px;padding:0 12px;color:var(--faint);min-width:200px;display:inline-flex;align-items:center}
+.foot{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border)}.foot .sp{flex:1}
+.stages{display:flex;gap:4px}.stg{flex:1}.stg .bar{height:4px;border-radius:4px;background:var(--primary)}.stg.nd .bar{background:var(--warn)}.stg .lb{font-size:12px;font-weight:600;margin-top:6px}.stg.nd .lb{color:var(--warn)}
+.note{max-width:1100px;color:var(--muted);font-size:13px;margin:10px 4px 0}.note b{color:var(--text)}.note li{margin:3px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.split{display:grid;grid-template-columns:360px 1fr;gap:0;min-height:560px}
+.q{border-right:1px solid var(--border);display:flex;flex-direction:column}.qi{display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}.qi.on{background:var(--psoft);box-shadow:inset 3px 0 0 var(--primary)}.qi.done{opacity:.45}
+.box{width:14px;height:14px;border:1.5px solid var(--faint);border-radius:4px}.box.x{background:var(--primary);border-color:var(--primary)}
+.dec{padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+.ask{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.cmp{display:grid;grid-template-columns:140px 1fr 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden}.cmp div{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}.cmp .h{color:var(--muted);font-size:12px;font-weight:600;background:var(--raised)}
+.ok{color:var(--good)}.no{color:var(--bad)}
+.answers{display:grid;gap:8px}
+.cand{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.cc{border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px}.cc.top{border-color:var(--primary)}
+.prog{height:4px;background:var(--border);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--primary)}
+.kv{display:grid;grid-template-columns:170px 1fr;gap:0}.kv div{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.kv .k{color:var(--muted)}
+.step{display:grid;grid-template-columns:22px 130px 1fr auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--border)}.dot{width:18px;height:18px;border-radius:50%;background:var(--psoft);border:2px solid var(--primary)}.dot.w{border-color:var(--warn);background:var(--warnbg)}.dot.z{border-color:var(--faint);background:none}
+.board2{display:grid;grid-template-columns:240px 1fr 300px;min-height:560px}
+.col{border-right:1px solid var(--border);padding:12px}.col:last-child{border-right:0}
+.oc{display:grid;grid-template-columns:1fr 18px 200px 70px;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;background:var(--surface)}.oc.on{border-color:var(--primary)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;background:var(--raised);border:1px solid var(--border)}.pill i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.stagecol div{padding:10px 12px;border:1px dashed var(--border);border-radius:9px;margin-bottom:6px;display:flex;justify-content:space-between;font-weight:600;font-size:13px}
+.dlg{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.6);padding:18px;width:440px}
+.pop{background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:6px;width:260px}.pop div{padding:8px 10px;border-radius:7px;font-size:13px}.pop .on{background:var(--psoft)}
+.toast{display:inline-flex;gap:10px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-weight:600}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:18px}.flow .fs{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface);min-width:150px}.flow .fs b{display:block}.flow .fs small{color:var(--muted)}.arrow{color:var(--faint)}
+.map li{margin:6px 0}.k2{display:inline-block;min-width:110px;font-weight:700}
+.phone{width:390px;background:var(--canvas);border:1px solid var(--border);border-radius:28px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.crit td{height:auto;padding:10px 14px;vertical-align:top;font-size:13px}
+.tile{display:block;padding:14px;border-right:1px solid var(--border);color:inherit}.tile:hover{background:var(--raised)}
+.tile2{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:10px;padding:10px;color:inherit}.tile2 b{font-size:18px}
+.bar2{height:4px;border-radius:4px;background:var(--border);margin-top:6px;overflow:hidden}.bar2 i{display:block;height:100%;background:var(--primary)}
+.money{display:flex;height:6px;border-radius:6px;overflow:hidden;background:var(--border);margin-bottom:4px}.money i{display:block;height:100%}.money .e{background:var(--primary)}.money .a{background:var(--warn)}.money .s{background:var(--bad)}.money .z2{background:var(--hi)}
+.months{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}.mo{font-size:11px;text-align:center;border:1px solid var(--border);border-radius:6px;padding:5px 2px;color:var(--muted)}.mo.on{background:var(--psoft);border-color:#1f5a49;color:var(--text)}
+.dots{display:inline-flex;gap:3px}.dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--faint);display:inline-block}.dots .d1{background:var(--primary);border-color:var(--primary)}.dots .d2{background:var(--muted);border-color:var(--muted)}
+tr.hov:hover td,tr.hovon td{background:var(--raised)}tr.hov{cursor:pointer}
+
+.strip{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
+.strip.s4{grid-template-columns:repeat(4,minmax(0,1fr))}.strip.s3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.strip>div{padding:12px 16px;border-right:1px solid var(--border);min-width:0}.strip>div:last-child{border-right:0}
+.strip .l{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.strip .v{font-size:22px;font-weight:700;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.strip .v.bad{color:var(--bad)}.strip .v.warn{color:var(--warn)}.strip .v.good{color:var(--good)}
+.strip .fn{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rows{display:flex;flex-direction:column}.rows>div{display:grid;grid-template-columns:150px 1fr 18px;align-items:center;gap:10px;min-height:44px;padding:0 16px;border-bottom:1px solid var(--border);font-size:13px}.rows>div:last-child{border-bottom:0}.rows .k{color:var(--muted)}
+.ib{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--faint);color:var(--faint);font:700 10px/13px Inter,sans-serif;text-align:center;display:inline-block}
+.iconbtn{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface);display:inline-grid;place-items:center;color:var(--text);font-weight:700}
+.dotmark{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--warn);font-weight:600}.dotmark:before{content:"";width:8px;height:8px;border-radius:50%;background:var(--warn)}
+.tip{background:#0b1210;border:1px solid var(--border);border-radius:9px;padding:10px 12px;font-size:12px;width:300px;box-shadow:0 14px 40px rgba(0,0,0,.55)}
+.fill{display:flex;flex-direction:column;gap:14px;min-height:0;flex:1}
+.ed{width:100%;border:1px solid var(--border);border-radius:12px;overflow:hidden}.ed td,.ed th{height:auto;padding:8px 12px;vertical-align:top;font-size:13px}
+.months{display:grid;grid-template-columns:repeat(12,1fr);gap:6px}.months div{height:44px;border-radius:7px;border:1px solid var(--border);display:grid;place-items:center;font-size:11px;font-weight:600;color:var(--muted)}.months .pd{background:var(--goodbg);color:var(--good);border-color:transparent}.months .ms{background:var(--badbg);color:var(--bad);border-color:transparent}
+.bar3{display:flex;height:10px;border-radius:6px;overflow:hidden;background:var(--raised)}.bar3 i{display:block}
+.phone{width:390px;border:1px solid var(--border);border-radius:28px;background:var(--canvas);padding:16px;display:flex;flex-direction:column;gap:12px}
+.hscroll{display:flex;gap:6px;overflow:hidden}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Policy page · round 6</h1>
+<p class="note">One direction for Book of business › Policies › one policy (owner 2026-11-06: "redesign this whole page … overview, history, client, pipeline, money, and file … without losing the functionality"). Data is the demo policy AMH6900131 · Laura Lopez. Every tab, menu, pop-up and toast is drawn, then the edit map.</p>
+<div class="toc"><a href="#c">Critique</a><a href="#p1">1 Overview</a><a href="#p2">2 History</a><a href="#p3">3 Client</a><a href="#p4">4 Pipeline</a><a href="#p5">5 Money</a><a href="#p6">6 Files</a><a href="#p7">7 Notes</a><a href="#p8">8 Menus and pop-ups</a><a href="#p9">9 Phone</a><a href="#e">Edit map</a></div>
+
+<section class="board" id="c"><div class="cap"><b>CRITIQUE</b><span>what the page does today, and why it reads as a different product</span></div>
+<div class="card" style="padding:16px 20px">
+<ol class="note" style="margin:0;padding-left:18px">
+<li><b>A label wall, not a summary.</b> Overview is nine "label over sentence" pairs in two thin columns; the answer to "is this policy OK?" (at risk, 191 days behind, critical) is buried in sentences. Every other redesigned page opens with the mockups' strip of figures.</li>
+<li><b>Two reds and an orange in the title.</b> "7 payments behind", "Provisional" and "Check the client" compete beside the name; the facts line is cut off before the agent.</li>
+<li><b>A collapsible explainer.</b> "Where each value comes from" is a closed &lt;details&gt; under the card; the owner's rule is no collapsible explainers. Provenance belongs on each value.</li>
+<li><b>Half the window is empty.</b> The page doesn't fill the height; the carrier's raw row (the most useful evidence) is hidden.</li>
+<li><b>The wrong primary.</b> "Open in Save Queue" goes to the radar the call of 2026-11-05 retired; More is a text button, not ⋯ last.</li>
+<li><b>Each tab is drawn differently.</b> Client is a fact grid, Pipeline a sentence and a button over a table, Money three stacked cards plus notices on the page (no notices: they go to the bell).</li>
+</ol></div></section>
+
+<!-- ═══ 1 OVERVIEW ═══ -->
+<section class="board" id="p1"><div class="cap"><b>1 · OVERVIEW</b><span>strip of five figures, then the policy's facts and the row as the carrier sent it, side by side; each value's source on its (i)</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i></i></div>
+<div class="rail"><div class="on">Policies</div><div>Carrier files <small>7</small></div><div>Commission ledger</div></div>
+<div class="main">
+<div class="trail">Book of business › Policies › <b>AMH6900131 · Laura Lopez</b></div>
+<div class="tl"><h1>Laura Lopez</h1><span class="st b">7 payments behind</span><span class="dotmark" title="Client made from the carrier's file">Provisional</span>
+<div class="tabs"><span class="tab on">Overview</span><span class="tab">History</span><span class="tab">Client</span><span class="tab">Pipeline</span><span class="tab">Money<span class="n w">1</span></span><span class="tab">Files</span></div>
+<span class="sp"></span><span class="btn p">Open the case</span><span class="iconbtn">⋯</span></div>
+<div class="m" style="font-size:13px;margin-top:-8px"><span class="mono" style="color:var(--text)">AMH6900131</span> · American Home Life · Final Exp Level Benefit · $83.62/mo · agent code AMW5029736 <a>not mapped</a></div>
+<div class="strip"><div><div class="l">Status</div><div class="v bad">At risk</div><div class="fn">carrier says “Active - Premium paying”</div></div>
+<div><div class="l">Paid to</div><div class="v bad">Apr 28, 2026</div><div class="fn">191 days behind · 1 month paid</div></div>
+<div><div class="l">Risk</div><div class="v bad">Critical</div><div class="fn">the carrier's window has run out</div></div>
+<div><div class="l">Premium</div><div class="v">$83.62<span class="m" style="font-size:13px">/mo</span></div><div class="fn">face $12,000 · direct bill (mailed)</div></div>
+<div><div class="l">Next date</div><div class="v m">None</div><div class="fn">nothing is due while it's behind</div></div></div>
+<div class="two" style="grid-template-columns:1.1fr 1fr">
+<div class="card"><div class="hd"><h2>Policy</h2><span class="sp"></span><span class="f" style="font-size:12px">from policySummary.xlsx · file of Sep 1, 2026</span></div>
+<div class="rows"><div><span class="k">Issued</span><span>Mar 20, 2026</span><span class="ib">i</span></div><div><span class="k">Effective</span><span>Mar 28, 2026</span><span class="ib">i</span></div><div><span class="k">Draft day</span><span class="m">—</span><span class="ib">i</span></div><div><span class="k">Paid by</span><span>Direct bill (mailed)</span><span class="ib">i</span></div><div><span class="k">Writing agent</span><span>AMW5029736 · <a>Map the code</a></span><span class="ib">i</span></div><div><span class="k">Came from</span><span>Lead source not known</span><span class="ib">i</span></div><div><span class="k">Client</span><span>Laura Lopez <span class="dotmark">Provisional</span> · <a>Check the client</a></span><span></span></div></div></div>
+<div class="card"><div class="hd"><h2>As the carrier sent it</h2><span class="sp"></span><a style="font-size:13px">Open row 21 ›</a></div>
+<div class="rows" style="max-height:310px;overflow:hidden"><div><span class="k mono">Policy Number</span><span class="mono">AMH6900131</span><span></span></div><div><span class="k mono">Insured Name</span><span class="mono">LOPEZ, LAURA</span><span></span></div><div><span class="k mono">Status</span><span class="mono">Active - Premium paying</span><span></span></div><div><span class="k mono">Paid To Date</span><span class="mono">04/28/2026</span><span></span></div><div><span class="k mono">Modal Premium</span><span class="mono">83.62</span><span></span></div><div><span class="k mono">Face Amount</span><span class="mono">12000</span><span></span></div><div><span class="k mono">Writing Agent</span><span class="mono">AMW5029736</span><span></span></div></div>
+<div class="foot"><span class="f" style="font-size:12px">14 columns · scrolls inside</span></div></div>
+</div>
+<div class="card"><div class="hd"><h2>Laura Lopez has 2 policies</h2><span class="sp"></span><span class="m" style="font-size:12px">Household $141.20 a month</span></div><table><tr><td><a>Aetna / CVS · <span class="mono">ACC7940408</span></a></td><td class="r m">In force · $57.58/mo</td></tr></table></div>
+</div></div></div>
+<ul class="note"><li><b>Title</b> is the client (people look for a name); the policy number leads the facts line in monospace. Health chip beside it; Provisional is an amber dot with its reason in the tooltip; "Check the client" moved to the Client row.</li><li><b>Strip</b> replaces Status · Paid to · Risk · Face/premium · Next date sentences. Tone on the value, the detail in the footnote.</li><li><b>Policy card</b>: each value's (i) says where it was read and when it last changed (board 8). <b>As the carrier sent it</b> is the old collapsible's raw row, always open, scrolling inside.</li><li>Other policies / household only when there are any. The page fills the window; the two cards stretch to the foot.</li></ul></section>
+
+<!-- ═══ 2 HISTORY ═══ -->
+<section class="board" id="p2"><div class="cap"><b>2 · HISTORY</b><span>unchanged table, chips for the field filter, Export on the card's head; the whole row opens its file row</span></div>
+<div class="frame"><div class="main" style="min-height:360px">
+<div class="tl"><h1>Laura Lopez</h1><span class="st b">7 payments behind</span><div class="tabs"><span class="tab">Overview</span><span class="tab on">History<span class="n">4</span></span><span class="tab">Client</span><span class="tab">Pipeline</span><span class="tab">Money<span class="n w">1</span></span><span class="tab">Files</span></div><span class="sp"></span><span class="btn p">Open the case</span><span class="iconbtn">⋯</span></div>
+<div class="card"><div class="toolbar"><span class="chip on">Every field 4</span><span class="chip">Paid to 2</span><span class="chip">Status 1</span><span class="chip">Card stage 1</span><span class="sp"></span><span class="btn">Export</span></div>
+<table><tr><th>Date</th><th>Field</th><th>Change</th><th>Because of</th><th></th></tr>
+<tr><td class="m">Sep 1, 2026</td><td>Paid to</td><td><span class="m">Mar 28 → </span><b>Apr 28, 2026</b></td><td class="m">policySummary.xlsx · row 21</td><td class="r m">›</td></tr>
+<tr><td class="m">Sep 1, 2026</td><td>Card stage</td><td><span class="m">Issued → </span><b>In force</b></td><td class="m">A pipeline rule (carrier file) · Insurvas</td><td></td></tr></table>
+<div class="foot"><span class="m" style="font-size:12px">Showing 1–4 of 4 changes</span></div></div></div></div></section>
+
+<!-- ═══ 3 CLIENT ═══ -->
+<section class="board" id="p3"><div class="cap"><b>3 · CLIENT</b><span>the link as a strip; Unlink and Change client on the link history's head</span></div>
+<div class="frame"><div class="main" style="min-height:360px">
+<div class="tl"><h1>Laura Lopez</h1><span class="st b">7 payments behind</span><div class="tabs"><span class="tab">Overview</span><span class="tab">History</span><span class="tab on">Client</span><span class="tab">Pipeline</span><span class="tab">Money</span><span class="tab">Files</span></div><span class="sp"></span><span class="btn p">Open the case</span><span class="iconbtn">⋯</span></div>
+<div class="strip s4"><div><div class="l">Linked to</div><div class="v">Laura Lopez</div><div class="fn">born Feb 3, 1951 · <span style="color:var(--warn)">made from the carrier's file</span></div></div>
+<div><div class="l">How <span class="ib">i</span></div><div class="v" style="font-size:18px">By identity</div><div class="fn">to an application · Sep 1, 2026</div></div>
+<div><div class="l">Sale</div><div class="v" style="font-size:18px">Application</div><div class="fn">Mar 12, 2026 · Demo Agent · issued</div></div>
+<div><div class="l">Policy number</div><div class="v mono" style="font-size:18px">AMH6900131</div><div class="fn">submitted as the same</div></div></div>
+<div class="card"><div class="hd"><h2>Link history</h2><span class="sp"></span><span class="btn sm">Unlink</span><span class="btn sm p">Change client</span></div>
+<table><tr><th>When</th><th>What</th><th>Why</th><th>By</th></tr><tr><td class="m">Sep 1, 2026</td><td>Linked to Laura Lopez <span class="m">· by identity · now</span></td><td class="m">Same name, DOB and premium as the application</td><td class="m">Insurvas</td></tr></table></div>
+</div></div>
+<ul class="note"><li>"How"'s (i) holds the reason the link was made (today's "Why:" line). "Before" is the second row of Link history, not a field.</li><li>A producer sees no buttons. No client: the strip reads "No client yet" in amber, and the head's button is <b>Link a client</b>.</li></ul></section>
+
+<!-- ═══ 4 PIPELINE ═══ -->
+<section class="board" id="p4"><div class="cap"><b>4 · PIPELINE</b><span>where the card is now, then every move and rule line</span></div>
+<div class="frame"><div class="main" style="min-height:360px">
+<div class="tl"><h1>Laura Lopez</h1><span class="st b">7 payments behind</span><div class="tabs"><span class="tab">Overview</span><span class="tab">History</span><span class="tab">Client</span><span class="tab on">Pipeline<span class="n">2</span></span><span class="tab">Money</span><span class="tab">Files</span></div><span class="sp"></span><span class="btn p">Open the case</span><span class="iconbtn">⋯</span></div>
+<div class="strip s3"><div><div class="l">Card now</div><div class="v">In force</div><div class="fn">Sales pipeline</div></div><div><div class="l">Last move</div><div class="v" style="font-size:18px">Sep 1, 2026</div><div class="fn">a pipeline rule (carrier file)</div></div><div><div class="l">Rule lines</div><div class="v" style="font-size:18px">1 live · 0 forecast</div><div class="fn">0 skipped</div></div></div>
+<div class="card"><div class="hd"><h2>Moves</h2><span class="sp"></span><span class="btn sm">Move it by hand ›</span></div>
+<table><tr><th>When</th><th>Card</th><th>Because</th><th>By</th><th></th></tr><tr><td class="m">Sep 1, 2026</td><td><span class="m">Issued → </span><b>In force</b> <span class="m">· Sales</span></td><td class="m">A pipeline rule (carrier file)</td><td class="m">Insurvas</td><td class="r"><span class="btn sm">Undo</span></td></tr><tr><td class="m">Sep 1, 2026</td><td>Issued → In force</td><td class="m">Paid to moved forward</td><td><span class="m">In force rule · v2</span></td><td></td></tr></table></div>
+</div></div></section>
+
+<!-- ═══ 5 MONEY ═══ -->
+<section class="board" id="p5"><div class="cap"><b>5 · MONEY</b><span>first-year strip; the year and what's next side by side; the carrier's lines; no notices on the page</span></div>
+<div class="frame"><div class="main" style="min-height:560px">
+<div class="tl"><h1>Laura Lopez</h1><span class="st b">7 payments behind</span><div class="tabs"><span class="tab">Overview</span><span class="tab">History</span><span class="tab">Client</span><span class="tab">Pipeline</span><span class="tab on">Money<span class="n w">1</span></span><span class="tab">Files</span></div><span class="sp"></span><span class="btn p">Open the case</span><span class="iconbtn">⋯</span></div>
+<div class="strip s4"><div><div class="l">Expected</div><div class="v">$401.38</div><div class="fn">first year, from the rate card</div></div><div><div class="l">Advanced</div><div class="v">$0.00</div><div class="fn">no advance on record</div></div><div><div class="l">Earned</div><div class="v">$0.00</div><div class="fn">no commission line yet</div></div><div><div class="l">At risk</div><div class="v warn">$0.00</div><div class="fn">no advance to take back</div></div></div>
+<div class="two" style="grid-template-columns:1.4fr 1fr">
+<div class="card"><div class="hd"><h2>First year</h2><span class="m" style="font-size:12px">rate card 40% · paid on the first draft</span><span class="sp"></span><span class="btn sm">Change the rate</span></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px"><div class="bar3"><i style="width:0;background:var(--good)"></i><i style="width:100%;background:var(--bad)"></i></div><div class="m" style="font-size:12px">● $0.00 earned · ● $401.38 short · ● still to come</div><div class="months"><div class="pd">Mar ✓</div><div class="ms">Apr</div><div class="ms">May</div><div class="ms">Jun</div><div class="ms">Jul</div><div class="ms">Aug</div><div class="ms">Sep</div><div class="ms">Oct</div><div>Nov</div><div>Dec</div><div>Jan</div><div>Feb</div></div><div style="font-size:13px">Nothing advanced; commission is paid as premiums arrive.</div></div></div>
+<div class="card"><div class="hd"><h2>What's next</h2><span class="sp"></span><span class="btn sm">Set the grace</span></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:8px;font-size:13px"><div style="color:var(--bad)">191 days behind: the carrier's window has run out.</div><div>Grace not set for American Home Life.</div></div></div>
+</div>
+<div class="card"><div class="hd"><h2>Lines from the carrier</h2><span class="sp"></span><span class="btn sm">Draft a letter</span><a style="font-size:13px">Ledger ›</a></div><table><tr><th>Date</th><th>Line</th><th class="r">Amount</th><th>From</th><th></th></tr><tr><td class="m">Sep 1</td><td><span class="st b">Not paid</span></td><td class="r m">$401.38</td><td class="m">Against your rate card</td><td class="r"><span class="btn sm">Review</span></td></tr></table></div>
+</div></div>
+<ul class="note"><li>"Inside the clawback window: … will likely take back $X" was a notice on the page; it becomes the At risk tile's footnote, in amber ("likely taken back: inside the clawback window").</li><li>"Pay issues aren't available yet" (a missing migration) becomes the lines table's empty-state hint.</li></ul></section>
+
+<!-- ═══ 6 FILES ═══ -->
+<section class="board" id="p6"><div class="cap"><b>6 · FILES</b><span>every file that named the policy; the row opens the file, a row number opens its row</span></div>
+<div class="frame"><div class="main" style="min-height:300px">
+<div class="tl"><h1>Laura Lopez</h1><span class="st b">7 payments behind</span><div class="tabs"><span class="tab">Overview</span><span class="tab">History</span><span class="tab">Client</span><span class="tab">Pipeline</span><span class="tab">Money</span><span class="tab on">Files<span class="n">3</span></span></div><span class="sp"></span><span class="btn p">Open the case</span><span class="iconbtn">⋯</span></div>
+<div class="card"><table><tr><th>File date</th><th>File</th><th>Kind</th><th>Rows</th><th></th></tr><tr><td class="m">Sep 1, 2026</td><td><b>policySummary.xlsx</b></td><td><span class="st z">Policy file</span></td><td><a>row 21</a></td><td class="r m">›</td></tr><tr><td class="m">Aug 3, 2026</td><td><b>AMH-commissions-2026-08.csv</b></td><td><span class="st i">Commission statement</span></td><td><a>line 4</a></td><td class="r m">›</td></tr></table><div class="foot"><span class="m" style="font-size:12px">Showing 1–3 of 3 files</span></div></div>
+</div></div><p class="note">The tab gets its count. Kind is a chip, so policy files and statements part at a glance.</p></section>
+
+<!-- ═══ 7 NOTES ═══ -->
+<section class="board" id="p7"><div class="cap"><b>7 · NOTES</b><span>opened from ⋯ › Add a note; a tab only while open</span></div>
+<div class="frame"><div class="main" style="min-height:300px">
+<div class="tl"><h1>Laura Lopez</h1><div class="tabs"><span class="tab">Overview</span><span class="tab">History</span><span class="tab">Client</span><span class="tab">Pipeline</span><span class="tab">Money</span><span class="tab">Files</span><span class="tab on">Notes</span></div><span class="sp"></span><span class="btn p">Open the case</span><span class="iconbtn">⋯</span></div>
+<div class="card" style="max-width:720px"><div class="hd"><h2>Your notes</h2></div><div style="padding:14px 16px;display:flex;flex-direction:column;gap:10px"><div class="input" style="height:90px;align-items:flex-start;padding-top:8px">Called the carrier 11/02 about the paid-to date…</div><div class="two"><div class="input">Lead vendor: none</div><div class="input">Campaign: none</div></div><div><span class="btn p">Save notes</span></div></div></div>
+</div></div></section>
+
+<!-- ═══ 8 POP-UPS ═══ -->
+<section class="board" id="p8"><div class="cap"><b>8 · MENUS AND POP-UPS</b><span>⋯ menu, a value's (i), the two confirms, the toasts</span></div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+<div class="pop"><div>Open the lead</div><div>Open the application</div><div>Change client</div><div>Add a note</div><div>Unlink</div><div>Copy policy number</div></div>
+<div class="tip"><b>Paid to · Apr 28, 2026</b><div class="m" style="margin-top:6px">Read from policySummary.xlsx, row 21 (snapshot of Sep 1, 2026).<br>Last changed Sep 1, 2026 · was Mar 28, 2026.</div><div style="margin-top:6px"><a>Open row 21 ›</a></div></div>
+<div class="dlg"><h2>Unlink this client?</h2><p class="m" style="font-size:13px">The policy goes back to Needs you to choose its client again, with Laura Lopez among the choices. Until someone decides, it stays linked as it is now.</p><div style="display:flex;gap:8px;justify-content:flex-end"><span class="btn">Keep the link</span><span class="btn" style="background:var(--badbg);color:var(--bad);border-color:transparent">Unlink</span></div></div>
+<div class="dlg"><h2>Undo this move?</h2><p class="m" style="font-size:13px">The card goes back from In force to Issued, where its application puts it. A history row records the move back.</p><div style="display:flex;gap:8px;justify-content:flex-end"><span class="btn">Keep it</span><span class="btn p">Undo the move</span></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span class="toast">✓ Copied AMH6900131</span><span class="toast">✓ Back in Needs you to choose the client</span><span class="toast">✓ Move undone · the card is back in Issued</span></div>
+</div>
+<p class="note">The primary button is the one thing to do next, in order: <b>Open the case</b> (an open Retention case) · <b>Open the lead</b> · <b>Open the application</b> · <b>Link a client</b> (no client). Everything else is in ⋯, last on the line.</p></section>
+
+<!-- ═══ 9 PHONE ═══ -->
+<section class="board" id="p9"><div class="cap"><b>9 · PHONE</b><span>the strip wraps two to a row, tabs scroll, the cards stack</span></div>
+<div class="phone"><div class="trail">Policies › <b>Laura Lopez</b></div><div class="tl"><h1>Laura Lopez</h1><span class="sp"></span><span class="iconbtn">⋯</span></div><div><span class="st b">7 payments behind</span> <span class="dotmark">Provisional</span></div><div class="hscroll"><span class="tab on">Overview</span><span class="tab">History</span><span class="tab">Client</span><span class="tab">Pipeline</span><span class="tab">Money</span></div>
+<div class="strip" style="grid-template-columns:1fr 1fr"><div><div class="l">Status</div><div class="v bad" style="font-size:18px">At risk</div></div><div style="border-right:0"><div class="l">Paid to</div><div class="v bad" style="font-size:18px">Apr 28</div></div></div>
+<div class="card"><div class="rows"><div style="grid-template-columns:110px 1fr 18px"><span class="k">Issued</span><span>Mar 20, 2026</span><span class="ib">i</span></div><div style="grid-template-columns:110px 1fr 18px"><span class="k">Agent</span><span>AMW5029736</span><span class="ib">i</span></div></div></div><span class="btn p" style="justify-content:center">Open the case</span></div></section>
+
+<!-- ═══ EDIT MAP ═══ -->
+<section class="board" id="e"><div class="cap"><b>EDIT MAP</b><span>every change you can make from this page, and where it happens</span></div>
+<table class="ed"><tr><th>What</th><th>From</th><th>Where it happens</th><th>Who</th></tr>
+<tr><td>Change or link the client</td><td>Client › head · ⋯</td><td>Its own page (/client)</td><td>Owner, bookkeeper</td></tr>
+<tr><td>Unlink</td><td>Client › head · ⋯</td><td>Confirm (board 8) → Needs you</td><td>Owner, bookkeeper</td></tr>
+<tr><td>Undo a card move</td><td>Pipeline › newest move</td><td>Confirm (board 8)</td><td>Owner, producer</td></tr>
+<tr><td>Move the card by hand</td><td>Pipeline › head</td><td>The lead's page</td><td>Owner, producer</td></tr>
+<tr><td>Add or change the rate</td><td>Money › First year</td><td>Carrier sync › Rate card</td><td>Owner, bookkeeper</td></tr>
+<tr><td>Set the grace</td><td>Money › What's next</td><td>Carrier sync › Carrier rules</td><td>Owner, bookkeeper</td></tr>
+<tr><td>Review a pay issue · Draft a letter</td><td>Money › lines</td><td>Needs you › Review · Pay issues</td><td>Owner, bookkeeper</td></tr>
+<tr><td>Map the agent code</td><td>Overview › Writing agent</td><td>Carrier sync › Agent codes</td><td>Owner, bookkeeper</td></tr>
+<tr><td>Check a provisional client</td><td>Overview › Client</td><td>Duplicate check</td><td>Owner, producer</td></tr>
+<tr><td>Notes, lead vendor, campaign</td><td>⋯ › Add a note</td><td>Notes tab, Save</td><td>Everyone who sees the policy</td></tr>
+<tr><td>Export history</td><td>History › head</td><td>CSV download</td><td>Everyone who sees the policy</td></tr>
+<tr><td>Copy policy number</td><td>⋯</td><td>Toast</td><td>Everyone</td></tr>
+<tr><td>Carrier values</td><td colspan="3" class="m">Read-only. They change only when the next carrier file arrives; each (i) says which file set them.</td></tr></table></section>
+</div>
+</body>
+</html>

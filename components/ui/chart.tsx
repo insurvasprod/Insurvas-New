@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 
 import { chartTop, ticks } from "@/lib/chart/scale";
 import { cn } from "@/lib/utils";
@@ -39,6 +40,13 @@ export const CHART_TONES = {
   /** A state that is waiting on someone, and one that is done: the donut's meaning-carrying tones. */
   warning: "bg-[var(--warning-ink)]",
   success: "bg-[var(--success-ink)]",
+  /** The categorical palette (--cat-1…6, BRAND.md): one hue per thing that is not a rank — carriers, sources. */
+  cat1: "bg-[var(--cat-1)]",
+  cat2: "bg-[var(--cat-2)]",
+  cat3: "bg-[var(--cat-3)]",
+  cat4: "bg-[var(--cat-4)]",
+  cat5: "bg-[var(--cat-5)]",
+  cat6: "bg-[var(--cat-6)]",
 } as const;
 
 export type ChartTone = keyof typeof CHART_TONES;
@@ -287,9 +295,15 @@ const DONUT_STROKE: Record<ChartTone, string> = {
   quiet: "var(--muted)",
   warning: "var(--warning-ink)",
   success: "var(--success-ink)",
+  cat1: "var(--cat-1)",
+  cat2: "var(--cat-2)",
+  cat3: "var(--cat-3)",
+  cat4: "var(--cat-4)",
+  cat5: "var(--cat-5)",
+  cat6: "var(--cat-6)",
 };
 
-export type DonutSegment = { key: string; label: string; value: number; tone: ChartTone; /** Words after the figure in the legend ("38% convert"). */ detail?: string };
+export type DonutSegment = { key: string; label: string; value: number; tone: ChartTone; /** Words after the figure in the legend ("38% convert"). */ detail?: string; /** Where the slice opens: its legend row becomes the link (owner 2026-11-06). */ href?: string };
 
 /**
  * A ring split by share, the total in its middle, and a legend that carries every name and figure
@@ -302,6 +316,7 @@ export function DonutChart({
   centerLabel,
   format = count,
   unit,
+  legend = "both",
   className,
 }: {
   segments: readonly DonutSegment[];
@@ -310,6 +325,8 @@ export function DonutChart({
   centerLabel?: string;
   format?: (value: number) => string;
   unit?: string;
+  /** "share": the legend carries each slice's percentage alone ("38%"), as the dashboard mockups draw it. */
+  legend?: "both" | "share";
   className?: string;
 }) {
   const total = segments.reduce((sum, segment) => sum + segment.value, 0);
@@ -354,17 +371,49 @@ export function DonutChart({
         </div>
       </div>
       <ul className="m-0 flex w-full min-w-0 list-none flex-col gap-1.5 p-0">
-        {segments.map((segment) => (
-          <li key={segment.key} className="flex min-w-0 items-center gap-2 text-sm">
-            <span className={cn("size-2.5 shrink-0 rounded-full", CHART_TONES[segment.tone])} aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate text-foreground">{segment.label}</span>
-            <span className="shrink-0 tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{format(segment.value)}</b>{segment.detail ? ` · ${segment.detail}` : ` · ${Math.round((segment.value / total) * 100)}%`}</span>
-          </li>
-        ))}
+        {segments.map((segment) => {
+          const row = (
+            <>
+              <span className={cn("size-2.5 shrink-0 rounded-full", CHART_TONES[segment.tone])} aria-hidden="true" />
+              <span className="min-w-0 flex-1 truncate text-foreground">{segment.label}</span>
+              {legend === "share"
+                ? <b className="shrink-0 font-semibold tabular-nums text-foreground">{Math.round((segment.value / total) * 100)}%</b>
+                : <span className="shrink-0 tabular-nums text-muted-foreground"><b className="font-semibold text-foreground">{format(segment.value)}</b>{segment.detail ? ` · ${segment.detail}` : ` · ${Math.round((segment.value / total) * 100)}%`}</span>}
+            </>
+          );
+          return (
+            <li key={segment.key} className="min-w-0 text-sm">
+              {segment.href
+                ? <Link href={segment.href} className="-mx-1.5 flex min-w-0 items-center gap-2 rounded-md px-1.5 py-0.5 no-underline hover:bg-[color-mix(in_srgb,var(--primary)_8%,transparent)]">{row}</Link>
+                : <span className="flex min-w-0 items-center gap-2">{row}</span>}
+            </li>
+          );
+        })}
       </ul>
       <ChartFigures items={segments.map((segment) => ({ key: segment.key, label: segment.label, value: format(segment.value) }))} unit={unit} />
     </figure>
   );
+}
+
+/** A smooth line through the points (a Catmull-Rom spline as cubic Béziers), the mockups' curve. */
+function smoothPath(pts: ReadonlyArray<readonly [number, number]>): string {
+  if (!pts.length) return "";
+  if (pts.length < 3) return pts.map(([px, py], index) => `${index === 0 ? "M" : "L"}${px.toFixed(1)} ${py.toFixed(1)}`).join(" ");
+  let d = `M${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}`;
+  for (let i = 0; i < pts.length - 1; i += 1) {
+    const p0 = pts[Math.max(0, i - 1)];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[Math.min(pts.length - 1, i + 2)];
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    // Never overshoot below the baseline or above the top: a premium is never negative.
+    const clamp = (v: number) => Math.max(0, Math.min(200, v));
+    d += ` C${c1x.toFixed(1)} ${clamp(c1y).toFixed(1)} ${c2x.toFixed(1)} ${clamp(c2y).toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
+  }
+  return d;
 }
 
 /* ── A line over time ────────────────────────────────────────────────────────────────────────── */
@@ -384,6 +433,8 @@ export function LineSeries({
   labels = "ends",
   className,
   minHeight = 160,
+  compare,
+  hrefFor,
 }: {
   points: readonly LinePoint[];
   summary: string;
@@ -392,9 +443,13 @@ export function LineSeries({
   labels?: "ends" | "all";
   className?: string;
   minHeight?: number;
+  /** A second series on the same axes (last month, submitted), drawn quieter under the main line. */
+  compare?: { points: readonly LinePoint[]; label: string };
+  /** Where each point opens (owner 2026-11-06: every element opens the rows behind it). */
+  hrefFor?: (point: LinePoint) => string | null;
 }) {
   if (!points.length) return null;
-  const top = chartTop(points.reduce((high, point) => Math.max(high, point.value), 0));
+  const top = chartTop(Math.max(points.reduce((high, point) => Math.max(high, point.value), 0), compare ? compare.points.reduce((high, point) => Math.max(high, point.value), 0) : 0));
   const tickText = ticks(top).map(format);
   const gutter = Math.max(36, Math.max(...tickText.map((text) => text.length)) * 7 + 10);
   const labelAt = labels === "all"
@@ -404,9 +459,12 @@ export function LineSeries({
   const height = 200;
   const x = (index: number) => (points.length === 1 ? width / 2 : (index / (points.length - 1)) * width);
   const y = (value: number) => height - (top > 0 ? (value / top) * height : 0);
-  const line = points.map((point, index) => `${index === 0 ? "M" : "L"}${x(index).toFixed(1)} ${y(point.value).toFixed(1)}`).join(" ");
+  const line = smoothPath(points.map((point, index) => [x(index), y(point.value)]));
   const area = `${line} L${x(points.length - 1).toFixed(1)} ${height} L${x(0).toFixed(1)} ${height} Z`;
   const last = points[points.length - 1];
+  const xc = (index: number) => (compare && compare.points.length > 1 ? (index / (compare.points.length - 1)) * width : width / 2);
+  const compareLine = compare?.points.length ? smoothPath(compare.points.map((point, index) => [xc(index), y(point.value)])) : null;
+  const compareAt = (index: number) => compare?.points[index] ?? null;
 
   return (
     <figure className={cn("m-0 flex min-h-0 flex-col", className)}>
@@ -421,12 +479,49 @@ export function LineSeries({
         ))}
         <div className="absolute inset-y-0 left-0" style={{ right: gutter }}>
           <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="size-full overflow-visible">
+            {compareLine && <path d={`${compareLine} L${width} ${height} L0 ${height} Z`} fill="var(--info)" fillOpacity="0.08" />}
+            {compareLine && <path d={compareLine} fill="none" stroke="var(--info)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
             <path d={area} fill="var(--primary)" fillOpacity="0.12" />
             <path d={line} fill="none" stroke="var(--primary)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
           </svg>
           <span className="absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[var(--primary)] ring-2 ring-[var(--surface)]" style={{ left: `${(x(points.length - 1) / width) * 100}%`, top: `${(y(last.value) / height) * 100}%` }} />
-          <ol className="absolute inset-0 m-0 grid list-none p-0" style={{ gridTemplateColumns: `repeat(${points.length}, minmax(0, 1fr))` }}>
-            {points.map((point) => <li key={point.key} className="h-full" title={`${point.label}: ${format(point.value)}${unit ? ` ${unit}` : ""}`} />)}
+          {/* Hover (owner 2026-11-06, as the round 2 mockup draws it): each point owns the strip of the chart nearest to
+              it; under the pointer it shows a dashed guide, a dot on the line, and a card with the period and figures.
+              CSS only, so it works on a server-rendered page; the strip is also the link to the rows behind the point. */}
+          <ol className="absolute inset-0 m-0 list-none p-0">
+            {points.map((point, index) => {
+              const title = `${point.label}: ${format(point.value)}${unit ? ` ${unit}` : ""}`;
+              const href = hrefFor?.(point) ?? null;
+              const from = index === 0 ? 0 : (x(index - 1) + x(index)) / 2;
+              const to = index === points.length - 1 ? width : (x(index) + x(index + 1)) / 2;
+              const span = Math.max(1, to - from);
+              const at = `${((x(index) - from) / span) * 100}%`;
+              const top = `${(y(point.value) / height) * 100}%`;
+              const other = compareAt(index);
+              const edge = points.length > 1 && index === 0 ? "left-0" : points.length > 1 && index === points.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2";
+              const body = (
+                <>
+                  <span className="pointer-events-none absolute inset-y-0 w-0 border-l border-dashed border-[var(--primary)] opacity-0 transition-opacity group-hover:opacity-70 group-focus-visible:opacity-70" style={{ left: at }} />
+                  <span className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--primary)] bg-[var(--surface)] opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" style={{ left: at, top }} />
+                  <span className="pointer-events-none absolute z-10 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100" style={{ left: at, top }}>
+                    <span className={cn("absolute bottom-3 flex w-max flex-col gap-0.5 rounded-lg border border-border bg-[var(--surface)] px-2.5 py-1.5 text-left shadow-[var(--shadow-rest)]", edge)}>
+                      <span className="text-[0.6875rem] leading-none text-muted-foreground">{point.label}</span>
+                      <span className="text-xs font-semibold leading-tight tabular-nums text-foreground">{format(point.value)}{unit ? ` ${unit}` : ""}</span>
+                      {other && compare && <span className="text-[0.6875rem] leading-tight tabular-nums text-muted-foreground">{compare.label} {format(other.value)}</span>}
+                    </span>
+                  </span>
+                </>
+              );
+              const cls = "group absolute inset-y-0 block outline-none";
+              const style = { left: `${(from / width) * 100}%`, width: `${(span / width) * 100}%` };
+              return (
+                <li key={point.key} className="contents">
+                  {href
+                    ? <Link href={href} aria-label={title} tabIndex={-1} className={cls} style={style}>{body}</Link>
+                    : <span title={title} className={cls} style={style}>{body}</span>}
+                </li>
+              );
+            })}
           </ol>
         </div>
       </div>

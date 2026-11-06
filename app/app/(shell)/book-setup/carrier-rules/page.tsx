@@ -1,9 +1,9 @@
+import { InfoTip } from "@/components/ui/info-tip";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { CarrierCoverageList, type CoverageListRow } from "@/components/app/book/setup/carrier-coverage-list";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
-import { SetupTabs } from "@/components/app/book/setup/setup-tabs";
 import { Callout } from "@/components/app/settings/primitives";
 import { RULE_TYPES } from "@/lib/ingestion/carrierRules";
 import { CARRIER_RULES_PENDING_MESSAGE } from "@/lib/ingestion/carrierRulesStore";
@@ -20,9 +20,9 @@ import { filesSummary, missingOf, moneySummary, unverifiedOf } from "@/lib/pipel
  */
 export default async function SetupCarrierRulesPage() {
   const guard = await guardPage("statement_ingestion");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Carrier rules" description="Rates, carrier rules and pipeline rules for your book." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Carrier terms" description="Rates, carrier terms and card-move rules for your book." />;
   // Owner and bookkeeper, like every Setup tab and its API.
-  if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Carrier rules" detail="Setup is for the account owner and bookkeepers." />;
+  if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Carrier terms" detail="Setup is for the account owner and bookkeepers." />;
   const tenantId = guard.context.tenantId;
   const view = await loadCarrierCoverage(tenantId);
 
@@ -43,7 +43,7 @@ export default async function SetupCarrierRulesPage() {
   });
 
   return (
-    <DataInPage step="setup" lead={<SetupTabs active="carrier-rules" tenantId={tenantId} />}>
+    <DataInPage step="carrier-rules" chip={<InfoTip label="About carrier terms" side="right">Each carrier&apos;s windows: how long it waits for the first payment, the grace after a missed one, when a lapsed policy can still come back, and how it pays and sends files. Without a window, Insurvas can&apos;t count down to a lapse or a chargeback for that carrier. Work down the list: each row&apos;s button says what is missing; set it from the carrier&apos;s contract or its agent guide.</InfoTip>}>
       {!view.available ? <Callout tone="warning" title={CARRIER_RULES_PENDING_MESSAGE} /> : <CarrierCoverageList rows={rows} />}
     </DataInPage>
   );

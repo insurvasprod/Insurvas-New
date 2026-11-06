@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { NoteField } from "@/components/ui/note-field";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { control, Field, textareaControl } from "@/components/ui/field";
+import { control, Field } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
@@ -95,7 +96,7 @@ export function HoldDialog({ card, onClose, onDone }: { card: Pick<SaveCard, "ca
               <option value="dismiss">Until the risk rises</option>
             </select>
           </Field>
-          <Field label="Why" htmlFor="hold-reason" required><textarea id="hold-reason" className={textareaControl} maxLength={500} value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
+          <Field label="Why" htmlFor="hold-reason" required><NoteField id="hold-reason"  maxLength={500} value={reason} onChange={setReason} /></Field>
           {error && <Callout tone="error" title={error} />}
         </div>
         <DialogFooter>
@@ -184,7 +185,7 @@ export function CallsTab({ card, calls, canLog }: { card: SaveCard; calls: CallL
               </Field>
             )}
           </div>
-          <Field label="Note" htmlFor="call-note"><textarea id="call-note" className={textareaControl} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+          <Field label="Note" htmlFor="call-note"><NoteField id="call-note"  maxLength={2000} value={note} onChange={setNote} /></Field>
           {/* On a page a Callout goes to the bell: an error the user must fix stays beside the button (§11). */}
           {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
           <div className="flex justify-end">

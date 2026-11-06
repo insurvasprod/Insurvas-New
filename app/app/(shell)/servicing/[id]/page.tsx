@@ -1,19 +1,21 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { personName } from "@/lib/format/personName";
 import { isRecordUuid } from "@/lib/ingestion/path";
-import { CARRIER_METHOD_LABELS, NEXT_STEPS, REQUEST_LABELS, STATUS_LABELS, describeChange } from "@/lib/retention/servicing";
+import { CARRIER_METHOD_LABELS, NEXT_STEPS, REQUEST_LABELS, describeChange } from "@/lib/retention/servicing";
 import { loadRequest, type ServicingRequest } from "@/lib/retention/servicingStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionPage, retentionTrail } from "@/components/app/retention/retention-page";
 import { ServicingRequestActions, ServicingStepForm } from "@/components/app/retention/servicing-request-view";
-import { SERVICING_TONE, TONE_CLASS, canCancel, dayText, fileCheckText, isFormStep, nextStepOf, phoneText } from "@/components/app/retention/servicing-shared";
+import { NoteBox } from "@/components/app/retention/note-box";
+import { TONE_CLASS, canCancel, dayText, fileCheckText, isFormStep, nextStepOf } from "@/components/app/retention/servicing-shared";
 import { cardSurface } from "@/components/ui/card";
-import { StatusChip } from "@/components/ui/status-chip";
+import { FactTable } from "@/components/ui/fact-table";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
 /**
@@ -46,13 +48,16 @@ export default async function ServicingRequestPage({ params, searchParams }: { p
   // A step from the address opens only when the request can take it now, and never read-only.
   const step = !readOnly && tab === "progress" && isFormStep(askedStep) && NEXT_STEPS[r.status].includes(askedStep) ? askedStep : null;
   const base = `/app/servicing/${r.id}`;
-  const facts = [REQUEST_LABELS[r.type], `${r.carrierName} ${r.policyNumber}`, r.phone ? phoneText(r.phone) : "No phone on file", `asked ${dayText(r.createdAt)}`].join(" · ");
+  // Under the name, one short line (owner 2026-11-06): what changes and on which policy; where it stands is the
+  // Progress ladder below, not a chip by the name; the asked date and who asked are on it too.
+  const line = [REQUEST_LABELS[r.type], `${r.carrierName} ${r.policyNumber}`].join(" · ");
+  // The case it was opened from, so the request leads back to the work (critique E3).
+  const facts = r.caseId ? <>{line} · <Link href={`/app/retention/${r.caseId}`} className="font-semibold text-[var(--accent-ink)] hover:underline">From a Retention case</Link></> : line;
 
   return (
     <RetentionPage
       step="servicing"
       title={name}
-      chip={<StatusChip tone={SERVICING_TONE[r.status]}>{STATUS_LABELS[r.status]}</StatusChip>}
       facts={facts}
       breadcrumbs={retentionTrail("servicing", name)}
       lead={<ViewTabs label={name} value={tab} tabs={[
@@ -69,12 +74,16 @@ export default async function ServicingRequestPage({ params, searchParams }: { p
     >
       {tab === "change" ? <ChangeTab r={r} />
         : tab === "notes" ? (
-          <section className={`${cardSurface} p-5`}>
-            <h2 className="m-0 text-base font-semibold text-foreground">Note</h2>
-            <p className="m-0 mt-2 whitespace-pre-wrap text-sm text-foreground">{r.note?.trim() ? r.note : <span className="text-muted-foreground">No note</span>}</p>
+          <section className={`${cardSurface} flex flex-col gap-4 p-5 lg:flex-1`}>
+            <div>
+              <h2 className="m-0 text-sm font-semibold text-foreground">Notes</h2>
+              <p className="m-0 mt-2 whitespace-pre-wrap text-sm text-foreground">{r.note?.trim() ? r.note : <span className="text-muted-foreground">No notes yet</span>}</p>
+            </div>
+            {!readOnly && <div className="border-t border-border pt-4"><NoteBox endpoint="/api/app/retention/servicing" fields={{ action: "note", id: r.id }} id="request-note" /></div>}
           </section>
         ) : (
-          <div className={step ? "grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)]" : undefined}>
+          // Grows to the foot of the screen (owner 2026-11-06: "fill the full height, no gaps").
+          <div className={step ? "grid gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,440px)]" : "flex flex-col lg:flex-1"}>
             <Timeline r={r} />
             {step && <ServicingStepForm key={step} id={r.id} to={step} type={r.type} carrierMethod={r.carrierMethod} carrierReference={r.carrierReference} expectedEffectiveDate={r.expectedEffectiveDate} />}
           </div>
@@ -123,7 +132,7 @@ function Timeline({ r }: { r: ServicingRequest }) {
     ahead: "border-border bg-card",
   };
   return (
-    <section className={`${cardSurface} p-5`} aria-label="Progress">
+    <section className={`${cardSurface} p-5 lg:flex-1`} aria-label="Progress">
       <ol className="m-0 grid list-none gap-0 p-0">
         {rungs.map((rung, i) => (
           <li key={rung.label} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-3 pb-5 last:pb-0">
@@ -154,16 +163,10 @@ function ChangeTab({ r }: { r: ServicingRequest }) {
     ["Due by", r.expectedEffectiveDate ? dayText(r.expectedEffectiveDate) : null],
     ["Carrier said done", r.confirmedAt ? dayText(r.confirmedAt) : null],
   ] as Array<[string, ReactNode]>).filter(([, v]) => v !== null && v !== undefined && v !== "");
+  // The change as a table (owner 2026-11-06), the same shape as a case's facts.
   return (
-    <section className={`${cardSurface} p-5`}>
-      <dl className="m-0 grid gap-4 text-sm sm:grid-cols-2">
-        {rows.map(([label, value]) => (
-          <div key={label} className="grid gap-0.5">
-            <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
-            <dd className="m-0 text-foreground">{value}</dd>
-          </div>
-        ))}
-      </dl>
+    <section className={`${cardSurface} p-5 lg:flex-1`} aria-label="The change">
+      <FactTable rows={rows} labelWidth={220} className="max-w-[860px]" />
     </section>
   );
 }

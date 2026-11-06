@@ -23,6 +23,12 @@ const EMPTY: Record<NeedsYouView, { title: string; hint: string }> = {
   closed: { title: "Nothing closed in the last 30 days", hint: "Decisions made here, on Exceptions or on Policy matching appear here for 30 days." },
 };
 
+/** How long an item has waited, toned: amber past a month, red past a quarter (round 6), so the oldest stand out. */
+function Age({ days }: { days: number }) {
+  const tone = days >= 90 ? "text-[var(--error-ink)] font-semibold" : days >= 30 ? "text-[var(--warning-ink)] font-semibold" : "text-foreground";
+  return <span className={`tabular-nums ${tone}`}>{ageShort(days)}</span>;
+}
+
 /** Items of one kind from one file fold into one line once there are this many. */
 const FOLD_AT = 3;
 
@@ -153,15 +159,15 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
       {every.length === 0 ? <EmptyState title={EMPTY[view].title} hint={EMPTY[view].hint} />
         : shown.length === 0 ? <NoMatches noun="items" onClear={() => { pick("all"); search(""); }} />
         : (
-          <table className="portal-lead-table w-full min-w-[860px] table-fixed text-left text-sm">
+          <table className="portal-lead-table w-full min-w-[980px] table-fixed text-left text-sm">
             <thead>
               <tr>
-                <th className="w-[170px]">Kind</th>
-                <th className="w-[28%]">About</th>
+                <th className="w-[150px]">Kind</th>
+                <th className="w-[24%]">About</th>
                 <th>{closed ? "How it ended" : "Why"}</th>
-                <th className="w-[160px]">Owner</th>
-                <th className="w-[72px]">{closed ? "Closed" : "Age"}</th>
-                <th className="w-[200px] text-right"><span className="sr-only">Actions</span></th>
+                <th className="w-[140px]">Owner</th>
+                <th className="w-[76px]" title={closed ? undefined : "How long it has waited. Amber after 30 days, red after 90."}>{closed ? "Closed" : "Waiting"}</th>
+                <th className="w-[220px] text-right">{closed ? <span className="sr-only">Open</span> : "What to do"}</th>
               </tr>
             </thead>
             <tbody>
@@ -175,11 +181,11 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                       <td className="truncate font-semibold text-foreground" title={f.where}>{f.label} <span className="font-normal text-muted-foreground">· {f.where}</span></td>
                       <td className="truncate text-foreground" title={first.kind === "no-sale" ? "No sale or application on record: a new client was made from each row" : first.why}>{first.kind === "no-sale" ? "No sale on record" : "A person picks the client"}</td>
                       <td className="text-foreground">{f.items.every((i) => i.who === first.who) ? first.who : "Several people"}</td>
-                      <td className="tabular-nums text-foreground">{ageShort(Math.max(...f.items.map((i) => i.ageDays)))}</td>
+                      <td><Age days={Math.max(...f.items.map((i) => i.ageDays))} /></td>
                       <td className="text-right">
                         <span className="inline-flex gap-2">
-                          <Button type="button" variant="ghost" size="sm" onClick={(event) => { event.stopPropagation(); setFolded(f.key); setPage(1); }}>List</Button>
-                          <Button asChild variant="outline" size="sm"><Link href={reviewOf(f)} onClick={(event) => event.stopPropagation()}>Review</Link></Button>
+                          <Button type="button" variant="ghost" size="sm" title={`See the ${f.label} one by one`} onClick={(event) => { event.stopPropagation(); setFolded(f.key); setPage(1); }}>See all</Button>
+                          <Button asChild variant="outline" size="sm"><Link href={reviewOf(f)} onClick={(event) => event.stopPropagation()}>{/* A line of many: the verb on all of them ("Confirm all"), so the button stays short. */}{`${KIND_META[first.kind].todo.split(" ")[0]} all`}</Link></Button>
                         </span>
                       </td>
                     </tr>
@@ -194,9 +200,12 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                     <td className="truncate font-semibold text-foreground" title={item.about}>{item.about}</td>
                     <td className="truncate text-foreground" title={closed ? item.closedAs ?? "Closed" : item.why}>{closed ? item.closedAs ?? "Closed" : item.why}</td>
                     <td className="text-foreground"><span className="inline-flex flex-wrap items-center gap-2">{item.who}{item.escalated && !closed && <StatusChip tone="danger">Escalated</StatusChip>}</span></td>
-                    <td className="tabular-nums text-foreground">{closed ? fileDay(item.closedAt ?? null) : ageShort(item.ageDays)}</td>
+                    <td>{closed ? <span className="tabular-nums text-foreground">{fileDay(item.closedAt ?? null)}</span> : <Age days={item.ageDays} />}</td>
                     <td className="text-right">
-                      <Link href={go} onClick={(event) => event.stopPropagation()} className={closed ? "text-muted-foreground hover:text-foreground" : "font-semibold text-[var(--accent-ink)] hover:underline"}>{closed ? "›" : item.kind === "status-word" ? "Open" : "Review"}</Link>
+                      {/* Round 6 (owner 2026-11-06: "know exactly what to do"): every open row's one button says what to do, the same button on every row. */}
+                      {closed
+                        ? <Link href={go} onClick={(event) => event.stopPropagation()} className="text-muted-foreground hover:text-foreground" aria-label={`Open ${item.about}`}>›</Link>
+                        : <Button asChild variant="outline" size="sm"><Link href={go} onClick={(event) => event.stopPropagation()}>{KIND_META[item.kind].todo}</Link></Button>}
                     </td>
                   </tr>
                 );

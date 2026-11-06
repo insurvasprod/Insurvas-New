@@ -81,6 +81,7 @@ import {
   PhoneCall,
   PhoneOff,
   Recycle,
+  RefreshCw,
   Scale,
   ScrollText,
   SquareKanban,
@@ -97,7 +98,7 @@ import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover"
 import { leadsInStepOf } from "@/lib/leadSources/steps";
 import { complianceStepOf } from "@/lib/compliance/steps";
 import { reportsViewOf } from "@/lib/reports/views";
-import { bookAreaOf, dataInStepOf } from "@/lib/dataIn/steps";
+import { bookAreaOf, dataInAreaOf, dataInStepOf } from "@/lib/dataIn/steps";
 import { accountingStepOf } from "@/lib/accounting/steps";
 import { commissionsStepOf } from "@/lib/commissions/steps";
 import { agencyStepOf } from "@/lib/agency/steps";
@@ -122,10 +123,9 @@ function isActivePath(pathname: string, href: string) {
   if (href === "/app/compliance" && complianceStepOf(pathname)) return true;
   // Every Reports view is the one Reports entry, whichever view it opens on.
   if (reportsViewOf(href) && reportsViewOf(pathname)) return true;
-  // Every Data in step is the one Data in entry (2026-11-02), whichever page it opens on.
-  if (dataInStepOf(href) && bookAreaOf(pathname)) return true;
-  // Lapse risk is a Needs you view (owner 2026-11-02), so it lights Book of business too.
-  if (dataInStepOf(href) && /^\/app\/lapse-risk\/?$/.test(pathname)) return true;
+  // Every Book of business step is the one Book of business entry, every Carrier sync step the one Carrier sync
+  // entry (split 2026-11-05), whichever page it opens on. Lapse risk is a Needs you view, so it lights Carrier sync.
+  if (dataInStepOf(href) && bookAreaOf(pathname) && dataInAreaOf(href) === dataInAreaOf(pathname)) return true;
   // Every Retention step is the one Retention entry (2026-11-02).
   if (retentionStepOf(href) && retentionStepOf(pathname)) return true;
   // Every Accounting step is the one Accounting entry (2026-11-02).
@@ -405,12 +405,18 @@ function NavList({
         ))}
       </ul>
 
-      {tree.groups.map((group) => group.items.length === 1 && group.items[0].groupLink ? (
+      {tree.groups.map((group) => group.items.length === 1 && group.items[0].groupLink ? (() => {
         // A group that is one page (Compliance): one link under the group's own name and icon, no dropdown.
-        <ul key={group.label} className="portal-agent-nav-home">
-          <NavItemLink item={{ ...group.items[0], navLabel: group.label, icon: group.icon }} onNavigate={onNavigate} />
-        </ul>
-      ) : (
+        const link = (
+          <ul key={group.label} className="portal-agent-nav-home">
+            <NavItemLink item={{ ...group.items[0], navLabel: group.label, icon: group.icon }} onNavigate={onNavigate} />
+          </ul>
+        );
+        // Collapsed, hovering it lists its pages beside the rail, as a group's icon does (owner 2026-11-06).
+        return isCollapsed && group.steps
+          ? <CollapsedFlyout key={group.label} label={group.label} icon={iconFor(group.icon)} items={group.steps}>{link}</CollapsedFlyout>
+          : link;
+      })() : (
         <DisclosureSection
           key={group.label}
           label={group.label}
@@ -526,6 +532,8 @@ const ICONS = {
   "user-round-search": UserRoundSearch,
   "user-x": UserX,
   wallet: Wallet,
+  // Carrier sync (owner 2026-11-05): the files kept in step with the book.
+  "refresh-cw": RefreshCw,
 } as const;
 
 export function AgentSidebar({

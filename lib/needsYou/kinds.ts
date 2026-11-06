@@ -47,24 +47,26 @@ export type KindMeta = {
   verb: string;
   /** Where the source lives, for the line under the title. */
   source: string;
+  /** What to do, as the row's one button on the Needs you list (round 6, owner 2026-11-06: "know exactly what to do"). */
+  todo: string;
 };
 
 export const KIND_META: Record<NeedsYouKind, KindMeta> = {
-  "pick-client": { label: "Pick the client", tone: "warning", group: "clients", keeperOnly: true, verb: "Link", source: "Policy matching" },
-  "no-sale": { label: "Policy with no sale", tone: "warning", group: "clients", keeperOnly: false, verb: "Save", source: "Exceptions" },
-  "no-carrier": { label: "Sale no carrier has", tone: "danger", group: "sales", keeperOnly: false, verb: "Save", source: "Exceptions" },
-  "same-person": { label: "Same person?", tone: "neutral", group: "clients", keeperOnly: false, verb: "Save", source: "Exceptions" },
-  "existing-book": { label: "Existing book to look over", tone: "neutral", group: "files", keeperOnly: false, verb: "Mark looked over", source: "Exceptions" },
-  "commission-no-policy": { label: "Commission, no policy", tone: "warning", group: "money", keeperOnly: false, verb: "Save", source: "Exceptions" },
+  "pick-client": { label: "Pick the client", tone: "warning", group: "clients", keeperOnly: true, verb: "Link", source: "Policy matching", todo: "Pick the client" },
+  "no-sale": { label: "Policy with no sale", tone: "warning", group: "clients", keeperOnly: false, verb: "Save", source: "Exceptions", todo: "Confirm the client" },
+  "no-carrier": { label: "Sale no carrier has", tone: "danger", group: "sales", keeperOnly: false, verb: "Save", source: "Exceptions", todo: "Find the policy" },
+  "same-person": { label: "Same person?", tone: "neutral", group: "clients", keeperOnly: false, verb: "Save", source: "Exceptions", todo: "Merge or keep apart" },
+  "existing-book": { label: "Existing book to look over", tone: "neutral", group: "files", keeperOnly: false, verb: "Mark looked over", source: "Exceptions", todo: "Look it over" },
+  "commission-no-policy": { label: "Commission, no policy", tone: "warning", group: "money", keeperOnly: false, verb: "Save", source: "Exceptions", todo: "Find the policy" },
   // Lines on a policy no file or sale has, past ORPHAN_NOTICE_DAYS: told early, long before the 60-day sweep.
-  "unknown-policy": { label: "Paid on a policy we don’t have", tone: "warning", group: "money", keeperOnly: true, verb: "Save", source: "Commission lines" },
-  money: { label: "Money doesn’t match", tone: "danger", group: "money", keeperOnly: true, verb: "Save", source: "Discrepancies" },
-  credit: { label: "Who gets the credit", tone: "neutral", group: "credit", keeperOnly: true, verb: "Give the credit", source: "Attribution" },
-  agent: { label: "Who’s the agent", tone: "neutral", group: "credit", keeperOnly: true, verb: "Map the code", source: "Policy matching › Agent codes" },
-  "status-word": { label: "Status word", tone: "neutral", group: "files", keeperOnly: true, verb: "Open the next", source: "Waiting on Insurvas" },
-  rules: { label: "Two rules disagree", tone: "warning", group: "rules", keeperOnly: true, verb: "Move the card", source: "Pipeline rules" },
+  "unknown-policy": { label: "Paid on a policy we don’t have", tone: "warning", group: "money", keeperOnly: true, verb: "Save", source: "Commission lines", todo: "Find the policy" },
+  money: { label: "Money doesn’t match", tone: "danger", group: "money", keeperOnly: true, verb: "Save", source: "Discrepancies", todo: "Check the payment" },
+  credit: { label: "Who gets the credit", tone: "neutral", group: "credit", keeperOnly: true, verb: "Give the credit", source: "Attribution", todo: "Give the credit" },
+  agent: { label: "Who’s the agent", tone: "neutral", group: "credit", keeperOnly: true, verb: "Map the code", source: "Policy matching › Agent codes", todo: "Map the code" },
+  "status-word": { label: "Status word", tone: "neutral", group: "files", keeperOnly: true, verb: "Open the next", source: "Waiting on Insurvas", todo: "See the word" },
+  rules: { label: "Two rules disagree", tone: "warning", group: "rules", keeperOnly: true, verb: "Move the card", source: "Card moves", todo: "Pick the stage" },
   // LA-4.9's file_failed queue (owner: operations, i.e. the owner and bookkeepers, who receive carrier files).
-  file: { label: "File didn’t read", tone: "danger", group: "files", keeperOnly: true, verb: "Open the next", source: "Files" },
+  file: { label: "File didn’t read", tone: "danger", group: "files", keeperOnly: true, verb: "Open the next", source: "Files", todo: "Fix the file" },
 };
 
 /** The exception queues' types, as Needs you kinds (lib/ingestion/exceptionQueues.ts QUEUE_TYPES). */

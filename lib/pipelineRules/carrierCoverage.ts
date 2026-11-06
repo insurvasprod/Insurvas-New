@@ -63,7 +63,7 @@ export const loadCarrierCoverage = cache(async (tenantId: string): Promise<{ ava
   for (const read of [rules, settings]) {
     if (read.error) {
       if (isSchemaGap(read.error)) return { available: false, asOf, carriers: [], authors: {} };
-      throw new Error(`Could not load the carrier rules: ${read.error.message}`);
+      throw new Error(`Could not load the carrier terms: ${read.error.message}`);
     }
   }
   if (carriers.error) throw new Error(`Could not load the carriers: ${carriers.error.message}`);

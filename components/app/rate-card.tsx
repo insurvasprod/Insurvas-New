@@ -114,7 +114,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                         <span className="block text-xs text-muted-foreground">{share}% of premium</span>
                       </>}
                     </td>
-                    <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setForm({}); setOpenId(c.carrierId); }}>{readOnly ? "Open" : c.policies > 0 && c.pricedPolicies === c.policies ? "Edit" : "Set up"}</Button></td>
+                    <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setForm({}); setOpenId(c.carrierId); }}>{/* Round 6: the verb says what is missing — "Add rates" while policies can't be priced. */}{readOnly ? "Open" : c.policies > 0 && c.pricedPolicies === c.policies ? "Edit rates" : "Add rates"}</Button></td>
                   </tr>
                 );
               })}

@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { NoteField } from "@/components/ui/note-field";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { confirmAction } from "@/components/ui/confirm-dialog";
-import { control, Field, textareaControl } from "@/components/ui/field";
+import { control, Field } from "@/components/ui/field";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
 import { ServicingRequestForm } from "@/components/app/retention/servicing-request-form";
@@ -94,7 +95,7 @@ export function PaperBillCall({ carrierId, policyNumber, state, talkTrack, coolo
               <div className="flex items-end"><Button type="button" disabled={busy || reason.trim().length < 3} onClick={() => void quick("declined", `Logged. It comes back to the list in ${cooloffDays} days.`)}>Log: said no</Button></div>
             </div>
           )}
-          <Field label="Note (kept with the call)" htmlFor="pb-note"><textarea id="pb-note" className={textareaControl} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+          <Field label="Note (kept with the call)" htmlFor="pb-note"><NoteField id="pb-note"  maxLength={2000} value={note} onChange={setNote} /></Field>
           {/* On a page a Callout goes to the bell: an error the user must fix stays beside the buttons (§11). */}
           {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
         </section>

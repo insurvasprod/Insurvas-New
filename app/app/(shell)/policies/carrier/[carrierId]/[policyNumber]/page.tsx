@@ -5,7 +5,6 @@ import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PolicyAnnotationForm } from "@/components/app/policy-annotation-form";
 import { PolicyAwaitingFile } from "@/components/app/policy-awaiting-file";
-import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PolicyClientTab } from "@/components/app/book/policy/client-tab";
 import { PolicyCommissionsTab } from "@/components/app/book/policy/commissions-tab";
@@ -26,15 +25,15 @@ import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { hasFeature } from "@/lib/entitlements/types";
 import { holdsAnyRole } from "@/lib/tenantAuth/teamAccess";
 import { agencyToday } from "@/lib/ingestion/agencyDay";
-import { inForce } from "@/lib/ingestion/policyBook";
 import { policyHealth } from "@/lib/ingestion/policyMoney";
 import { loadCurrentLinkId, loadPolicyGrace } from "@/lib/ingestion/policyMoneyStore";
 import { loadIssuedAwaitingOne, loadPolicy, PolicyBookError } from "@/lib/ingestion/policyBookStore";
 import { MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
-import { agentMismatchLine, carrierPolicyHref, changeClientHref, POLICY_TABS, policyTabOf, saleCameFrom, showsProvisional, type PolicyTab } from "@/lib/ingestion/policyPage";
+import { agentMismatchLine, cardMoveHistoryRows, carrierPolicyHref, changeClientHref, mergeHistory, POLICY_TABS, policyTabOf, saleCameFrom, showsProvisional, type PolicyTab } from "@/lib/ingestion/policyPage";
 import { loadPolicyFiles, loadPolicyFindings, loadPolicyHistory, loadPolicyLink, loadPolicyPipeline, policyKeys, policyTabCounts, STAGE_HISTORY_PENDING_MESSAGE, type PolicyPipeline } from "@/lib/ingestion/policyPageStore";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { loadPolicyRuleEvents, type EvaluationRow } from "@/lib/pipelineRules/store";
+import { openLadderCaseId } from "@/lib/retention/cases/store";
 
 const LINK = "font-medium text-[var(--accent-ink)] hover:underline";
 const money = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -88,40 +87,50 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
   // Changing the link is Policy matching's write: owner and bookkeeper on statement ingestion.
   const canEditLink = ownerOrBookkeeper && hasFeature(guard.entitlement, "statement_ingestion");
   const clientName = client?.name ?? sale?.name ?? keys?.leadName ?? null;
-  const title = clientName ? `${policy.policyNumber} · ${clientName}` : `Policy ${policy.policyNumber}`;
+  // Round 6 (owner 2026-11-06): the client is the title (people look for a name); the policy number leads the facts.
+  const title = clientName ?? `Policy ${policy.policyNumber}`;
 
   // ── the header: the health chip, the muted facts, one button and More ──
   const late = (policy.daysPastDue ?? 0) > 0;
   const atRiskCents = view.ledger.unearned?.atRiskCents ?? null;
   const monthly = policy.annualCents === null ? null : Math.round(policy.annualCents / 12);
   const health = policyHealth({ status: policy.status, paidTo: policy.paidTo, daysPastDue: policy.daysPastDue, asOf: policy.asOf, premiumMode: policy.premiumMode });
-  const saveQueue = inForce(policy.status) && (late || policy.riskBand === "at_risk" || policy.riskBand === "critical") && holdsAnyRole(guard.roles, ["owner", "producer"]);
   const canLink = canEditLink && !readOnly;
-  const linkId = canEditLink ? await loadCurrentLinkId(tenantId, carrierId, policy.policyNumber) : null;
-  // Round 5: one button, the lead first; the rest (Change client, Add a note, Unlink, Copy policy number) in "More".
+  // Round 6: the Save queue is retired (call of 2026-11-05); an open Retention case for this policy is the place to work it.
+  const retention = holdsAnyRole(guard.roles, ["owner", "producer", "retention"]) && hasFeature(guard.entitlement, "chargeback_radar");
+  const [linkId, caseId] = await Promise.all([
+    canEditLink ? loadCurrentLinkId(tenantId, carrierId, policy.policyNumber) : Promise.resolve(null),
+    retention ? openLadderCaseId(tenantId, carrierId, policy.policyNumber).catch(() => null) : Promise.resolve(null),
+  ]);
+  // One primary — the next thing to do, in this order — and the rest in ⋯, last on the line (round 6, board 8).
   const links: MoreLink[] = [
+    ...(caseId ? [{ label: "Open the case", href: `/app/retention/${caseId}` }] : []),
     ...(keys?.leadId ? [{ label: "Open the lead", href: `/app/leads/${keys.leadId}` }] : []),
     ...(sale ? [{ label: "Open the application", href: `/app/applications/${sale.caseId}` }] : []),
-    ...(saveQueue ? [{ label: "Open in Save queue", href: "/app/save-queue" }] : []),
     ...(canLink ? [{ label: client || sale ? "Change client" : "Link a client", href: changeClientHref(policy.carrierId, policy.policyNumber) }] : []),
     { label: "Add a note", href: carrierPolicyHref(carrierId, policy.policyNumber, "notes") },
   ];
+  // "Add a note" is never the primary: with nothing else to do, the page shows ⋯ alone.
+  const primary = links[0] && links[0].label !== "Add a note" ? links[0] : null;
   const actions = (
     <>
-      {links.slice(0, 1).map((link) => <Button key={link.href} asChild><Link href={link.href}>{link.label}</Link></Button>)}
-      <PolicyMoreMenu links={links.slice(1)} policyNumber={policy.policyNumber} unlink={linkId ? { matchId: linkId, clientName, disabledReason: readOnly ? "The account is read-only." : null } : null} />
+      {primary && <Button asChild><Link href={primary.href}>{primary.label}</Link></Button>}
+      <PolicyMoreMenu links={primary ? links.slice(1) : links} policyNumber={policy.policyNumber} unlink={linkId ? { matchId: linkId, clientName, disabledReason: readOnly ? "The account is read-only." : null } : null} />
     </>
   );
   // Round 3: the Overview's three status lines, as chips and links on the header's facts line.
   const saleState = sale ? (sale.outcome ? sale.outcome.replaceAll("_", " ") : sale.status ? sale.status.replaceAll("_", " ") : null) : null;
   // QA 2026-11-03: the carrier pays one producer, the sale names another — said once, plainly.
   const mismatch = keys?.sale ? agentMismatchLine(keys.carrierAgent, { userId: keys.sale.agentUserId, name: keys.sale.agentName }) : null;
+  // Round 6: risk and status as marks, the long words in tooltips. Provisional is an amber dot (its "Check the
+  // client" is on the Overview's Client row); the application is ⋯ › Open the application, its state in the tooltip.
+  const provisional = showsProvisional(client?.provisional, keys?.link);
   const notices = (
     <>
       {mismatch && <span className="inline-flex items-center gap-1.5" title="The writing number on the carrier's row maps to a different producer than the one who sold it"><StatusChip tone="warning">{mismatch}</StatusChip></span>}
-      {showsProvisional(client?.provisional, keys?.link) && <span className="inline-flex items-center gap-1.5"><ProvisionalBadge /><Link href="/app/duplicates" className={LINK} title="This client was built from the carrier's file">Check the client</Link></span>}
-      {sale && <Link href={`/app/applications/${sale.caseId}`} className={LINK} title={`Linked to ${sale.name ? `${sale.name}'s` : "an"} application`}>Application{saleState ? ` · ${saleState}` : ""}</Link>}
-      {!client && !sale && <span className="inline-flex items-center gap-1.5"><StatusChip tone="warning">No client linked</StatusChip>{canLink ? <Link href={changeClientHref(policy.carrierId, policy.policyNumber)} className={LINK}>Link a client</Link> : <Link href={carrierPolicyHref(policy.carrierId, policy.policyNumber, "client")} className={LINK}>See the Client tab</Link>}</span>}
+      {provisional && <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--warning-ink)]" title="This client was built from the carrier's file: check it against your leads"><span aria-hidden="true" className="size-2 rounded-full bg-[var(--warning)]" />Provisional</span>}
+      {sale && <Link href={`/app/applications/${sale.caseId}`} className={LINK} title={`Linked to ${sale.name ? `${sale.name}'s` : "an"} application${saleState ? ` · ${saleState}` : ""}`}>Application</Link>}
+      {!client && !sale && <span className="inline-flex items-center gap-1.5"><StatusChip tone="warning">No client linked</StatusChip>{canLink ? null : <Link href={carrierPolicyHref(policy.carrierId, policy.policyNumber, "client")} className={LINK}>See the Client tab</Link>}</span>}
     </>
   );
 
@@ -139,7 +148,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
       step="policies"
       title={title}
       chip={<span title={policy.statusRaw ? `The carrier's word: ${policy.statusRaw}` : undefined}><StatusChip tone={health.tone}>{health.label}</StatusChip></span>}
-      facts={<PolicyLead facts={[policy.carrierName, policy.product, monthly !== null ? `${money(monthly)}/mo` : policy.premiumCents !== null ? money(policy.premiumCents) : null, policy.agentName ? `agent ${policy.agentName}` : null]} notices={notices} />}
+      facts={<PolicyLead number={policy.policyNumber} facts={[policy.carrierName, policy.product, monthly !== null ? `${money(monthly)}/mo` : policy.premiumCents !== null ? money(policy.premiumCents) : null, policy.agentName ? `agent ${policy.agentName}` : null]} notices={notices} />}
       lead={<ViewTabs label="This policy" value={tab} tabs={tabs.map((item) => ({ ...item, href: hrefs[item.key] }))} />}
       actions={actions}
     >
@@ -150,9 +159,13 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
   async function tabBody() {
     if (!view) return null;
     if (tab === "history") {
-      const history = await loadPolicyHistory(tenantId, carrierId, policy.policyNumber);
+      // The carrier's field changes and the lead's card moves in one list (owner 2026-11-05: the stage history too).
+      const [history, card] = await Promise.all([
+        loadPolicyHistory(tenantId, carrierId, policy.policyNumber),
+        loadPolicyPipeline(tenantId, keys?.leadId ?? null).catch(() => null),
+      ]);
       if (!history.available) return <EmptyState title="History isn't available yet" hint="The policy history needs a database update (20261008140000)." />;
-      return <PolicyHistoryTab rows={history.rows} policyNumber={policy.policyNumber} truncated={history.truncated} />;
+      return <PolicyHistoryTab rows={mergeHistory(history.rows, card?.available ? cardMoveHistoryRows(card.moves) : [])} policyNumber={policy.policyNumber} truncated={history.truncated} />;
     }
     if (tab === "client") {
       const link = await loadPolicyLink(tenantId, carrierId, policy.policyNumber, keys);
@@ -225,7 +238,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
     }
     // "Came from": a sale with no lead source on record names the sale, not "Lead source not known".
     const cameFrom = view.lead.name ? null : saleCameFrom(keys?.sale);
-    return <PolicyOverviewTab view={cameFrom ? { ...view, lead: { ...view.lead, name: cameFrom } } : view} />;
+    return <PolicyOverviewTab view={cameFrom ? { ...view, lead: { ...view.lead, name: cameFrom } } : view} provisional={provisional} />;
   }
 }
 

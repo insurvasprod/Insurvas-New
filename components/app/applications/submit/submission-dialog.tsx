@@ -131,7 +131,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
       // step reloads behind it. The welcome pack is off for now (owner 2026-10-29), so none is made.
       onOpenChange(false);
       notify.done(ref ? `Submission recorded · ${ref}` : "Submission recorded", {
-        detail: !ref ? "It stays on the Missing reference list until you add the reference." : undefined,
+        detail: !ref ? "The policy number is added when the carrier's file brings this policy." : undefined,
       });
       if (recorded.duplicate) notify.warn("That reference is already on another application", { detail: "Check you copied the right one." });
       void (async () => {
@@ -162,7 +162,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
     >
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[240px] flex-1">
-          <Field label="Carrier reference number" htmlFor="submission-reference" hint={hint}>
+          <Field label="Carrier reference number (optional)" htmlFor="submission-reference" hint={hint}>
             <input id="submission-reference" className={`${control} font-mono uppercase`} value={reference} onChange={(e) => setReference(e.target.value)} autoComplete="off" spellCheck={false} autoFocus />
           </Field>
         </div>
@@ -171,7 +171,7 @@ function CaptureForm({ open, onOpenChange, existing, extensionDetected, seed }: 
           {ref && check.format === "mismatch" && <StatusChip tone="warning">Format doesn&apos;t match</StatusChip>}
         </div>
       </div>
-      {!ref && <Warning>Without a reference it stays on the Missing reference list until you add it.</Warning>}
+      {!ref && <p className="m-0 text-sm text-[var(--muted)]">No reference needed: the carrier&apos;s policy file links to this application by the client, the agent and the amounts, and adds the policy number.</p>}
       {ref && check.format === "mismatch" && <Warning>{check.example ? `${check.carrierName ?? "This carrier"}'s references look like ${check.example}. Check it against the confirmation — it still saves.` : "Check it against the confirmation — it still saves."}</Warning>}
 
       <div className="grid gap-4 sm:grid-cols-2">

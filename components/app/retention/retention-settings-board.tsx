@@ -195,8 +195,9 @@ export function RetentionSettingsBoard({ hub, canEdit }: { hub: Hub; canEdit: bo
               </div>
               {(["mediumFrom", "highFrom", "criticalFrom"] as const).some((k) => draft[k] !== PLATFORM_DEFAULT_SETTINGS[k]) && <p className="m-0 text-xs text-[var(--muted)]">Insurvas: {PLATFORM_DEFAULT_SETTINGS.mediumFrom} / {PLATFORM_DEFAULT_SETTINGS.highFrom} / {PLATFORM_DEFAULT_SETTINGS.criticalFrom}</p>}
             </SettingRow>
-            <SettingRow id="weights" label="How a policy is scored" change="Its own page: you see how many policies change band before a new version is saved.">
-              <span className="flex flex-wrap items-center gap-3 text-sm text-[var(--ink)]">Version {hub.weightVersion}{hub.weightIsPlatform ? ", Insurvas's" : ", yours"} · 7 signals adding to 100<Button asChild variant="outline" size="sm"><Link href="/app/retention-settings/weights">Edit weights</Link></Button></span>
+            {/* 2026-11-05: Retention is the files' facts (the ladder), so its rules replace the radar's weights here. */}
+            <SettingRow id="weights" label="What puts a policy on the ladder" change="Its own page: each reason from the carrier files on or off, and when a deadline is urgent.">
+              <span className="flex flex-wrap items-center gap-3 text-sm text-[var(--ink)]">Missed and bounced payments, lapse notices, lapses, chargebacks and paperwork<Button asChild variant="outline" size="sm"><Link href="/app/retention-settings/ladder">Ladder rules</Link></Button></span>
             </SettingRow>
             <Advanced summary="Advanced" hint={`Queue: rest ${draft.workedCooldownDays} days · ${draft.maxCards} cards · ${SORT_LABELS[draft.queueDefaultSort].replace(" (default)", "").toLowerCase()}. Signals: floors ${draft.sampleFloor} and ${draft.carrierSampleFloor} · danger months ${draft.dangerMonthFrom}–${draft.dangerMonthTo}`}>
               <div id="queue" className="flex scroll-mt-24 flex-col gap-4">

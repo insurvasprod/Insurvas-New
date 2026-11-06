@@ -3,7 +3,6 @@ import { Check } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
@@ -83,7 +82,7 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
   const rateAction = !expected.available ? null : !first || noRate ? "Add the rate" : findings.items.some((f) => f.type === "mis_rated") ? "Check the rate" : "Change the rate";
   const rateLine = !expected.available
     ? "expected commission needs a database update (20261008230000)"
-    : !first ? "nothing expected yet: the carrier's pay trigger hasn't happened, or its trigger isn't set in Carrier rules"
+    : !first ? "nothing expected yet: the carrier's pay trigger hasn't happened, or its trigger isn't set in Carrier terms"
     : noRate ? String(first.reason ?? "no rate on the Rate card")
     : [`rate card: ${pct(first.rate_bp_applied) ?? "—"}`, first.advance_pct_bp ? `advance ${pct(first.advance_pct_bp)}${advanceMonths ? ` over ${advanceMonths} months` : ""}` : advanceMonths ? `advanced over ${advanceMonths} months` : "no advance rule", first.commission_trigger === "on_issue" ? "paid on issue" : "paid on the first draft"].join(" · ");
 
@@ -98,10 +97,13 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
         <StatTile label="Expected" value={figures.expectedCents !== null ? money(figures.expectedCents) : "—"} footnote={!expected.available ? "can't be read yet" : !first ? "nothing expected yet" : noRate ? "no rate on the Rate card" : "first year, from the rate card"} />
         <StatTile label="Advanced" value={totals ? money(grossAdvance + chargedBack) : "—"} valueTone={takenBack ? "warning" : undefined} footnote={chargedBack < 0 ? [`${money(grossAdvance)} advanced`, `${money(-chargedBack)} charged back${lastChargeback?.transactionDate ?? lastChargeback?.statementDate ? ` ${shortDay(lastChargeback.transactionDate ?? lastChargeback.statementDate)}` : ""}`].join(" · ") : firstAdvance ? [firstAdvance.transactionDate ?? firstAdvance.statementDate ? shortDay(firstAdvance.transactionDate ?? firstAdvance.statementDate) : null, firstAdvance.fileName ?? "the statement"].filter(Boolean).join(" · ") : "no advance on record"} />
         <StatTile label="Earned" value={figures.earnedCents !== null ? money(figures.earnedCents) : "—"} valueTone={figures.earnedCents ? "good" : undefined} footnote={takenBack ? "the advance was charged back" : figures.earnedCents === null ? "months advanced not known" : advanceMonths && facts.monthsPaid !== null && full.advancedCents > 0 ? `${Math.min(facts.monthsPaid, advanceMonths)} of ${advanceMonths} months paid` : totals ? "from the statements" : "no commission line yet"} />
-        <StatTile label="At risk" value={atRisk !== null ? money(atRisk) : "—"} valueTone={atRisk ? "warning" : undefined} footnote={atRisk === null ? trace?.reason ?? "can't be worked out" : atRisk ? "taken back if it lapses" : takenBack ? "nothing left to take back" : full.advancedCents > 0 ? "the advance is earned" : "no advance to take back"} />
+        {/* Round 6: "Inside the clawback window…" was a notice on the page (no notices: owner 2026-11-02); it is this footnote now. */}
+        <StatTile label="At risk" value={atRisk !== null ? money(atRisk) : "—"} valueTone={atRisk ? (chargebackLikely ? "danger" : "warning") : undefined} footnote={atRisk === null ? trace?.reason ?? "can't be worked out" : atRisk ? (chargebackLikely ? `likely taken back: inside the clawback window` : "taken back if it lapses") : takenBack ? "nothing left to take back" : full.advancedCents > 0 ? "the advance is earned" : "no advance to take back"} />
       </StatStrip>
 
-      {/* Cards, not table cards: neither is a list, so neither stretches to the window's foot (§6b). */}
+      {/* Round 6 (board 5): the year and what's next side by side on a wide screen. Cards, not table cards: neither
+          is a list, so neither stretches to the window's foot (§6b). */}
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-start gap-4 min-[1100px]:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
       <Card>
         <CardHeader>
           <CardTitle>First year</CardTitle>
@@ -170,6 +172,7 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
         )}
         </CardContent>
       </Card>
+      </div>
 
       <PagedTableCard
         total={rows.length}
@@ -183,7 +186,7 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
         }
       >
         {rows.length === 0 ? (
-          <EmptyState title="No commission lines yet" hint={`Lines appear once ${carrierName}'s commission statements that name this policy are read.`} />
+          <EmptyState title="No commission lines yet" hint={`Lines appear once ${carrierName}'s commission statements that name this policy are read.${findings.available ? "" : ` ${FINDINGS_PENDING_MESSAGE}`}`} />
         ) : (
           <table className="portal-lead-table w-full min-w-[680px] text-left text-sm">
             <thead><tr><th className="w-[110px]">Date</th><th>Line</th><th className="w-[130px] text-right">Amount</th><th>From</th><th className="w-[110px]"><span className="sr-only">Next step</span></th></tr></thead>
@@ -208,12 +211,6 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
           </table>
         )}
       </PagedTableCard>
-
-      {!findings.available && <Callout tone="warning" title={FINDINGS_PENDING_MESSAGE} />}
-      {chargebackLikely && atRisk ? (
-        // Round 3: one line, a title and no paragraph.
-        <Callout tone="warning" title={`Inside the clawback window: ${carrierName} will likely take back ${money(atRisk)}; nothing to do until it arrives.`} />
-      ) : null}
     </>
   );
 }

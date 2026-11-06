@@ -120,7 +120,7 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
     try {
       // The upload's progress is a toast (2026-10-28); its outcome is also the dialog's result panel,
       // and a refusal stays in the dialog beside the fields to fix, so it ends without one.
-      const data = await notify.promise(send, {
+      await notify.promise(send, {
         loading: `Uploading ${file.name}…`,
         done: (result) => result.outcome !== "registered" ? "Same file as before · skipped, nothing changed"
           : result.status === "failed" ? { title: "Received, but it cannot be read", treatment: "warn", detail: result.errorDetail ?? undefined }
@@ -128,7 +128,10 @@ export function CarrierFileUploadButton({ carriers, autoOpen = false, label = "U
         // A refusal, and a clash (a question in the dialog), stay in the dialog: no failure toast.
         fail: null,
       });
-      setDone(data);
+      // No "Received…" panel (owner 2026-11-05: "I don't want it to be shown"): the toast says it arrived, the
+      // dialog closes, and the Files list shows it reading and says when it is read (carrier-files-table.tsx).
+      setOpen(false);
+      reset();
       router.refresh();
     } catch (reason) {
       if (reason instanceof ClashError) setClash(reason.existing);
