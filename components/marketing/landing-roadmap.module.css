@@ -3,16 +3,24 @@
 .section {
   --band: color-mix(in srgb, var(--footer-bg) 62%, black);
   position: relative;
-  scroll-margin-top: 80px;
+  /* One screen, like the hero (Umar, 4 Nov, A8.3: the hero fills the screen, this part should too,
+     neither bigger nor a strip): the header at the top, the road filling the rest. */
+  display: flex;
+  height: 100svh;
+  min-height: 640px;
+  max-height: 1100px;
+  flex-direction: column;
+  scroll-margin-top: 0;
   background: var(--band);
   color: var(--nav-ink);
 }
 
 /* The band. It is a size container so the stage can cover it while keeping the photo's proportions. */
-.map { position: relative; margin-top: -56px; height: clamp(420px, 63vh, 540px); overflow: hidden; container-type: size; }
-/* The stage is the photo's own shape (1600 × 864), wide enough to cover the band and anchored so the
-   band shows the stage from about 30% down to 93%, where the road runs. */
-.stage { position: absolute; top: 100%; left: 50%; width: max(100cqw, 294cqh); aspect-ratio: 1600 / 864; transform: translate(-50%, -93%); }
+.map { position: relative; flex: 1 1 auto; min-height: 0; margin-top: -56px; overflow: hidden; container-type: size; }
+/* The stage is the photo's own shape (1600 x 864), anchored so its 93% line sits on the band's bottom
+   edge, where the road runs. It is as wide as the band, and wider only when the band is taller than
+   the photo would then be (199.2cqh = 1600/864/0.93), so the pins never leave the screen sideways. */
+.stage { position: absolute; top: 100%; left: 50%; width: max(100cqw, 199.2cqh); aspect-ratio: 1600 / 864; transform: translate(-50%, -93%); }
 .photo { object-fit: cover; opacity: .5; filter: saturate(.75); }
 /* Darker where the words are (top left), lighter where the road is, and into the band at both ends.
    The green cast stays, so it ties to the hero (Umar: "green will resonate with the green on top"). */
@@ -82,8 +90,10 @@
 }
 /* Phones: the photo is a short backdrop for the heading, and the stops are a list under it. */
 @media (max-width: 760px) {
+  /* Phones: the section is as tall as its content. */
+  .section { display: block; height: auto; min-height: 0; max-height: none; }
   /* A short strip of the road between the header and the stops. */
-  .map { height: 200px; margin-top: -24px; container-type: normal; }
+  .map { flex: none; height: 200px; margin-top: -24px; container-type: normal; }
   .stage { inset: 0; width: auto; aspect-ratio: auto; transform: none; }
   .pins { display: none; }
   .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 88px 0 8px; }
