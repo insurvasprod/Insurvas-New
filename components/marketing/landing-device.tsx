@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import { animate } from "animejs";
 import {
-  BadgeDollarSign, CalendarCheck, ClipboardList, FileCheck2, FileText, Inbox, LayoutDashboard, LifeBuoy, Package,
-  PhoneCall, Search, ShieldCheck, SquareKanban,
+  BadgeDollarSign, Bell, CalendarCheck, ChevronDown, ClipboardList, FileCheck2, FileText, Inbox, LayoutDashboard, LifeBuoy, Package,
+  PhoneCall, Search, ShieldCheck, SquareKanban, Sun, TriangleAlert,
 } from "lucide-react";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
@@ -24,12 +24,12 @@ import { money, VENDORS } from "@/components/marketing/landing-sample-data";
  * page scrolls the device tilts up from a slight recline to face the reader. Everything pauses off
  * screen; with reduced motion it is a still, complete picture. Sample data, labelled so.
  *
- * Owner, 6 Nov (Umar's A1.4): it shows more than the dashboard. Every 10 seconds it moves on to the
+ * Owner, 6 Nov (Umar's A1.4): it shows more than the dashboard. Every 5 seconds it moves on to the
  * next page (Inbound, Dialer, Callbacks, Applications, then back), and those sidebar items are real
  * buttons: choosing one opens that page and holds the cycle for a while. The active item fills a thin
  * bar while it waits, so the change never comes as a surprise. No cycling under reduced motion.
  */
-const PAGE_MS = 10_000;
+const PAGE_MS = 5_000;
 /** How long a page chosen by hand stays before the cycle carries on. */
 const HOLD_MS = 20_000;
 const PAGE_OF: Record<string, DevicePageKey> = { Dashboard: "dashboard", Inbound: "inbound", Dialer: "dialer", Callbacks: "callbacks", Applications: "applications" };
@@ -251,15 +251,22 @@ export function LandingDevice() {
               {/* A <div>, not a <main>: this mock sits inside the page's real <main>, and a second
                   main landmark is an accessibility defect. The class does the layout. */}
               <div className={styles.main} aria-hidden="true">
+                {/* The app's own top bar (components/app/app-top-bar.tsx): the search on the left; the
+                    theme switch, the bell, alerts and the account on the right. No title in it. */}
                 <header className={styles.top}>
-                  <span className={styles.crumb}>Home <i>/</i> <b>{current.crumb}</b></span>
-                  <span className={styles.search}><Search />Search leads, policies, statements<kbd>⌘K</kbd></span>
-                  <span className={styles.status}><i />Taking calls</span>
-                  <span className={styles.avatar}>DK</span>
+                  <span className={styles.search}><Search />Search leads, policies, statements<span className={styles.keys}><kbd>⌘</kbd><kbd>K</kbd></span></span>
+                  <span className={styles.topActions}>
+                    <span className={styles.topIcon}><Sun /></span>
+                    <span className={styles.topIcon}><Bell /><em>3</em></span>
+                    <span className={`${styles.topIcon} ${styles.topAlert}`}><TriangleAlert /></span>
+                    <span className={styles.topDivider} />
+                    <span className={styles.account}><span className={styles.avatar}>DK</span>Dana<ChevronDown /></span>
+                  </span>
                 </header>
 
                 <div className={styles.titleRow}>
-                  <div><h3>{current.title}</h3><p>{current.sub}</p></div>
+                  {/* The trail over the title, as every app page has it (UI-CONSISTENCY §2). */}
+                  <div><span className={styles.crumb}>{current.section} <i>›</i> <b>{current.crumb}</b></span><h3>{current.title}</h3><p>{current.sub}</p></div>
                   <div className={styles.segment}><span>Today</span><span>7 days</span><span data-on="true">30 days</span></div>
                 </div>
 

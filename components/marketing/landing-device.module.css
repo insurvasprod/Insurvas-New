@@ -55,23 +55,32 @@ button.navItem { cursor: pointer; transition: background-color 160ms ease, color
 @media (hover: hover) and (pointer: fine) { button.navItem:hover { background: rgb(234 246 242 / 6%); color: var(--nav-ink); } }
 button.navItem:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
 /* The wait for the next page, as a thin line along the bottom of the current item. */
-.navTimer { position: absolute; right: 8px; bottom: 3px; left: 8px; height: 2px; border-radius: 2px; background: var(--primary); opacity: .8; transform: scaleX(0); transform-origin: left; animation: page-timer 10s linear forwards; }
+.navTimer { position: absolute; right: 8px; bottom: 3px; left: 8px; height: 2px; border-radius: 2px; background: var(--primary); opacity: .8; transform: scaleX(0); transform-origin: left; animation: page-timer 5s linear forwards; }
 @keyframes page-timer { to { transform: scaleX(1); } }
 .navItem svg { width: 16px; height: 16px; }
 .navItem em { margin-left: auto; border-radius: 999px; background: var(--primary); padding: 0 7px; color: var(--on-primary); font-size: 11px; font-style: normal; font-weight: 700; }
 .navItem[data-active="true"] { background: rgb(234 246 242 / 10%); color: var(--nav-ink); }
 
-.main { display: grid; align-content: start; gap: 16px; padding: 16px 22px; min-width: 0; }
-.top { display: flex; align-items: center; gap: 14px; }
-.crumb { color: var(--muted); font-size: 13px; }
+.main { display: grid; align-content: start; gap: 16px; padding: 0 22px 16px; min-width: 0; }
+/* The app's top bar: 56px, white, a hairline under it, full width of the main column. */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 24px; height: 56px; margin: 0 -22px; border-bottom: 1px solid var(--border); background: var(--surface); padding: 0 22px 0 26px; }
+.topActions { display: flex; align-items: center; gap: 8px; }
+.topIcon { position: relative; display: inline-grid; width: 36px; height: 36px; place-items: center; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--body); }
+.topIcon svg { width: 16px; height: 16px; }
+.topIcon em { position: absolute; top: 2px; right: 2px; display: grid; min-width: 16px; height: 16px; place-items: center; border: 2px solid var(--surface); border-radius: 999px; background: var(--error); padding: 0 3px; color: var(--on-error); font-size: 9.5px; font-style: normal; font-weight: 600; line-height: 1; box-sizing: border-box; }
+.topAlert { color: var(--error-ink); }
+.topDivider { width: 1px; height: 22px; margin-inline: 2px; background: var(--border); }
+.account { display: inline-flex; height: 36px; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 8px; padding: 0 8px 0 4px; color: var(--ink); font-size: 14px; font-weight: 500; }
+.account svg { width: 14px; height: 14px; color: var(--muted); }
+.crumb { display: block; margin-bottom: 4px; color: var(--muted); font-size: 12.5px; }
 .crumb i { margin: 0 4px; font-style: normal; opacity: .6; }
 .crumb b { color: var(--ink); font-weight: 600; }
-.search { display: flex; align-items: center; gap: 8px; width: 330px; margin-left: auto; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 7px 10px; color: var(--muted); font-size: 12.5px; }
+.search { display: flex; height: 36px; align-items: center; gap: 8px; width: 420px; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-sunken); padding: 0 10px 0 11px; color: var(--muted); font-size: 13.5px; letter-spacing: -.02em; }
+.keys { display: inline-flex; gap: 3px; margin-left: auto; }
+.keys kbd { display: inline-grid; min-width: 18px; height: 18px; place-items: center; box-sizing: border-box; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; background: var(--surface); padding: 0 4px; color: var(--muted); font: 600 10px var(--font-sans); }
 .search svg { width: 14px; height: 14px; }
-.search kbd, .toastAction kbd { margin-left: auto; border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; font: 11px var(--font-sans); }
-.status { display: inline-flex; align-items: center; gap: 7px; border-radius: 999px; background: var(--success-surface); padding: 5px 11px; color: var(--success-ink); font-size: 12px; font-weight: 600; }
-.status i { width: 7px; height: 7px; border-radius: 50%; background: var(--success); animation: blink 1.8s ease-in-out infinite; }
-.avatar { display: grid; width: 32px; height: 32px; place-items: center; border-radius: 50%; background: var(--primary-soft); color: var(--accent-ink); font-size: 12px; font-weight: 700; }
+.toastAction kbd { margin-left: auto; border: 1px solid var(--border); border-radius: 5px; padding: 0 5px; font: 11px var(--font-sans); }
+.avatar { display: grid; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: var(--primary-soft); color: var(--accent-ink); font-size: 11px; font-weight: 600; }
 @keyframes blink { 50% { opacity: .35; } }
 
 .titleRow { display: flex; align-items: flex-end; justify-content: space-between; }
@@ -179,7 +188,7 @@ button.navItem:focus-visible { outline: 2px solid var(--primary); outline-offset
   .lineEarned, .lineSpend { stroke-dashoffset: 0; transition: none; }
   .area { opacity: 1; transition: none; }
   .bar i { transform: scaleX(var(--w, 0)); transition: none; }
-  .status i, .pulseDot i::after, .toast[data-state="waiting"] .toastIcon { animation: none; }
+  .pulseDot i::after, .toast[data-state="waiting"] .toastIcon { animation: none; }
   .feed li { animation: none; }
 }
 

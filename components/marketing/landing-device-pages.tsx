@@ -11,12 +11,13 @@ import styles from "@/components/marketing/landing-device.module.css";
  */
 export type DevicePageKey = "dashboard" | "inbound" | "dialer" | "callbacks" | "applications";
 
-export const DEVICE_PAGES: { key: DevicePageKey; crumb: string; title: string; sub: string }[] = [
-  { key: "dashboard", crumb: "Agency dashboard", title: "Good morning, Dana", sub: "Sample Agency · last 30 days · sample data" },
-  { key: "inbound", crumb: "Inbound", title: "Inbound floor", sub: "Live transfers from your partners · sample data" },
-  { key: "dialer", crumb: "Dialer", title: "Dialer", sub: "Final expense · Cobalt Media list · sample data" },
-  { key: "callbacks", crumb: "Callbacks", title: "Callbacks", sub: "Today, in each client’s own time · sample data" },
-  { key: "applications", crumb: "Applications", title: "Applications", sub: "This week · sample data" },
+/** `section` is the page's menu group, shown in the trail over the title, as the app shows it. */
+export const DEVICE_PAGES: { key: DevicePageKey; section: string; crumb: string; title: string; sub: string }[] = [
+  { key: "dashboard", section: "Home", crumb: "Agency dashboard", title: "Good morning, Dana", sub: "Sample Agency · last 30 days · sample data" },
+  { key: "inbound", section: "Today", crumb: "Inbound", title: "Inbound floor", sub: "Live transfers from your partners · sample data" },
+  { key: "dialer", section: "Today", crumb: "Dialer", title: "Dialer", sub: "Final expense · Cobalt Media list · sample data" },
+  { key: "callbacks", section: "Today", crumb: "Callbacks", title: "Callbacks", sub: "Today, in each client’s own time · sample data" },
+  { key: "applications", section: "Sales", crumb: "Applications", title: "Applications", sub: "This week · sample data" },
 ];
 
 function Kpis({ items }: { items: { label: string; value: string; hint: string; accent?: boolean }[] }) {
