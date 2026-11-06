@@ -1,82 +1,163 @@
-import { ArrowRight } from "lucide-react";
+"use client";
 
+import { useEffect, useRef } from "react";
+import type { CSSProperties } from "react";
+import type { LucideIcon } from "lucide-react";
+import {
+  BadgeDollarSign, Ban, CalendarX, Check, ClipboardList, Copy, FileQuestion, FileSpreadsheet, HandCoins, Phone,
+  PhoneMissed, ShieldAlert, Sheet, Users,
+} from "lucide-react";
+import { createTimeline, stagger } from "animejs";
+
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import styles from "@/components/marketing/landing-stack.module.css";
 
 /**
- * "Sound like your agency?" (2026-11-04, owner, copy from "Insurvas OS Landing.md"): the five
- * tools an agency runs on, the founder's line about what that costs, and the one system instead.
- * Two things in the copy are still the owner's to confirm, and are marked where they sit below.
+ * "Sound like your agency?" rebuilt after Umar's review (4 Nov, A3.1–A3.3), on the pattern he named:
+ * clepso.io, where scattered cards of mess drift into the product's mark and come out resolved.
+ *
+ * Here the agency's five tools are a stack of 3D cards that collapses into the Insurvas tile when
+ * the section scrolls in (A3.1: "Insurvas here is just replacing those cards"). Then the floor's mess
+ * drifts in from the left and clean outcomes leave on the right (A3.3: "problems coming in, going
+ * through a system, coming out as a solution"). One line tells the story (A3.2).
+ *
+ * Every card on the right is something the product does today. The motion is decoration: the five
+ * tools are named in the lede, so nothing is lost under reduced motion, where the resolved stage is
+ * shown still. The drift pauses whenever the section is off screen.
  */
+type Card = { icon: LucideIcon; kind: string; title: string; note: string };
+
 const TOOLS = [
-  { name: "A CRM", job: "for tracking." },
-  { name: "A dialer", job: "for calls." },
-  { name: "A spreadsheet", job: "for commissions." },
-  { name: "Another spreadsheet", job: "for publisher payouts." },
-  { name: "A prayer", job: "for compliance." },
+  { icon: Users, name: "A CRM", job: "for tracking" },
+  { icon: Phone, name: "A dialer", job: "for calls" },
+  { icon: Sheet, name: "A spreadsheet", job: "for commissions" },
+  { icon: FileSpreadsheet, name: "Another spreadsheet", job: "for publisher payouts" },
+  { icon: ShieldAlert, name: "A prayer", job: "for compliance" },
 ];
 
-const COSTS = [
-  "Leads dying in handoffs.",
-  "Agents doing data entry instead of selling.",
-  "Commission disputes that lose top producers.",
-  "Compliance gaps no one notices until it’s expensive.",
+const MESS: Card[][] = [
+  [
+    { icon: Copy, kind: "Lead", title: "Bought twice", note: "Ruth A. is in two lists" },
+    { icon: FileQuestion, kind: "Spreadsheet", title: "commissions_v7_FINAL.xlsx", note: "Which one is current?" },
+    { icon: PhoneMissed, kind: "Live transfer", title: "Dropped after 0:40", note: "Nobody claimed it" },
+  ],
+  [
+    { icon: Ban, kind: "Dial", title: "No consent on file", note: "Dialed anyway" },
+    { icon: BadgeDollarSign, kind: "Statement line", title: "Unmatched · $84.00", note: "No policy found for it" },
+    { icon: ClipboardList, kind: "Application", title: "Re-keyed by hand", note: "Into the carrier’s portal" },
+  ],
+  [
+    { icon: CalendarX, kind: "Draft", title: "Missed on the 3rd", note: "Nobody saw the notice" },
+    { icon: HandCoins, kind: "Publisher", title: "Paid twice", note: "Same leads, two invoices" },
+    { icon: Copy, kind: "Lead cost", title: "Not recorded", note: "So no true CPA" },
+  ],
 ];
 
-const INSTEAD = [
-  { name: "Smart lead pipeline", text: "Tracks every opportunity from first dial to issued policy." },
-  // TO CONFIRM (owner): the AI qualification claim is unverified in the source copy.
-  { name: "AI qualification", text: "Filters bad leads before they burn agent hours." },
-  { name: "Commission, accounting and publisher-payout automation", text: "With full transparency." },
-  { name: "Compliance and data security", text: "Built into the workflow, not bolted on after." },
+const OUTCOMES: Card[][] = [
+  [
+    { icon: Check, kind: "Lead", title: "One record per lead", note: "Duplicates set aside" },
+    { icon: Check, kind: "Live transfer", title: "Claimed once", note: "The first claim wins" },
+    { icon: Check, kind: "True CPA", title: "Every policy to its campaign", note: "Cost on every lead" },
+  ],
+  [
+    { icon: Check, kind: "Dial", title: "Screened before it is placed", note: "Consent · DNC · window" },
+    { icon: Check, kind: "Statement line", title: "Matched to its policy", note: "Owed beside paid" },
+    { icon: Check, kind: "Application", title: "Submitted on the call", note: "Blockers shown first" },
+  ],
+  [
+    { icon: Check, kind: "Draft", title: "Flagged before it misses", note: "Into the save queue" },
+    { icon: Check, kind: "Publisher", title: "Payouts worked out", note: "Per publisher, per period" },
+    { icon: Check, kind: "Ledger", title: "Profit by campaign", note: "One set of numbers" },
+  ],
 ];
+
+function Row({ cards, tone, speed }: { cards: Card[]; tone: "mess" | "clean"; speed: number }) {
+  // The cards twice over, so the track can loop without a seam.
+  const loop = [...cards, ...cards, ...cards, ...cards];
+  return (
+    <div className={styles.row} data-tone={tone}>
+      <div className={styles.track} style={{ animationDuration: `${speed}s` }}>
+        {loop.map((card, i) => {
+          const Icon = card.icon;
+          return (
+            <div key={i} className={styles.card}>
+              <span className={styles.kind}><Icon aria-hidden="true" />{card.kind}</span>
+              <b>{card.title}</b>
+              <small>{card.note}</small>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 export function LandingStack() {
+  const stageRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) { stage.dataset.state = "resolved"; return; }
+
+    let timeline: ReturnType<typeof createTimeline> | null = null;
+    // The take-over plays once, the first time the stage is well into view. The drift after it
+    // runs only while the stage is on screen.
+    const io = new IntersectionObserver(([entry]) => {
+      const visible = Boolean(entry?.isIntersecting);
+      stage.dataset.run = String(visible && stage.dataset.state === "resolved");
+      if (!visible || timeline) return;
+      const cards = stage.querySelectorAll("[data-tool]");
+      const tile = stage.querySelector("[data-tile]");
+      timeline = createTimeline({ defaults: { ease: "inOutCubic" }, onComplete: () => { stage.dataset.state = "resolved"; stage.dataset.run = "true"; } })
+        .add(cards, { translateZ: 0, translateY: 30, opacity: 0, duration: 520, delay: stagger(110, { from: "last" }) }, 700)
+        .add(tile!, { opacity: [0, 1], scale: [0.7, 1], duration: 560, ease: "outBack(1.6)" }, 1150);
+    }, { threshold: 0.45 });
+    io.observe(stage);
+    return () => { io.disconnect(); timeline?.revert(); };
+  }, []);
+
   return (
     <section aria-labelledby="stack-title" className={styles.section}>
       <div className={styles.inner}>
-        {/* The heading and the line that explains it share one row, so the header is two lines tall
-            instead of a narrow column of four with the rest of the row empty. */}
         <header className={styles.head}>
-          <div>
-            <p className={styles.eyebrow}>Sound like your agency?</p>
-            <h2 id="stack-title" className={styles.heading}>Most Final Expense agencies run on five tools that don’t talk to each other.</h2>
-          </div>
-          <p className={styles.leak}>Every handoff between them is where leads, hours and money leak.</p>
+          <p className={styles.eyebrow}>Sound like your agency?</p>
+          <h2 id="stack-title" className={styles.heading}>Most final expense agencies run on five tools that don’t talk to each other.</h2>
+          <p className={styles.lede}>A CRM for tracking. A dialer for calls. A spreadsheet for commissions, another for publisher payouts. And a prayer for compliance.</p>
         </header>
+      </div>
 
-        <ol className={styles.tools}>
-          {TOOLS.map((tool, i) => (
-            <li key={tool.name} data-last={i === TOOLS.length - 1}>
-              <strong>{tool.name}</strong>
-              <span>{tool.job}</span>
-            </li>
-          ))}
-        </ol>
-
-        <div className={styles.split}>
-          <figure className={styles.quote}>
-            <blockquote>
-              <p>I’ve watched what that chaos costs from the inside.</p>
-              <ul>
-                {COSTS.map((cost) => <li key={cost}>{cost}</li>)}
-              </ul>
-            </blockquote>
-            {/* TO CONFIRM (owner): who is speaking. The source copy has only this placeholder. */}
-            <figcaption>Founder name and role</figcaption>
-          </figure>
-
-          <div className={styles.instead}>
-            <h3>One system instead</h3>
-            <ul>
-              {INSTEAD.map((item) => (
-                <li key={item.name}>
-                  <ArrowRight aria-hidden="true" />
-                  <p><strong>{item.name}</strong><span>{item.text}</span></p>
-                </li>
-              ))}
-            </ul>
+      <div ref={stageRef} className={styles.stage} data-state="stacked" aria-hidden="true">
+        <div className={styles.side} data-side="in">
+          {MESS.map((cards, i) => <Row key={i} cards={cards} tone="mess" speed={46 + i * 7} />)}
+        </div>
+        <div className={styles.core}>
+          <span className={styles.beam} />
+          <div className={styles.deck}>
+            {TOOLS.map((tool, i) => {
+              const Icon = tool.icon;
+              return (
+                <div key={tool.name} data-tool="" className={styles.tool} style={{ "--z": `${(TOOLS.length - 1 - i) * 26}px` } as CSSProperties}>
+                  <Icon aria-hidden="true" />
+                  <b>{tool.name}</b>
+                  <small>{tool.job}</small>
+                </div>
+              );
+            })}
+          </div>
+          <div data-tile="" className={styles.tile}>
+            <InsurvasLogo variant="symbol" tone="dark" size="public" alt="" className={styles.mark} />
           </div>
         </div>
+        <div className={styles.side} data-side="out">
+          {OUTCOMES.map((cards, i) => <Row key={i} cards={cards} tone="clean" speed={46 + i * 7} />)}
+        </div>
+      </div>
+
+      <div className={styles.inner}>
+        {/* TO CONFIRM (Umar): "two years", from the review call. */}
+        <p className={styles.story}>We ran a final expense agency on those five tools for two years. <b>Insurvas is the one system we built to replace them.</b></p>
       </div>
     </section>
   );

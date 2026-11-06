@@ -1,52 +1,87 @@
-/* "Sound like your agency?" (owner, 4 Nov): five tools, the founder's line, one system instead.
-   Compact pass (owner, 4 Nov): the section fits one screen. The heading and its explaining line share a
-   row, the tools are tighter, and the bottom pairs a narrower quote with a wider card whose four
-   points sit two by two. */
-.section { border-bottom: 1px solid var(--border); background: var(--canvas); }
-.inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(40px, 4.5vw, 64px) 0; }
-.head { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: end; gap: 16px clamp(24px, 4vw, 64px); margin-bottom: clamp(20px, 2.4vw, 28px); }
-.eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; color: var(--accent-ink); font-size: 15px; font-weight: 650; letter-spacing: -.005em; }
-.eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
-.heading { max-width: 30ch; margin: 0; color: var(--ink); font: 600 clamp(26px, 2.8vw, 38px)/1.1 var(--font-brand); letter-spacing: -.025em; text-wrap: balance; }
-.leak { max-width: 34ch; margin: 0; justify-self: end; border-left: 2px solid var(--border-strong); padding-left: 16px; color: var(--muted); font-size: clamp(15px, 1.3vw, 17px); line-height: 1.45; }
+/* "Sound like your agency?" (Umar's review, 4 Nov, after clepso.io): the five tools as a 3D stack
+   that collapses into the Insurvas tile, the floor's mess drifting in from the left, clean outcomes
+   leaving on the right. Deep olive in both themes, so the page alternates dark and light (A0.3). */
+.section {
+  --band: color-mix(in srgb, var(--footer-bg) 62%, black);
+  position: relative;
+  overflow: hidden;
+  background: var(--band);
+  color: var(--nav-ink);
+}
+.inner { width: min(100% - 64px, 1320px); margin: 0 auto; }
+.head { max-width: 860px; margin: 0 auto; padding-top: clamp(64px, 7vw, 96px); text-align: center; }
+.eyebrow { margin: 0 0 14px; color: var(--primary); font-size: 14px; font-weight: 600; }
+.heading { margin: 0; font: 600 clamp(28px, 3.2vw, 44px)/1.08 var(--font-brand); letter-spacing: -.028em; text-wrap: balance; }
+.lede { max-width: 60ch; margin: 16px auto 0; color: var(--nav-muted); font-size: clamp(16px, 1.3vw, 18px); line-height: 1.55; text-wrap: balance; }
 
-.tools { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
-.tools li { position: relative; display: grid; align-content: start; gap: 2px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 14px 13px; }
-.tools li + li::before { position: absolute; top: 50%; left: -11px; width: 12px; border-top: 2px dashed var(--border-strong); content: ""; }
-.tools strong { color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: -.015em; }
-.tools span { color: var(--muted); font-size: 13px; }
-.tools li[data-last="true"] { border-color: var(--warning); }
-.tools li[data-last="true"] strong { color: var(--warning); }
+/* ── The stage ───────────────────────────────────────────────────────────────────────────────── */
+.stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 240px minmax(0, 1fr); height: 400px; margin-top: clamp(20px, 3vw, 40px); perspective: 1200px; }
+/* The two sides lean in towards the middle, like the inside of a curve, and fade at both ends so
+   the cards appear out of nowhere and vanish into the tile. */
+.side { display: grid; align-content: center; gap: 16px; overflow: hidden; transition: opacity 700ms ease; }
+.side[data-side="in"] { transform: rotateY(22deg); transform-origin: 100% 50%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 22%, #000 80%, transparent); mask-image: linear-gradient(90deg, transparent, #000 22%, #000 80%, transparent); }
+.side[data-side="out"] { transform: rotateY(-22deg); transform-origin: 0 50%; -webkit-mask-image: linear-gradient(90deg, transparent, #000 20%, #000 78%, transparent); mask-image: linear-gradient(90deg, transparent, #000 20%, #000 78%, transparent); }
 
-.split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: stretch; gap: clamp(20px, 3vw, 40px); margin-top: clamp(24px, 3vw, 36px); }
-.quote { margin: 0; display: grid; align-content: space-between; gap: 14px; border-left: 3px solid var(--primary); padding: 2px 0 2px 22px; }
-.quote blockquote { margin: 0; }
-.quote blockquote > p { margin: 0 0 12px; color: var(--ink); font: 600 clamp(20px, 2vw, 25px)/1.2 var(--font-brand); letter-spacing: -.02em; text-wrap: balance; }
-.quote ul { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.quote li { position: relative; padding-left: 18px; color: var(--muted); font-size: 15px; line-height: 1.45; }
-.quote li::before { position: absolute; left: 0; top: .66em; width: 8px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
-.quote figcaption { color: var(--muted); font-size: 13px; }
+.row { overflow: visible; }
+/* Four copies of a row's cards; moving it by half a track is one seamless loop. Both sides drift
+   right: into the tile on the left, away from it on the right. */
+.track { display: flex; width: max-content; gap: 14px; animation: drift linear infinite; animation-play-state: paused; }
+.row:nth-child(2) .track { animation-delay: -14s; }
+.row:nth-child(3) .track { animation-delay: -27s; }
+.stage[data-run="true"] .track { animation-play-state: running; }
+@keyframes drift { from { transform: translateX(-50%); } to { transform: translateX(0); } }
 
-.instead { border: 1px solid var(--border); border-radius: 16px; background: var(--surface); padding: clamp(16px, 1.8vw, 22px) clamp(18px, 2vw, 26px); }
-.instead h3 { margin: 0 0 12px; color: var(--accent-ink); font-size: 14px; font-weight: 650; }
-.instead ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px clamp(20px, 2.4vw, 32px); margin: 0; padding: 0; list-style: none; }
-.instead li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 10px; }
-.instead svg { width: 16px; height: 16px; margin-top: 3px; color: var(--accent-ink); }
-.instead p { display: grid; align-content: start; gap: 2px; margin: 0; }
-.instead strong { color: var(--ink); font-size: 16px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
-.instead span { color: var(--muted); font-size: 14px; line-height: 1.4; }
+.card { display: grid; flex: none; width: 236px; gap: 3px; border: 1px solid rgb(234 246 242 / 10%); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 50%, black); padding: 12px 14px 13px; }
+.kind { display: flex; align-items: center; gap: 7px; color: var(--nav-muted); font-size: 12px; font-weight: 600; }
+.kind svg { width: 14px; height: 14px; }
+.card b { overflow: hidden; font-size: 15px; font-weight: 600; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
+.card small { color: var(--nav-muted); font-size: 12.5px; }
+.row[data-tone="mess"] .kind svg { color: var(--warning); }
+.row[data-tone="clean"] .card { border-color: color-mix(in srgb, var(--primary) 32%, transparent); }
+.row[data-tone="clean"] .kind { color: var(--primary); }
+
+/* ── The middle: the beam, the five tools, the Insurvas tile ─────────────────────────────────── */
+.core { position: relative; display: grid; place-items: center; }
+.beam { position: absolute; top: 0; bottom: 0; left: calc(50% - 1px); width: 2px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary) 70%, transparent) 35%, color-mix(in srgb, var(--primary) 70%, transparent) 65%, transparent); }
+.tile { position: relative; z-index: 2; display: grid; width: 112px; height: 112px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 55%, transparent); border-radius: 28px; background: color-mix(in srgb, var(--footer-bg) 55%, black); box-shadow: 0 20px 50px -20px rgb(0 0 0 / 80%); }
+.mark { position: relative; display: block; width: 58px; height: 58px; }
+
+/* The stack: five cards in an isometric pile, the top one first. */
+.deck { position: absolute; z-index: 3; top: 50%; left: 50%; width: 220px; height: 74px; margin: -37px 0 0 -110px; transform-style: preserve-3d; transform: rotateX(56deg) rotateZ(-34deg); pointer-events: none; }
+.tool { position: absolute; inset: 0; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; column-gap: 10px; border: 1px solid color-mix(in srgb, var(--primary) 40%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 72%, black); padding: 0 16px; opacity: 0; transform: translateZ(var(--z)); box-shadow: 0 14px 30px -12px rgb(0 0 0 / 70%); }
+.tool svg { grid-row: span 2; width: 20px; height: 20px; color: var(--primary); }
+.tool b { font-size: 15px; font-weight: 600; }
+.tool small { color: var(--nav-muted); font-size: 12px; }
+.tool:last-child { border-color: color-mix(in srgb, var(--warning) 60%, transparent); }
+.tool:last-child svg { color: var(--warning); }
+
+/* Before the take-over, only when a script will run it: the pile shows, the tile and the drift wait.
+   Without a script, or under reduced motion, the stage is simply the resolved one. */
+@media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
+  .stage[data-state="stacked"] .tool { opacity: 1; }
+  .stage[data-state="stacked"] .tile { opacity: 0; }
+  .stage[data-state="stacked"] .side { opacity: 0; }
+}
+
+.story { max-width: 46ch; margin: clamp(16px, 2vw, 28px) auto 0; padding-bottom: clamp(64px, 7vw, 96px); color: var(--nav-muted); font: 500 clamp(18px, 1.7vw, 22px)/1.4 var(--font-brand); letter-spacing: -.015em; text-align: center; text-wrap: balance; }
+.story b { color: var(--nav-ink); font-weight: 600; }
 
 @media (max-width: 1000px) {
-  .head { grid-template-columns: minmax(0, 1fr); }
-  .leak { justify-self: start; max-width: 46ch; }
-  .tools { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .tools li + li::before { display: none; }
-  .tools li[data-last="true"] { grid-column: 1 / -1; }
-  .split { grid-template-columns: minmax(0, 1fr); }
+  .stage { grid-template-columns: minmax(0, 1fr) 180px minmax(0, 1fr); }
+  .side[data-side="in"], .side[data-side="out"] { transform: none; }
 }
-@media (max-width: 640px) {
+/* Phones: mess on top, the tile, outcomes below; two rows each, flat. */
+@media (max-width: 760px) {
   .inner { width: calc(100% - 32px); }
-  .tools { grid-template-columns: minmax(0, 1fr); }
-  .quote { padding-left: 16px; }
-  .instead ul { grid-template-columns: minmax(0, 1fr); }
+  .stage { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 170px auto; height: auto; }
+  .side { gap: 12px; }
+  .side[data-side="in"], .side[data-side="out"] { -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+  .row:nth-child(3) { display: none; }
+  .card { width: 210px; }
+  .tile { width: 92px; height: 92px; border-radius: 24px; }
+  .mark { width: 48px; height: 48px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .track { animation: none; }
+  .side { transition: none; }
 }
