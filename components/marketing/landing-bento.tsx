@@ -1,140 +1,125 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { CSSProperties } from "react";
 import {
-  ArrowRight, BadgeDollarSign, Check, ClipboardCheck, FileSpreadsheet, FileText, Link2, Lock, PhoneCall, PhoneIncoming,
-  ShieldCheck, Upload, UserRound, Users,
+  ArrowRight, BadgeCheck, BadgeDollarSign, Ban, CalendarClock, ClipboardCheck, CopyX, FileCheck, FileSpreadsheet,
+  FileText, Handshake, HeartHandshake, IdCard, Link2, ListOrdered, PhoneCall, PhoneIncoming, Receipt, ScrollText,
+  ShieldCheck, Stethoscope, Tag, TrendingUp, TriangleAlert, UserCheck, Wallet,
 } from "lucide-react";
 
+import { LandingFlow, type FlowStep } from "@/components/marketing/landing-flow";
 import styles from "@/components/marketing/landing-features.module.css";
 
 /**
- * "What it does" (2026-11-03, after the owner's reference): the workspace as a stack of feature
- * cards. Each card sticks below the header while the next slides up over it, and the one beneath
- * settles back, so five features take about five screens of scroll. Left: the job, in plain words,
- * with what it includes. Right: an isometric scene built from that feature's real pieces — a vendor
- * file and its rows, the four dial checks, the application steps, a statement line meeting its
- * policy, the save queue. The scenes are drawn in HTML/CSS 3D, float gently while their card is in
- * front, and lift towards the pointer. Behaviour described is the CRM's as observed
+ * "What it does": the workspace as a stack of module cards. Each card sticks below the header while
+ * the next slides up over it, and the one beneath settles back.
+ *
+ * Umar's review (4 Nov): seven modules, not five (A5.1); the section design stays but the copy is
+ * cut (A5.2), to a one-line lede and three points; and the isometric 3D scenes are replaced by a
+ * small 2D flow diagram per module, a record travelling that module's real steps (A5.3,
+ * `LandingFlow`). Behaviour described is the CRM's as observed
  * (docs/design/landing-page-research/crm-workflow-observations-production-2026-11-03.md).
+ *
+ * TO CONFIRM (Umar): the seven names are his first pass, spoken while thinking.
  */
-type Tile = { x: number; y: number; w: number; h: number; z: number; tone?: "solid" | "glass" | "accent" | "warn" | "ghost"; children?: ReactNode; float?: number };
-type Feature = { key: string; title: string; lede: string; points: string[]; href: string; cta: string; tiles: Tile[]; links?: Array<[number, number, number, number]> };
+type Module = { key: string; title: string; lede: string; points: string[]; cta: string; flow: FlowStep[] };
 
-const FEATURES: Feature[] = [
+const MODULES: Module[] = [
   {
-    key: "leads",
-    title: "Lead flow",
-    lede: "Every list you buy comes in with its cost attached, cleaned and ready to dial.",
-    points: ["Import a vendor’s CSV and map its columns once", "Lead cost recorded on every lead", "Duplicates set aside for a person to review", "Recycle leads on a cadence you choose", "Campaigns and vendors side by side"],
-    href: "/signup", cta: "Import your first list",
-    tiles: [
-      { x: 40, y: 40, w: 200, h: 130, z: 70, tone: "accent", float: 0, children: <><FileSpreadsheet /><b>cobalt-media.csv</b><small>600 rows · $17.06 a lead</small></> },
-      { x: 290, y: 60, w: 190, h: 52, z: 30, tone: "glass", float: 1, children: <><UserRound /><b>Ruth A.</b><em>Ready</em></> },
-      { x: 290, y: 130, w: 190, h: 52, z: 30, tone: "glass", float: 2, children: <><UserRound /><b>James M.</b><em>Ready</em></> },
-      { x: 290, y: 200, w: 190, h: 52, z: 30, tone: "warn", float: 3, children: <><UserRound /><b>Ruth A.</b><em>Duplicate</em></> },
-      { x: 290, y: 270, w: 190, h: 52, z: 30, tone: "glass", float: 1, children: <><UserRound /><b>Carol T.</b><em>Ready</em></> },
-      { x: 60, y: 260, w: 170, h: 170, z: 10, tone: "ghost", children: <><Upload /><small>Drop a list</small></> },
-      { x: 300, y: 370, w: 170, h: 70, z: 50, tone: "solid", float: 2, children: <><b>584</b><small>ready to dial</small></> },
+    key: "partners",
+    title: "Partnerships & lead flow",
+    lede: "Partners and vendors send leads and live transfers into one queue, each with its source and cost.",
+    points: ["Partners sign in to see only their own leads", "Live transfers land in one queue, with the wait shown", "Lead cost recorded on every lead"],
+    cta: "Set up a partner",
+    flow: [
+      { icon: Handshake, label: "Partner sends a lead", sub: "Summit Data · Final expense" },
+      { icon: Tag, label: "Source and cost attached", sub: "Lead cost $38.00" },
+      { icon: PhoneIncoming, label: "Live transfer queued", sub: "Waiting 0:14" },
+      { icon: UserCheck, label: "Claimed by an agent", sub: "The first claim wins" },
     ],
-    links: [[240, 105, 290, 86], [240, 105, 290, 226]],
   },
   {
-    key: "floor",
-    title: "Floor & dialer",
-    lede: "Live transfers are claimed exactly once, and every dial is screened before it’s placed.",
-    points: ["Partner transfers land in one queue, with the wait shown", "The first claim wins — a lost race is said plainly", "Consent, DNC, suppression and calling window re-checked by the server", "A refused dial is logged with its reason", "Callbacks and appointments in the same place"],
-    href: "/signup", cta: "Set up your floor",
-    tiles: [
-      { x: 40, y: 50, w: 220, h: 120, z: 80, tone: "accent", float: 0, children: <><PhoneIncoming /><b>Live transfer</b><small>Carol T. · Final expense · 0:14</small></> },
-      { x: 60, y: 210, w: 160, h: 56, z: 40, tone: "solid", float: 2, children: <><PhoneCall /><b>Claim ↵</b></> },
-      { x: 300, y: 40, w: 180, h: 54, z: 30, tone: "glass", float: 1, children: <><Check /><b>Consent on file</b></> },
-      { x: 300, y: 110, w: 180, h: 54, z: 30, tone: "glass", float: 2, children: <><Check /><b>DNC lists</b></> },
-      { x: 300, y: 180, w: 180, h: 54, z: 30, tone: "glass", float: 3, children: <><Check /><b>Suppression list</b></> },
-      { x: 300, y: 250, w: 180, h: 54, z: 30, tone: "glass", float: 1, children: <><Check /><b>Calling window</b></> },
-      { x: 290, y: 340, w: 200, h: 90, z: 60, tone: "solid", float: 0, children: <><ShieldCheck /><b>Clear to dial</b><small>4 of 4 passed</small></> },
+    key: "dialer",
+    title: "Outbound dialer & leads",
+    lede: "Every list you buy is imported once, cleaned, and screened before a single dial.",
+    points: ["Import a vendor’s CSV and map its columns once", "Duplicates set aside for a person to review", "Consent, DNC, suppression and calling window re-checked before every dial"],
+    cta: "Import your first list",
+    flow: [
+      { icon: FileSpreadsheet, label: "Vendor list imported", sub: "cobalt-media.csv · 600 rows" },
+      { icon: CopyX, label: "Duplicates set aside", sub: "16 for a person to review" },
+      { icon: ShieldCheck, label: "Screened before the dial", sub: "Consent · DNC · calling window" },
+      { icon: PhoneCall, label: "Dial placed", sub: "Ruth A. · clear to dial" },
+      { icon: CalendarClock, label: "Callback booked", sub: "Thursday 10:30, her time" },
     ],
-    links: [[220, 238, 300, 67], [390, 304, 390, 340]],
   },
   {
     key: "apps",
     title: "Applications",
-    lede: "The application is filled and submitted while the customer is still on the line.",
-    points: ["Verify, interview, quote, beneficiaries and payment in one flow", "Imported values marked for confirmation", "Review groups hard blockers apart from soft checks", "A quote is never counted as issued", "Draft dates and pending cases tracked"],
-    href: "/signup", cta: "See an application",
-    tiles: [
-      { x: 60, y: 60, w: 230, h: 300, z: 10, tone: "ghost", children: <><small>Verify</small></> },
-      { x: 90, y: 50, w: 230, h: 300, z: 35, tone: "glass", children: <><small>Quote</small><b>$70.00 / mo</b></> },
-      { x: 120, y: 40, w: 230, h: 300, z: 60, tone: "glass", children: <><small>Beneficiaries</small><b>2 named</b></> },
-      { x: 150, y: 30, w: 230, h: 300, z: 85, tone: "accent", float: 0, children: <><ClipboardCheck /><b>Review & submit</b><small>0 blockers · 1 to confirm</small></> },
-      { x: 360, y: 340, w: 140, h: 60, z: 70, tone: "solid", float: 2, children: <><Check /><b>Issued</b></> },
+    lede: "The application is filled and submitted while the client is still on the line.",
+    points: ["Verify, interview, quote, beneficiaries and payment in one flow", "Review separates hard blockers from soft checks", "Draft dates and pending cases tracked"],
+    cta: "See an application",
+    flow: [
+      { icon: IdCard, label: "Identity verified", sub: "Ruth A. · on the line" },
+      { icon: Stethoscope, label: "Interview", sub: "Health questions answered" },
+      { icon: Receipt, label: "Quote", sub: "$70.00 a month" },
+      { icon: ClipboardCheck, label: "Beneficiaries & payment", sub: "2 named · draft on the 3rd" },
+      { icon: BadgeCheck, label: "Submitted", sub: "0 blockers · 1 to confirm" },
     ],
-    links: [[380, 300, 420, 340]],
   },
   {
     key: "money",
     title: "Commissions & book",
-    lede: "Every carrier statement line meets the policy you wrote, and what was owed sits beside what was paid.",
-    points: ["Carrier files by upload or email", "Statement lines matched to policies — a person accepts", "Expected commission from your rate card", "A missing figure reads —, never $0.00", "True CPA by vendor and campaign"],
-    href: "/signup", cta: "Match a statement",
-    tiles: [
-      { x: 40, y: 60, w: 190, h: 250, z: 40, tone: "glass", float: 1, children: <><FileText /><b>Statement</b><small>Line 14 · SAMPLE-0482</small><b>$84.00</b></> },
-      { x: 300, y: 60, w: 190, h: 250, z: 40, tone: "glass", float: 2, children: <><ClipboardCheck /><b>Policy</b><small>SAMPLE-0482 · Ruth A.</small><b>Issued</b></> },
-      { x: 220, y: 150, w: 90, h: 70, z: 80, tone: "accent", float: 0, children: <><Link2 /></> },
-      { x: 150, y: 360, w: 230, h: 80, z: 60, tone: "solid", float: 3, children: <><BadgeDollarSign /><b>True CPA $46.10</b><small>Cobalt Media</small></> },
+    lede: "Every carrier statement line meets the policy you wrote, with what was owed beside what was paid.",
+    points: ["Carrier statements by upload or email", "Each line matched to a policy, and a person accepts it", "True CPA by vendor and campaign"],
+    cta: "Match a statement",
+    flow: [
+      { icon: FileCheck, label: "Policy issued", sub: "SAMPLE-0482 · Ruth A." },
+      { icon: FileText, label: "Carrier statement in", sub: "Line 14 · $84.00" },
+      { icon: Link2, label: "Line matched", sub: "A person accepts it" },
+      { icon: BadgeDollarSign, label: "Commission booked", sub: "Owed $84.00 · paid $84.00" },
     ],
-    links: [[230, 185, 300, 185], [265, 310, 265, 360]],
   },
   {
-    key: "keep",
-    title: "Retention & partners",
-    lede: "Keep the policies you wrote, and give partners a view of their own leads — never anyone else’s.",
-    points: ["Missed drafts and lapse notices go to a save queue", "Ranked by risk × money", "Servicing and reinstatement tracked", "Partners sign in to their own leads and stages", "No other partner’s leads, notes or lead cost"],
-    href: "/signup", cta: "Start keeping more",
-    tiles: [
-      { x: 40, y: 40, w: 230, h: 60, z: 70, tone: "warn", float: 0, children: <><b>SAMPLE-0533</b><em>$1,240 at risk</em></> },
-      { x: 40, y: 115, w: 230, h: 60, z: 45, tone: "glass", float: 1, children: <><b>SAMPLE-0391</b><em>$980</em></> },
-      { x: 40, y: 190, w: 230, h: 60, z: 25, tone: "glass", float: 2, children: <><b>SAMPLE-0277</b><em>$610</em></> },
-      { x: 310, y: 60, w: 180, h: 180, z: 50, tone: "accent", float: 3, children: <><Users /><b>Partner view</b><small>Summit Data · 3 leads</small></> },
-      { x: 320, y: 300, w: 160, h: 110, z: 80, tone: "solid", float: 0, children: <><Lock /><b>Only their own</b></> },
-      { x: 60, y: 300, w: 190, h: 130, z: 10, tone: "ghost", children: <><small>Save queue</small></> },
+    key: "accounting",
+    title: "Accounting",
+    lede: "Lead spend, commission and publisher payouts in one ledger, so profit is a number, not a guess.",
+    points: ["Lead spend from every list and transfer", "Publisher payouts worked out per period", "Profit and loss by campaign and month"],
+    cta: "See the ledger",
+    flow: [
+      { icon: Tag, label: "Lead spend", sub: "Cobalt Media · $10,236" },
+      { icon: BadgeDollarSign, label: "Commission received", sub: "$63,816.80 this month" },
+      { icon: Wallet, label: "Publisher payouts", sub: "Summit Data · per period" },
+      { icon: TrendingUp, label: "Profit by campaign", sub: "P&L for the month" },
     ],
-    links: [[400, 240, 400, 300]],
+  },
+  {
+    key: "retention",
+    title: "Retention",
+    lede: "Missed drafts and lapse notices become a save queue, worked before the policy is lost.",
+    points: ["Missed drafts and lapse notices go to a save queue", "Ranked by risk times money", "Servicing and reinstatement tracked"],
+    cta: "Start keeping more",
+    flow: [
+      { icon: TriangleAlert, label: "Draft missed", sub: "SAMPLE-0533 · lapse notice" },
+      { icon: ListOrdered, label: "Into the save queue", sub: "Ranked by risk × money" },
+      { icon: PhoneCall, label: "Agent calls the client", sub: "New bank details taken" },
+      { icon: HeartHandshake, label: "Policy saved", sub: "$1,240 a year kept" },
+    ],
+  },
+  {
+    key: "compliance",
+    title: "Compliance",
+    lede: "Consent, screening and every refused dial are recorded as the work happens, not reconstructed later.",
+    points: ["Consent kept on every lead", "A refused dial is logged with its reason", "Complaints tracked to their regulator deadline"],
+    cta: "See the checks",
+    flow: [
+      { icon: FileCheck, label: "Consent on file", sub: "Certificate on the lead" },
+      { icon: ShieldCheck, label: "Checked before the dial", sub: "DNC · suppression · window" },
+      { icon: Ban, label: "Dial refused", sub: "Outside the calling window" },
+      { icon: ScrollText, label: "Logged with the reason", sub: "Who, when and why" },
+    ],
   },
 ];
-
-function Scene({ feature, active }: { feature: Feature; active: boolean }) {
-  const planeRef = useRef<HTMLDivElement>(null);
-  const tilt = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "mouse" || !planeRef.current) return;
-    const r = event.currentTarget.getBoundingClientRect();
-    planeRef.current.style.setProperty("--px", `${((event.clientX - r.left) / r.width - 0.5) * 8}deg`);
-    planeRef.current.style.setProperty("--py", `${((event.clientY - r.top) / r.height - 0.5) * -6}deg`);
-  };
-  const untilt = () => { planeRef.current?.style.setProperty("--px", "0deg"); planeRef.current?.style.setProperty("--py", "0deg"); };
-  return (
-    <div className={styles.scene} onPointerMove={tilt} onPointerLeave={untilt} aria-hidden="true">
-      <div className={styles.grid} />
-      <div ref={planeRef} className={styles.plane} data-active={active}>
-        <svg className={styles.links} viewBox="0 0 520 480">
-          {feature.links?.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} />)}
-        </svg>
-        {feature.tiles.map((tile, i) => (
-          <div
-            key={i}
-            className={styles.tile}
-            data-tone={tile.tone ?? "glass"}
-            data-float={tile.float ?? "none"}
-            style={{ left: tile.x, top: tile.y, width: tile.w, height: tile.h, "--z": `${tile.z}px`, "--d": `${i * 70}ms` } as CSSProperties}
-          >
-            <span className={styles.face}>{tile.children}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 export function LandingBento() {
   const cardRefs = useRef<Array<HTMLElement | null>>([]);
@@ -172,29 +157,28 @@ export function LandingBento() {
         <header className={styles.head}>
           <p className={styles.eyebrow}>What it does</p>
           <h2 id="features-title" className={styles.title}>Built for the way insurance is <em>really</em> sold.</h2>
-          <p className={styles.lede}>One workspace, from the vendor’s list to the carrier’s statement — and the policy after it is issued.</p>
+          <p className={styles.lede}>Seven modules, one workspace: from the partner’s lead to the policy you keep.</p>
         </header>
 
         <div className={styles.stack}>
-          {FEATURES.map((feature, i) => (
+          {MODULES.map((module, i) => (
             <article
-              key={feature.key}
+              key={module.key}
               ref={(node) => { cardRefs.current[i] = node; }}
               className={styles.card}
-              style={{ "--i": i, "--top": `${96 + i * 14}px` } as CSSProperties}
-              aria-labelledby={`feature-${feature.key}`}
+              style={{ "--i": i, "--top": `${96 + i * 12}px` } as CSSProperties}
+              aria-labelledby={`feature-${module.key}`}
             >
               <div className={styles.copy}>
-                <ol className={styles.rail} aria-hidden="true">
-                  {FEATURES.map((f, j) => <li key={f.key} data-on={j === i} />)}
-                </ol>
-                <span className={styles.count}>{String(i + 1).padStart(2, "0")} / {String(FEATURES.length).padStart(2, "0")}</span>
-                <h3 id={`feature-${feature.key}`}>{feature.title}</h3>
-                <p>{feature.lede}</p>
-                <ul>{feature.points.map((point) => <li key={point}>{point}</li>)}</ul>
-                <a href={feature.href} className={styles.cta}>{feature.cta}<ArrowRight aria-hidden="true" /></a>
+                <span className={styles.count}>{String(i + 1).padStart(2, "0")} / {String(MODULES.length).padStart(2, "0")}</span>
+                <h3 id={`feature-${module.key}`}>{module.title}</h3>
+                <p>{module.lede}</p>
+                <ul>{module.points.map((point) => <li key={point}>{point}</li>)}</ul>
+                <a href="/signup" className={styles.cta}>{module.cta}<ArrowRight aria-hidden="true" /></a>
               </div>
-              <Scene feature={feature} active={active === i} />
+              <div className={styles.scene}>
+                <LandingFlow steps={module.flow} playing={active === i} />
+              </div>
             </article>
           ))}
         </div>

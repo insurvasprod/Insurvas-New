@@ -1,0 +1,19 @@
+/* The bento's flow diagrams (A5.3): flat boxes on the deep-olive card, hairline wires, one green
+   dot for the record. Until the loop runs (and under reduced motion) every step shows lit, so the
+   still diagram is the finished workflow. */
+.flow { display: block; width: 100%; height: auto; max-width: 560px; overflow: visible; font-family: var(--font-sans); }
+
+.box { fill: color-mix(in srgb, var(--footer-bg) 55%, black); stroke: rgb(234 246 242 / 12%); stroke-width: 1; }
+/* The lit edge: a brand border over the box. The outcome box also takes a soft green fill. */
+.lit, .litResult { fill: none; stroke: var(--primary); stroke-width: 1.5; }
+.litResult { fill: color-mix(in srgb, var(--primary) 14%, transparent); }
+
+.icon { color: var(--primary); stroke-width: 2; }
+.label { fill: var(--nav-ink); font-size: 14.5px; font-weight: 600; letter-spacing: -.01em; }
+.sub { fill: var(--nav-muted); font-size: 12.5px; }
+
+.wire { stroke: rgb(234 246 242 / 16%); stroke-width: 1.5; stroke-dasharray: 4 5; }
+/* Drawn by the record: pathLength=1, so an offset of 1 hides it and 0 draws it whole. */
+.wireLit { stroke: var(--primary); stroke-width: 2; stroke-dasharray: 1; stroke-dashoffset: 0; }
+
+.dot { opacity: 0; fill: var(--primary); stroke: color-mix(in srgb, var(--footer-bg) 55%, black); stroke-width: 3; }
