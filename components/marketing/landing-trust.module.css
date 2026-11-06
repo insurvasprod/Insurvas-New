@@ -1,35 +1,51 @@
-/* The trust band as an introduction (Umar, 4 Nov, A2.1): the statement, then one rule with three
-   stops from the floor it came from to today. White ground, ink type, the brand green only on the
-   rule and the "Today" stop. */
+/* The trust band (Umar, 4 Nov, A2.1; owner, 6 Nov: more visual, less text). A graded photo with the
+   figures along its foot on the left; the statement and a short three-stop line on the right. */
 .band { border-bottom: 1px solid var(--border); background: var(--canvas); }
-.inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0 clamp(56px, 6vw, 80px); }
+.inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: stretch; gap: clamp(32px, 5vw, 80px); width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0; }
 
-.head { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; max-width: 980px; }
-.label { margin: 0; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
-.title { max-width: 26ch; margin: 0; color: var(--ink); font: 600 clamp(28px, 3.4vw, 48px)/1.08 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
+/* The photo: graded into the deep green so it belongs to the page, darker at its foot for the figures. */
+.photo { position: relative; min-height: 440px; margin: 0; overflow: hidden; border-radius: 24px; background: color-mix(in srgb, var(--footer-bg) 62%, black); clip-path: inset(0 0 0 0 round 24px); }
+.img { object-fit: cover; object-position: 58% 30%; filter: grayscale(.35) contrast(1.05); }
+.grade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--footer-bg) 55%, black) 100%),
+    color-mix(in srgb, var(--footer-bg) 38%, transparent);
+  mix-blend-mode: normal;
+}
+.figures { position: absolute; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 0 clamp(20px, 2.4vw, 32px) clamp(20px, 2.4vw, 30px); }
+.figure { display: grid; gap: 4px; border-top: 1px solid rgb(234 246 242 / 28%); padding-top: 14px; }
+.figure b { color: var(--on-dark); font: 600 clamp(28px, 3vw, 44px)/1 var(--font-brand); letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.figure small { color: rgb(234 246 242 / 78%); font-size: 13.5px; }
 
-/* The line: a hairline rule across the top of three columns, a dot on it for each stop. */
-.line { position: relative; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: clamp(24px, 4vw, 64px); margin: clamp(40px, 5vw, 64px) 0 0; padding: 0; list-style: none; }
-.rule { position: absolute; top: 6px; left: 0; right: 0; height: 1px; background: linear-gradient(90deg, var(--border-strong) 0%, var(--border-strong) 62%, var(--primary) 100%); transform-origin: 0 50%; }
-.stop { position: relative; display: grid; align-content: start; gap: 10px; padding-top: 30px; }
-.dot { position: absolute; top: 0; left: 0; width: 13px; height: 13px; box-sizing: border-box; border: 2px solid var(--border-strong); border-radius: 50%; background: var(--canvas); }
+/* The copy: label, statement, then the line. */
+.copy { display: flex; flex-direction: column; justify-content: center; }
+.label { margin: 0 0 14px; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
+.title { max-width: 20ch; margin: 0; color: var(--ink); font: 600 clamp(28px, 3vw, 44px)/1.08 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
+
+/* Three stops down a hairline; the last one, today, in the brand green. */
+.line { position: relative; display: grid; gap: 22px; margin: clamp(28px, 3.4vw, 44px) 0 0; padding: 0 0 0 30px; list-style: none; }
+.line::before { position: absolute; top: 8px; bottom: 8px; left: 6px; width: 1px; background: linear-gradient(180deg, var(--border-strong) 0%, var(--border-strong) 60%, var(--primary) 100%); content: ""; }
+.stop { position: relative; display: grid; gap: 4px; }
+.dot { position: absolute; top: 3px; left: -30px; width: 13px; height: 13px; box-sizing: border-box; border: 2px solid var(--border-strong); border-radius: 50%; background: var(--canvas); }
 .stop[data-now="true"] .dot { border-color: var(--primary); background: var(--primary); box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 20%, transparent); }
-.when { color: var(--muted); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.when { color: var(--muted); font-size: 13px; font-weight: 600; }
 .stop[data-now="true"] .when { color: var(--accent-ink); }
-.text { max-width: 34ch; margin: 0; color: var(--body); font: 500 clamp(17px, 1.45vw, 20px)/1.45 var(--font-brand); letter-spacing: -.012em; text-wrap: pretty; }
-.text b { color: var(--ink); font-weight: 650; }
-.stop[data-now="true"] .text b { font-variant-numeric: tabular-nums; }
+.text { max-width: 40ch; margin: 0; color: var(--ink); font: 500 clamp(16px, 1.3vw, 18px)/1.45 var(--font-brand); letter-spacing: -.01em; }
 
 /* Before the entrance, only when a script will run it. */
-.inner[data-state="waiting"] .rule { transform: scaleX(0); }
-.inner[data-state="waiting"] .stop { opacity: 0; }
+.inner[data-state="waiting"] .photo { clip-path: inset(100% 0 0 0 round 24px); }
+.inner[data-state="waiting"] [data-figure], .inner[data-state="waiting"] [data-stop] { opacity: 0; }
 
 @media (max-width: 860px) {
-  /* One column: the rule runs down the left, the stops hang off it. */
-  .line { grid-template-columns: minmax(0, 1fr); gap: 28px; padding-left: 28px; }
-  .rule { top: 6px; bottom: 6px; left: 6px; right: auto; width: 1px; height: auto; background: linear-gradient(180deg, var(--border-strong) 0%, var(--border-strong) 62%, var(--primary) 100%); transform-origin: 50% 0; }
-  .stop { padding-top: 0; }
-  .dot { left: -28px; }
-  .inner[data-state="waiting"] .rule { transform: scaleY(0); }
+  .inner { grid-template-columns: minmax(0, 1fr); }
+  .copy { order: -1; }
+  .photo { min-height: 340px; }
 }
-@media (max-width: 640px) { .inner { width: calc(100% - 32px); padding: 44px 0 48px; } }
+@media (max-width: 640px) {
+  .inner { width: calc(100% - 32px); padding: 44px 0; }
+  .figures { gap: 10px; }
+  .figure b { font-size: 26px; }
+  .figure small { font-size: 12px; }
+}
