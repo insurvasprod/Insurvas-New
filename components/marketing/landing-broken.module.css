@@ -1,4 +1,4 @@
-/* "What's broken today" (owner, 4 Nov): a scrolling row of photo cards, the chosen leak opened below. */
+/* "What's broken today": the seven leaks on a turning 3D ring, solved under Insurvas; the last one solved opened below. */
 .broken { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 
 .controls { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
@@ -12,41 +12,35 @@
 .arrows button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 .arrows svg { width: 16px; height: 16px; }
 
-/* the row */
-.row {
-  --fade: 64px;
-  min-width: 0;
-  /* clip, not hidden: a focused card must not scroll the row behind the animation's back. */
-  overflow: clip;
-  margin-inline: -4px;
-  padding: 4px 4px 12px;
-  /* Vertical swipes still scroll the page; sideways ones drag the row. */
-  touch-action: pan-y;
-  -webkit-user-select: none;
-  user-select: none;
-  /* Both edges fade: the row never ends. */
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
-}
-/* The track: three copies of the cards, slid by the animation (landing-broken.tsx). */
-.track { display: grid; grid-auto-columns: 300px; grid-auto-flow: column; gap: 16px; width: max-content; will-change: transform; }
-.track img { -webkit-user-drag: none; }
-.card { display: grid; align-content: start; gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .2s, transform .25s ease, box-shadow .25s ease; }
-@media (hover: hover) and (pointer: fine) { .card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -24px rgb(0 0 0 / 70%); } }
-.card:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
-.card[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), 0 18px 40px -24px color-mix(in srgb, var(--primary) 60%, transparent); }
+/* ── The 3D ring (owner, 6 Nov) ─────────────────────────────────────────────────────────────── */
+.stage { --r: 620px; --w: 270px; position: relative; height: 480px; overflow: hidden; margin-inline: calc(50% - 50vw); }
+/* Insurvas over the middle, its beam falling to where the front card passes. */
+.core { position: absolute; z-index: 3; top: 0; left: 50%; display: grid; justify-items: center; transform: translateX(-50%); pointer-events: none; }
+.coreTile { display: grid; width: 76px; height: 76px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 60%, transparent); border-radius: 22px; background: color-mix(in srgb, var(--footer-bg) 62%, black); box-shadow: 0 0 0 8px color-mix(in srgb, var(--primary) 10%, transparent), 0 20px 40px -18px rgb(0 0 0 / 70%); }
+.coreMark { position: relative; display: block; width: 40px; height: 40px; }
+.coreBeam { width: 2px; height: 70px; background: linear-gradient(180deg, var(--primary), transparent); }
+.view { position: absolute; inset: 96px 0 0; perspective: 1700px; perspective-origin: 50% -10%; }
+.ring { position: absolute; top: 0; left: 50%; width: var(--w); height: 340px; margin-left: calc(var(--w) / -2); transform-style: preserve-3d; transform: translateZ(calc(var(--r) * -1)); }
+/* A slot stands on the ring facing outwards; its back half is hidden as it turns away. */
+.slot { position: absolute; inset: 0; border: 0; background: none; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; transform-style: preserve-3d; transform: rotateY(var(--a)) translateZ(var(--r)); backface-visibility: hidden; -webkit-tap-highlight-color: transparent; }
+.slot:focus-visible { outline: none; }
+.slot:focus-visible .face { box-shadow: 0 0 0 3px var(--primary); }
+.flip { position: absolute; inset: 0; transform-style: preserve-3d; transition: transform 800ms cubic-bezier(.23, 1, .32, 1); }
+.slot[data-solved="true"] .flip { transform: rotateY(180deg); }
+.face { position: absolute; inset: 0; display: grid; grid-template-rows: auto 1fr; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); backface-visibility: hidden; box-shadow: 0 24px 50px -26px rgb(0 0 0 / 55%); }
+.face[data-face="fix"] { border-color: var(--primary); transform: rotateY(180deg); }
+.face[data-face="fix"] .cardTab { color: var(--accent-ink); }
+.face[data-face="fix"] .photo img { filter: saturate(.5) brightness(.75); }
+/* The scan: a green sweep across the fix face as the card turns into it. */
+.face[data-face="fix"]::after { position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--primary) 45%, transparent) 50%, transparent 70%); content: ""; opacity: 0; pointer-events: none; }
+.slot[data-solved="true"] .face[data-face="fix"]::after { animation: scan 900ms cubic-bezier(.23, 1, .32, 1) 120ms both; }
+@keyframes scan { from { opacity: 1; transform: translateX(-100%); } to { opacity: 0; transform: translateX(100%); } }
+.solved { position: absolute; z-index: 1; bottom: 12px; left: 14px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; background: var(--primary); padding: 5px 11px; color: var(--on-primary); font-size: 12px; font-weight: 700; }
+.solved svg { width: 13px; height: 13px; stroke-width: 3; }
 .photo { position: relative; display: block; aspect-ratio: 4 / 3; overflow: hidden; }
-.photo img { object-fit: cover; filter: saturate(.9); transition: transform .5s ease; }
-.card:hover .photo img { transform: scale(1.04); }
-.photo::after { position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, color-mix(in srgb, var(--surface) 70%, transparent)); content: ""; }
+.photo img { object-fit: cover; }
 .cardText { display: grid; gap: 6px; padding: 14px 18px 20px; }
 .cardTab { color: var(--warning); font-size: 12.5px; font-weight: 600; }
-.card[aria-pressed="true"] .cardTab { color: var(--accent-ink); }
-/* The wait for the next leak: a line filling along the chosen card's foot (owner, 6 Nov). */
-.card { position: relative; }
-.cardTimer { position: absolute; right: 18px; bottom: 10px; left: 18px; height: 3px; border-radius: 3px; background: var(--primary); transform: scaleX(0); transform-origin: left; animation: leak-timer 5s linear forwards; }
-@keyframes leak-timer { to { transform: scaleX(1); } }
-@media (prefers-reduced-motion: reduce) { .cardTimer { display: none; } }
 .cardTitle { color: var(--ink); font: 600 17px/1.3 var(--font-brand); letter-spacing: -.01em; }
 
 /* the open leak */
@@ -66,5 +60,9 @@
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (max-width: 860px) { .panel { grid-template-columns: minmax(0, 1fr); } }
 /* Phones: one card and a peek of the next; the arrows stay (owner, 6 Nov), beside the count. */
-@media (max-width: 640px) { .row { --fade: 28px; } .track { grid-auto-columns: min(78vw, 300px); } }
-@media (prefers-reduced-motion: reduce) { .card, .photo img, .panel { transition: none; animation: none; } }
+@media (max-width: 640px) {
+  .stage { --r: 330px; --w: 210px; height: 420px; }
+  .ring { height: 290px; } }
+@media (prefers-reduced-motion: reduce) { .panel { transition: none; animation: none; } }
+
+@media (prefers-reduced-motion: reduce) { .flip { transition: none; } .slot[data-solved="true"] .face[data-face="fix"]::after { animation: none; } }

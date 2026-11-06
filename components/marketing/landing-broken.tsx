@@ -1,9 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
+import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 
 import styles from "@/components/marketing/landing-broken.module.css";
 
@@ -13,19 +15,18 @@ import styles from "@/components/marketing/landing-broken.module.css";
  * the sources and licences) and the problem in one line; choosing a card opens what Insurvas does
  * about it, and on which plan, underneath. The cards are pressed buttons, not tabs: they scroll.
  *
- * Owner, 6 Nov: no scrollbar, the arrows at the top are the controls, the edges fade, and the
- * row moves on its own, slowly, without stopping and only ever one way (owner, 6 Nov). The cards
- * are laid out three times on a track that slides left by exactly one copy and repeats, which
- * looks like one endless row. It is a Web Animations transform, so it runs on the compositor and
- * stays smooth (moving scrollLeft stepped by whole pixels). The arrows glide it a card either way
- * and a finger can drag it; it carries on afterwards. It stops only while a card has keyboard focus,
- * and never moves under reduced motion (the arrows and dragging still work there).
+ * Owner, 6 Nov (third pass): crazier, 3D, and the leaks go through Insurvas the way the five-tools
+ * section does. The seven photo cards stand on a slowly turning ring seen from a little above; the
+ * Insurvas tile floats over the middle with a beam down to the front. Each card comes round from the
+ * left as the problem, and as it passes under the beam a green scan crosses it and it flips to the fix,
+ * leaving to the right solved. The panel below always shows the card solved last. Choosing a card or
+ * an arrow turns the ring to it and holds for 15 s. The turn is a Web Animations rotation, so it runs
+ * on the compositor; the ring pauses off screen and stands still under reduced motion.
  */
-const SPEED = 30; // pixels a second
-/** The open leak moves on to the next one this often (owner, 6 Nov), and waits longer after a click. */
-const LEAK_MS = 5_000;
 const LEAK_HOLD_MS = 15_000;
-const COPIES = [0, 1, 2];
+/** One card reaches the beam every 5 seconds. */
+const TURN_MS = 7 * 5_000;
+const STEP = 360 / 7;
 const LEAKS = [
   {
     key: "lapse",
@@ -131,180 +132,131 @@ const LEAKS = [
 
 export function LandingBroken() {
   const [index, setIndex] = useState(0);
-  /** Ticks to skip after a click: 15 seconds is three 5-second ticks. */
-  const holdTicks = useRef(0);
-  const panelHover = useRef(false);
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const choose = (i: number) => { holdTicks.current = LEAK_HOLD_MS / LEAK_MS; setIndex(i); };
-
-  // The next leak every 5 seconds, while the section is on screen and nobody is reading the panel.
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    let visible = false;
-    const io = new IntersectionObserver(([entry]) => { visible = Boolean(entry?.isIntersecting); }, { threshold: 0.3 });
-    io.observe(section);
-    const timer = window.setInterval(() => {
-      if (holdTicks.current > 0) { holdTicks.current -= 1; return; }
-      if (!visible || panelHover.current || document.hidden) return;
-      setIndex((now) => (now + 1) % LEAKS.length);
-    }, LEAK_MS);
-    return () => { io.disconnect(); window.clearInterval(timer); };
-  }, []);
   const leak = LEAKS[index];
+  const stageRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
+  const spin = useRef<Animation | null>(null);
+  const holdTimer = useRef(0);
 
-  const trackRef = useRef<HTMLDivElement>(null);
-  const motion = useRef<Animation | null>(null);
-  /** One copy of the cards, in pixels: how far the track slides before it looks the same again. */
-  const copy = useRef(0);
-  const drag = useRef<{ x: number; moved: boolean } | null>(null);
-  const dragged = useRef(false);
-
-  const loopTime = () => (copy.current / SPEED) * 1000;
-  const wrap = (time: number) => ((time % loopTime()) + loopTime()) % loopTime();
-
-  /** Moves the loop by some pixels (+ is on, to the right) over a short ease-out, then it runs on. */
-  const nudge = useCallback((pixels: number, duration = 450) => {
-    const animation = motion.current;
-    if (!animation || !copy.current) return;
-    const from = Number(animation.currentTime ?? 0);
-    const delta = (pixels / SPEED) * 1000;
-    const begin = performance.now();
+  /** The ring's angle now, in degrees (0 → 360 over one turn). */
+  const angleNow = () => {
+    const animation = spin.current;
+    return animation ? (Number(animation.currentTime ?? 0) / TURN_MS) * 360 : 0;
+  };
+  /** Turns the ring to an angle over a short ease-out, then holds it before it carries on. */
+  const turnTo = (target: number, hold = true) => {
+    const animation = spin.current;
+    if (!animation) return;
+    const from = angleNow();
+    let delta = (((target - from) % 360) + 540) % 360 - 180; // the short way round
+    if (Math.abs(delta) < 0.5) delta = 0;
+    animation.pause();
+    // The first frame's time is the start, so no clock is read here.
+    let begin = -1;
     const step = (now: number) => {
-      const t = Math.min(1, (now - begin) / duration);
-      const eased = 1 - (1 - t) ** 3;
-      animation.currentTime = wrap(from + delta * eased);
+      if (begin < 0) begin = now;
+      const t = Math.min(1, (now - begin) / 700);
+      const eased = 1 - (1 - t) ** 4;
+      animation.currentTime = ((((from + delta * eased) % 360) + 360) % 360 / 360) * TURN_MS;
       if (t < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const scroll = (by: number) => {
-    const card = trackRef.current?.querySelector("button");
-    if (card) nudge(by * (card.getBoundingClientRect().width + 16));
-  };
-
-  // The loop: built once the cards are laid out, rebuilt at the same point when the width changes.
-  useEffect(() => {
-    const track = trackRef.current;
-    if (!track) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const build = () => {
-      const cards = track.querySelectorAll<HTMLElement>("button");
-      const width = cards.length > LEAKS.length ? cards[LEAKS.length].offsetLeft - cards[0].offsetLeft : 0;
-      if (!width || width === copy.current) return;
-      const progress = motion.current && copy.current ? Number(motion.current.currentTime ?? 0) / loopTime() : 0;
-      motion.current?.cancel();
-      copy.current = width;
-      const animation = track.animate(
-        [{ transform: `translate3d(${-width}px, 0, 0)` }, { transform: `translate3d(${-2 * width}px, 0, 0)` }],
-        { duration: loopTime(), iterations: Infinity, easing: "linear" },
-      );
-      animation.currentTime = progress * loopTime();
-      if (reduce) animation.pause();
-      motion.current = animation;
-    };
-    build();
-    const resize = new ResizeObserver(build);
-    resize.observe(track);
-    // A card with keyboard focus holds still, so it can be read.
-    // Only keyboard focus holds it: a card clicked with a mouse or a finger keeps focus too, and the
-    // row used to stop until the visitor clicked somewhere else (owner, 6 Nov: it stops time to time).
-    const hold = (event: FocusEvent) => { if ((event.target as HTMLElement).matches(":focus-visible")) motion.current?.pause(); };
-    const go = () => { if (!reduce) motion.current?.play(); };
-    track.addEventListener("focusin", hold);
-    track.addEventListener("focusout", go);
-    return () => {
-      resize.disconnect();
-      track.removeEventListener("focusin", hold);
-      track.removeEventListener("focusout", go);
-      motion.current?.cancel();
-      motion.current = null;
-      copy.current = 0;
-    };
-  }, []);
-
-  // Dragging with a finger (or a mouse) moves the loop; a tap still chooses a card.
-  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    drag.current = { x: event.clientX, moved: false };
-    dragged.current = false;
-  };
-  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const state = drag.current;
-    const animation = motion.current;
-    if (!state || !animation || !copy.current) return;
-    const dx = event.clientX - state.x;
-    if (!state.moved && Math.abs(dx) < 6) return;
-    if (!state.moved) {
-      state.moved = true;
-      dragged.current = true;
-      animation.pause();
-      event.currentTarget.setPointerCapture(event.pointerId);
+    window.clearTimeout(holdTimer.current);
+    if (hold && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      holdTimer.current = window.setTimeout(() => spin.current?.play(), LEAK_HOLD_MS);
     }
-    state.x = event.clientX;
-    animation.currentTime = wrap(Number(animation.currentTime ?? 0) - (dx / SPEED) * 1000);
   };
-  const onPointerUp = () => {
-    const moved = drag.current?.moved;
-    drag.current = null;
-    if (moved && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) motion.current?.play();
-  };
-  // A drag that ends over a card must not also choose it.
-  const onClickCapture = (event: ReactMouseEvent) => {
-    if (dragged.current) { event.stopPropagation(); event.preventDefault(); }
-    dragged.current = false;
-  };
+  // Card i reaches the beam at angle i·STEP; just past it, it is solved.
+  const choose = (i: number) => turnTo(i * STEP + 4);
+  const scroll = (by: number) => turnTo((Math.floor(angleNow() / STEP) + by) * STEP + 4);
+
+  // The turn: a Web Animations rotation (on the compositor, so it stays smooth), one card every 5 s.
+  useEffect(() => {
+    const ring = ringRef.current;
+    const stage = stageRef.current;
+    if (!ring || !stage) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const animation = ring.animate(
+      [{ transform: "translateZ(calc(var(--r) * -1)) rotateY(0deg)" }, { transform: "translateZ(calc(var(--r) * -1)) rotateY(360deg)" }],
+      { duration: TURN_MS, iterations: Infinity, easing: "linear" },
+    );
+    animation.currentTime = (4 / 360) * TURN_MS;
+    if (reduce) animation.pause();
+    spin.current = animation;
+    // Which side of the beam each card is on, and which card was solved last: read ten times a second.
+    const cards = [...ring.querySelectorAll<HTMLElement>("[data-card]")];
+    let last = -1;
+    const read = window.setInterval(() => {
+      const a = angleNow();
+      cards.forEach((card, i) => {
+        const world = (((a - i * STEP) % 360) + 360) % 360; // 0 at the beam, growing as it moves right
+        card.dataset.solved = String(world < 180);
+      });
+      const front = ((Math.floor(a / STEP) % LEAKS.length) + LEAKS.length) % LEAKS.length;
+      if (front !== last) { last = front; setIndex(front); }
+    }, 100);
+    const io = new IntersectionObserver(([entry]) => {
+      if (reduce) return;
+      if (entry?.isIntersecting) { if (!holdTimer.current || animation.playState !== "paused") animation.play(); } else animation.pause();
+    }, { threshold: 0 });
+    io.observe(stage);
+    return () => { window.clearInterval(read); window.clearTimeout(holdTimer.current); io.disconnect(); animation.cancel(); spin.current = null; };
+  }, []);
 
   return (
-    <div ref={sectionRef} className={styles.broken}>
+    <div className={styles.broken}>
       <div className={styles.controls}>
         <p className={styles.count}>{index + 1} of {LEAKS.length} · <b>{leak.tab}</b></p>
         <div className={styles.arrows}>
-          <button type="button" onClick={() => scroll(-1)} aria-label="Scroll back"><ArrowLeft aria-hidden="true" /></button>
-          <button type="button" onClick={() => scroll(1)} aria-label="Scroll on"><ArrowRight aria-hidden="true" /></button>
+          <button type="button" onClick={() => scroll(-1)} aria-label="Previous leak"><ArrowLeft aria-hidden="true" /></button>
+          <button type="button" onClick={() => scroll(1)} aria-label="Next leak"><ArrowRight aria-hidden="true" /></button>
         </div>
       </div>
 
-      <div
-        className={styles.row}
-        role="group"
-        aria-label="What’s broken today"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-        onClickCapture={onClickCapture}
-      >
-        <div ref={trackRef} className={styles.track}>
-        {/* Three copies for the endless loop; only the middle one is reachable by keyboard and
-            screen reader, the other two are the same cards seen again. */}
-        {COPIES.flatMap((copy) => LEAKS.map((item, i) => (
-          <button
-            key={`${copy}-${item.key}`}
-            type="button"
-            aria-pressed={i === index}
-            aria-controls="leak-panel"
-            aria-hidden={copy === 1 ? undefined : true}
-            tabIndex={copy === 1 ? undefined : -1}
-            className={styles.card}
-            onClick={() => choose(i)}
-          >
-            <span className={styles.photo}>
-              <Image src={item.photo} alt="" fill sizes="(max-width: 640px) 80vw, 320px" />
-            </span>
-            {/* Fills while the open leak waits for the next; restarts with each one. Middle copy only. */}
-            {i === index && copy === 1 && <span key={index} className={styles.cardTimer} aria-hidden="true" />}
-            <span className={styles.cardText}>
-              <span className={styles.cardTab}>{item.tab}</span>
-              <span className={styles.cardTitle}>{item.broken}</span>
-            </span>
-          </button>
-        )))}
+      {/* The 3D ring: problems come round from the left, pass under Insurvas's beam, flip to the fix. */}
+      <div ref={stageRef} className={styles.stage}>
+        <div className={styles.core} aria-hidden="true">
+          <span className={styles.coreTile}><InsurvasLogo variant="symbol" tone="dark" size="public" alt="" className={styles.coreMark} /></span>
+          <span className={styles.coreBeam} />
+        </div>
+        <div className={styles.view}>
+          <div ref={ringRef} className={styles.ring} role="group" aria-label="What’s broken today">
+            {LEAKS.map((item, i) => (
+              <button
+                key={item.key}
+                type="button"
+                data-card=""
+                data-solved="false"
+                aria-pressed={i === index}
+                aria-controls="leak-panel"
+                aria-label={`${item.tab}: ${item.broken}`}
+                className={styles.slot}
+                style={{ "--a": `${-i * STEP}deg` } as CSSProperties}
+                onClick={() => choose(i)}
+              >
+                <span className={styles.flip}>
+                  <span className={styles.face} data-face="problem">
+                    <span className={styles.photo}><Image src={item.photo} alt="" fill sizes="300px" /></span>
+                    <span className={styles.cardText}>
+                      <span className={styles.cardTab}>{item.tab}</span>
+                      <span className={styles.cardTitle}>{item.broken}</span>
+                    </span>
+                  </span>
+                  <span className={styles.face} data-face="fix">
+                    <span className={styles.photo}><Image src={item.photo} alt="" fill sizes="300px" /><span className={styles.solved}><Check aria-hidden="true" />Solved in Insurvas</span></span>
+                    <span className={styles.cardText}>
+                      <span className={styles.cardTab}>{item.tab} · {item.plan}</span>
+                      <span className={styles.cardTitle}>{item.fix}</span>
+                    </span>
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key} onPointerEnter={() => { panelHover.current = true; }} onPointerLeave={() => { panelHover.current = false; }}>
+      <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key}>
         <div className={styles.panelProblem}>
           <p className={styles.tag}>Broken today</p>
           <p className={styles.problem}>{leak.broken}</p>
