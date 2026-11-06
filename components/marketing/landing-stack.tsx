@@ -15,6 +15,10 @@ import styles from "@/components/marketing/landing-stack.module.css";
  * "Sound like your agency?" rebuilt after Umar's review (4 Nov, A3.1–A3.3), on the pattern he named:
  * clepso.io, where scattered cards of mess drift into the product's mark and come out resolved.
  *
+ * Owner, 6 Nov (second pass): one screen, and the change shown where it happens. Three lanes of
+ * matched cards run through an Insurvas gate in the middle; each arrives as a problem and leaves as
+ * its fix (`Lane`), so the story reads without words: problems in, Insurvas, solutions out.
+ *
  * Reworked 6 Nov (owner: "buggy and bad"). The agency's five tools stand in a column of cards in the
  * middle; as the section scrolls in they close up into one stack and the Insurvas tile lands in front
  * and takes them over (A3.1: "3D cards, they get stacked, and Insurvas is just replacing those
@@ -26,7 +30,6 @@ import styles from "@/components/marketing/landing-stack.module.css";
  * tools are named in the lede, so nothing is lost under reduced motion, where the resolved stage is
  * shown still. The drift pauses whenever the section is off screen.
  */
-type Card = { icon: LucideIcon; kind: string; title: string; note: string };
 
 const TOOLS = [
   { icon: Users, name: "A CRM", job: "for tracking" },
@@ -36,61 +39,52 @@ const TOOLS = [
   { icon: ShieldAlert, name: "A prayer", job: "for compliance" },
 ];
 
-const MESS: Card[][] = [
+/** Each problem and the fix Insurvas turns it into: the same kind of thing, before and after. */
+type Pair = { kind: string; icon: LucideIcon; problem: [string, string]; fix: [string, string] };
+
+const LANES: Pair[][] = [
   [
-    { icon: Copy, kind: "Lead", title: "Bought twice", note: "Ruth A. is in two lists" },
-    { icon: FileQuestion, kind: "Spreadsheet", title: "commissions_FINAL_v7.xlsx", note: "Which one is current?" },
-    { icon: PhoneMissed, kind: "Live transfer", title: "Dropped after 0:40", note: "Nobody claimed it" },
+    { kind: "Lead", icon: Copy, problem: ["Bought twice", "Ruth A. is in two lists"], fix: ["One record per lead", "The duplicate set aside"] },
+    { kind: "Live transfer", icon: PhoneMissed, problem: ["Dropped after 0:40", "Nobody claimed it"], fix: ["Claimed once", "The first claim wins"] },
+    { kind: "Lead cost", icon: BadgeDollarSign, problem: ["Not recorded", "So no true CPA"], fix: ["On every lead", "True CPA by campaign"] },
   ],
   [
-    { icon: Ban, kind: "Dial", title: "No consent on file", note: "Dialed anyway" },
-    { icon: BadgeDollarSign, kind: "Statement line", title: "Unmatched · $84.00", note: "No policy found for it" },
-    { icon: ClipboardList, kind: "Application", title: "Re-keyed by hand", note: "Into the carrier’s portal" },
+    { kind: "Dial", icon: Ban, problem: ["No consent on file", "Dialed anyway"], fix: ["Screened first", "Consent · DNC · window"] },
+    { kind: "Statement line", icon: FileQuestion, problem: ["Unmatched · $84.00", "No policy found for it"], fix: ["Matched to its policy", "Owed beside paid"] },
+    { kind: "Application", icon: ClipboardList, problem: ["Re-keyed by hand", "Into the carrier’s portal"], fix: ["Submitted on the call", "Blockers shown first"] },
   ],
   [
-    { icon: CalendarX, kind: "Draft", title: "Missed on the 3rd", note: "Nobody saw the notice" },
-    { icon: HandCoins, kind: "Publisher", title: "Paid twice", note: "Same leads, two invoices" },
-    { icon: Copy, kind: "Lead cost", title: "Not recorded", note: "So no true CPA" },
+    { kind: "Draft", icon: CalendarX, problem: ["Missed on the 3rd", "Nobody saw the notice"], fix: ["Flagged before it misses", "Into the save queue"] },
+    { kind: "Publisher", icon: HandCoins, problem: ["Paid twice", "Same leads, two invoices"], fix: ["Payouts worked out", "Per publisher, per period"] },
+    { kind: "Spreadsheet", icon: FileSpreadsheet, problem: ["commissions_v7.xlsx", "Which one is current?"], fix: ["One ledger", "One set of numbers"] },
   ],
 ];
 
-const OUTCOMES: Card[][] = [
-  [
-    { icon: Check, kind: "Lead", title: "One record per lead", note: "Duplicates set aside" },
-    { icon: Check, kind: "Live transfer", title: "Claimed once", note: "The first claim wins" },
-    { icon: Check, kind: "True CPA", title: "Every policy to its source", note: "Cost on every lead" },
-  ],
-  [
-    { icon: Check, kind: "Dial", title: "Screened before the dial", note: "Consent · DNC · window" },
-    { icon: Check, kind: "Statement line", title: "Matched to its policy", note: "Owed beside paid" },
-    { icon: Check, kind: "Application", title: "Submitted on the call", note: "Blockers shown first" },
-  ],
-  [
-    { icon: Check, kind: "Draft", title: "Flagged before it misses", note: "Into the save queue" },
-    { icon: Check, kind: "Publisher", title: "Payouts worked out", note: "Per publisher, per period" },
-    { icon: Check, kind: "Ledger", title: "Profit by campaign", note: "One set of numbers" },
-  ],
-];
-
-function Row({ cards, tone, speed, delay }: { cards: Card[]; tone: "mess" | "clean"; speed: number; delay: number }) {
-  // Four copies of the row's cards; the track slides by half its length, which is one seamless loop.
-  const loop = [...cards, ...cards, ...cards, ...cards];
-  return (
-    <div className={styles.row} data-tone={tone}>
+/**
+ * One lane: the same moving track twice, one layer clipped to the left of the gate and showing each
+ * card as the problem, one clipped to the right showing it as the fix. The two move in step, so a card
+ * turns into its fix exactly as it passes through Insurvas.
+ */
+function Lane({ pairs, speed, delay }: { pairs: Pair[]; speed: number; delay: number }) {
+  const loop = [...pairs, ...pairs, ...pairs, ...pairs];
+  const track = (side: "problem" | "fix") => (
+    <div className={styles.layer} data-side={side}>
       <div className={styles.track} style={{ animationDuration: `${speed}s`, animationDelay: `${delay}s` }}>
-        {loop.map((card, i) => {
-          const Icon = card.icon;
+        {loop.map((pair, i) => {
+          const Icon = side === "fix" ? Check : pair.icon;
+          const [title, note] = pair[side];
           return (
             <div key={i} className={styles.card}>
-              <span className={styles.kind}><Icon aria-hidden="true" />{card.kind}</span>
-              <b>{card.title}</b>
-              <small>{card.note}</small>
+              <span className={styles.kind}><Icon aria-hidden="true" />{pair.kind}</span>
+              <b>{title}</b>
+              <small>{note}</small>
             </div>
           );
         })}
       </div>
     </div>
   );
+  return <div className={styles.lane}>{track("problem")}{track("fix")}</div>;
 }
 
 /**
@@ -178,19 +172,16 @@ export function LandingStack() {
       </div>
 
       <div ref={stageRef} className={styles.stage} data-state="stacked" aria-hidden="true">
-        <div className={styles.side} data-side="in">
-          <p className={styles.sideLabel}>Coming in</p>
-          {MESS.map((cards, i) => <Row key={i} cards={cards} tone="mess" speed={40 + i * 6} delay={-i * 9} />)}
+        <div className={styles.labels}><span data-side="problem">Coming in</span><span data-side="fix">Coming out</span></div>
+        <div className={styles.lanes}>
+          {LANES.map((pairs, i) => <Lane key={i} pairs={pairs} speed={36 + i * 5} delay={-i * 7} />)}
         </div>
-        <div className={styles.core}>
+        {/* The gate: every card passes through it and comes out fixed. */}
+        <div className={styles.gate}>
           <span className={styles.beam} />
           <div data-tile="" className={styles.tile}>
             <InsurvasLogo variant="symbol" tone="dark" size="public" alt="" className={styles.mark} />
           </div>
-        </div>
-        <div className={styles.side} data-side="out">
-          <p className={styles.sideLabel}>Coming out</p>
-          {OUTCOMES.map((cards, i) => <Row key={i} cards={cards} tone="clean" speed={40 + i * 6} delay={-i * 9} />)}
         </div>
         {/* The five tools, as 3D cards spread across the stage; they stack and Insurvas takes over. */}
         <div className={styles.deck}>

@@ -226,3 +226,18 @@ the module is made of, plus its flow diagram.
 - [ ] Long titles fit on two lines at 1366 and 1536; cards stay one screen tall; phone layout holds
 **Verification:** screenshots of cards 1, 2, 4 at 1536×826 and 390×844; design tests green
 **Files:** `components/marketing/landing-bento.tsx`, `landing-features.module.css` · **Scope:** S
+
+### Task 20: Five tools: one screen, and each problem visibly becomes its fix (owner, 6 Nov)
+**Description:** The section ran past one screen and the two sides drifted on their own, so nothing
+showed a problem *becoming* a solution. Rebuild the stage as three lanes that run through an Insurvas
+gate in the middle: every card is a matched pair (a dropped transfer → claimed once, an unmatched
+statement line → matched to its policy). It travels in as the problem and leaves as its fix, switching
+at the gate, so the change happens exactly where Insurvas is.
+**Acceptance criteria:**
+- [ ] The whole section (header, stage, story line) fits 1536×826 and 1366×657 without scrolling
+- [ ] Nine problem/fix pairs, each switching at the gate; three lanes at different speeds, endless,
+      compositor-only motion, paused off screen; reduced motion shows problems left and fixes right, still
+- [ ] The five-tools stack still collapses into the Insurvas tile on first sight (Umar's A3.1)
+- [ ] Phones: the lanes and gate still read; no horizontal overflow at 360–768
+**Verification:** measured section height at both sizes; screenshots; design tests green
+**Files:** `components/marketing/landing-stack.tsx`, `landing-stack.module.css` · **Scope:** S

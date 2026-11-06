@@ -4,48 +4,57 @@
 .section {
   --band: color-mix(in srgb, var(--footer-bg) 62%, black);
   position: relative;
+  /* One screen (owner, 6 Nov): header, stage and story line, with the stage taking what is left. */
+  display: flex;
+  min-height: 640px;
+  height: 100svh;
+  max-height: 980px;
+  flex-direction: column;
   overflow: hidden;
   background: var(--band);
   color: var(--nav-ink);
 }
 .inner { width: min(100% - 64px, 1320px); margin: 0 auto; }
-.head { max-width: 860px; margin: 0 auto; padding-top: clamp(64px, 7vw, 96px); text-align: center; }
+.head { max-width: 860px; margin: 0 auto; padding-top: clamp(84px, 11vh, 112px); text-align: center; }
 .eyebrow { margin: 0 0 14px; color: var(--primary); font-size: 14px; font-weight: 600; }
-.heading { margin: 0; font: 600 clamp(28px, 3.2vw, 44px)/1.08 var(--font-brand); letter-spacing: -.028em; text-wrap: balance; }
-.lede { max-width: 60ch; margin: 16px auto 0; color: var(--nav-muted); font-size: clamp(16px, 1.3vw, 18px); line-height: 1.55; text-wrap: balance; }
+.heading { margin: 0; font: 600 clamp(26px, min(3vw, 5vh), 42px)/1.08 var(--font-brand); letter-spacing: -.028em; text-wrap: balance; }
+.lede { max-width: 66ch; margin: 12px auto 0; color: var(--nav-muted); font-size: clamp(16px, 1.3vw, 18px); line-height: 1.55; text-wrap: balance; }
 
-/* ── The stage (reworked 6 Nov): problems coming in on the left, the tools and Insurvas in the
-   middle, outcomes coming out on the right. Flat cards, so the text stays sharp. ──────────────── */
-.stage { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 300px minmax(0, 1fr); align-items: center; margin-top: clamp(28px, 3.4vw, 48px); }
-.side { display: grid; min-width: 0; gap: 14px; }
-.sideLabel { margin: 0 0 4px; padding-inline: clamp(24px, 4vw, 64px); font-size: 13px; font-weight: 600; }
-.side[data-side="in"] .sideLabel { color: var(--warning); }
-.side[data-side="out"] .sideLabel { padding-left: 28px; color: var(--primary); }
-/* Each row fades at the page edge and runs right up to the middle, so cards vanish into the tile on
-   the left and come out of it on the right. */
-.row { overflow: hidden; }
-.side[data-side="in"] .row { -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 94%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 94%, transparent); }
-.side[data-side="out"] .row { -webkit-mask-image: linear-gradient(90deg, transparent, #000 6%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 6%, #000 82%, transparent); }
-/* Four copies of a row's cards; moving it by half a track is one seamless loop. Both sides move
-   right: into the tile on the left, away from it on the right. */
-.track { display: flex; width: max-content; gap: 14px; animation: drift linear infinite; animation-play-state: paused; will-change: transform; }
+/* ── The stage: three lanes through the Insurvas gate (owner, 6 Nov) ─────────────────────────── */
+.stage { --gate: 152px; --card: 236px; position: relative; display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; justify-content: center; gap: 12px; margin: clamp(12px, 2.4vh, 28px) 0 0; }
+.labels { position: relative; display: grid; grid-template-columns: 1fr var(--gate) 1fr; width: min(100% - 64px, 1320px); margin: 0 auto; font-size: 13px; font-weight: 600; }
+.labels [data-side="problem"] { grid-column: 1; color: var(--warning); }
+.labels [data-side="fix"] { grid-column: 3; justify-self: end; color: var(--primary); }
+.lanes { display: grid; gap: clamp(10px, 1.6vh, 16px); }
+
+/* A lane is two identical moving tracks: problems clipped to the left of the gate, fixes to the right.
+   Both edges of the page fade, so cards appear from and vanish into the dark. */
+.lane { position: relative; height: 80px; -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+.layer { position: absolute; inset: 0; overflow: hidden; }
+.layer[data-side="problem"] { clip-path: inset(0 50% 0 0); }
+.layer[data-side="fix"] { clip-path: inset(0 0 0 50%); }
+/* Four copies of the lane's cards; sliding by half the track is one seamless loop, always rightwards. */
+.track { display: flex; width: max-content; height: 100%; gap: 14px; animation: drift linear infinite; animation-play-state: paused; will-change: transform; }
 .stage[data-run="true"] .track { animation-play-state: running; }
 @keyframes drift { from { transform: translate3d(-50%, 0, 0); } to { transform: translate3d(0, 0, 0); } }
 
-.card { display: grid; flex: none; width: 250px; gap: 3px; border: 1px solid rgb(234 246 242 / 10%); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 50%, black); padding: 12px 14px 13px; }
+.card { display: grid; flex: none; width: var(--card); align-content: center; gap: 3px; box-sizing: border-box; border: 1px solid rgb(234 246 242 / 10%); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 48%, black); padding: 0 16px; }
 .kind { display: flex; align-items: center; gap: 7px; color: var(--nav-muted); font-size: 12px; font-weight: 600; }
 .kind svg { width: 14px; height: 14px; flex: none; }
-.card b { font-size: 15px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; }
-.card small { color: var(--nav-muted); font-size: 12.5px; white-space: nowrap; }
-.row[data-tone="mess"] .kind svg { color: var(--warning); }
-.row[data-tone="clean"] .card { border-color: color-mix(in srgb, var(--primary) 32%, transparent); }
-.row[data-tone="clean"] .kind { color: var(--primary); }
+.card b { overflow: hidden; color: var(--nav-ink); font-size: 15px; font-weight: 600; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
+.card small { overflow: hidden; color: var(--nav-muted); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.layer[data-side="problem"] .kind svg { color: var(--warning); }
+.layer[data-side="fix"] .card { border-color: color-mix(in srgb, var(--primary) 38%, transparent); background: color-mix(in srgb, var(--primary) 9%, color-mix(in srgb, var(--footer-bg) 48%, black)); }
+.layer[data-side="fix"] .kind { color: var(--primary); }
 
-/* ── The middle: the five tools, then the Insurvas tile in front of them ───────────────────── */
-.core { position: relative; display: grid; height: 360px; place-items: center; }
-.beam { position: absolute; top: 0; bottom: 0; left: calc(50% - 1px); width: 2px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary) 60%, transparent) 30%, color-mix(in srgb, var(--primary) 60%, transparent) 70%, transparent); opacity: 0; transition: opacity 600ms ease; }
+/* ── The gate: a tall column over the seam, the beam through it, the Insurvas tile in its middle. ── */
+.gate { position: absolute; z-index: 4; top: 22px; bottom: -6px; left: 50%; display: grid; width: var(--gate); place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 28px; background: linear-gradient(180deg, color-mix(in srgb, var(--footer-bg) 70%, black), color-mix(in srgb, var(--footer-bg) 52%, black)); box-shadow: 0 0 0 10px color-mix(in srgb, var(--footer-bg) 62%, black), 0 30px 60px -20px rgb(0 0 0 / 80%); transform: translateX(-50%); }
+.beam { position: absolute; top: 12%; bottom: 12%; left: calc(50% - 1px); width: 2px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--primary) 70%, transparent) 25%, color-mix(in srgb, var(--primary) 70%, transparent) 75%, transparent); opacity: 0; transition: opacity 600ms ease; }
 .stage[data-state="resolved"] .beam { opacity: 1; }
-/* The tools sit on the whole stage, in 3D, so they can start far apart. */
+.tile { position: relative; z-index: 2; display: grid; width: 104px; height: 104px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 60%, transparent); border-radius: 28px; background: color-mix(in srgb, var(--footer-bg) 55%, black); box-shadow: 0 24px 56px -22px rgb(0 0 0 / 85%); }
+.mark { position: relative; display: block; width: 54px; height: 54px; }
+
+/* ── The five tools (Umar's A3.1): 3D cards spread across the stage that stack and are taken over. ── */
 .deck { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; perspective: 1100px; pointer-events: none; }
 .tool { position: absolute; display: grid; grid-template-columns: 22px minmax(0, 1fr); align-content: center; column-gap: 10px; width: 236px; height: 52px; border: 1px solid color-mix(in srgb, var(--primary) 34%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--footer-bg) 78%, black); padding: 0 16px; opacity: 0; transform-style: preserve-3d; box-shadow: 0 12px 26px -14px rgb(0 0 0 / 80%); }
 .tool svg { grid-row: span 2; width: 20px; height: 20px; color: var(--primary); }
@@ -53,39 +62,33 @@
 .tool small { color: var(--nav-muted); font-size: 12px; line-height: 1.2; }
 .tool:last-child { border-color: color-mix(in srgb, var(--warning) 60%, transparent); }
 .tool:last-child svg { color: var(--warning); }
-.tile { position: relative; z-index: 10; display: grid; width: 120px; height: 120px; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 60%, transparent); border-radius: 30px; background: color-mix(in srgb, var(--footer-bg) 55%, black); box-shadow: 0 24px 56px -22px rgb(0 0 0 / 85%); }
-.mark { position: relative; display: block; width: 60px; height: 60px; }
 
-/* Before the take-over, only when a script will run it: the five tools stand in a column, the tile
-   and the two flows wait. Without a script, or under reduced motion, the stage is the resolved one. */
-.side { transition: opacity 700ms ease; }
+/* Before the take-over, only when a script will run it: the tools show; the gate's tile, the lanes and
+   their labels wait. Without a script, or under reduced motion, the stage is the resolved one. */
+.lanes, .labels { transition: opacity 700ms ease; }
 @media (scripting: enabled) and (prefers-reduced-motion: no-preference) {
   .stage[data-state="stacked"] .tool { opacity: 1; }
   .stage[data-state="stacked"] .tile { opacity: 0; }
-  .stage[data-state="stacked"] .side { opacity: 0; }
+  .stage[data-state="stacked"] .lanes, .stage[data-state="stacked"] .labels { opacity: 0; }
 }
 
-.story { max-width: 46ch; margin: clamp(16px, 2vw, 28px) auto 0; padding-bottom: clamp(64px, 7vw, 96px); color: var(--nav-muted); font: 500 clamp(18px, 1.7vw, 22px)/1.4 var(--font-brand); letter-spacing: -.015em; text-align: center; text-wrap: balance; }
+.story { max-width: 46ch; margin: 0 auto; padding: clamp(16px, 3vh, 32px) 0 clamp(28px, 5vh, 56px); color: var(--nav-muted); font: 500 clamp(17px, 1.6vw, 21px)/1.4 var(--font-brand); letter-spacing: -.015em; text-align: center; text-wrap: balance; }
 .story b { color: var(--nav-ink); font-weight: 600; }
 
-@media (max-width: 1000px) {
-  .stage { grid-template-columns: minmax(0, 1fr) 240px minmax(0, 1fr); }
-}
-/* Phones and small tablets: coming in on top, the middle, coming out below; two rows each. */
+/* Phones: the section grows to its content; narrower cards and gate, two lanes. */
 @media (max-width: 760px) {
+  .section { height: auto; min-height: 0; max-height: none; }
   .inner { width: calc(100% - 32px); }
-  .stage { grid-template-columns: minmax(0, 1fr); gap: 8px; }
-  .core { order: 0; height: 250px; }
-  .side[data-side="in"] { order: -1; }
-  .side[data-side="out"] { order: 1; }
-  .sideLabel, .side[data-side="out"] .sideLabel { padding-inline: 16px; }
-  .side[data-side="in"] .row, .side[data-side="out"] .row { -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent); }
-  .row:nth-of-type(3) { display: none; }
-  .card { width: 220px; }
-  .tile { width: 96px; height: 96px; border-radius: 24px; }
-  .mark { width: 48px; height: 48px; }
+  .stage { --gate: 96px; --card: 196px; flex: none; padding: 8px 0; }
+  .labels { width: calc(100% - 32px); }
+  .lane { height: 74px; }
+  .lane:nth-child(3) { display: none; }
+  .tile { width: 72px; height: 72px; border-radius: 20px; }
+  .mark { width: 40px; height: 40px; }
+  .card { padding: 0 12px; }
+  .card b { font-size: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .track { animation: none; }
-  .side, .beam { transition: none; }
+  .lanes, .labels, .beam { transition: none; }
 }
