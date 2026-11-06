@@ -50,6 +50,17 @@
 .link:hover svg { transform: translateX(3px); }
 .link:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 
+/* The road from stop to stop: a dashed line over a soft dark casing, so it reads on the photo, its
+   dashes marching on towards the next stop. The mask draws it on (landing-roadmap.tsx). */
+.route { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.routeMask { fill: none; stroke: #fff; stroke-width: 26; stroke-linecap: round; stroke-linejoin: round; }
+.routeCase { fill: none; stroke: color-mix(in srgb, var(--band) 70%, transparent); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.routeLine { fill: none; stroke: var(--primary); stroke-width: 3; stroke-dasharray: 10 9; stroke-linecap: round; vector-effect: non-scaling-stroke; animation: route-march 1.4s linear infinite; }
+@keyframes route-march { to { stroke-dashoffset: -19; } }
+/* Waiting for the band: the stops are hidden until the line reaches each one. */
+.section[data-route] .pin { opacity: 0; transform: scale(.6); transition: opacity 360ms cubic-bezier(.23, 1, .32, 1), transform 520ms cubic-bezier(.34, 1.56, .64, 1); }
+.section[data-route] .pin[data-shown], .section[data-route="done"] .pin { opacity: 1; transform: none; }
+
 /* the pins and their labels */
 .pins { position: absolute; inset: 0; z-index: 2; }
 .pin { position: absolute; top: var(--y); left: var(--x); width: 0; height: 0; border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; }
@@ -95,6 +106,7 @@
   /* The tall photo's own shape (1200 x 2000), centred and covering the screen, so the pins stay on
      the road whatever the phone's proportions. */
   .stage { top: 50%; left: 50%; width: max(100cqw, 60cqh); aspect-ratio: 1200 / 2000; transform: translate(-50%, -50%); }
+  .route { display: none; }
   .photo { display: none; }
   /* The computer's treatment (owner, 6 Nov): faded to half and a little desaturated, under the green. */
   .photoTall { display: block; object-fit: cover; opacity: .5; filter: saturate(.75); }
@@ -127,4 +139,4 @@
   .eyebrow { display: none; }
   .heading { font-size: 26px; }
 }
-@media (prefers-reduced-motion: reduce) { .detail { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .detail { transition: none; } .routeLine { animation: none; } }
