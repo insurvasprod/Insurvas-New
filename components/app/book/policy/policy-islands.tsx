@@ -41,9 +41,10 @@ export type MoreLink = { label: string; href: string };
 export function PolicyMoreMenu({ links, policyNumber, unlink }: { links: MoreLink[]; policyNumber: string; unlink?: UnlinkTarget | null }) {
   const run = useUnlink();
   return (
+    // Round 6 (owner's standing look): ⋯, last on the title line.
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline"><MoreHorizontal aria-hidden="true" />More</Button>
+        <Button type="button" variant="outline" size="icon" aria-label="More" title="More"><MoreHorizontal aria-hidden="true" /></Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {links.map((link) => (

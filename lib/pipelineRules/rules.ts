@@ -39,8 +39,8 @@ export const EVENT_LABELS: Record<RuleEvent, { label: string; meaning: string }>
   at_risk: { label: "At risk", meaning: "The carrier's file shows the policy at risk: in force but behind on payment (the carrier's own word, or derived from the paid-to date)." },
   paid_up: { label: "Paid up", meaning: "The carrier's file shows the policy paid up: fully paid, no premiums due." },
   waiting_first_payment: { label: "Waiting for first payment", meaning: "Approved, and the first premium has not been drawn yet." },
-  first_payment_missed: { label: "First payment missed", meaning: "Missed means: issued, and the first premium is late by more than the carrier's first-payment grace (Carrier rules). Checked every morning, even when no file arrives." },
-  later_payment_missed: { label: "Later payment missed", meaning: "A paying policy whose paid-to date is behind by more than the carrier's grace after a missed payment (Carrier rules). Checked every morning, even when no file arrives." },
+  first_payment_missed: { label: "First payment missed", meaning: "Missed means: issued, and the first premium is late by more than the carrier's first-payment grace (Carrier terms). Checked every morning, even when no file arrives." },
+  later_payment_missed: { label: "Later payment missed", meaning: "A paying policy whose paid-to date is behind by more than the carrier's grace after a missed payment (Carrier terms). Checked every morning, even when no file arrives." },
   paid_again: { label: "Paid again", meaning: "The paid-to date moved forward after a missed payment." },
   lapsed: { label: "Lapsed", meaning: "The carrier's file changes the policy to lapsed." },
   not_taken: { label: "Not taken", meaning: "The carrier's file changes the policy to not taken." },
@@ -67,7 +67,7 @@ export const DEFAULT_HAND_MOVE_DAYS = 7;
 /** How far back a change (a status word, a paid-to date, a statement line) is still news to a rule. */
 export const EVENT_LOOKBACK_DAYS = 30;
 
-export const PIPELINE_RULES_PENDING_MESSAGE = "Pipeline rules need a database update (20261102100000).";
+export const PIPELINE_RULES_PENDING_MESSAGE = "Card moves need a database update (20261102100000).";
 
 /** The note a rule adds, with its fill-ins filled. A fill-in with no value says so; an unknown one is left as written. */
 export function fillNote(template: string, values: FillValues): string {

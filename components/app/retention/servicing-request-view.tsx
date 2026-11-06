@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { NoteField } from "@/components/ui/note-field";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { control, Field, textareaControl } from "@/components/ui/field";
+import { control, Field } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { CARRIER_METHOD_LABELS, CARRIER_METHODS, REQUEST_LABELS, type CarrierMethod, type RequestStatus, type RequestType } from "@/lib/retention/servicing";
 import { notify } from "@/lib/notify";
@@ -62,7 +63,7 @@ export function CancelRequestDialog({ id, name, open, onOpenChange, onDone }: { 
       confirmDisabled={why.trim().length < 3}
       fields={<>
         <Field label="Why" htmlFor={`cancel-why-${id}`} required>
-          <textarea id={`cancel-why-${id}`} className={textareaControl} maxLength={500} value={why} onChange={(e) => setWhy(e.target.value)} />
+          <NoteField id={`cancel-why-${id}`}  maxLength={500} value={why} onChange={setWhy} />
         </Field>
         {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
       </>}

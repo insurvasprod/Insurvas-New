@@ -209,6 +209,9 @@ export type WinbackRow = {
   releasedAt: string | null;
   leadId: string | null;
   blockedReason: string | null;
+  phone: string | null;
+  state: string | null;
+  age: number | null;
 };
 
 export type ClaimRow = { id: string; carrierName: string; policyNumber: string; clientName: string | null; reason: string; createdAt: string };
@@ -276,7 +279,9 @@ export async function loadWinback(viewer: Viewer, options: { release: boolean } 
     claims = claims.filter((c) => mine.has(`${c.carrier_id}|${c.policy_number}`));
   }
   const contactIds = [...new Set([...rows.map((r) => r.contact_id), ...claims.map((c) => c.contact_id)].filter(Boolean))] as string[];
-  const contacts = await inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name").eq("tenant_id", viewer.tenantId).in("id", part));
+  const contacts = await inChunks(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, primary_phone, state, dob").eq("tenant_id", viewer.tenantId).in("id", part));
+  const contactOf = new Map<string, Loose>(contacts.map((c: Loose) => [c.id, c]));
+  const ageOf = (dob: string | null) => (dob ? Math.floor((Date.now() - Date.parse(dob)) / (365.25 * 86_400_000)) : null);
   const [carriers, { listId, list }] = unwrap(await sideRead);
   const nameOf = new Map<string, string>(contacts.map((c: Loose) => [c.id, [c.first_name, c.last_name].filter(Boolean).join(" ")]));
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
@@ -292,6 +297,9 @@ export async function loadWinback(viewer: Viewer, options: { release: boolean } 
       premiumCents: r.premium_cents === null ? null : Number(r.premium_cents), faceCents: r.face_amount_cents === null ? null : Number(r.face_amount_cents),
       category: r.lapse_reason_category, source: r.reason_source, inferred: r.reason_inferred, detail: r.reason_detail, band: r.winback_band,
       eligibleFrom: r.eligible_from, releasedAt: r.released_to_nurture_at, leadId: r.released_lead_id, blockedReason: r.release_blocked_reason?.startsWith(RELEASING) ? null : r.release_blocked_reason,
+      // How to reach them (round 3, owner 2026-11-06): the phone, the state and the age a new policy prices at.
+      phone: r.contact_id ? contactOf.get(r.contact_id)?.primary_phone ?? null : null, state: r.contact_id ? contactOf.get(r.contact_id)?.state ?? null : null,
+      age: r.contact_id ? ageOf(contactOf.get(r.contact_id)?.dob ?? null) : null,
     })),
     claims: claims.map((c) => ({ id: c.id, carrierName: carrierName.get(c.carrier_id) ?? "Carrier not known", policyNumber: c.policy_number, clientName: c.contact_id ? nameOf.get(c.contact_id) || null : null, reason: c.reason, createdAt: c.created_at })),
   };

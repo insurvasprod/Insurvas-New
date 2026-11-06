@@ -98,7 +98,7 @@ const toVersion = (row: Loose): RuleVersionRow => ({
 
 async function readSettings(tenantId: string): Promise<RuleSettings> {
   const { data, error } = await db().from("pipeline_rule_settings").select("engine_on, cap_per_run, hand_move_days").eq("tenant_id", tenantId).maybeSingle();
-  if (error) fail(error, "Could not read the pipeline rule settings");
+  if (error) fail(error, "Could not read the card-move rule settings");
   return { engineOn: data?.engine_on ?? true, capPerRun: data?.cap_per_run ?? DEFAULT_CAP_PER_RUN, handMoveDays: data?.hand_move_days ?? DEFAULT_HAND_MOVE_DAYS };
 }
 
@@ -108,11 +108,11 @@ async function readRules(tenantId: string, filter?: { ids?: string[]; active?: b
   if (filter?.ids) query = query.in("id", filter.ids);
   if (filter?.active) query = query.eq("enabled", true).in("mode", ["forecast", "live"]);
   const { data, error } = await query.order("created_at").limit(500);
-  if (error) fail(error, "Could not read the pipeline rules");
+  if (error) fail(error, "Could not read the card-move rules");
   const rules = (data ?? []) as Loose[];
   if (!rules.length) return [];
   const versions = await db().from("pipeline_rule_version").select("*").eq("tenant_id", tenantId).in("rule_id", rules.map((r) => r.id)).limit(5000);
-  if (versions.error) fail(versions.error, "Could not read the pipeline rule versions");
+  if (versions.error) fail(versions.error, "Could not read the card-move rule versions");
   const current = new Map<string, Loose>();
   const want = new Map(rules.map((r) => [r.id, r.current_version]));
   for (const v of (versions.data ?? []) as Loose[]) if (want.get(v.rule_id) === v.version) current.set(v.rule_id, v);
@@ -496,7 +496,7 @@ async function readWorld(tenantId: string, wanted: Set<RuleEvent>, handMoveDays:
     db().from("carriers").select("id, name"),
     loadBoard(tenantId),
   ]);
-  for (const read of [open, issued, seen, changes, ledger]) if (read.error && !isSchemaGap(read.error)) throw new Error(`Could not read the book for the pipeline rules: ${read.error.message}`);
+  for (const read of [open, issued, seen, changes, ledger]) if (read.error && !isSchemaGap(read.error)) throw new Error(`Could not read the book for the card-move rules: ${read.error.message}`);
 
   const policies = new Map<string, PolicyFacts>();
   for (const r of [...open.data, ...issued.data, ...seen.data]) policies.set(policyKey(r.carrier_id, r.policy_number), toPolicy(r));
@@ -513,7 +513,7 @@ async function readWorld(tenantId: string, wanted: Set<RuleEvent>, handMoveDays:
   const linked = needStatus
     ? await allPages((from, to) => db().from("policy_match").select("carrier_id, policy_number, created_at").eq("tenant_id", tenantId).is("superseded_by_id", null).in("matched_to_type", ["application", "deal_flow"]).gte("created_at", `${since}T00:00:00Z`).order("created_at").order("id").range(from, to))
     : { data: [], error: null };
-  if (linked.error && !isSchemaGap(linked.error)) throw new Error(`Could not read the policy links for the pipeline rules: ${linked.error.message}`);
+  if (linked.error && !isSchemaGap(linked.error)) throw new Error(`Could not read the policy links for the card-move rules: ${linked.error.message}`);
   const linkedOn = new Map<string, string>();
   for (const l of (linked.data ?? []) as Loose[]) {
     const k = policyKey(l.carrier_id, l.policy_number);
@@ -708,11 +708,11 @@ export async function runPipelineRules(tenantId: string, trigger: RunTrigger, op
   const active = await db().from("pipeline_rule").select("id").eq("tenant_id", tenantId).eq("enabled", true).in("mode", ["forecast", "live"]).limit(1);
   if (active.error) {
     if (isSchemaGap(active.error)) return { ...NOTHING, available: false, reason: PIPELINE_RULES_PENDING_MESSAGE };
-    throw new Error(`Could not read the pipeline rules: ${active.error.message}`);
+    throw new Error(`Could not read the card-move rules: ${active.error.message}`);
   }
   if (!active.data?.length) return { ...NOTHING, reason: "No rule is on" };
   const settings = await readSettings(tenantId);
-  if (!settings.engineOn) return { ...NOTHING, reason: "Pipeline rules are switched off for this agency" };
+  if (!settings.engineOn) return { ...NOTHING, reason: "Card moves are switched off for this agency" };
   const busy = await db().from("pipeline_rule_run").select("id").eq("tenant_id", tenantId).is("finished_at", null).gte("started_at", new Date(Date.now() - 5 * 60_000).toISOString()).limit(1);
   if (busy.data?.length && trigger !== "switch_live") return { ...NOTHING, reason: "Another run is going" };
 
@@ -723,7 +723,7 @@ export async function runPipelineRules(tenantId: string, trigger: RunTrigger, op
   const author = new Map(rules.map((r) => [r.id, r.liveBy ?? r.current?.createdBy ?? r.createdBy]));
 
   const run = await db().from("pipeline_rule_run").insert({ tenant_id: tenantId, trigger }).select("id").single();
-  if (run.error) fail(run.error, "Could not start the pipeline rules run");
+  if (run.error) fail(run.error, "Could not start the card-move rules run");
   const runId = run.data.id as string;
   const totals = { moved: 0, wouldMove: 0, skipped: 0, held: 0 };
   let capped = { forecast: 0, live: 0 };
@@ -809,7 +809,7 @@ export async function runAllAgencies(trigger: RunTrigger, budgetMs = 50_000): Pr
   const { data, error } = await db().from("pipeline_rule").select("tenant_id").eq("enabled", true).in("mode", ["forecast", "live"]).limit(5000);
   if (error) {
     if (isSchemaGap(error)) return { available: false, agencies: 0, moved: 0, wouldMove: 0, left: 0 };
-    throw new Error(`Could not read the pipeline rules: ${error.message}`);
+    throw new Error(`Could not read the card-move rules: ${error.message}`);
   }
   const tenants = [...new Set(((data ?? []) as Loose[]).map((r) => r.tenant_id as string))];
   const deadline = Date.now() + budgetMs;

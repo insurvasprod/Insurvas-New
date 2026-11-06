@@ -1,6 +1,6 @@
-import Link from "next/link";
-
 import { DataInPage } from "@/components/app/data-in/data-in-page";
+import { MoreMenu } from "@/components/app/book/files/more-menu";
+import { InfoTip } from "@/components/ui/info-tip";
 import { NeedsYouList } from "@/components/app/book/needs-you/needs-you-list";
 import { ReviewOldest } from "@/components/app/book/needs-you/review-oldest";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -47,23 +47,25 @@ export default async function NeedsYouPage({ searchParams }: { searchParams: Pro
   const items = itemsOf(view);
   const oldest = view === "closed" ? null : items[0] ?? null;
 
+  // Round 6 (owner 2026-11-06): the two older views go in More, not as loose links under the table.
+  const more = [
+    ...(lapseRisk ? [{ label: "Lapse risk: who to call today", href: "/app/lapse-risk" }] : []),
+    ...(scope.keeper ? [{ label: "Client links and Reopen", href: "/app/policy-matching?tab=links" }, { label: "Queue owners and closed items", href: "/app/exceptions" }] : []),
+  ];
   return (
     <DataInPage
       step="needs-you"
+      // Why you came and what to do (round 6): behind the title's (i), never a notice on the page.
+      chip={<InfoTip label="About Needs you" side="right">
+        Every decision the carrier files leave for a person: a client to pick, a sale no carrier has, money that doesn&apos;t match, an agent code nobody owns. Each row&apos;s button says what to do; it opens the Review page at that item, and the row leaves the list when it is decided.
+        <br /><br /><b>Mine</b> is what is assigned to you. <b>Agency</b> is everyone&apos;s. <b>Waiting on Insurvas</b> is a status word only Insurvas can map; nothing to do. <b>Closed</b> is the last 30 days. The oldest first; amber after 30 days, red after 90.
+      </InfoTip>}
       lead={<ViewTabs label="Needs you views" value={view} tabs={views.map((v) => ({ key: v, label: VIEW_LABELS[v], count: v === "closed" ? null : itemsOf(v).length, href: `/app/needs-you?view=${v}${fileQuery}` }))} />}
-      actions={oldest ? <ReviewOldest fileId={file?.fileId ?? null} view={view} /> : undefined}
+      actions={<>{oldest ? <ReviewOldest fileId={file?.fileId ?? null} view={view} /> : null}<MoreMenu items={more} /></>}
     >
       {/* Round 3: the sources that could not be read, as one line. */}
       {list.notes.length > 0 && <Callout tone="warning" title={list.notes.join(" · ")} />}
       <NeedsYouList items={items} view={view} initialGroup={(NEEDS_YOU_GROUPS as readonly string[]).includes(askedGroup ?? "") ? (askedGroup as NeedsYouGroup) : "all"} readOnly={guard.entitlement.access === "read_only"} fromFile={file ? { name: file.name, clearHref: `/app/needs-you?view=${view}` } : null} initialQuery={searchParam(q) ?? ""} />
-      {/* Round 3: no explainer line, just the two older views by name. */}
-      {(scope.keeper || lapseRisk) && (
-        <p className="m-0 flex flex-wrap gap-x-4 text-sm text-muted-foreground">
-          {lapseRisk && <Link href="/app/lapse-risk" className="font-medium text-[var(--accent-ink)] hover:underline">Lapse risk: who to call today</Link>}
-          {scope.keeper && <Link href="/app/policy-matching?tab=links" className="font-medium text-[var(--accent-ink)] hover:underline">Client links and Reopen</Link>}
-          {scope.keeper && <Link href="/app/exceptions" className="font-medium text-[var(--accent-ink)] hover:underline">Queue owners and closed items</Link>}
-        </p>
-      )}
     </DataInPage>
   );
 }

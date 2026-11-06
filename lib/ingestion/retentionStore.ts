@@ -7,7 +7,7 @@ import { scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 import { flaggedFiles } from "./carrierAccountsStore";
 import { unearnedAdvance } from "./commissionLedger";
 import { advanceRuleResolver } from "./commissionLedgerStore";
-import { boardOrder, daysLeftFor, groupOf, reasonFor, saveRates, type Group, type Outcome, type Reason } from "./retentionBoard";
+import { boardOrder, signedDaysLeftFor, groupOf, reasonFor, saveRates, type Group, type Outcome, type Reason } from "./retentionBoard";
 
 /**
  * LA-4.16 (Notion sprint) · the retention board, server side: the call list built from policy_current
@@ -50,7 +50,9 @@ const chunks = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(
 
 export type BoardEntry = {
   key: string; carrierId: string; carrierName: string; policyNumber: string; clientName: string | null; phone: string | null;
-  reason: Reason; daysLeft: number | null; daysPastDue: number | null; group: Group; amountDueCents: number | null; premiumMode: string | null;
+  reason: Reason; daysLeft: number | null; daysPastDue: number | null; group: Group;
+  /** The signed countdown (negative once passed) and the lapse date: the Retention ladder's deadline and evidence. */
+  daysLeftSigned: number | null; lapsedOn: string | null; amountDueCents: number | null; premiumMode: string | null;
   atRiskCents: number | null; paidTo: string | null; status: string | null; snapshotDate: string | null; agentName: string | null;
   lastAction: { outcome: Outcome; at: string; by: string | null; result: string | null } | null;
 };
@@ -117,7 +119,7 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
     else lastChange.set(`${c.carrier_id}|${c.policy_number}`, c);
   }
 
-  type Candidate = { p: Loose; reason: Reason; daysLeft: number | null };
+  type Candidate = { p: Loose; reason: Reason; daysLeft: number | null; daysLeftSigned: number | null };
   const candidates: Candidate[] = [];
   for (const p of policies) {
     const key = `${p.carrier_id}|${p.policy_number}`;
@@ -135,7 +137,10 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
     if (first === "conservation") input.noticeWindowDays = conservationWindow.get(p.carrier_id) ?? null;
     if (first === "cancellation_request") input.noticeWindowDays = cancellationWindow.get(p.carrier_id) ?? null;
     const reason = reasonFor(input, today);
-    if (reason) candidates.push({ p, reason, daysLeft: daysLeftFor(input, reason, today) });
+    if (reason) {
+      const daysLeftSigned = signedDaysLeftFor(input, reason, today);
+      candidates.push({ p, reason, daysLeftSigned, daysLeft: daysLeftSigned === null ? null : Math.max(0, daysLeftSigned) });
+    }
   }
 
   const contactIds = [...new Set(candidates.map((c) => c.p.contact_id).filter(Boolean))] as string[];
@@ -153,7 +158,7 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
   for (const a of actions) { const key = `${a.carrier_id}|${a.policy_number}`; if (!lastAction.has(key)) lastAction.set(key, a); }
   const carrierName = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
 
-  const rows: BoardEntry[] = candidates.map(({ p, reason, daysLeft }) => {
+  const rows: BoardEntry[] = candidates.map(({ p, reason, daysLeft, daysLeftSigned }) => {
     const key = `${p.carrier_id}|${p.policy_number}`;
     const contact = p.contact_id ? contactOf.get(p.contact_id) : null;
     const atRisk = atRiskOf.get(key) ?? null;
@@ -161,7 +166,7 @@ export async function loadBoard(viewer: Viewer, only?: { carrierId: string; poli
     return {
       key, carrierId: p.carrier_id, carrierName: carrierName.get(p.carrier_id) ?? "Carrier not known", policyNumber: p.policy_number,
       clientName: contact ? [contact.first_name, contact.last_name].filter(Boolean).join(" ") || null : null, phone: contact?.primary_phone ?? null,
-      reason, daysLeft, daysPastDue: p.days_past_due, group: groupOf(reason, daysLeft), amountDueCents: p.premium_cents === null ? null : Number(p.premium_cents), premiumMode: p.premium_mode,
+      reason, daysLeft, daysLeftSigned, lapsedOn: p.lapsed_on ?? null, daysPastDue: p.days_past_due, group: groupOf(reason, daysLeft), amountDueCents: p.premium_cents === null ? null : Number(p.premium_cents), premiumMode: p.premium_mode,
       atRiskCents: atRisk, paidTo: p.paid_to_date, status: p.status_normalized, snapshotDate: p.last_snapshot_date, agentName: p.agent_user_id ? userName.get(p.agent_user_id) ?? null : null,
       lastAction: last ? { outcome: last.outcome, at: last.acted_at, by: last.acted_by ? userName.get(last.acted_by) ?? null : null, result: last.result } : null,
     };

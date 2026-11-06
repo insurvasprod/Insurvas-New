@@ -194,3 +194,178 @@ SqA, SvA, RiA, PbA, WbA, ScA and ReA are built. Nothing is committed.
 | ReA | Reports › Retention results | The first two tiles answer "Do the bands come true?" and "Does working beat the holdout?". |
 
 The old `components/app/servicing-request-dialog.tsx` is replaced by `components/app/retention/servicing-request-form.tsx`. Every page was walked on :3000 at 1440×900, read-only: no write button was pressed on the demo data. The writes go through the same APIs as before and are covered by tests (`savePages`, `servicingPages`, `reinstatementPages`).
+
+## The ladder pages, live (2026-11-05, after the migration was pasted)
+
+The owner asked: "is this how it's supposed to work and look?" Checked against `docs/retention/SPEC.md`, on the demo agency (1,029 live cases), at 1440 wide. The model works as specified: the files open the cases, each policy has one, and every case has an owner. What was wrong was how the pages say it.
+
+**Cases list (`/app/retention`)**
+1. **Deadlines that had passed read "Today".** The placement clamped a negative countdown to today, so 333 overdue cases showed "Today" and their date moved every day. *Fixed:* the real date is kept; the list shows "12 days over · Oct 24" (red), the chip "12 days over". Test added. **Not enough (second walk, below, A1):** the countdown is already clamped upstream in `daysLeftFor`, so 298 cases still read "Today".
+2. **The tiles said "0 due this week" on 659 cases.** 597 cases have no carrier window at all, and the tile hid that. *Fixed:* each step tile reads "N past due · N this week · N no window".
+3. **The reason repeated the step.** "Lapsed, can reinstate" over "Lapsed, inside the reinstatement window · …" pushed the file's fact out of view. *Fixed:* the line under the step is the fact itself ("Carrier says 'Cancelled'").
+4. **The policy number was cut off** ("American Amicable 0119…"), and it is what the carrier asks for. *Fixed:* wider column, full text on hover.
+5. **Missing: nowhere to see what left Retention.** The Saved tile led nowhere, and saves, losses and closes without a save disappeared. *Added:* a **Closed** tab (last 90 days: how it ended, why, when). Saved this month links to it.
+6. **Missing: no way to open the one case a person opens.** The spec's "wants a new payment date" had an API but no page. *Added:* **New case** on the title line opens `/app/retention/new`, a form page (find the policy, say what they asked, Open the case). The policy search is now one shared `PolicyPicker`, also used by Servicing › New request.
+
+**A case (`/app/retention/[id]`)**
+7. **The facts line wrapped to three lines beside the tabs.** *Fixed:* the header is who and which policy (phone, carrier and policy, premium, owner, status). The why moved to the strip, and the policy's status is on the Policy tab.
+8. **The most important line was the smallest.** "If it is still unpaid on Nov 14, it becomes a pending lapse" was grey 12px text on the right. *Fixed:* the strip's second line is the reason (bold) plus what happens next, in the step's colour, with the file path under it. The step numbers take the step's own colour (amber for a payment problem, not red for every step).
+9. **Two primaries for one action.** "Take the payment" in the header only linked to the tab you were on, next to "Payment taken". *Fixed:* on What to do the header keeps only More.
+10. *(Fixed in the walk)* "First draft failed" on a policy that pays by mailed bill → **First payment missed**. "If it stays unpaid soon" when no date exists. Paperwork reasons each have their own steps (a mailed bill: offer bank draft).
+
+**Settings › Retention › Ladder rules**
+11. **It opened on a bare table**, and the column "Counts" was unclear. *Fixed:* a heading and one line on what the page does, plus "All Retention settings". The column is now "On".
+12. **Missing: the status-word flags per carrier (SPEC §6).** `carrier_status_map` is Insurvas's, one per carrier, so an agency can't edit it. *Added, read-only:* "Carrier words that count", which today says none are flagged yet. **Not built:** an editor for Insurvas staff on the admin status-map page.
+
+**Reports › Retention scorecard**
+13. The By person / By step tabs were already there. They looked missing only because the browser tab had run out of connections. In a fresh tab they show.
+14. **Retention results was still on the Reports rail**, though SPEC §7 hides it and the radar no longer runs, so it only grows stale. *Fixed:* off the rail (`offRail`); its address still answers.
+
+**Servicing and Reinstatement:** no change needed on the pages. One data finding: Reinstatement lists **Maxine Sizemore** (American Amicable 0119990001) as lapsed, yet her latest file says active and paid to Dec 2, so Cases correctly leaves her off. Her reinstatement case was seeded on Nov 2 with a lapse date of Nov 3, after her last file, so no file can close it. This is demo data, not a code fault.
+
+## Can an agent work it? (second walk, 2026-11-05)
+
+The owner asked: "how easy is it for the user to know exactly what to do there?" This pass is read-only: the demo agency at 1440×900, as demo.agent, with no write button pressed. It covers:
+- every Cases tab: All, Payment problem, Pending lapse, Lapsed, Paperwork, Lost and Closed;
+- a first-payment case through What to do (and its New draft date form, cancelled), Calls, Policy and History;
+- a lapsed case through Start reinstatement into the Reinstatement page;
+- the Reinstatement and Servicing lists.
+
+**Verdict:** the ladder is right, but the agent is given **three places to work the same client** (the case, the Reinstatement case and the Servicing paper-bill list). The pages also still show **carrier codes and contradictions** where a plain sentence should be.
+
+### A. Wrong or unsafe: fix first
+- **A1. 298 of 344 pending lapses still say "Today".** `daysLeftFor` (`lib/ingestion/retentionBoard.ts:103–106`) clamps every countdown with `Math.max(0, …)` before the ladder sees it, so the fix to finding 1 never reached a stored case. Every overdue case reads "Today", and the "333 this week" tile is false. *Fix:* the ladder gets the signed number (the Lapse-risk board keeps its clamp), and the next sync rewrites the dates.
+- **A2. "Close · to win-back" on a Lost case closes it in one click.** There is no confirm and no reason, and the close is final (`case-view.tsx:56`). *Fix:* a ConfirmDialog with the reason, like Close without a save.
+- **A3. The two lists disagree.** Cases › Lapsed shows 5, and Reinstatement shows 6 (Maxine, see above). An agent working one list misses the other.
+- **A4. The page contradicts itself.** Rory Ridealong's case shows all of the following at once:
+  - "Terminated";
+  - "Paid to Jan 1, 2027";
+  - "Days past due 0";
+  - "Charged back $276";
+  - "Your advance revives: $0" (on the Reinstatement page).
+
+  The future dates are demo data. But a lapsed policy should never show "0 days past due", and "advance revives" should read the chargeback line.
+
+**A1–A4 fixed (2026-11-06; owner: "Fix A1–A4 first"; uncommitted):**
+- **A1.** `signedDaysLeftFor` is the unclamped countdown. The board's `daysLeftFor` clamps it, and the ladder sync uses the signed one. Live after the next sync: the Pending lapse tile reads "295 past due · 38 this week · 11 no window", and rows read "N days over · <date>". A case with exactly 0 days left still reads Today. That is correct.
+- **A2.** A Lost case's "Close to win-back" opens a confirm: the client and policy, "why it was lost" (prefilled from the reason), and a note (required for Other). It was opened and cancelled live; nothing was closed.
+- **A3.** Reinstatement leaves off an open case whose latest file shows the policy in force and paid past the lapse. The Open tile says "1 left off: the latest file says in force". Live: 5 open, matching Cases › Lapsed.
+- **A4.** A lapsed or lost case shows "Lapsed on" (filled at its next refresh), never "Days past due 0". Reinstatement reads the newest chargeback: "$276 charged back Dec 4" on the row, and "Charged back $276 on Dec 4: ask the carrier if reinstating returns it" on the case, instead of "advance revives: $0".
+- **Tests:** `cases.test.mjs` (A1–A4) and `retentionBoard.test.mjs` (signed countdown). Full `npm test` 3,925/3,925; tsc and eslint clean.
+
+### B. Cases list
+- **B1. Only 5 rows fit on All (206 pages).** The five step tiles repeat the counts already on the tabs and take a third of the height. *Fix:* fold the tiles into the tabs (count plus a red "N overdue" badge) and keep one slim line for "Saved this month". The table then shows 10 to 12 rows.
+- **B2. Ten identical bright buttons per page.** The row button is a filled primary on every row, so nothing stands out, even though the name already opens the case. *Fix:* use an outline row button, with the filled one only on overdue rows.
+- **B3. The button words don't match where they lead.**
+  - "Call: First Payment".
+  - "Close · To Win-Back".
+  - "Start Reinstatement" lands on a page whose buttons are "Open the reinstatement" and "Sent to the carrier".
+
+  The buttons are also Title Cased by the style. *Fix:* use one verb per step that the case page repeats: "Call about the first payment", "Take the payment", "Reinstate", "Switch to bank draft", "Close to win-back".
+- **B4. "No phone" rows still say "Call".** Many American Amicable rows have no number. *Fix:* the row reads "No phone · find a number", which opens the contact.
+- **B5. The why line shows carrier codes, not meaning.** For example: "First payment missed · carrier says 'Active (Inforce)'" on a pending lapse, "IssNotPaid", or "On the statement of Dec 4, 2026" (a chargeback). *Fix:* use one sentence per fact, such as "Unpaid 44 days. The carrier still lists it active", "Issued, never paid", "Charged back $276 on Dec 4". The raw word moves to the case's "From the files".
+- **B6. No "my cases".** A producer sees all 1,029, mostly owned by others, and there is no owner column. *Fix:* producers land on Mine; owners and managers get an Owner column and an owner filter.
+- **B7. No premium on the row.** With 659 payment problems, $/mo is how an agent picks first. *Fix:* add $/mo under the deadline.
+- **B8. The Lost tab's deadline column says "No carrier window"** and the reason is cut off. *Fix:* the column shows "Win-back from <date>" and the reason gets its full width.
+
+### C. A case: What to do, Calls, Policy, History
+- **C1. "owner Ruth Alvarez · Not started" in the header.** "Not started" reads as the policy. *Fix:* "Not worked yet" or "Last call Nov 3", whichever applies.
+- **C2. No way to reach the client from the case.** The phone isn't a link and there's no email or contact record. On a no-phone case, step 1 is "Call the client today". *Fix:* a contact line (tap to call, email, open the client), and a different step 1 when there's no phone.
+- **C3. "Payment taken" saves at once with nothing captured.** There's no amount, no how, no date and no confirm. *Fix:* three inline fields (amount, how, date) and a one-line confirm, so the next person knows what was promised before the file catches up.
+- **C4. The servicing form in What to do has four problems:**
+  - "I have sent it to the carrier" is ticked by default, so it's recorded as sent before anything was sent;
+  - "No instructions for American Amicable yet" is a dead end;
+  - "set it in Draft dates" isn't a link;
+  - the title "Payment date" doesn't match the button "New draft date", and the note typed on What to do is lost when the form opens.
+
+  *Fix:* unticked by default, a carrier-phone or portal fallback line, a real link, matching words, and carry the note over.
+- **C5. "From the files" shows raw words** ("IssNotPaid", "approved unpaid" on Policy). *Fix:* the plain meaning first and the carrier's word in grey, plus "Next file expected about <date>", so the agent knows when the case can close.
+- **C6. Calls tab.** The header primary "Call: First Payment" only links back to What to do, and the phone number isn't next to the form. *Fix:* the number with a tap-to-call link above "Log this call", and no header primary on this tab.
+- **C7. Policy tab.** It's missing what a servicing call needs: draft day, bank or card last 4, writing agent, and the client's address and email. *Fix:* add them where the file has them.
+- **C8. History tab.** "Who: A carrier file" doesn't name or link the file, and the What column sits far right on a wide empty table. *Fix:* "Policy file of Oct 1 (American Amicable)" as a link, with When, What and Who left-aligned.
+
+### D. Start reinstatement: two trackers for one job
+- **D1. A lapsed policy has two progress trackers:**
+  - the Retention case (step 3, "Sent to the carrier");
+  - the Reinstatement case, with its own steps (Not called yet → Called them → Client agreed → Sent → Back in force) and its own "Called them" button.
+
+  A call logged on one doesn't move the other: both say "Not called yet". The agent can't tell which to update.
+- **D2. Three verbs:**
+  - the list says Start reinstatement;
+  - the case says Open the reinstatement;
+  - the Reinstatement page says Called them.
+- **D3. Leaving the case loses the way back.** The breadcrumb becomes Retention › Reinstatement, with no link back to the case.
+- **D4. The page opens on the wrong tab.** Its first tab is the reinstate-vs-sell-new comparison, mostly "ask the carrier". What the agent needs (back premium, months owed, health questions, signed form) is on the second tab, and it's empty.
+- *Fix:* step 3's What to do **is** the reinstatement:
+  - one progress strip: Called → Client agreed → Sent → Back in force (from the file);
+  - the carrier-needs fields in place;
+  - the comparison as a small aside;
+  - `/app/reinstatement/[id]` redirects to the case.
+
+### E. Servicing and Reinstatement lists
+- **E1. Servicing's "Paper bill → bank" list is the same clients as Cases › Paperwork (mailed bill, 19).** That's two places to work one client. *Fix:* fold it into Paperwork.
+- **E2. Its filters wrap to a second line.** The chips plus "Every change" and Refresh plus New request don't fit on one line. "Can't be proven" is jargon. *Fix:* use one Filters button (as on Cases), and "The file doesn't show this change".
+- **E3. A request made from a case doesn't point back to it.** *Fix:* "From case: <client>" on the request.
+- **E4. The Reinstatement list repeats Cases › Lapsed.** Win-back sits there as a tab, though it comes after Lost.
+
+### The setup: three menu items, two of them duplicates
+Today the rail has Cases, Servicing and Reinstatement. Reinstatement is a second copy of step 3, and Servicing holds a second copy of a Paperwork reason. Recommended:
+
+| Rail item | What it is | Comes from |
+|---|---|---|
+| **Cases** (default: Mine) | The only work list: every step as a tab, with each case's playbook in place, reinstatement included | Cases + the Reinstatement case page |
+| **Waiting on the carrier** | Everything sent that the next file must prove (servicing requests, sent reinstatements) and when that file is due. You chase here; you don't work here | Servicing |
+| **Win-back** | Lost clients once the cooling-off has passed | the Reinstatement › Win-back tab |
+
+The scorecard stays in Reports. The Reinstatement list and the Paper-bill list go away: their addresses redirect, and their tables are kept.
+
+### B–E built (2026-11-06; owner: "Yes, do B–E"; uncommitted)
+Walked live at 1440×900 on the demo agency. Nothing was saved: the payment fields, the payment-date form and the confirms were opened, then cancelled.
+
+| Finding | Built |
+|---|---|
+| B1 | Step tiles removed. A tab's count turns red when any case in that step is overdue. One line in the table's foot gives "N past due · N due this week · N with no carrier window · Saved this month: N ($/mo kept)", and the "Saved this month" part links to Closed. 10 rows show where 5 did. |
+| B2 | Rows use an outline button. A filled button marks only a case past due or within 3 days. |
+| B3 | One verb per step: Get the first payment, Take the payment, Fix the draft, Fix the bank, Reinstate, Close to win-back, Keep the policy, Switch to bank draft. Title Case is the Button's own (the design system's). |
+| B4 | "No phone on file" in amber. Numbers are plain, copyable text. A `tel:` link is refused by `contract.test` (a call goes through the dialer's gates). |
+| B5 | `STATUS_MEANING`: "issued, never paid", "the carrier still lists it active", "Charged back $276 on Dec 4", "N days unpaid". The carrier's word is on the case only. |
+| B6 | Filters › Owner › "My cases (N)" (`?owner=me`). The owner gets an Owner column ("You" for their own). |
+| B7 | A $/mo column (`CaseRow.monthlyCents`). |
+| B8 | The Lost tab's column is "Lost since <date> · win-back after the cooling-off". The why line keeps at least 300px. Lost cases stay out of the urgency line. |
+| C1 | The header reads "not worked yet", "last call <date>" or "with the carrier". |
+| C2 | The phone leads the header. With no phone, step 1 says where to find one (the application, or the carrier). |
+| C3 | Payment taken opens amount, how and when in place, then "Record the payment" (amount_cents, plus how and when in the note). The date is the agent's local day. |
+| C4 | The servicing form: "I have sent it" is unticked by default. A carrier with no guide gets a portal or service-line fallback. Draft dates is a link. The case note carries in (`initialNote`). The buttons are titled like the form ("New payment date", "Switch to bank payment"). |
+| C5 | From the files: the meaning first, the carrier's word in grey, then "Latest file". |
+| C6 | Calls: the number, or the no-phone line, sits beside "Log this call". The header primary is hidden there. |
+| C7 | Policy: the meaning, the carrier's word, Written by, Client's state and Draft day (`policy_risk_signals`). |
+| C8 | History: When, What, Who. A file reads "<Carrier> file of <date>" and links to the policy's file history. |
+| D1–D4 | Step 3's What to do is the reinstatement: its own next step (Called them › Client agreed › Sent) and declines, "What the carrier needs" in place, and the comparison beside it. A reached call on the case moves the reinstatement from "Not called yet" to "Called them". `/app/reinstatement/[id]` redirects an open case to its Retention case. |
+| E1 | `/app/servicing?view=campaign` opens Cases › Paperwork › "Paying by mailed bill". `paper-bill-campaign.tsx` is deleted; its call pages still answer. |
+| E2 | Servicing's kind-of-change filter sits behind one Filters button, and New request moved to the title line, so the toolbar fits one line. "Can't be proven" is now "The file can't show it". |
+| E3 | A request opened from a case says "From a Retention case", as a link, on the list and on its page (`ServicingRow.caseId`). |
+| E4 | The rail is Cases · Waiting on the carrier · Win-back. `/app/reinstatement` opens Win-back. The old list answers at `?view=cases` / `?cases=closed`. A retention rep (no win-back calls, LA-5.8) lands on Cases › Lapsed and does not see Win-back on the rail. The sidebar item keeps the role, as LA-5.8's test requires. |
+
+**Checks:** tsc clean; eslint clean on the changed files; full `npm test` 3,926/3,926; graphify updated.
+
+### Round 3 built (2026-11-06; owner picked header A + table B, rejected every in-table edit surface; uncommitted)
+Mockups: the "Retention round 2" canvas (https://claude.ai/artifact/BHddaAR4Axnw38RhRi6Zgv).
+- **The risk cards** (`components/app/retention/risk-cards.tsx`) sit on top of all three lists, each card heavier than the last:
+  - **Cases:** Fixable › Act now › Last chance › Gone. Each card has its count, money at stake and a past-due / this-week / later / no-window bar. Paperwork and Closed sit beside them. A card is the step.
+  - **Waiting on the carrier:** Waiting › Send it › Check it › Failed, with Proven and Cancelled beside them.
+  - **Win-back:** Resting › Soon › Call now › Needs you, with Never call and Possible claims beside them.
+  - Tags are sentence case on a flat tint (§17 forbids eyebrows and gradients).
+- **Tables grouped by urgency** inside the chosen card:
+  - **Cases:** past due, due this week, later, no carrier window. Columns: client and policy (with product and face), risk point and why, $/mo with what is due and the advance or chargeback at stake, deadline, last touch, next.
+  - **Waiting on the carrier:** check it, send it, waiting. Columns: change asked, sent and show-by, what the latest file shows, days waiting.
+  - **Win-back:** stuck, on the list, soon, cooling off. Columns: phone, age and state; what they had; why it ended; when to call; chance.
+- **Nothing opens inside a table:**
+  - Filters is a `FilterPopover`, and applied filters are `ActiveFilters inline` chips on the toolbar line (UI-CONSISTENCY §6a updated).
+  - A read-only `HoverPeek` sits on the Cases name.
+  - Each Win-back client has a page (`/app/reinstatement/winback/[id]`): why, what to say, what they had, and Open the lead. Calls stay in the dialer's Win-back list.
+- **Title line:** All / Mine.
+- **Checks:** walked live at 1440 with no sideways scroll on any of the three pages. The pop-over and the peek were checked; nothing was saved. `npm test` 3,928/3,928; tsc and eslint clean.
+
+**Left as they are:**
+- On step 3 the reinstatement's own More (declines) sits beside the header's More.
+- The facts line wraps to two lines on long owner names.

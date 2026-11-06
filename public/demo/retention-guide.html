@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>body{margin:0}</style>
+<title>Retention Demo Script</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+<style>
+/* Layout: one reading column; a sticky step list on wide screens, stacked on a phone. Insurvas green, Montserrat UI, a serif for the lines you say out loud. */
+:root {
+  --bg: #f4f7f5; --surface: #ffffff; --fg: #10231d; --muted: #4f665e; --line: #d5e2dc;
+  --accent: #077a5c; --accent-soft: #e2f3ec; --say-bg: #fbf8ef; --say-line: #e2d6b3;
+  --fixable: #9a5b00; --actnow: #b8460f; --last: #b42318; --gone: #5f6b67;
+  --ui: "Montserrat", system-ui, sans-serif; --say: "Source Serif 4", Georgia, serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #07130f; --surface: #0d1f19; --fg: #e8f3ee; --muted: #9fb8ae; --line: #1f3a31;
+  --accent: #3fdcaa; --accent-soft: #0f3226; --say-bg: #17170f; --say-line: #3b3620;
+  --fixable: #ffc477; --actnow: #ff9d6b; --last: #ff8d8d; --gone: #a3b0ab; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #07130f; --surface: #0d1f19; --fg: #e8f3ee; --muted: #9fb8ae; --line: #1f3a31;
+  --accent: #3fdcaa; --accent-soft: #0f3226; --say-bg: #17170f; --say-line: #3b3620;
+  --fixable: #ffc477; --actnow: #ff9d6b; --last: #ff8d8d; --gone: #a3b0ab; color-scheme: dark }
+body { background: var(--bg); color: var(--fg); font: 15px/1.6 var(--ui); }
+.wrap { max-width: 1100px; margin: 0 auto; padding-block: 28px 64px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 32px; }
+@media (max-width: 820px) { .wrap { grid-template-columns: minmax(0, 1fr); } nav.toc { position: static !important; } }
+nav.toc { position: sticky; top: max(20px, env(safe-area-inset-top, 0px)); align-self: start; display: grid; gap: 4px; font-size: 13px; }
+nav.toc b { font-size: 12px; color: var(--muted); font-weight: 700; margin-bottom: 4px; }
+nav.toc a { color: var(--fg); text-decoration: none; padding: 6px 10px; border-radius: 8px; display: flex; gap: 8px; }
+nav.toc a:hover, nav.toc a:focus-visible { background: var(--accent-soft); outline: none; }
+nav.toc a span { color: var(--muted); font-variant-numeric: tabular-nums; width: 18px; }
+main { min-width: 0; display: grid; gap: 22px; }
+header h1 { font-size: 30px; line-height: 1.2; margin: 0 0 8px; font-weight: 800; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 66ch; }
+.ladder { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.rung { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1px solid currentColor; }
+section.step { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; display: grid; gap: 12px; scroll-margin-top: 16px; }
+.step-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; }
+.num { font-weight: 800; color: var(--accent); font-variant-numeric: tabular-nums; }
+.step h2 { font-size: 19px; margin: 0; font-weight: 700; flex: 1 1 260px; }
+a.open { font-size: 13px; font-weight: 700; color: var(--accent); text-decoration: none; border: 1px solid var(--accent); padding: 5px 12px; border-radius: 8px; white-space: nowrap; }
+a.open:hover, a.open:focus-visible { background: var(--accent-soft); outline: none; }
+h3 { font-size: 12px; font-weight: 700; color: var(--muted); margin: 4px 0 0; }
+ul, ol { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+.say { font-family: var(--say); font-size: 17px; line-height: 1.55; background: var(--say-bg); border: 1px solid var(--say-line); border-radius: 10px; padding: 12px 16px; margin: 0; max-width: 70ch; }
+.say + .say { margin-top: 6px; }
+.note { font-size: 13px; color: var(--muted); }
+code { font-size: 12px; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.qa dt { font-weight: 700; margin-top: 8px; }
+.qa dd { margin: 2px 0 0; color: var(--fg); }
+.pager { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; }
+.pager a { color: var(--muted); text-decoration: none; }
+.pager a:hover { color: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Demo steps">
+    <b>Demo order</b>
+    <a href="#start"><span>0</span>Before you start</a>
+    <a href="#cases"><span>1</span>The Cases page</a>
+    <a href="#case"><span>2</span>One case, end to end</a>
+    <a href="#saved"><span>3</span>How a case gets saved</a>
+    <a href="#reinstate"><span>4</span>A lapsed policy</a>
+    <a href="#lost"><span>5</span>Lost, then win-back</a>
+    <a href="#waiting"><span>6</span>Waiting on the carrier</a>
+    <a href="#winback"><span>7</span>Win-back</a>
+    <a href="#results"><span>8</span>Results</a>
+    <a href="#questions"><span>?</span>Likely questions</a>
+  </nav>
+
+  <main>
+    <header>
+      <h1>Retention: the demo, page by page</h1>
+      <p>Keep this tab open beside the app. Each step says which page to open, what to point at, and what to say. The app runs locally for now (<code>localhost:3000</code>), signed in as the demo agency.</p>
+      <div class="ladder" aria-label="The risk ladder">
+        <span class="rung" style="color: var(--fixable)">1 · Fixable: payment problem</span>
+        <span class="rung" style="color: var(--actnow)">2 · Act now: pending lapse</span>
+        <span class="rung" style="color: var(--last)">3 · Last chance: lapsed, can reinstate</span>
+        <span class="rung" style="color: var(--gone)">4 · Gone: lost</span>
+      </div>
+    </header>
+
+    <section class="step" id="start">
+      <div class="step-head"><span class="num">0</span><h2>Before you start: the one idea</h2></div>
+      <p class="say">"Retention is keeping the policies you already sold paying. Insurvas doesn't guess who might lapse. It reads the policy and commission files the carriers send you, and every policy in trouble becomes a case, at the point of risk it has reached, with what to do about it."</p>
+      <ul>
+        <li>Three pages, left menu: <b>Cases</b> (where you work), <b>Waiting on the carrier</b> (what you sent, waiting for proof), <b>Win-back</b> (clients lost for good, to win back later).</li>
+        <li>The rule to repeat: <b>the carrier's file decides</b>. Nobody marks a case saved by hand.</li>
+      </ul>
+    </section>
+
+    <section class="step" id="cases">
+      <div class="step-head"><span class="num">1</span><h2>The Cases page: the risk ladder</h2><a class="open" href="http://localhost:3000/app/retention" target="_blank" rel="noopener">Open Cases</a></div>
+      <h3>Point at the four cards on top, left to right</h3>
+      <ul>
+        <li><b>Fixable</b>, payment problem: a payment failed or bounced. Grace is still running.</li>
+        <li><b>Act now</b>, pending lapse: grace is running out, or the carrier sent a lapse notice.</li>
+        <li><b>Last chance</b>, lapsed: the policy stopped, but the carrier still takes it back for a while.</li>
+        <li><b>Gone</b>, lost: past the window, or the commission was charged back.</li>
+        <li>Each card: how many, the money a month at stake, and the bar (red past due, amber this week, green later, grey no carrier window).</li>
+        <li>Beside the ladder: <b>Paperwork</b> (forms, notices, mailed bills, not a payment yet) and <b>Closed</b> (what left Retention in 90 days).</li>
+      </ul>
+      <p class="say">"The cards get heavier as the risk climbs. The agent always knows which pile is most urgent before reading a single row."</p>
+      <h3>Then the table</h3>
+      <ul>
+        <li>Click <b>Act now</b>. The rows come grouped: <b>Past due</b> first, then due this week, later, and no carrier window.</li>
+        <li>Each row: client and policy, where it is and why in plain words, $ a month and what is due or at stake, the deadline, the last call, and the next step as the button.</li>
+        <li>Rest the mouse on a name: a small read-only summary. Click the name to open the case.</li>
+        <li><b>Filters</b> opens over the table (owner, carrier, reason, deadline, last touch). <b>Mine</b> on the title line shows only my cases.</li>
+      </ul>
+      <p class="say">"Only the urgent rows get a bright button, so the eye goes to what can still be saved this week."</p>
+    </section>
+
+    <section class="step" id="case">
+      <div class="step-head"><span class="num">2</span><h2>One case, end to end: a first payment that never came</h2><a class="open" href="http://localhost:3000/app/retention/e2b33dc6-2d0f-49e7-aec1-090824073ff3" target="_blank" rel="noopener">Open the case</a></div>
+      <p class="note">Robin Bell Casey West, American Amicable. Any Fixable or Act-now case works the same way.</p>
+      <ul>
+        <li><b>Header</b>: the step, days left, phone, policy, $ a month, owner, and whether anyone has worked it yet.</li>
+        <li><b>The ladder strip</b>: where it is, why ("First payment missed · 22 days unpaid") and what happens if nobody acts ("If it is still unpaid on Nov 13, it becomes a pending lapse").</li>
+        <li><b>What to do</b>: three steps and a line to say on the call. With no phone on file, step 1 tells the agent where to find one.</li>
+        <li><b>From the files</b>: the carrier's status in plain words, with its own code in grey, paid-to date, days past due, deadline.</li>
+        <li>Tabs: <b>Calls</b> (log what happened and what you did), <b>Policy</b> (who wrote it, draft day, premium), <b>History</b> (every file and person that touched it).</li>
+      </ul>
+      <p class="say">"The agent never has to work out what to do. The step says it, the script says it, and the deadline says how long they have."</p>
+    </section>
+
+    <section class="step" id="saved">
+      <div class="step-head"><span class="num">3</span><h2>How you try to save a case</h2><a class="open" href="http://localhost:3000/app/retention/e2b33dc6-2d0f-49e7-aec1-090824073ff3" target="_blank" rel="noopener">Same case</a></div>
+      <ol>
+        <li><b>Call</b> and log it on the Calls tab. After 4 tries with nobody reached, the case is marked unreachable.</li>
+        <li><b>Fix it with the client</b>, one of three ways on What to do:
+          <ul>
+            <li><b>Payment taken</b>: amount, how and when. Recorded on the case.</li>
+            <li><b>New payment date</b> or <b>New bank or card</b>: a request to the carrier, which then shows on Waiting on the carrier.</li>
+            <li>For a mailed bill: <b>Switch to bank payment</b>.</li>
+          </ul>
+        </li>
+        <li><b>The next carrier file proves it.</b> When the file shows the policy paying again, the case closes as <b>Saved</b> by itself and moves to Closed.</li>
+        <li>If the file shows it getting worse, the case <b>moves up</b> the ladder. If the client truly wants out: More › <b>Close without a save</b>, with a reason. That is counted apart from saves.</li>
+      </ol>
+      <p class="say">"Saved means the carrier says so. That keeps the numbers honest: a save on the scorecard is money that really stayed."</p>
+      <p class="note">In the demo, open the forms and press Cancel. Nothing needs to be saved to show them.</p>
+    </section>
+
+    <section class="step" id="reinstate">
+      <div class="step-head"><span class="num">4</span><h2>A lapsed policy: reinstatement inside the case</h2><a class="open" href="http://localhost:3000/app/retention/44e93bcd-4753-4650-a3ba-b44eb645c883" target="_blank" rel="noopener">Open Rory Ridealong</a></div>
+      <ul>
+        <li>Step 3, <b>Last chance</b>: 63 days left before the carrier's reinstatement window closes.</li>
+        <li>What to do holds the whole reinstatement: <b>Called them → Client agreed → Sent to the carrier</b>, then <b>Back in force</b> when the file shows it.</li>
+        <li><b>What the carrier needs</b>: back premium, months owed, health questions, signed form.</li>
+        <li><b>Reinstate or sell new</b>: reinstating keeps the original policy and the commission. Here it also shows the $276 already charged back.</li>
+      </ul>
+      <p class="say">"One place for the whole lapse. Logging the call here moves the reinstatement on too, so there's never a second tracker to keep up to date."</p>
+    </section>
+
+    <section class="step" id="lost">
+      <div class="step-head"><span class="num">5</span><h2>Lost, then win-back</h2><a class="open" href="http://localhost:3000/app/retention?step=lost" target="_blank" rel="noopener">Open the Gone card</a></div>
+      <ul>
+        <li>A lost case says when it was lost and that win-back comes next.</li>
+        <li><b>Close to win-back</b> asks first (why it was lost, a note), because it is final.</li>
+        <li>After the cooling-off for that reason, the client goes to Win-back.</li>
+      </ul>
+      <p class="say">"Lost isn't the end. It's the start of a cooling-off, and then a second chance with a new policy."</p>
+    </section>
+
+    <section class="step" id="waiting">
+      <div class="step-head"><span class="num">6</span><h2>Waiting on the carrier</h2><a class="open" href="http://localhost:3000/app/servicing" target="_blank" rel="noopener">Open Waiting on the carrier</a></div>
+      <ul>
+        <li>Every change sent to a carrier: payment date, bank or card, mailed bill to bank, address.</li>
+        <li>Cards, calm to urgent: <b>Waiting</b> (nothing to do yet) → <b>Send it</b> (saved, never sent) → <b>Check it</b> (past its date, or the file can't show it) → <b>Failed</b> (the file shows it didn't happen). Proven and Cancelled sit beside them.</li>
+        <li>Each row: what was asked (from → to), how and when it was sent, the date the file should show it, what the latest file shows, and how long it has waited. "From a Retention case" goes back to the case.</li>
+        <li>Open a row for its page: Progress, The change, Notes.</li>
+      </ul>
+      <p class="say">"You don't work here, you chase. The page tells you which requests need a phone call to the carrier, and the next file closes the rest by itself."</p>
+    </section>
+
+    <section class="step" id="winback">
+      <div class="step-head"><span class="num">7</span><h2>Win-back</h2><a class="open" href="http://localhost:3000/app/reinstatement" target="_blank" rel="noopener">Open Win-back</a></div>
+      <ul>
+        <li>Clients whose policy is gone for good, grouped: <b>Resting</b> (cooling off) → <b>Soon</b> (callable within 30 days) → <b>Call now</b> (on the Win-back list) → <b>Needs you</b> (couldn't go on the list). Never call and Possible claims sit beside them.</li>
+        <li>The cooling-off depends on why they left. A failed payment rests 30 days. "Couldn't afford it" rests a year.</li>
+        <li>Each row: phone, age and state, what they had and paid, why it ended, when to call, the chance.</li>
+        <li>Click a name for the client's page: why it ended, what to say, what they had, and <b>Open the lead</b>.</li>
+      </ul>
+      <p class="say">"The calls happen from the Win-back list in the dialer, where the calling hours and do-not-call checks apply. Retention decides who and when; the dialer handles the call."</p>
+      <a class="open" href="http://localhost:3000/app/reinstatement/winback/4d87374e-10d9-4932-87f3-9fff55dd775f" target="_blank" rel="noopener" style="justify-self: start">Open James Morgan's page</a>
+    </section>
+
+    <section class="step" id="results">
+      <div class="step-head"><span class="num">8</span><h2>Results</h2><a class="open" href="http://localhost:3000/app/retention?step=closed" target="_blank" rel="noopener">Open Closed</a></div>
+      <ul>
+        <li><b>Closed</b> card: everything that left Retention in 90 days and how. Saved (by a file), Lost, or Closed without a save (by a person, with the reason).</li>
+        <li><b>Reports › Retention scorecard</b>: per person and per step: opened, saved, lost, unreachable, the save rate and the premium kept.</li>
+      </ul>
+      <a class="open" href="http://localhost:3000/app/retention-scorecard" target="_blank" rel="noopener" style="justify-self: start">Open the scorecard</a>
+      <p class="say">"The owner sees who saves policies and at which step, and every number is backed by a carrier file."</p>
+    </section>
+
+    <section class="step" id="questions">
+      <div class="step-head"><span class="num">?</span><h2>Likely questions</h2></div>
+      <dl class="qa">
+        <dt>"Why do some cases say No carrier window?"</dt>
+        <dd>The deadline comes from that carrier's grace and reinstatement rules. Where they aren't set up yet, the case still shows, just without a countdown. Fill in the carrier's rules and the countdowns appear.</dd>
+        <dt>"Can my agent mark a case saved after the client pays?"</dt>
+        <dd>They record "Payment taken". The case closes as saved when the next carrier file shows the policy paying. That's what keeps the save rate trustworthy.</dd>
+        <dt>"Where do the cases come from?"</dt>
+        <dd>The uploaded policy and commission files. Every upload re-reads them: new problems open cases, worse ones move up the ladder, fixed ones close.</dd>
+        <dt>"Who works a case?"</dt>
+        <dd>A retention rep if the agency has one, otherwise the writing agent. The owner can reassign from the case (More › Assign).</dd>
+        <dt>"Does Retention dial?"</dt>
+        <dd>No. It tells you who to call and what to say. Win-back calls go through the dialer's list with its compliance checks.</dd>
+      </dl>
+    </section>
+
+    <div class="pager"><a href="#start">Back to the top</a><span class="note">Retention · demo agency · Nov 2026</span></div>
+  </main>
+</div>
+
+</body>
+</html>

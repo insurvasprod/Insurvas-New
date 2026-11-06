@@ -97,14 +97,24 @@ export function reasonFor(p: BoardPolicy, today: string): Reason | null {
   return null;
 }
 
-/** Days left to act: the carrier's window from LA-4.7, the reinstatement window for a lapse, none for prevention. */
-export function daysLeftFor(p: BoardPolicy, reason: Reason, today: string): number | null {
+/**
+ * Days left to act, signed: negative once the window has passed (the Retention ladder keeps the real
+ * deadline, so an overdue case reads "12 days over", never "Today"). The carrier's window from LA-4.7, the
+ * reinstatement window for a lapse, none for prevention.
+ */
+export function signedDaysLeftFor(p: BoardPolicy, reason: Reason, today: string): number | null {
   if (reason === "direct_bill") return null;
-  if (reason === "recently_lapsed") return p.lapsedOn && p.reinstatementDays !== null ? Math.max(0, p.reinstatementDays - daysSince(p.lapsedOn, today)) : null;
-  if ((reason === "cancellation_request" || reason === "conservation") && p.noticeWindowDays != null && p.noticeSince) return Math.max(0, p.noticeWindowDays - daysSince(p.noticeSince, today));
-  if (p.daysUntilClose !== null) return Math.max(0, p.daysUntilClose);
-  if (reason === "first_payment_missed" && p.firstPaymentWindowDays != null && p.effectiveDate) return Math.max(0, p.firstPaymentWindowDays - (p.daysPastDue ?? Math.max(0, daysSince(p.effectiveDate, today))));
+  if (reason === "recently_lapsed") return p.lapsedOn && p.reinstatementDays !== null ? p.reinstatementDays - daysSince(p.lapsedOn, today) : null;
+  if ((reason === "cancellation_request" || reason === "conservation") && p.noticeWindowDays != null && p.noticeSince) return p.noticeWindowDays - daysSince(p.noticeSince, today);
+  if (p.daysUntilClose !== null) return p.daysUntilClose;
+  if (reason === "first_payment_missed" && p.firstPaymentWindowDays != null && p.effectiveDate) return p.firstPaymentWindowDays - (p.daysPastDue ?? Math.max(0, daysSince(p.effectiveDate, today)));
   return null;
+}
+
+/** Days left to act on the Lapse-risk board: the signed count, never below zero. */
+export function daysLeftFor(p: BoardPolicy, reason: Reason, today: string): number | null {
+  const days = signedDaysLeftFor(p, reason, today);
+  return days === null ? null : Math.max(0, days);
 }
 
 export type Group = "deadline" | "no_window" | "prevention";

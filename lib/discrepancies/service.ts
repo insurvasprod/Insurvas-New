@@ -97,7 +97,7 @@ async function gather(tenantId: string, today: string) {
     readAll<{ id: string; tenant_id: string | null; carrier_id: string; expected_lag_days: number | null }>(() => db().from("carrier_operating_settings").select("id, tenant_id, carrier_id, expected_lag_days").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).order("id")),
   ]);
   for (const read of [policies, entries, statements]) if (read.error) throw new Error(`Could not read the book for discrepancies: ${read.error.message}`);
-  if (settings.error && !isSchemaGap(settings.error)) throw new Error(`Could not read the carrier rules for discrepancies: ${settings.error.message}`);
+  if (settings.error && !isSchemaGap(settings.error)) throw new Error(`Could not read the carrier terms for discrepancies: ${settings.error.message}`);
   const lagDays = carrierLagDays(settings.error ? [] : settings.rows, tenantId);
 
   // LA-4.3 premium and rate, when the carrier showed them (after 20261002100000).

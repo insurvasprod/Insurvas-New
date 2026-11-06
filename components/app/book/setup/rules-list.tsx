@@ -29,11 +29,17 @@ export function stageNames(board: BoardPipeline[]) {
 export function RulesList({ rules, board, carriers }: { rules: RuleListItem[]; board: BoardPipeline[]; carriers: Array<{ id: string; name: string }> }) {
   const stages = stageNames(board);
   const carrierName = new Map(carriers.map((c) => [c.id, c.name]));
-  const list = (ids: string[], none: string, name: (id: string) => string) => (ids.length ? ids.map(name).join(", ") : none);
+  // Round 6 (owner 2026-11-06): a rule from nine stages wrote all nine across the row; past two it reads "9 stages",
+  // the names in the tooltip, so the row says what the rule does at a glance.
+  const list = (ids: string[], none: string, name: (id: string) => string, noun: string) => {
+    if (!ids.length) return none;
+    const names = [...new Set(ids.map(name))];
+    return names.length <= 2 ? names.join(", ") : <span title={names.join(", ")} className="underline decoration-dotted underline-offset-4">{names.length} {noun}</span>;
+  };
   return (
     <TableCard>
       {rules.length === 0 ? (
-        <EmptyState title="No pipeline rules yet" hint="A rule moves a lead's card when something happens to its policy, and adds a note. It starts in forecast: it records what it would do and moves nothing until you switch it to live." action={<Link href="/app/book-setup/pipeline-rules/new" className={buttonVariants()}>New rule</Link>} />
+        <EmptyState title="No card-move rules yet" hint="A rule moves a lead's card when something happens to its policy, and adds a note. It starts in forecast: it records what it would do and moves nothing until you switch it to live." action={<Link href="/app/book-setup/pipeline-rules/new" className={buttonVariants()}>New rule</Link>} />
       ) : (
         <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
           <thead>
@@ -50,8 +56,8 @@ export function RulesList({ rules, board, carriers }: { rules: RuleListItem[]; b
                     <Link href={`/app/book-setup/pipeline-rules/${rule.id}`} className="block font-semibold leading-snug text-foreground hover:underline">{rule.name}</Link>
                     <span className="block text-xs text-muted-foreground">{v ? `${EVENT_LABELS[v.event].label} · ${v.noteOn ? "adds a note" : "no note"}` : "no version"}</span>
                   </td>
-                  <td className="text-muted-foreground">{v ? list(v.carrierIds, "Every carrier", (id) => carrierName.get(id) ?? "a carrier") : "—"}</td>
-                  <td className="text-muted-foreground">{v ? list(v.fromStageIds, "Any stage", (id) => stages.get(id)?.stage ?? "a stage") : "—"}</td>
+                  <td className="text-muted-foreground">{v ? list(v.carrierIds, "Every carrier", (id) => carrierName.get(id) ?? "a carrier", "carriers") : "—"}</td>
+                  <td className="text-muted-foreground">{v ? list(v.fromStageIds, "Any stage", (id) => stages.get(id)?.stage ?? "a stage", "stages") : "—"}</td>
                   <td>{to ? `${to.pipeline} › ${to.stage}` : <span className="text-[var(--warning-ink)]">A stage no longer on the board</span>}</td>
                   <td><ModeChip mode={rule.mode} enabled={rule.enabled} /></td>
                   <td className="text-muted-foreground tabular-nums">{last}{rule.last7.held ? ` · ${rule.last7.held} held` : ""}</td>

@@ -1,5 +1,6 @@
 "use client";
 
+import { NoteField } from "@/components/ui/note-field";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
@@ -7,9 +8,10 @@ import { Button } from "@/components/ui/button";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { cardSurface } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Field, control, textareaControl } from "@/components/ui/field";
+import { Field, control } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { personName } from "@/lib/format/personName";
+import { fileDay } from "@/lib/ingestion/constants";
 import { cn } from "@/lib/utils";
 import { CASE_STATUS_LABELS, FORWARD, canMove, type CaseStatus } from "@/lib/retention/reinstatement";
 import type { CaseRow } from "@/lib/retention/reinstatementStore";
@@ -106,7 +108,9 @@ export function CaseComparison({ row }: { row: CaseRow }) {
           <ul className="m-0 mt-1 grid list-none gap-0.5 p-0 text-muted-foreground">
             <li>{c.reinstate.owedCents === null ? "Back premium: ask the carrier" : `Pays ${c.reinstate.owedIsEstimate ? "about " : ""}${money(c.reinstate.owedCents)} back premium${c.reinstate.owedIsEstimate ? " (estimate)" : ""}`}</li>
             <li>Coverage resumes as it was</li>
-            <li>{c.reinstate.advanceRevivesCents !== null ? `Your advance revives: ${money(c.reinstate.advanceRevivesCents)}` : "The original advance revives"}</li>
+            <li>{row.chargeback && !c.reinstate.advanceRevivesCents
+              ? `Charged back ${money(row.chargeback.cents)} on ${fileDay(row.chargeback.on)}: ask the carrier if reinstating returns it`
+              : c.reinstate.advanceRevivesCents !== null ? `Your advance revives: ${money(c.reinstate.advanceRevivesCents)}` : "The original advance revives"}</li>
             <li>No new chargeback window</li>
             {c.reinstate.needsHealthQuestions && <li>A short health questionnaire</li>}
           </ul>
@@ -241,7 +245,7 @@ export function CaseNoteForm({ row, readOnly }: { row: CaseRow; readOnly: boolea
     <form className={`${cardSurface} flex flex-col gap-4 p-5`} onSubmit={(e) => void save(e)} aria-label="Notes">
       <LeaveGuard dirty={dirty && !busy && !readOnly} onDiscard={() => setNote(row.note ?? "")} what="the note" />
       <Field label="Note" htmlFor="case-note">
-        <textarea id="case-note" className={textareaControl} maxLength={2000} disabled={readOnly || busy} value={note} onChange={(e) => setNote(e.target.value)} />
+        <NoteField id="case-note"  maxLength={2000} disabled={readOnly || busy} value={note} onChange={setNote} />
       </Field>
       {!readOnly && (
         <div className="flex flex-wrap items-center justify-end gap-2">

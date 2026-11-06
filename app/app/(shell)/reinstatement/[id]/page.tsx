@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 
 import { scopeFor } from "@/lib/agency/visibility";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
@@ -6,6 +6,7 @@ import { personName } from "@/lib/format/personName";
 import { fileDay } from "@/lib/ingestion/constants";
 import { CASE_STATUS_LABELS, OPEN_CASE_STATUSES, type Urgency } from "@/lib/retention/reinstatement";
 import { loadCase, REINSTATEMENT_PENDING_MESSAGE } from "@/lib/retention/reinstatementStore";
+import { openLadderCaseId } from "@/lib/retention/cases/store";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { RetentionPage, retentionTrail } from "@/components/app/retention/retention-page";
@@ -51,6 +52,12 @@ export default async function ReinstatementCasePage({ params, searchParams }: { 
   if (!row) notFound();
 
   const open = OPEN_CASE_STATUSES.includes(row.status);
+  // One place to work a lapse (critique D1–D3): an open reinstatement is worked on its Retention case, step 3,
+  // where the trail leads back to Cases. A closed one (or one with no ladder case) still reads here.
+  if (open) {
+    const ladderCase = await openLadderCaseId(guard.context.tenantId, row.carrierId, row.policyNumber);
+    if (ladderCase) redirect(`/app/retention/${ladderCase}`);
+  }
   const locked = readOnly || !open;
   const name = row.clientName ? personName(row.clientName) : row.policyNumber;
   const chip = !open ? (

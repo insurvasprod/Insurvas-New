@@ -209,9 +209,9 @@ const deps: RunDeps = {
     let rules = "";
     try {
       const outcome = await runPipelineRules(tenantId, "file");
-      if (outcome.ran) rules = ` Pipeline rules: ${outcome.moved} moved, ${outcome.wouldMove} would move (forecast), ${outcome.held} held${outcome.capped.live || outcome.capped.forecast ? ", stopped at the run cap" : ""}.`;
+      if (outcome.ran) rules = ` Card moves: ${outcome.moved} moved, ${outcome.wouldMove} would move (forecast), ${outcome.held} held${outcome.capped.live || outcome.capped.forecast ? ", stopped at the run cap" : ""}.`;
     } catch (error) {
-      console.error("[daily-run] the pipeline rules could not run", tenantId, error);
+      console.error("[daily-run] the card-move rules could not run", tenantId, error);
     }
     return { status: "succeeded", rowsIn: ids.length, findings: count ?? 0, note: `Boards and scorecards are computed when they are opened. The written summary waits for an AI provider.${rules}` };
   },

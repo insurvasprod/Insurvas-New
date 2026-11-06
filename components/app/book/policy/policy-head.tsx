@@ -7,12 +7,16 @@ import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
  * health chip beside the title and leaves this the muted facts line): an optional status chip and the one line of facts ("AM-88120 · Americo · Eagle Premier"), then a quiet line of figures (the
  * mockups' stat line: label over value, no tiles, so the Commissions tab's tiles stay the page's one strip).
  */
-export function PolicyLead({ status, tone = "neutral", facts, notices }: { status?: string; tone?: StatusTone; facts: Array<string | null | undefined>; notices?: ReactNode }) {
+export function PolicyLead({ status, tone = "neutral", number, facts, notices }: { status?: string; tone?: StatusTone; number?: string; facts: Array<string | null | undefined>; notices?: ReactNode }) {
   const line = facts.filter(Boolean).join(" · ");
   return (
     <div className="flex min-w-0 flex-wrap items-center gap-3">
       {status && <StatusChip tone={tone}>{status}</StatusChip>}
-      <span className="min-w-0 truncate text-sm text-muted-foreground" title={line}>{line}</span>
+      {/* Round 6: the client is the title, so the policy number leads the facts, in the number's own type. */}
+      {/* Capped, so on a 1440 screen the six tabs keep their room on the title line; the whole line is the tooltip. */}
+      <span className="min-w-0 max-w-[30rem] truncate text-sm text-muted-foreground" title={[number, line].filter(Boolean).join(" · ")}>
+        {number && <><span className="font-mono text-foreground">{number}</span>{line ? " · " : ""}</>}{line}
+      </span>
       {/* Round 3: what used to be the Overview's status lines (a provisional client, the linked application,
           no client yet), as chips and links on the facts line. */}
       {notices && <span className="flex shrink-0 flex-wrap items-center gap-3 text-sm">{notices}</span>}

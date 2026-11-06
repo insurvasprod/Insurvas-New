@@ -7,7 +7,7 @@ import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { LEADS_IN_STEPS, leadsInStepLabel, leadsInStepOf } from "@/lib/leadSources/steps";
 import { COMPLIANCE_STEPS, complianceStepLabel, complianceStepOf } from "@/lib/compliance/steps";
 import { REPORTS_VIEWS, reportsViewLabel, reportsViewOf } from "@/lib/reports/views";
-import { BOOK_AREA_LABEL, DATA_IN_STEPS, bookAreaOf, dataInStepLabel } from "@/lib/dataIn/steps";
+import { AREA_LABELS, DATA_IN_STEPS, areaOfStep, areaSteps, bookAreaOf, dataInStepLabel } from "@/lib/dataIn/steps";
 import { accountingStepHref, accountingStepLabel, accountingStepOf } from "@/lib/accounting/steps";
 import { commissionsStepLabel, commissionsStepOf } from "@/lib/commissions/steps";
 import { agencyStepHref, agencyStepLabel, agencyStepOf } from "@/lib/agency/steps";
@@ -102,14 +102,15 @@ export function PageTrail({ title }: { title: string }) {
     const below = view && title.trim() && title !== label;
     return <Breadcrumbs crumbs={[{ label: "Reports" }, { label, href: view?.href }, ...(below ? [{ label: title }] : [])]} />;
   }
-  // A Book of business step (2026-11-02): Book of business › the step, named as the rail names it, and › the
-  // record it has open (a file, an item, a policy, a rule).
+  // A Book of business or Carrier sync step (2026-11-02; two areas since 2026-11-05): the area › the step, named as
+  // the rail names it, and › the record it has open (a file, an item, a policy, a rule).
   const dataInStep = bookAreaOf(pathname);
   if (dataInStep) {
+    const area = areaOfStep(dataInStep);
     const stepHref = DATA_IN_STEPS.find((step) => step.key === dataInStep)?.href;
     const label = dataInStepLabel(dataInStep);
     const below = pathname !== stepHref && title.trim() && title !== label;
-    return <Breadcrumbs crumbs={[{ label: BOOK_AREA_LABEL, href: DATA_IN_STEPS[0]?.href }, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
+    return <Breadcrumbs crumbs={[{ label: AREA_LABELS[area], href: areaSteps(area)[0]?.href }, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
   }
   // An Accounting step (2026-11-02): Accounting › the step (My balance on its own address), and › the record it
   // has open (an invoice, a producer, a payee, a P&L line; foundation pass 2026-11-03).

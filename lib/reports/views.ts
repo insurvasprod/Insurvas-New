@@ -7,9 +7,10 @@
 /** The Reports menu collapsed or open, remembered for a year; the frame reads it on the server so the page draws at the right width. */
 export const REPORTS_RAIL_COOKIE = "insurvas_reports_rail";
 
-export type ReportsView = "sales" | "activity" | "scoring" | "book" | "cpa" | "partner" | "retention" | "retentionResults" | "producers";
+export type ReportsView = "sales" | "activity" | "scoring" | "book" | "cpa" | "partner" | "retention" | "retentionResults" | "producers" | "hierarchy";
 
-export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; sub: string; href: string; sharesPeriod: boolean }[] = [
+/** `offRail`: still a Reports view at its address, but not listed on the rail (it shows only while you are on it). */
+export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; sub: string; href: string; sharesPeriod: boolean; offRail?: true }[] = [
   { key: "sales", menuKey: "insight.sales-performance", label: "Sales performance", sub: "Funnel, timing, declines", href: "/app/sales-performance", sharesPeriod: true },
   { key: "activity", menuKey: "insight.activity", label: "Team activity", sub: "Dials and outcomes, by person", href: "/app/activity", sharesPeriod: true },
   { key: "scoring", menuKey: "insight.scoring", label: "Queue scoring", sub: "Scored order against plain", href: "/app/scoring", sharesPeriod: false },
@@ -17,11 +18,15 @@ export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; 
   { key: "book", menuKey: "insight.book-scorecards", label: "Book scorecards", sub: "Persistency and chargebacks", href: "/app/book-scorecards", sharesPeriod: false },
   // AG-1.9 · the agency's producer scorecards (2026-11-03, out of Team): a date window, so the shared period.
   { key: "producers", menuKey: "team.scorecards", label: "Producer scorecards", sub: "Who is profitable, not just busy", href: "/app/producer-scorecards", sharesPeriod: true },
+  // AG-1.2 · out of Commissions (owner 2026-11-05: "Put hierarchy and overrides on reports"); its own month.
+  { key: "hierarchy", menuKey: "team.hierarchy", label: "Hierarchy & overrides", sub: "Who reports to whom, and the override", href: "/app/hierarchy", sharesPeriod: false },
   { key: "cpa", menuKey: "insight.true-cpa", label: "True CPA", sub: "Cost per issued policy", href: "/app/true-cpa", sharesPeriod: true },
   { key: "partner", menuKey: "partners.review", label: "Partner quality", sub: "Lead quality, by partner", href: "/app/partner-quality", sharesPeriod: true },
   // Module 5's two report pages (owner 2026-11-02: "this can go into reports"), each with its own period.
   { key: "retention", menuKey: "retention.scorecard", label: "Retention scorecard", sub: "Save rate by reason, per rep", href: "/app/retention-scorecard", sharesPeriod: false },
-  { key: "retentionResults", menuKey: "retention.results", label: "Retention results", sub: "Did the radar and the saves work", href: "/app/retention-results", sharesPeriod: false },
+  // Off the rail since 2026-11-05 (docs/retention/SPEC.md §7: the radar and its holdout are hidden, not deleted;
+  // the radar no longer runs after files, so this page would only grow stale). Its address still answers.
+  { key: "retentionResults", menuKey: "retention.results", label: "Retention results", sub: "Did the radar and the saves work", href: "/app/retention-results", sharesPeriod: false, offRail: true },
 ];
 
 /** The view an address belongs to (a partner's page is Partner quality), or null outside Reports. */

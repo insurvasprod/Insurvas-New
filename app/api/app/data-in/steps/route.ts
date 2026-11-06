@@ -9,6 +9,7 @@ import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
 import { hiddenOpenFindings, unmappedAgentCodes } from "@/lib/needsYou/store";
 import { countRuleHolds } from "@/lib/pipelineRules/store";
+import { setupTabCounts } from "@/lib/pipelineRules/setupCounts";
 
 /**
  * The live counts on the Book of business rail (owner 2026-11-02, round 2): what waits on a person, per step.
@@ -48,7 +49,7 @@ export async function GET() {
   const money = Boolean(entitlement && hasFeature(entitlement, "discrepancy_report"));
   const credit = Boolean(entitlement && hasFeature(entitlement, "producer_payouts"));
 
-  const [files, matching, exceptions, findings, attribution, agentCodes, ruleHolds] = await Promise.all([
+  const [files, matching, exceptions, findings, attribution, agentCodes, ruleHolds, setup] = await Promise.all([
     keeper ? head(count("file_registry").eq("status", "failed").is("superseded_by_file_id", null).or("parse_block.is.null,parse_block.neq.no_layout_map")).catch(() => null) : null,
     keeper ? head(count("policy_match_review").eq("status", "open")).catch(() => null) : null,
     narrow ? null : head((keeper ? count("queue_item") : count("queue_item").eq("assigned_to_user_id", userId)).eq("status", "open").in("queue_type", QUEUE_TYPES)).catch(() => null),
@@ -58,10 +59,16 @@ export async function GET() {
     keeper ? unmappedAgentCodes(tenantId).then((codes) => codes.length).catch(() => null) : null,
     // Two rules disagree: null before 20261102100000, which adds nothing.
     keeper ? countRuleHolds(tenantId).catch(() => null) : null,
+    // Setup's tabs are rail steps (2026-11-05): what each is missing, as their tabs counted it. Owner and bookkeeper.
+    keeper ? setupTabCounts(tenantId).catch(() => null) : null,
   ]);
   const counts: DataInStepCounts = {};
   if (files !== null) counts.files = files;
   const decisions = [matching, exceptions, findings, attribution, agentCodes, ruleHolds].filter((n): n is number => n !== null);
   if (decisions.length) counts["needs-you"] = decisions.reduce((sum, n) => sum + n, 0);
+  for (const key of ["rate-card", "carrier-rules", "agent-codes"] as const) {
+    const n = setup?.[key];
+    if (typeof n === "number" && n > 0) counts[key] = n;
+  }
   return NextResponse.json({ counts }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -37,16 +37,22 @@ const NAME: Record<StageState, string> = {
 
 const said = (stage: FileStage) => `${stage.name}: ${STAGE_STATE_LABELS[stage.state]}${stage.state === "needs" && stage.count ? ` (${stage.count})` : ""}. ${stage.note}`;
 
-/** One short bar per stage the file goes through, for a row of the Files list. */
-export function StageStrip({ stages, fileType = null, className }: { stages: FileStage[]; fileType?: string | null; className?: string }) {
+/**
+ * One short bar per stage the file goes through, for a row of the Files list. While the file is being read
+ * (`reading`), the stage it is at — the first not reached yet — pulses (owner 2026-11-05: "see at which stage it
+ * is"); off under reduced motion, where the "Reading…" words beside the list say it instead.
+ */
+export function StageStrip({ stages, fileType = null, className, reading = false }: { stages: FileStage[]; fileType?: string | null; className?: string; reading?: boolean }) {
   const shown = shownStages(stages, fileType);
+  const at = reading ? shown.findIndex((stage) => stage.state === "pending") : -1;
   return (
-    <span role="img" aria-label={shown.map(said).join(" ")} className={cn("inline-flex items-center gap-[3px]", className)}>
+    <span role="img" aria-label={`${at >= 0 ? `Now at ${shown[at].name}. ` : ""}${shown.map(said).join(" ")}`} className={cn("inline-flex items-center gap-[3px]", className)}>
       {shown.map((stage, index) => (
-        <span key={stage.name} title={said(stage)} className={cn("h-1.5 w-[14px] overflow-hidden rounded-full", BAR.pending)}>
+        <span key={stage.name} title={index === at ? `${stage.name}: working on it now` : said(stage)} className={cn("h-1.5 w-[14px] overflow-hidden rounded-full", BAR.pending)}>
           {stage.state !== "pending" && (
             <span key={stage.state} className={cn("block size-full rounded-full", BAR[stage.state], fill)} style={{ animationDelay: `${index * STEP_MS}ms` }} />
           )}
+          {index === at && <span className="block size-full rounded-full bg-[var(--primary)] opacity-60 motion-safe:animate-pulse" />}
         </span>
       ))}
     </span>

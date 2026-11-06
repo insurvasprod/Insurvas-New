@@ -3,13 +3,13 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Activity, Award, BadgeDollarSign, Brain, ChartColumn, ChartLine, ChartNoAxesCombined, ChevronsLeft, ChevronsRight, Gauge, UserRoundCheck, type LucideIcon } from "lucide-react";
+import { Activity, Award, BadgeDollarSign, Brain, ChartColumn, ChartLine, ChartNoAxesCombined, ChevronsLeft, ChevronsRight, Gauge, Network, UserRoundCheck, type LucideIcon } from "lucide-react";
 
 import { useMenuSections } from "@/components/ui/page-trail";
 import { REPORTS_RAIL_COOKIE, REPORTS_VIEWS, sharedPeriod, type ReportsView } from "@/lib/reports/views";
 import { cn } from "@/lib/utils";
 
-const ICONS: Record<ReportsView, LucideIcon> = { sales: ChartColumn, activity: Activity, scoring: Brain, book: Gauge, cpa: BadgeDollarSign, partner: Award, retention: ChartNoAxesCombined, retentionResults: ChartLine, producers: UserRoundCheck };
+const ICONS: Record<ReportsView, LucideIcon> = { sales: ChartColumn, activity: Activity, scoring: Brain, book: Gauge, cpa: BadgeDollarSign, partner: Award, retention: ChartNoAxesCombined, retentionResults: ChartLine, producers: UserRoundCheck, hierarchy: Network };
 
 /**
  * The Reports menu (owner 2026-10-30, canvas "Reports in one page", board RpS1), the Leads in menu's
@@ -31,7 +31,7 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
 
   const views = useMemo(() => {
     const keys = new Set((menu ?? []).flatMap((section) => section.items).map((item) => item.key));
-    return REPORTS_VIEWS.filter((item) => item.key === view || keys.has(item.menuKey));
+    return REPORTS_VIEWS.filter((item) => item.key === view || (!item.offRail && keys.has(item.menuKey)));
   }, [menu, view]);
   const hasActivity = views.some((item) => item.key === "activity");
 

@@ -14,15 +14,15 @@ import { loadBoard, loadCarrierChoices, loadRulesList } from "@/lib/pipelineRule
  */
 export default async function NewPipelineRulePage() {
   const guard = await guardPage("statement_ingestion");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Pipeline rules" description="Rates, carrier rules and pipeline rules for your book." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Card moves" description="Rates, carrier terms and card-move rules for your book." />;
   // Owner and bookkeeper, like every Setup tab and its API.
-  if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Pipeline rules" detail="Setup is for the account owner and bookkeepers." />;
+  if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Card moves" detail="Setup is for the account owner and bookkeepers." />;
   const tenantId = guard.context.tenantId;
   const [view, board, carriers] = await Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
   const readOnly = guard.entitlement.access === "read_only";
 
   return (
-    <DataInPage step="setup" title="New rule" lead={<span className="flex items-center gap-3 text-sm text-muted-foreground"><StatusChip tone="warning">Forecast</StatusChip>Starts in forecast · version 1</span>}>
+    <DataInPage step="pipeline-rules" title="New rule" lead={<span className="flex items-center gap-3 text-sm text-muted-foreground"><StatusChip tone="warning">Forecast</StatusChip>Starts in forecast · version 1</span>}>
       {!view.available ? (
         <Callout tone="warning" title={PIPELINE_RULES_PENDING_MESSAGE} />
       ) : (

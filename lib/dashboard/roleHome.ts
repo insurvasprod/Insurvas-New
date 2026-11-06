@@ -273,7 +273,7 @@ export const ROLE_HOMES: Record<TenantRole, RoleHome> = {
     needs: [],
     money: [],
     actions: [
-      { label: "Save queue", opens: "retention.save-queue" },
+      { label: "Retention cases", opens: "retention.save-queue" },
       { label: "Reinstatement", opens: "retention.winback" },
       { label: "Lapse risk", opens: "retention.lapse-risk" },
       { label: "My scorecard", opens: "retention.scorecard" },

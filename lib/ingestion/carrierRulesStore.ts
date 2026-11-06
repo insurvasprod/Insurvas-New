@@ -27,7 +27,7 @@ export class CarrierRulesError extends Error {
   }
 }
 
-export const CARRIER_RULES_PENDING_MESSAGE = "Carrier rules need a database update (20261008150000).";
+export const CARRIER_RULES_PENDING_MESSAGE = "Carrier terms need a database update (20261008150000).";
 
 function fail(error: { message: string; code?: string }, fallback: string): never {
   if (isSchemaGap(error)) throw new CarrierRulesError(CARRIER_RULES_PENDING_MESSAGE, 503);
@@ -91,7 +91,7 @@ export async function loadCarrierRules(scope: RulesScope): Promise<{ available: 
   for (const read of [rules, settings]) {
     if (read.error) {
       if (isSchemaGap(read.error)) return { available: false, carriers: [], asOf };
-      fail(read.error, "Could not load carrier rules");
+      fail(read.error, "Could not load carrier terms");
     }
   }
   if (carriers.error) fail(carriers.error, "Could not load carriers");

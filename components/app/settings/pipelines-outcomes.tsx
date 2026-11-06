@@ -22,7 +22,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { createPortal } from "react-dom";
 import {
   Ban, CalendarClock, Check, CircleCheck, CircleX, Clock, DollarSign, FileCheck, GripVertical, Hash, MessageSquare,
-  ChevronLeft, Moon, PhoneCall, PhoneOff, Plus, Repeat, RotateCcw, Settings2, Square, ThumbsDown, Trash2, Voicemail, type LucideIcon,
+  ChevronLeft, Moon, PhoneCall, PhoneOff, Plus, Repeat, RotateCcw, Settings2, Square, ThumbsDown, Trash2, TriangleAlert, Voicemail, type LucideIcon,
 } from "lucide-react";
 
 import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
@@ -332,7 +332,16 @@ export function PipelinesOutcomesSettings() {
   }
 
   async function save() {
-    if (!loaded || !draft || problems.length) return;
+    if (!loaded || !draft) return;
+    if (problems.length) {
+      // Open what needs fixing — the first unnamed stage here, else the first unnamed outcome — and say why.
+      const unnamedStage = liveStages(pipeline).find((s) => !s.name.trim());
+      const unnamedOutcome = draft.outcomes.find((o) => !o.label.trim());
+      if (unnamedStage) setPicked({ kind: "stage", id: unnamedStage.id });
+      else if (unnamedOutcome) setPicked({ kind: "outcome", key: unnamedOutcome.key });
+      notify.block(problems[0]);
+      return;
+    }
     setSaving(true);
     setSaveError(null);
     const finalDoc = finalizeKeys(draft);
@@ -467,18 +476,18 @@ export function PipelinesOutcomesSettings() {
               <RotateCcw className="size-4" aria-hidden="true" />Reset to default
             </Button>
           )}
-          <span role="status" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--muted)]">
-            {dirty ? <span className="size-2 rounded-full bg-[var(--ink)]" aria-hidden="true" /> : <Check className="size-3.5 text-[var(--accent-ink)]" aria-hidden="true" />}
-            {dirty ? `${ops.length} unsaved change${ops.length === 1 ? "" : "s"}` : savedNote ? "Saved" : "All saved"}
+          {/* Why a save can't go through, said beside Save itself (2026-11-05): Callout no longer draws on the page,
+              so a blocked or failed save used to look like a dead button. */}
+          <span role="status" className={cn("inline-flex max-w-[420px] items-center gap-1.5 text-xs font-semibold", saveError ? "text-[var(--error-ink)]" : dirty && problems.length ? "text-[var(--warning-ink)]" : "text-[var(--muted)]")} title={saveError ?? (dirty && problems.length ? problems[0] : undefined)}>
+            {saveError || (dirty && problems.length) ? <TriangleAlert className="size-3.5 shrink-0" aria-hidden="true" /> : dirty ? <span className="size-2 rounded-full bg-[var(--ink)]" aria-hidden="true" /> : <Check className="size-3.5 text-[var(--accent-ink)]" aria-hidden="true" />}
+            <span className="truncate">{saveError ?? (dirty && problems.length ? problems[0] : dirty ? `${ops.length} unsaved change${ops.length === 1 ? "" : "s"}` : savedNote ? "Saved" : "All saved")}</span>
           </span>
           <LeaveGuard dirty={dirty} onDiscard={() => { setDraft(clone(loaded.doc)); setPicked(null); setSaveError(null); }} what="the pipelines and outcomes" />
           <Button type="button" variant="outline" onClick={() => { setDraft(clone(loaded.doc)); setPicked(null); setSaveError(null); }} disabled={!dirty || saving}>Discard</Button>
-          <Button type="button" onClick={() => void save()} disabled={!dirty || saving || problems.length > 0} title={dirty ? "Saving updates the lead workspace and the dialer right away" : "Changes wait here until you save them"}>{saving ? "Saving…" : "Save changes"}</Button>
+          {/* Save stays pressable while something is wrong: pressing it opens the item to fix and says what is missing. */}
+          <Button type="button" onClick={() => void save()} disabled={!dirty || saving} title={dirty ? (problems[0] ?? "Saving updates the lead workspace and the dialer right away") : "Changes wait here until you save them"}>{saving ? "Saving…" : "Save changes"}</Button>
         </span>
       </div>
-
-      {problems.length > 0 && dirty && <Callout tone="warning" title={problems[0]} />}
-      {saveError && <Callout tone="error" title={saveError} />}
 
       <div className={cn(cardSurface, "flex min-h-0 flex-1 flex-col px-4 pt-3 pb-3.5")}>
         <div className="mb-2 grid shrink-0 grid-cols-[minmax(0,280px)_minmax(96px,1fr)_minmax(0,280px)] items-center border-b border-[var(--border)] pb-1.5">

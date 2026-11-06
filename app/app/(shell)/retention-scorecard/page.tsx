@@ -1,4 +1,8 @@
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
+import { scopeFor } from "@/lib/agency/visibility";
+import { loadScoreCases, monthly } from "@/lib/retention/cases/store";
+import { caseScorecard } from "@/lib/retention/cases/scorecard";
+import { CaseScorecardBoard } from "@/components/app/retention/case-scorecard-board";
 import { loadScorecard, SCORECARD_PERIODS, type ScorecardPeriod } from "@/lib/retention/scorecardStore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
@@ -23,6 +27,16 @@ export default async function RetentionScorecardPage({ searchParams }: { searchP
   }
   const { period: periodParam, rep } = await searchParams;
   const period: ScorecardPeriod = periodParam && periodParam in SCORECARD_PERIODS ? (periodParam as ScorecardPeriod) : "180";
+  // 2026-11-05: on the ladder (cases from the carrier files) once its tables exist; until then the LA-5.8 card below.
+  const ladder = await loadScoreCases({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) }, SCORECARD_PERIODS[period]);
+  if (ladder) {
+    const card = caseScorecard(ladder.cases.map((c) => ({ ownerId: c.ownerId, step: c.step, status: c.status, unreachable: c.unreachable, monthlyCents: monthly(c.premiumCents, c.premiumMode) })));
+    return (
+      <ReportsPage view="retention" info="What each person working Retention achieved on the ladder: cases open, saved (a carrier file proved it), lost and closed without a save, with the save rate per person and per step. Under 10 decided cases the counts are shown.">
+        <CaseScorecardBoard people={card.people} steps={card.steps} total={card.total} names={Object.fromEntries(ladder.names)} period={period} />
+      </ReportsPage>
+    );
+  }
   const data = await loadScorecard({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role }, period);
 
   return (

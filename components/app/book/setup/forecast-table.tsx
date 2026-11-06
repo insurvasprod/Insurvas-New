@@ -1,5 +1,6 @@
 "use client";
 
+import type React from "react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -19,7 +20,7 @@ type Filter = "all" | "open" | "right" | "wrong";
  * A rule's Forecast tab (board BobE8): the last 7 days of what it would have done, each line marked Right
  * or Wrong by a person. Nothing here moves a card.
  */
-export function ForecastTable({ lines, readOnly }: { lines: EvaluationRow[]; readOnly: boolean }) {
+export function ForecastTable({ lines, readOnly, title, action, live = false }: { lines: EvaluationRow[]; readOnly: boolean; title?: string; action?: React.ReactNode; live?: boolean }) {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState<string | null>(null);
@@ -42,16 +43,17 @@ export function ForecastTable({ lines, readOnly }: { lines: EvaluationRow[]; rea
 
   return (
     <TableCard
-      title={`Last 7 days · ${lines.length} would-${lines.length === 1 ? "move" : "moves"}`}
+      title={title ?? `Last 7 days · ${lines.length} would-${lines.length === 1 ? "move" : "moves"}`}
+      action={action}
       toolbar={<DataToolbar><Segmented<Filter> label="Checked" value={filter} onChange={setFilter} options={[{ key: "all", label: "All" }, { key: "open", label: "Not checked", count: counts.open }, { key: "right", label: "Right", count: counts.right }, { key: "wrong", label: "Wrong", count: counts.wrong }]} /></DataToolbar>}
     >
       {lines.length === 0 ? (
-        <EmptyState title="Nothing would have moved in the last 7 days" hint="A forecast line appears when the rule's event happens to a policy linked to a lead and every check passes." />
+        <EmptyState title={live ? "It hasn't acted in the last 7 days" : "Nothing would have moved in the last 7 days"} hint={live ? "A line appears each time a carrier file brings its event to a policy linked to a lead." : "A forecast line appears when the rule's event happens to a policy linked to a lead and every check passes."} />
       ) : shown.length === 0 ? (
         <EmptyState title="No line in this view" hint="Choose All to see every line." />
       ) : (
         <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-          <thead><tr><th className="w-[110px]">Day</th><th>Lead</th><th>Would have</th><th className="w-[220px]">You checked</th></tr></thead>
+          <thead><tr><th className="w-[110px]">Day</th><th>Lead</th><th>{live ? "What it did" : "Would have"}</th><th className="w-[220px]">Was it right?</th></tr></thead>
           <tbody>
             {shown.map((line) => (
               <tr key={line.id}>
@@ -60,7 +62,7 @@ export function ForecastTable({ lines, readOnly }: { lines: EvaluationRow[]; rea
                   <span className="block font-semibold leading-snug text-foreground">{line.leadName ?? "A lead"}</span>
                   <span className="block text-xs text-muted-foreground">{line.policyNumber}{line.because ? ` · ${line.because}` : ""}</span>
                 </td>
-                <td>{line.fromStage ?? "No stage"} → {line.toStage ?? "the rule's stage"}</td>
+                <td>{live && line.outcome !== "moved" ? <><StatusChip tone={line.outcome === "held" ? "warning" : "neutral"}>{line.outcome === "held" ? "Held" : line.outcome === "failed" ? "Not moved" : "Skipped"}</StatusChip> <span className="text-muted-foreground">{line.reason ?? ""}</span></> : <>{line.fromStage ?? "No stage"} → {line.toStage ?? "the rule's stage"}</>}</td>
                 <td>
                   {line.checked ? (
                     <span className="inline-flex items-center gap-2">

@@ -48,7 +48,7 @@ const toContent = (c: z.infer<typeof content>): RuleContent => ({ event: c.event
 function failure(error: unknown) {
   if (error instanceof PipelineRulesError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error("[pipeline-rules]", error);
-  return NextResponse.json({ error: "The pipeline rule could not be saved. Try again." }, { status: 500 });
+  return NextResponse.json({ error: "The card-move rule could not be saved. Try again." }, { status: 500 });
 }
 
 export async function GET() {

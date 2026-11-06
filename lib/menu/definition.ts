@@ -158,9 +158,11 @@ export const AGENT_MENU: MenuSection[] = [
       // (groupLink, no dropdown): each later page stands in for the one before. Lapse risk (LA-4.16, what the files
       // already show) went to Book of business; Carrier appointments (LA-0.5) to Compliance.
       // LA-5.3 · predicted, not observed: kept apart from Lapse risk so a guess never sits beside an emergency.
-      item("Retention", { key: "retention.save-queue", groupLink: true, label: "Save queue", path: "/app/save-queue", icon: "life-buoy", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Policies paying fine today that the radar says will stop, and the fix." }),
-      item("Retention", { key: "retention.payment-repair", groupLink: true, sidebar_fallback_for: "retention.save-queue", label: "Servicing", path: "/app/servicing", icon: "wrench", built: true, required_feature: "payment_repair", required_roles: ["owner", "producer", "retention"], blurb: "Payment date, bank, bill-to-draft and address changes, verified by the next carrier file." }),
-      item("Retention", { key: "retention.winback", groupLink: true, sidebar_fallback_for: "retention.payment-repair", label: "Reinstatement", path: "/app/reinstatement", icon: "heart-handshake", built: true, required_feature: "winback", required_roles: ["owner", "producer", "retention"], blurb: "Lapsed policies the carrier will still take back, with the days left." }),
+      // The key is kept (links and homes open it); since 2026-11-05 it is Cases, the ladder from the carrier files.
+      item("Retention", { key: "retention.save-queue", groupLink: true, label: "Cases", path: "/app/retention", icon: "life-buoy", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"], blurb: "Every policy the carrier files flag, at its risk point, with what to do." }),
+      item("Retention", { key: "retention.payment-repair", groupLink: true, sidebar_fallback_for: "retention.save-queue", label: "Waiting on the carrier", path: "/app/servicing", icon: "wrench", built: true, required_feature: "payment_repair", required_roles: ["owner", "producer", "retention"], blurb: "Changes sent to the carrier, open until the next carrier file proves them." }),
+      // A lapse inside its window is worked on its Retention case (critique 2026-11-05, D/E); this is Win-back.
+      item("Retention", { key: "retention.winback", groupLink: true, sidebar_fallback_for: "retention.payment-repair", label: "Win-back", path: "/app/reinstatement", icon: "heart-handshake", built: true, required_feature: "winback", required_roles: ["owner", "producer", "retention"], blurb: "Former clients worth winning back, once the cooling-off has passed." }),
     ],
   },
   // Agency Module 0 (AG-1) · the Team group is gone (owner 2026-11-03, "the team should be rearranged somewhere
@@ -171,16 +173,13 @@ export const AGENT_MENU: MenuSection[] = [
     id: "commissions",
     label: "Commissions",
     items: [
-      // One Commissions link (owner 2026-11-02, as Accounting): groupLink, no dropdown. Three steps since Statements went to
-      // Book of business › Files and the Attribution queue into Needs you (same day); a producer gets My pay without the ledger.
-      item("Commissions", { key: "book.ledger", groupLink: true, label: "Commission ledger", path: "/app/ledger", icon: "receipt", required_feature: "commission_ledger", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
-      item("Commissions", { key: "book.discrepancies", groupLink: true, sidebar_fallback_for: "book.ledger", label: "Pay issues", path: "/app/discrepancies", icon: "scale", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed.", built: true }),
+      // One Commissions link (owner 2026-11-02, as Accounting): groupLink, no dropdown. Two steps since 2026-11-05 (owner):
+      // the Commission ledger went to Book of business and Hierarchy & overrides to Reports. A producer gets My pay.
+      item("Commissions", { key: "book.discrepancies", groupLink: true, label: "Pay issues", path: "/app/discrepancies", icon: "scale", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed.", built: true }),
       // AG-1.12 · each producer's three truths.
       item("Commissions", { key: "commissions.producer_reconciliation", groupLink: true, sidebar_fallback_for: "book.discrepancies", label: "Producer pay", path: "/app/producer-reconciliation", icon: "arrow-left-right", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Expected, reported and received, per producer, never blended." }),
       // AG-1.5 / AG-1.8 · a producer's own pay: his ledger and his statements, opened without asking anyone.
-      item("Commissions", { key: "commissions.my_pay", groupLink: true, sidebar_fallback_for: "book.ledger", label: "My pay", path: "/app/my-pay", icon: "briefcase-business", required_feature: "producer_payouts", required_roles: ["producer"], built: true, blurb: "What you earned, what came back, and every statement." }),
-      // AG-1.2 · from Team (owner 2026-11-03): the override is commission money, so its rule is a Commissions step.
-      item("Commissions", { key: "team.hierarchy", groupLink: true, sidebar_fallback_for: "book.ledger", label: "Hierarchy & Overrides", navLabel: "Hierarchy", path: "/app/hierarchy", icon: "network", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Who reports to whom, and what the agency keeps on each producer." }),
+      item("Commissions", { key: "commissions.my_pay", groupLink: true, sidebar_fallback_for: "commissions.producer_reconciliation", label: "My pay", path: "/app/my-pay", icon: "briefcase-business", required_feature: "producer_payouts", required_roles: ["producer"], built: true, blurb: "What you earned, what came back, and every statement." }),
     ],
   },
   {
@@ -188,19 +187,30 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Book of business",
     items: [
       // One Book of business link (owner 2026-11-02, round 2; it was Data in): groupLink, no dropdown; each later
-      // step stands in for the one before, so a producer (no Files) still gets the one link. Policy matching,
-      // Exceptions and Import your book keep their addresses inside Needs you and Setup.
-      item("Book of business", { key: "book.carrier_files", groupLink: true, label: "Files", path: "/app/carrier-files", icon: "files", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Every policy and commission file a carrier sent, and where each one is: read, linked, moved, paid." }),
-      item("Book of business", { key: "book.needs_you", groupLink: true, sidebar_fallback_for: "book.carrier_files", label: "Needs you", path: "/app/needs-you", icon: "circle-alert", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Every decision the carrier files left for a person: a client to pick, a sale no carrier has, money that doesn't match." }),
-      item("Book of business", { key: "book.policies", groupLink: true, sidebar_fallback_for: "book.needs_you", label: "Policies", path: "/app/policies", icon: "book-user", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "bookkeeper"], blurb: "The book you already have" }),
-      item("Book of business", { key: "book.setup", groupLink: true, sidebar_fallback_for: "book.policies", label: "Setup", path: "/app/book-setup", icon: "settings", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Rates, carrier rules, pipeline rules, agent codes, how your files arrive and your existing book." }),
-      // Lapse risk (LA-4.16) is a Needs you view now (owner 2026-11-02): what the carriers' files already show.
-      item("Book of business", { key: "retention.lapse-risk", groupLink: true, sidebar_fallback_for: "book.setup", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"] }),
+      // step stands in for the one before, so a producer (no Carrier files) still gets the one link. Since 2026-11-05
+      // (owner: "carrier files, policies … and also commission ledger. So only these three") Needs you and Setup are
+      // Carrier sync's, and the Commission ledger came from Commissions (same key, gate and address).
+      item("Book of business", { key: "book.carrier_files", groupLink: true, label: "Carrier files", path: "/app/carrier-files", icon: "files", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Every policy and commission file a carrier sent, and where each one is: read, linked, moved, paid." }),
+      item("Book of business", { key: "book.policies", groupLink: true, sidebar_fallback_for: "book.carrier_files", label: "Policies", path: "/app/policies", icon: "book-user", built: true, required_feature: "book_of_business", required_roles: ["owner", "producer", "bookkeeper"], blurb: "The book you already have" }),
+      item("Book of business", { key: "book.ledger", groupLink: true, sidebar_fallback_for: "book.policies", label: "Commission ledger", path: "/app/ledger", icon: "receipt", required_feature: "commission_ledger", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
       // The Rate card is Setup's first tab (/app/rate-card redirects there, owner 2026-11-02).
       item("Book of business", { key: "book.rate_card", sidebar: false, label: "Rate card", path: "/app/rate-card", icon: "calculator", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Your contract level and commission rates per carrier, and how much of your book they can check." }),
       // Statements open from Files; the Attribution queue's rows are Needs you's Credit items (owner 2026-11-02).
       item("Book of business", { key: "book.statements", sidebar: false, label: "Statements", path: "/app/statements", icon: "file-text", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Carrier statements imported, matched to policies by a person, and posted to the commission ledger." }),
       item("Book of business", { key: "commissions.attribution", sidebar: false, label: "Attribution queue", path: "/app/attribution", icon: "user-round-search", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Statement rows we could not safely give to one producer." }),
+    ],
+  },
+  {
+    // Carrier sync (owner 2026-11-05): one merged page holding Needs you and Setup (Rate card, Carrier rules, Pipeline
+    // rules, Agent codes, Files in), out of Book of business. One link (groupLink); each later step stands in for the
+    // one before. Keys, gates and addresses kept.
+    id: "sync",
+    label: "Carrier sync",
+    items: [
+      item("Carrier sync", { key: "book.needs_you", groupLink: true, label: "Needs you", path: "/app/needs-you", icon: "circle-alert", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Every decision the carrier files left for a person: a client to pick, a sale no carrier has, money that doesn't match." }),
+      item("Carrier sync", { key: "book.setup", groupLink: true, sidebar_fallback_for: "book.needs_you", label: "Setup", path: "/app/book-setup", icon: "settings", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Rates, carrier terms, card-move rules, agent codes, how your files arrive and your existing book." }),
+      // Lapse risk (LA-4.16) is a Needs you view (owner 2026-11-02): what the carriers' files already show.
+      item("Carrier sync", { key: "retention.lapse-risk", groupLink: true, sidebar_fallback_for: "book.setup", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"] }),
     ],
   },
   {
@@ -275,6 +285,9 @@ export const AGENT_MENU: MenuSection[] = [
       item("Reports", { key: "retention.results", groupLink: true, sidebar_fallback_for: "retention.scorecard", label: "Retention results", path: "/app/retention-results", icon: "chart-line", built: true, required_feature: "chargeback_radar", required_roles: ["owner"], blurb: "Whether the risk bands came true, and what working the queue saved, from your own book." }),
       // AG-1.9 · a report, so a Reports view (2026-11-03, out of Team); same key, gate and address.
       item("Reports", { key: "team.scorecards", groupLink: true, sidebar_fallback_for: "insight.sales-performance", label: "Producer scorecards", navLabel: "Scorecards", path: "/app/producer-scorecards", icon: "gauge", required_feature: "producer_scorecards", required_roles: ["owner", "bookkeeper", "producer"], built: true, blurb: "Who is profitable, not just busy." }),
+      // AG-1.2 · a Reports view (owner 2026-11-05: "Put hierarchy and overrides on reports"; it was a Commissions step).
+      // Same key, gate and address; a manager whose plan has no other report still gets the one Reports link.
+      item("Reports", { key: "team.hierarchy", groupLink: true, sidebar_fallback_for: "team.scorecards", label: "Hierarchy & Overrides", navLabel: "Hierarchy", path: "/app/hierarchy", icon: "network", required_feature: "team_hierarchy", required_roles: ["owner", "bookkeeper", "manager"], built: true, blurb: "Who reports to whom, and what the agency keeps on each producer." }),
     ],
   },
   {

@@ -66,6 +66,7 @@ export const MOVE_SOURCE_WORDS: Record<string, string> = {
   owner_fix: "Corrected by the owner",
   dialer: "A call outcome",
   inbound: "An inbound call outcome",
+  pipeline_rule: "A card-move rule (carrier file)",
 };
 export const moveSourceWord = (source: string | null | undefined) => (source ? MOVE_SOURCE_WORDS[source] ?? source.replaceAll("_", " ") : "Not recorded");
 /** A move a person made: Undo never offers to reverse it (the person's move wins, as the stage sync). */
@@ -80,7 +81,28 @@ export type PolicyHistoryRow = {
   from: string | null;
   to: string;
   source: { fileId: string; fileName: string | null; rowNumber: number | null } | null;
+  /** What made a change that has no file row: for a card move, who or what moved it ("Pipeline rule", "A person"). */
+  note?: string | null;
 };
+
+/**
+ * The lead's card moves as History rows (owner 2026-11-05, his manager's request: "from which stage it changed to
+ * what stage"), beside the carrier's field changes. Field "Card stage"; "Because of" says what moved it and who.
+ */
+export function cardMoveHistoryRows(moves: ReadonlyArray<{ at: string; from: string | null; to: string; source: string; by: string | null }>): PolicyHistoryRow[] {
+  return moves.map((move) => ({
+    date: move.at,
+    field: "card_stage",
+    fieldLabel: "Card stage",
+    from: move.from,
+    to: move.to,
+    source: null,
+    note: [moveSourceWord(move.source), move.by].filter(Boolean).join(" · "),
+  }));
+}
+
+/** History rows from every source, newest first (a stable order for rows of one day). */
+export const mergeHistory = (...lists: ReadonlyArray<readonly PolicyHistoryRow[]>) => lists.flat().sort((a, b) => b.date.localeCompare(a.date));
 
 /** The field filter's choices: every field that changed, most changes first, "Every field" first. */
 export function historyFields(rows: readonly PolicyHistoryRow[]): Array<{ key: string; label: string; count: number }> {
@@ -99,7 +121,7 @@ export const filterHistory = (rows: readonly PolicyHistoryRow[], field: string |
 export function historyCsv(rows: readonly PolicyHistoryRow[]): string {
   // The one escaper (lib/csv/cell.ts): quotes when needed, and defuses a cell that would run as a formula.
   const header = ["Date", "Field", "From", "To", "File", "Row"];
-  return [header, ...rows.map((row) => [row.date, row.fieldLabel, row.from, row.to, row.source?.fileName ?? null, row.source?.rowNumber ?? null])].map((line) => line.map(csvCellMinimal).join(",")).join("\r\n");
+  return [header, ...rows.map((row) => [row.date, row.fieldLabel, row.from, row.to, row.source?.fileName ?? row.note ?? null, row.source?.rowNumber ?? null])].map((line) => line.map(csvCellMinimal).join(",")).join("\r\n");
 }
 
 /** The carrier's side of a person, from the policy's latest snapshot, for the Change client match count. */
@@ -135,7 +157,7 @@ const IN_FORCE = new Set(["active", "at_risk", "approved_unpaid"]);
 export function nextDateThatMatters(policy: { status: string | null; paidTo: string | null; daysPastDue: number | null; daysLeft: number | null; asOf: string | null }): { label: string; date: string; detail: string } | null {
   if (policy.daysLeft !== null && policy.daysLeft > 0 && (policy.daysPastDue ?? 0) > 0 && policy.asOf) {
     const lapsed = policy.status === "lapsed";
-    return { label: lapsed ? "Can be reinstated until" : "The carrier closes it on", date: addDays(policy.asOf, policy.daysLeft), detail: `${policy.daysLeft} more day${policy.daysLeft === 1 ? "" : "s"}, by the carrier's window in Carrier rules` };
+    return { label: lapsed ? "Can be reinstated until" : "The carrier closes it on", date: addDays(policy.asOf, policy.daysLeft), detail: `${policy.daysLeft} more day${policy.daysLeft === 1 ? "" : "s"}, by the carrier's window in Carrier terms` };
   }
   if (policy.paidTo && IN_FORCE.has(policy.status ?? "") && !(policy.daysPastDue && policy.daysPastDue > 0)) {
     return { label: "Next payment due", date: policy.paidTo.slice(0, 10), detail: "the paid-to date in the carrier's latest file" };

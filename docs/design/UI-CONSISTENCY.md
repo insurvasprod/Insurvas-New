@@ -382,6 +382,13 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
 - Applied filters show in a row under the panel, labelled "Active filters", as removable chips
   ("Status: In force ×") followed by "Clear filters". The row stays visible when the panel is
   collapsed.
+- **Pop-over (owner 2026-11-06, Retention round 3: "a cleaner solution rather than destroying the
+  table").** A list may instead use `FilterPopover`: the same labelled fields, one column, in a
+  `Popover` under the Filters button, with Clear and Done; the table keeps its rows. Its applied
+  filters are `<ActiveFilters inline>` chips on the toolbar's own line, never a band. Live on Cases,
+  Waiting on the carrier and Win-back; other lists move to it when they are reworked. A row never
+  opens in place: it links to its record's page, and a read-only `HoverPeek` on the name may show the
+  few facts that decide what to do.
 
 ## 7. Loading — one look everywhere
 - Route level: `app/app/(shell)/loading.tsx` renders `PageLoading` (header + table skeleton).

@@ -28,15 +28,15 @@ const toWindow = (rule: ResolvedRule | RuleRow | null): WindowRule | null =>
  */
 export default async function CarrierRulesCarrierPage({ params }: { params: Promise<{ carrierId: string }> }) {
   const guard = await guardPage("statement_ingestion");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Carrier rules" description="Rates, carrier rules and pipeline rules for your book." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Carrier terms" description="Rates, carrier terms and card-move rules for your book." />;
   // Owner and bookkeeper, like every Setup tab and its API.
-  if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Carrier rules" detail="Setup is for the account owner and bookkeepers." />;
+  if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Carrier terms" detail="Setup is for the account owner and bookkeepers." />;
   const { carrierId } = await params;
   if (!isRecordUuid(carrierId)) notFound();
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
   const view = await loadCarrierRulesPage(tenantId, carrierId);
-  if (!view.available) return <DataInPage step="setup" title="Carrier rules"><Callout tone="warning" title={CARRIER_RULES_PENDING_MESSAGE} /></DataInPage>;
+  if (!view.available) return <DataInPage step="carrier-rules" title="Carrier terms"><Callout tone="warning" title={CARRIER_RULES_PENDING_MESSAGE} /></DataInPage>;
   const carrier = view.carrier;
   if (!carrier) notFound();
 
@@ -68,11 +68,11 @@ export default async function CarrierRulesCarrierPage({ params }: { params: Prom
 
   return (
     <DataInPage
-      step="setup"
+      step="carrier-rules"
       title={carrier.carrierName}
       facts={facts}
       actions={stepper || undefined}
-      breadcrumbs={[{ label: "Book of business", href: "/app/carrier-files" }, { label: "Setup", href: "/app/book-setup" }, { label: "Carrier rules", href: "/app/book-setup/carrier-rules" }, { label: carrier.carrierName }]}
+      breadcrumbs={[{ label: "Carrier sync", href: "/app/needs-you" },{ label: "Carrier terms", href: "/app/book-setup/carrier-rules" }, { label: carrier.carrierName }]}
     >
       <CarrierRuleWindows carrierId={carrier.carrierId} carrierName={carrier.carrierName} asOf={view.asOf} readOnly={readOnly} rows={rows} />
       <CarrierFacts

@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { PreviewTable } from "@/components/app/book/setup/preview-table";
+import { StagePicker } from "@/components/app/book/setup/stage-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { checkboxControl, control, Field, textareaControl } from "@/components/ui/field";
@@ -72,7 +73,7 @@ export function RuleForm({ ruleId, initial, board, carriers, readOnly }: { ruleI
     setBusy("preview");
     try {
       const data = (await call({ action: "preview", rule_id: ruleId, name: draft.name, content: apiContent({ ...draft, carrierIds: everyCarrier ? [] : draft.carrierIds }) })) as unknown as Preview & { message?: string | null };
-      if (!data.available) throw new Error(data.message ?? "Pipeline rules need a database update.");
+      if (!data.available) throw new Error(data.message ?? "Card moves need a database update.");
       setPreview(data);
     } catch (error) {
       notify.block(error instanceof Error ? error.message : "The preview did not run.");
@@ -137,18 +138,10 @@ export function RuleForm({ ruleId, initial, board, carriers, readOnly }: { ruleI
         <Card>
           <CardHeader><CardTitle>Move the card</CardTitle></CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div>
-              <span className="text-label text-[var(--body)]">Only when it is in</span>
-              <span className="mt-1 block text-xs text-muted-foreground">{draft.fromStageIds.length ? `${draft.fromStageIds.length} ${draft.fromStageIds.length === 1 ? "stage" : "stages"} picked` : "Any stage (pick stages to narrow it)"}</span>
-              <div className="mt-2 flex max-h-48 flex-col gap-2 overflow-y-auto" role="group" aria-label="From stages">
-                {board.map((p) => (
-                  <div key={p.id} className="flex flex-wrap items-center gap-2">
-                    <span className="w-full text-xs text-muted-foreground">{p.name}</span>
-                    {p.stages.filter((s) => !s.archived || draft.fromStageIds.includes(s.id)).map((s) => <ToggleChip key={s.id} selected={draft.fromStageIds.includes(s.id)} onClick={() => set({ fromStageIds: toggle(draft.fromStageIds, s.id) })}>{s.name}</ToggleChip>)}
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Round 6 (owner 2026-11-06): one control that says the answer, not every stage as a chip on the page. */}
+            <Field label="Only when the card is in" htmlFor="rule-from">
+              <StagePicker board={board} value={draft.fromStageIds} onChange={(next) => set({ fromStageIds: next })} disabled={readOnly || busy !== null} />
+            </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Pipeline" htmlFor="rule-pipeline">
                 <select id="rule-pipeline" className={control} value={draft.targetPipelineId} onChange={(e) => set({ targetPipelineId: e.target.value, targetStageId: "" })}>
@@ -197,7 +190,7 @@ export function RuleForm({ ruleId, initial, board, carriers, readOnly }: { ruleI
 
       {preview && <PreviewTable lines={preview.lines} asOf={preview.asOf} title="Preview on today's data" />}
       {preview && preview.carriersWithoutGrace.length > 0 && (draft.event === "first_payment_missed" || draft.event === "later_payment_missed") && (
-        <span className="text-xs text-[var(--warning-ink)]">{preview.carriersWithoutGrace.length} {preview.carriersWithoutGrace.length === 1 ? "carrier has" : "carriers have"} policies behind but no grace set, so no missed payment is counted for them. Set one in Carrier rules.</span>
+        <span className="text-xs text-[var(--warning-ink)]">{preview.carriersWithoutGrace.length} {preview.carriersWithoutGrace.length === 1 ? "carrier has" : "carriers have"} policies behind but no grace set, so no missed payment is counted for them. Set one in Carrier terms.</span>
       )}
     </div>
   );

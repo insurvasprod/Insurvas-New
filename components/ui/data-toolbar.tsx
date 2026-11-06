@@ -2,6 +2,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { ChevronDown, RotateCw, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 /**
@@ -151,11 +152,11 @@ export type ActiveFilter = { key: string; label: string; value: string; onRemove
  * filters" link. It stays visible while the panel is closed, so a filtered list never looks like the
  * whole list. Renders nothing when no filter is on.
  */
-export function ActiveFilters({ filters, onClear, className }: { filters: ActiveFilter[]; onClear: () => void; className?: string }) {
+export function ActiveFilters({ filters, onClear, className, inline = false }: { filters: ActiveFilter[]; onClear: () => void; className?: string; /** On the toolbar's own line, beside a FilterPopover (§6a, 2026-11-06): no band, no label. */ inline?: boolean }) {
   if (filters.length === 0) return null;
   return (
-    <div className={cn("flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2 text-sm", className)}>
-      <span className="mr-1 text-xs font-medium text-muted-foreground">Active filters</span>
+    <div className={cn(inline ? "flex flex-wrap items-center gap-1.5 text-sm" : "flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-2 text-sm", className)}>
+      {!inline && <span className="mr-1 text-xs font-medium text-muted-foreground">Active filters</span>}
       {filters.map((filter) => (
         <span key={filter.key} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-card pl-2.5 pr-1 text-xs">
           <span className="text-muted-foreground">{filter.label}:</span>
@@ -178,6 +179,26 @@ export function ActiveFilters({ filters, onClear, className }: { filters: Active
         Clear filters
       </button>
     </div>
+  );
+}
+
+/**
+ * Filters in a pop-over under the Filters button (§6a, owner 2026-11-06: "a cleaner solution rather than
+ * destroying the table"): the table keeps its rows while the filters are chosen. The fields stack in one
+ * column; Clear and Done close it. Applied filters show as `<ActiveFilters inline>` on the toolbar line.
+ */
+export function FilterPopover({ count = 0, children, onClear, doneLabel = "Done" }: { count?: number; children: ReactNode; onClear: () => void; doneLabel?: string }) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild><FilterButton count={count} /></PopoverTrigger>
+      <PopoverContent aria-label="Filters" className="grid w-[340px] gap-3 p-4">
+        {children}
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <Button type="button" variant="ghost" size="sm" onClick={onClear} disabled={count === 0}>Clear</Button>
+          <PopoverClose asChild><Button type="button" size="sm">{doneLabel}</Button></PopoverClose>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }
 

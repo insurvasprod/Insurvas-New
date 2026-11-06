@@ -65,7 +65,20 @@ export type ServicingRow = {
   requestedBy: string | null;
   createdAt: string;
   note: string | null;
+  /** The Retention case it was opened from, if any: the request points back to the work (critique E3). */
+  caseId: string | null;
 };
+
+/** request id → the Retention case that links it. Empty before the ladder exists. */
+async function casesLinking(tenantId: string, ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db().from("retention_case").select("id, servicing_request_id").eq("tenant_id", tenantId).in("servicing_request_id", ids.slice(i, i + 200));
+    if (error) return out;
+    for (const c of (data ?? []) as Loose[]) out.set(c.servicing_request_id, c.id);
+  }
+  return out;
+}
 
 const ROW_COLUMNS = "id, carrier_id, policy_number, contact_id, request_type, origin, field_changes_json, target_draft_reason, status, carrier_method, carrier_reference, submitted_at, carrier_confirmed_at, expected_effective_date, verified_at, verified_snapshot_date, failure_reason, checked_snapshot_date, unprovable_fields, requested_by, created_at, note";
 
@@ -231,6 +244,24 @@ export async function stepRequest(viewer: Viewer, id: string, to: RequestStatus,
   if (update.error) throw new Error(`Could not update the request: ${update.error.message}`);
 }
 
+/** A note added to a request (owner 2026-11-06: typed or dictated): dated, kept under the earlier ones. */
+export async function addRequestNote(viewer: Viewer, id: string, note: string) {
+  const text = note.trim();
+  if (!text) throw new ServicingError("Write the note first.", 400);
+  const { data: row, error } = await db().from("servicing_request").select("id, carrier_id, policy_number, note").eq("tenant_id", viewer.tenantId).eq("id", id).maybeSingle();
+  if (error) {
+    if (isSchemaGap(error)) throw new ServicingError(SERVICING_PENDING_MESSAGE, 503);
+    throw new Error(error.message);
+  }
+  if (!row) throw new ServicingError("That request isn't here.", 404);
+  await policyFor(viewer, row.carrier_id, row.policy_number);
+  const line = `${new Date().toISOString().slice(0, 10)}: ${text}`;
+  const next = [row.note, line].filter(Boolean).join("\n");
+  // The column holds 2,000 characters: the newest notes are kept.
+  const update = await db().from("servicing_request").update({ note: next.length > 2000 ? next.slice(next.length - 2000) : next }).eq("tenant_id", viewer.tenantId).eq("id", id);
+  if (update.error) throw new Error(`Could not save the note: ${update.error.message}`);
+}
+
 export type ServicingList = {
   available: true;
   rows: ServicingRow[];
@@ -275,10 +306,11 @@ export async function loadServicing(viewer: Viewer): Promise<ServicingList | { a
   }
   const contactIds = [...new Set(rows.map((r) => r.contact_id).filter(Boolean))] as string[];
   const userIds = [...new Set(rows.map((r) => r.requested_by).filter(Boolean))] as string[];
-  const [contactParts, users, carriers] = await Promise.all([
+  const [contactParts, users, carriers, caseOf] = await Promise.all([
     mapLimit(chunksOf(contactIds), READ_CONCURRENCY, async (chunk) => ((await db().from("contacts").select("id, first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).in("id", chunk)).data ?? []) as Loose[]),
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
     db().from("carriers").select("id, name"),
+    casesLinking(viewer.tenantId, rows.map((r) => r.id)),
   ]);
   const contacts: Loose[] = contactParts.flat();
   const contactOf = new Map<string, Loose>(contacts.map((c) => [c.id, c]));
@@ -304,6 +336,7 @@ export async function loadServicing(viewer: Viewer): Promise<ServicingList | { a
         expectedEffectiveDate: r.expected_effective_date, verifiedAt: r.verified_at, verifiedSnapshotDate: r.verified_snapshot_date,
         failureReason: r.failure_reason, checkedSnapshotDate: r.checked_snapshot_date, unprovable: r.unprovable_fields ?? [],
         requestedBy: r.requested_by ? userName.get(r.requested_by) ?? "Someone no longer here" : null, createdAt: r.created_at, note: r.note,
+        caseId: caseOf.get(r.id) ?? null,
       } satisfies ServicingRow;
     }),
   };
@@ -346,10 +379,11 @@ export async function loadRequest(viewer: Viewer, id: string): Promise<Servicing
     }
     if (!r) return null;
   }
-  const [contact, user, carrier] = await Promise.all([
+  const [contact, user, carrier, caseOf] = await Promise.all([
     r.contact_id ? db().from("contacts").select("first_name, last_name, primary_phone").eq("tenant_id", viewer.tenantId).eq("id", r.contact_id).maybeSingle() : { data: null },
     r.requested_by ? db().from("users").select("name, email").eq("id", r.requested_by).maybeSingle() : { data: null },
     db().from("carriers").select("name").eq("id", r.carrier_id).maybeSingle(),
+    casesLinking(viewer.tenantId, [r.id]),
   ]);
   const c = contact.data as Loose;
   const u = user.data as Loose;
@@ -362,6 +396,7 @@ export async function loadRequest(viewer: Viewer, id: string): Promise<Servicing
     failureReason: r.failure_reason, checkedSnapshotDate: r.checked_snapshot_date, unprovable: r.unprovable_fields ?? [],
     requestedBy: r.requested_by ? (u ? u.name || u.email : "Someone no longer here") : null, createdAt: r.created_at, note: r.note,
     formRef: r.carrier_form_ref ?? null, failedAt: r.failed_at ?? null, cancelledAt: r.cancelled_at ?? null,
+    caseId: caseOf.get(r.id) ?? null,
   };
 }
 
