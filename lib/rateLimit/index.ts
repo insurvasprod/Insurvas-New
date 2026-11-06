@@ -28,6 +28,13 @@ export const SIGNUP_PER_EMAIL: RateLimitRule = { name: "signup_email", max: 3, w
 export const VERIFICATION_RESEND: RateLimitRule = { name: "verify_resend", max: 5, windowSeconds: 3600 };
 
 /**
+ * The landing page's contact form. Each request is one email to our own inbox, so the limits keep a
+ * script from filling it: a few an hour from one machine, fewer from one address.
+ */
+export const CONTACT_PER_IP: RateLimitRule = { name: "contact_ip", max: 5, windowSeconds: 3600 };
+export const CONTACT_PER_EMAIL: RateLimitRule = { name: "contact_email", max: 3, windowSeconds: 3600 };
+
+/**
  * LA-2.5 · a vendor posting real-time leads.
  *
  * Per KEY rather than per IP, so one vendor's burst cannot throttle another's, which an IP-based

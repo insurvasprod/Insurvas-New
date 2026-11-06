@@ -16,8 +16,24 @@ import styles from "@/components/marketing/cta.module.css";
  */
 type Variant = "primary" | "secondary" | "onDark";
 
-export function MarketingCta({ href, children, variant = "primary", icon = "right" }: { href: string; children: ReactNode; variant?: Variant; icon?: "right" | "down" | "none" }) {
+export function MarketingCta({ href, children, variant = "primary", icon = "right", type = "button", disabled = false }: {
+  /** A link when set; without it the CTA is a button element (a form's submit, 2026-11-06). */
+  href?: string;
+  children: ReactNode;
+  variant?: Variant;
+  icon?: "right" | "down" | "none";
+  type?: "button" | "submit";
+  disabled?: boolean;
+}) {
   const Icon = icon === "down" ? ArrowDown : ArrowRight;
+  if (!href) {
+    return (
+      <button type={type} disabled={disabled} className={`${styles.cta} ${styles.button} ${styles[variant]}`}>
+        <span className={styles.label}>{children}</span>
+        {icon !== "none" && <span className={styles.icon} aria-hidden="true"><Icon /></span>}
+      </button>
+    );
+  }
   return (
     <Link href={href} className={`${styles.cta} ${styles[variant]}`}>
       <span className={styles.label}>{children}</span>

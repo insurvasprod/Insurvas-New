@@ -36,6 +36,8 @@ const COLUMNS: Array<{ title: string; links: Array<{ href: string; label: string
       { href: "/pricing", label: "Pricing" },
       { href: "/roadmap", label: "Roadmap" },
       { href: "/#faq", label: "FAQ" },
+      // The landing page's contact form (Umar, 4 Nov: "How will people contact us?").
+      { href: "/#contact", label: "Contact us" },
     ],
   },
   {

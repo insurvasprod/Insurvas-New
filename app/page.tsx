@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
 import { LandingHero } from "@/components/marketing/landing-hero";
 import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
+import { LandingContact } from "@/components/marketing/landing-contact";
 import { LandingStack } from "@/components/marketing/landing-stack";
 import { LandingBento } from "@/components/marketing/landing-bento";
 import { LandingAudience, LandingBuiltFor } from "@/components/marketing/landing-audience";
@@ -45,6 +46,7 @@ export default async function Home() {
         <LandingPricingTeaser plans={plans} />
         <LandingFaq />
         <LandingRoadmap />
+        <LandingContact />
       </main>
       <SiteFooter />
     </div>
