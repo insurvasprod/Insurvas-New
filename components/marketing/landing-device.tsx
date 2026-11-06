@@ -32,7 +32,7 @@ import { money, VENDORS } from "@/components/marketing/landing-sample-data";
 const PAGE_MS = 5_000;
 /** How long a page chosen by hand stays before the cycle carries on. */
 const HOLD_MS = 20_000;
-const PAGE_OF: Record<string, DevicePageKey> = { Dashboard: "dashboard", Inbound: "inbound", Dialer: "dialer", Callbacks: "callbacks", Applications: "applications" };
+const PAGE_OF: Record<string, DevicePageKey> = { Dashboard: "dashboard", Inbound: "inbound", Dialer: "dialer", Callbacks: "callbacks", "Lead workspace": "leads", "Lead flow": "leadFlow", Applications: "applications", "Daily deal flow": "dealFlow" };
 
 // The design is drawn at one screen size and scaled to fit, like a real screenshot would be.
 const SCREEN_W = 1280;

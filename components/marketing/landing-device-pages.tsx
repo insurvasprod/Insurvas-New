@@ -9,7 +9,7 @@ import styles from "@/components/marketing/landing-device.module.css";
  * of the app, drawn with the dashboard's own cards and figure tiles. Sample data throughout, with
  * the same people, partners and vendors as the dashboard, so the screens agree with one another.
  */
-export type DevicePageKey = "dashboard" | "inbound" | "dialer" | "callbacks" | "applications";
+export type DevicePageKey = "dashboard" | "inbound" | "dialer" | "callbacks" | "leads" | "leadFlow" | "applications" | "dealFlow";
 
 /** `section` is the page's menu group, shown in the trail over the title, as the app shows it. */
 export const DEVICE_PAGES: { key: DevicePageKey; section: string; crumb: string; title: string; sub: string }[] = [
@@ -17,7 +17,10 @@ export const DEVICE_PAGES: { key: DevicePageKey; section: string; crumb: string;
   { key: "inbound", section: "Today", crumb: "Inbound", title: "Inbound floor", sub: "Live transfers from your partners · sample data" },
   { key: "dialer", section: "Today", crumb: "Dialer", title: "Dialer", sub: "Final expense · Cobalt Media list · sample data" },
   { key: "callbacks", section: "Today", crumb: "Callbacks", title: "Callbacks", sub: "Today, in each client’s own time · sample data" },
+  { key: "leads", section: "Leads", crumb: "Lead workspace", title: "Lead workspace", sub: "Every lead you bought · sample data" },
+  { key: "leadFlow", section: "Leads", crumb: "Lead flow", title: "Lead flow", sub: "Vendors and campaigns this month · sample data" },
   { key: "applications", section: "Sales", crumb: "Applications", title: "Applications", sub: "This week · sample data" },
+  { key: "dealFlow", section: "Sales", crumb: "Daily deal flow", title: "Daily deal flow", sub: "Today · sample data" },
 ];
 
 function Kpis({ items }: { items: { label: string; value: string; hint: string; accent?: boolean }[] }) {
@@ -188,9 +191,106 @@ function Applications() {
   );
 }
 
+function LeadWorkspace() {
+  const leads = [
+    { name: "Walter K.", source: "Cobalt Media", stage: "New", touch: "Not yet called", who: "Unassigned" },
+    { name: "Doris P.", source: "Summit Data", stage: "Contacted", touch: "Today, 9:30", who: "Dana K." },
+    { name: "Frank L.", source: "Bayview Data", stage: "Quoted", touch: "Today, 10:05", who: "Omar S." },
+    { name: "Edna S.", source: "Cobalt Media", stage: "Callback", touch: "Yesterday", who: "Dana K." },
+    { name: "Henry B.", source: "Bayview Data", stage: "Applied", touch: "Today, 11:20", who: "Omar S." },
+  ];
+  return (
+    <>
+      <Kpis items={[
+        { label: "Leads in work", value: "1,284", hint: "across 4 vendors" },
+        { label: "New today", value: "96", hint: "from 2 lists" },
+        { label: "Contacted", value: "61%", hint: "of this week’s leads" },
+        { label: "Ready to dial", value: "584", hint: "screened and clean", accent: true },
+      ]} />
+      <section className={styles.card}>
+        <div className={styles.cardHead}><b>Leads</b><span>Every lead with its source, stage and owner</span></div>
+        {leads.map((lead) => (
+          <div key={lead.name} className={styles.leadRow}>
+            <span><b>{lead.name}</b><small>{lead.source}</small></span>
+            <em data-stage={lead.stage}>{lead.stage}</em>
+            <span className={styles.leadTouch}>{lead.touch}</span>
+            <span className={styles.leadWho}>{lead.who}</span>
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}
+
+function LeadFlow() {
+  const vendors = [
+    { name: "Cobalt Media", campaign: "Final expense · Ohio", bought: 1200, issued: 186, cost: "$17.06" },
+    { name: "Summit Data", campaign: "Final expense · Texas", bought: 900, issued: 148, cost: "$21.40" },
+    { name: "Bayview Data", campaign: "Term life · Georgia", bought: 760, issued: 98, cost: "$15.90" },
+    { name: "Northline Leads", campaign: "Final expense · Arizona", bought: 380, issued: 50, cost: "$19.75" },
+  ];
+  return (
+    <>
+      <Kpis items={[
+        { label: "Lists this month", value: "6", hint: "from 4 vendors" },
+        { label: "Leads bought", value: "3,240", hint: "$26,990.80 spent" },
+        { label: "Duplicates set aside", value: "112", hint: "for a person to review" },
+        { label: "Issued from them", value: "482", hint: "14.9% of leads bought", accent: true },
+      ]} />
+      <section className={styles.card}>
+        <div className={styles.cardHead}><b>Vendors and campaigns</b><span>Bought, issued and lead cost</span></div>
+        {vendors.map((v) => (
+          <div key={v.name} className={styles.flowRow}>
+            <span><b>{v.name}</b><small>{v.campaign}</small></span>
+            <span className={styles.flowBar}><i style={{ "--w": v.bought / 1200 } as CSSProperties} /><i data-issued="" style={{ "--w": v.issued / 1200 } as CSSProperties} /></span>
+            <span className={styles.flowNum}><b>{v.bought.toLocaleString("en-US")}</b><small>bought</small></span>
+            <span className={styles.flowNum}><b>{v.issued}</b><small>issued</small></span>
+            <span className={styles.flowNum}><b>{v.cost}</b><small>a lead</small></span>
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}
+
+function DealFlow() {
+  const deals = [
+    { time: "9:42", client: "Doris P.", carrier: "Sample Carrier Life", premium: "$64.10", who: "Dana K.", state: "Submitted" },
+    { time: "10:18", client: "Walter K.", carrier: "Sample Mutual", premium: "$52.80", who: "Omar S.", state: "Submitted" },
+    { time: "11:05", client: "Ruth A.", carrier: "Sample Carrier Life", premium: "$70.00", who: "Dana K.", state: "Issued" },
+    { time: "11:51", client: "Frank L.", carrier: "Sample Mutual", premium: "$58.20", who: "Omar S.", state: "Pending" },
+    { time: "12:34", client: "Edna S.", carrier: "Sample Carrier Life", premium: "$71.90", who: "Dana K.", state: "Submitted" },
+  ];
+  return (
+    <>
+      <Kpis items={[
+        { label: "Deals today", value: "9", hint: "5 before noon" },
+        { label: "Annual premium", value: "$6,204", hint: "from today’s deals", accent: true },
+        { label: "Average premium", value: "$57.40", hint: "a month" },
+        { label: "Top producer", value: "Dana K.", hint: "5 deals today" },
+      ]} />
+      <section className={styles.card}>
+        <div className={styles.cardHead}><b>Today’s deals</b><span>Written today, by the hour</span></div>
+        {deals.map((deal) => (
+          <div key={deal.time} className={styles.dealRow}>
+            <span className={styles.dealTime}>{deal.time}</span>
+            <span><b>{deal.client}</b><small>{deal.carrier}</small></span>
+            <span className={styles.dealPremium}>{deal.premium}<small>/mo</small></span>
+            <span className={styles.leadWho}>{deal.who}</span>
+            <em data-stage={deal.state}>{deal.state}</em>
+          </div>
+        ))}
+      </section>
+    </>
+  );
+}
+
 export function DevicePage({ page }: { page: Exclude<DevicePageKey, "dashboard"> }) {
   if (page === "inbound") return <Inbound />;
   if (page === "dialer") return <Dialer />;
   if (page === "callbacks") return <Callbacks />;
+  if (page === "leads") return <LeadWorkspace />;
+  if (page === "leadFlow") return <LeadFlow />;
+  if (page === "dealFlow") return <DealFlow />;
   return <Applications />;
 }

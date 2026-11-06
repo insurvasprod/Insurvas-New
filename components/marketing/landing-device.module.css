@@ -271,3 +271,26 @@ button.navItem:focus-visible { outline: 2px solid var(--primary); outline-offset
   .pageTabs button[aria-pressed="true"] { border-color: transparent; background: var(--primary); color: var(--on-primary); }
   .pageTabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 }
+
+/* Lead workspace, Lead flow and Daily deal flow (owner, 6 Nov). */
+.leadRow, .dealRow, .flowRow { display: grid; align-items: center; gap: 14px; border-top: 1px solid var(--border); padding: 10px 0; }
+.leadRow { grid-template-columns: minmax(0, 1.4fr) 100px minmax(0, 1fr) 110px; }
+.dealRow { grid-template-columns: 56px minmax(0, 1.5fr) 100px 100px 100px; }
+.flowRow { grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.6fr) 70px 60px 70px; }
+.leadRow > span:first-child, .dealRow > span:nth-child(2), .flowRow > span:first-child { display: grid; gap: 1px; }
+.leadRow b, .dealRow b, .flowRow b { color: var(--ink); font-size: 13px; font-weight: 600; }
+.leadRow small, .dealRow small, .flowRow small { color: var(--muted); font-size: 11.5px; }
+.leadTouch { color: var(--body); font-size: 12.5px; }
+.leadWho { color: var(--body); font-size: 12.5px; }
+.leadRow em, .dealRow em { justify-self: start; border-radius: 999px; background: var(--surface-alt); padding: 3px 10px; color: var(--muted); font-size: 11.5px; font-style: normal; font-weight: 700; }
+.leadRow em[data-stage="Applied"], .dealRow em[data-stage="Issued"] { background: var(--success-surface); color: var(--success-ink); }
+.leadRow em[data-stage="Quoted"], .dealRow em[data-stage="Submitted"] { background: var(--primary-soft); color: var(--accent-ink); }
+.leadRow em[data-stage="Callback"], .dealRow em[data-stage="Pending"] { background: var(--warning-surface); color: var(--warning-ink); }
+.leadRow em[data-stage="New"] { background: var(--info-surface); color: var(--info-ink); }
+.dealTime { color: var(--ink); font: 600 15px var(--font-display); }
+.dealPremium { color: var(--ink); font-size: 13px; font-weight: 600; }
+.dealPremium small { margin-left: 2px; }
+.flowBar { position: relative; height: 8px; overflow: hidden; border-radius: 8px; background: var(--surface-alt); }
+.flowBar i { position: absolute; inset: 0 auto 0 0; width: calc(var(--w, 0) * 100%); border-radius: 8px; background: color-mix(in srgb, var(--primary) 35%, var(--surface-alt)); }
+.flowBar i[data-issued] { background: var(--primary); }
+.flowNum { display: grid; justify-items: end; gap: 1px; }
