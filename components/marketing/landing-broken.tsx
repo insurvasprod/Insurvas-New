@@ -117,16 +117,15 @@ const LEAKS = [
 ];
 
 /**
- * The journey (owner, 6 Nov; it replaces the separate five-tools section). One tall section in three
- * parts on the page: the seven problems with their photos at the top, the Insurvas gate in the middle,
- * and the seven fixes at the bottom. As the visitor scrolls, the problem cards travel down with them,
- * gather, pass one by one behind the gate (where each turns into its fix), and spread out into the
- * solved grid below, photos and all.
+ * The journey (owner, 6 Nov; it replaces the separate five-tools section). One screen that holds
+ * still while the visitor scrolls through it: the seven problems in a row at the top, Insurvas in the
+ * middle, and seven empty places in a row at the bottom. Scrolling sends the problem cards down one
+ * after another; each drops behind Insurvas, turns into its fix there, and comes out into its place
+ * below, photo and all. Everything stays on screen the whole way, so there is no empty scrolling.
  *
- * GSAP ScrollTrigger scrubs one timeline with a little smoothing (scrub 0.9), so the motion follows
- * the scroll softly and plays backwards on the way up. The cards' paths are measured from the page
- * (their own place, the gate, their solved place) and re-measured on resize. Phones and reduced motion
- * get the two grids as they are: problems, the gate, fixes.
+ * GSAP ScrollTrigger scrubs one timeline (scrub 0.6), so the motion follows the scroll and plays
+ * backwards on the way up. The paths are measured inside the pinned stage, which does not move, and
+ * re-measured whenever its size changes. Phones and reduced motion get the parts in order instead.
  */
 function offsetWithin(el: HTMLElement, root: HTMLElement) {
   let x = 0;
@@ -165,57 +164,62 @@ export function LandingBroken() {
     const mm = gsap.matchMedia();
     mm.add("(min-width: 761px) and (prefers-reduced-motion: no-preference)", () => {
       section.dataset.mode = "scene";
+      const stage = section.querySelector<HTMLElement>("[data-stage]")!;
       const cards = gsap.utils.toArray<HTMLElement>("[data-card]", section);
       const slots = gsap.utils.toArray<HTMLElement>("[data-slot]", section);
       const gate = section.querySelector<HTMLElement>("[data-gate]")!;
-      const problems = section.querySelector<HTMLElement>("[data-problems]")!;
-      const solved = section.querySelector<HTMLElement>("[data-solved]")!;
+      const count = section.querySelector<HTMLElement>("[data-count]")!;
+      const through: number[] = [];
       const tl = gsap.timeline({
         defaults: { ease: "none" },
-        scrollTrigger: { trigger: problems, start: "top 18%", endTrigger: solved, end: "top 32%", scrub: 0.9, invalidateOnRefresh: true },
+        scrollTrigger: { trigger: section, start: "top top", end: "bottom bottom", scrub: 0.6, invalidateOnRefresh: true },
       });
       cards.forEach((card, i) => {
         const flip = card.querySelector<HTMLElement>("[data-flip]")!;
-        const enter = 0.36 + i * 0.04; // when this card is behind the gate
-        const from = () => offsetWithin(card, section);
+        const start = 0.04 + i * 0.075;
+        const arrive = start + 0.2; // behind the gate
+        through.push(arrive);
+        const from = () => offsetWithin(card, stage);
         tl.to(card, {
-          x: () => offsetWithin(gate, section).x - from().x + (i - 3) * 6,
-          y: () => offsetWithin(gate, section).y - from().y,
-          scale: 0.46,
-          rotation: (i - 3) * 5,
-          rotationX: 18,
+          x: () => offsetWithin(gate, stage).x - from().x,
+          y: () => offsetWithin(gate, stage).y - from().y,
+          scale: 0.4,
+          rotationX: 28,
           transformPerspective: 900,
-          duration: enter,
-          ease: "power1.inOut",
-        }, 0)
-          .set(flip, { rotationY: 180 }, enter)
+          duration: arrive - start,
+          ease: "power2.in",
+        }, start)
+          .set(flip, { rotationY: 180 }, arrive)
+          .fromTo(gate, { "--glow": 1 }, { "--glow": 0.25, duration: 0.08, immediateRender: false }, arrive)
           .to(card, {
-            x: () => offsetWithin(slots[i], section).x - from().x,
-            y: () => offsetWithin(slots[i], section).y - from().y,
+            x: () => offsetWithin(slots[i], stage).x - from().x,
+            y: () => offsetWithin(slots[i], stage).y - from().y,
             scale: 1,
-            rotation: 0,
             rotationX: 0,
-            duration: 1 - enter,
-            ease: "power2.out",
-          }, enter);
+            duration: 0.2,
+            ease: "power3.out",
+          }, arrive);
       });
-      // The gate wakes as the first card reaches it and rests once the last is through.
-      tl.to(gate, { "--glow": 1, duration: 0.06 }, 0.33).to(gate, { "--glow": 0.25, duration: 0.1 }, 0.66);
-      // Re-measure the paths whenever the section's layout changes (late fonts and images, a live
-      // reload, a resized window), so the cards always land on their solved places.
+      tl.to({}, { duration: 0.06 });
+      // The gate counts the fixes as the cards go through it.
+      let shown = -1;
+      tl.eventCallback("onUpdate", () => {
+        const done = through.filter((t) => tl.time() >= t).length;
+        if (done !== shown) { shown = done; count.textContent = `${done} of 7 fixed`; }
+      });
       let pending = 0;
       const remeasure = () => { window.clearTimeout(pending); pending = window.setTimeout(() => ScrollTrigger.refresh(), 120); };
       const watch = new ResizeObserver(remeasure);
-      watch.observe(section);
+      watch.observe(stage);
       document.fonts?.ready.then(remeasure);
-      return () => { watch.disconnect(); window.clearTimeout(pending); delete section.dataset.mode; };
+      return () => { watch.disconnect(); window.clearTimeout(pending); delete section.dataset.mode; count.textContent = "7 of 7 fixed"; };
     });
     return () => mm.revert();
   }, []);
 
   return (
     <section ref={sectionRef} id="industries" aria-labelledby="audience-title" className={styles.section}>
-      <div className={styles.inner}>
+      <div className={styles.stage} data-stage="">
         <header className={styles.head}>
           <p className={styles.eyebrow}>What’s broken today</p>
           <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
@@ -238,16 +242,13 @@ export function LandingBroken() {
           <p className={styles.gateNote}>A CRM, a dialer, two spreadsheets and a prayer</p>
           <div className={styles.gate} data-gate="">
             <InsurvasLogo variant="wordmark" tone="dark" size="public" alt="Insurvas" />
+            <span className={styles.count} data-count="" aria-hidden="true">7 of 7 fixed</span>
             <span className={styles.gateScan} aria-hidden="true" />
           </div>
           <p className={styles.gateNote} data-out="">One system, built by people who ran the floor</p>
         </div>
 
-        <header className={styles.head} data-solved-head="">
-          <p className={styles.eyebrow}>With Insurvas</p>
-          <h2 className={styles.heading}>Seven fixes, in one workspace.</h2>
-        </header>
-        <ul className={styles.grid} data-solved="">
+        <ul className={styles.grid} data-solved="" aria-label="With Insurvas">
           {LEAKS.map((leak) => (
             <li key={leak.key} className={styles.card} data-slot="">
               <div className={styles.flip}><Face leak={leak} side="fix" /></div>

@@ -2,7 +2,7 @@
    gate, the fixes. Without the scene (phones, reduced motion, before the script) it is simply the
    three parts in order. */
 .section { position: relative; overflow: clip; scroll-margin-top: 80px; background: var(--canvas); }
-.inner { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0 clamp(64px, 7vw, 104px); }
+.stage { width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0 clamp(64px, 7vw, 104px); }
 .head { margin-bottom: clamp(24px, 3vw, 36px); text-align: center; }
 .eyebrow { display: inline-flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--accent-ink); font-size: 15px; font-weight: 650; }
 .eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
@@ -51,21 +51,54 @@
     0 30px 60px -24px rgb(13 64 55 / 55%);
 }
 /* A light that runs across the gate, so it reads as working. */
+.count { position: relative; z-index: 1; display: none; color: var(--nav-muted); font-size: 12.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
 .gateScan { position: absolute; inset: 0; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 30%, transparent), transparent); transform: translateX(-100%); animation: gate-scan 2.6s cubic-bezier(.65, 0, .35, 1) infinite; }
 @keyframes gate-scan { to { transform: translateX(100%); } }
 
 /* ── The scene (min-width 761px, motion allowed) ─────────────────────────────────────────────── */
-/* Room to travel: the gate sits about a screen below the problems, the fixes a screen below it. */
-.section[data-mode="scene"] .gateZone { margin: 48vh 0 42vh; }
+/* One screen, held while the section scrolls past it: problems in a row, the gate, the places. */
+.section[data-mode="scene"] { height: 260svh; overflow: visible; }
+.section[data-mode="scene"] .stage {
+  --gap: 14px;
+  --cw: min(calc((min(100vw - 64px, 1320px) - 6 * var(--gap)) / 7), 196px);
+  --ch: max(170px, min(calc(var(--cw) * 1.2), calc((100svh - 330px) / 2)));
+  position: sticky;
+  top: 0;
+  display: grid;
+  height: 100svh;
+  align-content: center;
+  gap: clamp(14px, 2.6vh, 28px);
+  box-sizing: border-box;
+  padding: 92px 0 20px;
+}
+.section[data-mode="scene"] .head { margin: 0; }
+.section[data-mode="scene"] .eyebrow { margin-bottom: 8px; }
+.section[data-mode="scene"] .heading { max-width: none; font-size: clamp(24px, 2.5vw, 38px); }
+.section[data-mode="scene"] .lede { display: none; }
+.section[data-mode="scene"] .grid { flex-wrap: nowrap; gap: var(--gap); max-width: none; }
+.section[data-mode="scene"] .card { flex: 0 0 var(--cw); height: var(--ch); }
+.section[data-mode="scene"] .face { grid-template-rows: minmax(0, 1fr) 90px; border-radius: 14px; }
+.section[data-mode="scene"] .photo { aspect-ratio: auto; }
+.section[data-mode="scene"] .text { gap: 4px; min-height: 0; padding: 9px 11px 11px; }
+.section[data-mode="scene"] .tab { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.section[data-mode="scene"] .title { font-size: clamp(12px, .9vw, 13.5px); line-height: 1.28; }
+.section[data-mode="scene"] .solved { top: 8px; left: 8px; padding: 3px 8px; font-size: 11px; }
+/* The gate band: what goes in on the left, what comes out on the right. */
+.section[data-mode="scene"] .gateZone { grid-template-columns: 1fr auto 1fr; align-items: center; gap: 28px; margin: 0; }
+.section[data-mode="scene"] .gateNote { justify-self: end; max-width: 26ch; text-align: right; }
+.section[data-mode="scene"] .gateNote[data-out] { justify-self: start; text-align: left; }
+.section[data-mode="scene"] .gate { display: flex; width: clamp(280px, 26vw, 380px); height: clamp(76px, 11vh, 100px); flex-direction: column; justify-content: center; gap: 6px; border-radius: 24px; }
+.section[data-mode="scene"] .count { display: block; }
+/* Travelling cards sit under the gate, so they vanish into it and come out of it. */
 .section[data-mode="scene"] .grid[data-problems] .card { position: relative; z-index: 4; will-change: transform; }
 .section[data-mode="scene"] .grid[data-problems] .face { position: absolute; inset: 0; backface-visibility: hidden; }
-.section[data-mode="scene"] .grid[data-problems] .face[data-face="problem"] { position: relative; }
 .section[data-mode="scene"] .grid[data-problems] .face[data-face="fix"] { display: grid; transform: rotateY(180deg); }
-/* The solved grid keeps its places but shows nothing until the travelling cards land in them. */
-.section[data-mode="scene"] .grid[data-solved] .card { visibility: hidden; }
+/* The places below wait as dashed outlines until their card lands on them. */
+.section[data-mode="scene"] .grid[data-solved] .card { border: 1.5px dashed color-mix(in srgb, var(--primary) 45%, var(--border)); border-radius: 14px; }
+.section[data-mode="scene"] .grid[data-solved] .flip { visibility: hidden; }
 
 @media (max-width: 640px) {
-  .inner { width: calc(100% - 32px); }
+  .stage { width: calc(100% - 32px); }
   .grid { flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; margin: 0 -16px; padding: 4px 16px 12px; scroll-snap-type: x mandatory; scrollbar-width: none; }
   .grid::-webkit-scrollbar { display: none; }
   .card { flex-basis: 76vw; scroll-snap-align: start; }
