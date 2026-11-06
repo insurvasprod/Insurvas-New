@@ -1,32 +1,18 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
-import type { CSSProperties } from "react";
-import { ArrowLeft, ArrowRight, Check } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Check } from "lucide-react";
+import { gsap } from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
-
 import styles from "@/components/marketing/landing-broken.module.css";
 
 /**
- * "What's broken today" (2026-11-04, owner, copy from "Insurvas OS Landing.md"): seven leaks as a
- * row of photo cards you can scroll. Each card is a real photograph (public/marketing/README.md has
- * the sources and licences) and the problem in one line; choosing a card opens what Insurvas does
- * about it, and on which plan, underneath. The cards are pressed buttons, not tabs: they scroll.
- *
- * Owner, 6 Nov (third pass): crazier, 3D, and the leaks go through Insurvas the way the five-tools
- * section does. The seven photo cards stand on a slowly turning ring seen from a little above; the
- * Insurvas tile floats over the middle with a beam down to the front. Each card comes round from the
- * left as the problem, and as it passes under the beam a green scan crosses it and it flips to the fix,
- * leaving to the right solved. The panel below always shows the card solved last. Choosing a card or
- * an arrow turns the ring to it and holds for 15 s. The turn is a Web Animations rotation, so it runs
- * on the compositor; the ring pauses off screen and stands still under reduced motion.
+ * "What's broken today": seven leaks, each a real photograph (public/marketing/README.md has the
+ * sources and licences), the problem in one line and the fix Insurvas brings, on the plan shown.
  */
-const LEAK_HOLD_MS = 15_000;
-/** One card reaches the beam every 5 seconds. */
-const TURN_MS = 7 * 5_000;
-const STEP = 360 / 7;
 const LEAKS = [
   {
     key: "lapse",
@@ -130,147 +116,138 @@ const LEAKS = [
   },
 ];
 
+/**
+ * The journey (owner, 6 Nov; it replaces the separate five-tools section). One tall section in three
+ * parts on the page: the seven problems with their photos at the top, the Insurvas gate in the middle,
+ * and the seven fixes at the bottom. As the visitor scrolls, the problem cards travel down with them,
+ * gather, pass one by one behind the gate (where each turns into its fix), and spread out into the
+ * solved grid below, photos and all.
+ *
+ * GSAP ScrollTrigger scrubs one timeline with a little smoothing (scrub 0.9), so the motion follows
+ * the scroll softly and plays backwards on the way up. The cards' paths are measured from the page
+ * (their own place, the gate, their solved place) and re-measured on resize. Phones and reduced motion
+ * get the two grids as they are: problems, the gate, fixes.
+ */
+function offsetWithin(el: HTMLElement, root: HTMLElement) {
+  let x = 0;
+  let y = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== root) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return { x: x + el.offsetWidth / 2, y: y + el.offsetHeight / 2 };
+}
+
+function Face({ leak, side }: { leak: (typeof LEAKS)[number]; side: "problem" | "fix" }) {
+  return (
+    <div className={styles.face} data-face={side}>
+      <span className={styles.photo}>
+        <Image src={leak.photo} alt="" fill sizes="(max-width: 760px) 75vw, 260px" />
+        {side === "fix" && <span className={styles.solved}><Check aria-hidden="true" />Solved</span>}
+      </span>
+      <span className={styles.text}>
+        <span className={styles.tab}>{side === "fix" ? `${leak.tab} · ${leak.plan}` : leak.tab}</span>
+        <span className={styles.title}>{side === "fix" ? leak.fix : leak.broken}</span>
+      </span>
+    </div>
+  );
+}
+
 export function LandingBroken() {
-  const [index, setIndex] = useState(0);
-  const leak = LEAKS[index];
-  const stageRef = useRef<HTMLDivElement>(null);
-  const ringRef = useRef<HTMLDivElement>(null);
-  const spin = useRef<Animation | null>(null);
-  const holdTimer = useRef(0);
+  const sectionRef = useRef<HTMLElement>(null);
 
-  /** The ring's angle now, in degrees (0 → 360 over one turn). */
-  const angleNow = () => {
-    const animation = spin.current;
-    return animation ? (Number(animation.currentTime ?? 0) / TURN_MS) * 360 : 0;
-  };
-  /** Turns the ring to an angle over a short ease-out, then holds it before it carries on. */
-  const turnTo = (target: number, hold = true) => {
-    const animation = spin.current;
-    if (!animation) return;
-    const from = angleNow();
-    let delta = (((target - from) % 360) + 540) % 360 - 180; // the short way round
-    if (Math.abs(delta) < 0.5) delta = 0;
-    animation.pause();
-    // The first frame's time is the start, so no clock is read here.
-    let begin = -1;
-    const step = (now: number) => {
-      if (begin < 0) begin = now;
-      const t = Math.min(1, (now - begin) / 700);
-      const eased = 1 - (1 - t) ** 4;
-      animation.currentTime = ((((from + delta * eased) % 360) + 360) % 360 / 360) * TURN_MS;
-      if (t < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-    window.clearTimeout(holdTimer.current);
-    if (hold && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      holdTimer.current = window.setTimeout(() => spin.current?.play(), LEAK_HOLD_MS);
-    }
-  };
-  // Card i reaches the beam at angle i·STEP; just past it, it is solved.
-  const choose = (i: number) => turnTo(i * STEP + 4);
-  const scroll = (by: number) => turnTo((Math.floor(angleNow() / STEP) + by) * STEP + 4);
-
-  // The turn: a Web Animations rotation (on the compositor, so it stays smooth), one card every 5 s.
   useEffect(() => {
-    const ring = ringRef.current;
-    const stage = stageRef.current;
-    if (!ring || !stage) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const animation = ring.animate(
-      [{ transform: "translateZ(calc(var(--r) * -1)) rotateY(0deg)" }, { transform: "translateZ(calc(var(--r) * -1)) rotateY(360deg)" }],
-      { duration: TURN_MS, iterations: Infinity, easing: "linear" },
-    );
-    animation.currentTime = (4 / 360) * TURN_MS;
-    if (reduce) animation.pause();
-    spin.current = animation;
-    // Which side of the beam each card is on, and which card was solved last: read ten times a second.
-    const cards = [...ring.querySelectorAll<HTMLElement>("[data-card]")];
-    let last = -1;
-    const read = window.setInterval(() => {
-      const a = angleNow();
-      cards.forEach((card, i) => {
-        const world = (((a - i * STEP) % 360) + 360) % 360; // 0 at the beam, growing as it moves right
-        card.dataset.solved = String(world < 180);
+    const section = sectionRef.current;
+    if (!section) return;
+    gsap.registerPlugin(ScrollTrigger);
+    const mm = gsap.matchMedia();
+    mm.add("(min-width: 761px) and (prefers-reduced-motion: no-preference)", () => {
+      section.dataset.mode = "scene";
+      const cards = gsap.utils.toArray<HTMLElement>("[data-card]", section);
+      const slots = gsap.utils.toArray<HTMLElement>("[data-slot]", section);
+      const gate = section.querySelector<HTMLElement>("[data-gate]")!;
+      const problems = section.querySelector<HTMLElement>("[data-problems]")!;
+      const solved = section.querySelector<HTMLElement>("[data-solved]")!;
+      const tl = gsap.timeline({
+        defaults: { ease: "none" },
+        scrollTrigger: { trigger: problems, start: "top 18%", endTrigger: solved, end: "top 32%", scrub: 0.9, invalidateOnRefresh: true },
       });
-      const front = ((Math.floor(a / STEP) % LEAKS.length) + LEAKS.length) % LEAKS.length;
-      if (front !== last) { last = front; setIndex(front); }
-    }, 100);
-    const io = new IntersectionObserver(([entry]) => {
-      if (reduce) return;
-      if (entry?.isIntersecting) { if (!holdTimer.current || animation.playState !== "paused") animation.play(); } else animation.pause();
-    }, { threshold: 0 });
-    io.observe(stage);
-    return () => { window.clearInterval(read); window.clearTimeout(holdTimer.current); io.disconnect(); animation.cancel(); spin.current = null; };
+      cards.forEach((card, i) => {
+        const flip = card.querySelector<HTMLElement>("[data-flip]")!;
+        const enter = 0.36 + i * 0.04; // when this card is behind the gate
+        const from = () => offsetWithin(card, section);
+        tl.to(card, {
+          x: () => offsetWithin(gate, section).x - from().x + (i - 3) * 6,
+          y: () => offsetWithin(gate, section).y - from().y,
+          scale: 0.46,
+          rotation: (i - 3) * 5,
+          rotationX: 18,
+          transformPerspective: 900,
+          duration: enter,
+          ease: "power1.inOut",
+        }, 0)
+          .set(flip, { rotationY: 180 }, enter)
+          .to(card, {
+            x: () => offsetWithin(slots[i], section).x - from().x,
+            y: () => offsetWithin(slots[i], section).y - from().y,
+            scale: 1,
+            rotation: 0,
+            rotationX: 0,
+            duration: 1 - enter,
+            ease: "power2.out",
+          }, enter);
+      });
+      // The gate wakes as the first card reaches it and rests once the last is through.
+      tl.to(gate, { "--glow": 1, duration: 0.06 }, 0.33).to(gate, { "--glow": 0.25, duration: 0.1 }, 0.66);
+      return () => { delete section.dataset.mode; };
+    });
+    return () => mm.revert();
   }, []);
 
   return (
-    <div className={styles.broken}>
-      <div className={styles.controls}>
-        <p className={styles.count}>{index + 1} of {LEAKS.length} · <b>{leak.tab}</b></p>
-        <div className={styles.arrows}>
-          <button type="button" onClick={() => scroll(-1)} aria-label="Previous leak"><ArrowLeft aria-hidden="true" /></button>
-          <button type="button" onClick={() => scroll(1)} aria-label="Next leak"><ArrowRight aria-hidden="true" /></button>
-        </div>
-      </div>
+    <section ref={sectionRef} id="industries" aria-labelledby="audience-title" className={styles.section}>
+      <div className={styles.inner}>
+        <header className={styles.head}>
+          <p className={styles.eyebrow}>What’s broken today</p>
+          <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
+          <p className={styles.lede}>Each one costs you money every month. Scroll, and watch them go through Insurvas.</p>
+        </header>
 
-      {/* The 3D ring: problems come round from the left, pass under Insurvas's beam, flip to the fix. */}
-      <div ref={stageRef} className={styles.stage}>
-        <div className={styles.core} aria-hidden="true">
-          <span className={styles.coreTile}><InsurvasLogo variant="symbol" tone="dark" size="public" alt="" className={styles.coreMark} /></span>
-          <span className={styles.coreBeam} />
-        </div>
-        <div className={styles.view}>
-          <div ref={ringRef} className={styles.ring} role="group" aria-label="What’s broken today">
-            {LEAKS.map((item, i) => (
-              <button
-                key={item.key}
-                type="button"
-                data-card=""
-                data-solved="false"
-                aria-pressed={i === index}
-                aria-controls="leak-panel"
-                aria-label={`${item.tab}: ${item.broken}`}
-                className={styles.slot}
-                style={{ "--a": `${-i * STEP}deg` } as CSSProperties}
-                onClick={() => choose(i)}
-              >
-                <span className={styles.flip}>
-                  <span className={styles.face} data-face="problem">
-                    <span className={styles.photo}><Image src={item.photo} alt="" fill sizes="300px" /></span>
-                    <span className={styles.cardText}>
-                      <span className={styles.cardTab}>{item.tab}</span>
-                      <span className={styles.cardTitle}>{item.broken}</span>
-                    </span>
-                  </span>
-                  <span className={styles.face} data-face="fix">
-                    <span className={styles.photo}><Image src={item.photo} alt="" fill sizes="300px" /><span className={styles.solved}><Check aria-hidden="true" />Solved in Insurvas</span></span>
-                    <span className={styles.cardText}>
-                      <span className={styles.cardTab}>{item.tab} · {item.plan}</span>
-                      <span className={styles.cardTitle}>{item.fix}</span>
-                    </span>
-                  </span>
-                </span>
-              </button>
-            ))}
+        <ul className={styles.grid} data-problems="">
+          {LEAKS.map((leak) => (
+            <li key={leak.key} className={styles.card} data-card="">
+              <div className={styles.flip} data-flip="">
+                <Face leak={leak} side="problem" />
+                <Face leak={leak} side="fix" />
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {/* The gate: the five tools go in, one system comes out (Umar's A3, in one line). */}
+        <div className={styles.gateZone}>
+          <p className={styles.gateNote}>A CRM, a dialer, two spreadsheets and a prayer</p>
+          <div className={styles.gate} data-gate="">
+            <InsurvasLogo variant="wordmark" tone="dark" size="public" alt="Insurvas" />
+            <span className={styles.gateScan} aria-hidden="true" />
           </div>
+          <p className={styles.gateNote} data-out="">One system, built by people who ran the floor</p>
         </div>
-      </div>
 
-      <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key}>
-        <div className={styles.panelProblem}>
-          <p className={styles.tag}>Broken today</p>
-          <p className={styles.problem}>{leak.broken}</p>
-          <p className={styles.body}>{leak.body}</p>
-        </div>
-        <div className={styles.panelFix}>
-          <p className={styles.plan}>With Insurvas <b>{leak.plan}</b></p>
-          <p className={styles.fix}>{leak.fix}</p>
-          <ul className={styles.points}>
-            {leak.points.map((point) => <li key={point}>{point}</li>)}
-          </ul>
-          {"note" in leak && leak.note && <p className={styles.note}>{leak.note}</p>}
-        </div>
+        <header className={styles.head} data-solved-head="">
+          <p className={styles.eyebrow}>With Insurvas</p>
+          <h2 className={styles.heading}>Seven fixes, in one workspace.</h2>
+        </header>
+        <ul className={styles.grid} data-solved="">
+          {LEAKS.map((leak) => (
+            <li key={leak.key} className={styles.card} data-slot="">
+              <div className={styles.flip}><Face leak={leak} side="fix" /></div>
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
+    </section>
   );
 }

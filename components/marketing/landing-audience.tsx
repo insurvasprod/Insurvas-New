@@ -1,5 +1,4 @@
 import { LandingBroken } from "@/components/marketing/landing-broken";
-import styles from "@/components/marketing/landing-audience.module.css";
 
 /**
  * "Who it's for" (2026-11-03, docs/design/landing-who-its-for-spec.md), in two parts:
@@ -15,16 +14,6 @@ import styles from "@/components/marketing/landing-audience.module.css";
  */
 
 export function LandingAudience() {
-  return (
-    <section id="industries" aria-labelledby="audience-title" className={`scroll-mt-20 ${styles.section}`}>
-      <div className={styles.inner}>
-        <header className={styles.head}>
-          <p className={styles.eyebrow}>What’s broken today</p>
-          <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
-          <p className={styles.lede}>Each one costs you money every month. Each one has a fix inside the same ledger.</p>
-        </header>
-        <LandingBroken />
-      </div>
-    </section>
-  );
+  // The section and its heading live in LandingBroken: the heading takes part in the scroll scene.
+  return <LandingBroken />;
 }

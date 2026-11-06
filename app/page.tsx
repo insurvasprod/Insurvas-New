@@ -5,7 +5,6 @@ import { SiteHeader } from "@/components/public/site-header";
 import { LandingHero } from "@/components/marketing/landing-hero";
 import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
 import { LandingContact } from "@/components/marketing/landing-contact";
-import { LandingStack } from "@/components/marketing/landing-stack";
 import { LandingBento } from "@/components/marketing/landing-bento";
 import { LandingAudience } from "@/components/marketing/landing-audience";
 import { LandingTrust } from "@/components/marketing/landing-trust";
@@ -41,9 +40,8 @@ export default async function Home() {
             without a call to action. */}
         <LandingHero />
         <LandingTrust />
-        {/* What is broken comes first, then how Insurvas takes it in and fixes it (owner, 6 Nov). */}
+        {/* Problems, through Insurvas, out as fixes: one section since 6 Nov (owner); it replaced the five-tools section. */}
         <LandingAudience />
-        <LandingStack />
         <LandingBento />
         <LandingPricingTeaser plans={plans} />
         <LandingFaq />
