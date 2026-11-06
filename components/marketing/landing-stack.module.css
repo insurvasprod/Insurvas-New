@@ -23,8 +23,8 @@
 /* ── The stage: three lanes through the Insurvas gate (owner, 6 Nov) ─────────────────────────── */
 .stage { --gate: 152px; --card: 236px; position: relative; display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; justify-content: center; gap: 12px; margin: clamp(12px, 2.4vh, 28px) 0 0; }
 .labels { position: relative; z-index: 6; display: grid; grid-template-columns: 1fr var(--gate) 1fr; width: min(100% - 64px, 1320px); margin: 0 auto; font-size: 13px; font-weight: 600; }
-.labels [data-side="problem"] { grid-column: 1; color: var(--warning); }
-.labels [data-side="fix"] { grid-column: 3; justify-self: end; color: var(--primary); }
+.labels [data-side="problem"] { grid-column: 1; justify-self: end; padding-right: 18px; color: var(--warning); }
+.labels [data-side="fix"] { grid-column: 3; justify-self: start; padding-left: 18px; color: var(--primary); }
 .lanes { display: grid; gap: clamp(10px, 1.6vh, 16px); perspective: 1100px; perspective-origin: 50% 50%; }
 
 /* A lane is two identical moving tracks: problems clipped to the left of the gate, fixes to the right.
@@ -54,8 +54,7 @@
 .layer[data-side="fix"] .kind { color: var(--primary); }
 /* Just fixed: a green light at the gate's exit that a card passes through as it comes out, fading
    further right. And the way in dims towards the gate, as if the problem is being taken in. */
-.layer[data-side="fix"]::after { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 50%, color-mix(in srgb, var(--primary) 26%, transparent) 53%, color-mix(in srgb, var(--primary) 8%, transparent) 62%, transparent 74%); content: ""; mix-blend-mode: screen; pointer-events: none; }
-.layer[data-side="problem"]::after { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 34%, color-mix(in srgb, var(--warning) 10%, transparent) 50%); content: ""; mix-blend-mode: screen; pointer-events: none; }
+.layer[data-side="fix"]::after { position: absolute; inset: 0; background: linear-gradient(90deg, transparent 50%, color-mix(in srgb, var(--primary) 16%, transparent) 53%, transparent 70%); content: ""; pointer-events: none; }
 
 /* ── The gate: a tall column over the seam, the beam through it, the Insurvas tile in its middle. ── */
 .gate { position: absolute; z-index: 4; top: 22px; bottom: -6px; left: 50%; display: grid; width: var(--gate); place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 28%, transparent); border-radius: 28px; background: linear-gradient(180deg, color-mix(in srgb, var(--footer-bg) 70%, black), color-mix(in srgb, var(--footer-bg) 52%, black)); box-shadow: 0 0 0 10px color-mix(in srgb, var(--footer-bg) 62%, black), 0 30px 60px -20px rgb(0 0 0 / 80%); transform: translateX(-50%); }

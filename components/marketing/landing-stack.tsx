@@ -132,9 +132,7 @@ export function LandingStack() {
     // The take-over plays once, the first time the stage is well into view; the flow on both sides
     // runs only while the stage is on screen.
     const io = new IntersectionObserver(([entry]) => {
-      const visible = Boolean(entry?.isIntersecting);
-      stage.dataset.run = String(visible && stage.dataset.state === "resolved");
-      if (!visible || timeline) return;
+      if (!entry?.isIntersecting || timeline) return;
       timeline = createTimeline({
         defaults: { ease: "inOutCubic" },
         onComplete: () => { stage.dataset.state = "resolved"; stage.dataset.run = "true"; },
@@ -156,9 +154,12 @@ export function LandingStack() {
         .add(tools, { opacity: 0, scale: 0.85, duration: 420, ease: "inQuad" }, 2050);
     }, { threshold: 0.5 });
     io.observe(stage);
+    // The lanes flow whenever any part of the stage is on screen, not only past halfway.
+    const flow = new IntersectionObserver(([entry]) => { stage.dataset.run = String(Boolean(entry?.isIntersecting) && stage.dataset.state === "resolved"); }, { threshold: 0 });
+    flow.observe(stage);
     const onResize = () => { if (!timeline) scatter(); };
     window.addEventListener("resize", onResize);
-    return () => { io.disconnect(); window.removeEventListener("resize", onResize); timeline?.revert(); };
+    return () => { io.disconnect(); flow.disconnect(); window.removeEventListener("resize", onResize); timeline?.revert(); };
   }, []);
 
   return (

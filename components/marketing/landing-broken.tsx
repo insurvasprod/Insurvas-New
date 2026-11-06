@@ -209,8 +209,10 @@ export function LandingBroken() {
     const resize = new ResizeObserver(build);
     resize.observe(track);
     // A card with keyboard focus holds still, so it can be read.
-    const hold = () => motion.current?.pause();
-    const go = () => { if (!reduce && !track.contains(document.activeElement)) motion.current?.play(); };
+    // Only keyboard focus holds it: a card clicked with a mouse or a finger keeps focus too, and the
+    // row used to stop until the visitor clicked somewhere else (owner, 6 Nov: it stops time to time).
+    const hold = (event: FocusEvent) => { if ((event.target as HTMLElement).matches(":focus-visible")) motion.current?.pause(); };
+    const go = () => { if (!reduce) motion.current?.play(); };
     track.addEventListener("focusin", hold);
     track.addEventListener("focusout", go);
     return () => {
