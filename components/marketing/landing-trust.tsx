@@ -56,8 +56,10 @@ export function LandingTrust() {
         const value = { n: 0 };
         animate(value, { n: figure.to, duration: 1300, delay: 700 + i * 110, ease: "outQuart", onUpdate: () => { el.textContent = show(figure, value.n); } });
       });
-    }, { threshold: 0.35 });
-    io.observe(root);
+    }, { threshold: 0.4 });
+    // The photo, not the whole band: on a phone it sits under the text, and watching the band would
+    // play the reveal and the count while the photo is still below the screen (owner, 6 Nov).
+    io.observe(root.querySelector<HTMLElement>("[data-photo]") ?? root);
     return () => { io.disconnect(); timeline?.revert(); root.dataset.state = "done"; };
   }, []);
 
@@ -93,7 +95,7 @@ export function LandingTrust() {
         timers.push(window.setTimeout(() => { stop.dataset.on = "true"; }, t));
         t += HOLD_MS;
       });
-    }, { threshold: 0.5 });
+    }, { threshold: 0.6, rootMargin: "0px 0px -15% 0px" });
     io.observe(line);
     return () => { io.disconnect(); timers.forEach((id) => window.clearTimeout(id)); delete line.dataset.scroll; };
   }, []);

@@ -85,6 +85,15 @@
 .node[data-kind="outcome"] .icon { background: var(--primary); color: var(--on-primary); }
 .node[data-kind="outcome"] [data-value] { color: var(--primary); font-weight: 700; font-variant-numeric: tabular-nums; }
 
+/* The narrow zig-zag: smaller nodes, so two fit side by side on a phone. */
+.stage[data-narrow] { transform: rotateX(calc(14deg + var(--tx))) rotateY(var(--ty)); }
+.stage[data-narrow] .node { grid-template-columns: 24px minmax(0, 1fr); gap: 7px; padding: 0 8px; border-radius: 12px; }
+.stage[data-narrow] .icon { width: 24px; height: 24px; border-radius: 8px; }
+.stage[data-narrow] .icon svg { width: 14px; height: 14px; }
+.stage[data-narrow] .text b { font-size: 12px; }
+.stage[data-narrow] .text small { font-size: 10.5px; }
+.stage[data-narrow] .ring { border-radius: 12px; }
+
 @media (prefers-reduced-motion: reduce) {
   .stage { transition: none; }
 }

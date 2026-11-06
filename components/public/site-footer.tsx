@@ -83,18 +83,20 @@ export async function SiteFooter() {
       <div className="relative mx-auto max-w-7xl">
         {/* The wordmark, wide and faded, behind the brand block and the link columns (owner, 2026-11-04). */}
         <div aria-hidden="true" className={styles.watermark} />
-        <div className="relative grid gap-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
-          <div>
+        {/* Phones (owner, 6 Nov): the brand block across the top, the link groups two to a row, and the
+            copyright on its own line at the bottom. */}
+        <div className="relative grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
+          <div className="col-span-2 md:col-span-1">
             <Link href="/" className="inline-flex no-underline">
               <InsurvasLogo size="auth" tone="dark" alt="Insurvas" />
             </Link>
             <p className="mt-4 max-w-[280px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)]">
               The operating system for life insurance sales teams.
             </p>
-            <div className="mt-6">
+            <div className="mt-6 hidden md:block">
               <MarketingCta href="/signup">Start free trial</MarketingCta>
             </div>
-            <p className="mt-6 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</p>
+            <p className="mt-6 hidden text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)] md:block">© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</p>
           </div>
 
           {columns.map((column) => (
@@ -105,7 +107,7 @@ export async function SiteFooter() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="block py-[5px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)] no-underline hover:text-[var(--nav-ink)]"
+                    className="block py-2 text-base md:py-[5px] md:text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)] no-underline hover:text-[var(--nav-ink)]"
                   >
                     {item.label}
                   </Link>
@@ -113,6 +115,11 @@ export async function SiteFooter() {
               </div>
             </div>
           ))}
+        </div>
+        {/* Phones: the copyright bottom left, the trial button in the bottom right corner (Umar, 6 Nov). */}
+        <div className="relative mt-10 flex items-center justify-between gap-4 border-t border-[rgb(234_246_242/10%)] pt-6 md:hidden">
+          <p className="text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">© {new Date().getFullYear()} Insurvas Inc.<br />All rights reserved.</p>
+          <MarketingCta href="/signup">Start free trial</MarketingCta>
         </div>
       </div>
     </footer>

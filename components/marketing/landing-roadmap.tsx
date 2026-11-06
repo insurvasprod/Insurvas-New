@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { ROADMAP, type RoadmapStatus } from "@/lib/marketing/roadmap";
@@ -16,7 +16,9 @@ import styles from "@/components/marketing/landing-roadmap.module.css";
  *
  * The photo sits in a stage that keeps its proportions and is anchored to the band's bottom edge,
  * so the pins (percentages of the photo) stay on the asphalt at every width. Re-place them by eye if
- * the photo changes. On phones the stage is cropped too hard for pins, so the stops are a list.
+ * the photo changes. On phones (owner, 6 Nov: the pins belong on the photo, not in a list under it)
+ * the band is a strip of the whole photo, swiped sideways, and it tours the stops on its own: every
+ * few seconds it glides to the next pin and opens its label, until the visitor touches it.
  */
 const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: "above" | "below"; align: "start" | "center" | "end" }[] = [
   { status: "shipped", label: "Shipped", x: 20, y: 63.5, tag: "below", align: "start" },
@@ -25,10 +27,33 @@ const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: 
   { status: "exploring", label: "Exploring", x: 64, y: 65.5, tag: "above", align: "center" },
 ];
 const NOW = 1;
+const TOUR_MS = 4_000;
 
 export function LandingRoadmap() {
   const stops = STOPS.map((stop) => ({ ...stop, item: ROADMAP.find((item) => item.status === stop.status) })).filter((stop) => stop.item !== undefined);
   const [active, setActive] = useState(NOW);
+  const mapRef = useRef<HTMLDivElement>(null);
+  const touched = useRef(false);
+  const [wait, setWait] = useState(0);
+
+  // Phones: keep the pin being shown in the middle of the strip, and tour the stops until touched.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.matchMedia("(max-width: 760px)").matches) return;
+    const pin = map.querySelectorAll<HTMLElement>("[data-pin]")[active];
+    if (!pin) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    map.scrollTo({ left: pin.offsetLeft - map.clientWidth / 2, behavior: reduce ? "auto" : "smooth" });
+    if (reduce || touched.current) return;
+    const next = window.setTimeout(() => {
+      const rect = map.getBoundingClientRect();
+      // Only while the strip is on screen; otherwise check again later.
+      if (rect.bottom > 0 && rect.top < window.innerHeight) setActive((i) => (i + 1) % STOPS.length);
+      else setWait((n) => n + 1);
+    }, TOUR_MS);
+    return () => window.clearTimeout(next);
+  }, [active, wait]);
+  const stopTour = () => { touched.current = true; };
 
   return (
     <section id="roadmap" aria-labelledby="roadmap-title" className={styles.section}>
@@ -48,7 +73,7 @@ export function LandingRoadmap() {
             <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
           </div>
         </div>
-      <div className={styles.map}>
+      <div ref={mapRef} className={styles.map} onPointerDown={stopTour} onWheel={stopTour}>
         <div className={styles.stage}>
           <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
         </div>
@@ -65,8 +90,9 @@ export function LandingRoadmap() {
                 data-status={stop.status}
                 data-tag={stop.tag}
                 data-align={stop.align}
+                data-pin=""
                 style={{ left: `${stop.x}%`, top: `${stop.y}%` }}
-                onClick={() => setActive(i)}
+                onClick={() => { stopTour(); setActive(i); }}
                 onMouseEnter={() => setActive(i)}
                 onFocus={() => setActive(i)}
               >
@@ -78,15 +104,6 @@ export function LandingRoadmap() {
         </div>
       </div>
 
-      {/* Phones: the stops as a list, in the order the road runs. */}
-      <ol className={styles.list}>
-        {stops.map((stop) => (
-          <li key={stop.status} data-status={stop.status}>
-            <i aria-hidden="true" />
-            <span><b>{stop.label} · {stop.item!.when}</b>{stop.item!.title}</span>
-          </li>
-        ))}
-      </ol>
     </section>
   );
 }

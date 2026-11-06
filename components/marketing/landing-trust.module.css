@@ -53,6 +53,10 @@
   .photo { min-height: 340px; }
 }
 @media (max-width: 640px) {
+  /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
+  .copy { align-items: center; text-align: center; }
+  .title { margin-inline: auto; }
+  .line { align-self: center; text-align: left; }
   .inner { width: calc(100% - 32px); padding: 44px 0; }
   .figures { gap: 10px; }
   .figure b { font-size: 26px; }

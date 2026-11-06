@@ -160,7 +160,9 @@ export function LandingBento() {
   const cardRefs = useRef<Array<HTMLElement | null>>([]);
   const [active, setActive] = useState(0);
 
-  // As the next card slides over, the one beneath settles back: a little smaller and dimmer.
+  // As the next card slides over, the one beneath settles back: a little smaller and dimmer. On
+  // narrower screens, where the cards do not stack, each one rises and tilts up into place as it
+  // scrolls in instead (--enter, 0 to 1; owner, 6 Nov: the phone had no scroll motion at all).
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let frame = 0;
@@ -171,6 +173,8 @@ export function LandingBento() {
       cards.forEach((card, i) => {
         const next = cards[i + 1];
         const top = card.getBoundingClientRect().top;
+        const enter = reduce ? 1 : Math.min(1, Math.max(0, (window.innerHeight - top) / (window.innerHeight * 0.5)));
+        card.style.setProperty("--enter", enter.toFixed(3));
         if (top < window.innerHeight * 0.55) current = i;
         if (!next || reduce) { card.style.setProperty("--cover", "0"); return; }
         const gap = next.getBoundingClientRect().top - top;

@@ -53,6 +53,8 @@
   .side { position: static; }
 }
 @media (max-width: 640px) {
+  /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
+  .side { text-align: center; }
   .inner { width: calc(100% - 32px); }
   .item button { grid-template-columns: 30px minmax(0, 1fr) 32px; gap: 10px; }
   .answer p { padding: 0 0 22px 40px; }

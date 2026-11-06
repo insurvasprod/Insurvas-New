@@ -45,6 +45,10 @@
   .inner { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
+  /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
+  .ask { text-align: center; }
+  .heading, .lede { margin-inline: auto; }
+  .examples { width: fit-content; margin-inline: auto; text-align: left; }
   .inner { width: calc(100% - 32px); }
   .row { grid-template-columns: minmax(0, 1fr); }
   .panel { padding: 18px; }

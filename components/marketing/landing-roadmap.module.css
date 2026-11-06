@@ -78,8 +78,6 @@
 .pin[aria-pressed="true"] .detail { grid-template-rows: 1fr; }
 .pin[aria-pressed="true"] .detail > span { padding-top: 4px; }
 
-/* the stops as a list: phones only */
-.list { display: none; }
 
 /* Narrow screens: only the label of the pin being pointed at shows. */
 @media (max-width: 1000px) {
@@ -88,25 +86,23 @@
   .tag { display: none; }
   .pin[aria-pressed="true"] .tag { display: grid; max-width: min(240px, 60vw); }
 }
-/* Phones: the photo is a short backdrop for the heading, and the stops are a list under it. */
+/* Phones: the header, then the whole photo as a strip to swipe along, the pins on the road. */
 @media (max-width: 760px) {
   /* Phones: the section is as tall as its content. */
-  .section { display: block; height: auto; min-height: 0; max-height: none; }
-  /* A short strip of the road between the header and the stops. */
-  .map { flex: none; height: 200px; margin-top: -24px; container-type: normal; }
-  .stage { inset: 0; width: auto; aspect-ratio: auto; transform: none; }
-  .pins { display: none; }
-  .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 88px 0 8px; }
-  .aside { justify-self: start; }
+  .section { --strip-h: 380px; --strip-w: calc(var(--strip-h) * 1600 / 864); display: block; height: auto; min-height: 0; max-height: none; }
+  .map { flex: none; height: var(--strip-h); margin-top: -12px; overflow-x: auto; overflow-y: hidden; container-type: normal; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .map::-webkit-scrollbar { display: none; }
+  .stage { top: 0; left: 0; width: var(--strip-w); height: var(--strip-h); aspect-ratio: auto; transform: none; }
+  .shade { right: auto; width: var(--strip-w); background: linear-gradient(180deg, var(--band) 0%, transparent 22%, transparent 80%, var(--band) 100%); }
+  /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
+  .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 88px 0 8px; text-align: center; }
+  .titleBlock { justify-items: center; }
+  .heading { margin-inline: auto; }
+  .aside { justify-self: center; justify-items: center; }
   .fadeIn { height: 90px; }
-  .shade { background: linear-gradient(180deg, var(--band) 0%, transparent 38%, transparent 62%, var(--band) 100%); }
-  .list { display: grid; gap: 0; width: calc(100% - 32px); margin: 0 auto; padding: 0 0 8px; list-style: none; }
-  .list li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 12px; border-top: 1px solid rgb(234 246 242 / 10%); padding: 14px 0; }
-  .list i { width: 12px; height: 12px; margin-top: 4px; border: 2px solid var(--on-dark); border-radius: 50%; background: var(--nav-muted); }
-  .list li[data-status="shipped"] i { background: var(--primary); }
-  .list li[data-status="progress"] i { background: var(--warning); }
-  .list li[data-status="exploring"] i { border-style: dashed; }
-  .list span { display: grid; gap: 2px; font-size: 15px; font-weight: 600; line-height: 1.35; }
-  .list b { color: var(--nav-muted); font-size: 12px; font-weight: 600; }
+  /* A larger target for a thumb, the same dot. */
+  .pin::before { position: absolute; top: -22px; left: -22px; width: 44px; height: 44px; content: ""; }
+  /* Every label opens above its pin, so it stays inside the strip. */
+  .pin[aria-pressed="true"] .tag { top: auto; bottom: 24px; max-width: min(230px, 62vw); }
 }
 @media (prefers-reduced-motion: reduce) { .detail { transition: none; } }

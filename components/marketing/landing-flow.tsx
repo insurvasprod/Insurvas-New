@@ -57,27 +57,33 @@ const NODE_H = 72;
 const COL_X = [8, 214, 420];
 const ROW_Y = [58, 162, 266];
 const WIDE_H = 360;
-// One column on a narrow screen.
-const NARROW_W = 300;
-const NARROW_STEP = 96;
+// A narrow screen (a phone, owner 6 Nov): the nodes zig-zag down two columns, in the order they are
+// listed, so the workflow stays a diagram and stays short enough to read in one look.
+const NARROW_W = 334;
+const NARROW_NODE_W = 150;
+const NARROW_NODE_H = 62;
+const NARROW_COL_X = [6, NARROW_W - 6 - NARROW_NODE_W];
+const NARROW_STEP = 58;
 
-type Box = { x: number; y: number };
+type Box = { x: number; y: number; w: number; h: number };
 
 function curve(a: Box, b: Box): string {
   if (Math.abs(a.x - b.x) < 2) {
     // Same column: bottom edge to top edge (or top to bottom when going up).
-    const x = a.x + NODE_W / 2;
+    const x = a.x + a.w / 2;
     const down = b.y > a.y;
-    const y1 = down ? a.y + NODE_H : a.y;
-    const y2 = down ? b.y : b.y + NODE_H;
+    const y1 = down ? a.y + a.h : a.y;
+    const y2 = down ? b.y : b.y + b.h;
     const d = (y2 - y1) / 2;
     return `M${x},${y1} C${x},${y1 + d} ${x},${y2 - d} ${x},${y2}`;
   }
-  const x1 = a.x + NODE_W;
-  const y1 = a.y + NODE_H / 2;
-  const x2 = b.x;
-  const y2 = b.y + NODE_H / 2;
-  const d = Math.max(18, (x2 - x1) * 0.6);
+  // Side to side: from the facing edges, whichever way the next node lies.
+  const right = b.x > a.x;
+  const x1 = right ? a.x + a.w : a.x;
+  const y1 = a.y + a.h / 2;
+  const x2 = right ? b.x : b.x + b.w;
+  const y2 = b.y + b.h / 2;
+  const d = Math.max(18, Math.abs(x2 - x1) * 0.6) * (right ? 1 : -1);
   return `M${x1},${y1} C${x1 + d},${y1} ${x2 - d},${y2} ${x2},${y2}`;
 }
 
@@ -97,12 +103,12 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
   const svgRef = useRef<SVGSVGElement>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
 
-  // Positions: the grid on a wide canvas; one column, in the order the nodes are listed, on a narrow one.
+  // Positions: the grid on a wide canvas; a zig-zag, in the order the nodes are listed, on a narrow one.
   const boxes = new Map<string, Box>(graph.nodes.map((node, i) => [node.id, narrow
-    ? { x: (NARROW_W - NODE_W - 40) / 2 + 20, y: 58 + i * NARROW_STEP }
-    : { x: COL_X[node.col], y: ROW_Y[node.row] }]));
+    ? { x: NARROW_COL_X[i % 2], y: 54 + i * NARROW_STEP, w: NARROW_NODE_W, h: NARROW_NODE_H }
+    : { x: COL_X[node.col], y: ROW_Y[node.row], w: NODE_W, h: NODE_H }]));
   const stageW = narrow ? NARROW_W : W;
-  const stageH = narrow ? 58 + graph.nodes.length * NARROW_STEP - 8 : WIDE_H;
+  const stageH = narrow ? 54 + (graph.nodes.length - 1) * NARROW_STEP + NARROW_NODE_H + 14 : WIDE_H;
   // Narrow: the steps become one connector from each node to the next.
   const steps: Array<Array<[string, string]>> = narrow
     ? graph.nodes.slice(1).map((node, i) => [[graph.nodes[i].id, node.id]])
@@ -217,7 +223,7 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
   return (
     <div ref={wrapRef} className={styles.wrap} style={{ height: stageH * scale }} aria-hidden="true" onPointerMove={tilt} onPointerLeave={untilt}>
       <div className={styles.fit} style={{ width: stageW, height: stageH, transform: `scale(${scale})` } as CSSProperties}>
-      <div ref={stageRef} className={styles.stage} style={{ width: stageW, height: stageH }}>
+      <div ref={stageRef} className={styles.stage} data-narrow={narrow ? "" : undefined} style={{ width: stageW, height: stageH }}>
         <div className={styles.bar}>
           {/* Narrow canvases name no module: the card's heading, just above, already does. */}
           <span className={styles.barTitle}><Workflow />{narrow ? "Workflow" : title}</span>
@@ -247,7 +253,7 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
           const Icon = node.icon;
           const box = boxes.get(node.id)!;
           return (
-            <div key={node.id} className={styles.node} data-node={node.id} data-kind={node.kind ?? "step"} style={{ left: box.x, top: box.y, width: NODE_W, height: NODE_H }}>
+            <div key={node.id} className={styles.node} data-node={node.id} data-kind={node.kind ?? "step"} style={{ left: box.x, top: box.y, width: box.w, height: box.h }}>
               <span className={styles.ring} data-lit="" />
               <span className={styles.icon}><Icon /></span>
               <span className={styles.text}>
