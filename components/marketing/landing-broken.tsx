@@ -115,18 +115,18 @@ const LEAKS = [
 ];
 
 /**
- * The journey (owner, 6 Nov; it replaces the separate five-tools section). Two panels with room
- * between them: the seven problems on top, the seven places for their fixes below, and Insurvas in
- * the gap. As the visitor scrolls, each problem card travels down, drops behind Insurvas, turns into
- * its fix there, and lands in its place in the panel below, photo and all.
+ * The journey (owner, 6 Nov; it replaces the separate five-tools section). One tall section in three
+ * parts on the page: the seven problems with their photos at the top, the Insurvas gate in the middle,
+ * and the seven fixes at the bottom. As the visitor scrolls, the problem cards travel down with them,
+ * pass one by one behind the gate (where each turns into its fix), and spread out into the solved
+ * grid below, photos and all. Scrolling back up plays it backwards.
  *
- * Every frame works the cards' positions out from scratch: where each one lives, where the gate is
- * and where its place is, read from the page, and where the scroll is. Nothing is recorded, so a
- * late image, a resize or a live reload cannot leave a card aiming at an old spot. The vertical
- * travel is tied straight to the scroll: a card is in its problem place while that panel is in view,
- * at the gate as the gate crosses the middle of the screen, and in its fix place once that panel is
- * in view; in between it moves with the page, so it stays on screen the whole way.
- * Phones and reduced motion get the two panels as they are.
+ * Every frame works the cards' positions out from scratch, from where each card lives, where the gate
+ * is, where its solved place is, and where the scroll is. Nothing is recorded, so a late image, a
+ * resize or a live reload cannot leave a card aiming at an old spot. The vertical travel moves with
+ * the page: a card is in its own place while the problems are in view, behind the gate as the gate
+ * crosses the middle of the screen, and in its solved place once the fixes are in view, so it stays
+ * on screen the whole way. Phones and reduced motion get the two grids as they are.
  */
 function offsetWithin(el: HTMLElement, root: HTMLElement) {
   let x = 0;
@@ -149,7 +149,7 @@ function Face({ leak, side }: { leak: (typeof LEAKS)[number]; side: "problem" | 
   return (
     <div className={styles.face} data-face={side}>
       <span className={styles.photo}>
-        <Image src={leak.photo} alt="" fill sizes="(max-width: 760px) 75vw, 240px" />
+        <Image src={leak.photo} alt="" fill sizes="(max-width: 760px) 75vw, 260px" />
         {side === "fix" && <span className={styles.solved}><Check aria-hidden="true" />Solved</span>}
       </span>
       <span className={styles.text}>
@@ -167,23 +167,18 @@ export function LandingBroken() {
     const section = sectionRef.current;
     if (!section) return;
     const scene = window.matchMedia("(min-width: 761px) and (prefers-reduced-motion: no-preference)");
-    const homes = [...section.querySelectorAll<HTMLElement>("[data-card]")];
-    const movers = homes.map((home) => home.querySelector<HTMLElement>("[data-mover]")!);
-    const flips = homes.map((home) => home.querySelector<HTMLElement>("[data-flip]")!);
+    const cards = [...section.querySelectorAll<HTMLElement>("[data-card]")];
+    const flips = cards.map((card) => card.querySelector<HTMLElement>("[data-flip]")!);
     const slots = [...section.querySelectorAll<HTMLElement>("[data-slot]")];
     const gate = section.querySelector<HTMLElement>("[data-gate]")!;
     const problems = section.querySelector<HTMLElement>("[data-problems]")!;
     const solved = section.querySelector<HTMLElement>("[data-solved]")!;
-    const count = section.querySelector<HTMLElement>("[data-count]")!;
     let frame = 0;
-    let shown = -1;
 
     const clear = () => {
-      movers.forEach((m) => { m.style.transform = ""; });
-      flips.forEach((f) => { f.style.transform = ""; });
+      cards.forEach((card) => { card.style.transform = ""; });
+      flips.forEach((flip) => { flip.style.transform = ""; });
       gate.style.removeProperty("--glow");
-      count.textContent = "7 of 7 fixed";
-      shown = -1;
     };
 
     const update = () => {
@@ -203,14 +198,13 @@ export function LandingBroken() {
       const range = Math.max(1, end - start);
       const t = clamp01((scroll - start) / range);
       const atGate = clamp01((g.y - vh / 2 - start) / range);
-      let done = 0;
       let glow = 0;
-      homes.forEach((home, i) => {
-        const a = at(home);
+      cards.forEach((card, i) => {
+        const a = at(card);
         const b = at(slots[i]);
-        const leave = i * 0.018;
+        const leave = 0;
         const through = Math.min(0.9, Math.max(leave + 0.1, atGate + (i - 3) * 0.022));
-        const land = 0.96 - (6 - i) * 0.006;
+        const land = i < 4 ? 0.95 : 0.995; // the bottom row lands as its row comes fully into view
         let x = a.x;
         let y = a.y;
         let scale = 1;
@@ -218,25 +212,23 @@ export function LandingBroken() {
         let fixed = false;
         if (t > leave && t < through) {
           const u = (t - leave) / (through - leave);
-          x = lerp(a.x, g.x, easeInOut(u));
+          x = lerp(a.x, g.x + (i - 3) * 6, easeInOut(u));
           y = lerp(a.y, g.y, u);
-          scale = lerp(1, 0.4, u);
-          tilt = 26 * u;
+          scale = lerp(1, 0.46, u);
+          tilt = 18 * u;
         } else if (t >= through) {
           fixed = true;
-          done += 1;
           const u = clamp01((t - through) / (land - through));
-          x = lerp(g.x, b.x, easeOut(u));
+          x = lerp(g.x + (i - 3) * 6, b.x, easeOut(u));
           y = lerp(g.y, b.y, u);
-          scale = lerp(0.4, 1, easeOut(u));
-          tilt = 26 * (1 - u);
+          scale = lerp(0.46, 1, easeOut(u));
+          tilt = 18 * (1 - u);
         }
         glow = Math.max(glow, 1 - Math.abs(t - through) / 0.05);
-        movers[i].style.transform = t <= leave ? "" : `translate3d(${x - a.x}px, ${y - a.y}px, 0) perspective(900px) rotateX(${tilt}deg) scale(${scale})`;
+        card.style.transform = t <= leave ? "" : `translate3d(${x - a.x}px, ${y - a.y}px, 0) perspective(900px) rotateX(${tilt}deg) scale(${scale})`;
         flips[i].style.transform = fixed ? "rotateY(180deg)" : "";
       });
       gate.style.setProperty("--glow", String(0.25 + 0.75 * glow));
-      if (done !== shown) { shown = done; count.textContent = `${done} of 7 fixed`; }
     };
     const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
 
@@ -260,50 +252,44 @@ export function LandingBroken() {
   return (
     <section ref={sectionRef} id="industries" aria-labelledby="audience-title" className={styles.section}>
       <div className={styles.inner}>
-        <div className={styles.zone} data-zone="problems">
-          <header className={styles.head}>
-            <p className={styles.eyebrow}>What’s broken today</p>
-            <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
-            <p className={styles.lede}>Each one costs you money every month. Scroll, and watch them go through Insurvas.</p>
-          </header>
-          <ul className={styles.grid} data-problems="">
-            {LEAKS.map((leak) => (
-              <li key={leak.key} className={styles.card} data-card="">
-                <div className={styles.mover} data-mover="">
-                  <div className={styles.flip} data-flip="">
-                    <Face leak={leak} side="problem" />
-                    <Face leak={leak} side="fix" />
-                  </div>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <header className={styles.head}>
+          <p className={styles.eyebrow}>What’s broken today</p>
+          <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
+          <p className={styles.lede}>Each one costs you money every month. Scroll, and watch them go through Insurvas.</p>
+        </header>
+
+        <ul className={styles.grid} data-problems="">
+          {LEAKS.map((leak) => (
+            <li key={leak.key} className={styles.card} data-card="">
+              <div className={styles.flip} data-flip="">
+                <Face leak={leak} side="problem" />
+                <Face leak={leak} side="fix" />
+              </div>
+            </li>
+          ))}
+        </ul>
 
         {/* The gate: the five tools go in, one system comes out (Umar's A3, in one line). */}
         <div className={styles.gateZone}>
           <p className={styles.gateNote}>A CRM, a dialer, two spreadsheets and a prayer</p>
           <div className={styles.gate} data-gate="">
             <InsurvasLogo variant="wordmark" tone="dark" size="public" alt="Insurvas" />
-            <span className={styles.count} data-count="" aria-hidden="true">7 of 7 fixed</span>
             <span className={styles.gateScan} aria-hidden="true" />
           </div>
           <p className={styles.gateNote} data-out="">One system, built by people who ran the floor</p>
         </div>
 
-        <div className={styles.zone} data-zone="solved">
-          <header className={styles.head}>
-            <p className={styles.eyebrow}>With Insurvas</p>
-            <h2 className={styles.heading}>Seven fixes, in one workspace.</h2>
-          </header>
-          <ul className={styles.grid} data-solved="">
-            {LEAKS.map((leak) => (
-              <li key={leak.key} className={styles.card} data-slot="">
-                <div className={styles.flip}><Face leak={leak} side="fix" /></div>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <header className={styles.head} data-solved-head="">
+          <p className={styles.eyebrow}>With Insurvas</p>
+          <h2 className={styles.heading}>Seven fixes, in one workspace.</h2>
+        </header>
+        <ul className={styles.grid} data-solved="">
+          {LEAKS.map((leak) => (
+            <li key={leak.key} className={styles.card} data-slot="">
+              <div className={styles.flip}><Face leak={leak} side="fix" /></div>
+            </li>
+          ))}
+        </ul>
       </div>
     </section>
   );
