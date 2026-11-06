@@ -5,7 +5,7 @@ Read this first, then `plan.md` and `todo.md` in this folder, then
 
 ## Where things are
 
-- **Branch:** `redesign/landing-review-r1`, 15 commits on top of `origin/main` @ `5100428c`.
+- **Branch:** `redesign/landing-review-r1`, 18 commits on top of `origin/main` @ `5100428c`.
   **Not pushed, no PR yet.** Working tree clean.
 - **Dev server:** `npx next dev --turbopack --port 3000` (the owner reviews on localhost:3000;
   the owner's screen is 1536×826).
@@ -53,17 +53,9 @@ modules) → Pricing → FAQ → Roadmap → Contact → Footer.
 
 ## Next, in order
 
-1. **Trust band ("Built by industry experts", `LandingBuiltFor` in `landing-audience.tsx`).** The owner
-   asked for the best possible design here: Umar's A2.1 says it introduces us and must build
-   credibility (who built it, how long it has run, who uses it) before the page says why. Use the
-   impeccable, emil-design-eng and ui-taste skills. Today it is a heading, one line and three figures
-   on hairlines; it reads flat. Ideas: a stronger composition with the figures counting up on
-   entrance, an origin line with a founder name (still unconfirmed), a carrier/partner proof row if
-   real names exist. **Do not invent figures:** 2 years, 2,400+, 180+ and $48M are all marked TO
-   CONFIRM (Umar).
-2. **Workflow canvas polish:** several node sub-lines truncate ("Partner posts…", "Source and c…").
-   Widen the nodes or shorten the subs in `landing-bento.tsx`; check all seven cards in both themes
-   and at 390 px (the narrow one-column layout has not been eyeballed).
+1. ~~Trust band~~ **Done (a0769e35):** `landing-trust.tsx`, a statement and one rule with three stops
+   (Year one, Year two, Today) instead of big numbers. Figures still TO CONFIRM.
+2. ~~Workflow canvas labels~~ **Done (70f77d78):** nothing cut off at 1536 or 390.
 3. Remaining plan items (`todo.md`): A1.2 a shape behind the hero headline, A7.3 rewrite the FAQ
    questions, A9.1 footer pass, A0.2 cut text across the page, A0.1 full phone pass (360/390/430/768).
 4. Polish pass (impeccable + emil), `npm run build`, push the branch, open the PR. In the PR body list
