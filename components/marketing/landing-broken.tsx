@@ -126,7 +126,8 @@ const LEAKS = [
  * resize or a live reload cannot leave a card aiming at an old spot. The vertical travel moves with
  * the page: a card is in its own place while the problems are in view, behind the gate as the gate
  * crosses the middle of the screen, and in its solved place once the fixes are in view, so it stays
- * on screen the whole way. Phones and reduced motion get the two grids as they are.
+ * on screen the whole way. Phones, short screens (a phone on its side) and reduced motion get the two
+ * grids as they are.
  */
 function offsetWithin(el: HTMLElement, root: HTMLElement) {
   let x = 0;
@@ -166,7 +167,7 @@ export function LandingBroken() {
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
-    const scene = window.matchMedia("(min-width: 761px) and (prefers-reduced-motion: no-preference)");
+    const scene = window.matchMedia("(min-width: 761px) and (min-height: 560px) and (prefers-reduced-motion: no-preference)");
     const cards = [...section.querySelectorAll<HTMLElement>("[data-card]")];
     const flips = cards.map((card) => card.querySelector<HTMLElement>("[data-flip]")!);
     const slots = [...section.querySelectorAll<HTMLElement>("[data-slot]")];
@@ -255,7 +256,7 @@ export function LandingBroken() {
         <header className={styles.head}>
           <p className={styles.eyebrow}>What’s broken today</p>
           <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
-          <p className={styles.lede}>Each one costs you money every month. Scroll, and watch them go through Insurvas.</p>
+          <p className={styles.lede}>Each one costs you money every month.<span className={styles.sceneHint}> Scroll, and watch them go through Insurvas.</span></p>
         </header>
 
         <ul className={styles.grid} data-problems="">
