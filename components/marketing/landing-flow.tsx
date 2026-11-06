@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import type { LucideIcon } from "lucide-react";
 import { Check, Workflow } from "lucide-react";
@@ -26,7 +26,14 @@ import styles from "@/components/marketing/landing-flow.module.css";
  * In 3D (owner, 6 Nov): the canvas leans back in perspective, the nodes stand off it as raised slabs
  * that rise further when the record reaches them, and the canvas turns a little towards the pointer.
  * The tilt is gentle enough that every label stays readable; reduced motion keeps it still.
+ *
+ * Flowing (Umar, via the owner, 6 Nov): besides the step-by-step run, data streams along every
+ * connector all the time, a few small packets per wire moving in the direction of the work, and the
+ * lit wires carry a moving dash. The packets are SVG <animateMotion>, so they run on the browser's own
+ * clock and stay smooth; they pause off screen, and CSS hides them under reduced motion.
  */
+const STREAM = 3; // packets per connector
+const STREAM_S = 2.6; // seconds for one packet to cross a connector
 const LIFT_WAIT = 6;
 const LIFT_DONE = 22;
 export type FlowNode = {
@@ -87,6 +94,8 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
   const playingRef = useRef(playing);
   const visibleRef = useRef(false);
   const timelineRef = useRef<ReturnType<typeof createTimeline> | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
 
   // Positions: the grid on a wide canvas; one column, in the order the nodes are listed, on a narrow one.
   const boxes = new Map<string, Box>(graph.nodes.map((node, i) => [node.id, narrow
@@ -172,6 +181,8 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
     const io = new IntersectionObserver(([entry]) => {
       visibleRef.current = Boolean(entry?.isIntersecting);
       if (visibleRef.current && playingRef.current) tl.play(); else tl.pause();
+      // The stream flows whenever the canvas is on screen, front card or not.
+      if (visibleRef.current) svgRef.current?.unpauseAnimations(); else svgRef.current?.pauseAnimations();
     }, { threshold: 0.35 });
     io.observe(stage);
     return () => {
@@ -212,13 +223,21 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
           <span className={styles.barTitle}><Workflow />{narrow ? "Workflow" : title}</span>
           <span className={styles.barStep} data-step="">{steps.length} steps</span>
         </div>
-        <svg className={styles.wires} width={stageW} height={stageH} viewBox={`0 0 ${stageW} ${stageH}`}>
+        <svg ref={svgRef} className={styles.wires} width={stageW} height={stageH} viewBox={`0 0 ${stageW} ${stageH}`}>
           {edges.map(([from, to]) => {
             const d = curve(boxes.get(from)!, boxes.get(to)!);
             return (
               <g key={`${from}>${to}`}>
                 <path className={styles.wire} d={d} />
                 <path className={styles.wireLit} d={d} data-edge={`${from}>${to}`} />
+                <path className={styles.wireFlow} d={d} id={`${uid}-${from}-${to}`} />
+                {Array.from({ length: STREAM }, (_, k) => (
+                  <circle key={k} className={styles.stream} r={2.6}>
+                    <animateMotion dur={`${STREAM_S}s`} begin={`${(-k * STREAM_S) / STREAM}s`} repeatCount="indefinite" keyPoints="0;1" keyTimes="0;1" calcMode="linear">
+                      <mpath href={`#${uid}-${from}-${to}`} />
+                    </animateMotion>
+                  </circle>
+                ))}
               </g>
             );
           })}

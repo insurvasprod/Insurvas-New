@@ -36,6 +36,11 @@
 .wires { position: absolute; inset: 0; overflow: visible; }
 .wire { fill: none; stroke: rgb(234 246 242 / 16%); stroke-width: 1.5; stroke-dasharray: 3 5; }
 .wireLit { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; }
+/* The stream: a moving dash over each wire and small packets riding it, always flowing. */
+.wireFlow { fill: none; stroke: color-mix(in srgb, var(--primary) 70%, transparent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 14; opacity: .9; animation: flow 1.1s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -16; } }
+.stream { fill: color-mix(in srgb, var(--primary) 85%, white); }
+@media (prefers-reduced-motion: reduce) { .wireFlow, .stream { display: none; } }
 .packet { opacity: 0; fill: var(--primary); stroke: color-mix(in srgb, var(--footer-bg) 42%, black); stroke-width: 3; }
 
 .node {
