@@ -15,7 +15,9 @@ import styles from "@/components/marketing/landing-trust.module.css";
  * along its foot: who uses it. Right, the statement and a short line from the floor it came from
  * to today: who built it and how long it has run, one sentence a stop.
  *
- * On first sight the photo opens upwards, the figures count up and the stops rise in turn. Without
+ * On first sight the photo opens upwards and the figures count up. The line is tied to the scroll
+ * (owner, 6 Nov): Year one shows first, green flows down the line as the page scrolls, and each stop
+ * lights up and rises when the flow reaches it, back again on the way up. Without
  * a script, or under reduced motion, it is the finished band. The photo is CC0
  * (public/marketing/README.md).
  *
@@ -49,8 +51,7 @@ export function LandingTrust() {
       io.disconnect();
       timeline = createTimeline({ defaults: { ease: "outQuart" }, onComplete: () => { root.dataset.state = "done"; } })
         .add(root.querySelector("[data-photo]")!, { clipPath: ["inset(100% 0 0 0 round 24px)", "inset(0% 0 0 0 round 24px)"], duration: 1100, ease: "inOutQuart" }, 0)
-        .add(root.querySelectorAll("[data-figure]"), { opacity: [0, 1], translateY: [12, 0], duration: 700, delay: stagger(110) }, 650)
-        .add(root.querySelectorAll("[data-stop]"), { opacity: [0, 1], translateY: [12, 0], duration: 650, delay: stagger(180) }, 300);
+        .add(root.querySelectorAll("[data-figure]"), { opacity: [0, 1], translateY: [12, 0], duration: 700, delay: stagger(110) }, 650);
       root.querySelectorAll<HTMLElement>("[data-count]").forEach((el, i) => {
         const figure = FIGURES[i];
         const value = { n: 0 };
@@ -59,6 +60,35 @@ export function LandingTrust() {
     }, { threshold: 0.35 });
     io.observe(root);
     return () => { io.disconnect(); timeline?.revert(); root.dataset.state = "done"; };
+  }, []);
+
+  // The line follows the scroll: the fill grows down it, and a stop turns on when the fill reaches it.
+  const lineRef = useRef<HTMLOListElement>(null);
+  useEffect(() => {
+    const line = lineRef.current;
+    if (!line || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const fill = line.querySelector<HTMLElement>("[data-fill]");
+    const stops = [...line.querySelectorAll<HTMLElement>("[data-stop]")];
+    line.dataset.scroll = "true";
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const rect = line.getBoundingClientRect();
+      // 0 when the line's top is at 88% of the screen, 1 when its foot is at 70%: the whole story plays while the band is in view.
+      const start = window.innerHeight * 0.88;
+      const end = window.innerHeight * 0.7;
+      const progress = Math.min(1, Math.max(0, (start - rect.top) / (start - end + rect.height)));
+      if (fill) fill.style.transform = `scaleY(${progress})`;
+      stops.forEach((stop) => {
+        const at = (stop.offsetTop + 8) / Math.max(1, rect.height);
+        stop.dataset.on = String(progress >= at - 0.02);
+      });
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => { window.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); window.cancelAnimationFrame(frame); delete line.dataset.scroll; };
   }, []);
 
   return (
@@ -80,7 +110,8 @@ export function LandingTrust() {
         <div className={styles.copy}>
           <p className={styles.label}>Built by industry experts</p>
           <h2 id="landing-trust-heading" className={styles.title}>Made by people who sold final expense and ran live-transfer floors.</h2>
-          <ol className={styles.line}>
+          <ol ref={lineRef} className={styles.line}>
+            <span className={styles.fill} data-fill="" aria-hidden="true" />
             {STOPS.map((stop, i) => (
               <li key={stop.when} className={styles.stop} data-stop="" data-now={i === STOPS.length - 1}>
                 <span className={styles.dot} aria-hidden="true" />

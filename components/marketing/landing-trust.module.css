@@ -28,6 +28,15 @@
 .line { position: relative; display: grid; gap: 22px; margin: clamp(28px, 3.4vw, 44px) 0 0; padding: 0 0 0 30px; list-style: none; }
 .line::before { position: absolute; top: 8px; bottom: 8px; left: 6px; width: 1px; background: linear-gradient(180deg, var(--border-strong) 0%, var(--border-strong) 60%, var(--primary) 100%); content: ""; }
 .stop { position: relative; display: grid; gap: 4px; }
+/* The green that flows down the line with the scroll (landing-trust.tsx), over the grey rule. */
+.fill { position: absolute; top: 8px; bottom: 8px; left: 6px; width: 2px; margin-left: -.5px; border-radius: 2px; background: var(--primary); transform: scaleY(0); transform-origin: 50% 0; }
+.line:not([data-scroll="true"]) .fill { display: none; }
+/* Scroll-driven: a stop waits, dimmed and a little low, until the flow reaches it. */
+.line[data-scroll="true"] .stop { opacity: .28; transform: translateY(10px); transition: opacity 500ms cubic-bezier(.23, 1, .32, 1), transform 600ms cubic-bezier(.23, 1, .32, 1); }
+.line[data-scroll="true"] .stop[data-on="true"] { opacity: 1; transform: none; }
+.line[data-scroll="true"] .stop .dot { transition: border-color 300ms ease, background-color 300ms ease, box-shadow 300ms ease; }
+.line[data-scroll="true"] .stop[data-on="true"] .dot { border-color: var(--primary); }
+.line[data-scroll="true"] .stop[data-now="true"]:not([data-on="true"]) .dot { border-color: var(--border-strong); background: var(--canvas); box-shadow: none; }
 .dot { position: absolute; top: 3px; left: -30px; width: 13px; height: 13px; box-sizing: border-box; border: 2px solid var(--border-strong); border-radius: 50%; background: var(--canvas); }
 .stop[data-now="true"] .dot { border-color: var(--primary); background: var(--primary); box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 20%, transparent); }
 .when { color: var(--muted); font-size: 13px; font-weight: 600; }
@@ -36,7 +45,7 @@
 
 /* Before the entrance, only when a script will run it. */
 .inner[data-state="waiting"] .photo { clip-path: inset(100% 0 0 0 round 24px); }
-.inner[data-state="waiting"] [data-figure], .inner[data-state="waiting"] [data-stop] { opacity: 0; }
+.inner[data-state="waiting"] [data-figure] { opacity: 0; }
 
 @media (max-width: 860px) {
   .inner { grid-template-columns: minmax(0, 1fr); }
