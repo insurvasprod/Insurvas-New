@@ -206,8 +206,9 @@ line "recorded but not sent" proves the path); keyboard-only submit works
 ### Task 18: "What's broken today" photo row: arrows only, auto-scroll, faded edges
 **Acceptance criteria:**
 - [ ] No scrollbar under the photos; the ‹ › arrows at the top are the only controls
-- [ ] The row advances to the right on its own, one card every few seconds, with a smooth scroll,
-      and wraps to the start at the end; it pauses on hover, focus, touch and when off screen
+- [x] The row moves to the right on its own, slowly and continuously, and only ever that way
+      (owner, 6 Nov: no rewind at the end; the cards repeat endlessly); it pauses on hover, focus,
+      touch and when off screen
 - [ ] The left and right edges fade out
 - [ ] Reduced motion: no auto-advance; arrows still work
 - [ ] Swipe still works on phones; checked at 360, 390, 430 and 768

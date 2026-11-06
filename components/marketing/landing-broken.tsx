@@ -12,14 +12,17 @@ import styles from "@/components/marketing/landing-broken.module.css";
  * the sources and licences) and the problem in one line; choosing a card opens what Insurvas does
  * about it, and on which plan, underneath. The cards are pressed buttons, not tabs: they scroll.
  *
- * Owner, 6 Nov: no scrollbar, the arrows at the top are the controls, the row glides one card to
- * the right on its own every few seconds (wrapping to the start at the end), and its edges fade.
- * The glide waits while the row is pointed at, focused, touched, off screen, or the tab is hidden,
- * and never runs under reduced motion. It only scrolls: the open leak changes when you choose one.
+ * Owner, 6 Nov: no scrollbar, the arrows at the top are the controls, the edges fade, and the
+ * row moves on its own, slowly and only ever one way: the cards are laid out three times over and
+ * the row glides through the middle copy; each time a whole copy has passed it is moved back by
+ * exactly one copy, which looks identical, so it never rewinds. It waits while it is pointed at,
+ * focused, touched, off screen or in a hidden tab, and never moves under reduced motion. It only
+ * scrolls: the open leak changes when you choose one.
  */
-const ADVANCE_MS = 4000;
+const SPEED = 28; // pixels a second
 /** How long after a touch, a click or an arrow the glide waits before it starts again. */
-const RESUME_MS = 7000;
+const RESUME_MS = 5000;
+const COPIES = [0, 1, 2];
 const LEAKS = [
   {
     key: "lapse",
@@ -132,43 +135,60 @@ export function LandingBroken() {
   const hovering = useRef(false);
   const visible = useRef(false);
 
-  /** One card on (or back); past either end it wraps to the other. */
-  const scroll = useCallback((by: number) => {
+  /** One copy of the cards, in pixels: the distance after which the row looks the same again. */
+  const copyWidth = () => (rowRef.current ? rowRef.current.scrollWidth / COPIES.length : 0);
+
+  /** Keeps the row inside the middle copy; the jump is one exact copy, so nothing visibly moves. */
+  const recentre = useCallback(() => {
+    const row = rowRef.current;
+    const width = copyWidth();
+    if (!row || !width) return;
+    if (row.scrollLeft >= width * 2) row.scrollLeft -= width;
+    else if (row.scrollLeft < width) row.scrollLeft += width;
+  }, []);
+
+  /** One card on or back, from wherever the row is. */
+  const scroll = (by: number) => {
     const row = rowRef.current;
     const card = row?.querySelector("button");
     if (!row || !card) return;
-    const step = card.getBoundingClientRect().width + 16;
-    const end = row.scrollWidth - row.clientWidth - 8;
-    if (by > 0 && row.scrollLeft >= end) row.scrollTo({ left: 0, behavior: "smooth" });
-    else if (by < 0 && row.scrollLeft <= 8) row.scrollTo({ left: row.scrollWidth, behavior: "smooth" });
-    else row.scrollBy({ left: by * step, behavior: "smooth" });
-  }, []);
+    holdUntil.current = Date.now() + RESUME_MS;
+    recentre();
+    row.scrollBy({ left: by * (card.getBoundingClientRect().width + 16), behavior: "smooth" });
+  };
 
   const hold = () => { holdUntil.current = Date.now() + RESUME_MS; };
-
-  // The edge fades show only where there is more to see.
-  const updateEdges = useCallback(() => {
-    const row = rowRef.current;
-    if (!row) return;
-    row.dataset.start = String(row.scrollLeft <= 8);
-    row.dataset.end = String(row.scrollLeft >= row.scrollWidth - row.clientWidth - 8);
-  }, []);
 
   useEffect(() => {
     const row = rowRef.current;
     if (!row) return;
-    updateEdges();
-    const io = new IntersectionObserver(([entry]) => { visible.current = Boolean(entry?.isIntersecting); }, { threshold: 0.5 });
+    row.scrollLeft = copyWidth();
+    const io = new IntersectionObserver(([entry]) => { visible.current = Boolean(entry?.isIntersecting); }, { threshold: 0.3 });
     io.observe(row);
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const timer = window.setInterval(() => {
-      if (reduce.matches || !visible.current || hovering.current || document.hidden) return;
-      if (Date.now() < holdUntil.current || row.contains(document.activeElement)) return;
-      scroll(1);
-    }, ADVANCE_MS);
-    window.addEventListener("resize", updateEdges);
-    return () => { io.disconnect(); window.clearInterval(timer); window.removeEventListener("resize", updateEdges); };
-  }, [scroll, updateEdges]);
+    // The glide keeps its own fractional position, because scrollLeft rounds to whole pixels and
+    // 28px a second is less than one pixel a frame.
+    let position = row.scrollLeft;
+    let last = 0;
+    let frame = 0;
+    const tick = (now: number) => {
+      frame = window.requestAnimationFrame(tick);
+      const elapsed = last ? Math.min(now - last, 64) : 0;
+      last = now;
+      const waiting = reduce.matches || !visible.current || hovering.current || document.hidden
+        || Date.now() < holdUntil.current || row.contains(document.activeElement);
+      if (waiting) { position = row.scrollLeft; return; }
+      if (Math.abs(row.scrollLeft - position) > 2) position = row.scrollLeft; // a swipe moved it
+      position += (SPEED * elapsed) / 1000;
+      const width = copyWidth();
+      if (width && position >= width * 2) position -= width;
+      row.scrollLeft = position;
+    };
+    frame = window.requestAnimationFrame(tick);
+    const onResize = () => { recentre(); position = row.scrollLeft; };
+    window.addEventListener("resize", onResize);
+    return () => { io.disconnect(); window.cancelAnimationFrame(frame); window.removeEventListener("resize", onResize); };
+  }, [recentre]);
 
   return (
     <div className={styles.broken}>
@@ -185,19 +205,21 @@ export function LandingBroken() {
         className={styles.row}
         role="group"
         aria-label="What’s broken today"
-        data-start="true"
-        data-end="false"
-        onScroll={updateEdges}
+        onScrollEnd={recentre}
         onPointerEnter={(event) => { if (event.pointerType === "mouse") hovering.current = true; }}
         onPointerLeave={() => { hovering.current = false; }}
         onPointerDown={hold}
       >
-        {LEAKS.map((item, i) => (
+        {/* Three copies for the endless loop; only the middle one is reachable by keyboard and
+            screen reader, the other two are the same cards seen again. */}
+        {COPIES.flatMap((copy) => LEAKS.map((item, i) => (
           <button
-            key={item.key}
+            key={`${copy}-${item.key}`}
             type="button"
             aria-pressed={i === index}
             aria-controls="leak-panel"
+            aria-hidden={copy === 1 ? undefined : true}
+            tabIndex={copy === 1 ? undefined : -1}
             className={styles.card}
             onClick={() => { hold(); setIndex(i); }}
           >
@@ -209,7 +231,7 @@ export function LandingBroken() {
               <span className={styles.cardTitle}>{item.broken}</span>
             </span>
           </button>
-        ))}
+        )))}
       </div>
 
       <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key}>
