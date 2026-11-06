@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { ArrowRight } from "lucide-react";
 
 import { ROADMAP, type RoadmapStatus } from "@/lib/marketing/roadmap";
@@ -16,15 +17,21 @@ import styles from "@/components/marketing/landing-roadmap.module.css";
  *
  * The photo sits in a stage that keeps its proportions and is anchored to the band's bottom edge,
  * so the pins (percentages of the photo) stay on the asphalt at every width. Re-place them by eye if
- * the photo changes. On phones (owner, 6 Nov: the pins belong on the photo, not in a list under it)
- * the band is a strip of the whole photo, swiped sideways, and it tours the stops on its own: every
- * few seconds it glides to the next pin and opens its label, until the visitor touches it.
+ * the photo changes.
+ *
+ * Phones (owner, 6 Nov: one screen, no scrolling sideways, a road you climb to get somewhere) have
+ * their own photo, a tall one of Trollstigen whose road winds up from the foot of the screen to the
+ * mountains: the stops sit on its bends in the order the road climbs, shipped at the bottom and what
+ * we are exploring near the top. The `p` fields place them there. Every few seconds the next stop's
+ * label opens, until the visitor touches the photo.
  */
-const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: "above" | "below"; align: "start" | "center" | "end" }[] = [
-  { status: "shipped", label: "Shipped", x: 20, y: 63.5, tag: "below", align: "start" },
-  { status: "progress", label: "Now", x: 46, y: 83, tag: "above", align: "center" },
-  { status: "planned", label: "Next", x: 94, y: 51, tag: "below", align: "end" },
-  { status: "exploring", label: "Exploring", x: 64, y: 65.5, tag: "above", align: "center" },
+type Tag = "above" | "below";
+type Align = "start" | "center" | "end";
+const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: Tag; align: Align; px: number; py: number; ptag: Tag; palign: Align }[] = [
+  { status: "shipped", label: "Shipped", x: 20, y: 63.5, tag: "below", align: "start", px: 74.5, py: 89, ptag: "above", palign: "end" },
+  { status: "progress", label: "Now", x: 46, y: 83, tag: "above", align: "center", px: 66.2, py: 52.4, ptag: "below", palign: "end" },
+  { status: "planned", label: "Next", x: 94, y: 51, tag: "below", align: "end", px: 34.5, py: 66, ptag: "above", palign: "start" },
+  { status: "exploring", label: "Exploring", x: 64, y: 65.5, tag: "above", align: "center", px: 45.2, py: 38.4, ptag: "below", palign: "center" },
 ];
 const NOW = 1;
 const TOUR_MS = 4_000;
@@ -36,15 +43,11 @@ export function LandingRoadmap() {
   const touched = useRef(false);
   const [wait, setWait] = useState(0);
 
-  // Phones: keep the pin being shown in the middle of the strip, and tour the stops until touched.
+  // Phones: tour the stops, one label at a time, until the visitor touches the photo.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !window.matchMedia("(max-width: 760px)").matches) return;
-    const pin = map.querySelectorAll<HTMLElement>("[data-pin]")[active];
-    if (!pin) return;
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    map.scrollTo({ left: pin.offsetLeft - map.clientWidth / 2, behavior: reduce ? "auto" : "smooth" });
-    if (reduce || touched.current) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || touched.current) return;
     const next = window.setTimeout(() => {
       const rect = map.getBoundingClientRect();
       // Only while the strip is on screen; otherwise check again later.
@@ -73,9 +76,10 @@ export function LandingRoadmap() {
             <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
           </div>
         </div>
-      <div ref={mapRef} className={styles.map} onPointerDown={stopTour} onWheel={stopTour}>
+      <div ref={mapRef} className={styles.map} onPointerDown={stopTour}>
         <div className={styles.stage}>
           <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
+          <Image src="/marketing/roadmap-road-tall.webp" alt="" fill sizes="100vw" className={styles.photoTall} />
         </div>
         <div className={styles.shade} aria-hidden="true" />
         {/* A second stage of the same shape holds the pins, so they sit above the shade. */}
@@ -90,8 +94,10 @@ export function LandingRoadmap() {
                 data-status={stop.status}
                 data-tag={stop.tag}
                 data-align={stop.align}
+                data-ptag={stop.ptag}
+                data-palign={stop.palign}
                 data-pin=""
-                style={{ left: `${stop.x}%`, top: `${stop.y}%` }}
+                style={{ "--x": `${stop.x}%`, "--y": `${stop.y}%`, "--px": `${stop.px}%`, "--py": `${stop.py}%` } as CSSProperties}
                 onClick={() => { stopTour(); setActive(i); }}
                 onMouseEnter={() => setActive(i)}
                 onFocus={() => setActive(i)}

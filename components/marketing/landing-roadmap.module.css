@@ -22,6 +22,7 @@
    the photo would then be (199.2cqh = 1600/864/0.93), so the pins never leave the screen sideways. */
 .stage { position: absolute; top: 100%; left: 50%; width: max(100cqw, 199.2cqh); aspect-ratio: 1600 / 864; transform: translate(-50%, -93%); }
 .photo { object-fit: cover; opacity: .5; filter: saturate(.75); }
+.photoTall { display: none; }
 /* Darker where the words are (top left), lighter where the road is, and into the band at both ends.
    The green cast stays, so it ties to the hero (Umar: "green will resonate with the green on top"). */
 .shade {
@@ -51,7 +52,7 @@
 
 /* the pins and their labels */
 .pins { position: absolute; inset: 0; z-index: 2; }
-.pin { position: absolute; width: 0; height: 0; border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; }
+.pin { position: absolute; top: var(--y); left: var(--x); width: 0; height: 0; border: 0; background: transparent; padding: 0; cursor: pointer; font: inherit; }
 .pin:focus-visible { outline: none; }
 .node { position: absolute; left: -13px; top: -13px; width: 26px; height: 26px; border: 4px solid var(--on-dark); border-radius: 50%; background: var(--nav-muted); box-shadow: 0 4px 14px rgb(0 0 0 / 45%); transition: transform .2s; }
 .pin[data-status="shipped"] .node { background: var(--primary); }
@@ -86,23 +87,42 @@
   .tag { display: none; }
   .pin[aria-pressed="true"] .tag { display: grid; max-width: min(240px, 60vw); }
 }
-/* Phones: the header, then the whole photo as a strip to swipe along, the pins on the road. */
+/* Phones: one screen. The tall photo fills it behind the header, the road climbing from the foot of
+   the screen to the mountains, the stops on its bends (owner, 6 Nov). */
 @media (max-width: 760px) {
-  /* Phones: the section is as tall as its content. */
-  .section { --strip-h: 380px; --strip-w: calc(var(--strip-h) * 1600 / 864); display: block; height: auto; min-height: 0; max-height: none; }
-  .map { flex: none; height: var(--strip-h); margin-top: -12px; overflow-x: auto; overflow-y: hidden; container-type: normal; overscroll-behavior-x: contain; scrollbar-width: none; }
-  .map::-webkit-scrollbar { display: none; }
-  .stage { top: 0; left: 0; width: var(--strip-w); height: var(--strip-h); aspect-ratio: auto; transform: none; }
-  .shade { right: auto; width: var(--strip-w); background: linear-gradient(180deg, var(--band) 0%, transparent 22%, transparent 80%, var(--band) 100%); }
+  .section { height: 100svh; min-height: 520px; max-height: none; }
+  .map { position: absolute; inset: 0; flex: none; height: auto; margin: 0; }
+  /* The tall photo's own shape (1200 x 2000), centred and covering the screen, so the pins stay on
+     the road whatever the phone's proportions. */
+  .stage { top: 50%; left: 50%; width: max(100cqw, 60cqh); aspect-ratio: 1200 / 2000; transform: translate(-50%, -50%); }
+  .photo { display: none; }
+  .photoTall { display: block; object-fit: cover; opacity: .78; filter: saturate(.85); }
+  /* Dark behind the header, clear over the road, into the band at the foot. */
+  .shade { background: linear-gradient(180deg, var(--band) 0%, color-mix(in srgb, var(--band) 80%, transparent) 24%, transparent 44%, transparent 86%, var(--band) 100%); }
   /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
-  .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 88px 0 8px; text-align: center; }
+  .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 84px 0 0; text-align: center; }
   .titleBlock { justify-items: center; }
   .heading { margin-inline: auto; }
   .aside { justify-self: center; justify-items: center; }
+  /* The why repeats the trust band; on a phone the road gets the room. */
+  .why { display: none; }
   .fadeIn { height: 90px; }
+  .pin { top: var(--py); left: var(--px); }
   /* A larger target for a thumb, the same dot. */
   .pin::before { position: absolute; top: -22px; left: -22px; width: 44px; height: 44px; content: ""; }
-  /* Every label opens above its pin, so it stays inside the strip. */
-  .pin[aria-pressed="true"] .tag { top: auto; bottom: 24px; max-width: min(230px, 62vw); }
+  .pin[aria-pressed="true"] .tag { max-width: min(220px, 58vw); }
+  /* The label is the stop and its name only, so it covers as little of the road as it can. */
+  .detail { display: none; }
+  .pin[data-ptag="above"] .tag { top: auto; bottom: 24px; }
+  .pin[data-ptag="below"] .tag { top: 24px; bottom: auto; }
+  .pin[data-palign="start"] .tag { right: auto; left: -14px; transform: none; }
+  .pin[data-palign="end"] .tag { right: -14px; left: auto; transform: none; }
+  .pin[data-palign="center"] .tag { right: auto; left: 0; transform: translateX(-50%); }
+}
+/* A short phone (an iPhone SE): a tighter header, so the top of the road stays clear of it. */
+@media (max-width: 760px) and (max-height: 640px) {
+  .over { padding-top: 72px; }
+  .eyebrow { display: none; }
+  .heading { font-size: 26px; }
 }
 @media (prefers-reduced-motion: reduce) { .detail { transition: none; } }
