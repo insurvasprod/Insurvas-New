@@ -3,6 +3,7 @@
 .section {
   --band: color-mix(in srgb, var(--footer-bg) 62%, black);
   scroll-margin-top: 80px;
+  /* The same dark as the footer under it, so the page ends in one colour (owner, 6 Nov). */
   background: var(--band);
   color: var(--nav-ink);
 }

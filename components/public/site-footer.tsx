@@ -74,7 +74,12 @@ export async function SiteFooter() {
   const legalLinks = await publishedLegalLinks();
   const columns = legalLinks.length > 0 ? [...COLUMNS, { title: "Legal", links: legalLinks }] : COLUMNS;
   return (
-    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-12 pt-12 sm:px-6 lg:px-16">
+    // The same deep olive as every dark band on the public pages (the hero, the roadmap, the
+    // contact form), not the lighter brand olive it used to be (owner, 6 Nov: one dark, everywhere).
+    <footer className="relative isolate overflow-hidden bg-[color-mix(in_srgb,var(--footer-bg)_62%,black)] px-4 pb-12 pt-16 sm:px-6 lg:px-16">
+      {/* Where the footer starts: a hairline that fades at both ends, since the footer shares the
+          page's dark and needs a line to read as its own part (owner, 6 Nov). */}
+      <div aria-hidden="true" className={styles.edge} />
       <div className="relative mx-auto max-w-7xl">
         {/* The wordmark, wide and faded, behind the brand block and the link columns (owner, 2026-11-04). */}
         <div aria-hidden="true" className={styles.watermark} />

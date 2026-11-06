@@ -9,7 +9,7 @@
 }
 
 /* The band. It is a size container so the stage can cover it while keeping the photo's proportions. */
-.map { position: relative; height: clamp(420px, 63vh, 560px); overflow: hidden; container-type: size; }
+.map { position: relative; margin-top: -56px; height: clamp(420px, 63vh, 540px); overflow: hidden; container-type: size; }
 /* The stage is the photo's own shape (1600 × 864), wide enough to cover the band and anchored so the
    band shows the stage from about 30% down to 93%, where the road runs. */
 .stage { position: absolute; top: 100%; left: 50%; width: max(100cqw, 294cqh); aspect-ratio: 1600 / 864; transform: translate(-50%, -93%); }
@@ -25,11 +25,17 @@
   pointer-events: none;
 }
 
-.over { position: absolute; z-index: 3; top: 0; left: 50%; width: min(100% - 64px, 1320px); padding-top: clamp(44px, 5vw, 64px); transform: translateX(-50%); pointer-events: none; }
-.over a { pointer-events: auto; }
+/* The fade from the white (or, in dark, the near-black) section above into the band. */
+.fadeIn { position: absolute; z-index: 1; inset: 0 0 auto; height: clamp(110px, 12vw, 150px); background: linear-gradient(180deg, var(--canvas) 0%, color-mix(in srgb, var(--canvas) 55%, transparent) 40%, transparent 100%); pointer-events: none; }
+/* The header row sits just under the fade: the heading left, the why and the link right, bottoms
+   aligned. The photo starts under its lower edge. */
+.over { position: relative; z-index: 3; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: end; gap: 16px clamp(32px, 6vw, 96px); width: min(100% - 64px, 1320px); margin: 0 auto; padding-top: clamp(112px, 11vw, 140px); }
+.titleBlock { display: grid; gap: 12px; }
+.eyebrow { margin: 0; color: var(--primary); font-size: 14px; font-weight: 600; }
+.aside { display: grid; justify-items: start; gap: 6px; max-width: 46ch; justify-self: end; padding-bottom: 4px; }
 .heading { max-width: 18ch; margin: 0; font: 600 clamp(30px, 3.4vw, 48px)/1.06 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
-.why { max-width: 44ch; margin: 14px 0 0; color: var(--nav-muted); font-size: clamp(16px, 1.3vw, 18px); line-height: 1.5; }
-.link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin-top: 6px; color: var(--primary); font-size: 15px; font-weight: 600; text-decoration: none; }
+.why { margin: 0; color: var(--nav-muted); font-size: clamp(16px, 1.3vw, 18px); line-height: 1.5; }
+.link { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; margin: 0; color: var(--primary); font-size: 15px; font-weight: 600; text-decoration: none; }
 .link:hover { text-decoration: underline; }
 .link svg { width: 16px; height: 16px; transition: transform .2s; }
 .link:hover svg { transform: translateX(3px); }
@@ -69,16 +75,21 @@
 
 /* Narrow screens: only the label of the pin being pointed at shows. */
 @media (max-width: 1000px) {
+  .over { grid-template-columns: minmax(0, 1fr); }
+  .aside { justify-self: start; }
   .tag { display: none; }
   .pin[aria-pressed="true"] .tag { display: grid; max-width: min(240px, 60vw); }
 }
 /* Phones: the photo is a short backdrop for the heading, and the stops are a list under it. */
 @media (max-width: 760px) {
-  .map { height: auto; container-type: normal; }
+  /* A short strip of the road between the header and the stops. */
+  .map { height: 200px; margin-top: -24px; container-type: normal; }
   .stage { inset: 0; width: auto; aspect-ratio: auto; transform: none; }
   .pins { display: none; }
-  .over { position: relative; left: 0; width: calc(100% - 32px); margin: 0 auto; padding: 48px 0 28px; transform: none; }
-  .shade { background: linear-gradient(180deg, color-mix(in srgb, var(--band) 55%, transparent) 0%, var(--band) 100%); }
+  .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 88px 0 8px; }
+  .aside { justify-self: start; }
+  .fadeIn { height: 90px; }
+  .shade { background: linear-gradient(180deg, var(--band) 0%, transparent 38%, transparent 62%, var(--band) 100%); }
   .list { display: grid; gap: 0; width: calc(100% - 32px); margin: 0 auto; padding: 0 0 8px; list-style: none; }
   .list li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 12px; border-top: 1px solid rgb(234 246 242 / 10%); padding: 14px 0; }
   .list i { width: 12px; height: 12px; margin-top: 4px; border: 2px solid var(--on-dark); border-radius: 50%; background: var(--nav-muted); }

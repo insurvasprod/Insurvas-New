@@ -32,6 +32,22 @@ export function LandingRoadmap() {
 
   return (
     <section id="roadmap" aria-labelledby="roadmap-title" className={styles.section}>
+        {/* The white of the section above melts into the band (owner, 6 Nov). */}
+        <div className={styles.fadeIn} aria-hidden="true" />
+        {/* The header: the heading on the left, the why and the link on the right, on one baseline
+            on a row of its own over the photo's faded top edge, so the pins below have the road to
+            themselves (owner, 6 Nov). */}
+        <div className={styles.over}>
+          <div className={styles.titleBlock}>
+            <p className={styles.eyebrow}>Roadmap</p>
+            <h2 id="roadmap-title" className={styles.heading}>See what we are building next.</h2>
+          </div>
+          <div className={styles.aside}>
+            {/* TO CONFIRM (Umar): the why. Same claim as the trust band, in one line. */}
+            <p className={styles.why}>Insurvas is built by people who ran a final expense floor, and it grows from what agencies ask us for.</p>
+            <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
+          </div>
+        </div>
       <div className={styles.map}>
         <div className={styles.stage}>
           <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
@@ -59,12 +75,6 @@ export function LandingRoadmap() {
               </button>
             ))}
           </div>
-        </div>
-        <div className={styles.over}>
-          <h2 id="roadmap-title" className={styles.heading}>See what we are building next.</h2>
-          {/* TO CONFIRM (Umar): the why. Same claim as the trust band, in one line. */}
-          <p className={styles.why}>Insurvas is built by people who ran a final expense floor, and it grows from what agencies ask us for.</p>
-          <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
         </div>
       </div>
 
