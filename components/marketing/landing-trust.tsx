@@ -45,9 +45,16 @@ export function LandingTrust() {
     if (!root || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     root.dataset.state = "waiting";
     let timeline: ReturnType<typeof createTimeline> | null = null;
-    const io = new IntersectionObserver(([entry]) => {
-      if (!entry?.isIntersecting || timeline) return;
-      io.disconnect();
+    const photo = root.querySelector<HTMLElement>("[data-photo]") ?? root;
+    // Started from the photo's place on the page, not an IntersectionObserver on it: the photo is
+    // clipped to nothing while it waits, and Chrome then never reports it as visible, so the
+    // reveal never ran (owner, 6 Nov). On a phone the photo sits under the text, so it is the photo,
+    // not the band, that has to be on screen.
+    const check = () => {
+      const r = photo.getBoundingClientRect();
+      if (timeline || r.top > window.innerHeight * 0.8 || r.bottom < 0) return;
+      window.removeEventListener("scroll", check);
+      window.removeEventListener("resize", check);
       timeline = createTimeline({ defaults: { ease: "outQuart" }, onComplete: () => { root.dataset.state = "done"; } })
         .add(root.querySelector("[data-photo]")!, { clipPath: ["inset(100% 0 0 0 round 24px)", "inset(0% 0 0 0 round 24px)"], duration: 1100, ease: "inOutQuart" }, 0)
         .add(root.querySelectorAll("[data-figure]"), { opacity: [0, 1], translateY: [12, 0], duration: 700, delay: stagger(110) }, 650);
@@ -56,11 +63,11 @@ export function LandingTrust() {
         const value = { n: 0 };
         animate(value, { n: figure.to, duration: 1300, delay: 700 + i * 110, ease: "outQuart", onUpdate: () => { el.textContent = show(figure, value.n); } });
       });
-    }, { threshold: 0.4 });
-    // The photo, not the whole band: on a phone it sits under the text, and watching the band would
-    // play the reveal and the count while the photo is still below the screen (owner, 6 Nov).
-    io.observe(root.querySelector<HTMLElement>("[data-photo]") ?? root);
-    return () => { io.disconnect(); timeline?.revert(); root.dataset.state = "done"; };
+    };
+    window.addEventListener("scroll", check, { passive: true });
+    window.addEventListener("resize", check);
+    check();
+    return () => { window.removeEventListener("scroll", check); window.removeEventListener("resize", check); timeline?.revert(); root.dataset.state = "done"; };
   }, []);
 
   // The line plays by itself, once, when the band comes into view (owner, 6 Nov: not tied to the
