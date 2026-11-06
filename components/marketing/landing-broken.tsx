@@ -22,6 +22,9 @@ import styles from "@/components/marketing/landing-broken.module.css";
  * and never moves under reduced motion (the arrows and dragging still work there).
  */
 const SPEED = 30; // pixels a second
+/** The open leak moves on to the next one this often (owner, 6 Nov), and waits longer after a click. */
+const LEAK_MS = 5_000;
+const LEAK_HOLD_MS = 15_000;
 const COPIES = [0, 1, 2];
 const LEAKS = [
   {
@@ -128,6 +131,26 @@ const LEAKS = [
 
 export function LandingBroken() {
   const [index, setIndex] = useState(0);
+  /** Ticks to skip after a click: 15 seconds is three 5-second ticks. */
+  const holdTicks = useRef(0);
+  const panelHover = useRef(false);
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const choose = (i: number) => { holdTicks.current = LEAK_HOLD_MS / LEAK_MS; setIndex(i); };
+
+  // The next leak every 5 seconds, while the section is on screen and nobody is reading the panel.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let visible = false;
+    const io = new IntersectionObserver(([entry]) => { visible = Boolean(entry?.isIntersecting); }, { threshold: 0.3 });
+    io.observe(section);
+    const timer = window.setInterval(() => {
+      if (holdTicks.current > 0) { holdTicks.current -= 1; return; }
+      if (!visible || panelHover.current || document.hidden) return;
+      setIndex((now) => (now + 1) % LEAKS.length);
+    }, LEAK_MS);
+    return () => { io.disconnect(); window.clearInterval(timer); };
+  }, []);
   const leak = LEAKS[index];
 
   const trackRef = useRef<HTMLDivElement>(null);
@@ -232,7 +255,7 @@ export function LandingBroken() {
   };
 
   return (
-    <div className={styles.broken}>
+    <div ref={sectionRef} className={styles.broken}>
       <div className={styles.controls}>
         <p className={styles.count}>{index + 1} of {LEAKS.length} · <b>{leak.tab}</b></p>
         <div className={styles.arrows}>
@@ -263,11 +286,13 @@ export function LandingBroken() {
             aria-hidden={copy === 1 ? undefined : true}
             tabIndex={copy === 1 ? undefined : -1}
             className={styles.card}
-            onClick={() => setIndex(i)}
+            onClick={() => choose(i)}
           >
             <span className={styles.photo}>
               <Image src={item.photo} alt="" fill sizes="(max-width: 640px) 80vw, 320px" />
             </span>
+            {/* Fills while the open leak waits for the next; restarts with each one. Middle copy only. */}
+            {i === index && copy === 1 && <span key={index} className={styles.cardTimer} aria-hidden="true" />}
             <span className={styles.cardText}>
               <span className={styles.cardTab}>{item.tab}</span>
               <span className={styles.cardTitle}>{item.broken}</span>
@@ -277,7 +302,7 @@ export function LandingBroken() {
         </div>
       </div>
 
-      <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key}>
+      <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key} onPointerEnter={() => { panelHover.current = true; }} onPointerLeave={() => { panelHover.current = false; }}>
         <div className={styles.panelProblem}>
           <p className={styles.tag}>Broken today</p>
           <p className={styles.problem}>{leak.broken}</p>
