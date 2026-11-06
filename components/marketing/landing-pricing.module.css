@@ -48,11 +48,8 @@
 .planCtaFeatured { border-color: transparent; background: var(--primary); color: var(--on-primary); box-shadow: 0 12px 28px -12px color-mix(in srgb, var(--primary) 80%, transparent); }
 .planCtaFeatured:hover { background: color-mix(in srgb, var(--primary) 88%, var(--on-dark)); }
 
-/* The recommended plan: a step brighter, with a hatched brand edge around it. */
-.featured { z-index: 1; border-color: transparent; background: var(--surface-alt); box-shadow: 0 30px 70px -28px rgb(0 0 0 / 60%); }
-/* only the 7px ring outside the card is hatched: the mask cuts the middle out */
-.featured::before { position: absolute; inset: -8px; border-radius: 35px; padding: 7px; background: repeating-linear-gradient(135deg, var(--primary) 0 2px, transparent 2px 7px); content: ""; opacity: .75; pointer-events: none; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
-.featured .tab { border-color: transparent; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--primary) 55%, transparent) 0 2px, var(--canvas) 2px 7px); color: var(--ink); font-weight: 600; }
+/* The recommended plan's tab names it; the hatched ring around the card is gone (Umar, 4 Nov). */
+.featured .tab { color: var(--ink); font-weight: 600; }
 .featured .tab i { background: var(--primary); }
 
 @media (max-width: 1000px) {

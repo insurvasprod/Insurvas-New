@@ -80,7 +80,7 @@ export function LandingPricingTeaser({ plans }: { plans: PublicPlan[] }) {
             <div className={styles.switch} role="group" aria-label="Plans for">
               {audiences.map((who) => (
                 <button key={who} type="button" aria-pressed={audience === who} onClick={() => setAudience(who)}>
-                  {who === "individual" ? "Independent agent" : "Team"}
+                  {who === "individual" ? "Agent workspace" : "Team workspace"}
                 </button>
               ))}
             </div>

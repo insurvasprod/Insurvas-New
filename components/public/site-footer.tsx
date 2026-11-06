@@ -82,7 +82,7 @@ export async function SiteFooter() {
               <InsurvasLogo size="auth" tone="dark" alt="Insurvas" />
             </Link>
             <p className="mt-4 max-w-[280px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)]">
-              The Complete OS for life insurance sales teams.
+              The operating system for life insurance sales teams.
             </p>
             <div className="mt-6">
               <MarketingCta href="/signup">Start free trial</MarketingCta>
