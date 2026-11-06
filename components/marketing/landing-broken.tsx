@@ -3,8 +3,6 @@
 import Image from "next/image";
 import { useEffect, useRef } from "react";
 import { Check } from "lucide-react";
-import { gsap } from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import styles from "@/components/marketing/landing-broken.module.css";
@@ -117,15 +115,18 @@ const LEAKS = [
 ];
 
 /**
- * The journey (owner, 6 Nov; it replaces the separate five-tools section). One screen that holds
- * still while the visitor scrolls through it: the seven problems in a row at the top, Insurvas in the
- * middle, and seven empty places in a row at the bottom. Scrolling sends the problem cards down one
- * after another; each drops behind Insurvas, turns into its fix there, and comes out into its place
- * below, photo and all. Everything stays on screen the whole way, so there is no empty scrolling.
+ * The journey (owner, 6 Nov; it replaces the separate five-tools section). Two panels with room
+ * between them: the seven problems on top, the seven places for their fixes below, and Insurvas in
+ * the gap. As the visitor scrolls, each problem card travels down, drops behind Insurvas, turns into
+ * its fix there, and lands in its place in the panel below, photo and all.
  *
- * GSAP ScrollTrigger scrubs one timeline (scrub 0.6), so the motion follows the scroll and plays
- * backwards on the way up. The paths are measured inside the pinned stage, which does not move, and
- * re-measured whenever its size changes. Phones and reduced motion get the parts in order instead.
+ * Every frame works the cards' positions out from scratch: where each one lives, where the gate is
+ * and where its place is, read from the page, and where the scroll is. Nothing is recorded, so a
+ * late image, a resize or a live reload cannot leave a card aiming at an old spot. The vertical
+ * travel is tied straight to the scroll: a card is in its problem place while that panel is in view,
+ * at the gate as the gate crosses the middle of the screen, and in its fix place once that panel is
+ * in view; in between it moves with the page, so it stays on screen the whole way.
+ * Phones and reduced motion get the two panels as they are.
  */
 function offsetWithin(el: HTMLElement, root: HTMLElement) {
   let x = 0;
@@ -136,14 +137,19 @@ function offsetWithin(el: HTMLElement, root: HTMLElement) {
     y += node.offsetTop;
     node = node.offsetParent as HTMLElement | null;
   }
-  return { x: x + el.offsetWidth / 2, y: y + el.offsetHeight / 2 };
+  return { x: x + el.offsetWidth / 2, y: y + el.offsetHeight / 2, h: el.offsetHeight };
 }
+
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
 
 function Face({ leak, side }: { leak: (typeof LEAKS)[number]; side: "problem" | "fix" }) {
   return (
     <div className={styles.face} data-face={side}>
       <span className={styles.photo}>
-        <Image src={leak.photo} alt="" fill sizes="(max-width: 760px) 75vw, 260px" />
+        <Image src={leak.photo} alt="" fill sizes="(max-width: 760px) 75vw, 240px" />
         {side === "fix" && <span className={styles.solved}><Check aria-hidden="true" />Solved</span>}
       </span>
       <span className={styles.text}>
@@ -160,82 +166,119 @@ export function LandingBroken() {
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
-    gsap.registerPlugin(ScrollTrigger);
-    const mm = gsap.matchMedia();
-    mm.add("(min-width: 761px) and (prefers-reduced-motion: no-preference)", () => {
+    const scene = window.matchMedia("(min-width: 761px) and (prefers-reduced-motion: no-preference)");
+    const homes = [...section.querySelectorAll<HTMLElement>("[data-card]")];
+    const movers = homes.map((home) => home.querySelector<HTMLElement>("[data-mover]")!);
+    const flips = homes.map((home) => home.querySelector<HTMLElement>("[data-flip]")!);
+    const slots = [...section.querySelectorAll<HTMLElement>("[data-slot]")];
+    const gate = section.querySelector<HTMLElement>("[data-gate]")!;
+    const problems = section.querySelector<HTMLElement>("[data-problems]")!;
+    const solved = section.querySelector<HTMLElement>("[data-solved]")!;
+    const count = section.querySelector<HTMLElement>("[data-count]")!;
+    let frame = 0;
+    let shown = -1;
+
+    const clear = () => {
+      movers.forEach((m) => { m.style.transform = ""; });
+      flips.forEach((f) => { f.style.transform = ""; });
+      gate.style.removeProperty("--glow");
+      count.textContent = "7 of 7 fixed";
+      shown = -1;
+    };
+
+    const update = () => {
+      frame = 0;
+      if (!scene.matches) { delete section.dataset.mode; clear(); return; }
       section.dataset.mode = "scene";
-      const stage = section.querySelector<HTMLElement>("[data-stage]")!;
-      const cards = gsap.utils.toArray<HTMLElement>("[data-card]", section);
-      const slots = gsap.utils.toArray<HTMLElement>("[data-slot]", section);
-      const gate = section.querySelector<HTMLElement>("[data-gate]")!;
-      const count = section.querySelector<HTMLElement>("[data-count]")!;
-      const through: number[] = [];
-      const tl = gsap.timeline({
-        defaults: { ease: "none" },
-        scrollTrigger: { trigger: section, start: "top top", end: "bottom bottom", scrub: 0.6, invalidateOnRefresh: true },
+      const vh = window.innerHeight;
+      const scroll = window.scrollY;
+      const top = section.getBoundingClientRect().top + scroll;
+      const at = (el: HTMLElement) => { const o = offsetWithin(el, section); return { x: o.x, y: o.y + top, h: o.h }; };
+      const from = at(problems);
+      const to = at(solved);
+      const g = at(gate);
+      // Start once the problems are centred on screen; end once the fixes sit fully in view.
+      const start = from.y - vh / 2 + 40;
+      const end = to.y + to.h / 2 - vh + 28;
+      const range = Math.max(1, end - start);
+      const t = clamp01((scroll - start) / range);
+      const atGate = clamp01((g.y - vh / 2 - start) / range);
+      let done = 0;
+      let glow = 0;
+      homes.forEach((home, i) => {
+        const a = at(home);
+        const b = at(slots[i]);
+        const leave = i * 0.018;
+        const through = Math.min(0.9, Math.max(leave + 0.1, atGate + (i - 3) * 0.022));
+        const land = 0.96 - (6 - i) * 0.006;
+        let x = a.x;
+        let y = a.y;
+        let scale = 1;
+        let tilt = 0;
+        let fixed = false;
+        if (t > leave && t < through) {
+          const u = (t - leave) / (through - leave);
+          x = lerp(a.x, g.x, easeInOut(u));
+          y = lerp(a.y, g.y, u);
+          scale = lerp(1, 0.4, u);
+          tilt = 26 * u;
+        } else if (t >= through) {
+          fixed = true;
+          done += 1;
+          const u = clamp01((t - through) / (land - through));
+          x = lerp(g.x, b.x, easeOut(u));
+          y = lerp(g.y, b.y, u);
+          scale = lerp(0.4, 1, easeOut(u));
+          tilt = 26 * (1 - u);
+        }
+        glow = Math.max(glow, 1 - Math.abs(t - through) / 0.05);
+        movers[i].style.transform = t <= leave ? "" : `translate3d(${x - a.x}px, ${y - a.y}px, 0) perspective(900px) rotateX(${tilt}deg) scale(${scale})`;
+        flips[i].style.transform = fixed ? "rotateY(180deg)" : "";
       });
-      cards.forEach((card, i) => {
-        const flip = card.querySelector<HTMLElement>("[data-flip]")!;
-        const start = 0.04 + i * 0.075;
-        const arrive = start + 0.2; // behind the gate
-        through.push(arrive);
-        const from = () => offsetWithin(card, stage);
-        tl.to(card, {
-          x: () => offsetWithin(gate, stage).x - from().x,
-          y: () => offsetWithin(gate, stage).y - from().y,
-          scale: 0.4,
-          rotationX: 28,
-          transformPerspective: 900,
-          duration: arrive - start,
-          ease: "power2.in",
-        }, start)
-          .set(flip, { rotationY: 180 }, arrive)
-          .fromTo(gate, { "--glow": 1 }, { "--glow": 0.25, duration: 0.08, immediateRender: false }, arrive)
-          .to(card, {
-            x: () => offsetWithin(slots[i], stage).x - from().x,
-            y: () => offsetWithin(slots[i], stage).y - from().y,
-            scale: 1,
-            rotationX: 0,
-            duration: 0.2,
-            ease: "power3.out",
-          }, arrive);
-      });
-      tl.to({}, { duration: 0.06 });
-      // The gate counts the fixes as the cards go through it.
-      let shown = -1;
-      tl.eventCallback("onUpdate", () => {
-        const done = through.filter((t) => tl.time() >= t).length;
-        if (done !== shown) { shown = done; count.textContent = `${done} of 7 fixed`; }
-      });
-      let pending = 0;
-      const remeasure = () => { window.clearTimeout(pending); pending = window.setTimeout(() => ScrollTrigger.refresh(), 120); };
-      const watch = new ResizeObserver(remeasure);
-      watch.observe(stage);
-      document.fonts?.ready.then(remeasure);
-      return () => { watch.disconnect(); window.clearTimeout(pending); delete section.dataset.mode; count.textContent = "7 of 7 fixed"; };
-    });
-    return () => mm.revert();
+      gate.style.setProperty("--glow", String(0.25 + 0.75 * glow));
+      if (done !== shown) { shown = done; count.textContent = `${done} of 7 fixed`; }
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    scene.addEventListener("change", schedule);
+    const watch = new ResizeObserver(schedule);
+    watch.observe(section);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      scene.removeEventListener("change", schedule);
+      watch.disconnect();
+      window.cancelAnimationFrame(frame);
+      delete section.dataset.mode;
+      clear();
+    };
   }, []);
 
   return (
     <section ref={sectionRef} id="industries" aria-labelledby="audience-title" className={styles.section}>
-      <div className={styles.stage} data-stage="">
-        <header className={styles.head}>
-          <p className={styles.eyebrow}>What’s broken today</p>
-          <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
-          <p className={styles.lede}>Each one costs you money every month. Scroll, and watch them go through Insurvas.</p>
-        </header>
-
-        <ul className={styles.grid} data-problems="">
-          {LEAKS.map((leak) => (
-            <li key={leak.key} className={styles.card} data-card="">
-              <div className={styles.flip} data-flip="">
-                <Face leak={leak} side="problem" />
-                <Face leak={leak} side="fix" />
-              </div>
-            </li>
-          ))}
-        </ul>
+      <div className={styles.inner}>
+        <div className={styles.zone} data-zone="problems">
+          <header className={styles.head}>
+            <p className={styles.eyebrow}>What’s broken today</p>
+            <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
+            <p className={styles.lede}>Each one costs you money every month. Scroll, and watch them go through Insurvas.</p>
+          </header>
+          <ul className={styles.grid} data-problems="">
+            {LEAKS.map((leak) => (
+              <li key={leak.key} className={styles.card} data-card="">
+                <div className={styles.mover} data-mover="">
+                  <div className={styles.flip} data-flip="">
+                    <Face leak={leak} side="problem" />
+                    <Face leak={leak} side="fix" />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
 
         {/* The gate: the five tools go in, one system comes out (Umar's A3, in one line). */}
         <div className={styles.gateZone}>
@@ -248,13 +291,19 @@ export function LandingBroken() {
           <p className={styles.gateNote} data-out="">One system, built by people who ran the floor</p>
         </div>
 
-        <ul className={styles.grid} data-solved="" aria-label="With Insurvas">
-          {LEAKS.map((leak) => (
-            <li key={leak.key} className={styles.card} data-slot="">
-              <div className={styles.flip}><Face leak={leak} side="fix" /></div>
-            </li>
-          ))}
-        </ul>
+        <div className={styles.zone} data-zone="solved">
+          <header className={styles.head}>
+            <p className={styles.eyebrow}>With Insurvas</p>
+            <h2 className={styles.heading}>Seven fixes, in one workspace.</h2>
+          </header>
+          <ul className={styles.grid} data-solved="">
+            {LEAKS.map((leak) => (
+              <li key={leak.key} className={styles.card} data-slot="">
+                <div className={styles.flip}><Face leak={leak} side="fix" /></div>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
     </section>
   );
