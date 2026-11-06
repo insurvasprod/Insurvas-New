@@ -65,20 +65,9 @@
 :global(:root:not(.dark)) .card { border-color: color-mix(in srgb, var(--footer-bg) 30%, transparent); box-shadow: 0 -18px 40px -30px rgb(13 64 55 / 45%), 0 24px 50px -30px rgb(13 64 55 / 40%); }
 
 /* Narrower screens: one card after another, each rising and tilting up into place as it scrolls in
-   (--enter, set from the scroll in landing-bento.tsx). */
+   (the transform is set from the scroll in landing-bento.tsx, only while the card is entering). */
 @media (max-width: 1000px) {
-  .card {
-    --enter: 1;
-    position: relative;
-    top: 0;
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 0;
-    opacity: calc(.3 + var(--enter) * .7);
-    transform: perspective(1100px) translateY(calc((1 - var(--enter)) * 44px)) rotateX(calc((1 - var(--enter)) * 12deg)) scale(calc(.93 + var(--enter) * .07));
-    transform-origin: 50% 100%;
-    filter: none;
-    will-change: transform, opacity;
-  }
+  .card { position: relative; top: 0; grid-template-columns: minmax(0, 1fr); min-height: 0; transform: none; transform-origin: 50% 100%; filter: none; }
   .copy { padding: 36px 28px 8px; }
   .scene { min-height: 0; padding: 20px 28px 32px; }
 }

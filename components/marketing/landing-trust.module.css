@@ -56,7 +56,13 @@
   /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
   .copy { align-items: center; text-align: center; }
   .title { margin-inline: auto; }
-  .line { align-self: center; text-align: left; }
+  /* The line runs down the middle: each stop's dot on it, the words centred under the dot, on the
+     page's ground so the rule shows only between the stops. */
+  .line { align-self: stretch; gap: 26px; padding: 0; justify-items: center; }
+  .line::before, .fill { top: 0; bottom: 0; left: 50%; }
+  .stop { justify-items: center; padding-top: 24px; background: var(--canvas); }
+  .dot { top: 0; left: 50%; margin-left: -6.5px; }
+  .text { max-width: 32ch; }
   .inner { width: calc(100% - 32px); padding: 44px 0; }
   .figures { gap: 10px; }
   .figure b { font-size: 26px; }

@@ -194,7 +194,8 @@ export function LandingBroken() {
       const to = at(solved);
       const g = at(gate);
       // Start once the problems are centred on screen; end once the fixes sit fully in view.
-      const start = from.y - vh / 2 + 40;
+      // Start with the problems centred, but never with the top row under the menu bar.
+      const start = from.y - vh / 2 + Math.min(40, (vh - from.h) / 2 - 80);
       const end = to.y + to.h / 2 - vh + 28;
       const range = Math.max(1, end - start);
       const t = clamp01((scroll - start) / range);

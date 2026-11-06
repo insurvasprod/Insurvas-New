@@ -90,8 +90,9 @@
   .gateNote { max-width: 30ch; text-align: center; }
   .section[data-mode="scene"] .gateZone { margin: 26vh 0 22vh; }
 }
-/* A small phone (an iPhone SE): slimmer rows, so all seven still fit on the screen. */
-@media (max-width: 640px) and (max-height: 640px) {
+/* A phone screen up to 720px tall (most iPhones, once Safari's bars are counted): slimmer rows, so
+   all seven still fit on the screen. */
+@media (max-width: 640px) and (max-height: 720px) {
   .grid { gap: 6px; }
   .section[data-mode="scene"] .text, .text { height: 70px; padding: 8px 11px; }
   .title { font-size: 12.5px; }

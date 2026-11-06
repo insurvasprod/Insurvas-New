@@ -162,20 +162,40 @@ export function LandingBento() {
 
   // As the next card slides over, the one beneath settles back: a little smaller and dimmer. On
   // narrower screens, where the cards do not stack, each one rises and tilts up into place as it
-  // scrolls in instead (--enter, 0 to 1; owner, 6 Nov: the phone had no scroll motion at all).
+  // scrolls in instead (owner, 6 Nov: the phone had no scroll motion at all).
+  //
+  // The entrance is written straight onto the card, and only while the card is entering: a card
+  // still well below the screen, or already in place, carries no transform at all. iPhone Safari
+  // allows a page little memory for moving layers, and seven tall cards held as layers at once
+  // (as a CSS variable driving the transform did, recomputing every card's whole subtree per
+  // frame as well) stopped the page's other scroll animations on a real phone.
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const narrow = window.matchMedia("(max-width: 1000px)");
     let frame = 0;
     const update = () => {
       frame = 0;
       const cards = cardRefs.current.filter(Boolean) as HTMLElement[];
+      const vh = window.innerHeight;
       let current = 0;
       cards.forEach((card, i) => {
         const next = cards[i + 1];
         const top = card.getBoundingClientRect().top;
-        const enter = reduce ? 1 : Math.min(1, Math.max(0, (window.innerHeight - top) / (window.innerHeight * 0.5)));
-        card.style.setProperty("--enter", enter.toFixed(3));
-        if (top < window.innerHeight * 0.55) current = i;
+        if (top < vh * 0.55) current = i;
+        if (narrow.matches) {
+          const enter = reduce ? 1 : Math.min(1, Math.max(0, (vh - top) / (vh * 0.4)));
+          if (enter >= 1 || top > vh + 80) {
+            card.style.transform = "";
+            card.style.opacity = "";
+          } else {
+            const u = 1 - enter;
+            card.style.transform = `perspective(1100px) translateY(${(u * 90).toFixed(1)}px) rotateX(${(u * 16).toFixed(2)}deg) scale(${(1 - u * 0.08).toFixed(3)})`;
+            card.style.opacity = (0.15 + enter * 0.85).toFixed(3);
+          }
+          return;
+        }
+        card.style.transform = "";
+        card.style.opacity = "";
         if (!next || reduce) { card.style.setProperty("--cover", "0"); return; }
         const gap = next.getBoundingClientRect().top - top;
         const cover = Math.min(1, Math.max(0, 1 - gap / card.offsetHeight));
