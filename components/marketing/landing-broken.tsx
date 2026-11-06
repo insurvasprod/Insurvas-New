@@ -126,8 +126,8 @@ const LEAKS = [
  * resize or a live reload cannot leave a card aiming at an old spot. The vertical travel moves with
  * the page: a card is in its own place while the problems are in view, behind the gate as the gate
  * crosses the middle of the screen, and in its solved place once the fixes are in view, so it stays
- * on screen the whole way. Phones, short screens (a phone on its side) and reduced motion get the two
- * grids as they are.
+ * on screen the whole way. On phones the cards are slim rows, so the journey fits there too. Short
+ * screens (a phone on its side) and reduced motion get the two grids as they are.
  */
 function offsetWithin(el: HTMLElement, root: HTMLElement) {
   let x = 0;
@@ -167,7 +167,7 @@ export function LandingBroken() {
   useEffect(() => {
     const section = sectionRef.current;
     if (!section) return;
-    const scene = window.matchMedia("(min-width: 761px) and (min-height: 560px) and (prefers-reduced-motion: no-preference)");
+    const scene = window.matchMedia("(min-height: 560px) and (prefers-reduced-motion: no-preference)");
     const cards = [...section.querySelectorAll<HTMLElement>("[data-card]")];
     const flips = cards.map((card) => card.querySelector<HTMLElement>("[data-flip]")!);
     const slots = [...section.querySelectorAll<HTMLElement>("[data-slot]")];
