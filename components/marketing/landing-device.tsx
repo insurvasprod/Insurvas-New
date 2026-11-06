@@ -8,7 +8,9 @@ import {
   PhoneCall, Search, ShieldCheck, SquareKanban,
 } from "lucide-react";
 
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import styles from "@/components/marketing/landing-device.module.css";
+import { DEVICE_PAGES, DevicePage, type DevicePageKey } from "@/components/marketing/landing-device-pages";
 import { money, VENDORS } from "@/components/marketing/landing-sample-data";
 
 /**
@@ -21,7 +23,16 @@ import { money, VENDORS } from "@/components/marketing/landing-sample-data";
  * activity feed takes a new event every few seconds and a live transfer arrives and is claimed. As the
  * page scrolls the device tilts up from a slight recline to face the reader. Everything pauses off
  * screen; with reduced motion it is a still, complete picture. Sample data, labelled so.
+ *
+ * Owner, 6 Nov (Umar's A1.4): it shows more than the dashboard. Every 10 seconds it moves on to the
+ * next page (Inbound, Dialer, Callbacks, Applications, then back), and those sidebar items are real
+ * buttons: choosing one opens that page and holds the cycle for a while. The active item fills a thin
+ * bar while it waits, so the change never comes as a surprise. No cycling under reduced motion.
  */
+const PAGE_MS = 10_000;
+/** How long a page chosen by hand stays before the cycle carries on. */
+const HOLD_MS = 20_000;
+const PAGE_OF: Record<string, DevicePageKey> = { Dashboard: "dashboard", Inbound: "inbound", Dialer: "dialer", Callbacks: "callbacks", Applications: "applications" };
 
 // The design is drawn at one screen size and scaled to fit, like a real screenshot would be.
 const SCREEN_W = 1280;
@@ -60,7 +71,7 @@ function areaPath(values: number[], max: number, w: number, h: number, close: bo
 }
 
 const NAV = [
-  { group: "Home", items: [{ icon: LayoutDashboard, label: "Dashboard", active: true }] },
+  { group: "Home", items: [{ icon: LayoutDashboard, label: "Dashboard" }] },
   { group: "Today", items: [{ icon: Inbox, label: "Inbound", badge: "2" }, { icon: PhoneCall, label: "Dialer" }, { icon: CalendarCheck, label: "Callbacks" }] },
   { group: "Leads", items: [{ icon: SquareKanban, label: "Lead workspace" }, { icon: Package, label: "Lead flow" }] },
   { group: "Sales", items: [{ icon: FileCheck2, label: "Applications" }, { icon: ClipboardList, label: "Daily deal flow" }] },
@@ -97,6 +108,24 @@ export function LandingDevice() {
    */
   const nextEventId = useRef(FEED_SIZE);
   const [toast, setToast] = useState<"hidden" | "waiting" | "claimed">("hidden");
+  const [page, setPage] = useState<DevicePageKey>("dashboard");
+  /** True after the first page change, which always comes after the dashboard's count-up. */
+  const [moved, setMoved] = useState(false);
+  const holdUntil = useRef(0);
+  const current = DEVICE_PAGES.find((entry) => entry.key === page) ?? DEVICE_PAGES[0];
+
+  const choose = (key: DevicePageKey) => { holdUntil.current = Date.now() + HOLD_MS; setMoved(true); setPage(key); };
+
+  // A new page every 10 seconds while the device is on screen, unless one was just chosen by hand.
+  useEffect(() => {
+    if (!live || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      if (Date.now() < holdUntil.current || document.hidden) return;
+      setMoved(true);
+      setPage((now) => DEVICE_PAGES[(DEVICE_PAGES.findIndex((entry) => entry.key === now) + 1) % DEVICE_PAGES.length].key);
+    }, PAGE_MS);
+    return () => window.clearInterval(timer);
+  }, [live]);
 
   // Fit the fixed-size screen into the frame.
   useEffect(() => {
@@ -189,42 +218,54 @@ export function LandingDevice() {
       <div ref={deviceRef} className={styles.device} data-live={live}>
         <div className={styles.bezel}>
           <span className={styles.camera} aria-hidden="true" />
-          <div ref={viewportRef} className={styles.viewport} style={{ height: SCREEN_H * scale }} role="img" aria-label="Sample Insurvas agency dashboard: lead spend, issued policies, True CPA and commission received, with live activity">
-            <div className={styles.screen} style={{ width: SCREEN_W, height: SCREEN_H, transform: `scale(${scale})` } as CSSProperties} aria-hidden="true">
+          <div ref={viewportRef} className={styles.viewport} style={{ height: SCREEN_H * scale }} role="group" aria-label="A sample Insurvas workspace. Choose a page in its sidebar to look inside.">
+            <div className={styles.screen} style={{ width: SCREEN_W, height: SCREEN_H, transform: `scale(${scale})` } as CSSProperties}>
               {/* ── Sidebar ── */}
-              <aside className={styles.rail}>
-                <div className={styles.brand}>
-                  <svg width="22" height="22" viewBox="0 0 16 16"><path d="M2 8.5 6 13 14 3" fill="none" stroke="var(--primary)" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                  <b>insurvas</b>
+              <nav className={styles.rail} aria-label="Sample workspace pages">
+                {/* The real logo, as the app's own sidebar shows it (owner, 6 Nov). */}
+                <div className={styles.brand} aria-hidden="true">
+                  <InsurvasLogo size="sidebar" tone="dark" />
                 </div>
-                <div className={styles.org}><span>Workspace</span><b>Sample Agency</b></div>
+                <div className={styles.org} aria-hidden="true"><span>Workspace</span><b>Sample Agency</b></div>
                 {NAV.map((group) => (
                   <div key={group.group} className={styles.navGroup}>
-                    <small>{group.group}</small>
-                    {group.items.map(({ icon: Icon, label, ...rest }) => (
-                      <span key={label} className={styles.navItem} data-active={"active" in rest && rest.active}>
-                        <Icon />{label}{"badge" in rest && <em>{rest.badge}</em>}
-                      </span>
-                    ))}
+                    <small aria-hidden="true">{group.group}</small>
+                    {group.items.map(({ icon: Icon, label, ...rest }) => {
+                      const target = PAGE_OF[label];
+                      const inner = <><Icon aria-hidden="true" />{label}{"badge" in rest && <em aria-hidden="true">{rest.badge}</em>}</>;
+                      if (!target) return <span key={label} className={styles.navItem} aria-hidden="true">{inner}</span>;
+                      const on = target === page;
+                      return (
+                        <button key={label} type="button" className={styles.navItem} data-active={on} aria-pressed={on} onClick={() => choose(target)}>
+                          {inner}
+                          {/* Fills while the page waits for the next one; restarts with each page. */}
+                          {on && <span key={page} className={styles.navTimer} aria-hidden="true" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 ))}
-              </aside>
+              </nav>
 
               {/* ── Main ── */}
               {/* A <div>, not a <main>: this mock sits inside the page's real <main>, and a second
                   main landmark is an accessibility defect. The class does the layout. */}
-              <div className={styles.main}>
+              <div className={styles.main} aria-hidden="true">
                 <header className={styles.top}>
-                  <span className={styles.crumb}>Home <i>/</i> <b>Agency dashboard</b></span>
+                  <span className={styles.crumb}>Home <i>/</i> <b>{current.crumb}</b></span>
                   <span className={styles.search}><Search />Search leads, policies, statements<kbd>⌘K</kbd></span>
                   <span className={styles.status}><i />Taking calls</span>
                   <span className={styles.avatar}>DK</span>
                 </header>
 
                 <div className={styles.titleRow}>
-                  <div><h3>Good morning, Dana</h3><p>Sample Agency · last 30 days · sample data</p></div>
+                  <div><h3>{current.title}</h3><p>{current.sub}</p></div>
                   <div className={styles.segment}><span>Today</span><span>7 days</span><span data-on="true">30 days</span></div>
                 </div>
+
+                {/* Each page eases in when it opens. */}
+                <div key={page} className={styles.page}>
+                {page !== "dashboard" ? <DevicePage page={page} /> : <>
 
                 <div className={styles.kpis}>
                   {[
@@ -235,7 +276,8 @@ export function LandingDevice() {
                   ].map((kpi, i) => (
                     <div key={kpi.label} className={styles.kpi} data-accent={kpi.accent ?? false}>
                       <span>{kpi.label}</span>
-                      <b ref={(node) => { kpiRefs.current[i] = node; }}>{i === 1 ? "0" : money(0)}</b>
+                      {/* Zero until the first count-up; after it, the real figure when the dashboard comes back. */}
+                      <b ref={(node) => { kpiRefs.current[i] = node; }}>{moved ? [money(SPEND), ISSUED.toLocaleString("en-US"), money(CPA), money(EARNED)][i] : i === 1 ? "0" : money(0)}</b>
                       <small>{kpi.hint}</small>
                     </div>
                   ))}
@@ -291,10 +333,12 @@ export function LandingDevice() {
                     );
                   })}
                 </section>
+                </>}
+                </div>
               </div>
 
               {/* A live transfer arrives and is claimed. */}
-              <div className={styles.toast} data-state={toast}>
+              <div className={styles.toast} data-state={toast} aria-hidden="true">
                 <span className={styles.toastIcon}><PhoneCall /></span>
                 <span className={styles.toastText}>
                   <b>{toast === "claimed" ? "Claimed by Dana K." : "Live transfer waiting"}</b>
