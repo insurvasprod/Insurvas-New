@@ -172,6 +172,8 @@ export function LandingBento() {
   useEffect(() => {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const narrow = window.matchMedia("(max-width: 1000px)");
+    // Phones stack the cards as a computer does (owner, 6 Nov), each card short enough for one screen.
+    const phone = window.matchMedia("(max-width: 640px)");
     let frame = 0;
     const update = () => {
       frame = 0;
@@ -182,6 +184,17 @@ export function LandingBento() {
         const next = cards[i + 1];
         const top = card.getBoundingClientRect().top;
         if (top < vh * 0.55) current = i;
+        const dim = card.querySelector<HTMLElement>("[data-dim]");
+        if (phone.matches) {
+          // The card being covered shrinks a little and darkens under the next one. Written onto the
+          // card and its shade directly, and only while it is covered, so nothing else recomputes.
+          card.style.opacity = "";
+          const cover = !next || reduce ? 0 : Math.min(1, Math.max(0, 1 - (next.getBoundingClientRect().top - top) / card.offsetHeight));
+          card.style.transform = cover > 0 ? `scale(${(1 - cover * 0.06).toFixed(4)})` : "";
+          if (dim) dim.style.opacity = (cover * 0.55).toFixed(3);
+          return;
+        }
+        if (dim) dim.style.opacity = "";
         if (narrow.matches) {
           const enter = reduce ? 1 : Math.min(1, Math.max(0, (vh - top) / (vh * 0.4)));
           if (enter >= 1 || top > vh + 80) {
@@ -242,6 +255,7 @@ export function LandingBento() {
               <div className={styles.scene}>
                 <LandingFlow graph={module.graph} title={module.title} playing={active === i} />
               </div>
+              <span className={styles.dim} data-dim="" aria-hidden="true" />
             </article>
           ))}
         </div>

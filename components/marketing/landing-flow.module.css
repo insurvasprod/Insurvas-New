@@ -85,14 +85,21 @@
 .node[data-kind="outcome"] .icon { background: var(--primary); color: var(--on-primary); }
 .node[data-kind="outcome"] [data-value] { color: var(--primary); font-weight: 700; font-variant-numeric: tabular-nums; }
 
-/* The narrow zig-zag: smaller nodes, so two fit side by side on a phone. */
-.stage[data-narrow] { transform: rotateX(calc(14deg + var(--tx))) rotateY(var(--ty)); }
-.stage[data-narrow] .node { grid-template-columns: 24px minmax(0, 1fr); gap: 7px; padding: 0 8px; border-radius: 12px; }
-.stage[data-narrow] .icon { width: 24px; height: 24px; border-radius: 8px; }
+/* The narrow rail: flat, slim rows, one line of label and one of detail. */
+.stage[data-narrow] { transform: none; border-radius: 16px; }
+.stage[data-narrow] .bar { height: 36px; border-radius: 16px 16px 0 0; padding: 0 12px; }
+.stage[data-narrow] .node { grid-template-columns: 24px minmax(0, 1fr); gap: 9px; padding: 0 10px 0 7px; border-radius: 11px; transform: none; box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%); }
+.stage[data-narrow] .ring { border-radius: 11px; }
+.stage[data-narrow] .icon { width: 24px; height: 24px; border-radius: 7px; }
 .stage[data-narrow] .icon svg { width: 14px; height: 14px; }
-.stage[data-narrow] .text b { font-size: 12px; }
-.stage[data-narrow] .text small { font-size: 10.5px; }
-.stage[data-narrow] .ring { border-radius: 12px; }
+.stage[data-narrow] .text { display: flex; align-items: baseline; gap: 8px; }
+.stage[data-narrow] .text b { flex: none; font-size: 12.5px; }
+.stage[data-narrow] .text small { display: block; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.stage[data-narrow] .done { top: 50%; right: 8px; width: 16px; height: 16px; margin-top: -8px; border-width: 0; }
+.stage[data-narrow] .wire { stroke-dasharray: none; stroke: rgb(234 246 242 / 14%); stroke-width: 2; }
+.railStop { fill: color-mix(in srgb, var(--footer-bg) 42%, black); stroke: rgb(234 246 242 / 30%); stroke-width: 2; }
+.railStop[data-kind="branch"] { stroke: var(--warning); }
+.railStop[data-kind="outcome"] { fill: var(--primary); stroke: var(--primary); }
 
 @media (prefers-reduced-motion: reduce) {
   .stage { transition: none; }

@@ -57,13 +57,21 @@ const NODE_H = 72;
 const COL_X = [8, 214, 420];
 const ROW_Y = [58, 162, 266];
 const WIDE_H = 360;
-// A narrow screen (a phone, owner 6 Nov): the nodes zig-zag down two columns, in the order they are
-// listed, so the workflow stays a diagram and stays short enough to read in one look.
-const NARROW_W = 334;
-const NARROW_NODE_W = 150;
-const NARROW_NODE_H = 62;
-const NARROW_COL_X = [6, NARROW_W - 6 - NARROW_NODE_W];
-const NARROW_STEP = 58;
+// A narrow screen (a phone, owner 6 Nov): the steps in order down a rail, one slim row each, with
+// the record running down the rail and lighting each step as it reaches it. Short enough for the
+// whole card to fit one phone screen, so the cards can stack there as they do on a computer.
+const NARROW_W = 330;
+const RAIL_X = 15;
+const NARROW_NODE_X = 34;
+const NARROW_NODE_W = NARROW_W - NARROW_NODE_X - 4;
+const NARROW_NODE_H = 34;
+const NARROW_STEP = 40;
+const NARROW_TOP = 48;
+
+/** The rail between two steps: straight down the left edge, centre to centre. */
+function rail(a: Box, b: Box): string {
+  return `M${RAIL_X},${a.y + a.h / 2} L${RAIL_X},${b.y + b.h / 2}`;
+}
 
 type Box = { x: number; y: number; w: number; h: number };
 
@@ -103,12 +111,12 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
   const svgRef = useRef<SVGSVGElement>(null);
   const uid = useId().replace(/[^a-zA-Z0-9]/g, "");
 
-  // Positions: the grid on a wide canvas; a zig-zag, in the order the nodes are listed, on a narrow one.
+  // Positions: the grid on a wide canvas; the rail, in the order the nodes are listed, on a narrow one.
   const boxes = new Map<string, Box>(graph.nodes.map((node, i) => [node.id, narrow
-    ? { x: NARROW_COL_X[i % 2], y: 54 + i * NARROW_STEP, w: NARROW_NODE_W, h: NARROW_NODE_H }
+    ? { x: NARROW_NODE_X, y: NARROW_TOP + i * NARROW_STEP, w: NARROW_NODE_W, h: NARROW_NODE_H }
     : { x: COL_X[node.col], y: ROW_Y[node.row], w: NODE_W, h: NODE_H }]));
   const stageW = narrow ? NARROW_W : W;
-  const stageH = narrow ? 54 + (graph.nodes.length - 1) * NARROW_STEP + NARROW_NODE_H + 14 : WIDE_H;
+  const stageH = narrow ? NARROW_TOP + (graph.nodes.length - 1) * NARROW_STEP + NARROW_NODE_H + 12 : WIDE_H;
   // Narrow: the steps become one connector from each node to the next.
   const steps: Array<Array<[string, string]>> = narrow
     ? graph.nodes.slice(1).map((node, i) => [[graph.nodes[i].id, node.id]])
@@ -231,7 +239,7 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
         </div>
         <svg ref={svgRef} className={styles.wires} width={stageW} height={stageH} viewBox={`0 0 ${stageW} ${stageH}`}>
           {edges.map(([from, to]) => {
-            const d = curve(boxes.get(from)!, boxes.get(to)!);
+            const d = (narrow ? rail : curve)(boxes.get(from)!, boxes.get(to)!);
             return (
               <g key={`${from}>${to}`}>
                 <path className={styles.wire} d={d} />
@@ -246,6 +254,11 @@ export function LandingFlow({ graph, title, playing }: { graph: FlowGraph; title
                 ))}
               </g>
             );
+          })}
+          {/* The rail's stops, one beside each step. */}
+          {narrow && graph.nodes.map((node) => {
+            const box = boxes.get(node.id)!;
+            return <circle key={`r-${node.id}`} className={styles.railStop} data-kind={node.kind ?? "step"} r={4.5} cx={RAIL_X} cy={box.y + box.h / 2} />;
           })}
           {edges.map(([from, to]) => <circle key={`p-${from}>${to}`} className={styles.packet} r={5} cx={0} cy={0} data-packet="" />)}
         </svg>
