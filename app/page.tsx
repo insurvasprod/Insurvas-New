@@ -7,7 +7,8 @@ import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
 import { LandingContact } from "@/components/marketing/landing-contact";
 import { LandingStack } from "@/components/marketing/landing-stack";
 import { LandingBento } from "@/components/marketing/landing-bento";
-import { LandingAudience, LandingBuiltFor } from "@/components/marketing/landing-audience";
+import { LandingAudience } from "@/components/marketing/landing-audience";
+import { LandingTrust } from "@/components/marketing/landing-trust";
 import { LandingPricingTeaser } from "@/components/marketing/landing-pricing";
 import { LandingFaq } from "@/components/marketing/landing-faq";
 import { fetchPublicPlans } from "@/lib/publicPlans/queries";
@@ -39,7 +40,7 @@ export default async function Home() {
             instruction (3 Nov); the header's trial button rides the whole page, so the page is never
             without a call to action. */}
         <LandingHero />
-        <LandingBuiltFor />
+        <LandingTrust />
         {/* What is broken comes first, then how Insurvas takes it in and fixes it (owner, 6 Nov). */}
         <LandingAudience />
         <LandingStack />
