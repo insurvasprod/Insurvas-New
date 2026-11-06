@@ -260,3 +260,14 @@ button.navItem:focus-visible { outline: 2px solid var(--primary); outline-offset
   .page { animation: none; }
   .navTimer { display: none; }
 }
+
+/* The page tabs under the device: shown on touch screens only, 44px tall (owner, 6 Nov: every phone). */
+.pageTabs { display: none; }
+@media (pointer: coarse), (max-width: 900px) {
+  .pageTabs { position: relative; z-index: 4; display: flex; gap: 6px; overflow-x: auto; margin: 14px auto 0; padding: 2px 2px 6px; scrollbar-width: none; justify-content: safe center; }
+  .pageTabs::-webkit-scrollbar { display: none; }
+  .pageTabs button { flex: none; min-height: 44px; border: 1px solid rgb(234 246 242 / 18%); border-radius: 999px; background: rgb(234 246 242 / 5%); padding: 0 16px; color: var(--nav-muted); font: 600 14px var(--font-sans); cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color 160ms ease, color 160ms ease, transform 120ms ease; }
+  .pageTabs button:active { transform: scale(.96); }
+  .pageTabs button[aria-pressed="true"] { border-color: transparent; background: var(--primary); color: var(--on-primary); }
+  .pageTabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+}

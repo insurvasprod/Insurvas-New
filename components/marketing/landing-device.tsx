@@ -111,16 +111,18 @@ export function LandingDevice() {
   const [page, setPage] = useState<DevicePageKey>("dashboard");
   /** True after the first page change, which always comes after the dashboard's count-up. */
   const [moved, setMoved] = useState(false);
-  const holdUntil = useRef(0);
+  /** Ticks to skip after a page is chosen by hand: HOLD_MS in PAGE_MS steps. */
+  const holdTicks = useRef(0);
   const current = DEVICE_PAGES.find((entry) => entry.key === page) ?? DEVICE_PAGES[0];
 
-  const choose = (key: DevicePageKey) => { holdUntil.current = Date.now() + HOLD_MS; setMoved(true); setPage(key); };
+  const choose = (key: DevicePageKey) => { holdTicks.current = Math.round(HOLD_MS / PAGE_MS); setMoved(true); setPage(key); };
 
   // A new page every 10 seconds while the device is on screen, unless one was just chosen by hand.
   useEffect(() => {
     if (!live || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => {
-      if (Date.now() < holdUntil.current || document.hidden) return;
+      if (holdTicks.current > 0) { holdTicks.current -= 1; return; }
+      if (document.hidden) return;
       setMoved(true);
       setPage((now) => DEVICE_PAGES[(DEVICE_PAGES.findIndex((entry) => entry.key === now) + 1) % DEVICE_PAGES.length].key);
     }, PAGE_MS);
@@ -356,6 +358,14 @@ export function LandingDevice() {
             </div>
           </div>
         </div>
+      </div>
+      {/* Phones and tablets: the scaled sidebar is too small to tap, so the same pages as tabs. */}
+      <div className={styles.pageTabs} role="group" aria-label="Sample workspace pages">
+        {DEVICE_PAGES.map((entry) => (
+          <button key={entry.key} type="button" aria-pressed={entry.key === page} onClick={() => choose(entry.key)}>
+            {entry.crumb === "Agency dashboard" ? "Dashboard" : entry.crumb}
+          </button>
+        ))}
       </div>
     </div>
   );
