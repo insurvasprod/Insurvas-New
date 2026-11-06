@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
 import styles from "@/components/marketing/landing-broken.module.css";
@@ -13,15 +14,14 @@ import styles from "@/components/marketing/landing-broken.module.css";
  * about it, and on which plan, underneath. The cards are pressed buttons, not tabs: they scroll.
  *
  * Owner, 6 Nov: no scrollbar, the arrows at the top are the controls, the edges fade, and the
- * row moves on its own, slowly and only ever one way: the cards are laid out three times over and
- * the row glides through the middle copy; each time a whole copy has passed it is moved back by
- * exactly one copy, which looks identical, so it never rewinds. It waits while it is pointed at,
- * focused, touched, off screen or in a hidden tab, and never moves under reduced motion. It only
- * scrolls: the open leak changes when you choose one.
+ * row moves on its own, slowly, without stopping and only ever one way (owner, 6 Nov). The cards
+ * are laid out three times on a track that slides left by exactly one copy and repeats, which
+ * looks like one endless row. It is a Web Animations transform, so it runs on the compositor and
+ * stays smooth (moving scrollLeft stepped by whole pixels). The arrows glide it a card either way
+ * and a finger can drag it; it carries on afterwards. It stops only while a card has keyboard focus,
+ * and never moves under reduced motion (the arrows and dragging still work there).
  */
-const SPEED = 28; // pixels a second
-/** How long after a touch, a click or an arrow the glide waits before it starts again. */
-const RESUME_MS = 5000;
+const SPEED = 30; // pixels a second
 const COPIES = [0, 1, 2];
 const LEAKS = [
   {
@@ -128,88 +128,130 @@ const LEAKS = [
 
 export function LandingBroken() {
   const [index, setIndex] = useState(0);
-  const rowRef = useRef<HTMLDivElement>(null);
   const leak = LEAKS[index];
 
-  const holdUntil = useRef(0);
-  const hovering = useRef(false);
-  const visible = useRef(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const motion = useRef<Animation | null>(null);
+  /** One copy of the cards, in pixels: how far the track slides before it looks the same again. */
+  const copy = useRef(0);
+  const drag = useRef<{ x: number; moved: boolean } | null>(null);
+  const dragged = useRef(false);
 
-  /** One copy of the cards, in pixels: the distance after which the row looks the same again. */
-  const copyWidth = () => (rowRef.current ? rowRef.current.scrollWidth / COPIES.length : 0);
+  const loopTime = () => (copy.current / SPEED) * 1000;
+  const wrap = (time: number) => ((time % loopTime()) + loopTime()) % loopTime();
 
-  /** Keeps the row inside the middle copy; the jump is one exact copy, so nothing visibly moves. */
-  const recentre = useCallback(() => {
-    const row = rowRef.current;
-    const width = copyWidth();
-    if (!row || !width) return;
-    if (row.scrollLeft >= width * 2) row.scrollLeft -= width;
-    else if (row.scrollLeft < width) row.scrollLeft += width;
+  /** Moves the loop by some pixels (+ is on, to the right) over a short ease-out, then it runs on. */
+  const nudge = useCallback((pixels: number, duration = 450) => {
+    const animation = motion.current;
+    if (!animation || !copy.current) return;
+    const from = Number(animation.currentTime ?? 0);
+    const delta = (pixels / SPEED) * 1000;
+    const begin = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - begin) / duration);
+      const eased = 1 - (1 - t) ** 3;
+      animation.currentTime = wrap(from + delta * eased);
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  /** One card on or back, from wherever the row is. */
   const scroll = (by: number) => {
-    const row = rowRef.current;
-    const card = row?.querySelector("button");
-    if (!row || !card) return;
-    holdUntil.current = Date.now() + RESUME_MS;
-    recentre();
-    row.scrollBy({ left: by * (card.getBoundingClientRect().width + 16), behavior: "smooth" });
+    const card = trackRef.current?.querySelector("button");
+    if (card) nudge(by * (card.getBoundingClientRect().width + 16));
   };
 
-  const hold = () => { holdUntil.current = Date.now() + RESUME_MS; };
-
+  // The loop: built once the cards are laid out, rebuilt at the same point when the width changes.
   useEffect(() => {
-    const row = rowRef.current;
-    if (!row) return;
-    row.scrollLeft = copyWidth();
-    const io = new IntersectionObserver(([entry]) => { visible.current = Boolean(entry?.isIntersecting); }, { threshold: 0.3 });
-    io.observe(row);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    // The glide keeps its own fractional position, because scrollLeft rounds to whole pixels and
-    // 28px a second is less than one pixel a frame.
-    let position = row.scrollLeft;
-    let last = 0;
-    let frame = 0;
-    const tick = (now: number) => {
-      frame = window.requestAnimationFrame(tick);
-      const elapsed = last ? Math.min(now - last, 64) : 0;
-      last = now;
-      const waiting = reduce.matches || !visible.current || hovering.current || document.hidden
-        || Date.now() < holdUntil.current || row.contains(document.activeElement);
-      if (waiting) { position = row.scrollLeft; return; }
-      if (Math.abs(row.scrollLeft - position) > 2) position = row.scrollLeft; // a swipe moved it
-      position += (SPEED * elapsed) / 1000;
-      const width = copyWidth();
-      if (width && position >= width * 2) position -= width;
-      row.scrollLeft = position;
+    const track = trackRef.current;
+    if (!track) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const build = () => {
+      const cards = track.querySelectorAll<HTMLElement>("button");
+      const width = cards.length > LEAKS.length ? cards[LEAKS.length].offsetLeft - cards[0].offsetLeft : 0;
+      if (!width || width === copy.current) return;
+      const progress = motion.current && copy.current ? Number(motion.current.currentTime ?? 0) / loopTime() : 0;
+      motion.current?.cancel();
+      copy.current = width;
+      const animation = track.animate(
+        [{ transform: `translate3d(${-width}px, 0, 0)` }, { transform: `translate3d(${-2 * width}px, 0, 0)` }],
+        { duration: loopTime(), iterations: Infinity, easing: "linear" },
+      );
+      animation.currentTime = progress * loopTime();
+      if (reduce) animation.pause();
+      motion.current = animation;
     };
-    frame = window.requestAnimationFrame(tick);
-    const onResize = () => { recentre(); position = row.scrollLeft; };
-    window.addEventListener("resize", onResize);
-    return () => { io.disconnect(); window.cancelAnimationFrame(frame); window.removeEventListener("resize", onResize); };
-  }, [recentre]);
+    build();
+    const resize = new ResizeObserver(build);
+    resize.observe(track);
+    // A card with keyboard focus holds still, so it can be read.
+    const hold = () => motion.current?.pause();
+    const go = () => { if (!reduce && !track.contains(document.activeElement)) motion.current?.play(); };
+    track.addEventListener("focusin", hold);
+    track.addEventListener("focusout", go);
+    return () => {
+      resize.disconnect();
+      track.removeEventListener("focusin", hold);
+      track.removeEventListener("focusout", go);
+      motion.current?.cancel();
+      motion.current = null;
+      copy.current = 0;
+    };
+  }, []);
+
+  // Dragging with a finger (or a mouse) moves the loop; a tap still chooses a card.
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    drag.current = { x: event.clientX, moved: false };
+    dragged.current = false;
+  };
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const state = drag.current;
+    const animation = motion.current;
+    if (!state || !animation || !copy.current) return;
+    const dx = event.clientX - state.x;
+    if (!state.moved && Math.abs(dx) < 6) return;
+    if (!state.moved) {
+      state.moved = true;
+      dragged.current = true;
+      animation.pause();
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    state.x = event.clientX;
+    animation.currentTime = wrap(Number(animation.currentTime ?? 0) - (dx / SPEED) * 1000);
+  };
+  const onPointerUp = () => {
+    const moved = drag.current?.moved;
+    drag.current = null;
+    if (moved && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) motion.current?.play();
+  };
+  // A drag that ends over a card must not also choose it.
+  const onClickCapture = (event: ReactMouseEvent) => {
+    if (dragged.current) { event.stopPropagation(); event.preventDefault(); }
+    dragged.current = false;
+  };
 
   return (
     <div className={styles.broken}>
       <div className={styles.controls}>
         <p className={styles.count}>{index + 1} of {LEAKS.length} · <b>{leak.tab}</b></p>
         <div className={styles.arrows}>
-          <button type="button" onClick={() => { hold(); scroll(-1); }} aria-label="Scroll back"><ArrowLeft aria-hidden="true" /></button>
-          <button type="button" onClick={() => { hold(); scroll(1); }} aria-label="Scroll on"><ArrowRight aria-hidden="true" /></button>
+          <button type="button" onClick={() => scroll(-1)} aria-label="Scroll back"><ArrowLeft aria-hidden="true" /></button>
+          <button type="button" onClick={() => scroll(1)} aria-label="Scroll on"><ArrowRight aria-hidden="true" /></button>
         </div>
       </div>
 
       <div
-        ref={rowRef}
         className={styles.row}
         role="group"
         aria-label="What’s broken today"
-        onScrollEnd={recentre}
-        onPointerEnter={(event) => { if (event.pointerType === "mouse") hovering.current = true; }}
-        onPointerLeave={() => { hovering.current = false; }}
-        onPointerDown={hold}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onClickCapture={onClickCapture}
       >
+        <div ref={trackRef} className={styles.track}>
         {/* Three copies for the endless loop; only the middle one is reachable by keyboard and
             screen reader, the other two are the same cards seen again. */}
         {COPIES.flatMap((copy) => LEAKS.map((item, i) => (
@@ -221,7 +263,7 @@ export function LandingBroken() {
             aria-hidden={copy === 1 ? undefined : true}
             tabIndex={copy === 1 ? undefined : -1}
             className={styles.card}
-            onClick={() => { hold(); setIndex(i); }}
+            onClick={() => setIndex(i)}
           >
             <span className={styles.photo}>
               <Image src={item.photo} alt="" fill sizes="(max-width: 640px) 80vw, 320px" />
@@ -232,6 +274,7 @@ export function LandingBroken() {
             </span>
           </button>
         )))}
+        </div>
       </div>
 
       <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key}>

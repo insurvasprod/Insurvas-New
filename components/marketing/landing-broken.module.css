@@ -1,5 +1,5 @@
 /* "What's broken today" (owner, 4 Nov): a scrolling row of photo cards, the chosen leak opened below. */
-.broken { display: grid; gap: 20px; }
+.broken { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 
 .controls { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
 .count { margin: 0; color: var(--muted); font-size: 14px; }
@@ -14,24 +14,24 @@
 
 /* the row */
 .row {
-  --fade-l: 56px;
-  --fade-r: 56px;
-  display: grid;
-  grid-auto-columns: minmax(260px, 300px);
-  grid-auto-flow: column;
-  gap: 16px;
-  overflow-x: auto;
+  --fade: 64px;
+  min-width: 0;
+  /* clip, not hidden: a focused card must not scroll the row behind the animation's back. */
+  overflow: clip;
   margin-inline: -4px;
   padding: 4px 4px 12px;
-  /* No snapping: it would fight the slow glide. */
-  /* No scrollbar (owner, 6 Nov): the arrows and a swipe move the row. */
-  scrollbar-width: none;
+  /* Vertical swipes still scroll the page; sideways ones drag the row. */
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
   /* Both edges fade: the row never ends. */
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 var(--fade-l), #000 calc(100% - var(--fade-r)), transparent);
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 var(--fade), #000 calc(100% - var(--fade)), transparent);
 }
-.row::-webkit-scrollbar { display: none; }
-.card { display: grid; align-content: start; gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; transition: border-color .2s, transform .25s ease, box-shadow .25s ease; }
+/* The track: three copies of the cards, slid by the animation (landing-broken.tsx). */
+.track { display: grid; grid-auto-columns: 300px; grid-auto-flow: column; gap: 16px; width: max-content; will-change: transform; }
+.track img { -webkit-user-drag: none; }
+.card { display: grid; align-content: start; gap: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 20px; background: var(--surface); padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .2s, transform .25s ease, box-shadow .25s ease; }
 @media (hover: hover) and (pointer: fine) { .card:hover { transform: translateY(-3px); box-shadow: 0 18px 40px -24px rgb(0 0 0 / 70%); } }
 .card:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 .card[aria-pressed="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary), 0 18px 40px -24px color-mix(in srgb, var(--primary) 60%, transparent); }
@@ -61,5 +61,5 @@
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (max-width: 860px) { .panel { grid-template-columns: minmax(0, 1fr); } }
 /* Phones: one card and a peek of the next; the arrows stay (owner, 6 Nov), beside the count. */
-@media (max-width: 640px) { .row { grid-auto-columns: 78%; --fade-l: 28px; --fade-r: 28px; } }
+@media (max-width: 640px) { .row { --fade: 28px; } .track { grid-auto-columns: min(78vw, 300px); } }
 @media (prefers-reduced-motion: reduce) { .card, .photo img, .panel { transition: none; animation: none; } }
