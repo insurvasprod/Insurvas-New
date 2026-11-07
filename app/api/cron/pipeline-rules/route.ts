@@ -22,6 +22,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: true, ...outcome });
   } catch (error) {
     console.error("[cron/pipeline-rules] failed:", error);
-    return NextResponse.json({ error: "The pipeline rules run failed" }, { status: 500 });
+    return NextResponse.json({ error: "The card-move rules run failed" }, { status: 500 });
   }
 }

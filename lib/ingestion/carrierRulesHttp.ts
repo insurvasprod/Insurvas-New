@@ -62,5 +62,5 @@ export async function runCarrierRulesAction(scope: RulesScope, body: CarrierRule
 export function carrierRulesFailure(error: unknown) {
   if (error instanceof CarrierRulesError) return NextResponse.json({ error: error.message }, { status: error.status });
   console.error("[carrier-rules]", error);
-  return NextResponse.json({ error: "The carrier rules could not be saved. Try again." }, { status: 500 });
+  return NextResponse.json({ error: "The carrier terms could not be saved. Try again." }, { status: 500 });
 }

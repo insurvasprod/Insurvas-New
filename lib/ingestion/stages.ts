@@ -8,7 +8,7 @@ import { runDetection } from "./discrepancyStore";
 import { evaluateRetention } from "./retentionStore";
 import { computeExpected } from "./expectedCommissionStore";
 import { rebuildFileSnapshots } from "./snapshotStore";
-import { computeRadar } from "@/lib/retention/radarStore";
+import { syncRetentionCases } from "@/lib/retention/cases/sync";
 import { runServicingVerification } from "@/lib/retention/servicingStore";
 import { runReinstatementSync } from "@/lib/retention/reinstatementStore";
 import { releaseDueWinbacks, runWinbackSync } from "@/lib/retention/winbackStore";
@@ -99,25 +99,6 @@ const retentionResults: ReprocessStage = {
 };
 
 /**
- * risk_radar (LA-5.1 / 5.2): after a policy file, that carrier's in-force policies get their risk
- * signals and score again. Derived rows only; a failure here never fails the file — the save queue
- * recomputes on its own once a day has passed, and says when its scores are from.
- */
-const riskRadar: ReprocessStage = {
-  name: "risk_radar",
-  async rebuild(tenantId: string, file: ReprocessFile, _rows, parsed: ParsedFile | null) {
-    if (!isPolicyFeed(file.fileType) || !parsed?.typedRows || !file.carrierId) return { changed: 0 };
-    try {
-      const run = await computeRadar(tenantId, { carrierId: file.carrierId });
-      return { changed: run.available ? run.scored + run.removed : 0 };
-    } catch (error) {
-      console.error("[risk_radar] the radar could not be refreshed after a file", error);
-      return { changed: 0 };
-    }
-  },
-};
-
-/**
  * servicing_verify (LA-5.4): after a policy file, every open servicing request on that carrier is
  * checked against the newest file — verified when it shows the change, failed (with an alert) past
  * the expected date plus grace. The database decides; this only asks. Before the radar, so a proven
@@ -176,7 +157,28 @@ const winback: ReprocessStage = {
   },
 };
 
-export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, servicingVerify, reinstatementSync, winback, riskRadar, commissionEntries, orphanCommission, commissionDiscrepancies];
+/**
+ * retention_ladder (owner 2026-11-05, docs/retention/SPEC.md): after any policy or commission file, every
+ * policy the files flag is put at its risk point on the Retention ladder, and cases the files prove fixed or
+ * gone are closed. Last, so the chargebacks this file brought are in the ledger. A failure never fails the
+ * file; Retention refreshes itself when it opens. (Replaces the LA-5.1/5.2 radar run: Retention is the
+ * files' facts, never a prediction.)
+ */
+const retentionLadder: ReprocessStage = {
+  name: "retention_ladder",
+  async rebuild(tenantId: string, _file: ReprocessFile, _rows, parsed: ParsedFile | null) {
+    if (!parsed?.typedRows) return { changed: 0 };
+    try {
+      const run = await syncRetentionCases(tenantId);
+      return { changed: run.available ? run.opened.length + run.moved.length + run.saved.length + run.lost.length : 0 };
+    } catch (error) {
+      console.error("[retention_ladder] the Retention cases could not be updated after a file", error);
+      return { changed: 0 };
+    }
+  },
+};
+
+export const REPROCESS_STAGES: ReprocessStage[] = [policySnapshots, expectedCommission, retentionResults, servicingVerify, reinstatementSync, winback, commissionEntries, orphanCommission, commissionDiscrepancies, retentionLadder];
 
 /** After a door's parse: the same stages a reprocess runs, for one file's passed rows. */
 export async function runStages(tenantId: string, file: ReprocessFile, parsed: ParsedFile): Promise<void> {

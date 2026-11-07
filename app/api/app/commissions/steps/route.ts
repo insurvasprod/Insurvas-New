@@ -1,9 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { readOverrides } from "@/lib/agency/overrideStore";
-import { periodOf } from "@/lib/agency/http";
 import type { CommissionsStepCounts } from "@/lib/commissions/steps";
 
 /**
@@ -13,7 +11,6 @@ import type { CommissionsStepCounts } from "@/lib/commissions/steps";
  *
  *   statements     statement lines proposed or unmatched, on statements not voided (Statements' "Lines waiting")
  *   discrepancies  findings open or disputed, from carrier files and from imported statements
- *   hierarchy      producer-carrier rows with no contract level, or a negative spread (under team_hierarchy)
  *   attribution    open rows: disagreements and unattributed (the Attribution queue's two tabs)
  */
 const ROLES = ["owner", "bookkeeper"] as const;
@@ -28,7 +25,7 @@ const head = async (query: PromiseLike<Result>): Promise<number | null> => {
   return error ? null : (count ?? 0);
 };
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   const auth = await requireFeatureRole("statement_ingestion", ROLES);
   if (auth instanceof NextResponse) return auth;
   const tenantId = auth.context.tenantId;
@@ -42,13 +39,6 @@ export async function GET(request: NextRequest) {
   ]);
   const counts: CommissionsStepCounts = {};
   if (fromFiles !== null || fromStatements !== null) counts.discrepancies = (fromFiles ?? 0) + (fromStatements ?? 0);
-  // Hierarchy & overrides (from Team, 2026-11-03): producer-carrier rows with no contract level or a negative spread,
-  // this month, under the step's own gate and through the scoped store. Left out when that gate refuses.
-  const team = await requireFeatureRole("team_hierarchy", ROLES, { prefetchScope: true }).catch(() => null);
-  if (team && !(team instanceof NextResponse)) {
-    const period = periodOf(new URL(request.url));
-    const overrides = period instanceof NextResponse ? null : await readOverrides(team.context, period).catch(() => null);
-    if (overrides) counts.hierarchy = overrides.filter((row) => row.producerLevelBps === null || (row.spreadBps !== null && row.spreadBps < 0)).length;
-  }
+  // Hierarchy & overrides left for Reports (owner 2026-11-05), and its count with it.
   return NextResponse.json({ counts }, { headers: { "Cache-Control": "no-store" } });
 }

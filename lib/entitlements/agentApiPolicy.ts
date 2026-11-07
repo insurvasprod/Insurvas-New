@@ -239,6 +239,10 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/retention/save-queue/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.4 · servicing requests: open one, take a step. Verified and failed are the carrier file's alone.
   { sourceFile: "app/api/app/retention/servicing/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer", "retention"] },
+  // Retention ladder rules (owner 2026-11-05): owner only, like the rest of Settings › Retention.
+  { sourceFile: "app/api/app/retention/ladder-rules/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner"] },
+  // Retention ladder (owner 2026-11-05): a person's steps on a case (call, fix, assign, close); the files do the rest.
+  { sourceFile: "app/api/app/retention/cases/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.4 · New request (2026-11-05): find the policy to open a request on, by name, phone or number. Read only.
   { sourceFile: "app/api/app/retention/servicing/policies/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.5 · the paper-bill campaign: log a call; owners save the talk track.

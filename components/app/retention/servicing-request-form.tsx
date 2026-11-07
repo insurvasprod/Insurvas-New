@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
+import { NoteField } from "@/components/ui/note-field";
 import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cardInset, cardSurface } from "@/components/ui/card";
-import { checkboxControl, control, Field, textareaControl } from "@/components/ui/field";
+import { checkboxControl, control, Field } from "@/components/ui/field";
 import { SectionLoading } from "@/components/ui/page-states";
 import { CONTACT_OUTCOME_LABELS, CONTACT_OUTCOMES, PAYMENT_METHODS, type ContactOutcome, type PaymentMethod } from "@/lib/retention/constants";
 import { CARRIER_METHOD_LABELS, CARRIER_METHODS, REQUEST_LABELS, type CarrierMethod, type Origin, type RequestType } from "@/lib/retention/servicing";
@@ -24,13 +26,15 @@ const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
  *
  * `onDone` gets the new request's id.
  */
-export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fromQueue, initialOutcome = "reached_agreed", onCancel, onDone }: {
+export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fromQueue, initialOutcome = "reached_agreed", initialNote = "", onCancel, onDone }: {
   carrierId: string;
   policyNumber: string;
   type: RequestType;
   origin: Origin;
   fromQueue: boolean;
   initialOutcome?: ContactOutcome;
+  /** What the agent already typed where the form was opened from (a Retention case's note): never lost. */
+  initialNote?: string;
   onCancel?: () => void;
   onDone: (id: string | null) => void;
 }) {
@@ -43,12 +47,13 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
   const [zip, setZip] = useState("");
   const [state, setState] = useState("");
   const [outcome, setOutcome] = useState<ContactOutcome>(initialOutcome);
-  const [sendNow, setSendNow] = useState(true);
+  // Not ticked until the agent has sent it: a request is never recorded as sent before it was (critique C4).
+  const [sendNow, setSendNow] = useState(false);
   const [method, setMethod] = useState<CarrierMethod | "">("");
   const [reference, setReference] = useState("");
   const [formRef, setFormRef] = useState("");
   const [effective, setEffective] = useState("");
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(initialNote);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,7 +135,7 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
             {guide.notes && <li>{guide.notes}</li>}
           </ul>
         ) : (
-          <span className="block text-muted-foreground">No instructions for {prefill.carrierName} yet. Insurvas adds them; ask the carrier how they take this change.</span>
+          <span className="block text-muted-foreground">No instructions for {prefill.carrierName} yet. Use their agent portal or call their agent service line, and ask how they take this change and whether the client must authorise it.</span>
         )}
       </div>
 
@@ -141,7 +146,7 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
             htmlFor="svc-day"
             hint={day !== "" && day === prefill.recommendedDraftDay && prefill.recommendedReason ? <>Read to the client: &ldquo;{prefill.recommendedReason}&rdquo;</>
               : day !== "" && prefill.recommendedDraftDay && day !== prefill.recommendedDraftDay ? `The recommended day is the ${ordinal(prefill.recommendedDraftDay)}.`
-                : !prefill.recommendedDraftDay ? "No recommendation: when their money arrives isn't known. Ask, and set it in Draft dates." : undefined}
+                : !prefill.recommendedDraftDay ? <>No recommendation: when their money arrives isn&apos;t known. Ask the client, and set it in <Link href="/app/draft-dates" className="font-semibold text-[var(--accent-ink)] hover:underline">Draft dates</Link>.</> : undefined}
           >
             <select id="svc-day" className={control} value={day} onChange={(e) => setDay(e.target.value ? Number(e.target.value) : "")}>
               {type === "bill_to_draft_conversion" && <option value="">The carrier&apos;s default</option>}
@@ -197,7 +202,7 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
         </div>
       )}
 
-      <Field label="Note" htmlFor="svc-note"><textarea id="svc-note" className={textareaControl} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></Field>
+      <Field label="Note" htmlFor="svc-note"><NoteField id="svc-note"  maxLength={2000} value={note} onChange={setNote} /></Field>
       {/* On a page a Callout goes to the bell: an error the user must fix stays beside the button (§11). */}
       {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
       <div className="flex flex-wrap justify-end gap-2">

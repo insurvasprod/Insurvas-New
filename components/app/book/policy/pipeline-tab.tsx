@@ -4,6 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { fileDay } from "@/lib/ingestion/constants";
 import { moveSourceWord } from "@/lib/ingestion/policyPage";
@@ -33,14 +34,19 @@ export function PolicyPipelineTab({ pipeline, leadId, undo, pendingMessage }: {
     ...pipeline.ruleLines.map((line) => ({ kind: "rule" as const, at: line.at, line })),
   ].sort((a, b) => b.at.localeCompare(a.at));
   const card = pipeline.card;
+  // Round 6 (board 4): where the card is now, its last move and the rules' lines, as the mockups' strip; the
+  // hand move on the table's head.
+  const last = pipeline.moves[0] ?? null;
+  const count = (mode: "live" | "forecast" | "skipped") => pipeline.ruleLines.filter((line) => line.mode === mode).length;
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 text-sm text-muted-foreground">Card now: <span className="font-medium text-foreground">{card?.stage ? `${card.pipeline ? `${card.pipeline} › ` : ""}${card.stage}` : "Not on a pipeline"}</span></p>
-        <Button asChild variant="outline"><Link href={`/app/leads/${leadId}`}><ExternalLink aria-hidden="true" />Move it by hand (opens the lead)</Link></Button>
-      </div>
-      <PagedTableCard total={rows.length} noun="moves">
+      <StatStrip label="This policy's card">
+        <StatTile label="Card now" valueSize="text" value={card?.stage ?? "Not on a pipeline"} footnote={card?.pipeline ?? "no pipeline"} />
+        <StatTile label="Last move" valueSize="text" value={last ? fileDay(last.at) : "None yet"} footnote={last ? `${last.from ? `${last.from} → ` : ""}${last.to} · ${moveSourceWord(last.source).toLowerCase()}` : "the card hasn't moved"} />
+        <StatTile label="Rule lines" valueSize="text" value={`${count("live")} live · ${count("forecast")} forecast`} footnote={`${count("skipped")} skipped or held`} />
+      </StatStrip>
+      <PagedTableCard total={rows.length} noun="moves" title="Moves" action={<Button asChild variant="outline"><Link href={`/app/leads/${leadId}`} title="Opens the lead, where the card is moved"><ExternalLink aria-hidden="true" />Move it by hand</Link></Button>}>
         {rows.length === 0 ? (
           <EmptyState title="The card hasn't moved yet" hint="Each move of this policy's card, by a person, a call outcome or the application, shows here with the reason." />
         ) : (

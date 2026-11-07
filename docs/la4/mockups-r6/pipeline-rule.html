@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pipeline Rule R6</title>
+<style>
+
+:root{--canvas:#0d1412;--surface:#151e1b;--raised:#1d2824;--hi:#24322d;--text:#f2f6f4;--muted:#9fb0a7;--faint:#6f8079;--border:#2a3631;--primary:#35d6aa;--pfg:#0b2119;--psoft:#173a30;--good:#6be3c1;--goodbg:#173a30;--info:#a4c0f8;--infobg:#172a4a;--warn:#f3c266;--warnbg:#3a2b0c;--bad:#f7a1a1;--badbg:#3f1a1a;--r:12px}
+*{box-sizing:border-box}html,body{margin:0;background:#080d0b;color:var(--text);font:14px/1.45 Inter,system-ui,sans-serif}
+a{color:var(--primary);text-decoration:none}
+h1{font-size:22px;margin:0;letter-spacing:-.01em}h2{font-size:15px;margin:0}h3{font-size:13px;margin:0}
+.wrap{max-width:1480px;margin:0 auto;padding:24px 16px 80px}
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 28px}.toc a{border:1px solid var(--border);border-radius:8px;padding:6px 10px;font-size:12px;color:var(--muted)}
+.board{margin:40px 0}.cap{display:flex;gap:12px;align-items:baseline;margin:0 0 10px}.cap b{font-size:13px;letter-spacing:.04em;color:var(--primary)}.cap span{color:var(--muted);font-size:13px}
+.frame{background:var(--canvas);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.app{display:grid;grid-template-columns:56px 200px 1fr;min-height:620px}
+.side{border-right:1px solid var(--border);background:#0a110f}.side i{display:block;width:22px;height:22px;border-radius:6px;background:var(--raised);margin:14px auto}
+.rail{border-right:1px solid var(--border);padding:16px 12px;display:flex;flex-direction:column;gap:4px}.rail div{padding:9px 10px;border-radius:9px;color:var(--muted);font-weight:600;display:flex;justify-content:space-between}.rail .on{background:var(--psoft);color:var(--text);border:1px solid #1f5a49}.rail small{font-size:11px;background:var(--warnbg);color:var(--warn);border-radius:6px;padding:0 6px}
+.main{padding:16px 20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.trail{font-size:12px;color:var(--muted)}.trail b{color:var(--text);font-weight:600}
+.tl{display:flex;align-items:center;gap:14px;flex-wrap:wrap}.tl .sp{flex:1}
+.tabs{display:flex;gap:4px;border-left:1px solid var(--border);padding-left:12px}.tab{padding:6px 11px;border-radius:8px;font-weight:600;color:var(--muted);font-size:13px}.tab.on{background:var(--raised);color:var(--text);border:1px solid var(--border)}
+.n{font-size:11px;background:var(--raised);border-radius:6px;padding:1px 6px;margin-left:5px;color:var(--muted)}.n.w{color:var(--warn);background:var(--warnbg)}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:13px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--pfg);border-color:var(--primary)}.btn.sm{height:30px;padding:0 10px;font-size:12px}.btn.g{background:none;border-color:transparent;color:var(--muted)}.btn.big{height:52px;font-size:14px;justify-content:space-between;width:100%;padding:0 16px}
+kbd{font:600 11px ui-monospace,Consolas,monospace;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--muted);background:var(--canvas)}
+.btn.p kbd{color:var(--pfg);border-color:#1b7a60;background:#5ee3bf}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r)}
+.hd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}.hd .sp{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:8px;border:1px solid var(--border);font-weight:600;font-size:13px}.chip.on{border-color:var(--primary);background:var(--psoft)}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}.st:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.w{color:var(--warn);background:var(--warnbg)}.g1{color:var(--good);background:var(--goodbg)}.i{color:var(--info);background:var(--infobg)}.b{color:var(--bad);background:var(--badbg)}.z{color:var(--muted);background:var(--raised)}
+.m{color:var(--muted)}.f{color:var(--faint)}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+table{width:100%;border-collapse:collapse}th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;padding:10px 14px;border-bottom:1px solid var(--border)}td{padding:0 14px;height:44px;border-bottom:1px solid var(--border)}.r{text-align:right}
+tr.sel td{background:var(--psoft)}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px 12px}.toolbar .sp{flex:1}
+.input{height:36px;border:1px solid var(--border);background:var(--canvas);border-radius:8px;padding:0 12px;color:var(--faint);min-width:200px;display:inline-flex;align-items:center}
+.foot{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--border)}.foot .sp{flex:1}
+.stages{display:flex;gap:4px}.stg{flex:1}.stg .bar{height:4px;border-radius:4px;background:var(--primary)}.stg.nd .bar{background:var(--warn)}.stg .lb{font-size:12px;font-weight:600;margin-top:6px}.stg.nd .lb{color:var(--warn)}
+.note{max-width:1100px;color:var(--muted);font-size:13px;margin:10px 4px 0}.note b{color:var(--text)}.note li{margin:3px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.split{display:grid;grid-template-columns:360px 1fr;gap:0;min-height:560px}
+.q{border-right:1px solid var(--border);display:flex;flex-direction:column}.qi{display:grid;grid-template-columns:18px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)}.qi.on{background:var(--psoft);box-shadow:inset 3px 0 0 var(--primary)}.qi.done{opacity:.45}
+.box{width:14px;height:14px;border:1.5px solid var(--faint);border-radius:4px}.box.x{background:var(--primary);border-color:var(--primary)}
+.dec{padding:20px 24px;display:flex;flex-direction:column;gap:16px}
+.ask{font-size:20px;font-weight:700;letter-spacing:-.01em}
+.cmp{display:grid;grid-template-columns:140px 1fr 1fr;border:1px solid var(--border);border-radius:10px;overflow:hidden}.cmp div{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px}.cmp .h{color:var(--muted);font-size:12px;font-weight:600;background:var(--raised)}
+.ok{color:var(--good)}.no{color:var(--bad)}
+.answers{display:grid;gap:8px}
+.cand{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.cc{border:1px solid var(--border);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px}.cc.top{border-color:var(--primary)}
+.prog{height:4px;background:var(--border);border-radius:4px;overflow:hidden}.prog i{display:block;height:100%;background:var(--primary)}
+.kv{display:grid;grid-template-columns:170px 1fr;gap:0}.kv div{padding:7px 0;border-bottom:1px solid var(--border);font-size:13px}.kv .k{color:var(--muted)}
+.step{display:grid;grid-template-columns:22px 130px 1fr auto;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid var(--border)}.dot{width:18px;height:18px;border-radius:50%;background:var(--psoft);border:2px solid var(--primary)}.dot.w{border-color:var(--warn);background:var(--warnbg)}.dot.z{border-color:var(--faint);background:none}
+.board2{display:grid;grid-template-columns:240px 1fr 300px;min-height:560px}
+.col{border-right:1px solid var(--border);padding:12px}.col:last-child{border-right:0}
+.oc{display:grid;grid-template-columns:1fr 18px 200px 70px;gap:10px;align-items:center;padding:9px 12px;border:1px solid var(--border);border-radius:9px;margin-bottom:6px;background:var(--surface)}.oc.on{border-color:var(--primary)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:600;background:var(--raised);border:1px solid var(--border)}.pill i{width:8px;height:8px;border-radius:50%;display:inline-block}
+.stagecol div{padding:10px 12px;border:1px dashed var(--border);border-radius:9px;margin-bottom:6px;display:flex;justify-content:space-between;font-weight:600;font-size:13px}
+.dlg{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.6);padding:18px;width:440px}
+.pop{background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:6px;width:260px}.pop div{padding:8px 10px;border-radius:7px;font-size:13px}.pop .on{background:var(--psoft)}
+.toast{display:inline-flex;gap:10px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:10px;padding:10px 14px;font-weight:600}
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:18px}.flow .fs{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface);min-width:150px}.flow .fs b{display:block}.flow .fs small{color:var(--muted)}.arrow{color:var(--faint)}
+.map li{margin:6px 0}.k2{display:inline-block;min-width:110px;font-weight:700}
+.phone{width:390px;background:var(--canvas);border:1px solid var(--border);border-radius:28px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.crit td{height:auto;padding:10px 14px;vertical-align:top;font-size:13px}
+.tile{display:block;padding:14px;border-right:1px solid var(--border);color:inherit}.tile:hover{background:var(--raised)}
+.tile2{display:flex;flex-direction:column;gap:2px;border:1px solid var(--border);border-radius:10px;padding:10px;color:inherit}.tile2 b{font-size:18px}
+.bar2{height:4px;border-radius:4px;background:var(--border);margin-top:6px;overflow:hidden}.bar2 i{display:block;height:100%;background:var(--primary)}
+.money{display:flex;height:6px;border-radius:6px;overflow:hidden;background:var(--border);margin-bottom:4px}.money i{display:block;height:100%}.money .e{background:var(--primary)}.money .a{background:var(--warn)}.money .s{background:var(--bad)}.money .z2{background:var(--hi)}
+.months{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}.mo{font-size:11px;text-align:center;border:1px solid var(--border);border-radius:6px;padding:5px 2px;color:var(--muted)}.mo.on{background:var(--psoft);border-color:#1f5a49;color:var(--text)}
+.dots{display:inline-flex;gap:3px}.dots i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--faint);display:inline-block}.dots .d1{background:var(--primary);border-color:var(--primary)}.dots .d2{background:var(--muted);border-color:var(--muted)}
+tr.hov:hover td,tr.hovon td{background:var(--raised)}tr.hov{cursor:pointer}
+
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border:1px solid var(--border);border-radius:var(--r);background:var(--surface)}
+.strip>div{padding:12px 16px;border-right:1px solid var(--border);min-width:0}.strip>div:last-child{border-right:0}
+.strip .l{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase}
+.strip .v{font-size:20px;font-weight:700;margin-top:2px;white-space:nowrap}.strip .v.good{color:var(--good)}.strip .v.warn{color:var(--warn)}
+.strip .fn{font-size:12px;color:var(--muted)}
+.iconbtn{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--surface);display:inline-grid;place-items:center;color:var(--text);font-weight:700}
+.sent{font-size:18px;line-height:1.9;padding:18px 20px}
+.tok{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--raised);border-radius:8px;padding:1px 10px;font-weight:700;color:var(--text);white-space:nowrap}
+.tok:after{content:"▾";font-size:10px;color:var(--muted)}.tok.on{border-color:var(--primary);background:var(--psoft)}
+.field{display:flex;flex-direction:column;gap:6px}.field .lb{font-size:12px;font-weight:600;color:var(--muted)}
+.sel{height:36px;border:1px solid var(--border);background:var(--canvas);border-radius:8px;padding:0 12px;display:flex;align-items:center;justify-content:space-between;font-size:13px}.sel:after{content:"▾";color:var(--muted);font-size:10px}
+.steps{display:flex;flex-direction:column}.sp2{display:grid;grid-template-columns:28px 1fr;gap:12px;padding:16px;border-bottom:1px solid var(--border)}.sp2:last-child{border-bottom:0}
+.num{width:24px;height:24px;border-radius:50%;background:var(--psoft);color:var(--primary);display:grid;place-items:center;font-weight:700;font-size:12px}
+.side2{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:start}
+.next{display:flex;align-items:center;gap:14px;padding:14px 18px;border:1px solid #1f5a49;background:var(--psoft);border-radius:var(--r)}
+.next.w{border-color:#5a4a1f;background:var(--warnbg)}
+.ta{border:1px solid var(--border);background:var(--canvas);border-radius:8px;padding:10px 12px;min-height:64px;font-size:13px}
+.fill{display:flex;gap:6px;flex-wrap:wrap}.fill span{font:600 11px ui-monospace,Consolas,monospace;border:1px dashed var(--border);border-radius:6px;padding:2px 6px;color:var(--muted)}
+.grp{font-size:11px;color:var(--muted);margin:8px 0 4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chips span{border:1px solid var(--border);border-radius:7px;padding:3px 9px;font-size:12px;font-weight:600}.chips span.on{border-color:var(--primary);background:var(--psoft)}
+.ed{width:100%;border:1px solid var(--border);border-radius:12px;overflow:hidden}.ed td,.ed th{height:auto;padding:8px 12px;vertical-align:top;font-size:13px}
+.dir{font-size:12px;font-weight:700;letter-spacing:.06em;color:var(--primary);margin:52px 0 0;border-top:1px solid var(--border);padding-top:24px}
+.dir span{display:block;color:var(--text);font-size:20px;letter-spacing:-.01em;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Pipeline rule · round 6</h1>
+<p class="note">Carrier sync › Pipeline rules › a rule. Owner 2026-11-06: "reorganize so he knows exactly what to do in this page … make that title even shorter … it looks messy. Create some mockups, I'll choose." Three directions, each with every tab, panel and pop-up; then the edit map. Data: the demo agency's rule <b>Issued → Issued</b>, v4, live since Nov 4, 2026.</p>
+<div class="toc"><a href="#c">Critique</a><a href="#a">A · One sentence</a><a href="#b">B · Numbered steps</a><a href="#cc">C · Status first</a><a href="#s">Shared pop-ups</a><a href="#e">Edit map</a></div>
+
+<section class="board" id="c"><div class="cap"><b>CRITIQUE</b><span>what the page does today, and what makes it hard</span></div>
+<div class="card" style="padding:16px 20px"><ol class="note" style="margin:0;padding-left:18px">
+<li><b>The title line carries everything.</b> "Issued → Issued · Live" then "Issued · Every carrier · version 4 · live since 2026-11-04" in large type: five facts, a raw ISO date, and the event twice (it is already the name).</li>
+<li><b>No "what now".</b> Three equal buttons (Duplicate, Turn off, Back to forecast) and nothing says what this page wants from you. For a Forecast rule the job is "check the would-moves, then switch to live"; for a Live rule, "nothing, unless it moved a card wrong". The page shows neither.</li>
+<li><b>27 chips.</b> "Only when it is in" lays out every stage of every pipeline as chips in a scrolling box: the answer ("27 of 31 stages") is buried in the control.</li>
+<li><b>Save hides at the foot</b>, under the note card, cut off at 1440 × 900. Preview on today's data and the Preview tab do the same thing twice.</li>
+<li><b>Forecast and Preview are two tabs for one question</b> ("what does this rule do?"): one looks back 7 days, the other at today.</li>
+<li><b>Notices on the page</b> (carriers with no grace, lines marked wrong) — the owner's rule is: no notices; say it on the thing it is about.</li>
+</ol></div></section>
+
+<!-- ═══════════════ A ═══════════════ -->
+<div class="dir" id="a">DIRECTION A<span>One sentence: the rule reads as a sentence, each part edits in place</span></div>
+
+<section class="board"><div class="cap"><b>A1 · RULE</b><span>title is the name; the facts become one sentence; the next step is the one primary button</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i></i></div>
+<div class="rail"><div>Needs you <small>3,852</small></div><div>Rate card <small>7</small></div><div>Carrier rules <small>59</small></div><div class="on">Pipeline rules</div><div>Agent codes <small>42</small></div><div>Files in</div></div>
+<div class="main">
+<div class="trail">Carrier sync › Pipeline rules › <b>Issued → Issued</b></div>
+<div class="tl"><h1>Issued → Issued</h1><span class="st g1">Live</span><span class="m" style="font-size:12px">v4 · since Nov 4</span>
+<div class="tabs"><span class="tab on">Rule</span><span class="tab">What it did<span class="n">12</span></span><span class="tab">Versions<span class="n">4</span></span></div>
+<span class="sp"></span><span class="btn">Preview today</span><span class="iconbtn">⋯</span></div>
+<div class="card"><div class="sent">When a carrier file says a policy is <span class="tok">Issued</span> for <span class="tok">every carrier</span>, and its lead's card is in <span class="tok">27 of 31 stages</span>, move the card to <span class="tok">Sales › Issued</span> and <span class="tok on">add a note</span>.</div>
+<div style="padding:0 20px 18px"><div class="lb m" style="font-size:12px;margin-bottom:6px">The note</div><div class="ta">Issued by {carrier}, policy {policy_number}.</div><div class="fill" style="margin-top:8px"><span>{paid_to_date}</span><span>{days_past_due}</span><span>{days_left}</span><span>{months_paid}</span><span>{premium}</span><span>{amount}</span><span>{carrier}</span><span>{policy_number}</span></div></div>
+<div class="foot"><span class="m" style="font-size:12px">Change any underlined part; saving makes version 5. What v4 recorded stays with v4.</span><span class="sp"></span><span class="btn">Discard</span><span class="btn p">Save as version 5</span></div></div>
+<div class="strip"><div><div class="l">Last 7 days</div><div class="v">12 moved</div><div class="fn">0 held · 3 skipped</div></div><div><div class="l">Today</div><div class="v">2 would move</div><div class="fn">on the file of Nov 6</div></div><div><div class="l">Checked</div><div class="v good">0 wrong</div><div class="fn">of 0 marked</div></div></div>
+</div></div></div>
+<ul class="note"><li><b>Title</b>: the name only. Mode chip + "v4 · since Nov 4" small and muted (the event, the carriers and the stages are the sentence, not the header).</li><li><b>Actions</b>: one button that fits the mode — Live: <i>Preview today</i>; Forecast: <b>Switch to live</b> (primary); Draft: <b>Start the forecast</b>. Duplicate, Turn off and Back to forecast go in ⋯.</li><li>Save sits on the card's foot, right under what you changed, and only lights when something did.</li></ul></section>
+
+<section class="board"><div class="cap"><b>A2 · A PART OPENS IN PLACE</b><span>the stages token: search, a pipeline's "all", counts — not 27 chips on the page</span></div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+<div class="pop" style="width:380px;padding:12px"><div class="input" style="width:100%">Search stages</div><div class="grp">Sales pipeline · 9 of 9 <a style="float:right">None</a></div><div class="chips"><span class="on">✓ Submitted</span><span class="on">✓ Issued</span><span class="on">✓ In force</span><span class="on">✓ At risk</span><span class="on">+5</span></div><div class="grp">Marketing leads · 5 of 6 <a style="float:right">All</a></div><div class="chips"><span class="on">✓ Form lead</span><span class="on">✓ Call lead</span><span>Disqualified - Do not call</span></div><div class="grp">Affiliate referrals · 4 of 5 <a style="float:right">All</a></div><div class="chips"><span class="on">✓ Referred</span><span>Not interested</span></div><div style="display:flex;justify-content:space-between;margin-top:12px"><a>Any stage</a><span class="btn sm p">Done · 27 stages</span></div></div>
+<div class="pop" style="width:260px"><div class="on">Issued</div><div>First payment made</div><div>First payment missed</div><div>Later payment missed</div><div>Lapsed</div><div>Charged back</div><div class="m" style="font-size:12px">The carrier's file shows the policy issued (its first day issued).</div></div>
+<div class="pop" style="width:260px"><div class="on">Every carrier</div><div>Only these…</div><div class="m" style="font-size:12px;border-top:1px solid var(--border);border-radius:0">Aetna / CVS · Aflac · American Amicable · American Home Life …</div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>A3 · WHAT IT DID</b><span>Forecast and Preview as one tab: today, then the last 7 days; marking right/wrong in the row</span></div>
+<div class="frame"><div class="main" style="min-height:380px">
+<div class="tl"><h1>Issued → Issued</h1><span class="st g1">Live</span><span class="m" style="font-size:12px">v4 · since Nov 4</span><div class="tabs"><span class="tab">Rule</span><span class="tab on">What it did<span class="n">12</span></span><span class="tab">Versions<span class="n">4</span></span></div><span class="sp"></span><span class="btn">Preview today</span><span class="iconbtn">⋯</span></div>
+<div class="card"><div class="toolbar"><span class="chip on">Today 2</span><span class="chip">Last 7 days 12</span><span class="chip">Not checked 12</span><span class="chip">Wrong 0</span></div>
+<table><tr><th>Day</th><th>Lead</th><th>Card</th><th>Result</th><th class="r">Was it right?</th></tr>
+<tr><td class="m">Today</td><td><b>Laura Lopez</b> <span class="m">· AMH6900131</span></td><td>Submitted → <b>Issued</b></td><td><span class="st i">Would move</span></td><td class="r m">—</td></tr>
+<tr><td class="m">Nov 5</td><td><b>Quinn Testmore</b> <span class="m">· AMAM 0119990301</span></td><td>Submitted → <b>Issued</b></td><td><span class="st g1">Moved</span></td><td class="r"><span class="btn sm">Right</span> <span class="btn sm">Wrong</span></td></tr>
+<tr><td class="m">Nov 5</td><td><b>Riley Upton</b></td><td>Issued</td><td><span class="st z">Skipped</span> <span class="m">already there</span></td><td class="r m">—</td></tr></table></div>
+</div></div></section>
+
+<!-- ═══════════════ B ═══════════════ -->
+<div class="dir" id="b">DIRECTION B<span>Numbered steps: the form as four questions, a summary that follows you</span></div>
+
+<section class="board"><div class="cap"><b>B1 · RULE</b><span>1 When · 2 Which cards · 3 Move to · 4 Note — and a sticky summary with the next step and Save</span></div>
+<div class="frame"><div class="main" style="min-height:560px">
+<div class="trail">Carrier sync › Pipeline rules › <b>Issued → Issued</b></div>
+<div class="tl"><h1>Issued → Issued</h1><span class="st g1">Live</span><div class="tabs"><span class="tab on">Rule</span><span class="tab">Preview</span><span class="tab">Forecast<span class="n">0</span></span><span class="tab">Versions<span class="n">4</span></span></div><span class="sp"></span><span class="btn">Duplicate</span><span class="iconbtn">⋯</span></div>
+<div class="side2">
+<div class="card steps">
+<div class="sp2"><span class="num">1</span><div class="field"><b>When the carrier's file says</b><div class="two"><div class="sel">Issued</div><div class="sel">Every carrier</div></div><span class="m" style="font-size:12px">The carrier's file shows the policy issued (its first day issued).</span></div></div>
+<div class="sp2"><span class="num">2</span><div class="field"><b>And the card is in</b><div class="sel">27 of 31 stages</div><span class="m" style="font-size:12px">Sales pipeline 9 · Marketing leads 5 of 6 · Affiliate referrals 4 of 5 · Publisher 9 of 11</span></div></div>
+<div class="sp2"><span class="num">3</span><div class="field"><b>Move the card to</b><div class="two"><div class="sel">Sales pipeline</div><div class="sel">Issued</div></div></div></div>
+<div class="sp2"><span class="num">4</span><div class="field"><b>Add a note</b> <span class="m" style="font-size:12px">optional</span><div class="ta">Issued by {carrier}, policy {policy_number}.</div><div class="fill"><span>{carrier}</span><span>{policy_number}</span><span>{premium}</span><span>{paid_to_date}</span><span>+4</span></div></div></div>
+</div>
+<div style="display:flex;flex-direction:column;gap:12px;position:sticky;top:0">
+<div class="card" style="padding:16px"><div class="m" style="font-size:12px;font-weight:700;letter-spacing:.06em">THIS RULE</div><p style="margin:8px 0 12px;font-size:14px">Moves a card to <b>Sales › Issued</b> when a policy is issued, for every carrier, from 27 stages, and adds a note.</p>
+<div class="kv"><div class="k">Mode</div><div><span class="st g1">Live</span> since Nov 4</div><div class="k">Version</div><div>4 · <a>see all</a></div><div class="k">Last 7 days</div><div>12 moved · 0 wrong</div></div>
+<div style="display:flex;flex-direction:column;gap:8px;margin-top:14px"><span class="btn" style="justify-content:center">Preview on today's data</span><span class="btn p" style="justify-content:center;opacity:.45">Save as version 5</span><span class="m" style="font-size:12px;text-align:center">Nothing changed yet</span></div></div>
+</div></div>
+</div></div>
+<ul class="note"><li>The facts line is gone: the summary card says it in a sentence, with Mode, Version and the last 7 days. Save and Preview live in the summary, always on screen.</li><li>Step 2 is one picker ("27 of 31 stages") with the per-pipeline counts under it; the picker is A2's pop-over.</li><li>Tabs stay four, as today.</li></ul></section>
+
+<section class="board"><div class="cap"><b>B2 · FORECAST, B3 · PREVIEW, B4 · VERSIONS</b><span>tables as today, each with a one-line head that says what to do</span></div>
+<div class="two" style="grid-template-columns:1fr 1fr 1fr">
+<div class="card"><div class="hd"><h3>Forecast · 8 would-moves</h3></div><div class="next w" style="margin:12px;border-radius:9px"><span>Mark each line <b>Right</b> or <b>Wrong</b>; when they're right, switch to live.</span></div><table><tr><td class="m">Nov 5</td><td>Quinn → <b>Issued</b></td><td class="r"><span class="btn sm">Right</span></td></tr><tr><td class="m">Nov 4</td><td>Nora → <b>Issued</b></td><td class="r"><span class="st g1">Right</span></td></tr></table></div>
+<div class="card"><div class="hd"><h3>Today · 2 would move</h3></div><table><tr><td><span class="st i">Would move</span></td><td>Laura Lopez</td></tr><tr><td><span class="st z">Skipped</span></td><td class="m">no lead linked</td></tr></table></div>
+<div class="card"><div class="hd"><h3>4 versions</h3></div><table><tr><td>v4 <span class="st g1">In use</span></td><td class="m">Nov 4</td><td class="m">27 stages</td></tr><tr><td>v3</td><td class="m">Nov 3</td><td class="m">any stage</td></tr></table></div>
+</div></section>
+
+<!-- ═══════════════ C ═══════════════ -->
+<div class="dir" id="cc">DIRECTION C<span>Status first: what the rule is doing and the one thing to do, then the rule read-only; edit is its own page</span></div>
+
+<section class="board"><div class="cap"><b>C1 · OVERVIEW</b><span>the next step as a band, the strip, the rule as a sentence, the last moves</span></div>
+<div class="frame"><div class="main" style="min-height:560px">
+<div class="trail">Carrier sync › Pipeline rules › <b>Issued → Issued</b></div>
+<div class="tl"><h1>Issued → Issued</h1><span class="st g1">Live</span><div class="tabs"><span class="tab on">Overview</span><span class="tab">Moves<span class="n">12</span></span><span class="tab">Versions<span class="n">4</span></span></div><span class="sp"></span><span class="btn p">Edit the rule</span><span class="iconbtn">⋯</span></div>
+<div class="next"><b>Live and working.</b><span class="m">12 cards moved in 7 days, none marked wrong. Nothing to do unless a move looks wrong.</span><span class="sp" style="flex:1"></span><a>Check the moves ›</a></div>
+<div class="strip"><div><div class="l">Mode</div><div class="v good">Live</div><div class="fn">since Nov 4 · version 4</div></div><div><div class="l">Moved</div><div class="v">12</div><div class="fn">last 7 days</div></div><div><div class="l">Today</div><div class="v">2</div><div class="fn">would move on the next run</div></div><div><div class="l">Marked wrong</div><div class="v">0</div><div class="fn">of 0 checked</div></div></div>
+<div class="two" style="grid-template-columns:1.2fr 1fr">
+<div class="card"><div class="hd"><h2>What it does</h2></div><div style="padding:14px 16px;font-size:14px;line-height:1.7">When a carrier file says a policy is <b>Issued</b> · <b>every carrier</b><br>and the card is in <b>27 of 31 stages</b><br>→ move it to <b>Sales › Issued</b><br>and add the note <span class="m">“Issued by {carrier}, policy {policy_number}.”</span></div></div>
+<div class="card"><div class="hd"><h2>Last moves</h2><span class="sp"></span><a style="font-size:13px">All ›</a></div><table><tr><td class="m">Nov 5</td><td>Quinn Testmore</td><td class="r"><span class="st g1">Moved</span></td></tr><tr><td class="m">Nov 5</td><td>Riley Upton</td><td class="r"><span class="st z">Skipped</span></td></tr></table></div>
+</div></div></div>
+<ul class="note"><li>The band changes with the mode: <b>Forecast</b> — "8 would-moves to check · <i>Check them</i>", primary <b>Switch to live</b>; <b>Draft</b> — "Not running · <i>Start the forecast</i>"; <b>Off</b> — "Off since … · <i>Turn on</i>".</li><li>Editing is a page of its own (C2), so the overview never shows a half-edited rule.</li></ul></section>
+
+<section class="board"><div class="cap"><b>C2 · EDIT THE RULE</b><span>its own page, the form as today (tidied: one stage picker, Save on the title line)</span></div>
+<div class="frame"><div class="main" style="min-height:380px">
+<div class="trail">Carrier sync › Pipeline rules › Issued → Issued › <b>Edit</b></div>
+<div class="tl"><h1>Edit the rule</h1><span class="m" style="font-size:12px">saving makes version 5</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn">Preview today</span><span class="btn p">Save as version 5</span></div>
+<div class="two"><div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div class="field"><span class="lb">Name</span><div class="sel" style="justify-content:flex-start">Issued → Issued</div></div><div class="field"><span class="lb">When</span><div class="sel">Issued</div></div><div class="field"><span class="lb">Carriers</span><div class="sel">Every carrier</div></div></div>
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:12px"><div class="field"><span class="lb">Only when the card is in</span><div class="sel">27 of 31 stages</div></div><div class="two"><div class="field"><span class="lb">Pipeline</span><div class="sel">Sales pipeline</div></div><div class="field"><span class="lb">Stage</span><div class="sel">Issued</div></div></div><div class="field"><span class="lb">Note</span><div class="ta">Issued by {carrier}, policy {policy_number}.</div></div></div></div>
+</div></div></section>
+
+<!-- ═══════════════ SHARED ═══════════════ -->
+<section class="board" id="s"><div class="cap"><b>SHARED · MENUS, CONFIRMS, TOASTS</b><span>the same in A, B and C</span></div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+<div class="pop"><div>Duplicate</div><div>Back to forecast</div><div>Turn off</div><div style="border-top:1px solid var(--border);border-radius:0" class="m">Open Carrier rules</div></div>
+<div class="dlg"><h2>Switch “Issued → Issued” to live?</h2><p class="m" style="font-size:13px">From now on it moves cards and adds notes. Past would-moves are not replayed unless you tick below.</p><div class="kv"><div class="k">Forecast</div><div>7 days · 8 would-moves</div><div class="k">You checked</div><div>6 right · 0 wrong</div></div><label style="display:flex;gap:8px;margin:12px 0;font-size:13px"><span class="box x"></span>Also move the 2 cards that qualify right now</label><div style="display:flex;gap:8px;justify-content:flex-end"><span class="btn">Not yet</span><span class="btn p">Switch to live</span></div></div>
+<div class="dlg"><h2>Turn off “Issued → Issued”?</h2><p class="m" style="font-size:13px">It stops moving cards and recording what it would do. Turn it on again any time; nothing is lost.</p><div style="display:flex;gap:8px;justify-content:flex-end"><span class="btn">Keep it on</span><span class="btn" style="background:var(--badbg);color:var(--bad);border-color:transparent">Turn off</span></div></div>
+<div class="dlg"><h2>Mark it wrong</h2><p class="m" style="font-size:13px">What should have happened? It helps decide whether a different grace or a narrower from-stage fixes it.</p><div class="ta">Card was already past Issued.</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><span class="btn">Cancel</span><span class="btn p">Mark wrong</span></div></div>
+<div class="dlg"><h2>Leave without saving?</h2><p class="m" style="font-size:13px">Your changes to this rule aren't saved yet.</p><div style="display:flex;gap:8px;justify-content:flex-end"><span class="btn">Discard</span><span class="btn p">Save as version 5</span></div></div>
+<div style="display:flex;flex-direction:column;gap:8px"><span class="toast">✓ Saved as version 5</span><span class="toast">✓ “Issued → Issued” is live · 2 cards moved now</span><span class="toast">✓ Copied as a new rule, in forecast</span><span class="toast">✓ “Issued → Issued” is off</span></div>
+</div>
+<ul class="note"><li><b>Turn off</b> asks first in every direction (today it acts on one click). The other confirms are today's.</li><li>"Carriers with no grace" (missed-payment rules) moves from a notice to the When token / step 1: <span class="st w">3 carriers have no grace</span> beside the event, opening Carrier rules.</li></ul></section>
+
+<!-- ═══ EDIT MAP ═══ -->
+<section class="board" id="e"><div class="cap"><b>EDIT MAP</b><span>every change on this page, where it happens in each direction</span></div>
+<table class="ed"><tr><th>What</th><th>A · One sentence</th><th>B · Numbered steps</th><th>C · Status first</th><th>Writes</th></tr>
+<tr><td>Name</td><td>Click the title</td><td>⋯ › Rename</td><td>Edit page</td><td>a new version</td></tr>
+<tr><td>Event, carriers</td><td>Their tokens (pop-over)</td><td>Step 1</td><td>Edit page</td><td>a new version</td></tr>
+<tr><td>From stages</td><td>Token → stage picker</td><td>Step 2 → stage picker</td><td>Edit page → stage picker</td><td>a new version</td></tr>
+<tr><td>Target pipeline · stage</td><td>Token</td><td>Step 3</td><td>Edit page</td><td>a new version</td></tr>
+<tr><td>Note on/off, its text, fill-ins</td><td>"add a note" token + note box</td><td>Step 4</td><td>Edit page</td><td>a new version</td></tr>
+<tr><td>Save · discard</td><td>Card foot</td><td>Summary card</td><td>Edit page title line</td><td>—</td></tr>
+<tr><td>Preview on today's data</td><td>Title line · What it did › Today</td><td>Summary card · Preview tab</td><td>Edit page title line</td><td>nothing</td></tr>
+<tr><td>Start the forecast · Switch to live (confirm) · Back to forecast</td><td colspan="3">Primary button by mode; the rest in ⋯</td><td>mode (not a version)</td></tr>
+<tr><td>Turn off / on (confirm on off)</td><td colspan="3">⋯</td><td>on/off (not a version)</td></tr>
+<tr><td>Duplicate</td><td colspan="3">⋯ → the copy's page, in forecast</td><td>a new rule</td></tr>
+<tr><td>Mark a line right / wrong (with a note) · undo</td><td>What it did</td><td>Forecast tab</td><td>Moves tab</td><td>the check</td></tr>
+<tr><td>Read an old version</td><td colspan="3">Versions tab (read-only)</td><td>nothing</td></tr></table></section>
+
+<p class="note"><b>My pick: A.</b> It answers "what does this rule do" in one sentence a new agent can read, keeps editing on the same page without a form wall, and merges Preview and Forecast, the two tabs that answer the same question. B is the safest change from today. C is best if most rules, once live, are only ever looked at, never edited.</p>
+</div>
+</body>
+</html>

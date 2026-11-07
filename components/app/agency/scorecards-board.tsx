@@ -76,7 +76,7 @@ export function ScorecardsBoard({ scoped, initialPeriod }: { scoped: boolean; in
         footer={data?.available && rows.length ? <Pager page={shown.current} total={rows.length} noun="producers" pageSize={pageSize} onPage={setPage} /> : undefined}
       >
         {error ? <ErrorState detail={error} /> : loading || !data ? <SectionLoading rows={5} columns={10} label="Loading scorecards" /> : !data.available ? (
-          <EmptyState title="No carrier files yet" hint="Scorecards are built from your carriers' policy files. Bring one in under Book of business › Files." action={scoped ? undefined : <Button asChild variant="outline"><Link href="/app/carrier-files">Open Files</Link></Button>} />
+          <EmptyState title="No carrier files yet" hint="Scorecards are built from your carriers' policy files. Bring one in under Book of business › Carrier files." action={scoped ? undefined : <Button asChild variant="outline"><Link href="/app/carrier-files">Open Files</Link></Button>} />
         ) : rows.length === 0 ? <EmptyState title="No producers yet" hint="Each producer's row appears once they are active." /> : (
           <Table>
             <TableHeader>

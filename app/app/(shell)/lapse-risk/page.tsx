@@ -1,4 +1,7 @@
+import { redirect } from "next/navigation";
+
 import { scopeFor } from "@/lib/agency/visibility";
+import { ladderAvailable } from "@/lib/retention/cases/store";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { getLapseRisk, LAPSE_SCHEMA_PENDING_MESSAGE } from "@/lib/lapseRisk/service";
 import { loadBoard, loadSaveRates } from "@/lib/ingestion/retentionStore";
@@ -62,6 +65,9 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
     );
   }
 
+  // The call list became Retention › Cases (owner 2026-11-05: Retention is what the files say), once its
+  // tables exist; the recorded signals above stay here.
+  if (await ladderAvailable(guard.context.tenantId)) redirect("/app/retention");
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const [board, rates] = await Promise.all([loadBoard(viewer), loadSaveRates(viewer)]);
   return (

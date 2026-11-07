@@ -8,16 +8,13 @@
 /** The Commissions menu collapsed or open, remembered for a year; read on the server so the page draws at the right width. */
 export const COMMISSIONS_RAIL_COOKIE = "insurvas_commissions_rail";
 
-export type CommissionsStep = "ledger" | "discrepancies" | "reconciliation" | "hierarchy";
+// Two steps since 2026-11-05 (owner): the Commission ledger went to Book of business, Hierarchy & overrides to Reports.
+export type CommissionsStep = "discrepancies" | "reconciliation";
 
 /** `icon`: the sidebar's own icon for the page. Reconciliation opens as My pay for a producer (commissions-page.tsx). */
 export const COMMISSIONS_STEPS: { key: CommissionsStep; label: string; href: string; icon: string }[] = [
-  { key: "ledger", label: "Commission ledger", href: "/app/ledger", icon: "receipt" },
   { key: "discrepancies", label: "Pay issues", href: "/app/discrepancies", icon: "scale" },
   { key: "reconciliation", label: "Producer pay", href: "/app/producer-reconciliation", icon: "arrow-left-right" },
-  // AG-1.2 · who reports to whom and what the agency keeps on each producer: the rule override money comes from.
-  // Here since the Team group went (owner 2026-11-03); its address, gate and manager scope kept.
-  { key: "hierarchy", label: "Hierarchy & overrides", href: "/app/hierarchy", icon: "network" },
 ];
 
 /** A producer's Reconciliation step: their own pay, at its own address. */
@@ -25,10 +22,8 @@ export const MY_PAY = { label: "My pay", href: "/app/my-pay", icon: "briefcase-b
 
 /** Each step's addresses. A statement's own page (/app/statements/<id>) is a record, not a step. */
 const STEP_PATHS: [RegExp, CommissionsStep][] = [
-  [/^\/app\/ledger\/?$/, "ledger"],
   [/^\/app\/discrepancies\/?$/, "discrepancies"],
   [/^\/app\/(producer-reconciliation|my-pay)\/?$/, "reconciliation"],
-  [/^\/app\/hierarchy\/?$/, "hierarchy"],
 ];
 
 export function commissionsStepOf(pathname: string): CommissionsStep | null {
@@ -47,5 +42,4 @@ export type CommissionsStepCounts = Partial<Record<CommissionsStep, number>>;
 /** What each badge counts, one and many. The ledger, Reconciliation and the Rate card have no queue. */
 export const COMMISSIONS_WAITING: Record<string, [string, string]> = {
   discrepancies: ["open pay issue", "open pay issues"],
-  hierarchy: ["contract level to fix", "contract levels to fix"],
 };

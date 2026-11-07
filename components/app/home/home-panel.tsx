@@ -12,6 +12,9 @@ import { cn } from "@/lib/utils";
 export function HomePanel({
   title,
   period,
+  sub,
+  badge,
+  roundLink = false,
   link,
   footer,
   children,
@@ -21,6 +24,12 @@ export function HomePanel({
   title: string;
   /** Muted after the title: "14 days", "today". */
   period?: string;
+  /** A muted line under the title: "Last 7 days". */
+  sub?: string;
+  /** A chip beside the link, top right: "+1 sale vs your average". */
+  badge?: ReactNode;
+  /** The link drawn as a round "›" button (its label is read out), as the dashboard mockups draw it. */
+  roundLink?: boolean;
   /** The one way into the full page, top right. */
   link?: { label: string; href: string };
   footer?: ReactNode;
@@ -31,11 +40,15 @@ export function HomePanel({
   return (
     <section aria-label={title} data-size="panel" className={cn("m-glass flex min-w-0 flex-col rounded-lg border border-border", className)}>
       <header className="flex min-h-12 items-center gap-2 px-4 pt-3">
-        <h2 className="m-0 min-w-0 flex-1 truncate font-[family-name:var(--font-display)] text-[0.9375rem] font-semibold leading-snug tracking-[-0.01em] text-foreground">
-          {title}
-          {period && <span className="font-[family-name:var(--font-sans)] text-[0.8125rem] font-normal tracking-normal text-muted-foreground"> · {period}</span>}
-        </h2>
-        {link && <PanelLink href={link.href}>{link.label}</PanelLink>}
+        <div className="flex min-w-0 flex-1 flex-col">
+          <h2 className="m-0 min-w-0 truncate font-[family-name:var(--font-display)] text-[0.9375rem] font-semibold leading-snug tracking-[-0.01em] text-foreground">
+            {title}
+            {period && <span className="font-[family-name:var(--font-sans)] text-[0.8125rem] font-normal tracking-normal text-muted-foreground"> · {period}</span>}
+          </h2>
+          {sub && <span className="truncate text-xs text-muted-foreground">{sub}</span>}
+        </div>
+        {badge}
+        {link && (roundLink ? <PanelRoundLink href={link.href} label={link.label} /> : <PanelLink href={link.href}>{link.label}</PanelLink>)}
       </header>
       <div className={cn("flex min-h-0 flex-1 flex-col px-4 pb-4 pt-2", bodyClassName)}>{children}</div>
       {footer && (
@@ -56,6 +69,20 @@ export function PanelLink({ href, children }: { href: string; children: ReactNod
     >
       {children}
       <ChevronRight className="size-3.5" aria-hidden="true" />
+    </Link>
+  );
+}
+
+/** The round "›" link in a panel header; its label is what a screen reader hears. */
+export function PanelRoundLink({ href, label }: { href: string; label: string }) {
+  return (
+    <Link
+      href={href}
+      aria-label={label}
+      title={label}
+      className="grid size-8 shrink-0 place-items-center rounded-full border border-border text-muted-foreground no-underline transition-colors hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+    >
+      <ChevronRight className="size-4" aria-hidden="true" />
     </Link>
   );
 }

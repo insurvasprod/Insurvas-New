@@ -53,7 +53,7 @@ export default async function FindingPage({ params }: { params: Promise<{ findin
       title={`${severity.word}: ${finding.agentLabel}`}
       chip={<StatusChip tone={finding.status === "open" ? severity.tone : "neutral"}>{STATUS_WORD[finding.status] ?? finding.status}</StatusChip>}
       facts={open.length ? `${at >= 0 ? `Problem ${at + 1} of ${open.length} open` : `${open.length} open`}` : "None open"}
-      breadcrumbs={[{ label: "Book of business", href: "/app/carrier-files" }, { label: "Files", href: "/app/carrier-files" }, { label: "Problems found", href: LIST }, { label: finding.fileName ?? "A problem" }]}
+      breadcrumbs={[{ label: "Book of business", href: "/app/carrier-files" }, { label: "Carrier files", href: "/app/carrier-files" }, { label: "Problems found", href: LIST }, { label: finding.fileName ?? "A problem" }]}
       actions={<>
         {prev ? <Button asChild variant="outline"><Link href={findingHref(prev.id)}>‹ Problem</Link></Button> : <Button type="button" variant="outline" disabled title="This is the newest open problem">‹ Problem</Button>}
         {next ? <Button asChild variant="outline"><Link href={findingHref(next.id)}>Problem ›</Link></Button> : <Button type="button" variant="outline" disabled title="This is the oldest open problem">Problem ›</Button>}

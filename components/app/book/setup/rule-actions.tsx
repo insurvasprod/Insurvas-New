@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { MoreHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConfirmDialog, confirmAction } from "@/components/ui/confirm-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { checkboxControl } from "@/components/ui/field";
 import type { RuleMode } from "@/lib/pipelineRules/rules";
 import { notify } from "@/lib/notify";
@@ -16,7 +19,7 @@ const ENDPOINT = "/api/app/pipeline-rules";
  * forecast (a draft), Switch to live (asks first; past would-moves are not replayed unless ticked), Back
  * to forecast (a live rule). On/off and the mode are not a new version.
  */
-export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly }: { ruleId: string; name: string; mode: RuleMode; enabled: boolean; forecast: { days: number; wouldMoves: number; right: number; wrong: number }; readOnly: boolean }) {
+export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, previewHref, renameHref }: { ruleId: string; name: string; mode: RuleMode; enabled: boolean; forecast: { days: number; wouldMoves: number; right: number; wrong: number }; readOnly: boolean; previewHref?: string; renameHref?: string }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -56,14 +59,34 @@ export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly }:
     }
   }
 
+  const turn = (on: boolean) => act({ action: "set_enabled", rule_id: ruleId, enabled: on }, on ? `“${name}” is on again.` : `“${name}” is off. It records nothing until it is on again.`);
+  // A loss asks first (UI-CONSISTENCY §11): off stops it moving and recording.
+  async function askOff() {
+    const ok = await confirmAction({ title: `Turn off “${name}”?`, description: "It stops moving cards and recording what it would do. Turn it on again any time; nothing is lost.", confirmLabel: "Turn off", cancelLabel: "Keep it on" });
+    if (ok) await turn(false);
+  }
+
   if (readOnly) return null;
+  // Round 6 (direction F, owner's pick 2026-11-06): one primary — the next step on the track — and the rest in ⋯, last.
+  const primary = !enabled
+    ? <Button type="button" disabled={busy} onClick={() => void turn(true)}>Turn on</Button>
+    : mode === "draft" ? <Button type="button" disabled={busy} onClick={() => void act({ action: "set_mode", rule_id: ruleId, mode: "forecast" }, `“${name}” is in forecast: it records what it would do.`)}>Start the forecast</Button>
+    : mode === "forecast" ? <Button type="button" disabled={busy} onClick={() => void askLive()}>Switch to live</Button>
+    : previewHref ? <Button asChild variant="outline"><Link href={previewHref}>Preview today</Link></Button> : null;
   return (
     <>
-      <Button type="button" variant="outline" disabled={busy} onClick={() => void act({ action: "duplicate", rule_id: ruleId }, "Copied as a new rule, in forecast.", (data) => router.push(`/app/book-setup/pipeline-rules/${data.id}`))}>Duplicate</Button>
-      <Button type="button" variant="outline" disabled={busy} onClick={() => void act({ action: "set_enabled", rule_id: ruleId, enabled: !enabled }, enabled ? `“${name}” is off. It records nothing until it is on again.` : `“${name}” is on again.`)}>{enabled ? "Turn off" : "Turn on"}</Button>
-      {mode === "draft" && <Button type="button" disabled={busy} onClick={() => void act({ action: "set_mode", rule_id: ruleId, mode: "forecast" }, `“${name}” is in forecast: it records what it would do.`)}>Start the forecast</Button>}
-      {mode === "forecast" && <Button type="button" disabled={busy || !enabled} title={enabled ? undefined : "Turn the rule on first"} onClick={() => void askLive()}>Switch to live</Button>}
-      {mode === "live" && <Button type="button" variant="outline" disabled={busy} onClick={() => void act({ action: "set_mode", rule_id: ruleId, mode: "forecast" }, `“${name}” is back in forecast. It moves nothing.`)}>Back to forecast</Button>}
+      {primary}
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" size="icon" aria-label="More" title="More" disabled={busy}><MoreHorizontal aria-hidden="true" /></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onSelect={() => void act({ action: "duplicate", rule_id: ruleId }, "Copied as a new rule, in forecast.", (data) => router.push(`/app/book-setup/pipeline-rules/${data.id}`))}>Duplicate</DropdownMenuItem>
+          {renameHref && <DropdownMenuItem asChild><Link href={renameHref}>Rename or change</Link></DropdownMenuItem>}
+          {mode === "live" && <DropdownMenuItem onSelect={() => void act({ action: "set_mode", rule_id: ruleId, mode: "forecast" }, `“${name}” is back in forecast. It moves nothing.`)}>Back to forecast</DropdownMenuItem>}
+          {enabled && <DropdownMenuItem onSelect={() => void askOff()}>Turn off</DropdownMenuItem>}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       <ConfirmDialog
         open={asking}

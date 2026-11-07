@@ -13,7 +13,7 @@ import { LedgerViews } from "@/components/app/ledger-statement-sections";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { StatementImportButton } from "@/components/app/statement-import";
 import { Button } from "@/components/ui/button";
-import { CommissionsPage } from "@/components/app/commissions/commissions-page";
+import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
@@ -84,11 +84,11 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   if (view === "accounts") {
     const accounts = await loadAccounts(guard.context.tenantId);
     return (
-      <CommissionsPage step="ledger" lead={sourceTabs}>
+      <DataInPage step="ledger" lead={sourceTabs}>
         {accounts.available
           ? <CarrierAccounts orphanDays={accounts.orphanDays} statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
           : <Callout tone="warning" title={<>{ACCOUNTS_PENDING_MESSAGE}</>} />}
-      </CommissionsPage>
+      </DataInPage>
     );
   }
 
@@ -180,12 +180,12 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
       agentName: row.account ? null : names.agentOf(row.carrierId, row.policyNumber, row.agentUserId),
     }));
     return (
-      <CommissionsPage step="ledger" lead={sourceTabs} actions={headerActions}>
+      <DataInPage step="ledger" lead={sourceTabs} actions={headerActions}>
         {notices}
         {book && !book.available && <Callout tone="warning" title={<>{LEDGER_PENDING_MESSAGE}</>} />}
         {book?.available && book.truncated && <Callout tone="warning" title={<>Showing the newest {book.cap.toLocaleString("en-US")} lines from carrier files; older lines, and their amounts, are left out of the list and the figures here.</>} />}
         <CarrierLedger key={`${params.type ?? ""}|${params.source ?? ""}|${params.view ?? ""}`} entries={lines} scoped={guard.role === "producer"} initialSource={params.view === "statements" ? "hand" : params.source ?? ""} initialType={params.type ?? ""} />
-      </CommissionsPage>
+      </DataInPage>
     );
   }
 
@@ -195,7 +195,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
       {gaps.length > 0 && (
         <Callout tone="info" title={`${gaps.length} ${gaps.length === 1 ? "policy has" : "policies have"} no commission figure`}>
           ({gaps.slice(0, 5).map((gap) => gap.policyNumber).join(", ")}{gaps.length > 5 ? `, +${gaps.length - 5} more` : ""}).{" "}
-          {isOwner ? <>Add the missing rate in <Link href="/app/book-setup" className="font-semibold underline">Book setup</Link>.</> : "The account owner adds the missing rate in Book setup."}
+          {isOwner ? <>Add the missing rate in <Link href="/app/book-setup" className="font-semibold underline">Carrier sync › Setup</Link>.</> : "The account owner adds the missing rate in Carrier sync › Setup."}
         </Callout>
       )}
 
@@ -209,14 +209,14 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   );
 
   return (
-    <CommissionsPage step="ledger" lead={sourceTabs} actions={headerActions}>
+    <DataInPage step="ledger" lead={sourceTabs} actions={headerActions}>
       {!showExpected ? (
         <>
           {notices}
           <TableCard>
             <EmptyState
               title="Nothing expected from hand-entered policies"
-              hint={`${ledger.policiesRead === 0 ? "No policy has been entered by hand" : "No hand-entered policy can be priced by the carrier library yet"}. Policies from carrier files are priced by the rates in Book setup.`}
+              hint={`${ledger.policiesRead === 0 ? "No policy has been entered by hand" : "No hand-entered policy can be priced by the carrier library yet"}. Policies from carrier files are priced by the rates in Carrier sync › Setup.`}
               action={<Button asChild type="button" variant="outline"><Link href="/app/policies?source=hand">Policies entered by hand</Link></Button>}
             />
           </TableCard>
@@ -234,6 +234,6 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
           {expectedNotices}
         </LedgerViews>
       )}
-    </CommissionsPage>
+    </DataInPage>
   );
 }

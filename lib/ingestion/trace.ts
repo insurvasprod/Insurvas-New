@@ -56,13 +56,16 @@ export const TRACE_SCREENS: Record<string, { label: string; sources: TracedSourc
   "app/app/(shell)/book-import/page.tsx": { label: "Book import", sources: ["policy_current"] },
   // Book of business › Setup (2026-11-02, round 2): the rate card, carrier rules and agent codes, as tabs.
   "app/app/(shell)/book-setup/page.tsx": { label: "Setup › Rate card", sources: ["expected_commission"] },
-  "app/app/(shell)/book-setup/carrier-rules/page.tsx": { label: "Setup › Carrier rules", sources: ["policy_current"] },
+  "app/app/(shell)/book-setup/carrier-rules/page.tsx": { label: "Setup › Carrier terms", sources: ["policy_current"] },
   // LA-4.17 (board 9b): a carrier's own rules page, its in-force count beside each window it is missing.
-  "app/app/(shell)/book-setup/carrier-rules/[carrierId]/page.tsx": { label: "Setup › Carrier rules › a carrier", sources: ["policy_current"] },
+  "app/app/(shell)/book-setup/carrier-rules/[carrierId]/page.tsx": { label: "Setup › Carrier terms › a carrier", sources: ["policy_current"] },
   "app/app/(shell)/book-setup/agent-codes/page.tsx": { label: "Setup › Agent codes", sources: ["policy_current"] },
   // Round 3: Setup › How files arrive (the upload, email and bucket doors, moved from Carrier files); board 8: Files in,
   // with Bring your existing book as its second section.
   "app/app/(shell)/book-setup/how-files-arrive/page.tsx": { label: "Setup › Files in", sources: ["policy_current"] },
+  // Round 6 (owner 2026-11-06): Files in's Email and Bucket as pages of their own; they read the file registry, as Carrier files.
+  "app/app/(shell)/book-setup/how-files-arrive/email/page.tsx": { label: "Setup › Files in › Email", sources: ["policy_current"] },
+  "app/app/(shell)/book-setup/how-files-arrive/bucket/page.tsx": { label: "Setup › Files in › Bucket", sources: ["policy_current"] },
 };
 
 /** A store module that reads carrier-derived figures: a page importing one must be registered above. */

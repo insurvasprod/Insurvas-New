@@ -76,6 +76,16 @@ A policy links to its lead with no person when the number on the agent's submiss
 - the submission recorded as a **policy number**: always;
 - recorded as an **application number** (AMAM turns it into the policy number): when the insured is the same person, by surname and date of birth. **Since 2026-11-05**, when the carrier's file has no birth date (Aetna, Aflac and AHL leave it empty; Americo and Sentinel carry none), by surname and the whole first name instead.
 
+**Since 2026-11-05 (owner), no number is needed at submit.** A carrier's policy number usually comes only when it issues, declines or closes the application. A policy whose number no submission holds links by itself to the **one** open submission on that carrier that matches all of these:
+- **Agent:** the writing agent must not disagree. A code that maps to the producer in Setup › Agent codes counts for the match. No code, or a code mapped to nobody, does not stop it (owner, 2026-11-05). A code mapped to another producer does stop it.
+- **No agent and no birth date:** the phone must match as well.
+- **Person:** the same surname and full first name.
+- **Dates:** submitted on or before the file's date, and no more than 180 days before it.
+- **Birth date and money:** with a birth date in the file, the same date of birth plus the premium or the face amount. With no birth date, the premium and the face amount.
+- **No disagreement:** neither the middle initial nor the carrier's application date (within 14 days) may disagree, when both sides carry them.
+
+The carrier's policy number is then written onto the submission, the application closes as issued, and the card moves. The link reads "linked to a submission" (step 2), with a reason naming what agreed. Two submissions that could each be it, or an unmapped agent code, go to the review queue. Walked live: Ivo Identitylink, submitted with no reference, linked from his first policy file and went to In force. Code: `submissionForRow` in `lib/ingestion/policyMatching.ts` and `linkByIdentity` in `policyMatchingStore.ts`.
+
 Anything else goes to the review queue for a person.
 
 ## Status of the open items (2026-11-05)

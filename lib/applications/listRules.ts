@@ -13,6 +13,8 @@ import type { ApplicationListRow, PendingRow } from "./types.ts";
 /** An Applications row: the shared list row plus what the board shows beside it. */
 export type ApplicationRow = ApplicationListRow & {
   submittedAt?: string | null;
+  /** When the attempt closed (its outcome's day: issued, declined…); null while it is open. */
+  closedAt?: string | null;
   /** From the verdict frozen on the latest submission, when there is one. */
   qaBlocking?: number | null;
   qaWarnings?: number | null;

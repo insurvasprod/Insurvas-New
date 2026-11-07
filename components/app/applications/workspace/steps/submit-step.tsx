@@ -126,7 +126,7 @@ function SubmitBody() {
                 </div>
               )}
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="Carrier reference number" htmlFor="capture-reference" hint={example?.example ? `${example.carrierName ?? carrier} uses ${example.example}.` : "Copy it from the carrier's confirmation screen."}>
+                <Field label="Carrier reference number (optional)" htmlFor="capture-reference" hint={example?.example ? `${example.carrierName ?? carrier} uses ${example.example}. Leave it empty if the carrier gave none: its policy file links by the client and the agent.` : "Leave it empty if the carrier gave none: its policy file links by the client and the agent."}>
                   <input id="capture-reference" className={`${control} font-mono uppercase`} value={reference} onChange={(e) => setReference(e.target.value)} disabled={!ready || readOnly} autoComplete="off" spellCheck={false} />
                 </Field>
                 <Field label={zoneNow ? `Submitted at (${zoneNow})` : "Submitted at"} htmlFor="capture-at" hint={timeZone ? "In the agency's time zone." : undefined}>

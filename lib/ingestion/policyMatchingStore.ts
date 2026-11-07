@@ -8,7 +8,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { annualisedPremiumCents } from "./policyCurrent";
-import { accuracy, applicationNumberIsThePolicy, isStrong, ladderShare, rankSaleChoices, saleApplicationFor, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type SaleChoice, type Scored } from "./policyMatching";
+import { accuracy, applicationNumberIsThePolicy, isStrong, ladderShare, rankSaleChoices, saleApplicationFor, shortlist, SHORTLIST_LOOKBACK_DAYS, splitName, SUBMISSION_LINK_DAYS, submissionForRow, WRITING_ROLES, type Candidate, type CarrierSide, type LadderCounts, type SaleChoice, type Scored, type SubmissionCandidate } from "./policyMatching";
 import { recordCarrierIssues } from "./applicationIssueStore";
 import { refreshPolicyCurrent } from "./policyCurrentStore";
 import { closeAnsweredItems, noRecordPolicy, openImportSummary, retireProvisional } from "./exceptionQueuesStore";
@@ -260,6 +260,90 @@ async function linkExact(tenantId: string, carrier: { id: string; name: string; 
 }
 
 /**
+ * Owner 2026-11-05 · step 2 by identity: a policy whose number no submission holds links to the one open submission
+ * on this carrier that is the same sale (submissionForRow: writing agent, surname, first name, date of birth, the
+ * date submitted, the premium or face), and the carrier's policy number is written onto that submission — the
+ * number usually comes only when the carrier issues, declines or closes it. Linked as `submission_record`, step 2,
+ * with the reason saying it was by identity, so it can be audited and unwound like any link. Two submissions that
+ * could each be it, or an agent code that maps to nobody, go to the review queue as before. Returns those it linked.
+ */
+async function linkByIdentity(tenantId: string, carrier: { id: string; name: string; code: string | null }, policies: string[]): Promise<Set<string>> {
+  const linked = new Set<string>();
+  if (!policies.length) return linked;
+  const snapshots = await latestSnapshots(tenantId, carrier.id, policies);
+  if (!snapshots.size) return linked;
+  const identifiers = [...new Set([...snapshots.values()].map((s) => s.agent_identifier).filter(Boolean))] as string[];
+  const maps = identifiers.length ? rowsOrFail(await db().from("carrier_agent_map").select("agent_identifier, user_id").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).in("agent_identifier", identifiers), "Could not read the agent codes") : [];
+  const agentOf = new Map<string, string>(maps.map((row: Loose) => [row.agent_identifier, row.user_id]));
+
+  // Open submissions on this carrier with no policy number yet, inside the window of the newest file.
+  const newest = [...snapshots.values()].map((s) => s.snapshot_date).sort().at(-1)!;
+  const subs = rowsOrFail(await db().from("tenant_application_submissions").select("id, application_id, created_by, submitted_at, policy_number").eq("tenant_id", tenantId).eq("carrier_id", carrier.id).is("policy_number", null)
+    .gte("submitted_at", `${addDays(newest, -SUBMISSION_LINK_DAYS)}T00:00:00Z`).limit(2000), "Could not read the open submissions");
+  if (!subs.length) return linked;
+  const appIds = [...new Set(subs.map((s: Loose) => s.application_id as string))];
+  const [apps, values, taken] = await Promise.all([
+    db().from("tenant_applications").select("id, lead_id, case_id, created_by, status, quote_id").eq("tenant_id", tenantId).in("id", appIds),
+    db().from("tenant_application_values").select("application_id, field_key, value").eq("tenant_id", tenantId).in("application_id", appIds)
+      .in("field_key", ["insured.first_name", "insured.middle_initial", "insured.last_name", "insured.dob", "contact.phone", "cov.monthly_premium", "cov.face_amount"]),
+    db().from("policy_match").select("matched_to_id").eq("tenant_id", tenantId).eq("matched_to_type", "application").is("superseded_by_id", null).in("matched_to_id", appIds),
+  ]);
+  const openApps = rowsOrFail(apps, "Could not read the submitted applications").filter((a: Loose) => ["submitted", "pending_carrier"].includes(a.status));
+  const takenIds = new Set(rowsOrFail(taken, "Could not read the applications' links").map((t: Loose) => t.matched_to_id));
+  const caseIds = [...new Set(openApps.map((a: Loose) => a.case_id).filter(Boolean))];
+  const leadIds = [...new Set(openApps.map((a: Loose) => a.lead_id).filter(Boolean))];
+  const quoteIds = [...new Set(openApps.map((a: Loose) => a.quote_id).filter(Boolean))];
+  const [cases, owners, quotes] = await Promise.all([
+    caseIds.length ? db().from("tenant_application_cases").select("id, opened_by").eq("tenant_id", tenantId).in("id", caseIds) : { data: [], error: null },
+    leadIds.length ? db().from("lead_queue").select("lead_id, owner_user_id, claimed_by").eq("tenant_id", tenantId).in("lead_id", leadIds) : { data: [], error: null },
+    quoteIds.length ? db().from("tenant_quotes").select("id, monthly_premium_cents, face_amount_cents").eq("tenant_id", tenantId).in("id", quoteIds) : { data: [], error: null },
+  ]);
+  const openedBy = new Map<string, string>(rowsOrFail(cases as Loose, "Could not read the cases").map((c: Loose) => [c.id, c.opened_by]));
+  const ownerOf = new Map<string, string[]>();
+  for (const q of rowsOrFail(owners as Loose, "Could not read the work items")) ownerOf.set(q.lead_id, [...(ownerOf.get(q.lead_id) ?? []), q.owner_user_id, q.claimed_by].filter(Boolean));
+  const quoteOf = new Map<string, Loose>(rowsOrFail(quotes as Loose, "Could not read the quotes").map((q: Loose) => [q.id, q]));
+  const valueOf = new Map<string, Record<string, unknown>>();
+  for (const v of rowsOrFail(values, "Could not read the applications' insured")) valueOf.set(v.application_id, { ...(valueOf.get(v.application_id) ?? {}), [v.field_key]: v.value });
+  const num = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value)) ? Number(value) : null);
+
+  const candidates: Array<SubmissionCandidate & { submissionId: string; leadId: string }> = [];
+  for (const sub of subs) {
+    const app = openApps.find((a: Loose) => a.id === sub.application_id);
+    if (!app || takenIds.has(app.id)) continue;
+    const v = valueOf.get(app.id) ?? {};
+    const q = app.quote_id ? quoteOf.get(app.quote_id) : null;
+    candidates.push({
+      submissionId: sub.id, applicationId: app.id, leadId: app.lead_id,
+      agentUserIds: [...new Set([sub.created_by, app.created_by, openedBy.get(app.case_id), ...(ownerOf.get(app.lead_id) ?? [])].filter(Boolean))] as string[],
+      submittedOn: String(sub.submitted_at), firstName: str(v["insured.first_name"]), middleInitial: str(v["insured.middle_initial"]), lastName: str(v["insured.last_name"]),
+      dob: str(v["insured.dob"]), phone: str(v["contact.phone"]),
+      premiumCents: num(q?.monthly_premium_cents) ?? num(v["cov.monthly_premium"]), faceCents: num(q?.face_amount_cents) ?? num(v["cov.face_amount"]),
+    });
+  }
+  if (!candidates.length) return linked;
+
+  const used = new Set<string>();
+  for (const policy of policies) {
+    const snapshot = snapshots.get(policy);
+    if (!snapshot) continue;
+    const fields = (snapshot.extra?.fields ?? {}) as Record<string, unknown>;
+    const row = { ...carrierSide(snapshot, carrier.name), agentUserId: snapshot.agent_identifier ? agentOf.get(snapshot.agent_identifier) ?? null : null, fileDate: snapshot.snapshot_date,
+      middleInitial: str(fields.insured_middle_initial) ?? str(fields.insured_middle_name), applicationDate: str(fields.application_date) };
+    const hit = submissionForRow(row, candidates.filter((c) => !used.has(c.applicationId)));
+    if (!hit) continue;
+    const cand = candidates.find((c) => c.applicationId === hit.applicationId)!;
+    const contactId = (await contactsOfLeads([cand.leadId])).get(cand.leadId) ?? (await clientForLead(tenantId, cand.leadId));
+    await record(tenantId, carrier.id, policy, { matched_to_type: "application", matched_to_id: cand.applicationId, contact_id: contactId, method: "submission_record", ladder_step: 2, reasoning: hit.why });
+    // The carrier's number goes on the submission, only where none is held yet.
+    const stamp = await db().from("tenant_application_submissions").update({ policy_number: policy }).eq("tenant_id", tenantId).eq("id", cand.submissionId).is("policy_number", null);
+    if (stamp.error) console.error("[policy-matching] the policy number could not be written on the submission", stamp.error.message);
+    used.add(cand.applicationId);
+    linked.add(policy);
+  }
+  return linked;
+}
+
+/**
  * A policy the system linked before its sale had a number — to a provisional client (no sale on
  * record) or to a client by identity — moves to the sale once a submission or an issued policy holds
  * its number: ladder step 2 is certain (LA-4.8), and the new link supersedes the old, which stays
@@ -273,7 +357,10 @@ export async function relinkToSale(tenantId: string, carrierId: string, policies
     .in("matched_to_type", ["provisional", "contact"]).in("method", ["no_match", "identity_exact", "import"]).in("policy_number", policies);
   if (error) fail(error, "Could not read the policies' links");
   if (!links?.length) return new Set();
-  const relinked = await linkExact(tenantId, await carrierOf(carrierId), links.map((link: Loose) => link.policy_number));
+  const carrier = await carrierOf(carrierId);
+  const relinked = await linkExact(tenantId, carrier, links.map((link: Loose) => link.policy_number));
+  // A policy parked on a provisional client finds its sale by identity too, once the submission is there.
+  for (const policy of await linkByIdentity(tenantId, carrier, links.map((link: Loose) => link.policy_number).filter((p: string) => !relinked.has(p)))) relinked.add(policy);
   if (!relinked.size) return relinked;
   const { data: now } = await db().from("policy_match").select("policy_number, contact_id").eq("tenant_id", tenantId).eq("carrier_id", carrierId).is("superseded_by_id", null).in("policy_number", [...relinked]);
   const nowContact = new Map<string, string | null>((now ?? []).map((row: Loose) => [row.policy_number, row.contact_id]));
@@ -526,6 +613,8 @@ export async function matchFilePolicies(tenantId: string, carrierId: string, fil
   const carrier = await carrierOf(carrierId);
   const unlinked = policies.filter((policy) => !linked.has(policy));
   const exact = await linkExact(tenantId, carrier, unlinked);
+  // No number on the submission: the same sale by identity (owner 2026-11-05), counted with step 2.
+  for (const policy of await linkByIdentity(tenantId, carrier, unlinked.filter((policy) => !exact.has(policy)))) exact.add(policy);
   const rest = unlinked.filter((policy) => !exact.has(policy));
   const toReview = (await importedBook(tenantId, carrier, fileId, rest)) ?? (await queueReviews(tenantId, carrier, rest, fileId, { refreshCurrent: false }));
   const counts = { alreadyLinked: linked.size, exactLinked: exact.size, toReview };

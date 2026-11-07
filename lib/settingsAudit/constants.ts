@@ -25,7 +25,7 @@ export const AUDITED_SECTIONS: ReadonlyArray<{ key: string; label: string; modul
   { key: "retention", label: "Retention", module: "LA-5.11" },
   { key: "sales-preferences", label: "Sales: quote & QA rules", module: "LA-3.17" },
   { key: "sales-carriers", label: "Sales: carriers and products", module: "LA-3.17" },
-  { key: "carrier-rules", label: "Carrier rules", module: "LA-4.17" },
+  { key: "carrier-rules", label: "Carrier terms", module: "LA-4.17" },
   // Recorded by their routes through lib/settingsAudit/record.ts (owner decision 2026-10-15).
   { key: "business-identity", label: "Business identity", module: "LA-8.3" },
   { key: "team-access", label: "Team & access", module: "LA-8.6" },

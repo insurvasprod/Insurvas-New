@@ -20,7 +20,8 @@ Written 2026-11-05 for the owner. It covers every American Amicable policy statu
 ## Steps
 
 1. **Create the leads.** Paste `00-create-leads.sql` into the Supabase SQL editor and run it. All eight cards are on Sales pipeline › **Submitted**. Their applications are recorded as submitted by the SQL, so there is nothing to fill in.
-2. **Upload day by day.** Use Book of Business › Files › Upload a File. Upload the **policies file (a) first, then that day's commissions file (b)** if there is one. The dialog fills in carrier, type and date from each file name. Wait about 30 seconds, then refresh Leads › Sales Pipeline.
+2. **Fill Sam's application, then submit it yourself** (before the day 1 files). Paste `00b-fill-sam.sql`. It reopens Sam's application and fills the quote, every field and the beneficiaries. The interview was already completed through the app. Then open Sam's application: type the **SSN** and the **driver's license number**, choose the **payment**, mark it ready, and submit with `0119990301` as the **policy number**. Sam's card moves to Submitted. The other seven leads stay submitted by the SQL.
+3. **Upload day by day.** Use Book of Business › Files › Upload a File. Upload the **policies file (a) first, then that day's commissions file (b)** if there is one. The dialog fills in carrier, type and date from each file name. Wait about 30 seconds, then refresh Leads › Sales Pipeline.
 
 Every policies file lists all eight policies. A row whose status did not change moves nothing.
 

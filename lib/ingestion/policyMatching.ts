@@ -158,6 +158,65 @@ export function applicationNumberIsThePolicy(carrier: { lastName: string | null;
   return firstWord(carrier.firstName) !== "" && firstWord(carrier.firstName) === firstWord(application.firstName);
 }
 
+/**
+ * Owner 2026-11-05: "a submitted application doesn't mean you have a policy number yet — you get it when it is
+ * issued, declined or whatever. Connect the carrier's policy to the application by the writing agent, the client's
+ * name, date of birth, the date it was submitted and the money, then put the policy number on it."
+ *
+ * One open submission (submitted, not yet linked to any policy) is the carrier row's sale when ALL of these hold,
+ * and exactly one submission qualifies (two that could each be it go to a person):
+ *   · the writing agent does not disagree: when the row's agent code resolves (carrier_agent_map, exact) it must be
+ *     the submission's producer; no code, or one mapped to nobody, does not stop it (owner 2026-11-05);
+ *   · the same surname and the same first name (whole first word, not an initial);
+ *   · submitted on or before the file's date, and no more than SUBMISSION_LINK_DAYS before it;
+ *   · when the carrier gives a date of birth: the same date of birth, and the premium or the face amount agrees;
+ *     when it gives none (Aetna, Aflac, AHL, Americo, Sentinel): the premium AND the face amount agree;
+ *   · when both sides carry them, the middle initial and the application date (within 14 days) do not disagree.
+ *   · with neither a date of birth nor a writing agent in the file, the phone agrees as well.
+ * The person is required; no field is decisive alone (LA-4.8).
+ */
+export const SUBMISSION_LINK_DAYS = 180;
+export type SubmissionCandidate = { applicationId: string; agentUserIds: string[]; submittedOn: string; firstName: string | null; middleInitial: string | null; lastName: string | null; dob: string | null; phone: string | null; premiumCents: number | null; faceCents: number | null };
+export type IdentityRow = CarrierSide & { agentUserId: string | null; fileDate: string; middleInitial?: string | null; applicationDate?: string | null };
+
+const daysApart = (a: string, b: string) => Math.abs(Date.parse(`${a.slice(0, 10)}T00:00:00Z`) - Date.parse(`${b.slice(0, 10)}T00:00:00Z`)) / 86_400_000;
+
+/** Why one submission is (or is not) the carrier row's sale. Null reason = it qualifies. */
+export function submissionMismatch(row: IdentityRow, sub: SubmissionCandidate): string | null {
+  // Owner 2026-11-05: no agent code, or one mapped to nobody, does not stop the link when the client agrees.
+  // A code that names ANOTHER producer is evidence against, and still stops it.
+  if (row.agentUserId && !sub.agentUserIds.includes(row.agentUserId)) return "another writing agent";
+  if (sub.submittedOn.slice(0, 10) > row.fileDate.slice(0, 10)) return "submitted after the file";
+  if (daysApart(sub.submittedOn, row.fileDate) > SUBMISSION_LINK_DAYS) return "submitted too long before the file";
+  if (surname(row.lastName, sub.lastName) !== "match") return "surname";
+  const first = tokens(row.firstName)[0], subFirst = tokens(sub.firstName)[0];
+  if (!first || !subFirst || first !== subFirst || first.length < 2) return "first name";
+  const premium = money(row.premiumCents, sub.premiumCents, 100), face = money(row.faceCents, sub.faceCents, 0);
+  if (row.dob) {
+    if (same(row.dob.slice(0, 10), sub.dob ? sub.dob.slice(0, 10) : null) !== "match") return "date of birth";
+    if (premium !== "match" && face !== "match") return "neither the premium nor the face amount";
+  } else if (premium !== "match" || face !== "match") {
+    return "the premium and face amount (the file has no date of birth)";
+  } else if (!row.agentUserId && same(phoneKey(row.phone), phoneKey(sub.phone)) !== "match") {
+    return "the phone (no date of birth and no writing agent in the file)";
+  }
+  const mi = (v: string | null | undefined) => (v ? tokens(v)[0]?.[0] ?? null : null);
+  if (mi(row.middleInitial) && mi(sub.middleInitial) && mi(row.middleInitial) !== mi(sub.middleInitial)) return "middle initial";
+  if (row.applicationDate && daysApart(row.applicationDate, sub.submittedOn) > 14) return "application date";
+  return null;
+}
+
+/** The one submission that is the row's sale, with what agreed; null when none or more than one qualifies. */
+export function submissionForRow(row: IdentityRow, subs: SubmissionCandidate[]): { applicationId: string; why: string } | null {
+  const fits = subs.filter((sub) => submissionMismatch(row, sub) === null);
+  if (fits.length !== 1) return null;
+  const sub = fits[0];
+  const agreed = [row.agentUserId ? "writing agent" : null, "surname", "first name", row.dob ? "date of birth" : null,
+    !row.agentUserId && !row.dob ? "phone" : null,
+    money(row.premiumCents, sub.premiumCents, 100) === "match" ? "premium" : null, money(row.faceCents, sub.faceCents, 0) === "match" ? "face amount" : null].filter(Boolean);
+  return { applicationId: sub.applicationId, why: `Linked by identity, no policy number on the submission: ${agreed.join(", ")} agree; submitted ${sub.submittedOn.slice(0, 10)}, file ${row.fileDate.slice(0, 10)}.` };
+}
+
 /** Application statuses still waiting on the carrier (applicationIssue.ts AWAITING_CARRIER: only these can close as issued). */
 const AWAITING_CARRIER_STATUSES: readonly string[] = ["submitted", "pending_carrier"];
 

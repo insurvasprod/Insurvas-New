@@ -104,7 +104,7 @@ export function CarrierBucket({ initial, tenantId, readOnly }: { initial: Ready;
   return (
     <div className="flex flex-col gap-4">
       {view.missing.length > 0 && (
-        <TableCard title="Missing files" description="From the file monitor: a carrier on a cadence in Carrier rules that sent nothing by its due day.">
+        <TableCard title="Missing files" description="From the file monitor: a carrier on a cadence in Carrier terms that sent nothing by its due day.">
           <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
             <thead>
               <tr>

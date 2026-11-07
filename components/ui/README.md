@@ -23,6 +23,8 @@ What lives here and which rule owns it:
 | The page ground: `DashboardStage` (drawn by the shell layouts, never by a page) | `dashboard-stage.tsx` | §5b |
 | Table card, toolbar, pager | `table-card.tsx`, `data-toolbar.tsx`, `pager.tsx` | §6 |
 | Inline filters: `FilterButton`, `FilterPanel`, `ActiveFilters`, `TableCard`'s `filters` slot | `data-toolbar.tsx`, `table-card.tsx` | §6a |
+| Filters in a pop-over (`FilterPopover`, `ActiveFilters inline`) and a read-only row peek (`HoverPeek`) | `data-toolbar.tsx`, `hover-peek.tsx` | §6a |
+| One record's facts as a label/value table (`FactTable`); dictating into a note (`DictateButton`) | `fact-table.tsx`, `dictate-button.tsx` | §6, §5 |
 | Loading, empty and error states | `page-states.tsx`, `page-loading.tsx` | §7 |
 | Side panel, tabs, info tip | `detail-panel.tsx`, `view-tabs.tsx`, `info-tip.tsx` | §8 |
 | Compact icon switch for dense page views | `view-tabs.tsx` (`IconViewSwitch`) | §6 |

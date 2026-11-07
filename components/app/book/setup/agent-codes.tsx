@@ -11,6 +11,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { MappedAgent, UnmappedAgent } from "@/lib/ingestion/policyMatchingStore";
 import { notify } from "@/lib/notify";
@@ -30,11 +31,13 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly }: { 
   const [assign, setAssign] = useState<Record<string, string>>({});
   const [adding, setAdding] = useState(false);
   const [code, setCode] = useState({ carrierId: "", code: "", userId: "" });
+  // Round 6 (owner 2026-11-06): open on the codes to map, the page's job; Mapped and All are a chip away.
+  const [show, setShow] = useState<"unmapped" | "mapped" | "all">(unmapped.length ? "unmapped" : "all");
   const q = query.trim().toLowerCase();
   const rows = useMemo(() => [
-    ...unmapped.map((a) => ({ kind: "unmapped" as const, ...a })),
-    ...mapped.map((m) => ({ kind: "mapped" as const, ...m })),
-  ].filter((a) => !q || [a.agentIdentifier, a.carrierName, a.kind === "mapped" ? a.userName : ""].some((v) => v.toLowerCase().includes(q))), [unmapped, mapped, q]);
+    ...(show === "mapped" ? [] : unmapped.map((a) => ({ kind: "unmapped" as const, ...a }))),
+    ...(show === "unmapped" ? [] : mapped.map((m) => ({ kind: "mapped" as const, ...m }))),
+  ].filter((a) => !q || [a.agentIdentifier, a.carrierName, a.kind === "mapped" ? a.userName : ""].some((v) => v.toLowerCase().includes(q))), [unmapped, mapped, q, show]);
   const pageSize = useFittingPageSize(420, 45);
   const shown = paginate(rows, page, pageSize);
 
@@ -74,6 +77,11 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly }: { 
       <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
     </>}>
       <ToolbarSearch value={query} onChange={search} placeholder="Search agent codes" />
+      <span role="radiogroup" aria-label="Show" className="inline-flex flex-wrap gap-2">
+        {([["unmapped", "To map", unmapped.length], ["mapped", "Mapped", mapped.length], ["all", "All", unmapped.length + mapped.length]] as const).map(([key, label, count]) => (
+          <ToggleChip key={key} role="radio" selected={show === key} count={count} countTone={key === "unmapped" && count ? "danger" : undefined} onClick={() => { setShow(key); setPage(1); }}>{label}</ToggleChip>
+        ))}
+      </span>
     </DataToolbar>
   );
 
@@ -107,7 +115,7 @@ export function AgentCodes({ unmapped, mapped, members, carriers, readOnly }: { 
       {!adding && unmapped.length === 0 && mapped.length === 0 ? (
         <EmptyState title="No agent codes yet" hint="Each carrier's writing-agent code appears here the first time a file carries it, or add one yourself." action={!readOnly ? <Button type="button" onClick={() => setAdding(true)}>Add agent code</Button> : undefined} />
       ) : !adding && rows.length === 0 ? (
-        <NoMatches noun="agent codes" onClear={() => search("")} />
+        show === "unmapped" && !q ? <EmptyState title="Every code is mapped" hint="Each carrier code now credits a person. A new code shows up here the first time a file carries it." /> : <NoMatches noun="agent codes" onClear={() => { search(""); setShow("all"); }} />
       ) : (
         <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
           <thead><tr><th>Code</th><th>Carrier</th><th className="w-[110px] text-right">Policies</th><th className="w-[260px]">Person</th><th className="w-[170px] text-right"><span className="sr-only">Actions</span></th></tr></thead>

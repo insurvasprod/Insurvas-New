@@ -472,7 +472,7 @@ export async function loadPolicy(viewer: Viewer, carrierId: string, policyNumber
     sourceOf("issue_date", "Issue date", day(row.issue_date)),
     computedField("Months paid", row.months_paid === null ? null : String(row.months_paid), "the paid-to date and the effective date above"),
     computedField("Days past due", row.days_past_due === null ? null : String(row.days_past_due), `the paid-to date above, as of ${day(row.as_of) ?? "today"}`),
-    computedField("Days until the carrier closes it", row.days_until_carrier_closes === null ? null : String(row.days_until_carrier_closes), row.retention_rule_id ? "the days past due and the carrier's window in Carrier rules" : "no carrier window is set in Carrier rules, so none"),
+    computedField("Days until the carrier closes it", row.days_until_carrier_closes === null ? null : String(row.days_until_carrier_closes), row.retention_rule_id ? "the days past due and the carrier's window in Carrier terms" : "no carrier window is set in Carrier terms, so none"),
     computedField("Annualised premium", money(row.annualised_premium_cents), "the premium and premium mode above"),
   ];
 

@@ -10,8 +10,7 @@ const nextConfig: NextConfig = {
   // for a full shell render — the agent layout's whole batch of reads, ~570ms — just to say "go
   // elsewhere", and /app added a second hop to every login. The alias pages stay as a fallback.
   //
-  // `/` is not redirected here: config redirects run before proxy.ts, which sends `/` on APP_HOST
-  // (app.insurvas.com) to the sign-in page and keeps it the landing page on SITE_HOST (lib/security/siteHosts.ts).
+  // `/` is the landing page on every host, so it is not redirected anywhere.
   async redirects() {
     return [
       { source: "/app", destination: "/app/dashboard", permanent: false },
