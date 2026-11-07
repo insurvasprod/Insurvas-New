@@ -52,7 +52,8 @@
 
 /* The road from stop to stop: a dashed line over a soft dark casing, so it reads on the photo, its
    dashes marching on towards the next stop. The mask draws it on (landing-roadmap.tsx). */
-.route { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.route, .routeTall { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+.routeTall { display: none; }
 .routeMask { fill: none; stroke: #fff; stroke-width: 26; stroke-linecap: round; stroke-linejoin: round; }
 .routeCase { fill: none; stroke: color-mix(in srgb, var(--band) 70%, transparent); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .routeLine { fill: none; stroke: var(--primary); stroke-width: 3; stroke-dasharray: 10 9; stroke-linecap: round; vector-effect: non-scaling-stroke; animation: route-march 1.4s linear infinite; }
@@ -107,12 +108,13 @@
      the road whatever the phone's proportions. */
   .stage { top: 50%; left: 50%; width: max(100cqw, 60cqh); aspect-ratio: 1200 / 2000; transform: translate(-50%, -50%); }
   .route { display: none; }
+  .routeTall { display: block; }
   .photo { display: none; }
   /* The computer's treatment (owner, 6 Nov): faded to half and a little desaturated, under the green. */
   .photoTall { display: block; object-fit: cover; opacity: .5; filter: saturate(.75); }
   /* As on the computer: the green shade over the whole photo, darkest behind the header, and into
      the band at the foot. */
-  .shade { background: linear-gradient(180deg, var(--band) 0%, color-mix(in srgb, var(--band) 72%, transparent) 28%, color-mix(in srgb, var(--band) 30%, transparent) 52%, color-mix(in srgb, var(--band) 30%, transparent) 84%, var(--band) 100%); }
+  .shade { background: linear-gradient(180deg, var(--band) 0%, color-mix(in srgb, var(--band) 84%, transparent) 26%, color-mix(in srgb, var(--band) 50%, transparent) 46%, color-mix(in srgb, var(--band) 46%, transparent) 82%, var(--band) 100%); }
   /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
   .over { grid-template-columns: minmax(0, 1fr); width: calc(100% - 32px); padding: 84px 0 0; text-align: center; }
   .titleBlock { justify-items: center; }
@@ -125,6 +127,10 @@
   /* A larger target for a thumb, the same dot. */
   .pin::before { position: absolute; top: -22px; left: -22px; width: 44px; height: 44px; content: ""; }
   .pin[aria-pressed="true"] .tag { max-width: min(220px, 58vw); }
+  /* A label opens as the line reaches its stop (landing-roadmap.tsx). */
+  .tag { display: grid; opacity: 0; pointer-events: none; transform: translateY(4px); transition: opacity 260ms cubic-bezier(.23, 1, .32, 1), transform 260ms cubic-bezier(.23, 1, .32, 1); }
+  .pin[aria-pressed="true"] .tag { opacity: 1; pointer-events: auto; transform: none; }
+  .pin[data-palign="center"][aria-pressed="true"] .tag { transform: translateX(-50%); }
   /* The label is the stop and its name only, so it covers as little of the road as it can. */
   .detail { display: none; }
   .pin[data-ptag="above"] .tag { top: auto; bottom: 24px; }

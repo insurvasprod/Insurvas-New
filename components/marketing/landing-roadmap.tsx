@@ -23,18 +23,20 @@ import styles from "@/components/marketing/landing-roadmap.module.css";
  * Phones (owner, 6 Nov: one screen, no scrolling sideways, a road you have to travel to get
  * somewhere) have their own cut of the same top-down photo, tall, so the road snakes through the
  * whole screen: the stops sit on it in the order the road runs, shipped on the lowest pass and what
- * we are exploring on the climb out at the top. The `p` fields place them there. Every few seconds the next stop's
- * label opens, until the visitor touches the photo.
+ * we are exploring at the foot of the climb out of the loop. The `p` fields place them there. Both
+ * photos get the same treatment and the same dashed line (owner, 7 Nov). A phone has no room for
+ * four labels at once, so there the label travels with the line: each opens as the line reaches its
+ * stop, and once the line is drawn they take turns every few seconds, until the visitor taps one.
  */
 type Tag = "above" | "below";
 type Align = "start" | "center" | "end";
 const STOPS: { status: RoadmapStatus; label: string; x: number; y: number; tag: Tag; align: Align; px: number; py: number; ptag: Tag; palign: Align }[] = [
   // Placed by the owner, 6 Nov, in the order the road runs: the lower road, the hairpin on the
   // right, back along the upper road to the hairpin on the left, and up through the loop.
-  { status: "shipped", label: "Shipped", x: 20.1, y: 63.3, tag: "below", align: "start", px: 42.9, py: 80, ptag: "above", palign: "center" },
-  { status: "progress", label: "Now", x: 95.5, y: 50.9, tag: "below", align: "end", px: 54.8, py: 66, ptag: "above", palign: "center" },
-  { status: "planned", label: "Next", x: 33.9, y: 38.7, tag: "above", align: "center", px: 35.7, py: 41.8, ptag: "below", palign: "start" },
-  { status: "exploring", label: "Exploring", x: 66.1, y: 35.3, tag: "below", align: "center", px: 78.6, py: 43, ptag: "below", palign: "end" },
+  { status: "shipped", label: "Shipped", x: 20.1, y: 63.3, tag: "below", align: "start", px: 25, py: 78.25, ptag: "below", palign: "start" },
+  { status: "progress", label: "Now", x: 95.5, y: 50.9, tag: "below", align: "end", px: 53.33, py: 68.1, ptag: "above", palign: "center" },
+  { status: "planned", label: "Next", x: 33.9, y: 38.7, tag: "above", align: "center", px: 25, py: 44, ptag: "below", palign: "start" },
+  { status: "exploring", label: "Exploring", x: 66.1, y: 35.3, tag: "below", align: "center", px: 80.17, py: 53, ptag: "below", palign: "end" },
 ];
 
 /**
@@ -59,60 +61,76 @@ function smooth(points: Array<[number, number]>): string {
   return d;
 }
 const ROUTE_D = ROUTE.map(smooth);
+/**
+ * The same, on the phone's tall photo (1200 x 2000): along the lowest pass and off the right edge
+ * round its hairpin, back left along the middle road, round the hairpin on the left, and up into
+ * the loop, to the foot of the climb on the right.
+ */
+const ROUTE_TALL: Array<Array<[number, number]>> = [
+  [[300, 1563], [400, 1586], [500, 1592], [600, 1584], [700, 1564], [800, 1540], [900, 1508], [1000, 1475], [1100, 1443], [1200, 1412], [1270, 1370], [1282, 1295], [1240, 1235], [1200, 1222], [1100, 1258], [1000, 1300], [900, 1335], [800, 1360], [700, 1365], [640, 1362]],
+  [[640, 1362], [540, 1328], [440, 1280], [300, 1200], [160, 1080], [80, 990], [52, 935], [90, 902], [200, 890], [300, 880]],
+  [[300, 880], [380, 860], [460, 830], [540, 790], [600, 750], [650, 715], [700, 700], [750, 712], [770, 760], [740, 810], [680, 850], [620, 890], [592, 960], [612, 1035], [680, 1085], [780, 1118], [860, 1130], [920, 1110], [962, 1060]],
+];
+const ROUTE_TALL_D = ROUTE_TALL.map(smooth);
 const NOW = 1;
 const TOUR_MS = 4_000;
 
 export function LandingRoadmap() {
   const stops = STOPS.map((stop) => ({ ...stop, item: ROADMAP.find((item) => item.status === stop.status) })).filter((stop) => stop.item !== undefined);
   const [active, setActive] = useState(NOW);
-  const mapRef = useRef<HTMLDivElement>(null);
   const touched = useRef(false);
+  const [drawn, setDrawn] = useState(false);
   const [wait, setWait] = useState(0);
 
-  // Phones: tour the stops, one label at a time, until the visitor touches the photo.
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !window.matchMedia("(max-width: 760px)").matches) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || touched.current) return;
-    const next = window.setTimeout(() => {
-      const rect = map.getBoundingClientRect();
-      // Only while the strip is on screen; otherwise check again later.
-      if (rect.bottom > 0 && rect.top < window.innerHeight) setActive((i) => (i + 1) % STOPS.length);
-      else setWait((n) => n + 1);
-    }, TOUR_MS);
-    return () => window.clearTimeout(next);
-  }, [active, wait]);
-  const stopTour = () => { touched.current = true; };
-
-  // The computer: once the band is in view, the first stop shows, then a dashed line runs along the
-  // road to the next, which shows as it arrives, and so on to the last (owner, 6 Nov). Then the
-  // dashes keep moving along the road. Phones and reduced motion show it all at once.
+  // Once the band is in view, the first stop shows, then a dashed line runs along the road to the
+  // next, which shows as it arrives, and so on to the last (owner, 6 Nov; on the phone too, 7 Nov).
+  // Then the dashes keep moving along the road. Reduced motion shows it all at once.
   const sectionRef = useRef<HTMLElement>(null);
   const maskId = `route-${useId().replace(/[^a-zA-Z0-9]/g, "")}`;
   useEffect(() => {
     const section = sectionRef.current;
-    if (!section || window.matchMedia("(max-width: 760px), (prefers-reduced-motion: reduce)").matches) return;
+    if (!section || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const phone = window.matchMedia("(max-width: 760px)").matches;
+    const photo = phone ? "tall" : "wide";
+    // On a phone the stop the line has reached is the one whose label shows.
+    const reach = (i: number) => {
+      pins[i]?.setAttribute("data-shown", "");
+      if (phone && !touched.current) setActive(i);
+    };
     const pins = [...section.querySelectorAll<HTMLElement>("[data-pin]")];
-    const reveals = [...section.querySelectorAll<SVGPathElement>("[data-reveal]")];
+    const reveals = [...section.querySelectorAll<SVGPathElement>(`[data-reveal="${photo}"]`)];
     section.dataset.route = "waiting";
     let timeline: ReturnType<typeof createTimeline> | null = null;
     const io = new IntersectionObserver(([entry]) => {
       if (!entry?.isIntersecting || timeline) return;
       io.disconnect();
       const SEG_MS = 1400;
-      const tl = createTimeline({ defaults: { ease: "inOutSine" }, onComplete: () => { section.dataset.route = "done"; } });
+      const tl = createTimeline({ defaults: { ease: "inOutSine" }, onComplete: () => { section.dataset.route = "done"; setDrawn(true); } });
       reveals.forEach((el) => { tl.set(svg.createDrawable(el), { draw: "0 0" }, 0); });
-      tl.call(() => { pins[0]?.setAttribute("data-shown", ""); }, 150);
+      tl.call(() => reach(0), 150);
       reveals.forEach((el, i) => {
         const at = 550 + i * (SEG_MS + 350);
         tl.add(svg.createDrawable(el), { draw: ["0 0", "0 1"], duration: SEG_MS }, at)
-          .call(() => { pins[i + 1]?.setAttribute("data-shown", ""); }, at + SEG_MS - 120);
+          .call(() => reach(i + 1), at + SEG_MS - 120);
       });
       timeline = tl;
     }, { threshold: 0.35 });
     io.observe(section);
     return () => { io.disconnect(); timeline?.revert(); delete section.dataset.route; pins.forEach((pin) => pin.removeAttribute("data-shown")); };
   }, []);
+
+  // Phones, once the line is drawn: the labels take turns, while the band is on screen, until the
+  // visitor taps a stop.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || !drawn || touched.current || !window.matchMedia("(max-width: 760px)").matches) return;
+    const next = window.setTimeout(() => {
+      const rect = section.getBoundingClientRect();
+      if (rect.bottom > 0 && rect.top < window.innerHeight) setActive((i) => (i + 1) % STOPS.length);
+      else setWait((n) => n + 1);
+    }, TOUR_MS);
+    return () => window.clearTimeout(next);
+  }, [active, drawn, wait]);
 
   return (
     <section ref={sectionRef} id="roadmap" aria-labelledby="roadmap-title" className={styles.section}>
@@ -132,7 +150,7 @@ export function LandingRoadmap() {
             <Link href="/roadmap" className={styles.link}>See the full roadmap<ArrowRight aria-hidden="true" /></Link>
           </div>
         </div>
-      <div ref={mapRef} className={styles.map} onPointerDown={stopTour}>
+      <div className={styles.map}>
         <div className={styles.stage}>
           <Image src="/marketing/roadmap-road.webp" alt="" fill sizes="100vw" className={styles.photo} />
           <Image src="/marketing/roadmap-road-phone.webp" alt="" fill sizes="100vw" className={styles.photoTall} />
@@ -144,12 +162,23 @@ export function LandingRoadmap() {
           <svg className={styles.route} viewBox="0 0 1600 864" preserveAspectRatio="none" aria-hidden="true">
             <defs>
               <mask id={maskId} maskUnits="userSpaceOnUse" x="0" y="0" width="1600" height="864">
-                {ROUTE_D.map((d) => <path key={d} d={d} className={styles.routeMask} data-reveal="" />)}
+                {ROUTE_D.map((d) => <path key={d} d={d} className={styles.routeMask} data-reveal="wide" />)}
               </mask>
             </defs>
             <g mask={`url(#${maskId})`}>
               {ROUTE_D.map((d) => <path key={d} d={d} className={styles.routeCase} />)}
               {ROUTE_D.map((d) => <path key={d} d={d} className={styles.routeLine} />)}
+            </g>
+          </svg>
+          <svg className={styles.routeTall} viewBox="0 0 1200 2000" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <mask id={`${maskId}t`} maskUnits="userSpaceOnUse" x="-100" y="0" width="1500" height="2000">
+                {ROUTE_TALL_D.map((d) => <path key={d} d={d} className={styles.routeMask} data-reveal="tall" />)}
+              </mask>
+            </defs>
+            <g mask={`url(#${maskId}t)`}>
+              {ROUTE_TALL_D.map((d) => <path key={d} d={d} className={styles.routeCase} />)}
+              {ROUTE_TALL_D.map((d) => <path key={d} d={d} className={styles.routeLine} />)}
             </g>
           </svg>
           <div className={styles.pins} role="group" aria-label="Roadmap stops">
@@ -166,7 +195,7 @@ export function LandingRoadmap() {
                 data-palign={stop.palign}
                 data-pin=""
                 style={{ "--x": `${stop.x}%`, "--y": `${stop.y}%`, "--px": `${stop.px}%`, "--py": `${stop.py}%` } as CSSProperties}
-                onClick={() => { stopTour(); setActive(i); }}
+                onClick={() => { touched.current = true; setActive(i); }}
                 onMouseEnter={() => setActive(i)}
                 onFocus={() => setActive(i)}
               >
