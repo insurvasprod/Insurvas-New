@@ -241,3 +241,55 @@ at the gate, so the change happens exactly where Insurvas is.
 - [ ] Phones: the lanes and gate still read; no horizontal overflow at 360–768
 **Verification:** measured section height at both sizes; screenshots; design tests green
 **Files:** `components/marketing/landing-stack.tsx`, `landing-stack.module.css` · **Scope:** S
+
+## Round of 7 Nov (owner): the hero laptop as the app is now, and the roadmap page
+
+### Task 21: The laptop's dashboard is the app's new Overview, with good figures
+**Description:** Main (PR #57) redrew the dashboard as the Overview (Needs you, premium and the month's
+goal, modules and lead to policy, the money card and Today). The laptop showed the old one. Draw it with
+the app's own cards (dash-kit) and healthy sample figures that agree with the True CPA report; the
+sidebar and top bar as the app draws them now.
+**Acceptance criteria:**
+- [x] Overview drawn from dash-kit, StatStrip and LineSeries; nothing in it can be focused (inert)
+- [x] Figures agree with the True CPA report (spend, issued, CPA, commission)
+- [x] Sidebar in the app's order with Today open; dark top bar
+- [x] Nothing overflows the 1280 screen; no label cut short
+**Verification:** flat screenshots in light and dark at 1536×826; typecheck, lint, design tests
+**Files:** `landing-device.tsx`, `landing-device-overview.tsx`, `landing-device.module.css` · **Scope:** M
+
+### Task 22: The laptop follows the site's theme
+**Description:** The screen took light surfaces in dark mode (a CSS-module `.dark` is hashed, so
+`:root:not(.dark)` always matched), leaving dark-mode text on white cards.
+**Acceptance criteria:**
+- [x] Dark mode: a dark screen; light mode: the app's light screen, never mixed
+- [x] Every laptop page checked in both themes
+**Verification:** screenshots of each page in both themes · **Scope:** XS
+
+### Task 23: Every sidebar entry in the laptop opens a page
+**Description:** Only Home, Today's and the Leads and Sales pages opened; the rest of the sidebar was a
+picture (owner's screenshot). Give each section a believable page of its own, from the app's real pages,
+in the same sample world, and add them to the cycle.
+**Acceptance criteria:**
+- [x] Agency, Calendar, Book of Business, Carrier Sync, Retention, Commissions, Accounting, Partners,
+      Compliance, Reports and Settings each open a page; the trail and title are the app's
+- [x] Each page fits the 1280 × 780 screen, in light and dark
+- [x] The phone and tablet tabs offer the same pages
+**Verification:** a screenshot of every page in both themes · **Files:** `landing-device-pages.tsx`, `landing-device.tsx`, CSS · **Scope:** M
+
+### Checkpoint E
+- [ ] Tasks 21–23 committed; reviewed in both themes at 1536×826 and on a phone
+
+### Task 24: The roadmap page reveals as it scrolls (impeccable, Emil Kowalski, taste)
+**Description:** /roadmap shows everything at once. Critique it first, then give it scroll reveals that
+explain the timeline: the header settles, the rail draws down as you read, each quarter's stop lights
+when it reaches it, its cards rise in a short stagger. Fast (under 600ms each), ease-out, transform and
+opacity only, once per element; reduced motion shows it all still.
+**Acceptance criteria:**
+- [ ] A short critique (what to keep, what to change) before building
+- [ ] Reveals on the header, rail, stops and cards; nothing waits on a scroll to be readable at the top
+- [ ] No layout shift; no element hidden if scripts fail (the page renders fully without JavaScript)
+- [ ] Works on iPhone Safari (no large layers held at once)
+**Verification:** step-scroll screenshots at 1536×826 and iPhone 14, both themes · **Files:** `app/roadmap/*`, its CSS · **Scope:** S
+
+### Checkpoint F: Complete
+- [ ] Typecheck, lint, design tests green; committed and pushed; graph updated
