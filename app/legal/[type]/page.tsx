@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
+import { SmoothScroll } from "@/components/marketing/smooth-scroll";
 import { LegalDocumentBody } from "@/components/public/legal-document-body";
 import { fetchDocument } from "@/lib/legal/queries";
 import { LEGAL_DOC_TYPES, type LegalDocType } from "@/lib/legal/constants";
@@ -51,6 +52,7 @@ export default async function LegalPage({ params, searchParams }: Params) {
 
   return (
     <div className="min-h-screen bg-[var(--color-page-bg)]">
+      <SmoothScroll />
       <SiteHeader />
       <main className="m-stagger flex justify-center px-4 py-12 sm:px-6 lg:px-16">
         <div className="w-full max-w-[780px]">
