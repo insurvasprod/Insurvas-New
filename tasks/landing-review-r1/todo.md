@@ -285,11 +285,11 @@ explain the timeline: the header settles, the rail draws down as you read, each 
 when it reaches it, its cards rise in a short stagger. Fast (under 600ms each), ease-out, transform and
 opacity only, once per element; reduced motion shows it all still.
 **Acceptance criteria:**
-- [ ] A short critique (what to keep, what to change) before building
-- [ ] Reveals on the header, rail, stops and cards; nothing waits on a scroll to be readable at the top
-- [ ] No layout shift; no element hidden if scripts fail (the page renders fully without JavaScript)
-- [ ] Works on iPhone Safari (no large layers held at once)
+- [x] A short critique (what to keep, what to change) before building
+- [x] Reveals on the header, rail, stops and cards; nothing waits on a scroll to be readable at the top
+- [x] No layout shift; no element hidden if scripts fail (the page renders fully without JavaScript)
+- [x] Works on iPhone Safari (no large layers held at once)
 **Verification:** step-scroll screenshots at 1536×826 and iPhone 14, both themes · **Files:** `app/roadmap/*`, its CSS · **Scope:** S
 
 ### Checkpoint F: Complete
-- [ ] Typecheck, lint, design tests green; committed and pushed; graph updated
+- [x] Typecheck, lint, design tests green; committed and pushed; graph updated
