@@ -1,18 +1,21 @@
-/* "What it does": stacked sticky feature cards on the deep-olive band, each with an isometric scene. */
+/* "What it does": stacked sticky module cards, each with a 2D flow diagram. The cards are deep olive
+   in both themes. The ground under them is white in light (owner, 6 Nov: it sat straight after the
+   dark five-tools section, and two dark bands read as one), and the page's darkest ground in dark. */
 .section {
   --band: color-mix(in srgb, var(--footer-bg) 62%, black);
   position: relative;
   isolation: isolate;
   scroll-margin-top: 80px;
-  background: var(--band);
-  color: var(--nav-ink);
+  background: var(--canvas);
+  color: var(--ink);
 }
-.inner { width: min(100% - 64px, 1280px); margin: 0 auto; padding: clamp(88px, 10vw, 128px) 0 clamp(64px, 8vw, 96px); }
+:global(.dark) .section { background: color-mix(in srgb, var(--canvas) 70%, black); }
+.inner { width: min(100% - 64px, 1280px); margin: 0 auto; padding: clamp(64px, 7vw, 96px) 0 clamp(64px, 8vw, 96px); }
 .head { max-width: 760px; margin-bottom: clamp(36px, 5vw, 56px); }
-.eyebrow { margin: 0 0 14px; color: var(--primary); font-size: 14px; font-weight: 600; }
+.eyebrow { margin: 0 0 14px; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
 .title { margin: 0; font: 600 clamp(34px, 4vw, 56px)/1.04 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
-.title em { color: var(--primary); font-family: var(--font-accent-serif); font-size: 1.1em; font-style: italic; font-weight: 400; letter-spacing: -.01em; }
-.lede { max-width: 52ch; margin: 16px 0 0; color: var(--nav-muted); font-size: 17px; line-height: 1.6; }
+.title em { color: var(--accent-ink); font-family: var(--font-accent-serif); font-size: 1.1em; font-style: italic; font-weight: 400; letter-spacing: -.01em; }
+.lede { max-width: 52ch; margin: 16px 0 0; color: var(--muted); font-size: 17px; line-height: 1.6; }
 
 /* The stack: each card sticks a little lower than the one before, and settles back when covered. */
 .stack { display: grid; gap: 28px; }
@@ -22,144 +25,84 @@
   top: var(--top, 96px);
   display: grid;
   grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
-  min-height: min(600px, calc(100svh - 140px));
+  min-height: min(560px, calc(100svh - 120px));
   overflow: hidden;
   border: 1px solid rgb(234 246 242 / 10%);
   border-radius: 28px;
+  color: var(--nav-ink);
   background:
     radial-gradient(70% 90% at 85% 40%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%),
     linear-gradient(180deg, color-mix(in srgb, var(--footer-bg) 80%, black), color-mix(in srgb, var(--footer-bg) 45%, black));
   box-shadow: 0 -24px 60px -30px rgb(0 0 0 / 70%), inset 0 1px 0 rgb(255 255 255 / 5%);
+  /* On white the stack needs a softer shadow; the card edge carries the separation. */
   transform: scale(calc(1 - var(--cover) * .05));
   transform-origin: 50% 0;
   filter: brightness(calc(1 - var(--cover) * .35));
 }
 
-.copy { position: relative; display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 4vw, 56px) clamp(28px, 3vw, 44px) clamp(32px, 4vw, 56px) clamp(56px, 6vw, 88px); }
-.rail { position: absolute; top: 50%; left: clamp(24px, 3vw, 40px); display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; transform: translateY(-50%); }
-.rail li { width: 3px; height: 20px; border-radius: 3px; background: rgb(234 246 242 / 14%); }
-.rail li[data-on="true"] { height: 40px; background: var(--primary); box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 70%, transparent); }
+.copy { position: relative; display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 4vw, 52px) clamp(24px, 3vw, 40px) clamp(32px, 4vw, 52px) clamp(32px, 4vw, 56px); }
 .count { color: var(--primary); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
-.copy h3 { margin: 10px 0 0; font: 600 clamp(36px, 4.2vw, 58px)/1 var(--font-brand); letter-spacing: -.035em; }
-.copy > p { max-width: 42ch; margin: 16px 0 0; color: var(--nav-muted); font-size: 17px; line-height: 1.55; }
-.copy ul { display: grid; gap: 11px; margin: 24px 0 0; padding: 0; list-style: none; }
-.copy ul li { position: relative; padding-left: 20px; color: var(--nav-ink); font-size: 15px; line-height: 1.45; }
+.copy h3 { max-width: 16ch; margin: 10px 0 0; font: 600 clamp(28px, 2.7vw, 40px)/1.06 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
+.copy > p { max-width: 46ch; margin: 14px 0 0; color: var(--nav-muted); font-size: 16px; line-height: 1.55; }
+.copy ul { display: grid; gap: 9px; margin: 18px 0 0; padding: 0; list-style: none; }
+.copy ul li { position: relative; padding-left: 20px; color: var(--nav-ink); font-size: 14.5px; line-height: 1.45; }
 .copy ul li::before { position: absolute; top: .55em; left: 2px; width: 6px; height: 6px; border-radius: 2px; background: var(--primary); content: ""; }
-.cta { display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; margin-top: 30px; border-radius: 999px; background: var(--primary); padding: 12px 20px; color: var(--on-primary); font-size: 15px; font-weight: 650; text-decoration: none; transition: transform 180ms ease, box-shadow 220ms ease; }
+/* The module's pages, as small chips under the points: what it is made of, in the app's own words. */
+.inside { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 20px; border-top: 1px solid rgb(234 246 242 / 10%); padding-top: 16px; }
+.inside > span { color: var(--nav-muted); font-size: 12.5px; font-weight: 600; }
+.copy .inside ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+.copy .inside li { border: 1px solid rgb(234 246 242 / 14%); border-radius: 999px; background: rgb(234 246 242 / 4%); padding: 3px 10px; color: var(--nav-ink); font-size: 12.5px; line-height: 1.4; }
+.copy .inside li::before { display: none; }
+.cta { display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; margin-top: 22px; border-radius: 999px; background: var(--primary); padding: 12px 20px; color: var(--on-primary); font-size: 15px; font-weight: 650; text-decoration: none; transition: transform 180ms ease, box-shadow 220ms ease; }
 .cta svg { width: 16px; height: 16px; transition: transform 220ms cubic-bezier(.2, .8, .2, 1); }
 .cta:hover { box-shadow: 0 12px 30px -10px color-mix(in srgb, var(--primary) 80%, transparent); transform: translateY(-1px); }
 .cta:hover svg { transform: translateX(3px); }
 .cta:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
 
-/* ── The isometric scene ─────────────────────────────────────────────────────────────────────── */
-.scene { position: relative; min-height: 420px; overflow: hidden; perspective: 2000px; }
-.grid {
-  position: absolute;
-  inset: -40%;
-  background-image:
-    linear-gradient(rgb(234 246 242 / 6%) 1px, transparent 1px),
-    linear-gradient(90deg, rgb(234 246 242 / 6%) 1px, transparent 1px);
-  background-size: 48px 48px;
-  transform: rotateX(56deg) rotateZ(-40deg);
-  -webkit-mask-image: radial-gradient(closest-side, rgb(0 0 0), transparent);
-  mask-image: radial-gradient(closest-side, rgb(0 0 0), transparent);
-}
-.plane {
-  --px: 0deg;
-  --py: 0deg;
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 520px;
-  height: 480px;
-  margin: -240px 0 0 -260px;
-  transform-style: preserve-3d;
-  transform: scale(var(--fit, 1.14)) rotateX(calc(56deg + var(--py))) rotateZ(calc(-40deg + var(--px)));
-  transition: transform 600ms cubic-bezier(.2, .8, .2, 1);
-}
-.links { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.links line { stroke: color-mix(in srgb, var(--primary) 60%, transparent); stroke-width: 1.5; stroke-dasharray: 5 6; animation: dash 1.4s linear infinite; animation-play-state: paused; }
-.plane[data-active="true"] .links line { animation-play-state: running; }
-@keyframes dash { to { stroke-dashoffset: -22; } }
+/* ── The flow diagram's frame (A5.3): the diagram centred in the card's right half. ─────────────── */
+.scene { position: relative; display: grid; place-items: center; min-height: 380px; padding: clamp(24px, 3vw, 44px); }
 
-.tile {
-  position: absolute;
-  transform-style: preserve-3d;
-  transform: translateZ(var(--z));
-  transition: transform 700ms cubic-bezier(.2, .8, .2, 1);
-  transition-delay: var(--d, 0ms);
-}
-/* The covered card's tiles settle flat; the front card's stand up. */
-.plane:not([data-active="true"]) .tile { transform: translateZ(calc(var(--z) * .35)); }
-.plane[data-active="true"] .tile[data-float="0"] { animation: float 5s ease-in-out infinite; }
-.plane[data-active="true"] .tile[data-float="1"] { animation: float 5.6s ease-in-out .6s infinite; }
-.plane[data-active="true"] .tile[data-float="2"] { animation: float 6.2s ease-in-out 1.2s infinite; }
-.plane[data-active="true"] .tile[data-float="3"] { animation: float 5.3s ease-in-out 1.8s infinite; }
-@keyframes float { 0%, 100% { transform: translateZ(var(--z)); } 50% { transform: translateZ(calc(var(--z) + 14px)); } }
+:global(:root:not(.dark)) .card { border-color: color-mix(in srgb, var(--footer-bg) 30%, transparent); box-shadow: 0 -18px 40px -30px rgb(13 64 55 / 45%), 0 24px 50px -30px rgb(13 64 55 / 40%); }
 
-.face {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  border: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--footer-bg) 70%, black);
-  padding: 12px 16px;
-  color: var(--nav-ink);
-  font-family: var(--font-sans);
-  box-shadow: 0 1px 0 rgb(255 255 255 / 6%) inset, 0 calc(var(--z) * .5) calc(var(--z) * .6) -10px rgb(0 0 0 / 55%);
-}
-.face svg { width: 20px; height: 20px; flex: none; color: var(--primary); }
-.face b { font-size: 15px; font-weight: 650; white-space: nowrap; }
-.face small { color: var(--nav-muted); font-size: 12px; white-space: nowrap; }
-.face em { margin-left: auto; border-radius: 999px; background: color-mix(in srgb, var(--primary) 20%, transparent); padding: 2px 9px; color: var(--primary); font-size: 11.5px; font-style: normal; font-weight: 650; }
-/* Short tiles read as rows: icon, label and tag on one line. */
-.tile[style*="height: 52px"] .face, .tile[style*="height: 54px"] .face, .tile[style*="height: 56px"] .face, .tile[style*="height: 60px"] .face { flex-direction: row; align-items: center; justify-content: flex-start; gap: 10px; }
-
-.tile[data-tone="accent"] .face { border-color: var(--primary); background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 34%, var(--footer-bg)), color-mix(in srgb, var(--primary) 12%, black)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 50%, transparent), 0 0 40px -6px color-mix(in srgb, var(--primary) 60%, transparent), 0 calc(var(--z) * .5) calc(var(--z) * .6) -10px rgb(0 0 0 / 60%); }
-.tile[data-tone="accent"] .face b { font-size: 17px; }
-/* The emphasis tile. It was a flat slab of --primary on the dark band, which glared and read as a
-   loose button rather than a lit face in the scene (owner, 2026-11-03). Now it carries the same
-   light direction as the accent tiles beside it — 160deg, bright at the top-left, deepening to the
-   bottom-right — with a lit rim, an inset highlight and a real offset shadow instead of a flat fill.
-   The darkest stop stops at 85% so --on-primary still clears AA on it (4.96:1; 100% footer-mix fell
-   to 4.01:1). */
-.tile[data-tone="solid"] .face {
-  border-color: color-mix(in srgb, var(--primary) 55%, white);
-  background: linear-gradient(160deg, color-mix(in srgb, var(--primary) 88%, white), var(--primary) 45%, color-mix(in srgb, var(--primary) 85%, var(--footer-bg)));
-  color: var(--on-primary);
-  box-shadow:
-    0 1px 0 color-mix(in srgb, white 55%, transparent) inset,
-    0 0 0 1px color-mix(in srgb, var(--primary) 35%, transparent),
-    0 0 30px -12px color-mix(in srgb, var(--primary) 50%, transparent),
-    0 calc(var(--z) * .5) calc(var(--z) * .6) -10px rgb(0 0 0 / 62%);
-}
-.tile[data-tone="solid"] .face svg, .tile[data-tone="solid"] .face small { color: var(--on-primary); opacity: .85; }
-.tile[data-tone="solid"] .face b { font-size: 18px; }
-.tile[data-tone="warn"] .face { border-color: color-mix(in srgb, var(--warning) 60%, transparent); background: color-mix(in srgb, var(--warning) 14%, color-mix(in srgb, var(--footer-bg) 70%, black)); }
-.tile[data-tone="warn"] .face em { background: color-mix(in srgb, var(--warning) 25%, transparent); color: color-mix(in srgb, var(--warning) 70%, white); }
-.tile[data-tone="ghost"] .face { border-style: dashed; border-color: rgb(234 246 242 / 18%); background: rgb(234 246 242 / 2%); box-shadow: none; align-items: center; color: var(--nav-muted); }
-
+/* Narrower screens: one card after another, each rising and tilting up into place as it scrolls in
+   (the transform is set from the scroll in landing-bento.tsx, only while the card is entering). */
 @media (max-width: 1000px) {
-  .card { position: relative; top: 0; grid-template-columns: minmax(0, 1fr); min-height: 0; transform: none; filter: none; }
+  .card { position: relative; top: 0; grid-template-columns: minmax(0, 1fr); min-height: 0; transform: none; transform-origin: 50% 100%; filter: none; }
   .copy { padding: 36px 28px 8px; }
-  .rail { display: none; }
-  .scene { min-height: 360px; }
-  .plane { --fit: .72; }
+  .scene { min-height: 0; padding: 20px 28px 32px; }
 }
+/* The shade a phone lays over a card as the next one covers it (landing-bento.tsx). */
+.dim { display: none; }
+
+/* Phones: the cards stack as they do on a computer (owner, 6 Nov), so each fits one screen: its
+   number, name and line, the workflow, the button. The points and the page chips go; the workflow
+   already shows both. */
 @media (max-width: 640px) {
+  .card { position: sticky; top: calc(68px + var(--i) * 5px); transform-origin: 50% 0; }
+  .dim { position: absolute; z-index: 5; inset: 0; display: block; border-radius: inherit; background: rgb(0 0 0); opacity: 0; pointer-events: none; }
+  .copy > ul { display: none; }
+  /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
+  .head { margin-inline: auto; text-align: center; }
+  .lede { margin-inline: auto; }
+  .count, .copy h3, .copy > p { justify-self: center; text-align: center; }
   .inner { width: calc(100% - 24px); }
-  .card { border-radius: 20px; }
-  .copy { padding: 28px 20px 4px; }
-  .scene { min-height: 300px; }
-  .plane { --fit: .58; }
+  .head { margin-bottom: 28px; }
+  .stack { gap: 18px; }
+  .card { border-radius: 22px; padding: 24px 16px 22px; }
+  .copy { display: contents; }
+  .count, .copy h3, .copy > p { order: 1; }
+  .copy h3 { max-width: none; margin-top: 6px; font-size: 25px; }
+  .copy > p { margin-top: 10px; font-size: 14.5px; line-height: 1.5; }
+  .scene { order: 2; margin: 16px -4px 0; padding: 0; }
+  .copy > ul { order: 3; gap: 7px; margin-top: 18px; }
+  .copy ul li { font-size: 14px; }
+  .inside { display: none; }
+  .cta { order: 4; justify-self: center; margin-top: 16px; min-height: 44px; box-sizing: border-box; }
+}
+/* A short phone screen: the line goes too, so the card still fits. */
+@media (max-width: 640px) and (max-height: 620px) {
+  .copy > p { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card { transform: none; filter: none; }
-  .plane, .tile { transition: none; }
-  .plane[data-active] .tile { animation: none !important; }
-  .links line { animation: none; }
+  .card { opacity: 1; transform: none; filter: none; }
 }

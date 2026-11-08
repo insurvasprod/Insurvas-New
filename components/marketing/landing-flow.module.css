@@ -1,0 +1,106 @@
+/* The module workflow canvas (A5.3; owner, 6 Nov): a framed, dotted canvas in the card's right half,
+   nodes for the module's pages, curved connectors a record travels along. Drawn at a fixed size and
+   scaled to fit, like the hero's device. Until the run starts (and under reduced motion) every node
+   shows done and every connector drawn, so the still canvas is the finished workflow. */
+.wrap { position: relative; width: 100%; max-width: 600px; }
+/* Scales the fixed-size canvas to the column; the perspective lives here so the scale does not flatten it. */
+.fit { position: absolute; top: 0; left: 0; transform-origin: 0 0; perspective: 1300px; perspective-origin: 50% 20%; }
+/* The canvas leans back and turns a little towards the pointer (owner, 6 Nov: 3D). preserve-3d lets the
+   nodes stand off it; it cannot also clip, so nothing on it reaches past its edge. */
+.stage {
+  --tx: 0deg;
+  --ty: 0deg;
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-style: preserve-3d;
+  transform: rotateX(calc(20deg + var(--tx))) rotateY(calc(-8deg + var(--ty))) rotateZ(1.5deg);
+  transition: transform 700ms cubic-bezier(.23, 1, .32, 1);
+  border: 1px solid rgb(234 246 242 / 12%);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle, rgb(234 246 242 / 9%) 1px, transparent 1.4px) 0 0 / 18px 18px,
+    color-mix(in srgb, var(--footer-bg) 42%, black);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 30px 60px -36px rgb(0 0 0 / 80%);
+  font-family: var(--font-sans);
+}
+.bar { border-radius: 20px 20px 0 0; }
+.wires { transform: translateZ(1px); }
+
+/* The canvas's own bar: which workflow, and the step being run. */
+.bar { position: absolute; inset: 0 0 auto; display: flex; height: 40px; align-items: center; justify-content: space-between; border-bottom: 1px solid rgb(234 246 242 / 8%); background: rgb(234 246 242 / 3%); padding: 0 14px; }
+.barTitle { display: flex; align-items: center; gap: 8px; color: var(--nav-ink); font-size: 12.5px; font-weight: 600; }
+.barTitle svg { width: 15px; height: 15px; color: var(--primary); }
+.barStep { flex: none; white-space: nowrap; border: 1px solid color-mix(in srgb, var(--primary) 35%, transparent); border-radius: 999px; padding: 2px 9px; color: var(--primary); font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.wires { position: absolute; inset: 0; overflow: visible; }
+.wire { fill: none; stroke: rgb(234 246 242 / 16%); stroke-width: 1.5; stroke-dasharray: 3 5; }
+.wireLit { fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; }
+/* The stream: a moving dash over each wire and small packets riding it, always flowing. */
+.wireFlow { fill: none; stroke: color-mix(in srgb, var(--primary) 70%, transparent); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 14; opacity: .9; animation: flow 1.1s linear infinite; }
+@keyframes flow { to { stroke-dashoffset: -16; } }
+.stream { fill: color-mix(in srgb, var(--primary) 85%, white); }
+@media (prefers-reduced-motion: reduce) { .wireFlow, .stream { display: none; } }
+.packet { opacity: 0; fill: var(--primary); stroke: color-mix(in srgb, var(--footer-bg) 42%, black); stroke-width: 3; }
+
+.node {
+  position: absolute;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  box-sizing: border-box;
+  border: 1px solid rgb(234 246 242 / 12%);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--footer-bg) 62%, black);
+  padding: 0 12px 0 10px;
+  /* Raised off the canvas; the stacked offset shadows read as the slab's thickness under the tilt. */
+  transform: translateZ(22px);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 7%),
+    0 2px 0 color-mix(in srgb, var(--footer-bg) 30%, black),
+    0 4px 0 color-mix(in srgb, var(--footer-bg) 22%, black),
+    0 6px 0 color-mix(in srgb, var(--footer-bg) 15%, black),
+    0 26px 30px -14px rgb(0 0 0 / 85%);
+}
+/* The lit edge, faded in when the record arrives. */
+.ring { position: absolute; inset: -1px; border: 1.5px solid var(--primary); border-radius: 14px; pointer-events: none; }
+.icon { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 10px; background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.icon svg { width: 17px; height: 17px; }
+.text { display: grid; min-width: 0; gap: 2px; }
+.text b { overflow: hidden; color: var(--nav-ink); font-size: 13px; font-weight: 600; letter-spacing: -.01em; text-overflow: ellipsis; white-space: nowrap; }
+/* Up to two lines, so a sub-line is never cut off mid-word. */
+.text small { display: -webkit-box; overflow: hidden; color: var(--nav-muted); font-size: 11.5px; line-height: 1.3; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.done { position: absolute; top: -7px; right: -7px; display: grid; width: 18px; height: 18px; place-items: center; border: 2px solid color-mix(in srgb, var(--footer-bg) 42%, black); border-radius: 50%; background: var(--primary); color: var(--on-primary); }
+.done svg { width: 10px; height: 10px; stroke-width: 3.5; }
+
+/* Where the work comes in. */
+.node[data-kind="source"] .icon { background: rgb(234 246 242 / 8%); color: var(--nav-ink); }
+/* A side branch: set aside, refused, missed. */
+.node[data-kind="branch"] .icon { background: color-mix(in srgb, var(--warning) 20%, transparent); color: var(--warning); }
+.node[data-kind="branch"] .ring { border-color: var(--warning); }
+.node[data-kind="branch"] .done { background: var(--warning); }
+/* What comes out: a filled green card, its figure in the brand green. */
+.node[data-kind="outcome"] { background: color-mix(in srgb, var(--primary) 14%, color-mix(in srgb, var(--footer-bg) 55%, black)); }
+.node[data-kind="outcome"] .icon { background: var(--primary); color: var(--on-primary); }
+.node[data-kind="outcome"] [data-value] { color: var(--primary); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* The narrow rail: flat, slim rows, one line of label and one of detail. */
+.stage[data-narrow] { transform: none; border-radius: 16px; }
+.stage[data-narrow] .bar { height: 36px; border-radius: 16px 16px 0 0; padding: 0 12px; }
+.stage[data-narrow] .node { grid-template-columns: 24px minmax(0, 1fr); gap: 9px; padding: 0 10px 0 7px; border-radius: 11px; transform: none; box-shadow: inset 0 1px 0 rgb(255 255 255 / 6%); }
+.stage[data-narrow] .ring { border-radius: 11px; }
+.stage[data-narrow] .icon { width: 24px; height: 24px; border-radius: 7px; }
+.stage[data-narrow] .icon svg { width: 14px; height: 14px; }
+.stage[data-narrow] .text { display: flex; align-items: baseline; gap: 8px; }
+.stage[data-narrow] .text b { flex: none; font-size: 12.5px; }
+.stage[data-narrow] .text small { display: block; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.stage[data-narrow] .done { top: 50%; right: 8px; width: 16px; height: 16px; margin-top: -8px; border-width: 0; }
+.stage[data-narrow] .wire { stroke-dasharray: none; stroke: rgb(234 246 242 / 14%); stroke-width: 2; }
+.railStop { fill: color-mix(in srgb, var(--footer-bg) 42%, black); stroke: rgb(234 246 242 / 30%); stroke-width: 2; }
+.railStop[data-kind="branch"] { stroke: var(--warning); }
+.railStop[data-kind="outcome"] { fill: var(--primary); stroke: var(--primary); }
+
+@media (prefers-reduced-motion: reduce) {
+  .stage { transition: none; }
+}

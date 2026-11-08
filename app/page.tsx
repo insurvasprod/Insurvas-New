@@ -2,11 +2,13 @@ import type { Metadata } from "next";
 
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
+import { SmoothScroll } from "@/components/marketing/smooth-scroll";
 import { LandingHero } from "@/components/marketing/landing-hero";
 import { LandingRoadmap } from "@/components/marketing/landing-roadmap";
-import { LandingStack } from "@/components/marketing/landing-stack";
+import { LandingContact } from "@/components/marketing/landing-contact";
 import { LandingBento } from "@/components/marketing/landing-bento";
-import { LandingAudience, LandingBuiltFor } from "@/components/marketing/landing-audience";
+import { LandingAudience } from "@/components/marketing/landing-audience";
+import { LandingTrust } from "@/components/marketing/landing-trust";
 import { LandingPricingTeaser } from "@/components/marketing/landing-pricing";
 import { LandingFaq } from "@/components/marketing/landing-faq";
 import { fetchPublicPlans } from "@/lib/publicPlans/queries";
@@ -30,6 +32,7 @@ export default async function Home() {
   const plans: PublicPlan[] = await fetchPublicPlans().catch(() => []);
   return (
     <div className="type-brand landing-type min-h-screen bg-background">
+      <SmoothScroll />
       <SiteHeader current="home" floating />
       <main>
         {/* The story (2026-11-03 redesign, docs/design/landing-page-redesign-spec.md): the promise over
@@ -38,13 +41,14 @@ export default async function Home() {
             instruction (3 Nov); the header's trial button rides the whole page, so the page is never
             without a call to action. */}
         <LandingHero />
-        <LandingBuiltFor />
-        <LandingStack />
+        <LandingTrust />
+        {/* Problems, through Insurvas, out as fixes: one section since 6 Nov (owner); it replaced the five-tools section. */}
         <LandingAudience />
         <LandingBento />
         <LandingPricingTeaser plans={plans} />
         <LandingFaq />
         <LandingRoadmap />
+        <LandingContact />
       </main>
       <SiteFooter />
     </div>

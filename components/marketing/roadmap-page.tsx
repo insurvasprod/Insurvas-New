@@ -1,10 +1,14 @@
 import { roadmapGroups, ROADMAP_STATUS } from "@/lib/marketing/roadmap";
 import styles from "@/components/marketing/roadmap-page.module.css";
+import { RoadmapTrail } from "@/components/marketing/roadmap-trail";
 
 /**
  * The /roadmap page body (2026-11-04, owner): a vertical trail from Shipped to Exploring, one block
  * per status and quarter. Quarters, not dates, and the page says so. The items are draft content
  * (see lib/marketing/roadmap.ts).
+ *
+ * Owner, 7 Nov: it unfolds as it is read. The header settles in on load (CSS); the trail is a client
+ * island (roadmap-trail.tsx) whose rail fills as you scroll and whose quarters rise into view.
  */
 export function RoadmapPage() {
   const groups = roadmapGroups();
@@ -21,25 +25,7 @@ export function RoadmapPage() {
         </ul>
       </header>
 
-      <ol className={styles.trail}>
-        {groups.map((group) => (
-          <li key={group.key} className={styles.group} data-status={group.status}>
-            <div className={styles.when}>
-              <i aria-hidden="true" />
-              <strong>{ROADMAP_STATUS[group.status].label}</strong>
-              <span>{group.when}</span>
-            </div>
-            <ul className={styles.items}>
-              {group.items.map((item) => (
-                <li key={item.id} className={styles.item}>
-                  <p className={styles.itemTop}><strong>{item.title}</strong><em>{item.theme}</em></p>
-                  <p className={styles.itemText}>{item.text}</p>
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ol>
+      <RoadmapTrail groups={groups} />
       <p className={styles.foot}>This roadmap shows direction, not a commitment to ship by a date. Every figure in a mock on the site is sample data.</p>
     </main>
   );

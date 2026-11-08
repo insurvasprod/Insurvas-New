@@ -8,6 +8,7 @@ Resized to 1600px wide and re-encoded as WebP.
 | `audience-agent.webp` | "Businesswoman working at table (Unsplash).jpg", Wikimedia Commons, CC0 — https://commons.wikimedia.org/wiki/File:Businesswoman_working_at_table_(Unsplash).jpg |
 | `audience-agency.webp` | "Illuminated offices in Moscow (Unsplash).jpg", Wikimedia Commons, CC0 — https://commons.wikimedia.org/wiki/File:Illuminated_offices_in_Moscow_(Unsplash).jpg |
 | `roadmap-road.webp` | Sa Calobra serpentine road, Mallorca, by Leonard von Bibra — https://unsplash.com/photos/XW9z9x3aoM8. Unsplash License (free commercial use, no attribution required; not CC0). Cropped to 2400×1296 from the top-down shot, 1600px WebP. Owner approved, 2026-11-04. |
+| `roadmap-road-phone.webp` | The same Sa Calobra photo as `roadmap-road.webp` (Leonard von Bibra, https://unsplash.com/photos/XW9z9x3aoM8, Unsplash License), cut tall for phones (owner, 2026-11-06): a 1750×2916 slice of the 3890×2916 original through the middle loops, 1200×2000 WebP. |
 | `leak-lapse.webp` | Elderly couple looking at bills and a phone — https://unsplash.com/photos/_nl1owGBorc. Unsplash License. |
 | `leak-draft.webp` | Calendar with red push pins — https://unsplash.com/photos/bwOAixLG0uc. Unsplash License. |
 | `leak-commission.webp` | Stacks of paper documents and file folders — https://unsplash.com/photos/snNHKZ-mGfE. Unsplash License. |

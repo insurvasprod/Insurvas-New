@@ -13,3 +13,13 @@
   mask: url("/brand/insurvas-logo-on-dark.svg") center / 100% 100% no-repeat;
   pointer-events: none;
 }
+
+/* The footer's top edge: a light hairline across the page, strongest in the middle, fading out at
+   both ends, with a faint band of the brand green under its centre. */
+.edge {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--nav-ink) 22%, transparent) 20%, color-mix(in srgb, var(--primary) 55%, transparent) 50%, color-mix(in srgb, var(--nav-ink) 22%, transparent) 80%, transparent);
+  pointer-events: none;
+}
