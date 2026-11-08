@@ -61,9 +61,9 @@ export async function proxy(request: NextRequest) {
   // `/` is the landing page on every host, app.insurvas.com included (owner, 2026-11-04). It used to
   // be sent to /app/login there; sign-in is one click away from the landing page's header.
   //
-  // The product itself lives on app.insurvas.com: with SITE_HOST and APP_HOST set, an /app or /partner
+  // The product itself lives on app.insurvas.com: with SITE_HOST and APP_HOST set, an /app, /partner or /signup
   // address on insurvas.com or www.insurvas.com moves there (path and query kept), because the session
-  // cookies are pinned to the app host and a sign-in made on www would never stick (owner, 2026-11-08).
+  // cookies are pinned to the app host and a sign-in or sign-up made on www would never stick (owner, 2026-11-08).
   // Unset, every host serves everything. Rules: lib/security/siteHosts.ts.
   const move = siteHostMove(hostname, pathname, process.env);
   if (move?.kind === "to_app_host") {
@@ -140,5 +140,7 @@ function redirectTo(request: NextRequest, pathname: string) {
 }
 
 export const config = {
-  matcher: ["/", "/admin/:path*", "/app/:path*", "/partner/:path*", "/api/app/:path*", "/api/partner/:path*", "/api/admin/:path*"],
+  // /signup is here only for the host rule above (the sign-up form must run on the app host); every
+  // other check in this file falls through for it.
+  matcher: ["/", "/admin/:path*", "/app/:path*", "/partner/:path*", "/signup/:path*", "/api/app/:path*", "/api/partner/:path*", "/api/admin/:path*"],
 };
