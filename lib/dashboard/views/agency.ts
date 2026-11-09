@@ -42,11 +42,12 @@ export function daysLeft(today: string): number {
 /** Whole-percent change from `before` to `now`; null when there is nothing to compare against. */
 export function pctChange(now: number, before: number): number | null {
   if (!before) return null;
-  return Math.round(((now - before) / before) * 100);
+  // `|| 0` turns a rounded -0 into 0, so a flat month never reads "−0%".
+  return Math.round(((now - before) / before) * 100) || 0;
 }
 
 export type PolicyLite = { issueDate: string | null; annualCents: number | null; carrierId: string; agentUserId: string | null; agentName: string | null };
-export type AppLite = { submittedAt?: string | null; closedAt?: string | null; updatedAt: string; outcome: string | null; status: string; state: string | null; monthlyPremiumCents: number | null };
+export type AppLite = { caseId?: string; submittedAt?: string | null; closedAt?: string | null; updatedAt: string; outcome: string | null; status: string; state: string | null; monthlyPremiumCents: number | null };
 
 /**
  * The policies issued in a month (by issue date): how many, and their annual premium. `throughDay` stops at that
@@ -182,8 +183,11 @@ export type FunnelStep = { key: string; label: string; count: number; pct: numbe
  */
 export function leadToPolicy(input: { leads: number | null; called: number | null; quotes: ReadonlyArray<{ caseId: string; createdAt: string; outcome: string }> | null; apps: readonly AppLite[] | null }, month: string, zone: string): { steps: FunnelStep[]; rate: number } | null {
   const inMonth = (iso: string | null | undefined) => Boolean(iso) && dayKey(iso as string, zone).slice(0, 7) === month;
-  const quoted = input.quotes ? new Set(input.quotes.filter((quote) => quote.outcome !== "discarded" && inMonth(quote.createdAt)).map((quote) => quote.caseId)).size : null;
-  const submitted = input.apps ? input.apps.filter((app) => inMonth(app.submittedAt)).length : null;
+  // One cohort: a case whose application went in this month was quoted, even if the quote is older, so the
+  // quoted step always holds the apps step (a funnel never widens).
+  const submittedApps = input.apps ? input.apps.filter((app) => inMonth(app.submittedAt)) : null;
+  const quoted = input.quotes ? new Set([...input.quotes.filter((quote) => quote.outcome !== "discarded" && inMonth(quote.createdAt)).map((quote) => quote.caseId), ...(submittedApps ?? []).map((app) => app.caseId ?? "")].filter(Boolean)).size : null;
+  const submitted = submittedApps ? submittedApps.length : null;
   const issued = input.apps ? input.apps.filter((app) => app.outcome === "issued" && inMonth(app.closedAt ?? app.updatedAt)).length : null;
   const raw = [
     { key: "leads", label: "Leads", count: input.leads },
@@ -194,6 +198,7 @@ export function leadToPolicy(input: { leads: number | null; called: number | nul
   ].filter((step): step is { key: string; label: string; count: number } => step.count !== null);
   const kept = raw.filter((step, index) => step.count > 0 || !raw.slice(index + 1).some((later) => later.count > 0));
   if (kept.length < 2 || kept[0].count <= 0) return null;
+  // The counts are shown as read; the card draws each bar against the biggest step, so none leaves the card.
   const first = kept[0].count;
   const steps = kept.map((step) => ({ ...step, pct: (step.count / first) * 100 }));
   return { steps, rate: steps[steps.length - 1].pct };

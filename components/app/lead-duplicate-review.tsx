@@ -39,6 +39,8 @@ const EMPTY: LeadDuplicateQueue = { ready: false, total: 0, index: 0, item: null
 export function LeadDuplicateReview({ readOnly, onTotal }: { readOnly: boolean; onTotal: (total: number) => void }) {
   const [queue, setQueue] = useState<LeadDuplicateQueue>(EMPTY);
   const [busy, setBusy] = useState<LeadDuplicateDecision | "queue" | null>(null);
+  // The next pair slides in from the right once one is answered or skipped, the previous one from the left (§ Motion).
+  const [enter, setEnter] = useState<"forward" | "back" | undefined>(undefined);
 
   const load = useCallback(async (index = 0) => {
     const response = await fetch(`/api/app/contacts/lead-reviews?index=${index}`, { cache: "no-store" });
@@ -55,12 +57,14 @@ export function LeadDuplicateReview({ readOnly, onTotal }: { readOnly: boolean; 
   if (!queue.ready || !item) return null;
 
   async function goTo(index: number) {
+    setEnter(index < queue.index ? "back" : "forward");
     setBusy("queue");
     try { await load(index); } finally { setBusy(null); }
   }
 
   async function answer(decision: LeadDuplicateDecision) {
     if (!item) return;
+    setEnter("forward");
     setBusy(decision);
     try {
       const response = await fetch("/api/app/contacts/lead-reviews", {
@@ -104,6 +108,7 @@ export function LeadDuplicateReview({ readOnly, onTotal }: { readOnly: boolean; 
           </span>
         )}
       </div>
+      <div key={item.id} data-enter={enter} className="flex min-w-0 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-1.5" aria-label="How these two compare">
         <StatusChip tone="good" dot={false}><Phone aria-hidden className="size-3.5" />Same phone · {formatPhone(item.phone)}</StatusChip>
         {differs.map((row) => <StatusChip key={row.key} tone="warning" dot={false}><TriangleAlert aria-hidden className="size-3.5" />{row.label} differs</StatusChip>)}
@@ -127,6 +132,7 @@ export function LeadDuplicateReview({ readOnly, onTotal }: { readOnly: boolean; 
             </div>
           );
         })}
+      </div>
       </div>
       <div className="mt-1 flex flex-wrap items-center justify-end gap-2">
         <Button type="button" variant="outline" disabled={disabled} onClick={() => void answer("separate")}>

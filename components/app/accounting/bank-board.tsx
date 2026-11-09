@@ -7,7 +7,7 @@ import { useMemo, useState, useTransition, type FormEvent } from "react";
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, control, inputControl } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -79,7 +79,8 @@ function AddAccountRow({ onDone }: { onDone: (saved: boolean) => void }) {
   );
 }
 
-function ImportDialog({ accounts, onClose, onDone }: { accounts: Account[]; onClose: () => void; onDone: () => void }) {
+/** The import itself: account, file, the column mapping, then the result. In the pop-up and on Check a payment. */
+export function BankImportForm({ accounts, onClose, onDone, closeLabel = "Cancel" }: { accounts: Account[]; onClose?: () => void; onDone: () => void; closeLabel?: string }) {
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<{ headers: string[]; map: ColumnMap | null; remembered: boolean; problem: string | null } | null>(null);
@@ -118,15 +119,12 @@ function ImportDialog({ accounts, onClose, onDone }: { accounts: Account[]; onCl
     </Field>
   );
   return (
-    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
-      <DialogContent className="sm:max-w-[620px]">
         <div className="flex flex-col gap-4">
-          <DialogHeader><DialogTitle>Import a bank export</DialogTitle><DialogDescription>A CSV from your bank, any date range: lines already here are skipped.</DialogDescription></DialogHeader>
           {result ? (
             <div className="flex flex-col gap-3 text-sm">
               <p>{result.rows} lines read: <strong>{result.added} new</strong>, {result.duplicates} already here. {result.suggested} deposit{result.suggested === 1 ? "" : "s"} now have a suggested match to confirm.</p>
               {result.skipped.length ? <Callout tone="warning" title={`${result.skipped.length} line${result.skipped.length === 1 ? "" : "s"} could not be read:`}>{result.skipped.slice(0, 5).map((s) => `line ${s.line} (${s.reason})`).join("; ")}{result.skipped.length > 5 ? "…" : ""}</Callout> : null}
-              <DialogFooter><Button onClick={onClose}>Done</Button></DialogFooter>
+              {onClose ? <div className="flex justify-end gap-2"><Button onClick={onClose}>Done</Button></div> : <div className="flex justify-end"><Button variant="outline" onClick={() => { setResult(null); setFile(null); setPreview(null); }}>Import another file</Button></div>}
             </div>
           ) : (
             <>
@@ -147,12 +145,23 @@ function ImportDialog({ accounts, onClose, onDone }: { accounts: Account[]; onCl
                 </div>
               ) : null}
               {error ? <Callout tone="error" title={error} /> : null}
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <div className="flex flex-wrap justify-end gap-2">
+                {onClose ? <Button type="button" variant="outline" onClick={onClose}>{closeLabel}</Button> : null}
                 {preview ? <Button disabled={busy} onClick={() => void send(false)}>{busy ? "Importing…" : "Import"}</Button> : <Button disabled={busy || !file || !accountId} onClick={() => void send(true)}>{busy ? "Reading…" : "Read the columns"}</Button>}
-              </DialogFooter>
+              </div>
             </>
           )}
+        </div>
+  );
+}
+
+function ImportDialog({ accounts, onClose, onDone }: { accounts: Account[]; onClose: () => void; onDone: () => void }) {
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent className="sm:max-w-[620px]">
+        <div className="flex flex-col gap-4">
+          <DialogHeader><DialogTitle>Import a bank export</DialogTitle><DialogDescription>A CSV from your bank, any date range: lines already here are skipped.</DialogDescription></DialogHeader>
+          <BankImportForm accounts={accounts} onClose={onClose} onDone={onDone} />
         </div>
       </DialogContent>
     </Dialog>
@@ -216,9 +225,9 @@ export function BankBoard({ data, view, adding = false, readOnly }: { data: Bank
   return (
     <>
       <StatStrip label="Bank matching">
-        <StatTile label="Suggestions to confirm" value={String(toReview.length)} valueTone={toReview.length ? "warning" : undefined} footnote="deposits" href="/app/bank" />
+        <StatTile label="Suggestions to confirm" value={String(toReview.length)} valueTone={toReview.length ? "warning" : undefined} footnote="deposits" href="/app/bank?view=queue" />
         <StatTile label="Not explained" value={money(unexplainedCents)} footnote={`${data.findings.unexplained.length} deposit${data.findings.unexplained.length === 1 ? "" : "s"} nothing accounts for`} href="/app/bank?view=unexplained" />
-        <StatTile label="Paid but not received" value={money(missingCents)} valueTone={missingCents ? "danger" : undefined} footnote={`${data.findings.notReceived.length} statement${data.findings.notReceived.length === 1 ? "" : "s"} past the carrier's lag`} href="/app/bank?view=not_received" />
+        <StatTile label="Paid but not received" value={money(missingCents)} valueTone={missingCents ? "danger" : undefined} footnote={`${data.findings.notReceived.length} statement${data.findings.notReceived.length === 1 ? "" : "s"} past the carrier's lag`} href="/app/bank?view=results&show=missing_money" />
       </StatStrip>
       <TableCard toolbar={
         <DataToolbar actions={<>
@@ -276,7 +285,7 @@ export function BankBoard({ data, view, adding = false, readOnly }: { data: Bank
                     <td>
                       <div className="flex flex-col gap-1">
                         {t.matches.map((m) => (
-                          <div key={m.id} className="flex items-center justify-between gap-2 text-xs">
+                          <div key={m.id} className="m-content-in flex items-center justify-between gap-2 text-xs">
                             <span>{m.carrierName} · {m.statementDate} · {money(m.amountAppliedCents)}{m.confirmed ? "" : <span className="text-muted-foreground"> · {m.reason}</span>}</span>
                             {!readOnly ? <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => void act(m.id, { op: "remove", match_id: m.id }, m.confirmed ? "Match removed" : "Suggestion declined")}>{m.confirmed ? "Remove" : "Decline"}</Button> : null}
                           </div>
@@ -284,7 +293,7 @@ export function BankBoard({ data, view, adding = false, readOnly }: { data: Bank
                         {!readOnly && pending.length ? <Button size="sm" className="self-start" disabled={busy !== null} onClick={() => void act(t.id, { op: "confirm", match_ids: pending.map((m) => m.id) }, "Confirmed")}>Confirm {pending.length === 1 ? "match" : `${pending.length} matches`}</Button> : null}
                         {/* Decided in place, under the row (the Book of business pattern), never a side panel. */}
                         {!readOnly && manual?.txn === t.id ? (
-                          <div className="flex flex-wrap gap-1">
+                          <div className="m-content-in flex flex-wrap gap-1">
                             <select aria-label="Statement" className={`${inputControl} h-8 w-auto`} value={manual.statement} onChange={(e) => setManual({ ...manual, statement: e.target.value })}><option value="">Statement…</option>{data.statements.map((s) => <option key={s.id} value={s.id}>{s.carrierName} {s.statementDate} — {money(s.paidCents - s.receivedCents)} open</option>)}</select>
                             <input aria-label="Amount" className={`${inputControl} h-8 w-24`} inputMode="decimal" value={manual.amount} onChange={(e) => setManual({ ...manual, amount: e.target.value })} />
                             <Button size="sm" disabled={!manual.statement || parseDollarsToCents(manual.amount) === null} onClick={() => void act(t.id, { op: "manual", transaction_id: t.id, statement_id: manual.statement, amount_cents: parseDollarsToCents(manual.amount) }, "Matched")}>Match</Button>
@@ -292,7 +301,7 @@ export function BankBoard({ data, view, adding = false, readOnly }: { data: Bank
                           </div>
                         ) : null}
                         {!readOnly && ignoring?.txn === t.id ? (
-                          <div className="flex gap-1"><input aria-label="Why" className={`${inputControl} h-8 flex-1`} placeholder="Why it isn't carrier money" value={ignoring.reason} onChange={(e) => setIgnoring({ ...ignoring, reason: e.target.value })} /><Button size="sm" disabled={!ignoring.reason.trim()} onClick={() => void act(t.id, { op: "ignore", transaction_id: t.id, reason: ignoring.reason }, "Ignored")}>Ignore</Button><Button size="sm" variant="ghost" onClick={() => setIgnoring(null)}>Cancel</Button></div>
+                          <div className="m-content-in flex gap-1"><input aria-label="Why" className={`${inputControl} h-8 flex-1`} placeholder="Why it isn't carrier money" value={ignoring.reason} onChange={(e) => setIgnoring({ ...ignoring, reason: e.target.value })} /><Button size="sm" disabled={!ignoring.reason.trim()} onClick={() => void act(t.id, { op: "ignore", transaction_id: t.id, reason: ignoring.reason }, "Ignored")}>Ignore</Button><Button size="sm" variant="ghost" onClick={() => setIgnoring(null)}>Cancel</Button></div>
                         ) : null}
                         {!readOnly && manual?.txn !== t.id && ignoring?.txn !== t.id ? (
                           <span className="flex gap-1">

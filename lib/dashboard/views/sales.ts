@@ -26,9 +26,20 @@ export type SalesApplication = {
 
 export type SalesQuote = { caseId: string; createdAt: string; outcome: string };
 
+/**
+ * One formatter per zone. Building an Intl.DateTimeFormat costs far more than using one, and dayKey runs once per row
+ * (perf pass 2026-11-08: a quarter of dials on Compare built thousands of them).
+ */
+const DAY_FORMATS = new Map<string, Intl.DateTimeFormat>();
+
 /** The calendar day (yyyy-mm-dd) of an instant in a time zone. */
 export function dayKey(iso: string | number, zone: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(iso));
+  let format = DAY_FORMATS.get(zone);
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-CA", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit" });
+    DAY_FORMATS.set(zone, format);
+  }
+  const parts = format.formatToParts(new Date(iso));
   const get = (type: string) => parts.find((part) => part.type === type)?.value ?? "";
   return `${get("year")}-${get("month")}-${get("day")}`;
 }

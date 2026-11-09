@@ -26,11 +26,17 @@ async function openSteps(): Promise<RailStep[]> {
   // One producer pay (owner 2026-11-03, "merge them"). A solo agent's plan has none (LA-7.5: agencies only). On
   // an agency it is AG-1.5/1.7's (Producer payouts + Commission splits, My pay; decision D5: one ledger), so the
   // LA-7.5 Splits step, its writer already off there (D4), is offered only to a tenant with neither audience.
-  const audience = money.entitled ? await getPlanAudience(money.context.tenantId) : null;
+  // The plan's audience and the session's scope are both read here, after the page's own data: at once, not one after
+  // the other (perf pass 2026-11-08).
+  const returnsRole = returns.entitled && actAsPage(returns, ["owner", "producer", "bookkeeper"]);
+  const [audience, scope] = await Promise.all([
+    money.entitled ? getPlanAudience(money.context.tenantId) : null,
+    returnsRole ? scopeFor(returns.context) : undefined,
+  ]);
   const legacySplits = audience !== "individual" && audience !== "agency";
   const producer = money.entitled && actAsPage(money, ["producer"]);
   // Vendor bills opens on invoices (owner, bookkeeper) or on returns (also a producer; never a narrow agency session).
-  const mayReturns = returns.entitled && actAsPage(returns, ["owner", "producer", "bookkeeper"]) && (await scopeFor(returns.context)) === null;
+  const mayReturns = returnsRole && scope === null;
   const open = new Set<AccountingStep>();
   if (keeper) { open.add("pnl"); open.add("bank"); open.add("expenses"); if (legacySplits) open.add("splits"); }
   if (producer && legacySplits) open.add("splits");

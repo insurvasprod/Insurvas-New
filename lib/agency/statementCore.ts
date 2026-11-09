@@ -21,9 +21,16 @@ export const ENTRY_LABELS: Record<string, string> = {
   split_earned: "Share of earned commission",
   split_chargeback: "Share of a chargeback",
   split_paid: "Paid to you",
+  // Team pay plans (2026-11-07): what isn't commission.
+  salary: "Base pay",
+  app_bonus: "Bonus: application submitted",
+  save_fee: "Saved deal",
 };
 
-export const isMovement = (type: string) => ["earned", "chargeback", "split_advance", "split_earned", "split_chargeback"].includes(type);
+/** Pay-plan lines: base pay, application bonuses and save fees (no premium, no level). */
+export const isPlanPay = (type: string) => ["salary", "app_bonus", "save_fee"].includes(type);
+
+export const isMovement = (type: string) => ["earned", "chargeback", "split_advance", "split_earned", "split_chargeback", "salary", "app_bonus", "save_fee"].includes(type);
 export const isPayout = (type: string) => ["payout", "split_paid", "advance_paid"].includes(type);
 
 export type StatementEntry = {
@@ -77,7 +84,7 @@ export function buildStatement(before: readonly StatementEntry[], during: readon
     const isBack = e.amountCents < 0;
     return {
       id: e.id,
-      client: e.clientName ?? "—",
+      client: e.clientName ?? (isPlanPay(e.entryType) ? e.reason ?? ENTRY_LABELS[e.entryType] : "—"),
       carrier: e.carrierName ?? "—",
       policy: e.policyNumber ?? "—",
       premiumCents: e.premiumCents,

@@ -122,10 +122,10 @@ export function CardActions({ actions, label }: { actions: RowAction[]; label: s
  * is 576px wide (a tablet in landscape, or portrait with the rail collapsed). Rules between cards,
  * not a card per row, so it is not a card inside a card (UI-CONSISTENCY §8).
  */
-export function CardList({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+export function CardList({ label, children, className, pageTurn }: { label: string; children: ReactNode; className?: string; /** The last page turn, so the cards come in from that side (§ Motion). */ pageTurn?: "next" | "prev" }) {
   return (
     <div className="@container">
-      <ul aria-label={label} className={cn("m-0 grid list-none grid-cols-1 p-0 @xl:grid-cols-2", className)}>{children}</ul>
+      <ul aria-label={label} data-page-turn={pageTurn} className={cn("m-0 grid list-none grid-cols-1 p-0 @xl:grid-cols-2", className)}>{children}</ul>
     </div>
   );
 }

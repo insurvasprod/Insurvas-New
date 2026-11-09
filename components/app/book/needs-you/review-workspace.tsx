@@ -152,7 +152,7 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
               const on = current !== null && keyOf(current) === key;
               const outcome = done.get(key);
               return (
-                <li key={key} className={cn("flex items-center gap-3 border-b border-[var(--border)] px-3 py-2.5", on && "bg-[var(--surface-alt)] shadow-[inset_3px_0_0_var(--primary)]", outcome && "opacity-50")}>
+                <li key={key} className={cn("flex items-center gap-3 border-b border-[var(--border)] px-3 py-2.5 transition-[background-color,box-shadow,opacity] duration-[var(--t-panel)]", on && "bg-[var(--surface-alt)] shadow-[inset_3px_0_0_var(--primary)]", outcome && "opacity-50")}>
                   {item.kind === "no-sale" && !readOnly && !outcome
                     ? <input type="checkbox" aria-label={`Select ${item.about}`} className={checkboxControl} checked={ticked.has(key)} onChange={() => toggle(key)} />
                     : <span className="size-4 shrink-0" aria-hidden="true" />}
@@ -183,7 +183,8 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
           {!items.length ? <div className="p-6"><EmptyState title="Nothing to review here" hint="Every item in this list has been decided." action={<Button asChild><Link href={backHref}>Back</Link></Button>} /></div>
             : !current && words.length && left > 0 ? <div className="p-6"><EmptyState title={shown.length ? "Nothing left that matches" : "Nothing matches"} hint={`${left.toLocaleString("en-US")} still wait outside this search.`} action={<Button type="button" onClick={() => search("")}>Clear the search</Button>} /></div>
             : !current ? <div className="p-6"><EmptyState title="All done" hint={`${(total - left).toLocaleString("en-US")} answered.`} action={<Button asChild><Link href={backHref} onClick={() => router.refresh()}>Back</Link></Button>} /></div>
-            : <Question key={keyOf(current)} item={current} readOnly={readOnly} register={register} onDone={finish} onSkip={skip} hasNext={leftShown > 1} />}
+            // The next question slides in from the right, as the queue moves on (§ Motion, Wave 5).
+            : <div key={keyOf(current)} data-enter="forward"><Question item={current} readOnly={readOnly} register={register} onDone={finish} onSkip={skip} hasNext={leftShown > 1} /></div>}
         </div>
       </div>
     </div>

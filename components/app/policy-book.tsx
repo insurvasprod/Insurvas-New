@@ -255,7 +255,9 @@ export function PolicyBook({ rows, strip, initialQuery, saved, savedAvailable, s
                 <th className="w-8"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
-            <tbody>
+            {/* Keyed by the chip, the sort and the filters (not the typed search, which would flicker per key): a new set
+                of rows settles in (§ Motion, "rows-filter"); turning the page keeps the body and slides instead. */}
+            <tbody key={`${show}|${sort.key}:${sort.dir}|${JSON.stringify({ ...filters, q: "" })}`} className="m-rows-settle">
               {pageRows.map((row) => {
                 const href = row.href ?? policyHref(row);
                 const m = row.money;

@@ -27,6 +27,8 @@ import { useEffect, useState } from "react";
 
 export function DialerWorkspace({ readOnly = false, role = "producer", canCheckNumber = false, requestedLeadId = null }: { readOnly?: boolean; role?: string; canCheckNumber?: boolean; requestedLeadId?: string | null }) {
   const dialer = useDialer({ readOnly, role, canCheckNumber, requestedLeadId });
+  // The lead the visit opened on: it does not slide in; every lead after it does.
+  const [firstLead, setFirstLead] = useState<string | null>(null);
   const now = useNow();
   const { needsDnc, checkingDnc, checkDnc, isSetter, searchMode, panel, attempt, working, dialled, serving, pendingCallback, setPendingCallback, callbackAt, setCallbackAt, pendingDnc, setPendingDnc, pendingReturn, setPendingReturn, checkOpen, setCheckOpen, dispositionError, callbackNote, setCallbackNote, dispositions, outcomeLabel, agentZone, serveNext, prepareAttempt, confirmRead, dial, choose, disposition, eligibility, outcomes, blockers, callReady, customerZone, callbackInstant, callbackWindow, callbackInWindow, callbackInFuture, callbackClash, stateName, quickOptions, phoneLabel, nextStep, confirmed, calendar, autoNext, setAutoNext } = dialer;
   const [bookOpen, setBookOpen] = useState(false);
@@ -206,8 +208,11 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
     </div>
   ) : null;
 
-  // The lead you are on, above the queue table.
-  const current = <div className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={<>{callButton}{serveButton}</>}>{callArea}</DialerLeadColumn></div>;
+  // The lead you are on, above the queue table. When the next lead comes up it slides in from the right, as the queue
+  // moves on (§ Motion, Wave 2); the first lead of the visit is simply there.
+  const leadKey = panel?.lead.id ?? "none";
+  if (firstLead === null && panel) setFirstLead(leadKey);
+  const current = <div key={leadKey} data-enter={leadKey !== firstLead ? "forward" : undefined} className="bg-[var(--brand-50)]/40 shadow-[inset_3px_0_0_var(--primary)]"><DialerLeadColumn d={dialer} readOnly={readOnly} call={<>{callButton}{serveButton}</>}>{callArea}</DialerLeadColumn></div>;
 
   return (
     /* The list is the page (Dialer A round 2, owner 2026-10-27): one centred column. The lead you

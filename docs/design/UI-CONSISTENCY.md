@@ -50,6 +50,7 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | One kit for cards, chips, dialogs, menus, popovers, fields and the leave guard | §5b | Live; ratchets count the old copies down |
 | Trail and title on every page, actions on the title's line, no title in the top bar | §2 | Live (owner 2026-10-30; replaces the hidden title of 2026-10-28). **Settings is the exception (owner 2026-11-03):** the trail is the title, with the alerts, the (i) and the actions on its line; `PageHeader hideTitle` keeps the h1 for screen readers |
 | Tables: 40px sentence-case head, 44px rows | §6 | Live |
+| Motion: one catalogue of tokens and patterns, calm premium (owner 2026-11-09) | §18 | Live for the shared kit; pages adopt it area by area |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
 rule per file (raw tables, extra headers, tall controls, hex colours, `text-[Npx]`, eyebrows,
@@ -630,6 +631,50 @@ The ratchets `caps-label`, `glow`, `magic-icon` and `pill-control` in
   label (§16, the owner's pick), recorded as an exception in the test.
 - **No pills.** A button, or a link drawn as one, has 8px corners whatever element draws it (§5a).
   Pills stay for toggle tracks, dots, avatars, the Filters count and the marketing CTAs.
+
+## 18. Motion (v3)
+
+**Status:** Live for the shared kit (2026-11-09); pages adopt it area by area (the waves in the plan below).
+
+Calm and quick (owner pick 2026-11-09, "calm premium"): small rises, fades and slides of 120–300ms; charts
+draw once; nothing endless. Every timing is a token in `app/globals.css` (`--t-micro` 120, `--t-float-out`
+120, `--t-float-in` 170, `--t-panel` 200, `--t-page` 220, `--t-data` 260, `--t-enter` 360; easings `--e`,
+`--e-out`), and every pattern lives in the motion layer there. A screen composes these and never invents
+its own timing. See them all side by side on `/app/motion-lab`.
+
+| Pattern | Where it comes from | Motion |
+|---|---|---|
+| page-area | an `IntentLink` without a type (the sidebar) | the arriving page rises 6px from .72 (a page with its own `m-stagger` keeps just that) |
+| page-forward / page-back | `transitionTypes={["nav-forward"]}` / `["nav-back"]` on an `IntentLink` (the step rails set it); the browser's back is `back` | 12px slide in from the right / left; on a merged page only the step's column moves, the title row and rail hold still |
+| content-in | a URL tab, a merged page's step (`m-content-in`) | 4px rise from .72, 150ms |
+| rows-page | `PagedBody` when the page turns | rows come in 8px from the side the pager moved, 16ms apart, eight at most |
+| overlay | `Dialog`, `ConfirmDialog` | fades, rises 8px and settles from .98; closing is shorter |
+| float | popover, menu, select, date picker, hover card | scales from .95 from the side it opens on |
+| hint | `InfoTip` | fades in |
+| panel | `DetailPanel`, `Sheet` | slides 16px from its edge; X, Esc or the backdrop slide it back out |
+| indicator | segmented `ViewTabs` | one pill slides from tab to tab, to the clicked tab at once |
+| figure | `CountUp` | counts from the old value to the new one |
+| chart | `BarSeries`, `LineSeries`, `SparkLine`, `DonutChart` | bars rise, lines reveal left to right, the donut sweeps; new figures move the marks |
+| controls | `Switch`, `CheckBox`, `<details>` | the thumb slides, the tick pops in, a fold opens by height |
+| pending | `IntentLink` (tabs, rails, the sidebar) | the clicked item looks chosen at once; a 2px hairline runs along the top while the page is on its way |
+| shell-enter | the first screen after signing in (`ShellEntrance`) | sidebar slides in, top bar drops in, the page rises; about 0.8s, once per sign-in |
+| shell-leave | signing out (`TopBarSignOut`) | the workspace dims and settles back while the sign-in page comes |
+| rows-filter | a list's chip, sort or filter changes (`m-rows-settle`, keyed body) | the new rows settle in together from .72; the typed search does not replay it |
+| step-direction | one-at-a-time steps inside a page (`useStepDirection`, `data-enter`): inbound call, application, Settings sections, calendar weeks, the next lead or question | later slides in from the right, earlier from the left |
+| board card | kanban cards (`m-drop-in`) | settle into their column; the card being dragged fades back in place |
+| dash cards | the dashboard (`m-dash`, `m-dash-ov`) | cards rise in turn, 40ms apart, all in by 240ms |
+| save bar | `SettingsSaveBar` (`m-savebar`) | rises into place |
+| chat message | a message arriving in an open conversation (`m-msg-in`) | rises into the thread; the history on open stays still |
+| sign-up step | `AuthLayout` with bars (`data-auth-step-body`) | the bars hold, the step's content slides in from the right |
+
+- **Never from blank.** Content that replaces content starts at .72 opacity, so no frame shows the bare page
+  ground (the light-mode flash, 2026-11-03). Only layers that float over the page (overlays, menus, hints) start
+  at 0.
+- **Transform and opacity only**, so nothing reflows; exits are shorter than entrances.
+- **Nothing endless** (§17): the loading skeleton's sheen and the pending hairline are the only motion that
+  waits, and both stop the moment the content is here.
+- **Reduced motion** is one block at the top of the motion layer: every animation and transition becomes
+  instant, and view transitions are off.
 
 ## Ownership notes
 - `components/ui/*` and `app/globals.css` are shared: change them only deliberately, once, for all.

@@ -54,7 +54,7 @@ type Icon = ComponentType<SVGProps<SVGSVGElement>>;
 const TOOLS: { key: string; label: string; href: string; icon: Icon; sub: string }[] = [
   { key: "team.producers", label: "Producers", href: "/app/producers", icon: UserRoundCheck, sub: "Roster, onboarding, carriers" },
   { key: "team.hierarchy", label: "Hierarchy & overrides", href: "/app/hierarchy", icon: Network, sub: "Who reports to whom, levels" },
-  { key: "team.payouts", label: "Producer payouts", href: "/app/producer-payouts", icon: WalletCards, sub: "Pay runs and statements" },
+  { key: "team.payouts", label: "Team payouts", href: "/app/producer-payouts", icon: WalletCards, sub: "Payroll, pay plans and statements" },
   { key: "team.splits", label: "Commission splits", href: "/app/commission-splits", icon: HandCoins, sub: "Shared policies, who gets what" },
   { key: "commissions.producer_reconciliation", label: "Producer pay", href: "/app/producer-reconciliation", icon: ArrowLeftRight, sub: "Expected, reported, received" },
   { key: "team.scorecards", label: "Producer scorecards", href: "/app/producer-scorecards", icon: Gauge, sub: "Who is profitable, not just busy" },

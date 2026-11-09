@@ -3,7 +3,7 @@ import "server-only";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
-import { acquisitionFor, readDefaults, type ExpenseCategory, type ExpenseStatus, type Recurrence } from "./expensesCore";
+import { acquisitionFor, bucketOf, readDefaults, scoreboard, type CostLine, type ExpenseBucket, type ExpenseCategory, type ExpenseStatus, type Recurrence, type Scoreboard } from "./expensesCore";
 import type { PaidMethod } from "./invoicesCore";
 
 /**
@@ -20,6 +20,8 @@ type Loose = any;
 const db = (): Loose => getSupabaseServiceClient();
 
 export const EXPENSES_PENDING_MESSAGE = "Expenses need a database update (20261015200000–20261015220000).";
+/** Lead buys and the one-click OK (owner, 2026-11-06) wait for this paste. */
+export const LEAD_BUYS_PENDING_MESSAGE = "Lead buys need a database update (supabase/deploy/2026-11-06-expense-buckets.sql). Until then, enter lead invoices in Vendor bills.";
 
 export class ExpenseError extends Error {
   constructor(message: string, readonly status = 400) {
@@ -103,6 +105,8 @@ export async function createExpense(tenantId: string, userId: string, input: Exp
     amount_cents: input.amountCents, incurred_on: input.incurredOn, recurrence: input.recurrence, recurrence_end_on: template ? input.recurrenceEndOn : null,
     status: template ? "template" : "unconfirmed", is_acquisition_cost: acq.isAcquisitionCost, acquisition_overridden: acq.overridden, created_by: userId,
   }).select("id").single();
+  // Before the 2026-11-06 paste the database does not know the leads category yet.
+  if (error && input.category === "leads" && error.code === "23514") throw new ExpenseError(LEAD_BUYS_PENDING_MESSAGE, 503);
   if (error) fail(error);
   if (template) return { id: data.id as string, generated: await generateRecurring(tenantId) };
   await confirmExpense(tenantId, data.id, userId);
@@ -181,4 +185,65 @@ export async function receiptUrl(tenantId: string, id: string): Promise<string> 
   const { data, error: se } = await db().storage.from("accounting-files").createSignedUrl(path, 60);
   if (se || !data?.signedUrl) throw new ExpenseError("The receipt could not be opened.", 500);
   return data.signedUrl;
+}
+
+// ─── OK and the scoreboard (owner, 2026-11-06) ────────────────────────────────────────────────
+
+/**
+ * OK on a bill that came back: book it and stamp it paid, in one step (ok_expense, 20261106120000).
+ * Before that paste, the same two writers run one after the other.
+ */
+export async function okExpense(tenantId: string, id: string, by: string, input: { paidOn: string; method: PaidMethod | null; reference: string | null }): Promise<void> {
+  const { error } = await db().rpc("ok_expense", { p_tenant_id: tenantId, p_expense_id: id, p_by: by, p_paid_on: input.paidOn, p_method: input.method, p_reference: input.reference });
+  if (!error) return;
+  if (error.code !== "PGRST202" && error.code !== "42883") fail(error);
+  await confirmExpense(tenantId, id, by);
+  await markExpensePaid(tenantId, id, input);
+}
+
+export type ScoreboardItem = { what: string; bucket: ExpenseBucket; amountCents: number; fromInvoice: boolean };
+export type MonthScoreboard = Scoreboard & { month: string; items: ScoreboardItem[] };
+
+/**
+ * The end-of-month scoreboard: everything booked in the month (by the day it was for), in total and per
+ * bucket. Leads are the lead invoices from Vendor bills plus lead buys entered as expenses; reversals
+ * (a voided bill) net out. With the biggest items per bucket.
+ */
+export async function monthScoreboard(tenantId: string, month: string): Promise<MonthScoreboard> {
+  if (!/^\d{4}-\d{2}$/.test(month)) throw new ExpenseError("Choose a month.");
+  const [y, m] = month.split("-").map(Number);
+  const from = `${month}-01`;
+  const to = new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10);
+  const rows: Loose[] = [];
+  for (let at = 0; at < 50_000; at += 1000) {
+    const { data, error } = await db().from("cost_entry").select("entry_type, amount_cents, expense_id, invoice_id, description, counterparty_name")
+      .eq("tenant_id", tenantId).gte("incurred_on", from).lt("incurred_on", to).order("id").range(at, at + 999);
+    if (error) fail(error);
+    rows.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const expenseIds = [...new Set(rows.map((r) => r.expense_id).filter(Boolean))] as string[];
+  const categories = new Map<string, string>();
+  for (let i = 0; i < expenseIds.length; i += 200) {
+    const { data, error } = await db().from("expense").select("id, category").eq("tenant_id", tenantId).in("id", expenseIds.slice(i, i + 200));
+    if (error) fail(error);
+    for (const e of (data ?? []) as Loose[]) categories.set(e.id, e.category);
+  }
+  const lines: (CostLine & { what: string; fromInvoice: boolean })[] = rows.map((r) => ({
+    entryType: r.entry_type, amountCents: Number(r.amount_cents), expenseCategory: r.expense_id ? categories.get(r.expense_id) ?? "other" : null,
+    what: (r.counterparty_name as string | null) || String(r.description ?? "").split(" — ")[0] || "Cost", fromInvoice: !r.expense_id && r.entry_type === "lead_cost",
+  }));
+  const board = scoreboard(lines);
+  // The biggest items: one line per bucket and payee, money out as positive cents.
+  const grouped = new Map<string, ScoreboardItem>();
+  for (const l of lines) {
+    const bucket: ExpenseBucket | null = l.expenseCategory ? bucketOf(l.expenseCategory) : l.entryType === "lead_cost" ? "leads" : null;
+    if (!bucket) continue;
+    const key = `${bucket}|${l.what}`;
+    const item = grouped.get(key) ?? { what: l.what, bucket, amountCents: 0, fromInvoice: l.fromInvoice };
+    item.amountCents -= l.amountCents;
+    grouped.set(key, item);
+  }
+  const items = [...grouped.values()].filter((i) => i.amountCents !== 0).sort((a, b) => b.amountCents - a.amountCents);
+  return { ...board, month, items };
 }

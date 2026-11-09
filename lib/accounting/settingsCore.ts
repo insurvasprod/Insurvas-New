@@ -56,7 +56,7 @@ export const ACCOUNTING_DEFAULTS: AccountingSettings = {
   producersSeeBalance: true,
   producerShareFees: false,
   bankAmountToleranceCents: 0,
-  bankWindowDays: 21,
+  bankWindowDays: 3, // owner's Accounting doc: the deposit lands the same day or a day or two later
   tax1099ThresholdCents: 200000,
   taxIdViewerRoles: ["owner"],
 };

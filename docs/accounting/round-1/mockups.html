@@ -1,0 +1,504 @@
+<title>Bank and team payout mockups</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: app canvas with one frame per screen, stacked in build order; a switcher picks the page (#bank / #team). Product tokens from docs/design/BRAND.md. */
+:root {
+  --canvas:#f1f3f7; --band:#e4e8ee; --card:#ffffff; --alt:#f6f8fa; --line:#dfe4ea;
+  --ink:#0d4037; --fg:#1b2430; --muted:#5d6775; --accent:#07d6a0; --accent-ink:#00735a; --soft:#dcfaf0;
+  --good-bg:#e3f5e6; --good:#1f6b2a; --bad-bg:#fcebea; --bad:#b42318; --warn-bg:#fbf0dc; --warn:#8a5a00; --info-bg:#e6effa; --info:#2563b8;
+  --rail:#0d4037; --rail-fg:#d9efe8;
+  --font-sans:Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display:"Inter Tight", Inter, system-ui, sans-serif;
+  --font-mono:"Geist Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --canvas:#0f1419; --band:#161d24; --card:#18212a; --alt:#1e2933; --line:#2a3642;
+  --ink:#e6f4ef; --fg:#e3e8ee; --muted:#9aa6b4; --accent:#07d6a0; --accent-ink:#4fe3bb; --soft:#123a31;
+  --good-bg:#16351f; --good:#7fd48d; --bad-bg:#3a1916; --bad:#ff8a7a; --warn-bg:#3a2c10; --warn:#f0c060; --info-bg:#152a44; --info:#8db8f0;
+  --rail:#0b2a24; --rail-fg:#cfe9e1; color-scheme:dark; } }
+:root[data-theme="dark"] {
+  --canvas:#0f1419; --band:#161d24; --card:#18212a; --alt:#1e2933; --line:#2a3642;
+  --ink:#e6f4ef; --fg:#e3e8ee; --muted:#9aa6b4; --accent:#07d6a0; --accent-ink:#4fe3bb; --soft:#123a31;
+  --good-bg:#16351f; --good:#7fd48d; --bad-bg:#3a1916; --bad:#ff8a7a; --warn-bg:#3a2c10; --warn:#f0c060; --info-bg:#152a44; --info:#8db8f0;
+  --rail:#0b2a24; --rail-fg:#cfe9e1; color-scheme:dark; }
+
+* { box-sizing:border-box; }
+body { background:var(--canvas); color:var(--fg); font:14px/1.5 var(--font-sans); margin:0;
+  padding-left:max(16px, env(safe-area-inset-left, 0px)); padding-right:max(16px, env(safe-area-inset-right, 0px)); padding-block:24px 64px; }
+.wrap { max-width:1200px; margin:0 auto; display:flex; flex-direction:column; gap:28px; }
+h1,h2,h3 { font-family:var(--font-display); color:var(--ink); text-wrap:balance; margin:0; }
+h1 { font-size:22px; } h2 { font-size:17px; } h3 { font-size:14px; }
+p { margin:0; }
+.muted { color:var(--muted); } .small { font-size:12px; } .mono { font-family:var(--font-mono); font-size:12.5px; }
+.num { font-variant-numeric:tabular-nums; text-align:right; white-space:nowrap; }
+
+/* Intro + switcher */
+.intro { display:flex; flex-direction:column; gap:10px; }
+.intro p { max-width:70ch; }
+.switch { display:flex; gap:6px; flex-wrap:wrap; }
+.switch a { padding:8px 14px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--fg); text-decoration:none; font-weight:600; }
+.switch a[aria-current="page"] { background:var(--ink); border-color:var(--ink); color:var(--card); }
+
+/* A screen = a label + a framed app page */
+.screen { display:flex; flex-direction:column; gap:8px; min-width:0; }
+.screen-label { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+.screen-label .id { font-family:var(--font-mono); font-size:12px; color:var(--accent-ink); font-weight:500; }
+.screen-label .why { color:var(--muted); font-size:13px; }
+.frame { background:var(--band); border-radius:14px; padding:20px; display:flex; flex-direction:column; gap:16px; min-width:0; }
+
+/* App page parts */
+.titleline { display:flex; gap:12px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+.titleline .left { display:flex; flex-direction:column; gap:2px; min-width:0; }
+.trail { font-size:12px; color:var(--muted); }
+.tabs { display:flex; gap:2px; flex-wrap:wrap; }
+.tabs span { padding:6px 12px; border-radius:8px; color:var(--muted); font-weight:500; }
+.tabs span.on { background:var(--card); color:var(--ink); font-weight:600; box-shadow:0 0 0 1px var(--line); }
+.tabs span .count { font-size:11px; margin-left:4px; color:var(--bad); font-weight:700; }
+.actions { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+.btn { font:inherit; font-weight:600; border:0; border-radius:8px; padding:8px 14px; background:var(--accent); color:#0d4037; cursor:pointer; white-space:nowrap; }
+.btn.o { background:var(--card); color:var(--fg); box-shadow:inset 0 0 0 1px var(--line); }
+.btn.ghost { background:transparent; color:var(--accent-ink); padding:6px 8px; }
+.btn:focus-visible, select:focus-visible, input:focus-visible, .pick:focus-visible { outline:2px solid var(--info); outline-offset:2px; }
+
+.card { background:var(--card); border-radius:12px; box-shadow:0 0 0 1px var(--line); padding:18px; display:flex; flex-direction:column; gap:12px; min-width:0; }
+.strip { display:grid; grid-template-columns:repeat(auto-fit, minmax(170px, 1fr)); gap:12px; }
+.tile { background:var(--card); border-radius:12px; box-shadow:0 0 0 1px var(--line); padding:14px 16px; display:flex; flex-direction:column; gap:2px; text-decoration:none; color:inherit; }
+.tile .k { font-size:12px; color:var(--muted); }
+.tile .v { font-family:var(--font-display); font-size:22px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+.tile.bad .v { color:var(--bad); } .tile.good .v { color:var(--good); }
+
+.tablewrap { overflow-x:auto; background:var(--card); border-radius:12px; box-shadow:0 0 0 1px var(--line); }
+table { width:100%; border-collapse:collapse; min-width:720px; }
+th { text-align:left; font-size:12px; font-weight:600; color:var(--muted); height:40px; padding:0 14px; border-bottom:1px solid var(--line); white-space:nowrap; }
+td { height:44px; padding:6px 14px; border-bottom:1px solid var(--line); vertical-align:middle; }
+tr:last-child td { border-bottom:0; }
+tr.flag td:first-child { box-shadow:inset 3px 0 0 var(--bad); }
+td .sub { display:block; font-size:12px; color:var(--muted); }
+th.num { text-align:right; }
+
+.chip { display:inline-flex; align-items:center; gap:5px; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; white-space:nowrap; background:var(--alt); color:var(--muted); }
+.chip.good { background:var(--good-bg); color:var(--good); } .chip.bad { background:var(--bad-bg); color:var(--bad); }
+.chip.warn { background:var(--warn-bg); color:var(--warn); } .chip.info { background:var(--info-bg); color:var(--info); }
+.dot { width:7px; height:7px; border-radius:50%; background:currentColor; }
+
+.grid2 { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:16px; }
+.grid3 { display:grid; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr)); gap:12px; }
+.field { display:flex; flex-direction:column; gap:4px; min-width:0; }
+.field label { font-size:12px; color:var(--muted); font-weight:500; }
+.ctl { font:inherit; height:36px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--fg); padding:0 10px; width:100%; }
+.hint { font-size:12px; color:var(--muted); }
+.step { display:grid; grid-template-columns:28px 1fr; gap:14px; padding-block:14px; border-top:1px solid var(--line); }
+.step:first-child { border-top:0; padding-top:0; }
+.n { width:28px; height:28px; border-radius:50%; background:var(--soft); color:var(--accent-ink); display:grid; place-items:center; font-weight:700; font-size:13px; }
+.step > div:last-child { display:flex; flex-direction:column; gap:10px; min-width:0; }
+
+.pick { text-align:left; font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; cursor:pointer; display:flex; flex-direction:column; gap:4px; }
+.pick b { color:var(--ink); }
+.pick[aria-pressed="true"] { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); background:var(--soft); }
+.toggle { display:flex; gap:10px; align-items:flex-start; }
+.toggle input { margin-top:3px; accent-color:var(--accent); }
+
+.drop { border:1.5px dashed var(--line); border-radius:12px; padding:20px; display:flex; flex-direction:column; gap:8px; background:var(--alt); }
+.drop.done { border-style:solid; border-color:var(--accent); background:var(--soft); }
+.drop .big { font-family:var(--font-display); font-size:16px; font-weight:700; color:var(--ink); }
+.file { display:flex; gap:10px; align-items:center; justify-content:space-between; background:var(--card); border-radius:8px; padding:8px 10px; box-shadow:0 0 0 1px var(--line); flex-wrap:wrap; }
+
+.match { display:grid; grid-template-columns:1fr auto 1fr; gap:14px; align-items:center; }
+.side { background:var(--alt); border-radius:10px; padding:14px; display:flex; flex-direction:column; gap:2px; min-width:0; }
+.side .amt { font-family:var(--font-display); font-size:22px; font-weight:700; color:var(--ink); font-variant-numeric:tabular-nums; }
+.side.missing { background:var(--bad-bg); }
+.side.missing .amt { color:var(--bad); }
+.link { width:38px; height:38px; border-radius:50%; display:grid; place-items:center; font-weight:700; background:var(--good-bg); color:var(--good); }
+.link.no { background:var(--bad-bg); color:var(--bad); }
+@media (max-width:640px) { .match { grid-template-columns:1fr; } .link { justify-self:center; } }
+
+.stamp { display:inline-block; border:2px solid var(--good); color:var(--good); padding:2px 10px; border-radius:6px; font-family:var(--font-display); font-weight:700; letter-spacing:.08em; transform:rotate(-4deg); }
+.fork { display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:16px; }
+.fork .tag { font-family:var(--font-mono); font-size:12px; color:var(--accent-ink); }
+.mini { background:var(--card); border-radius:10px; box-shadow:0 0 0 1px var(--line); padding:12px; display:flex; flex-direction:column; gap:8px; }
+.bar { height:10px; border-radius:6px; background:var(--alt); }
+.statement { background:var(--card); max-width:760px; border-radius:6px; box-shadow:0 0 0 1px var(--line); padding:28px; display:flex; flex-direction:column; gap:16px; }
+.statement table { min-width:0; }
+.statement td, .statement th { padding:0 6px; }
+.total td { font-weight:700; color:var(--ink); }
+.foot { display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap; }
+.legend { display:flex; gap:14px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+@media (prefers-reduced-motion: no-preference) { .pick, .btn { transition:background .15s, box-shadow .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <span class="trail">Accounting · Round 1 mockups · 7 Nov 2026</span>
+    <h1>Bank deposits and Team payouts</h1>
+    <p class="muted">Drawn from your Accounting doc. Each screen is labelled with its id (B1, T2…) so you can comment on it by name. Numbers are examples. Click the model cards and the balance choices; they work.</p>
+    <nav class="switch" aria-label="Page">
+      <a href="#bank" data-view="bank">Bank deposits · the matchmaker</a>
+      <a href="#team" data-view="team">Team payouts</a>
+    </nav>
+  </header>
+
+  <!-- ================= BANK ================= -->
+  <section id="view-bank" class="wrap" style="gap:28px">
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">B1</span><h2>Drop both files</h2><span class="why">Doc step 1: the carrier's commission file and the bank statement, on one screen.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Accounting › Bank deposits › Check a payment</span><h1>Check a carrier payment</h1></div>
+          <div class="actions"><button class="btn o">Cancel</button><button class="btn">Match them</button></div>
+        </div>
+        <div class="grid2">
+          <div class="drop done">
+            <span class="small muted">Clue A · what the carrier says</span>
+            <span class="big">Carrier commission file</span>
+            <div class="file"><span>AMAM_commissions_2026-11-01.csv</span><span class="chip good"><span class="dot"></span>Read with the American Amicable layout</span></div>
+            <span class="hint">4 policies · $2,000.00 · statement date Nov 1. CSV, Excel or PDF, using the layouts you set up in Carrier sync.</span>
+          </div>
+          <div class="drop done">
+            <span class="small muted">Clue B · what really landed</span>
+            <span class="big">Bank statement</span>
+            <div class="file"><span>chase_4471_oct-nov.csv</span><span class="chip good"><span class="dot"></span>Chase ••4471 · columns remembered</span></div>
+            <span class="hint">212 rows, Oct 1 – Nov 6 · 3 already imported, skipped. CSV from any bank.</span>
+          </div>
+        </div>
+        <p class="hint">Either file can come alone. A carrier file already uploaded in Carrier sync, or a bank file already imported, is used without uploading it again.</p>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">B2</span><h2>Results: green checks and red flags</h2><span class="why">Doc step 4. One row per carrier payment. This becomes the first tab of Bank deposits.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Accounting</span><h1>Bank deposits</h1></div>
+          <div class="tabs"><span class="on">Results</span><span>To match</span><span>Not explained</span><span>Accounts</span></div>
+          <div class="actions"><select class="ctl" style="width:auto" aria-label="Period"><option>Last 30 days</option><option>November</option><option>October</option></select><button class="btn">Check a payment</button></div>
+        </div>
+        <div class="strip">
+          <a class="tile"><span class="k">Carrier payments checked</span><span class="v">14</span><span class="small muted">$31,480.00</span></a>
+          <a class="tile good"><span class="k">All good</span><span class="v">9</span><span class="small muted">$22,915.00</span></a>
+          <a class="tile bad"><span class="k">Missing money</span><span class="v">2</span><span class="small muted">$3,140.00 not in the bank</span></a>
+          <a class="tile bad"><span class="k">Bad math</span><span class="v">3</span><span class="small muted">$412.50 short on 5 policies</span></a>
+        </div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Carrier payment</th><th class="num">Carrier says</th><th>Bank deposit</th><th>Policies</th><th>Result</th><th></th></tr></thead>
+          <tbody>
+            <tr class="flag"><td>Mutual of Omaha<span class="sub">Statement Nov 3 · 7 policies</span></td><td class="num">$1,860.00</td><td><span class="muted">Nothing landed by Nov 6</span></td><td>7 ✓</td><td><span class="chip bad"><span class="dot"></span>Missing money</span></td><td><button class="btn ghost">Open</button></td></tr>
+            <tr class="flag"><td>American Amicable<span class="sub">Statement Nov 1 · 4 policies</span></td><td class="num">$2,000.00</td><td>$2,000.00 · Nov 3<span class="sub">Chase ••4471 · 2 days after</span></td><td>3 ✓ · <b style="color:var(--bad)">1 short</b></td><td><span class="chip bad"><span class="dot"></span>Bad math · $100.00</span></td><td><button class="btn ghost">Open</button></td></tr>
+            <tr class="flag"><td>Corebridge<span class="sub">Statement Oct 30 · 11 policies</span></td><td class="num">$3,412.40</td><td>$3,412.40 · Oct 31<span class="sub">Chase ••4471 · 1 day after</span></td><td>9 ✓ · <b style="color:var(--bad)">2 short</b></td><td><span class="chip bad"><span class="dot"></span>Bad math · $212.50</span></td><td><button class="btn ghost">Open</button></td></tr>
+            <tr><td>Transamerica<span class="sub">Statement Oct 29 · 5 policies</span></td><td class="num">$1,275.00</td><td>$1,275.00 · Oct 29<span class="sub">Chase ••4471 · same day</span></td><td>4 ✓ · 1 no promise</td><td><span class="chip warn"><span class="dot"></span>Paid · 1 rate missing</span></td><td><button class="btn ghost">Open</button></td></tr>
+            <tr><td>Aetna (CVS)<span class="sub">Statement Oct 28 · 6 policies</span></td><td class="num">$2,190.00</td><td>$2,190.00 · Oct 29<span class="sub">Chase ••4471 · 1 day after</span></td><td>6 ✓</td><td><span class="chip good"><span class="dot"></span>All good</span></td><td><button class="btn ghost">Open</button></td></tr>
+          </tbody>
+        </table></div>
+        <div class="legend"><span><span class="chip good">All good</span> money landed and every policy paid what we were promised</span><span><span class="chip bad">Missing money</span> nothing in the bank within the window</span><span><span class="chip bad">Bad math</span> money landed, a policy was underpaid</span><span><span class="chip warn">Rate missing</span> no promised rate on the rate card, so it can't be checked</span></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">B3</span><h2>One payment opened: bad math</h2><span class="why">Doc steps 2 and 3: the lump sum is linked, then every policy is checked against what we were promised. A full page, not a side panel.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Bank deposits › Results</span><h1>American Amicable · Nov 1 · $2,000.00</h1></div>
+          <div class="actions"><span class="chip bad"><span class="dot"></span>Bad math · $100.00</span><button class="btn o">Accept as paid</button><button class="btn">Draft dispute letter</button></div>
+        </div>
+        <div class="card">
+          <h3>1 · Did the money land?</h3>
+          <div class="match">
+            <div class="side"><span class="small muted">Carrier said they paid</span><span class="amt">$2,000.00</span><span class="small muted">Nov 1 · AMAM_commissions_2026-11-01.csv</span></div>
+            <div class="link" aria-label="Linked">✓</div>
+            <div class="side"><span class="small muted">Bank shows</span><span class="amt">$2,000.00</span><span class="small muted">Nov 3 · Chase ••4471 · "AMER AMICABLE COMM PMT"</span></div>
+          </div>
+          <div class="actions"><span class="hint">Linked automatically: same amount, 2 days after the carrier's date.</span><button class="btn ghost">Unlink</button></div>
+        </div>
+        <div class="card">
+          <h3>2 · Did they pay each policy right?</h3>
+          <div class="tablewrap" style="box-shadow:none"><table>
+            <thead><tr><th>Policy</th><th>Product</th><th class="num">Premium</th><th class="num">Promised</th><th class="num">Should pay</th><th class="num">They paid</th><th class="num">Difference</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>0119990301<span class="sub">Rosa Delgado</span></td><td>Senior Choice · age 64</td><td class="num">$600.00</td><td class="num">100%</td><td class="num">$600.00</td><td class="num">$600.00</td><td class="num">$0.00</td><td><span class="chip good">✓</span></td></tr>
+              <tr class="flag"><td>0119990302<span class="sub">Glen Haskins</span></td><td>Senior Choice · age 71</td><td class="num">$500.00</td><td class="num">100%</td><td class="num">$500.00</td><td class="num">$400.00<span class="sub">paid at 80%</span></td><td class="num" style="color:var(--bad);font-weight:700">−$100.00</td><td><span class="chip bad">Short</span></td></tr>
+              <tr><td>0119990303<span class="sub">Ivy Marchetti</span></td><td>Senior Choice · age 58</td><td class="num">$500.00</td><td class="num">100%</td><td class="num">$500.00</td><td class="num">$500.00</td><td class="num">$0.00</td><td><span class="chip good">✓</span></td></tr>
+              <tr><td>0119990304<span class="sub">Darnell Price</span></td><td>Easy Term · age 45</td><td class="num">$500.00</td><td class="num">100%</td><td class="num">$500.00</td><td class="num">$500.00</td><td class="num">$0.00</td><td><span class="chip good">✓</span></td></tr>
+              <tr class="total"><td colspan="4">4 policies</td><td class="num">$2,100.00</td><td class="num">$2,000.00</td><td class="num" style="color:var(--bad)">−$100.00</td><td></td></tr>
+            </tbody>
+          </table></div>
+          <p class="hint">"Promised" comes from your rate card for American Amicable. Edit it in Rate card. The letter lists the short policy, the promised rate and the amount owed.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">B4</span><h2>One payment opened: missing money</h2><span class="why">The alarm. What we looked for, and the three ways out.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Bank deposits › Results</span><h1>Mutual of Omaha · Nov 3 · $1,860.00</h1></div>
+          <div class="actions"><span class="chip bad"><span class="dot"></span>Missing money</span><button class="btn o">Pick the deposit myself</button><button class="btn">Draft "where is it" letter</button></div>
+        </div>
+        <div class="card">
+          <h3>1 · Did the money land?</h3>
+          <div class="match">
+            <div class="side"><span class="small muted">Carrier said they paid</span><span class="amt">$1,860.00</span><span class="small muted">Nov 3 · MOO_statement_1103.pdf</span></div>
+            <div class="link no" aria-label="Not found">!</div>
+            <div class="side missing"><span class="small muted">Bank shows</span><span class="amt">Nothing</span><span class="small muted">Looked in Chase ••4471 from Nov 3 to Nov 6 for $1,860.00</span></div>
+          </div>
+          <div class="actions">
+            <span class="hint">Closest: $1,680.00 on Nov 4 ("MUTUAL OMAHA ACH"). $180.00 less than the carrier said.</span>
+            <button class="btn ghost">Link it anyway</button><button class="btn ghost">It went to another account</button>
+          </div>
+        </div>
+        <div class="card"><h3>2 · Did they pay each policy right?</h3><p class="muted">7 of 7 policies match what we were promised. The problem is only the deposit.</p></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">B5</span><h2>Matching rules</h2><span class="why">Under Settings › Accounting › Bank. Sets the "same day or a day or two later" window.</span></div>
+      <div class="frame">
+        <div class="card">
+          <div class="grid3">
+            <div class="field"><label for="b5-days">Look for the deposit up to</label><select id="b5-days" class="ctl"><option>Same day only</option><option>1 day after</option><option>2 days after</option><option selected>3 days after</option><option>5 days after</option><option>10 days after</option></select><span class="hint">After the carrier's date. Past this, it's flagged as missing money.</span></div>
+            <div class="field"><label for="b5-amt">The deposit may differ by up to</label><input id="b5-amt" class="ctl" value="$0.00"><span class="hint">For bank fees on wires.</span></div>
+            <div class="field"><label for="b5-pol">Flag a policy when it's off by more than</label><input id="b5-pol" class="ctl" value="$1.00"><span class="hint">Rounding below this is ignored.</span></div>
+          </div>
+          <div class="foot"><button class="btn o">Discard</button><button class="btn">Save</button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">B6</span><h2>Your call: where Results lives</h2><span class="why">The one real fork. I recommend A.</span></div>
+      <div class="frame"><div class="fork">
+        <div class="mini"><span class="tag">A · recommended</span><b>Results is the first tab of Bank deposits</b><div class="tabs"><span class="on">Results</span><span>To match</span><span>Not explained</span><span>Accounts</span></div><span class="hint">One page for all bank work. The old "Not received" tab folds into Results as Missing money.</span></div>
+        <div class="mini"><span class="tag">B</span><b>Its own page: "Carrier payments"</b><div class="tabs"><span class="on">All</span><span>Missing money</span><span>Bad math</span></div><span class="hint">Bank deposits stays as today. Discrepancies would point here for the money side.</span></div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ================= TEAM ================= -->
+  <section id="view-team" class="wrap" style="gap:28px" hidden>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">T1</span><h2>Pay plans: who is paid how</h2><span class="why">Doc phase 1. Every team member has one of the three models.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Accounting</span><h1>Team payouts</h1></div>
+          <div class="tabs"><span>Run payroll</span><span>Runs</span><span class="on">Pay plans</span></div>
+          <div class="actions"><button class="btn">Run payroll</button></div>
+        </div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Team member</th><th>Model</th><th>The deal</th><th>Chargebacks</th><th>Since</th><th></th></tr></thead>
+          <tbody>
+            <tr><td>Alex Morgan<span class="sub">Owner</span></td><td><span class="chip info">1 · Solo</span></td><td>Keeps 100% of commission</td><td class="muted">n/a</td><td>Jan 1, 2026</td><td><button class="btn ghost">Edit</button></td></tr>
+            <tr><td>Sam Ortiz<span class="sub">Retention</span></td><td><span class="chip info">1 · Sidekick</span></td><td>$20.00 per saved deal</td><td class="muted">n/a</td><td>Aug 1, 2026</td><td><button class="btn ghost">Edit</button></td></tr>
+            <tr><td>Maya Lopez<span class="sub">Agent</span></td><td><span class="chip good">2 · Salary + bonus</span></td><td>$2,000.00 a month · 10% of her sales · $25.00 per submitted app</td><td>Off</td><td>Sep 1, 2026</td><td><button class="btn ghost">Edit</button></td></tr>
+            <tr><td>Jordan Reed<span class="sub">Agent</span></td><td><span class="chip warn">3 · Big split</span></td><td>Agent 70% / agency 30%</td><td>Pays back 70%</td><td>Mar 1, 2026</td><td><button class="btn ghost">Edit</button></td></tr>
+            <tr><td>Priya Shah<span class="sub">Agent</span></td><td><span class="chip warn">3 · Big split</span></td><td>Agent 70% / agency 30%</td><td>Pays back 70%</td><td>Jun 15, 2026</td><td><button class="btn ghost">Edit</button></td></tr>
+            <tr><td>Chris Bell<span class="sub">Agent · new</span></td><td><span class="chip bad">No plan yet</span></td><td class="muted">Not paid until a plan is set</td><td></td><td></td><td><button class="btn ghost">Set plan</button></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">T2</span><h2>Pay plan form</h2><span class="why">A full page. Pick a model and only its fields show. Try the three cards.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Team payouts › Pay plans</span><h1>Maya Lopez · pay plan</h1></div>
+          <div class="actions"><button class="btn o">Discard</button><button class="btn">Save plan</button></div>
+        </div>
+        <div class="card">
+          <div class="step"><div class="n">1</div><div><h3>How is Maya paid?</h3>
+            <div class="grid3" role="group" aria-label="Pay model">
+              <button class="pick" data-model="1" aria-pressed="false"><b>1 · Solo &amp; sidekicks</b><span class="small muted">The owner keeps 100%. Retention people get a flat amount for each deal they fix.</span></button>
+              <button class="pick" data-model="2" aria-pressed="true"><b>2 · Salary + bonus</b><span class="small muted">A fixed monthly amount, a small slice of her sales, and a bonus per submitted application.</span></button>
+              <button class="pick" data-model="3" aria-pressed="false"><b>3 · Big split</b><span class="small muted">No salary. A straight split of the commission, and chargebacks come back at the same split.</span></button>
+            </div></div></div>
+          <div class="step"><div class="n">2</div><div><h3>The numbers</h3>
+            <div class="grid3" data-for="1" hidden>
+              <div class="field"><label for="t2-role">This person is</label><select id="t2-role" class="ctl"><option>The owner (keeps everything, not on payroll)</option><option selected>A sidekick (retention)</option></select></div>
+              <div class="field"><label for="t2-save">Paid per saved deal</label><input id="t2-save" class="ctl" value="$20.00"><span class="hint">A deal counts as saved when the client pays again after a retention call by this person.</span></div>
+            </div>
+            <div class="grid3" data-for="2">
+              <div class="field"><label for="t2-base">Base pay each month</label><input id="t2-base" class="ctl" value="$2,000.00"></div>
+              <div class="field"><label for="t2-pct">Her share of commission on her sales</label><input id="t2-pct" class="ctl" value="10%"></div>
+              <div class="field"><label for="t2-bonus">Bonus per submitted application</label><input id="t2-bonus" class="ctl" value="$25.00"></div>
+            </div>
+            <div class="grid3" data-for="3" hidden>
+              <div class="field"><label for="t2-split">Agent's share</label><input id="t2-split" class="ctl" value="70%"><span class="hint">Agency keeps 30%.</span></div>
+              <div class="field"><label>Can differ by carrier</label><button class="btn o" style="justify-self:start">Add a carrier rate</button></div>
+            </div></div></div>
+          <div class="step" data-cb><div class="n">3</div><div><h3>Chargebacks</h3>
+            <label class="toggle" data-for="2"><input type="checkbox" id="t2-cb"><span><b>Maya pays back her share when a policy cancels</b><br><span class="hint">Off: the agency absorbs her 10%. Her salary and bonuses are never taken back.</span></span></label>
+            <p class="hint" data-for="3" hidden>Always on for a big split. If a policy cancels she pays back 70% of the commission the carrier takes back.</p>
+          </div></div>
+          <div class="step"><div class="n">4</div><div><h3>Starts</h3>
+            <div class="grid3"><div class="field"><label for="t2-from">From</label><input id="t2-from" class="ctl" value="Sep 1, 2026"><span class="hint">Months already paid keep the old plan.</span></div></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">T3</span><h2>Run payroll · 1 Pick the month and team</h2><span class="why">Doc phase 2, step 1.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Team payouts › Run payroll</span><h1>Run payroll</h1></div>
+          <div class="tabs"><span class="on">1 · Month &amp; team</span><span>2 · Draft</span><span>3 · Confirm</span></div>
+          <div class="actions"><button class="btn">Show the draft</button></div>
+        </div>
+        <div class="card">
+          <div class="grid3"><div class="field"><label for="t3-month">Month</label><select id="t3-month" class="ctl"><option>October 2026</option><option>September 2026</option></select><span class="hint">September is already paid.</span></div></div>
+          <div class="tablewrap" style="box-shadow:none"><table>
+            <thead><tr><th><input type="checkbox" checked aria-label="All"></th><th>Team member</th><th>Model</th><th>Already paid for October?</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" checked aria-label="Maya"></td><td>Maya Lopez</td><td>2 · Salary + bonus</td><td class="muted">No</td></tr>
+              <tr><td><input type="checkbox" checked aria-label="Jordan"></td><td>Jordan Reed</td><td>3 · Big split</td><td class="muted">No</td></tr>
+              <tr><td><input type="checkbox" checked aria-label="Priya"></td><td>Priya Shah</td><td>3 · Big split</td><td class="muted">No</td></tr>
+              <tr><td><input type="checkbox" checked aria-label="Sam"></td><td>Sam Ortiz</td><td>1 · Sidekick</td><td class="muted">No</td></tr>
+              <tr><td><input type="checkbox" disabled aria-label="Chris"></td><td>Chris Bell</td><td><span class="chip bad">No plan yet</span></td><td class="muted">Set a plan first</td></tr>
+            </tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">T4</span><h2>Run payroll · 2 Draft (nothing is saved)</h2><span class="why">Doc steps 2 and 3. Every amount opens to the lines behind it. Try Priya's choice.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Team payouts › Run payroll</span><h1>October 2026 · draft</h1></div>
+          <div class="tabs"><span>1 · Month &amp; team</span><span class="on">2 · Draft</span><span>3 · Confirm</span></div>
+          <div class="actions"><span class="hint">Draft only. Nothing is saved until you confirm.</span><button class="btn o">Back</button><button class="btn">Looks right · confirm</button></div>
+        </div>
+        <div class="strip">
+          <div class="tile"><span class="k">To pay</span><span class="v" id="t4-total">$6,400.00</span><span class="small muted">4 people</span></div>
+          <div class="tile"><span class="k">Salaries</span><span class="v">$2,000.00</span></div>
+          <div class="tile"><span class="k">Commission shares, bonuses &amp; fees</span><span class="v">$6,210.00</span></div>
+          <div class="tile bad"><span class="k">Taken back</span><span class="v" id="t4-back">−$1,810.00</span><span class="small muted" id="t4-back-sub">$1,310.00 chargebacks + $500.00 old debt</span></div>
+        </div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Team member</th><th class="num">Base</th><th class="num">Commission share</th><th class="num">Bonuses &amp; fees</th><th class="num">Chargebacks</th><th class="num">Owed from before</th><th>If below zero</th><th class="num">Pay</th></tr></thead>
+          <tbody>
+            <tr><td>Maya Lopez<span class="sub">2 · Salary + bonus</span></td><td class="num">$2,000.00</td><td class="num">$640.00<span class="sub">10% of $6,400.00</span></td><td class="num">$350.00<span class="sub">14 apps × $25.00</span></td><td class="num muted">$0.00<span class="sub">off · agency absorbs $95.00</span></td><td class="num">$0.00</td><td class="muted">n/a</td><td class="num"><b>$2,990.00</b></td></tr>
+            <tr><td>Jordan Reed<span class="sub">3 · Big split</span></td><td class="num muted">n/a</td><td class="num">$3,640.00<span class="sub">70% of $5,200.00</span></td><td class="num">$0.00</td><td class="num" style="color:var(--bad)">−$910.00<span class="sub">2 policies · 70% of $1,300.00</span></td><td class="num">$0.00</td><td class="muted">n/a</td><td class="num"><b>$2,730.00</b></td></tr>
+            <tr class="flag"><td>Priya Shah<span class="sub">3 · Big split</span></td><td class="num muted">n/a</td><td class="num">$1,400.00<span class="sub">70% of $2,000.00</span></td><td class="num">$0.00</td><td class="num" style="color:var(--bad)">−$400.00<span class="sub">1 policy</span></td><td class="num" style="color:var(--bad)">−$2,500.00<span class="sub">from September</span></td>
+              <td><select id="t4-choice" class="ctl" style="min-width:200px" aria-label="Priya's negative balance">
+                <option value="carry">Carry it · owes $1,500.00 next month</option>
+                <option value="slow" selected>Take 20% this month · $500.00</option>
+                <option value="forgive">Let it go · forgive $2,500.00</option>
+              </select><span class="sub" id="t4-after">Still owes $2,000.00 after this month</span></td>
+              <td class="num"><b id="t4-priya">$500.00</b></td></tr>
+            <tr><td>Sam Ortiz<span class="sub">1 · Sidekick</span></td><td class="num muted">n/a</td><td class="num muted">n/a</td><td class="num">$180.00<span class="sub">9 saved deals × $20.00</span></td><td class="num muted">n/a</td><td class="num">$0.00</td><td class="muted">n/a</td><td class="num"><b>$180.00</b></td></tr>
+          </tbody>
+        </table></div>
+        <p class="hint">The default choice for anyone below zero comes from Settings › Accounting. "Take 20%" can be another percentage there.</p>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">T5</span><h2>Run payroll · 3 Confirm and pay</h2><span class="why">Doc step 4. Each person can be paid a different way.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Team payouts › Run payroll</span><h1>October 2026 · confirm</h1></div>
+          <div class="tabs"><span>1 · Month &amp; team</span><span>2 · Draft</span><span class="on">3 · Confirm</span></div>
+          <div class="actions"><button class="btn o">Back to draft</button><button class="btn">Confirm · mark October paid</button></div>
+        </div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Team member</th><th class="num">Pay</th><th>How did you pay them?</th><th>Reference (optional)</th><th>Paid on</th></tr></thead>
+          <tbody>
+            <tr><td>Maya Lopez</td><td class="num">$2,990.00</td><td><select class="ctl" aria-label="Method for Maya"><option>Bank transfer</option><option>Zelle</option><option>Check</option><option>Other</option></select></td><td><input class="ctl" value="ACH 88213" aria-label="Reference for Maya"></td><td><input class="ctl" value="Nov 7, 2026" aria-label="Date for Maya"></td></tr>
+            <tr><td>Jordan Reed</td><td class="num">$2,730.00</td><td><select class="ctl" aria-label="Method for Jordan"><option>Zelle</option><option>Bank transfer</option><option>Check</option><option>Other</option></select></td><td><input class="ctl" value="" placeholder="Zelle confirmation" aria-label="Reference for Jordan"></td><td><input class="ctl" value="Nov 7, 2026" aria-label="Date for Jordan"></td></tr>
+            <tr><td>Priya Shah</td><td class="num">$500.00</td><td><select class="ctl" aria-label="Method for Priya"><option>Check</option><option>Zelle</option><option>Bank transfer</option><option>Other</option></select></td><td><input class="ctl" value="Check #1042" aria-label="Reference for Priya"></td><td><input class="ctl" value="Nov 7, 2026" aria-label="Date for Priya"></td></tr>
+            <tr><td>Sam Ortiz</td><td class="num">$180.00</td><td><select class="ctl" aria-label="Method for Sam"><option>Zelle</option><option>Bank transfer</option><option>Check</option><option>Other</option></select></td><td><input class="ctl" value="" placeholder="Zelle confirmation" aria-label="Reference for Sam"></td><td><input class="ctl" value="Nov 7, 2026" aria-label="Date for Sam"></td></tr>
+          </tbody>
+        </table></div>
+        <p class="hint">On confirm: October is stamped PAID for these four, each gets a private pay statement, and the $6,400.00 is booked as payroll in Profit &amp; loss. A paid month can't be run twice; a mistake is fixed by voiding the run.</p>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">T6</span><h2>The paid run</h2><span class="why">Runs tab, after confirm.</span></div>
+      <div class="frame">
+        <div class="titleline">
+          <div class="left"><span class="trail">Team payouts › Runs</span><h1>October 2026 payroll</h1></div>
+          <div class="actions"><span class="stamp">PAID</span><button class="btn o">Download statements</button><button class="btn o">Void run</button></div>
+        </div>
+        <div class="tablewrap"><table>
+          <thead><tr><th>Team member</th><th class="num">Paid</th><th>How</th><th>Balance after</th><th>Statement</th></tr></thead>
+          <tbody>
+            <tr><td>Maya Lopez</td><td class="num">$2,990.00</td><td>Bank transfer · ACH 88213 · Nov 7</td><td>$0.00</td><td><button class="btn ghost">Open</button></td></tr>
+            <tr><td>Jordan Reed</td><td class="num">$2,730.00</td><td>Zelle · Nov 7</td><td>$0.00</td><td><button class="btn ghost">Open</button></td></tr>
+            <tr><td>Priya Shah</td><td class="num">$500.00</td><td>Check #1042 · Nov 7</td><td style="color:var(--bad)">Owes $2,000.00</td><td><button class="btn ghost">Open</button></td></tr>
+            <tr><td>Sam Ortiz</td><td class="num">$180.00</td><td>Zelle · Nov 7</td><td>$0.00</td><td><button class="btn ghost">Open</button></td></tr>
+          </tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <div class="screen">
+      <div class="screen-label"><span class="id">T7</span><h2>Priya's private pay statement</h2><span class="why">Doc phase 3. Priya sees this in My pay. Nobody else on the team can open it.</span></div>
+      <div class="frame">
+        <div class="statement">
+          <div class="titleline"><div class="left"><span class="trail">My pay › Statements</span><h1>Pay statement · October 2026</h1><span class="muted">Priya Shah · Big split, 70%</span></div><span class="stamp">PAID</span></div>
+          <table>
+            <thead><tr><th>What</th><th class="num">Amount</th></tr></thead>
+            <tbody>
+              <tr><td>Your 70% of commission on 3 policies<span class="sub">0119990311 · 0119990318 · CB-55102</span></td><td class="num">$1,400.00</td></tr>
+              <tr><td>Chargeback: 0119990277 cancelled Oct 14<span class="sub">70% of $571.43 taken back by the carrier</span></td><td class="num" style="color:var(--bad)">−$400.00</td></tr>
+              <tr><td>Owed from September</td><td class="num" style="color:var(--bad)">−$2,500.00</td></tr>
+              <tr><td>Held back this month (20% of what you owed)</td><td class="num">$500.00 recovered</td></tr>
+              <tr class="total"><td>Paid to you · Check #1042 · Nov 7</td><td class="num">$500.00</td></tr>
+              <tr><td>Still owed to the agency</td><td class="num" style="color:var(--bad)">$2,000.00</td></tr>
+            </tbody>
+          </table>
+          <div class="foot"><button class="btn o">Download PDF</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var views = ["bank", "team"];
+  function show() {
+    var v = (location.hash || "#bank").slice(1);
+    if (views.indexOf(v) < 0) v = "bank";
+    views.forEach(function (n) {
+      document.getElementById("view-" + n).hidden = n !== v;
+    });
+    document.querySelectorAll(".switch a").forEach(function (a) {
+      if (a.dataset.view === v) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+  }
+  window.addEventListener("hashchange", show);
+  show();
+
+  // T2: model cards switch the fields
+  var picks = document.querySelectorAll(".pick[data-model]");
+  function setModel(m) {
+    picks.forEach(function (p) { p.setAttribute("aria-pressed", p.dataset.model === m ? "true" : "false"); });
+    document.querySelectorAll("[data-for]").forEach(function (el) { el.hidden = el.dataset.for !== m; });
+    var cb = document.querySelector("[data-cb]");
+    if (cb) cb.hidden = m === "1";
+  }
+  picks.forEach(function (p) { p.addEventListener("click", function () { setModel(p.dataset.model); }); });
+  setModel("2");
+
+  // T4: Priya's below-zero choice changes her pay and the total
+  var fmt = function (c) { return "$" + (c / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+  var choice = document.getElementById("t4-choice");
+  var rows = { carry: [0, "Still owes $1,500.00 after this month"], slow: [50000, "Still owes $2,000.00 after this month"], forgive: [100000, "Owes nothing; $2,500.00 forgiven"] };
+  function recalc() {
+    var r = rows[choice.value];
+    document.getElementById("t4-priya").textContent = fmt(r[0]);
+    document.getElementById("t4-after").textContent = r[1];
+    document.getElementById("t4-total").textContent = fmt(299000 + 273000 + 18000 + r[0]);
+    var debt = 100000 - r[0];
+    document.getElementById("t4-back").textContent = "−" + fmt(131000 + debt);
+    document.getElementById("t4-back-sub").textContent = "$1,310.00 chargebacks" + (debt ? " + " + fmt(debt) + " old debt" : "");
+  }
+  choice.addEventListener("change", recalc);
+  recalc();
+})();
+</script>

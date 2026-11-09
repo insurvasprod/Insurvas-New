@@ -33,7 +33,7 @@ export function InboundStepBar({ current, onPick }: { current: 0 | 1 | 2 | 3 | 4
                   done ? "bg-[var(--primary)] text-[var(--on-primary)]" : on ? "border-2 border-[var(--primary)] text-[var(--accent-ink)]" : "border-[1.5px] border-[var(--border-strong)] text-[var(--body)]",
                 )}
               >
-                {done ? <Check className="size-3.5" /> : index + 1}
+                {done ? <Check className="m-tick size-3.5" /> : index + 1}
               </span>
               {/* One type for every step (owner 2026-10-28): 14px medium; the step on screen alone is semibold. */}
               <span className={cn("whitespace-nowrap text-sm leading-[1.4] tracking-[-0.01em] transition-colors", on ? "font-semibold text-[var(--ink)]" : done ? "font-medium text-[var(--ink)]" : "font-medium text-[var(--body)]")}>

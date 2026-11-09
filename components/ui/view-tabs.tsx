@@ -1,9 +1,9 @@
 import type { KeyboardEvent, ReactNode } from "react";
-import Link from "next/link";
 import { LayoutGrid, List } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+import { IntentLink } from "./nav-pending";
 import { TabTrack } from "./tab-track";
 import { ToggleChip } from "./toggle-chip";
 import { titleCaseNode } from "@/components/ui/title-case";
@@ -18,6 +18,10 @@ import { titleCaseNode } from "@/components/ui/title-case";
  * A tab is a button (the page keeps the view in state) or, on a server page, a link (`href`). No
  * hooks, so a server component can draw link tabs; `TabbedPanels` (view-tabs-panels.tsx) is the
  * client island for server pages that hand in rendered sections.
+ *
+ * A link tab is an `IntentLink` (2026-11-08, "feel instant"): it fetches its view once the pointer rests on it, and
+ * from the click until the view is here it looks chosen and the page's content dims (nav-pending.tsx) — the title,
+ * the tabs and the rest of the frame never leave the screen.
  */
 export type ViewTab<K extends string> = {
   key: K;
@@ -81,7 +85,7 @@ export function ViewTabs<K extends string>({
         const panel = typeof controls === "function" ? controls(tab.key) : controls;
         const id = idPrefix ? `${idPrefix}-${tab.key}` : panel ? `${panel}-tab-${tab.key}` : undefined;
         return tab.href ? (
-          <Link key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={panel} scroll={false} className={item(selected)}>{body}</Link>
+          <IntentLink key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={panel} scroll={false} className={item(selected)}>{body}</IntentLink>
         ) : (
           <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={panel} onClick={() => onChange?.(tab.key)} className={item(selected)}>{body}</button>
         );

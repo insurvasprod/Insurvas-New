@@ -206,9 +206,9 @@ export function AccountingSettingsBoard({ initial, locked, accounts, canEdit }: 
             <SettingRow label="Producers see their own balance" change="A producer sees what they are owed, chargebacks included, on My balance. A producer who finds a negative balance only when a payment does not arrive is the one who leaves.">
               <span className="flex items-center gap-3 text-sm text-[var(--ink)]"><Switch label="Producers see their own balance" checked={s.producersSeeBalance} disabled={dis} onChange={(v) => set("producersSeeBalance", v)} />{s.producersSeeBalance ? "Yes" : "No"}</span>
             </SettingRow>
-            <SettingRow label="When a producer's balance goes negative" change="Carry forward takes it from the next run in full. A capped share takes at most that share of each run. Write-off asks you for a reason each time.">
-              {dis ? readOnlyValue({ carry_forward: "Carry it forward", cap: "Recover a capped share", write_off: "Write it off" }[s.producerNegativePolicy]) : <Segmented label="Negative balance" value={s.producerNegativePolicy} onChange={(v) => set("producerNegativePolicy", v)} options={[{ key: "carry_forward", label: "Carry it forward" }, { key: "cap", label: "Recover a capped share" }, { key: "write_off", label: "Write it off" }]} />}
-              {s.producerNegativePolicy === "cap" && <span className="flex items-center gap-2 text-sm text-[var(--body)]">Recover at most {amount("cap", narrow, "Recover at most (%)")} % of each run</span>}
+            <SettingRow label="When someone's balance goes below zero" change="The choice Run payroll starts with for anyone below zero; you can change it per person in the draft. Carry it: what they owe comes off their next pay in full. Take a share: that share of what they owe comes off each month. Let it go: the agency forgives it.">
+              {dis ? readOnlyValue({ carry_forward: "Carry it", cap: "Take a share each month", write_off: "Let it go" }[s.producerNegativePolicy]) : <Segmented label="Negative balance" value={s.producerNegativePolicy} onChange={(v) => set("producerNegativePolicy", v)} options={[{ key: "carry_forward", label: "Carry it" }, { key: "cap", label: "Take a share each month" }, { key: "write_off", label: "Let it go" }]} />}
+              {s.producerNegativePolicy === "cap" && <span className="flex items-center gap-2 text-sm text-[var(--body)]">Take {amount("cap", narrow, "Share of the debt (%)")} % of what they owe each month</span>}
             </SettingRow>
             <SettingRow label="Default split for a new producer" sub="Leave empty for none" change="Filled in when you add a producer. Each producer's own split wins.">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -236,7 +236,7 @@ export function AccountingSettingsBoard({ initial, locked, accounts, canEdit }: 
           </FormSection>
 
           <FormSection id="bank-matching" title="Bank accounts" info="The accounts you import statements from. Insurvas suggests which deposit pays which commission." aside={<Link className="text-sm font-semibold text-[var(--accent-ink)] hover:underline" href="/app/bank">Bank deposits</Link>}>
-            {accounts.length === 0 ? <p className="m-0 text-sm text-[var(--muted)]">No accounts yet. Add one on <Link className="underline" href="/app/bank">Bank deposits</Link>.</p> : (
+            {accounts.length === 0 ? <p className="m-0 text-sm text-[var(--muted)]">No accounts yet. Add one on <Link className="underline" href="/app/bank?view=accounts">Bank deposits</Link>.</p> : (
               <ul className="m-0 flex list-none flex-col p-0">
                 {accounts.map((a) => (
                   <li key={a.id} className="border-t border-[var(--border)] first:border-t-0">
@@ -250,12 +250,12 @@ export function AccountingSettingsBoard({ initial, locked, accounts, canEdit }: 
               </ul>
             )}
             {lockLine("bank_auto_apply")}
-            <Advanced summary="Advanced" hint={`Suggest matches within $${text.bankTol} · look back ${s.bankWindowDays} days`}>
+            <Advanced summary="Advanced" hint={`Deposit within ${s.bankWindowDays} day${s.bankWindowDays === 1 ? "" : "s"} of the carrier's date · amounts within $${text.bankTol}`}>
               <SettingRow label="Suggest a match when the amounts differ by up to" change="A deposit this close to an expected payment is suggested as its match. $0.00 means the amounts must agree exactly.">
                 {dollarField("bankTol", "Bank amount tolerance")}
               </SettingRow>
-              <SettingRow label="Look back" change="How far before a deposit Insurvas looks for the payment it settles.">
-                <span className="flex items-center gap-2"><input aria-label="Look back (days)" className={cn(inputControl, narrow)} disabled={dis} type="number" min={1} max={120} value={s.bankWindowDays} onChange={(e) => set("bankWindowDays", Number(e.target.value) || 1)} /><span className="text-sm text-[var(--muted)]">days</span></span>
+              <SettingRow label="Look for the deposit up to" change="Days after the carrier's payment date. Past this with nothing in the bank, Bank deposits › Results flags it as missing money, once your bank file reaches that date.">
+                <span className="flex items-center gap-2"><input aria-label="Days after the carrier's date" className={cn(inputControl, narrow)} disabled={dis} type="number" min={1} max={120} value={s.bankWindowDays} onChange={(e) => set("bankWindowDays", Number(e.target.value) || 1)} /><span className="text-sm text-[var(--muted)]">days after</span></span>
               </SettingRow>
             </Advanced>
           </FormSection>

@@ -15,6 +15,7 @@ import { MoreMenu } from "@/components/ui/more-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { usePageTurn } from "@/components/ui/paged";
 import { TableCard } from "@/components/ui/table-card";
 import { st } from "@/components/app/settings/primitives";
 import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
@@ -354,6 +355,9 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
   const [when, setWhen] = useState<WhenFilter>("open");
   const [day, setDay] = useState("");
   const [listPage, setListPage] = useState(1);
+  // Turning the page brings the rows in from the side the pager moved toward (§ Motion, Wave 2). Read from the page
+  // asked for, before the early return below; a clamped page turns the same way.
+  const pageTurn = usePageTurn(listPage);
   // Below lg (2026-10-09 mobile) the rows are cards, the filters sit behind a Filters button, and the
   // list scrolls with the page; the fill-height sizing is for the table, from lg.
   const wide = useMediaQuery(WIDE_QUERY);
@@ -846,7 +850,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
                   </label>
                 </div>
                 {grouped ? groupedCards : (
-                <CardList label="Callbacks">
+                <CardList key={listCurrent} label="Callbacks" pageTurn={pageTurn}>
                   {pageRows.map((callback) => <CallbackCard key={callback.id} {...rowProps(callback)} />)}
                 </CardList>
                 )}
@@ -864,7 +868,7 @@ export function CallbackCalendar({ readOnly }: { readOnly: boolean }) {
                   </tr>
                 </thead>
                 {grouped ? groupedBody : (
-                <tbody>
+                <tbody key={listCurrent} data-page-turn={pageTurn}>
                   {pageRows.map((callback) => <CallbackTableRow key={callback.id} compact={compact} rowHeight={rowHeight} {...rowProps(callback)} />)}
                 </tbody>
                 )}

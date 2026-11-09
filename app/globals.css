@@ -519,7 +519,45 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
   --t-micro:  120ms;  /* hover, press, focus */
   --t-panel:  200ms;  /* a card lifting, a panel opening */
   --t-enter:  360ms;  /* a section arriving */
+  /* Premium motion foundation (2026-11-09, docs/design/UI-CONSISTENCY.md § Motion). */
+  --t-page:   220ms;  /* the content of a page replacing another */
+  --t-data:   260ms;  /* rows, figures and chart values changing */
+  --t-float-in:  170ms; /* a popover, menu, select or dialog opening */
+  --t-float-out: 120ms; /* … and closing: exits are always shorter than entrances */
 }
+
+/* ---------------------------------------------------------------------------
+ * Overlay enter/exit (2026-11-09). The kit's dialogs, popovers, menus, hints and hover cards have always
+ * carried `animate-in fade-in-0 zoom-in-95 slide-in-from-*` (and the `-out` twins), but no plugin defined
+ * them, so every overlay opened and closed with a cut. These are those utilities, on our tokens. The enter
+ * and exit values are non-inheriting properties, so a parent's `fade-in-0` never leaks into a child.
+ * Radix keeps a closing overlay mounted until its `animationend`, so the exit plays for free.
+ * Floating layers start at opacity 0: they sit over the page, so there is no bare background to flash.
+ * ------------------------------------------------------------------------ */
+@property --m-enter-opacity { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --m-enter-scale { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --m-enter-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --m-enter-y { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --m-exit-opacity { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --m-exit-scale { syntax: "<number>"; inherits: false; initial-value: 1; }
+@property --m-exit-x { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@property --m-exit-y { syntax: "<length>"; inherits: false; initial-value: 0px; }
+@keyframes m-enter { from { opacity: var(--m-enter-opacity); transform: translate3d(var(--m-enter-x), var(--m-enter-y), 0) scale(var(--m-enter-scale)); } }
+@keyframes m-exit  { to   { opacity: var(--m-exit-opacity);  transform: translate3d(var(--m-exit-x), var(--m-exit-y), 0) scale(var(--m-exit-scale)); } }
+@utility animate-in { animation: m-enter var(--t-float-in) var(--e-out) both; }
+@utility animate-out { animation: m-exit var(--t-float-out) var(--e) both; }
+@utility fade-in-* { --m-enter-opacity: calc(--value(number) / 100); }
+@utility fade-out-* { --m-exit-opacity: calc(--value(number) / 100); }
+@utility zoom-in-* { --m-enter-scale: calc(--value(number) / 100); }
+@utility zoom-out-* { --m-exit-scale: calc(--value(number) / 100); }
+@utility slide-in-from-top-* { --m-enter-y: calc(var(--spacing) * --value(number) * -1); }
+@utility slide-in-from-bottom-* { --m-enter-y: calc(var(--spacing) * --value(number)); }
+@utility slide-in-from-left-* { --m-enter-x: calc(var(--spacing) * --value(number) * -1); }
+@utility slide-in-from-right-* { --m-enter-x: calc(var(--spacing) * --value(number)); }
+@utility slide-out-to-top-* { --m-exit-y: calc(var(--spacing) * --value(number) * -1); }
+@utility slide-out-to-bottom-* { --m-exit-y: calc(var(--spacing) * --value(number)); }
+@utility slide-out-to-left-* { --m-exit-x: calc(var(--spacing) * --value(number) * -1); }
+@utility slide-out-to-right-* { --m-exit-x: calc(var(--spacing) * --value(number)); }
 
 /* A section arriving rises a few pixels and is never invisible on the way (owner 2026-11-03, "it flashes" in
    light mode): starting from opacity 0, the frames between the loading skeleton leaving and the page coming
@@ -536,9 +574,42 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 .m-draw { stroke-dasharray: 1; animation: m-draw 900ms var(--e-out) both; }
 @keyframes m-grow-x { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .m-bar-x { transform-origin: left; animation: m-grow-x 700ms var(--e-out) both; }
+/* A line chart reveals left to right, as time runs (2026-11-09: the whole drawing, so the line, its area and the
+   comparison line arrive together). */
+@keyframes m-reveal-x { from { clip-path: inset(-8px 100% -8px 0); } to { clip-path: inset(-8px -8px -8px 0); } }
+.m-reveal-x { animation: m-reveal-x 900ms var(--e-out) both; }
+/* New figures move the marks to their new values instead of redrawing them (bars, line paths, donut arcs). */
+.m-chart-tween { transition: height var(--t-data) var(--e-out), width var(--t-data) var(--e-out); }
+/* Wave 1 · the dashboard (components/app/home/dash/dash-kit.tsx DashLayout): the cards arrive one after another —
+   Needs you first, then the right column (the brand card leads), then the main column row by row. 40ms apart, all
+   in within 240ms, from .72 like every entrance. */
+.m-dash > :first-child,
+.m-dash > :nth-child(2) > :first-child > * > *,
+.m-dash > :nth-child(2) > :nth-child(2) > * { animation: m-rise var(--t-enter) var(--e-out) backwards; }
+.m-dash > :nth-child(2) > :nth-child(2) > :nth-child(1) { animation-delay: 40ms; }
+.m-dash > :nth-child(2) > :nth-child(2) > :nth-child(2) { animation-delay: 120ms; }
+.m-dash > :nth-child(2) > :first-child > :nth-child(1) > :nth-child(1) { animation-delay: 80ms; }
+.m-dash > :nth-child(2) > :first-child > :nth-child(1) > :nth-child(2) { animation-delay: 120ms; }
+.m-dash > :nth-child(2) > :first-child > :nth-child(2) > :nth-child(1) { animation-delay: 160ms; }
+.m-dash > :nth-child(2) > :first-child > :nth-child(2) > :nth-child(2) { animation-delay: 200ms; }
+/* The Overview's own grid (overview-view.tsx): Needs you, the right column, the two rows, then the bottom row. */
+.m-dash-ov > :first-child,
+.m-dash-ov > :nth-child(2) > :first-child > * > *,
+.m-dash-ov > :nth-child(2) > :nth-child(2) > * > *,
+.m-dash-ov > :nth-child(3) > * { animation: m-rise var(--t-enter) var(--e-out) backwards; }
+.m-dash-ov > :nth-child(2) > :nth-child(2) > * > :nth-child(1) { animation-delay: 40ms; }
+.m-dash-ov > :nth-child(2) > :nth-child(2) > * > :nth-child(2) { animation-delay: 120ms; }
+.m-dash-ov > :nth-child(2) > :first-child > :nth-child(1) > :nth-child(1) { animation-delay: 80ms; }
+.m-dash-ov > :nth-child(2) > :first-child > :nth-child(1) > :nth-child(2) { animation-delay: 120ms; }
+.m-dash-ov > :nth-child(2) > :first-child > :nth-child(2) > :nth-child(1) { animation-delay: 160ms; }
+.m-dash-ov > :nth-child(2) > :first-child > :nth-child(2) > :nth-child(2) { animation-delay: 200ms; }
+.m-dash-ov > :nth-child(2) > :first-child > :nth-child(2) > :nth-child(3) { animation-delay: 240ms; }
+.m-dash-ov > :nth-child(2) > :nth-child(2) > * > :nth-child(n + 3) { animation-delay: 160ms; }
+.m-dash-ov > :nth-child(3) > * { animation-delay: 240ms; }
+.m-chart-tween path { transition: d var(--t-data) var(--e-out); }
+.m-chart-tween circle { transition: stroke-dasharray var(--t-data) var(--e-out), stroke-dashoffset var(--t-data) var(--e-out); }
 @keyframes m-sweep { from { transform: rotate(-90deg) scale(.92); opacity: 0; } to { transform: rotate(0) scale(1); opacity: 1; } }
 .m-sweep { transform-origin: center; animation: m-sweep 700ms var(--e-out) both; }
-@keyframes m-draw  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes m-sheen { from { background-position: -640px 0; } to { background-position: 640px 0; } }
 @keyframes m-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(7, 214, 160, .42); }
@@ -590,8 +661,26 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 .m-seq > *:nth-child(8) { animation-delay: 288ms; }
 .m-seq > *:nth-child(n + 9) { animation-delay: 312ms; }
 
+/* 2a · Rows-filter (Wave 5): a new set of rows (a chip, a sort, a filter) settles in from .72, all together — no
+   ripple; a page turn below overrides it with its slide. */
+.m-rows-settle > * { animation: m-panel-settle var(--t-panel) var(--e-out) backwards; }
+
+/* 2b · Rows-page (2026-11-09, components/ui/paged.tsx): turning a page brings its rows in 8px from the side the
+   pager moved toward, 16ms apart and capped at the eighth, from .72 — never from blank. */
+@keyframes m-rows-next { from { opacity: .72; transform: translateX(8px); } }
+@keyframes m-rows-prev { from { opacity: .72; transform: translateX(-8px); } }
+[data-page-turn="next"] > * { animation: m-rows-next var(--t-data) var(--e-out) backwards; }
+[data-page-turn="prev"] > * { animation: m-rows-prev var(--t-data) var(--e-out) backwards; }
+[data-page-turn] > *:nth-child(2) { animation-delay: 16ms; }
+[data-page-turn] > *:nth-child(3) { animation-delay: 32ms; }
+[data-page-turn] > *:nth-child(4) { animation-delay: 48ms; }
+[data-page-turn] > *:nth-child(5) { animation-delay: 64ms; }
+[data-page-turn] > *:nth-child(6) { animation-delay: 80ms; }
+[data-page-turn] > *:nth-child(7) { animation-delay: 96ms; }
+[data-page-turn] > *:nth-child(n + 8) { animation-delay: 112ms; }
+
 /* 3 · Connector draw, in the direction the work travels. */
-.m-track { transform-origin: left; animation: m-draw 520ms var(--e-out) both; animation-delay: 200ms; }
+.m-track { transform-origin: left; animation: m-grow 520ms var(--e-out) both; animation-delay: 200ms; }
 
 /* 4 · Meter grow. Runs once, after the page settles, so the bar reads as a
    value rather than a loader. */
@@ -607,10 +696,123 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 @keyframes m-flyout-in { from { opacity: 0; transform: translateX(-6px) scale(.97); } to { opacity: 1; transform: none; } }
 @keyframes m-flyout-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-4px) scale(.98); } }
 .m-panel { animation: m-panel-in var(--t-panel) var(--e-out) both; }
+/* … and slides back out to its edge when the person closes it (DetailPanel's data-state, 2026-11-09). */
+@keyframes m-panel-out { to { opacity: 0; transform: translateX(16px); } }
+[data-slot="detail-panel"][data-state="closed"] { animation: m-panel-out var(--t-float-out) var(--e) both; pointer-events: none; }
+[data-slot="detail-panel-backdrop"] { animation: m-fade var(--t-panel) var(--e-out) both; }
+[data-slot="detail-panel-backdrop"][data-state="closed"] { animation: m-vt-out var(--t-float-out) var(--e) both; pointer-events: none; }
 /* A tab's panel settles in, never from invisible (owner 2026-11-03): a table inside a panel blanked to the
    page background for a few frames as the page finished loading — a flash on light. */
 @keyframes m-panel-settle { from { opacity: .72; } to { opacity: 1; } }
 [role="tabpanel"] { animation: m-panel-settle 180ms var(--e-out) both; }
+
+/* 5b · Content in (2026-11-08, "feel instant"): the one transition for content that replaces content — a merged
+   page's step, a tab's server-rendered view. 150ms, a 4px rise from .72, never from invisible (the light-mode
+   flash, 2026-11-03). `backwards`, not `both`, so no transform is left holding fixed layers. Only the content
+   moves; the frame around it (title, tabs, rail) stays put. Reduced motion: the block at the top cuts it. */
+@keyframes m-content-in { from { opacity: .72; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.m-content-in { animation: m-content-in 150ms var(--e-out) backwards; }
+/* While a tab, a rail step or a control waits on the server (components/ui/nav-pending.tsx puts a hidden
+   [data-nav-pending] in the page), the content it will replace dims — after 120ms, so a quick answer never
+   flickers, and back at once when it lands. */
+[data-page-content] { transition: opacity 150ms var(--e-out); }
+main:has([data-nav-pending]) [data-page-content] { opacity: .6; transition-delay: 120ms; }
+/* 5c · Page motion (2026-11-09, components/portal/portal-page-transition.tsx). The arriving page stamps the
+   direction its link gave (data-enter) and plays it, from .72 — never from 0, so no frame shows the bare background
+   (the light-mode flash, 2026-11-03). area: the sidebar and anything untagged; forward / back: down or up a rail, a
+   record opened, the browser's back. On a merged page only the step's column moves; the title and rail stay. */
+@keyframes m-vt-out { to { opacity: 0; } }
+@keyframes m-vt-rise { from { opacity: .72; transform: translateY(6px); } }
+@keyframes m-vt-from-right { from { opacity: .72; transform: translateX(12px); } }
+@keyframes m-vt-from-left { from { opacity: .72; transform: translateX(-12px); } }
+/* The stamp is put only on what is on screen as the page arrives (portal-page-transition.tsx): the page's root, or
+   a merged page's step column. A page with its own m-stagger is not raised a second time on an `area` move. */
+.portal-page-transition [data-enter="area"] { animation: m-vt-rise var(--t-page) var(--e-out) backwards; }
+.portal-page-transition [data-enter="forward"] { animation: m-vt-from-right var(--t-page) var(--e-out) backwards; }
+.portal-page-transition [data-enter="back"] { animation: m-vt-from-left var(--t-page) var(--e-out) backwards; }
+/* React <ViewTransition> (the motion lab's step demo, and any Transition-driven swap): the same three moves. */
+/* Two pages are rarely the same height: the box takes the new size at once and each snapshot keeps its own,
+   pinned to the top, so nothing stretches (as auth-step does). */
+::view-transition-group(.page-area),
+::view-transition-group(.page-forward),
+::view-transition-group(.page-back) { animation: none; }
+::view-transition-old(.page-area), ::view-transition-new(.page-area),
+::view-transition-old(.page-forward), ::view-transition-new(.page-forward),
+::view-transition-old(.page-back), ::view-transition-new(.page-back) { width: 100%; height: auto; object-fit: none; object-position: top; }
+::view-transition-old(.page-area),
+::view-transition-old(.page-forward),
+::view-transition-old(.page-back) { animation: m-vt-out var(--t-float-out) var(--e) both; }
+::view-transition-new(.page-area) { animation: m-vt-rise var(--t-page) var(--e-out) both; }
+::view-transition-new(.page-forward) { animation: m-vt-from-right var(--t-page) var(--e-out) both; }
+::view-transition-new(.page-back) { animation: m-vt-from-left var(--t-page) var(--e-out) both; }
+
+/* While any page or view is on its way, a 2px hairline runs along the top of the screen: it eases most of the way
+   and waits there, so a slow answer still looks alive and a fast one only flickers in (after 150ms). One element,
+   no script, gone the moment the marker is. */
+@keyframes m-nav-progress { from { transform: scaleX(0); } to { transform: scaleX(.86); } }
+body:has([data-nav-pending])::before {
+  content: ""; position: fixed; inset: 0 0 auto 0; z-index: 90; height: 2px; pointer-events: none;
+  background: var(--primary); transform-origin: left;
+  animation: m-nav-progress 2400ms var(--e-out) 150ms both;
+}
+
+/* Indicator (2026-11-09, components/ui/tab-track.tsx): in a segmented row the chosen look is one pill that slides
+   between tabs; the tabs themselves sit over it with no fill of their own. */
+[data-tab-pill] {
+  position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;
+  border: 1px solid var(--color-border); border-radius: var(--radius-md, 6px);
+  background: var(--color-card); box-shadow: 0 1px 2px rgba(16, 20, 26, .06);
+}
+[data-tab-pill="glide"] { transition: transform var(--t-panel) var(--e-out), width var(--t-panel) var(--e-out); }
+[data-tab-track="pill"] > [role="tab"] { position: relative; z-index: 1; }
+[data-tab-track="pill"] > [role="tab"][aria-selected="true"],
+[data-tab-track="pill"] > [role="tab"]:has(> [data-nav-pending]) { background: transparent; border-color: transparent; box-shadow: none; }
+
+/* The tab that was clicked looks chosen at once, before its view arrives. */
+[role="tab"]:has(> [data-nav-pending]) { color: var(--color-foreground); background: var(--color-card); border-color: var(--color-border); }
+
+/* 5d · Small controls (2026-11-09). A checkbox's tick pops in; a <details> (the trail's fold, a disclosure) opens
+   by height instead of snapping; an accordion row the same way where it uses <details>. */
+@keyframes m-tick { from { opacity: 0; transform: scale(.6); } }
+.m-tick { animation: m-tick var(--t-micro) var(--e-out) both; }
+@supports (interpolate-size: allow-keywords) {
+  details { interpolate-size: allow-keywords; }
+  details::details-content { block-size: 0; overflow-y: clip; transition: block-size var(--t-panel) var(--e-out), content-visibility var(--t-panel) allow-discrete; }
+  details[open]::details-content { block-size: auto; }
+}
+
+/* 5f · Board cards (Wave 3, lead-workspace.tsx): a card settles into its column — scaled from .96 at .72 — when the
+   board is drawn, when "Show more" adds cards, and where a moved card lands. The card being dragged fades back in
+   its place until it is dropped. */
+@keyframes m-drop-in { from { opacity: .72; transform: scale(.96); } }
+.m-drop-in { animation: m-drop-in var(--t-data) var(--e-out) backwards; }
+.m-drop-in { transition: opacity var(--t-micro) var(--e), transform var(--t-panel) var(--e), box-shadow var(--t-panel) var(--e), border-color var(--t-panel) var(--e); }
+.m-drop-in[data-dragging] { opacity: .45; transform: scale(.98); }
+
+/* 5g · Settings' unsaved-changes bar rises into place when there is something to save (Wave 7, settings-layout.tsx). */
+@keyframes m-savebar { from { opacity: .72; transform: translateY(12px); } }
+.m-savebar { animation: m-savebar var(--t-panel) var(--e-out) backwards; }
+
+/* 5h · A chat message that arrives while the conversation is open rises into the thread (Wave 7). */
+@keyframes m-msg-in { from { opacity: .72; transform: translateY(8px) scale(.98); } }
+.m-msg-in { transform-origin: bottom; animation: m-msg-in var(--t-data) var(--e-out) backwards; }
+
+/* 5e · Shell entrance (2026-11-09, components/app/shell-entrance.tsx): once per sign-in the sidebar slides in, the
+   top bar drops in, then the page rises. Never from blank: each part starts at .72 over the page ground. */
+@keyframes m-shell-side { from { opacity: .72; transform: translateX(-16px); } }
+@keyframes m-shell-top { from { opacity: .72; transform: translateY(-8px); } }
+html.shell-enter .portal-agent-sidebar-desktop { animation: m-shell-side 420ms var(--e-out) backwards; }
+html.shell-enter .portal-agent main > :first-child { animation: m-shell-top var(--t-enter) var(--e-out) 60ms backwards; }
+html.shell-enter .portal-agent main > :last-child { animation: m-rise 480ms var(--e-out) 140ms backwards; }
+
+/* Signing out (Wave 8): the workspace dims and settles back while the sign-in page comes; never to blank. */
+.portal-agent { transition: opacity var(--t-page) var(--e), transform var(--t-page) var(--e); }
+html.shell-leave .portal-agent { opacity: .55; transform: scale(.99); pointer-events: none; }
+
+/* Sign-up steps (Wave 8, components/portal/auth-layout.tsx): from step to step the bars hold still and only the
+   step's own content slides in from the right, as the funnel moves on. A door without bars keeps its rise. */
+[data-auth-body]:has(> [data-auth-steps]) > [data-auth-steps] { animation: none; }
+[data-auth-body]:has(> [data-auth-steps]) > [data-auth-step-body] { animation: m-vt-from-right var(--t-page) var(--e-out) backwards; }
 
 /* 6 · Refusal. The only animation in the product that signals no. */
 .m-deny { animation: m-deny 200ms var(--e) 1 both; animation-delay: 760ms; }
@@ -2154,10 +2356,6 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) body { background: tra
   .portal-settings-group-toggle, .portal-settings-group-chevron { transition: none; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { scroll-behavior: auto !important; animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; }
-}
-
 body {
   background: var(--color-page-bg);
   color: var(--color-text-dark);
@@ -2658,6 +2856,26 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   font-weight: 500; /* the chip carries it; the board keeps the weight of its neighbours */
 }
 .portal-agent-nav-link.is-active .portal-agent-nav-icon { color: var(--nav-active-icon); }
+/* Wave 1 · the sidebar (2026-11-09). Toggling it glides between its widths (only while .is-moving, which the toggle
+   sets; a page load snaps), and the page beside it follows. A group opens by height and fades in, and closes the
+   same way, instead of appearing and vanishing. */
+.portal-agent-sidebar-desktop.is-moving { transition: width var(--t-panel) var(--e-out), padding var(--t-panel) var(--e-out); }
+.portal-agent:has(.portal-agent-sidebar-desktop.is-moving) > main { transition: margin-left var(--t-panel) var(--e-out), width var(--t-panel) var(--e-out); }
+.portal-agent-nav-sublist,
+.portal-agent-nav-disclosure-content {
+  interpolate-size: allow-keywords; overflow-y: clip;
+  transition: height var(--t-panel) var(--e-out), opacity var(--t-panel) var(--e-out), display var(--t-panel) allow-discrete;
+}
+.portal-agent-nav-sublist[hidden],
+.portal-agent-nav-disclosure-content[hidden] { height: 0; opacity: 0; }
+/* Only the group whose heading was just pressed grows open; groups already open on a page load are simply there. */
+@starting-style {
+  .portal-agent-nav-section:focus-within > .portal-agent-nav-sublist:not([hidden]),
+  .portal-agent-nav-section:focus-within > .portal-agent-nav-disclosure-content:not([hidden]) { height: 0; opacity: 0; }
+}
+
+/* The item just clicked looks chosen at once, while its page is on its way (IntentLink's pending marker, 2026-11-09). */
+.portal-agent-nav-link:has(> [data-nav-pending]) { background: var(--nav-active-bg); box-shadow: inset 2px 0 0 var(--portal-primary); color: var(--nav-active-ink); }
 
 /* Section headings are labels, not buttons that happen to be quiet. LA-1 and LA-2 are headings
    too — they used to be 55px two-line blocks with an icon tile, heavier than anything they head. */

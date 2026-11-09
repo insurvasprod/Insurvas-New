@@ -125,24 +125,25 @@ function InvoiceForm({ sources, initial }: { sources: Sources; initial?: Invoice
   const totals = !bad && taxCents !== null ? invoiceTotals(parsed.map((p) => ({ quantity: p.quantity, unitPriceCents: p.unitPriceCents ?? 0, amountCents: p.amountCents })), taxCents) : null;
   const unattributed = lines.filter((l) => !l.campaignId).length;
 
-  const save = async (): Promise<boolean> => {
+  // "Save as draft" keeps it to finish later; "Save bill" means it arrived and is ready to check and approve.
+  const save = async (as: "draft" | "received" = "received"): Promise<boolean> => {
     if (!totals || taxCents === null) { setError("Check the amounts: dollars and cents only."); return false; }
     if (taxCents < 0) { setError("Tax can't be negative."); return false; }
-    if (f.periodStart && f.periodEnd && f.periodEnd < f.periodStart) { setError("“Period to” is before “Period from”."); return false; }
-    if (!f.source || !f.number.trim()) { setError("Say who sent it and its invoice number."); return false; }
+    if (f.periodStart && f.periodEnd && f.periodEnd < f.periodStart) { setError("“Leads to” is before “Leads from”."); return false; }
+    if (!f.source || !f.number.trim()) { setError("Choose who sent the bill and enter its bill number."); return false; }
     const [kind, id] = f.source.split(":");
     setBusy(true);
     setError(null);
     try {
       const payload = {
         vendor_id: kind === "vendor" ? id : null, partner_id: kind === "partner" ? id : null, invoice_number: f.number, invoice_date: f.date,
-        period_start: f.periodStart || null, period_end: f.periodEnd || null, due_date: f.due || null, tax_cents: taxCents, note: f.note || null, status: f.status,
+        period_start: f.periodStart || null, period_end: f.periodEnd || null, due_date: f.due || null, tax_cents: taxCents, note: f.note || null, status: as,
         lines: lines.map((l, i) => ({ description: l.description, campaign_id: l.campaignId || null, lead_type: l.leadType, quantity: parsed[i].quantity, unit_price_cents: parsed[i].unitPriceCents ?? 0, amount_cents: parsed[i].amountCents })),
       };
       const body = initial
         ? await send(`/api/app/accounting/invoices/${initial.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
         : await send("/api/app/accounting/invoices", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      notify.done(initial ? "Invoice saved" : "Invoice entered");
+      notify.done(as === "draft" ? "Saved as a draft. Finish it when you have the details." : initial ? "Bill saved" : "Bill saved. Check it against your count, then approve it.");
       router.push(`/app/vendor-bills/${initial?.id ?? body.id}`);
       router.refresh();
       return true;
@@ -158,59 +159,80 @@ function InvoiceForm({ sources, initial }: { sources: Sources; initial?: Invoice
   const vendorId = f.source.startsWith("vendor:") ? f.source.slice(7) : null;
   const campaigns = vendorId ? sources.campaigns.filter((c) => c.vendorId === vendorId || !c.vendorId) : sources.campaigns;
   const cell = `${inputControl} w-full`;
+  // The form in the order the bill is read (/ui-taste pass, owner 2026-11-09), each part a plain question.
+  const section = "flex flex-col gap-3 border-t border-border pt-5 first:border-t-0 first:pt-0";
+  const heading = "m-0 text-sm font-semibold text-[var(--ink)]";
   return (
-    <form ref={scope} onSubmit={submit} className={`${cardSurface} flex flex-col gap-4 p-5`}>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Field label="From" htmlFor="inv-source" required className="sm:col-span-2">
-          <select id="inv-source" className={control} required value={f.source} onChange={(e) => set("source", e.target.value)}>
-            <option value="">Choose…</option>
-            {sources.vendors.length ? <optgroup label="Lead vendors">{sources.vendors.map((v) => <option key={v.id} value={`vendor:${v.id}`}>{v.name}</option>)}</optgroup> : null}
-            {sources.partners.length ? <optgroup label="Partners">{sources.partners.map((p) => <option key={p.id} value={`partner:${p.id}`}>{p.name}</option>)}</optgroup> : null}
-          </select>
-        </Field>
-        <Field label="Invoice number" htmlFor="inv-number" required><input id="inv-number" className={control} required maxLength={80} value={f.number} onChange={(e) => set("number", e.target.value)} /></Field>
-        <Field label="Invoice date" htmlFor="inv-date" required><input id="inv-date" type="date" className={control} required value={f.date} onChange={(e) => set("date", e.target.value)} /></Field>
-        <Field label="Period from" htmlFor="inv-from"><input id="inv-from" type="date" className={control} value={f.periodStart} onChange={(e) => set("periodStart", e.target.value)} /></Field>
-        <Field label="Period to" htmlFor="inv-to"><input id="inv-to" type="date" className={control} value={f.periodEnd} onChange={(e) => set("periodEnd", e.target.value)} /></Field>
-        <Field label="Due" htmlFor="inv-due"><input id="inv-due" type="date" className={control} value={f.due} onChange={(e) => set("due", e.target.value)} /></Field>
-        <Field label="Tax ($)" htmlFor="inv-tax"><input id="inv-tax" className={control} inputMode="decimal" value={f.tax} onChange={(e) => set("tax", e.target.value)} placeholder="0.00" /></Field>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="portal-lead-table w-full min-w-[820px] text-left text-sm" data-even="off">
-          {/* data-even off: the inputs size the columns; an even spread would squeeze the description. */}
-          <thead><tr><th>Line</th><th className="w-[190px]">Campaign</th><th className="w-[170px]">Type</th><th className="w-[90px]">Qty</th><th className="w-[110px]">Unit ($)</th><th className="w-[120px]">Amount ($)</th><th className="w-[40px]"><span className="sr-only">Remove</span></th></tr></thead>
-          <tbody>
-            {lines.map((l, i) => (
-              <tr key={i}>
-                <td><input aria-label="Line description" className={cell} required maxLength={300} value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} /></td>
-                <td><select aria-label="Campaign" className={cell} value={l.campaignId} onChange={(e) => setLine(i, "campaignId", e.target.value)}><option value="">Unattributed</option>{campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>
-                <td><select aria-label="Lead type" className={cell} value={l.leadType} onChange={(e) => setLine(i, "leadType", e.target.value)}>{LEAD_TYPES.map((t) => <option key={t} value={t}>{LEAD_TYPE_LABELS[t]}</option>)}</select></td>
-                <td><input aria-label="Quantity" className={cell} inputMode="numeric" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value.replace(/[^\d]/g, ""))} /></td>
-                <td><input aria-label="Unit price" className={cell} inputMode="decimal" value={l.unitPrice} onChange={(e) => setLine(i, "unitPrice", e.target.value)} /></td>
-                <td><input aria-label="Amount" className={cell} inputMode="decimal" value={l.amount} placeholder={parsed[i].unitPriceCents != null ? dollars(lineAmount({ quantity: parsed[i].quantity, unitPriceCents: parsed[i].unitPriceCents ?? 0, amountCents: null })) : ""} onChange={(e) => setLine(i, "amount", e.target.value)} /></td>
-                <td>{lines.length > 1 ? <Button type="button" size="sm" variant="ghost" aria-label="Remove line" onClick={() => setLines((cur) => cur.filter((_, j) => j !== i))}>×</Button> : null}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <Button type="button" variant="outline" onClick={() => setLines((cur) => [...cur, blankLine()])}>Add a line</Button>
-        <span className="text-muted-foreground">
-          {unattributed ? `${unattributed} unattributed line${unattributed === 1 ? "" : "s"} · ` : ""}
-          {totals ? <>Subtotal {money(totals.subtotalCents)} · Total <strong className="text-foreground">{money(totals.totalCents)}</strong></> : "Check the amounts"}
-        </span>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Field label="Note" htmlFor="inv-note" className="sm:col-span-3"><input id="inv-note" className={control} maxLength={2000} value={f.note} onChange={(e) => set("note", e.target.value)} /></Field>
-        <Field label="Save as" htmlFor="inv-status"><select id="inv-status" className={control} value={f.status} onChange={(e) => set("status", e.target.value)}><option value="received">Received</option><option value="draft">Draft</option></select></Field>
-      </div>
+    <form ref={scope} onSubmit={submit} className={`${cardSurface} flex flex-col gap-5 p-5`}>
+      <section className={section}>
+        <h2 className={heading}>1 · Who sent the bill?</h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Field label="Vendor or partner" htmlFor="inv-source" required className="sm:col-span-2">
+            <select id="inv-source" className={control} required value={f.source} onChange={(e) => set("source", e.target.value)}>
+              <option value="">Choose who sent it</option>
+              {sources.vendors.length ? <optgroup label="Lead vendors">{sources.vendors.map((v) => <option key={v.id} value={`vendor:${v.id}`}>{v.name}</option>)}</optgroup> : null}
+              {sources.partners.length ? <optgroup label="Partners">{sources.partners.map((p) => <option key={p.id} value={`partner:${p.id}`}>{p.name}</option>)}</optgroup> : null}
+            </select>
+          </Field>
+          <Field label="Bill number" htmlFor="inv-number" required><input id="inv-number" className={control} required maxLength={80} placeholder="As printed on the bill" value={f.number} onChange={(e) => set("number", e.target.value)} /></Field>
+          <Field label="Bill date" htmlFor="inv-date" required><input id="inv-date" type="date" className={control} required value={f.date} onChange={(e) => set("date", e.target.value)} /></Field>
+        </div>
+      </section>
+
+      <section className={section}>
+        <h2 className={heading}>2 · Which leads does it cover?</h2>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Field label="Leads from" htmlFor="inv-from" hint="Used to compare the bill with the leads you really got."><input id="inv-from" type="date" className={control} value={f.periodStart} onChange={(e) => set("periodStart", e.target.value)} /></Field>
+          <Field label="Leads to" htmlFor="inv-to"><input id="inv-to" type="date" className={control} value={f.periodEnd} onChange={(e) => set("periodEnd", e.target.value)} /></Field>
+          <Field label="Pay by (optional)" htmlFor="inv-due"><input id="inv-due" type="date" className={control} value={f.due} onChange={(e) => set("due", e.target.value)} /></Field>
+        </div>
+      </section>
+
+      <section className={section}>
+        <h2 className={heading}>3 · What is on it?</h2>
+        <div className="overflow-x-auto">
+          <table className="portal-lead-table w-full min-w-[820px] text-left text-sm" data-even="off">
+            {/* data-even off: the inputs size the columns; an even spread would squeeze the description. */}
+            <thead><tr><th>What</th><th className="w-[190px]">Campaign</th><th className="w-[170px]">Kind of lead</th><th className="w-[90px]">How many</th><th className="w-[110px]">Each ($)</th><th className="w-[120px]">Line total ($)</th><th className="w-[40px]"><span className="sr-only">Remove</span></th></tr></thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <tr key={i}>
+                  <td><input aria-label="What this line is for" className={cell} required maxLength={300} placeholder="e.g. Live transfers, final expense" value={l.description} onChange={(e) => setLine(i, "description", e.target.value)} /></td>
+                  <td><select aria-label="Campaign" className={cell} value={l.campaignId} onChange={(e) => setLine(i, "campaignId", e.target.value)}><option value="">No campaign</option>{campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></td>
+                  <td><select aria-label="Kind of lead" className={cell} value={l.leadType} onChange={(e) => setLine(i, "leadType", e.target.value)}>{LEAD_TYPES.map((t) => <option key={t} value={t}>{LEAD_TYPE_LABELS[t]}</option>)}</select></td>
+                  <td><input aria-label="How many" className={cell} inputMode="numeric" value={l.quantity} onChange={(e) => setLine(i, "quantity", e.target.value.replace(/[^\d]/g, ""))} /></td>
+                  <td><input aria-label="Price each" className={cell} inputMode="decimal" value={l.unitPrice} onChange={(e) => setLine(i, "unitPrice", e.target.value)} /></td>
+                  <td><input aria-label="Line total" className={cell} inputMode="decimal" value={l.amount} placeholder={parsed[i].unitPriceCents != null ? dollars(lineAmount({ quantity: parsed[i].quantity, unitPriceCents: parsed[i].unitPriceCents ?? 0, amountCents: null })) : ""} onChange={(e) => setLine(i, "amount", e.target.value)} /></td>
+                  <td>{lines.length > 1 ? <Button type="button" size="sm" variant="ghost" aria-label="Remove this line" onClick={() => setLines((cur) => cur.filter((_, j) => j !== i))}>×</Button> : null}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex flex-wrap items-end justify-between gap-3 text-sm">
+          <Button type="button" variant="outline" onClick={() => setLines((cur) => [...cur, blankLine()])}>Add a line</Button>
+          <div className="flex flex-wrap items-end gap-4">
+            <Field label="Tax ($)" htmlFor="inv-tax" className="w-32"><input id="inv-tax" className={control} inputMode="decimal" value={f.tax} onChange={(e) => set("tax", e.target.value)} placeholder="0.00" /></Field>
+            <div className="pb-2 text-right">
+              {totals ? <><span className="text-muted-foreground">Subtotal {money(totals.subtotalCents)} · </span>Total <strong className="text-base text-foreground tabular-nums">{money(totals.totalCents)}</strong></> : <span className="text-[var(--error-ink)]">Check the amounts</span>}
+              {unattributed ? <div className="text-xs text-muted-foreground">{unattributed} line{unattributed === 1 ? "" : "s"} with no campaign won&apos;t count toward a campaign&apos;s cost</div> : null}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className={section}>
+        <h2 className={heading}>4 · Anything else? <span className="font-normal text-muted-foreground">(optional)</span></h2>
+        <Field label="Note" htmlFor="inv-note"><input id="inv-note" className={control} maxLength={2000} placeholder="Only you see this" value={f.note} onChange={(e) => set("note", e.target.value)} /></Field>
+      </section>
+
       {error ? <Callout tone="error" title={error} /> : null}
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" asChild><Link href={initial ? `/app/vendor-bills/${initial.id}` : "/app/vendor-bills"}>Discard</Link></Button>
-        <Button type="submit" disabled={busy || !totals}>{busy ? "Saving…" : "Save invoice"}</Button>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-border pt-4">
+        <Button type="button" variant="ghost" asChild><Link href={initial ? `/app/vendor-bills/${initial.id}` : "/app/vendor-bills"}>Discard</Link></Button>
+        <Button type="button" variant="outline" disabled={busy || !totals} onClick={() => void save("draft")}>Save as draft</Button>
+        <Button type="submit" disabled={busy || !totals}>{busy ? "Saving…" : initial ? "Save changes" : "Save bill"}</Button>
       </div>
-      <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={discard} what="this invoice" />
+      <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={() => save()} onDiscard={discard} what="this bill" />
     </form>
   );
 }
@@ -287,7 +309,7 @@ export function InvoiceListActions({ templates }: { templates: number }) {
   return (
     <>
       <MoreMenu items={[templates > 0 && { label: "From a monthly template", href: "/app/vendor-bills/new?template=first" }]} />
-      <Button asChild><Link href="/app/vendor-bills/new">Enter an invoice</Link></Button>
+      <Button asChild><Link href="/app/vendor-bills/new">Enter a bill</Link></Button>
     </>
   );
 }
@@ -401,71 +423,92 @@ export function InvoiceActions({ inv, readOnly }: { inv: Head; readOnly: boolean
 
 type Filter = "open" | "all" | "approve" | InvoiceStatus | "flagged";
 
+/** What a bill needs next, in words (/ui-taste pass, owner 2026-11-09, "like Bank deposits"). */
+const NEXT_STEP: Partial<Record<InvoiceStatus, string>> = { draft: "Finish", received: "Approve", approved: "Mark paid", disputed: "Waiting on vendor" };
+/** The day `n` days before today, as YYYY-MM-DD. */
+function daysBefore(n: number): string {
+  const d = new Date(`${today()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+const PERIODS = [{ key: "90", label: "Last 90 days" }, { key: "365", label: "Last 12 months" }, { key: "all", label: "All time" }] as const;
+const shortDate = (d: string, year = true) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" }).format(new Date(`${d}T00:00:00Z`));
+
 export function InvoicesBoard({ invoices, readOnly, status }: { invoices: InvoiceListRow[]; readOnly: boolean; status?: string }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const initial: Filter = status === "all" || status === "flagged" || status === "approve" || (status && status in INVOICE_STATUS_LABELS) ? (status as Filter) : "open";
   const [view, setView] = useState<Filter>(initial);
+  const [period, setPeriod] = useState<(typeof PERIODS)[number]["key"]>("365");
   const [page, setPage] = useState(1);
   const [refreshing, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
 
+  const since = period === "all" ? "" : daysBefore(Number(period));
+  const inPeriod = useMemo(() => invoices.filter((i) => !since || i.invoiceDate >= since || OPEN.includes(i.status)), [invoices, since]);
+  const matches = (i: InvoiceListRow, f: Filter) => (f === "all" ? true : f === "open" ? OPEN.includes(i.status) : f === "flagged" ? i.flagged && i.status !== "void" : f === "approve" ? EDITABLE.includes(i.status) : i.status === f);
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return invoices.filter((i) => (view === "all" ? true : view === "open" ? OPEN.includes(i.status) : view === "flagged" ? i.flagged && i.status !== "void" : view === "approve" ? EDITABLE.includes(i.status) : i.status === view)
-      && (!needle || i.invoiceNumber.toLowerCase().includes(needle) || i.sourceName.toLowerCase().includes(needle)));
-  }, [invoices, q, view]);
-  const pageSize = useFittingPageSize(480, 45);
+    return inPeriod.filter((i) => matches(i, view) && (!needle || i.invoiceNumber.toLowerCase().includes(needle) || i.sourceName.toLowerCase().includes(needle)));
+  }, [inPeriod, q, view]);
+  const pageSize = useFittingPageSize(480, 52);
   const shown = paginate(visible, page, pageSize);
   const toApprove = invoices.filter((i) => EDITABLE.includes(i.status));
   const flagged = invoices.filter((i) => i.flagged && i.status !== "void").length;
   const unpaid = invoices.filter((i) => i.status === "approved");
   const month = today().slice(0, 7);
   const paidThisMonth = invoices.filter((i) => i.status === "paid" && (i.paidOn ?? "").startsWith(month));
+  const count = (f: Filter) => inPeriod.filter((i) => matches(i, f)).length || null;
   const pick = (next: Filter) => { setView(next); setPage(1); };
 
   return (
     <>
       <StatStrip label="Invoice totals">
-        <StatTile label="To approve" value={String(toApprove.length)} footnote={money(toApprove.reduce((s, i) => s + i.totalCents, 0))} href="/app/vendor-bills?status=approve" />
-        <StatTile label="Approved, unpaid" value={money(unpaid.reduce((s, i) => s + i.totalCents, 0))} footnote={`${unpaid.length} invoice${unpaid.length === 1 ? "" : "s"} owed`} href="/app/vendor-bills?status=approved" />
-        <StatTile label="Paid this month" value={money(paidThisMonth.reduce((s, i) => s + i.totalCents, 0))} footnote={`${paidThisMonth.length} invoice${paidThisMonth.length === 1 ? "" : "s"}`} href="/app/vendor-bills?status=paid" />
-        <StatTile label="Differs from our count" value={String(flagged)} valueTone={flagged ? "warning" : undefined} footnote="beyond tolerance" href="/app/vendor-bills?status=flagged" />
+        <StatTile label="To approve" value={money(toApprove.reduce((s, i) => s + i.totalCents, 0))} valueTone={toApprove.length ? "warning" : undefined} footnote={`${toApprove.length} bill${toApprove.length === 1 ? "" : "s"} to check`} href="/app/vendor-bills?status=approve" />
+        <StatTile label="Approved, to pay" value={money(unpaid.reduce((s, i) => s + i.totalCents, 0))} footnote={`${unpaid.length} bill${unpaid.length === 1 ? "" : "s"} owed`} href="/app/vendor-bills?status=approved" />
+        <StatTile label="Paid this month" value={money(paidThisMonth.reduce((s, i) => s + i.totalCents, 0))} footnote={`${paidThisMonth.length} bill${paidThisMonth.length === 1 ? "" : "s"}`} href="/app/vendor-bills?status=paid" />
+        <StatTile label="Billed more than you got" value={String(flagged)} valueTone={flagged ? "danger" : undefined} footnote={flagged ? "check before you pay" : "Every bill matches your count"} href="/app/vendor-bills?status=flagged" />
       </StatStrip>
       <TableCard
         key={initial}
         toolbar={
-          <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
-            <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search number or source" />
-            <select aria-label="Which invoices" className={toolbarControl} value={view} onChange={(e) => pick(e.target.value as Filter)}>
-              <option value="open">Not yet paid</option>
-              <option value="all">All</option>
-              <option value="approve">To approve</option>
-              <option value="flagged">Differs from our count</option>
-              {(["received", "disputed", "approved", "paid", "void", "draft"] as InvoiceStatus[]).map((s) => <option key={s} value={s}>{INVOICE_STATUS_LABELS[s]}</option>)}
-            </select>
+          <DataToolbar actions={<>
+            <select aria-label="Period" className={toolbarControl} value={period} onChange={(e) => { setPeriod(e.target.value as typeof period); setPage(1); }}>{PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}</select>
+            <RefreshButton onClick={refresh} refreshing={refreshing} />
+          </>}>
+            <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search vendor or bill number" />
+            <Segmented label="Which bills" value={view} onChange={pick} options={[
+              { key: "open", label: "Not yet paid", count: count("open") },
+              { key: "approve", label: "To approve", count: count("approve") },
+              { key: "approved", label: "To pay", count: count("approved") },
+              { key: "flagged", label: "Differs", count: count("flagged"), tone: "danger" },
+              { key: "paid", label: "Paid", count: count("paid") },
+              { key: "all", label: "All", count: inPeriod.length },
+            ]} />
           </DataToolbar>
         }
-        footer={visible.length > pageSize ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="invoices" onPage={setPage} /> : undefined}
+        footer={visible.length > pageSize ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="bills" onPage={setPage} /> : undefined}
       >
         {invoices.length === 0 ? (
-          <EmptyState title="No invoices yet" hint="Enter each lead invoice as it arrives: approving it puts the cost in your P&L for the month it belongs to." action={!readOnly ? <Button asChild><Link href="/app/vendor-bills/new">Enter an invoice</Link></Button> : undefined} />
+          <EmptyState title="No bills yet" hint="Enter each lead vendor's bill as it arrives. Insurvas checks it against the leads you really got; approving it puts the cost in your P&L." action={!readOnly ? <Button asChild><Link href="/app/vendor-bills/new">Enter a bill</Link></Button> : undefined} />
         ) : visible.length === 0 ? (
-          <NoMatches noun="invoices" onClear={() => { setQ(""); pick("all"); }} />
+          <NoMatches noun="bills" onClear={() => { setQ(""); setPeriod("all"); pick("all"); }} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-            <thead><tr><th>Invoice</th><th className="w-[110px]">Dated</th><th className="w-[190px]">Period</th><th className="w-[130px] text-right">Total</th><th className="w-[200px]">Status</th><th className="w-[90px] text-right"><span className="sr-only">Open</span></th></tr></thead>
+          <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
+            <thead><tr><th className="w-[30%]">Vendor</th><th className="w-[22%]">Leads for</th><th className="w-[13%] text-right">Total</th><th className="w-[16%]">Status</th><th>Next step</th></tr></thead>
             <tbody>
-              {shown.rows.map((i) => (
-                <tr key={i.id}>
-                  <td><Link className="font-medium hover:underline" href={`/app/vendor-bills/${i.id}`}>{i.sourceName}</Link><div className="text-xs text-muted-foreground">{i.invoiceNumber}{i.hasDocument ? "" : " · no document"}</div></td>
-                  <td className="tabular-nums">{i.invoiceDate}</td>
-                  <td>{i.periodStart ? `${i.periodStart} to ${i.periodEnd ?? "…"}` : "—"}</td>
-                  <td className="text-right tabular-nums">{money(i.totalCents)}</td>
-                  <td><div className="flex flex-wrap gap-1"><InvoiceStatusChip status={i.status} paidOn={i.paidOn} />{i.flagged && i.status !== "void" ? <StatusChip tone="warning">Differs</StatusChip> : null}</div></td>
-                  <td className="text-right"><Button size="sm" variant="outline" asChild><Link href={`/app/vendor-bills/${i.id}`}>Open</Link></Button></td>
-                </tr>
-              ))}
+              {shown.rows.map((i) => {
+                const next = readOnly ? null : NEXT_STEP[i.status] ?? null;
+                return (
+                  <tr key={i.id} className="cursor-pointer" onClick={() => router.push(`/app/vendor-bills/${i.id}`)}>
+                    <td><Link className="font-medium hover:underline" href={`/app/vendor-bills/${i.id}`} onClick={(e) => e.stopPropagation()}>{i.sourceName}</Link><div className="text-xs text-muted-foreground">{i.invoiceNumber} · dated {shortDate(i.invoiceDate)}{i.hasDocument ? "" : " · no document"}</div></td>
+                    <td className="tabular-nums">{i.periodStart ? `${shortDate(i.periodStart, false)} – ${i.periodEnd ? shortDate(i.periodEnd) : "…"}` : <span className="text-muted-foreground">—</span>}</td>
+                    <td className="text-right tabular-nums">{money(i.totalCents)}</td>
+                    <td><div className="flex flex-wrap gap-1"><InvoiceStatusChip status={i.status} paidOn={i.paidOn} />{i.flagged && i.status !== "void" ? <StatusChip tone="danger">Differs</StatusChip> : null}</div></td>
+                    <td>{next ? (i.status === "disputed" ? <span className="text-sm text-muted-foreground">{next}</span> : <Button size="sm" variant="outline" asChild><Link href={`/app/vendor-bills/${i.id}${i.flagged && i.status !== "approved" ? "?tab=count" : ""}`} onClick={(e) => e.stopPropagation()}>{i.flagged && i.status !== "approved" ? "Check difference" : next}</Link></Button>) : <span className="text-muted-foreground">—</span>}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

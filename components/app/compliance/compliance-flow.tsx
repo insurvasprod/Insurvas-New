@@ -25,12 +25,15 @@ async function openSteps(): Promise<{ open: Set<ComplianceStep>; owner: boolean 
   // Licences & appointments keeps its own route's rule (owner and producer), agency or not.
   if (vault.entitled && actAsPage(vault, ["owner", "producer"])) open.add("appointments");
   if (!anyGuard) return { open, owner: false };
-  // AG-0.5: inside an agency every step is the owner's and admins' business; a narrow session opens none.
-  if ((await scopeFor(anyGuard.context)) !== null) return { open, owner: false };
+  // AG-0.5: inside an agency every step is the owner's and admins' business; a narrow session opens none. The scope and
+  // the evidence rule are read at once, not one after the other (perf pass 2026-11-08).
+  const mayEvidence = litigation.entitled && actAsPage(litigation, ["owner", "producer"]);
+  const [scope, reports] = await Promise.all([scopeFor(anyGuard.context), mayEvidence ? mayGenerateReports(litigation.context.tenantId, litigation.role) : false]);
+  if (scope !== null) return { open, owner: false };
   if (tcpa.entitled && actAsPage(tcpa, ["owner", "producer"])) { open.add("overview"); open.add("complaints"); open.add("deletions"); }
   if (tcpa.entitled && actAsPage(tcpa, ["owner", "producer", "assistant", "setter"])) open.add("dnc");
   if (consent.entitled && actAsPage(consent, ["owner", "producer", "assistant"])) open.add("consent");
-  if (litigation.entitled && actAsPage(litigation, ["owner", "producer"]) && (await mayGenerateReports(litigation.context.tenantId, litigation.role))) open.add("evidence");
+  if (mayEvidence && reports) open.add("evidence");
   return { open, owner: tcpa.entitled && tcpa.role === "owner" };
 }
 

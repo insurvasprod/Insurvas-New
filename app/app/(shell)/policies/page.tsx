@@ -41,13 +41,16 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Book of business" description="Your policies, premiums and carriers in one place." />;
   if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Policies" detail="Your tenant role does not include the book of business." />;
   const readOnly = guard.entitlement.access === "read_only";
-  const params = await searchParams;
-  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
+  const canAdd = !readOnly && guard.role !== "bookkeeper";
+  // The address, this person's scope and the Add form's carriers are read at once, not one after the other (perf
+  // pass 2026-11-08: three round trips in a row before the book itself was asked for).
+  const early = Promise.all([searchParams, scopeFor(guard.context), canAdd ? carrierPicker(guard.context.tenantId).catch(() => []) : Promise.resolve([])]);
   // Recent changes: the gates Carrier files › Policy changes had.
   const ingestion = await guardPage("statement_ingestion");
   const canSeeChanges = ingestion.entitled && actAsPagePermission(ingestion, "statements.view");
+  const [params, scope, carrierList] = await early;
+  const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope };
   const view: PoliciesView = params.view === "changes" && canSeeChanges ? "changes" : "book";
-  const canAdd = !readOnly && guard.role !== "bookkeeper";
   const lead = canSeeChanges ? (
     <ViewTabs
       label="Policies views"
@@ -55,7 +58,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
       tabs={[{ key: "book" as const, label: "Book", href: "/app/policies" }, { key: "changes" as const, label: "Recent changes", href: "/app/policies?view=changes" }]}
     />
   ) : undefined;
-  const carriers = canAdd ? (await carrierPicker(guard.context.tenantId).catch(() => [])).map((carrier) => carrier.name) : [];
+  const carriers = carrierList.map((carrier) => carrier.name);
   const actions = <PolicyEntryActions canAdd={canAdd} carriers={carriers} blockedReason={readOnly ? "Your account is read-only" : "Adding policies is for the owner and producers"} />;
 
   if (view === "changes") {
@@ -72,16 +75,19 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
     );
   }
 
-  const [book, hand, issued] = await Promise.all([loadBook(viewer), loadHandPolicies(viewer), loadIssuedAwaiting(viewer).catch(() => [])]);
+  const lists = Promise.all([loadBook(viewer), loadHandPolicies(viewer), loadIssuedAwaiting(viewer).catch(() => [])]);
+  // Where each policy's money stands, over exactly the rows this person may see. Its reads need only the tenant, so
+  // they start now, beside the book's, and wait for the rows only to add them up (perf pass 2026-11-08).
+  const moneyRead = loadBookMoney(guard.context.tenantId, lists.then(([book, hand, issued]) => [...(book.available ? book.rows : []), ...hand, ...issued])).catch((error) => {
+    console.error("[policies] money", error);
+    return null;
+  });
+  const [book, hand, issued] = await lists;
   // The old "Entered by hand" tab address lands on the same list, filtered to that source.
   const query = new URLSearchParams([...Object.entries(params).flatMap(([key, value]) => (typeof value === "string" && key !== "view" ? [[key, value]] : [])), ...(params.view === "entered" && !params.source ? [["source", "hand"]] : [])]).toString();
   const rows = [...(book.available ? book.rows : []), ...hand, ...issued];
   const unpriced = book.available ? book.unpriced : null;
-  // Where each policy's money stands, over exactly the rows this person may see.
-  const money = await loadBookMoney(guard.context.tenantId, rows).catch((error) => {
-    console.error("[policies] money", error);
-    return null;
-  });
+  const money = await moneyRead;
   const listRows = rows.map((row) => ({ ...row, money: money?.byKey.get(`${row.carrierId}|${row.policyNumber}`) ?? null }));
 
   return (

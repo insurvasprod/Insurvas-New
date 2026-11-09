@@ -136,10 +136,11 @@ export function Switch({
       onClick={() => onChange?.(!checked)}
       className={cn(
         "inline-flex h-[22px] w-[38px] shrink-0 items-center rounded-full p-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-        checked ? "justify-end bg-[var(--success)]" : "justify-start bg-[var(--border-strong)]"
+        checked ? "bg-[var(--success)]" : "bg-[var(--border-strong)]"
       )}
     >
-      <span className="size-[18px] rounded-full bg-[var(--surface)] shadow-[var(--shadow-rest)]" />
+      {/* The thumb slides across (§ Motion, 2026-11-09) rather than jumping from one end to the other. */}
+      <span className={cn("size-[18px] rounded-full bg-[var(--surface)] shadow-[var(--shadow-rest)] transition-transform duration-[var(--t-panel)] ease-[var(--e-out)]", checked && "translate-x-4")} />
     </button>
   );
 }

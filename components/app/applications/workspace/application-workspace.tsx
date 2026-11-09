@@ -27,6 +27,7 @@ import { AttemptStatusChip, face, SampleDataNotice } from "@/components/app/appl
 import { AddSpouseDialog } from "@/components/app/applications/household/add-spouse-dialog";
 import { HouseholdHeader } from "@/components/app/applications/household/household-header";
 import { useWorkspace, WorkspaceProvider, type WorkspaceState } from "./context";
+import { useStepDirection } from "@/components/ui/use-step-direction";
 import { ClientCard } from "./client-card";
 import { VerifyStep, verifyConfirmed, verifyItems } from "@/components/app/applications/workspace/steps/verify-step";
 import { InterviewStep } from "@/components/app/applications/workspace/steps/interview-step";
@@ -91,6 +92,7 @@ const STAGES: ReadonlyArray<{ key: string; label: string; steps: WorkspaceStep[]
   { key: "after", label: "After", steps: ["after"] },
 ];
 const STEP_LABEL = new Map(WORKSPACE_STEPS.map((s) => [s.key, s.label]));
+const STEP_ORDER = WORKSPACE_STEPS.map((s) => s.key);
 const STEP_NUMBER = new Map<string, number>(NUMBERED.map((s, i) => [s.key, i + 1]));
 
 /**
@@ -245,6 +247,8 @@ function InboundWorkspace({ onFinish }: { onFinish: () => void }) {
   const ws = useWorkspace();
   const { step, sample, seatReadOnly } = ws;
   const Step = STEP_COMPONENT[step];
+  // The step slides in from the side the case moved toward (§ Motion, Wave 4).
+  const enter = useStepDirection(step, STEP_ORDER);
   // The rail folds to its dots to give the step the width (owner 2026-11-05); the choice is kept in this browser.
   const [railCollapsed, setRailCollapsed] = useState(false);
   useEffect(() => {
@@ -266,7 +270,7 @@ function InboundWorkspace({ onFinish }: { onFinish: () => void }) {
         <InboundRail onFinish={onFinish} collapsed={railCollapsed} onToggle={toggleRail} />
         <div role="region" aria-label={STEP_LABEL.get(step)} className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
           {/* A step that is one card fills the column down to the rail's foot, so the two end level (owner 2026-11-05). */}
-          <div key={step} className="flex min-w-0 flex-col gap-4 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:flex-1 lg:[&>*:only-child]:flex-1">
+          <div key={step} data-enter={enter} className="flex min-w-0 flex-col gap-4 lg:flex-1 lg:[&>*:only-child]:flex-1">
             <Step />
           </div>
         </div>
@@ -279,6 +283,8 @@ function Workspace() {
   const ws = useWorkspace();
   const { caseView, attempt, attemptsForInsured, insured, step, readOnly, seatReadOnly, sample, selectAttempt } = ws;
   const [spouseOpen, setSpouseOpen] = useState(false);
+  // The step slides in from the side the case moved toward (§ Motion, Wave 4).
+  const enter = useStepDirection(step, STEP_ORDER);
   // Back to where the agent came from (the verification panel, a lead, the dialer…), not always the list.
   const back = backLink(useSearchParams().get("from"));
   const household = caseView.attempts.some((a) => a.insuredRole === "spouse");
@@ -350,8 +356,8 @@ function Workspace() {
         <ClientCard name={insured === "spouse" ? (spouseName || spouseOption || `${caseView.clientName}'s spouse`) : caseView.clientName} />
         <div role="region" aria-label={STEP_LABEL.get(step)} className="flex min-w-0 flex-col gap-4">
           {/* No "Step n of 10" heading on any step (owner, 2026-10-28): the bar above says where the agent is.
-              A new step rises in, so moving on reads as moving on. */}
-          <div key={step} className="flex min-w-0 flex-col gap-4 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both]">
+              A new step slides in from the side the case moved toward, so moving on reads as moving on. */}
+          <div key={step} data-enter={enter} className="flex min-w-0 flex-col gap-4">
             <Step />
           </div>
         </div>

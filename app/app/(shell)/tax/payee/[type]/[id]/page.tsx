@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
-import { maskTaxId } from "@/lib/accounting/taxCore";
 import { contractors, latestW9, TaxError, taxSettings } from "@/lib/accounting/taxStore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -45,7 +44,8 @@ export default async function PayeePage({ params, searchParams }: { params: Prom
   const readOnly = guard.entitlement.access === "read_only";
   // The W-9 on file (LA-7.8 upload): its file, once the details are saved (the file hangs off the profile).
   const w9 = row.profileId ? await latestW9(tenantId, row.profileId) : null;
-  const facts = [row.displayName, row.payeeType[0].toUpperCase() + row.payeeType.slice(1), `Paid ${formatCentsAsCurrency(row.paidCents)} in ${year}`, maskTaxId(row.profile?.taxIdType ?? "none", row.profile?.taxIdLast4 ?? null), w9 ? `W-9 file from ${w9.uploadedAt || "earlier"}` : row.profileId ? "no W-9 file" : "save the details to attach a W-9"].join(" · ");
+  // One short line (/ui-taste pass, owner 2026-11-09): who they are to you, what you paid them, and the W-9.
+  const facts = [`${row.displayName} · ${row.payeeType}`, `paid ${formatCentsAsCurrency(row.paidCents)} in ${year}`, w9 ? "W-9 attached" : row.profileId ? "no W-9 attached yet" : "save the details, then attach the W-9"].join(" · ");
   return (
     <AccountingPage
       step="tax"

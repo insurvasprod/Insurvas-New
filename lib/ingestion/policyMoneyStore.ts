@@ -7,8 +7,9 @@ import { agencyToday } from "./agencyDay";
 import { flaggedFiles } from "./carrierAccountsStore";
 import { unearnedAdvance } from "./commissionLedger";
 import { advanceRuleResolver } from "./commissionLedgerStore";
-import { allRows } from "./pages";
+import { chunks } from "./pages";
 import type { BookRow } from "./policyBook";
+import { everyRow } from "./policyBookStore";
 import { barParts, isBehind, isInForce, moneyFigures, moneySentence, nextDate, policyHealth, type BookStrip, type ListMoney, type MoneyFacts, type RowFlags } from "./policyMoney";
 
 export type { BookStrip, ListMoney } from "./policyMoney";
@@ -36,31 +37,39 @@ type Ledger = { advanced: number; earnedLines: number; chargedBack: number; mont
  * Every visible policy's money and the strip over them. `rows` is the list as the viewer may see it
  * (loadBook's scope), so a producer's figures are their own book's.
  */
-export async function loadBookMoney(tenantId: string, rows: BookRow[]): Promise<{ byKey: Map<string, ListMoney>; strip: BookStrip }> {
-  const today = await agencyToday(tenantId).catch(() => new Date().toISOString().slice(0, 10));
-  const year = today.slice(0, 4);
-  const [current, lines, flagged, ruleFor, expected, findings] = await Promise.all([
-    allRows(() => db().from("policy_current").select("carrier_id, policy_number, paid_to_date, months_paid, as_of, product_code, effective_date, retention_rule_id").eq("tenant_id", tenantId).order("carrier_id").order("policy_number"), 200_000),
+export async function loadBookMoney(tenantId: string, bookRows: BookRow[] | PromiseLike<BookRow[]>): Promise<{ byKey: Map<string, ListMoney>; strip: BookStrip }> {
+  // Every read here needs only the tenant, so they start at once — beside the book's own reads when the caller hands
+  // over its rows as a promise (perf pass 2026-11-08: they used to wait for every book row and name), and each pages
+  // three ahead (everyRow). The rows are needed only for the sums below.
+  // The grace of the rule each policy was measured against (first payment or ongoing, as refresh_policy_current picks),
+  // read as soon as the payment facts are in.
+  const currentRead = everyRow(() => db().from("policy_current").select("carrier_id, policy_number, paid_to_date, months_paid, as_of, product_code, effective_date, retention_rule_id").eq("tenant_id", tenantId).order("carrier_id").order("policy_number"), 200_000);
+  const graceRead = currentRead.then(async (current) => {
+    const ruleIds = [...new Set((current.rows ?? []).map((row: Loose) => row.retention_rule_id).filter(Boolean))] as string[];
+    const grace = new Map<string, number | null>();
+    const reads = await Promise.all(chunks(ruleIds).map((ids) => db().from("carrier_retention_rule").select("id, grace_days").in("id", ids)));
+    for (const { data } of reads as Loose[]) for (const rule of (data ?? []) as Loose[]) grace.set(rule.id, rule.grace_days ?? null);
+    return grace;
+  });
+  const [today, current, grace, lines, flagged, ruleFor, expected, findings] = await Promise.all([
+    agencyToday(tenantId).catch(() => new Date().toISOString().slice(0, 10)),
+    currentRead,
+    graceRead,
     // Along commission_entry_policy_idx (tenant, carrier, policy, day), id last for a stable page.
-    allRows(() => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id, transaction_date, statement_date").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").order("transaction_date").order("id"), 200_000),
+    everyRow(() => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id, transaction_date, statement_date").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").order("transaction_date").order("id"), 200_000),
     flaggedFiles(tenantId),
     advanceRuleResolver(tenantId),
-    allRows(() => db().from("expected_commission").select("carrier_id, policy_number, policy_year, confidence, expected_amount_cents, trigger_occurred_on").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").order("policy_year"), 200_000),
-    allRows(() => db().from("commission_discrepancy").select("id, carrier_id, policy_number, discrepancy_type, difference_cents").eq("tenant_id", tenantId).in("status", ["open", "disputed"]).in("discrepancy_type", [...SHORT_TYPES]).order("carrier_id").order("policy_number").order("id"), 50_000),
+    everyRow(() => db().from("expected_commission").select("carrier_id, policy_number, policy_year, confidence, expected_amount_cents, trigger_occurred_on").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").order("policy_year"), 200_000),
+    everyRow(() => db().from("commission_discrepancy").select("id, carrier_id, policy_number, discrepancy_type, difference_cents").eq("tenant_id", tenantId).in("status", ["open", "disputed"]).in("discrepancy_type", [...SHORT_TYPES]).order("carrier_id").order("policy_number").order("id"), 50_000),
   ]);
+  const year = today.slice(0, 4);
   if (current.error && !isSchemaGap(current.error)) throw new Error(`Could not load the policies' payment facts: ${current.error.message}`);
   const ledgerOk = !lines.error;
   const expectedOk = !expected.error;
   const findingsOk = !findings.error;
+  const rows = await bookRows;
 
   const facts = new Map<string, Loose>((current.rows ?? []).map((row: Loose) => [key(row.carrier_id, row.policy_number), row]));
-  // The grace of the rule each policy was measured against (first payment or ongoing, as refresh_policy_current picks).
-  const ruleIds = [...new Set((current.rows ?? []).map((row: Loose) => row.retention_rule_id).filter(Boolean))] as string[];
-  const grace = new Map<string, number | null>();
-  for (let i = 0; i < ruleIds.length; i += 200) {
-    const { data } = await db().from("carrier_retention_rule").select("id, grace_days").in("id", ruleIds.slice(i, i + 200));
-    for (const rule of (data ?? []) as Loose[]) grace.set(rule.id, rule.grace_days ?? null);
-  }
 
   const ledger = new Map<string, Ledger>();
   for (const line of ledgerOk ? lines.rows : []) {

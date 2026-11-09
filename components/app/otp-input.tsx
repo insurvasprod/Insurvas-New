@@ -80,7 +80,7 @@ export function OtpInput({
   }
 
   return (
-    <div className="flex gap-2" role="group" aria-label="Six-digit code">
+    <div className="flex justify-center gap-2" role="group" aria-label="Six-digit code">
       {digits.map((digit, index) => (
         <input
           key={index}

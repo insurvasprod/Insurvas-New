@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Suspense } from "react";
-import { Plus } from "lucide-react";
+import { GitCompareArrows, Plus } from "lucide-react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { loadFeatureSwitches } from "@/lib/features/killSwitch";
@@ -58,6 +58,7 @@ export default async function AgencyDashboardPage({ searchParams }: { searchPara
           <>
             <AgencyPeriodSelect value={period} />
             <span className="inline-flex h-9 max-w-56 items-center truncate rounded-[10px] border border-border px-3 text-[0.8125rem] font-semibold text-foreground">{agencyName}</span>
+            <Button asChild variant="outline"><Link href="/app/agency/compare"><GitCompareArrows className="size-4" aria-hidden="true" />Compare</Link></Button>
             {canInvite && <Button asChild><Link href="/app/producers/invite"><Plus className="size-4" aria-hidden="true" />Invite producer</Link></Button>}
           </>
         }

@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
 
+import { monthLabel } from "@/lib/agency/payPlanCore";
+import { dayMonthYear } from "@/lib/format/dates";
+
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { readStatement } from "@/lib/agency/ledgerStore";
 import { buildStatement } from "@/lib/agency/statementCore";
@@ -33,9 +36,13 @@ export default async function ProducerStatementPage({ params }: { params: Promis
   if (!keeper && data.run.producerUserId !== guard.context.userId) notFound();
   if (guard.context.memberRole === "manager" && data.run.producerUserId !== guard.context.userId) notFound();
   const statement = buildStatement(data.before, data.during, "reported");
-  const title = `Statement · ${data.run.periodStart} to ${data.run.periodEnd}`;
-  const paid = data.run.paidOn ? ` · paid ${data.run.paidOn}${data.run.method ? ` by ${data.run.method}` : ""}${data.run.reference ? ` (${data.run.reference})` : ""}` : " · nothing paid";
-  const facts = `${data.producer} · ${data.agency}${paid}`;
+  // "Devin Okafor · September 2026", and one line of how it was paid (/ui-taste pass, owner 2026-11-09).
+  const wholeMonth = data.run.periodStart.endsWith("-01") && data.run.periodStart.slice(0, 7) === data.run.periodEnd.slice(0, 7);
+  const when = wholeMonth ? monthLabel(data.run.periodStart.slice(0, 7)) : `${dayMonthYear(data.run.periodStart)} – ${dayMonthYear(data.run.periodEnd)}`;
+  const title = keeper ? `${data.producer} · ${when}` : `Your pay · ${when}`;
+  const method = data.run.method === "ach" ? "bank transfer" : data.run.method;
+  const paid = data.run.paidOn ? `Paid ${dayMonthYear(data.run.paidOn)}${method ? ` by ${method}` : ""}${data.run.reference ? ` (${data.run.reference})` : ""}` : "Nothing was paid this month";
+  const facts = `${paid} · from ${data.agency}`;
   const pdf = <Button asChild variant="outline"><a href={`/api/app/agency/statements/${runId}?format=pdf`} download>Download PDF</a></Button>;
   const body = <StatementView run={{ withheldCents: data.run.withheldCents, decisionReason: data.run.decisionReason }} statement={statement} />;
   if (keeper) return <AccountingPage step="producerPayouts" title={title} facts={facts} actions={pdf}>{body}</AccountingPage>;

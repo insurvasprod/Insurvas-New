@@ -34,4 +34,10 @@ function PopoverContent({ className, align = "start", sideOffset = 6, ...props }
   );
 }
 
-export { Popover, PopoverAnchor, PopoverClose, PopoverContent, PopoverTrigger };
+/**
+ * The pointer from a panel back to what opened it. Radix places it on the anchor's centre and keeps it there when the
+ * panel slides to stay on screen, so it always points at the right thing (a hand-placed nub stays put and drifts).
+ */
+const PopoverArrow = PopoverPrimitive.Arrow;
+
+export { Popover, PopoverAnchor, PopoverArrow, PopoverClose, PopoverContent, PopoverTrigger };

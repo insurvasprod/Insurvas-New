@@ -23,6 +23,7 @@ import { planDisplayName } from "@/lib/plans/display";
 import { AppTopBar } from "@/components/app/app-top-bar";
 import { NotifySoundPrimer } from "@/components/app/notify-sound-primer";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
+import { ShellEntrance } from "@/components/app/shell-entrance";
 import { overdueComplaintAlert } from "@/components/app/overdue-complaint-banner";
 import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
 import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
@@ -179,6 +180,8 @@ export default async function AgentShellLayout({ children }: { children: React.R
           two together are the whole sound story on this plane: the bridge covers call sites
           not yet migrated, this primes the layer that governs the ones that are. */}
       <NotifySoundPrimer />
+      {/* The first screen after signing in builds itself in, once (shell-entrance.tsx). */}
+      <ShellEntrance />
       {takesTransfers && <LiveTransferCard />}
 
       {/* min-w-0 is load-bearing, for the same reason it is on the admin shell: a flex item

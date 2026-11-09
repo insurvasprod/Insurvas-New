@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,10 @@ export function MiniMonth({ shown, onShown, picked, today, busy, onPick }: {
     const at = new Date(Date.UTC(shown.year, shown.month - 1 + delta, 1));
     onShown({ year: at.getUTCFullYear(), month: at.getUTCMonth() + 1 });
   };
+  // The days slide in from the side the month moved toward (§ Motion, Wave 2); the first month drawn is simply there.
+  const index = shown.year * 12 + shown.month;
+  const [seen, setSeen] = useState<{ index: number; enter?: "forward" | "back" }>({ index });
+  if (seen.index !== index) setSeen({ index, enter: index > seen.index ? "forward" : "back" });
   const same = (a: Ymd | null, day: number) => Boolean(a && a.year === shown.year && a.month === shown.month && a.day === day);
   return (
     <div>
@@ -45,7 +50,7 @@ export function MiniMonth({ shown, onShown, picked, today, busy, onPick }: {
       <div className="grid grid-cols-7 gap-0.5 text-center text-xs text-muted-foreground" aria-hidden="true">
         {HEAD.map((letter, index) => <span key={index} className="py-1">{letter}</span>)}
       </div>
-      <div className="grid grid-cols-7 gap-0.5">
+      <div key={index} data-enter={seen.enter} className="grid grid-cols-7 gap-0.5">
         {Array.from({ length: lead }, (_, index) => <span key={`gap-${index}`} />)}
         {Array.from({ length }, (_, index) => index + 1).map((day) => {
           const on = same(picked, day);
@@ -59,7 +64,7 @@ export function MiniMonth({ shown, onShown, picked, today, busy, onPick }: {
               aria-label={`${day} ${MONTH_LONG[shown.month - 1]}${dot ? ", has bookings" : ""}`}
               onClick={() => onPick({ year: shown.year, month: shown.month, day })}
               className={cn(
-                "relative grid h-8 place-items-center rounded-md text-xs tabular-nums",
+                "relative grid h-8 place-items-center rounded-md text-xs tabular-nums transition-colors duration-[var(--t-micro)]",
                 on ? "bg-primary font-bold text-primary-foreground" : "text-[var(--ink)] hover:bg-[var(--surface-alt)]",
                 isToday && !on && "font-bold text-[var(--accent-ink)]",
               )}

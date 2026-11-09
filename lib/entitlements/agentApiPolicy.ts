@@ -157,12 +157,19 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // LA-7.3: expenses — tools, insurance, fees. Owner and bookkeeper.
   { sourceFile: "app/api/app/accounting/expenses/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/accounting/expenses/[id]/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
+  // Expenses tracker (owner, 2026-11-06): the end-of-month scoreboard.
+  { sourceFile: "app/api/app/accounting/expenses/scoreboard/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
   // LA-7.7: the P&L's drill-through — the entries behind a figure.
   { sourceFile: "app/api/app/accounting/pnl/drill/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
   // LA-7.4: partner payout runs — what the agency owes its call centres. Owner and bookkeeper.
   { sourceFile: "app/api/app/accounting/payouts/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/accounting/payouts/[id]/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/accounting/payouts/[id]/statement/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
+  // Partner payouts rework (owner, 2026-11-06): the invoice PDF, the ledger, the invoice machine and each partner's rulebook.
+  { sourceFile: "app/api/app/accounting/payouts/[id]/invoice/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/payouts/ledger/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/accounting/payouts/run/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/partners/[id]/rulebook/route.ts", featureKey: "payout_runs", allowedRoles: ["owner", "bookkeeper"] },
   // LA-7.5: producer splits — the agency's side (owner, bookkeeper) and a producer's own balance (producer, own rows only).
   { sourceFile: "app/api/app/accounting/producers/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/accounting/producer-runs/[id]/route.ts", featureKey: "profit_and_loss", allowedRoles: ["owner", "bookkeeper"] },
@@ -510,6 +517,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/agency/statements/[runId]/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper", "producer"] },
   { sourceFile: "app/api/app/agency/my-pay/route.ts", featureKey: "producer_payouts", allowedRoles: ["producer"] },
   { sourceFile: "app/api/app/agency/payouts/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
+  { sourceFile: "app/api/app/agency/pay-plans/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/agency/attribution/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/agency/splits/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },
   { sourceFile: "app/api/app/agency/reconciliation/route.ts", featureKey: "producer_payouts", allowedRoles: ["owner", "bookkeeper"] },

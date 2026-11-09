@@ -551,7 +551,7 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
           return (
             <li
               key={draft.key}
-              className={cn(cardInset, "min-w-0", dragKey === draft.key && "opacity-60", open && "border-[var(--primary)]")}
+              className={cn(cardInset, "min-w-0 transition-[opacity,border-color] duration-[var(--t-micro)]", dragKey === draft.key && "opacity-60", open && "border-[var(--primary)]")}
               draggable={canManage && !open}
               onDragStart={() => setDragKey(draft.key)}
               onDragOver={(event) => { if (dragKey) event.preventDefault(); }}

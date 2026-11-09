@@ -7,7 +7,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Field, control } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -16,9 +16,11 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
+import { Segmented } from "@/components/ui/view-tabs";
 import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
 import { RUN_STATUS_LABELS, type RunDispute, type RunHeader, type RunStatus } from "@/lib/accounting/payoutsCore";
 import { defaultPayoutPeriod, periodHasTerms } from "@/lib/accounting/payoutPeriod";
+import { invoiceRef } from "@/lib/accounting/partnerPayoutCore";
 import { formatCentsAsCurrency } from "@/lib/money";
 
 import { notify } from "@/lib/notify";
@@ -97,14 +99,17 @@ function DraftRun({ partners, onClose }: { partners: Partner[]; onClose: () => v
   );
 }
 
-/** The step's header: Draft a payout run (the one primary). */
-export function PayoutActions({ partners, readOnly }: { partners: Partner[]; readOnly: boolean }) {
+/**
+ * The step's header: Draft a payout run (the one primary). Once the partner ledger is live (2026-11-06) Run
+ * payouts is the primary and this drafts one partner for a period of your choosing (`secondary`).
+ */
+export function PayoutActions({ partners, readOnly, secondary = false }: { partners: Partner[]; readOnly: boolean; secondary?: boolean }) {
   const [drafting, setDrafting] = useState(false);
   const open = partners.filter((p) => p.status !== "offboarded");
   if (readOnly || open.length === 0) return null;
   return (
     <>
-      <Button onClick={() => setDrafting(true)}>Draft a payout run</Button>
+      <Button variant={secondary ? "outline" : undefined} onClick={() => setDrafting(true)}>{secondary ? "Draft one partner" : "Draft a payout run"}</Button>
       {drafting ? <DraftRun partners={open} onClose={() => setDrafting(false)} /> : null}
     </>
   );
@@ -137,8 +142,9 @@ export function RunActions({ run, readOnly }: { run: Pick<RunHeader, "id" | "sta
       setBusy(false);
     }
   };
-  const statement = { label: "Download the statement", href: `/api/app/accounting/payouts/${run.id}/statement` };
-  if (readOnly) return <MoreMenu items={[statement]} />;
+  const statement = { label: "Download the statement (CSV)", href: `/api/app/accounting/payouts/${run.id}/statement` };
+  const invoice = { label: "Download the invoice (PDF)", href: `/api/app/accounting/payouts/${run.id}/invoice` };
+  if (readOnly) return <MoreMenu items={[invoice, statement]} />;
   return (
     <>
       {blocked ? (
@@ -146,14 +152,14 @@ export function RunActions({ run, readOnly }: { run: Pick<RunHeader, "id" | "sta
           The partner statement shows who sent it. {/trading name/i.test(blocked) ? <Link className="underline" href="/app/settings#business-identity/identity-trading-name">Add the trading name</Link> : null}{/trading name/i.test(blocked) && /business address/i.test(blocked) ? " and " : null}{/business address/i.test(blocked) ? <Link className="underline" href="/app/settings#business-identity/identity-address-line1">add the business address</Link> : null}.
         </Callout>
       ) : null}
-      <MoreMenu items={[statement, run.status !== "void" && { label: "Void the run", onSelect: () => setAsking({ kind: "void", reason: "" }) }]} />
-      {run.status === "draft" ? <Button disabled={busy} onClick={() => void act({ action: "publish" }, "Published: the partner can now see it, and the cost is booked")}>Publish to partner</Button> : null}
+      <MoreMenu items={[invoice, statement, run.status !== "void" && run.status !== "paid" && { label: "Void the invoice", onSelect: () => setAsking({ kind: "void", reason: "" }) }]} />
+      {run.status === "draft" ? <Button disabled={busy} onClick={() => void act({ action: "publish" }, "Published: the partner can see the invoice and its PDF, and the cost is booked")}>Publish &amp; share</Button> : null}
       {run.status === "published" && run.netCents > 0 ? <Button disabled={busy} onClick={() => setAsking({ kind: "paid", on: today(), method: "ach", reference: "" })}>Mark paid</Button> : null}
       {asking ? (
         <ConfirmDialog
           open onOpenChange={(next) => { if (!next) setAsking(null); }} busy={busy} destructive={asking.kind === "void"}
           title={asking.kind === "paid" ? `Mark ${money(run.netCents)} to ${run.partnerName} paid?` : `Void this run for ${run.partnerName}?`}
-          description={asking.kind === "paid" ? "Records when the money moved. Nothing is paid from here." : "Its cost is reversed and its open disputes are closed; the run stays on record."}
+          description={asking.kind === "paid" ? "Records when the money moved and stamps every item on it PAID, so none is paid again. Nothing is paid from here." : "Its cost is reversed, its open disputes are closed and its items go back to waiting for the next invoice; the invoice stays on record."}
           confirmLabel={asking.kind === "paid" ? "Record payment" : "Void run"} cancelLabel="Keep it"
           confirmDisabled={asking.kind === "void" ? !asking.reason.trim() : !asking.on}
           onConfirm={() => void (asking.kind === "paid" ? act({ action: "paid", paid_on: asking.on, method: asking.method, reference: asking.reference || null }, "Marked paid") : act({ action: "void", reason: asking.reason }, "Voided"))}
@@ -238,58 +244,115 @@ export function ResolveDispute({ runId, dispute }: { runId: string; dispute: Pic
   );
 }
 
-/** `partnerFixed`: one partner's runs on its record — no partner picker, Draft a run in the toolbar. `recordLinks`: partner names open the record. */
+/**
+ * Where an invoice stands, in the words of what to do next (/ui-taste pass, owner 2026-11-09, "like Bank
+ * deposits"): a draft that owes something is To review; a published one with money owed is To pay; a run
+ * that nets to nothing says so instead of sitting among the drafts.
+ */
+type InvoiceState = "review" | "pay" | "paid" | "nothing" | "void";
+const STATE_ORDER: InvoiceState[] = ["review", "pay", "paid", "nothing", "void"];
+const stateOf = (r: RunHeader): InvoiceState => (r.status === "void" ? "void" : r.status === "paid" ? "paid" : r.netCents === 0 ? "nothing" : r.status === "draft" ? "review" : r.netCents > 0 ? "pay" : "nothing");
+const STATE_CHIP: Record<InvoiceState, { tone: StatusTone; label: string }> = {
+  review: { tone: "warning", label: "To review" },
+  pay: { tone: "info", label: "To pay" },
+  paid: { tone: "good", label: "Paid" },
+  nothing: { tone: "neutral", label: "Nothing owed" },
+  void: { tone: "neutral", label: "Void" },
+};
+const NEXT_STEP: Record<InvoiceState, string | null> = { review: "Review", pay: "Mark paid", paid: null, nothing: null, void: null };
+/** The day `n` days before today, as YYYY-MM-DD. */
+function daysBefore(n: number): string {
+  const d = new Date(`${today()}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+const PERIODS = [{ key: "90", label: "Last 90 days" }, { key: "365", label: "Last 12 months" }, { key: "all", label: "All time" }] as const;
+const periodLabel = (start: string, end: string) => {
+  const f = (d: string, year: boolean) => new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" }).format(new Date(`${d}T00:00:00Z`));
+  return `${f(start, start.slice(0, 4) !== end.slice(0, 4))} – ${f(end, true)}`;
+};
+
+/** `partnerFixed`: one partner's runs on its record — no partner search, Draft a run in the toolbar. `recordLinks`: partner names open the record. */
 export function PayoutsBoard({ runs, partners, readOnly, status: initialStatus, partnerFixed = false, recordLinks = false }: { runs: RunRow[]; partners: Partner[]; readOnly: boolean; status?: string; partnerFixed?: boolean; recordLinks?: boolean }) {
   const router = useRouter();
-  const [partner, setPartner] = useState(partnerFixed ? partners[0]?.id ?? "" : "");
-  const [status, setStatus] = useState<"" | RunStatus>(initialStatus && initialStatus in RUN_STATUS_LABELS ? (initialStatus as RunStatus) : "");
+  const legacy: Record<string, InvoiceState> = { draft: "review", published: "pay", paid: "paid", void: "void" };
+  const [filter, setFilter] = useState<"all" | InvoiceState>(initialStatus ? (legacy[initialStatus] ?? (STATE_ORDER.includes(initialStatus as InvoiceState) ? (initialStatus as InvoiceState) : "all")) : "all");
+  const [search, setSearch] = useState("");
+  const [period, setPeriod] = useState<(typeof PERIODS)[number]["key"]>("365");
   const [page, setPage] = useState(1);
   const [drafting, setDrafting] = useState(false);
   const [refreshing, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
-  const visible = useMemo(() => runs.filter((r) => (!partner || r.partnerId === partner) && (!status || r.status === status)), [runs, partner, status]);
-  const pageSize = useFittingPageSize(500, 45);
+  const since = period === "all" ? "" : daysBefore(Number(period));
+  const inPeriod = useMemo(() => runs.filter((r) => !since || r.periodEnd >= since), [runs, since]);
+  const needle = search.trim().toLowerCase();
+  const visible = useMemo(() => inPeriod
+    .filter((r) => filter === "all" || stateOf(r) === filter)
+    .filter((r) => !needle || r.partnerName.toLowerCase().includes(needle) || (r.invoiceNumber ?? "").toLowerCase().includes(needle))
+    .sort((a, b) => STATE_ORDER.indexOf(stateOf(a)) - STATE_ORDER.indexOf(stateOf(b)) || b.periodEnd.localeCompare(a.periodEnd)), [inPeriod, filter, needle]);
+  const pageSize = useFittingPageSize(500, 52);
   const shown = paginate(visible, page, pageSize);
   const month = today().slice(0, 7);
-  const drafts = runs.filter((r) => r.status === "draft");
-  const owed = runs.filter((r) => r.status === "published");
+  const of = (s: InvoiceState) => inPeriod.filter((r) => stateOf(r) === s);
+  const review = of("review");
+  const owed = of("pay");
   const paid = runs.filter((r) => r.status === "paid" && (r.paidOn ?? "").startsWith(month));
   const openPartners = partners.filter((p) => p.status !== "offboarded");
   const canDraft = !readOnly && openPartners.length > 0;
+  const pick = (f: "all" | InvoiceState) => { setFilter(f); setPage(1); };
   return (
     <>
       {!(partnerFixed && runs.length === 0) && <StatStrip label="Payout totals">
-        <StatTile label="Drafts to review" value={String(drafts.length)} valueTone={drafts.length ? "warning" : undefined} footnote="the partner cannot see these" href={partnerFixed ? undefined : "/app/payouts?status=draft"} />
-        <StatTile label="Published, unpaid" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} run${owed.length === 1 ? "" : "s"} owed`} href={partnerFixed ? undefined : "/app/payouts?status=published"} />
-        <StatTile label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} run${paid.length === 1 ? "" : "s"}`} href={partnerFixed ? undefined : "/app/payouts?status=paid"} />
+        <StatTile label="To review" value={money(review.reduce((s, r) => s + r.netCents, 0))} valueTone={review.length ? "warning" : undefined} footnote={review.length ? `${review.length} draft${review.length === 1 ? "" : "s"} · the partner cannot see these` : "Nothing waiting"} href={partnerFixed ? undefined : "/app/payouts?status=review"} />
+        <StatTile label="To pay" value={money(owed.reduce((s, r) => s + r.netCents, 0))} footnote={`${owed.length} published invoice${owed.length === 1 ? "" : "s"}`} href={partnerFixed ? undefined : "/app/payouts?status=pay"} />
+        <StatTile label="Paid this month" value={money(paid.reduce((s, r) => s + r.netCents, 0))} footnote={`${paid.length} invoice${paid.length === 1 ? "" : "s"}`} href={partnerFixed ? undefined : "/app/payouts?status=paid"} />
       </StatStrip>}
       <TableCard
         // No runs at all: the empty state's one button is the whole page; filters over nothing are noise.
         toolbar={runs.length === 0 ? undefined :
-          <DataToolbar actions={<>{partnerFixed && canDraft ? <Button onClick={() => setDrafting(true)}>Draft a run</Button> : null}<RefreshButton onClick={refresh} refreshing={refreshing} /></>}>
-            {!partnerFixed && <select aria-label="Partner" className={toolbarControl} value={partner} onChange={(e) => { setPartner(e.target.value); setPage(1); }}><option value="">All partners</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>}
-            <select aria-label="Status" className={toolbarControl} value={status} onChange={(e) => { setStatus(e.target.value as "" | RunStatus); setPage(1); }}><option value="">Any status</option>{(["draft", "published", "paid", "void"] as RunStatus[]).map((s) => <option key={s} value={s}>{RUN_STATUS_LABELS[s]}</option>)}</select>
+          <DataToolbar actions={<>
+            {partnerFixed && canDraft ? <Button variant="outline" onClick={() => setDrafting(true)}>Draft a run</Button> : null}
+            <select aria-label="Period" className={toolbarControl} value={period} onChange={(e) => { setPeriod(e.target.value as typeof period); setPage(1); }}>{PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}</select>
+            <RefreshButton onClick={refresh} refreshing={refreshing} />
+          </>}>
+            {!partnerFixed && <ToolbarSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search partner or invoice" />}
+            <Segmented label="Invoice status" value={filter} onChange={pick} options={[
+              { key: "all", label: "All", count: inPeriod.length },
+              { key: "review", label: "To review", count: review.length || null },
+              { key: "pay", label: "To pay", count: owed.length || null },
+              { key: "paid", label: "Paid", count: of("paid").length || null },
+              { key: "nothing", label: "Nothing owed", count: of("nothing").length || null },
+            ]} />
           </DataToolbar>
         }
-        footer={visible.length > pageSize ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="runs" onPage={setPage} /> : undefined}
+        footer={visible.length > pageSize ? <Pager page={shown.current} pageSize={pageSize} total={visible.length} noun="invoices" onPage={setPage} /> : undefined}
       >
         {runs.length === 0 ? (
-          <EmptyState title="No payout runs yet" hint={openPartners.length ? "Draft one for a partner and a month: it is priced from the terms on the partner's record." : "Add a partner with payout terms first."} action={canDraft ? <Button onClick={() => setDrafting(true)}>Draft a run</Button> : undefined} />
+          <EmptyState title="No invoices yet" hint={openPartners.length ? "Run payouts makes one for every partner whose pay period has ended, priced from their rulebook." : "Add a partner and set its rulebook first."} action={canDraft ? <Button onClick={() => setDrafting(true)}>Draft a run</Button> : undefined} />
         ) : visible.length === 0 ? (
-          <NoMatches noun="runs" onClear={() => { setPartner(partnerFixed ? partner : ""); setStatus(""); }} />
+          <NoMatches noun="invoices" onClear={() => { setSearch(""); setPeriod("all"); pick("all"); }} />
         ) : (
-          <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
-            <thead><tr><th>Partner</th><th>Period</th><th className="text-right">Net payable</th><th>Status</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
+          <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
+            <thead><tr><th className="w-[30%]">{partnerFixed ? "Invoice" : "Partner"}</th><th className="w-[22%]">Pay period</th><th className="w-[14%] text-right">Amount</th><th className="w-[14%]">Status</th><th>Next step</th></tr></thead>
             <tbody>
-              {shown.rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="font-medium">{recordLinks && !partnerFixed ? <Link href={`/app/publishers/${r.partnerId}?tab=payouts`} className="text-foreground underline-offset-4 hover:underline">{r.partnerName}</Link> : r.partnerName}</td>
-                  <td className="tabular-nums">{r.periodStart} to {r.periodEnd}</td>
-                  <td className="text-right tabular-nums">{money(r.netCents)}</td>
-                  <td><RunStatusChip status={r.status} paidOn={r.paidOn} /></td>
-                  <td className="text-right"><Button size="sm" variant="outline" asChild><Link href={`/app/payouts/${r.id}`}>Open</Link></Button></td>
-                </tr>
-              ))}
+              {shown.rows.map((r) => {
+                const state = stateOf(r);
+                const next = readOnly ? null : NEXT_STEP[state];
+                return (
+                  <tr key={r.id} className="cursor-pointer" onClick={() => router.push(`/app/payouts/${r.id}`)}>
+                    <td>
+                      {partnerFixed ? <span className="font-medium">{invoiceRef(r)}</span>
+                        : recordLinks ? <Link href={`/app/publishers/${r.partnerId}?tab=terms`} className="font-medium text-foreground underline-offset-4 hover:underline" onClick={(e) => e.stopPropagation()}>{r.partnerName}</Link>
+                        : <span className="font-medium">{r.partnerName}</span>}
+                      {!partnerFixed ? <div className="font-mono text-xs text-muted-foreground">{invoiceRef(r)}</div> : null}
+                    </td>
+                    <td className="tabular-nums">{periodLabel(r.periodStart, r.periodEnd)}</td>
+                    <td className={`text-right tabular-nums ${r.netCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{money(r.netCents)}</td>
+                    <td><StatusChip tone={STATE_CHIP[state].tone}>{state === "paid" && r.paidOn ? `Paid ${dateLabel(r.paidOn)}` : r.netCents < 0 && state !== "void" ? "Owes you · next invoice" : STATE_CHIP[state].label}</StatusChip></td>
+                    <td>{next ? <Button size="sm" variant="outline" asChild><Link href={`/app/payouts/${r.id}`} onClick={(e) => e.stopPropagation()}>{next}</Link></Button> : <span className="text-muted-foreground">—</span>}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

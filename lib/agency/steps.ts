@@ -6,16 +6,19 @@
  * of the old group to Accounting, Reports, Sales and Leads; every address kept. A plain module so the frame, the
  * sidebar and the page trail read one list.
  */
-export type AgencyStep = "overview" | "producers";
+/** Compare (owner 2026-11-07): any two periods side by side, under the dashboard it compares. */
+export type AgencyStep = "overview" | "producers" | "compare";
 
 export const AGENCY_STEPS: { key: AgencyStep; label: string; href: string }[] = [
   { key: "overview", label: "Agency dashboard", href: "/app/agency" },
   { key: "producers", label: "Producers", href: "/app/producers" },
+  { key: "compare", label: "Compare", href: "/app/agency/compare" },
 ];
 
 /** Each page's addresses. A producer's record, their carriers and the invite form sit under Producers. */
 const STEP_PATHS: [RegExp, AgencyStep][] = [
   [/^\/app\/agency\/?$/, "overview"],
+  [/^\/app\/agency\/compare\/?$/, "compare"],
   [/^\/app\/producers(\/.*)?$/, "producers"],
 ];
 

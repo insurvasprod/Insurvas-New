@@ -285,6 +285,8 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [callbacks, setCallbacks] = useState<DiaryCallback[] | null>(null);
   const [anchor, setAnchor] = useState<number | null>(null);
+  // Which way the last day or week move went (§ Motion, Wave 2); set by moveTo below.
+  const [turn, setTurn] = useState<{ to: number | null; enter: "forward" | "back" } | null>(null);
   const [now, setNow] = useState<number | null>(null);
   const [context, setContext] = useState<Context | null>(null);
   const [me, setMe] = useState<string | null>(null);
@@ -588,7 +590,10 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
 
   const needConfirming = weekLive.filter((item) => item.status === "booked" && now != null && Date.parse(item.startsAtUtc) > now).length;
   const freeToday = today ? [...cellsFor(today).values()].filter((cell) => cell.kind === "free" && !cell.past).length : 0;
-  const step = (days: number) => { if (anchor != null) { setAnchor(anchor + days * DAY_MS); setListPage(1); } };
+  // Which way the last move went (§ Motion, Wave 2): a later day or week slides in from the right, an earlier one from
+  // the left; a view switch just settles. Kept with the anchor it moved to, so nothing else replays it.
+  const moveTo = (to: number) => { if (anchor != null && to !== anchor) setTurn({ to, enter: to > anchor ? "forward" : "back" }); setAnchor(to); setListPage(1); };
+  const step = (days: number) => { if (anchor != null) moveTo(anchor + days * DAY_MS); };
 
   return (
     <div className="m-stagger flex flex-col gap-6">
@@ -664,12 +669,12 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
                     type="date"
                     aria-label={view === "day" ? "Choose a day" : "Choose a week"}
                     className="absolute inset-0 cursor-pointer opacity-0"
-                    onChange={(event) => { if (event.target.value) { setAnchor(new Date(`${event.target.value}T12:00:00`).getTime()); setListPage(1); } }}
+                    onChange={(event) => { if (event.target.value) moveTo(new Date(`${event.target.value}T12:00:00`).getTime()); }}
                   />
                 </label>
                 <Button type="button" size="icon-sm" variant="outline" aria-label={view === "day" ? "Next day" : "Next week"} onClick={() => step(view === "day" ? 1 : 7)}><ChevronRight aria-hidden="true" /></Button>
                 {/* Back to today: today's day, or the week around it. */}
-                <Button type="button" size="sm" variant="ghost" onClick={() => { setAnchor(nowMs()); setListPage(1); }}>Today</Button>
+                <Button type="button" size="sm" variant="ghost" onClick={() => moveTo(nowMs())}>Today</Button>
               </span>
             </DataToolbar>
             <FilterPanel id="calendar-filters" open={filtersOpen} className="-mx-4 mt-3 w-[calc(100%+2rem)]">
@@ -702,7 +707,7 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
             : undefined}
         >
         {/* The views fade in on switch, like every tab panel (2026-10-09). */}
-        <div key={view} id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-panel-tab-${view}`}>
+        <div key={`${view}:${view === "list" ? "" : anchor}`} data-enter={turn && turn.to === anchor && view !== "list" ? turn.enter : undefined} id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-panel-tab-${view}`}>
         {view === "day" && (
           context == null ? (
             <div className="p-4"><ErrorState title="Availability did not load" detail="Try again in a moment." action={<Button type="button" variant="outline" onClick={refresh}>Try again</Button>} /></div>
