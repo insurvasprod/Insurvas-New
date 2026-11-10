@@ -48,7 +48,7 @@ export default async function TaxPage({ searchParams }: { searchParams: Promise<
     <AccountingPage
       step="tax"
       info="Contractors are counted by the date money moved, in the calendar year. By category follows your P&L's basis. The export is a summary of recorded transactions for your accountant, not a tax return; nothing is filed."
-      lead={data ? <ViewTabs label="Tax summaries" value={view} tabs={[
+      tabs={data ? <ViewTabs label="Tax summaries" value={view} tabs={[
         { key: "contractors", label: "Contractors", count: data.contractors.missingCount || null, tone: "danger", href: at("contractors") },
         { key: "categories", label: "By category", href: at("categories") },
         { key: "buckets", label: "Buckets", href: at("buckets") },

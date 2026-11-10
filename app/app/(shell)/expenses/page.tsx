@@ -61,7 +61,7 @@ export default async function ExpensesPage({ searchParams }: { searchParams: Pro
     <AccountingPage
       step="expenses"
       info="Every expense goes into one of three buckets: buying leads, monthly subscriptions, or daily & random. A monthly bill comes back each month as a to-do; OK books it and marks it paid, and nothing is paid without you. The Scoreboard shows what each month cost, with lead invoices from Vendor bills counted under Leads. Acquisition costs divide into cost per policy; overhead does not."
-      lead={tabs}
+      tabs={tabs}
       actions={expenses ? <ExpenseActions unconfirmedIds={unconfirmed.map((e) => e.id)} view={view} readOnly={readOnly} /> : undefined}
     >
       {!expenses ? <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>

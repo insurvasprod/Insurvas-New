@@ -130,7 +130,7 @@ export async function VendorBillsPage({ tab, open, vendor, status, guards }: { t
     <AccountingPage
       step="bills"
       info={shown === "invoices" ? "Each lead invoice, line by line with its campaign. Approving books the cost; marking paid records when the money moved; voiding reverses it. Nothing is deleted." : "Return claims against vendors, and what each vendor credited."}
-      lead={canInvoices && canReturns ? <ViewTabs label="Vendor bills" value={shown} tabs={[{ key: "invoices", label: "Bills", href: "/app/vendor-bills" }, { key: "returns", label: "Returns", href: "/app/vendor-bills?tab=returns" }]} /> : undefined}
+      tabs={canInvoices && canReturns ? <ViewTabs label="Vendor bills" value={shown} tabs={[{ key: "invoices", label: "Bills", href: "/app/vendor-bills" }, { key: "returns", label: "Returns", href: "/app/vendor-bills?tab=returns" }]} /> : undefined}
       actions={actions}
     >
       {readOnly && <Callout tone="warning" title={READ_ONLY_COPY} />}

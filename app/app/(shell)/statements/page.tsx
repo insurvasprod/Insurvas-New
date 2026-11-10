@@ -82,7 +82,7 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
       title="Statements"
       chip={<InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip>}
       actions={actions}
-      lead={statements.length > 0 ? (
+      tabs={statements.length > 0 ? (
         <ViewTabs
           label="Statement lists"
           value={showUnmatched ? "unmatched" : "statements"}

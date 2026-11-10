@@ -31,7 +31,7 @@ async function openSteps(): Promise<RailStep[]> {
  * The frame: the shared StepFrame with this page's steps, rail and badges. `pathname` names the address on
  * screen, so My pay keeps its own title.
  */
-export async function CommissionsPage({ step, pathname, titleInfo, lead, actions, children }: { step: CommissionsStep; pathname?: string; titleInfo?: ReactNode; lead?: ReactNode; actions?: ReactNode; children: ReactNode }) {
+export async function CommissionsPage({ step, pathname, titleInfo, tabs, actions, children }: { step: CommissionsStep; pathname?: string; titleInfo?: ReactNode; tabs?: ReactNode; actions?: ReactNode; children: ReactNode }) {
   const [steps, jar] = await Promise.all([openSteps(), cookies()]);
   // The step on screen is always offered: its route already let this person in.
   if (!steps.some((item) => item.key === step)) {
@@ -43,7 +43,7 @@ export async function CommissionsPage({ step, pathname, titleInfo, lead, actions
     <StepFrame
       title={commissionsStepLabel(step, pathname)}
       titleInfo={titleInfo}
-      lead={lead}
+      tabs={tabs}
       actions={actions}
       rail={{ label: "Commissions", cookie: COMMISSIONS_RAIL_COOKIE, countsUrl: "/api/app/commissions/steps", waiting: COMMISSIONS_WAITING, steps, step, collapsed: jar.get(COMMISSIONS_RAIL_COOKIE)?.value === "collapsed" }}
     >

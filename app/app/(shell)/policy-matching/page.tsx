@@ -42,7 +42,7 @@ export default async function PolicyMatchingPage({ searchParams }: { searchParam
   ) : undefined;
 
   return (
-    <DataInPage step="needs-you" title="Policy matching" lead={tabs}>
+    <DataInPage step="needs-you" title="Policy matching" tabs={tabs}>
       {!view.available ? (
         // §3: a blocked state raises a bell alert, never a box on the page.
         <Callout tone="warning" title={MATCHING_PENDING_MESSAGE} />

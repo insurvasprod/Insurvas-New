@@ -37,7 +37,7 @@ export default async function RetentionCasesPage({ searchParams }: { searchParam
     <RetentionPage step="cases"
       title="Retention"
       info="Every policy the uploaded policy and commission files flag, at its risk point: a payment problem, a pending lapse, lapsed but reinstatable, or lost, with paperwork beside them. A case leaves as saved only when a later file proves it fixed."
-      lead={data.available ? <ViewTabs label="Whose cases" value={active} tabs={[
+      tabs={data.available ? <ViewTabs label="Whose cases" value={active} tabs={[
         { key: "all", label: "All", count: data.open.length, href: keep ? `/app/retention?${keep}` : "/app/retention" },
         ...(mine > 0 ? [{ key: "mine", label: "Mine", count: mine, href: `/app/retention?${keep ? `${keep}&` : ""}owner=me` }] : []),
       ]} /> : undefined}

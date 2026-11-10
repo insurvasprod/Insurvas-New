@@ -47,13 +47,13 @@ async function openSteps(): Promise<{ open: Set<ComplianceStep>; owner: boolean 
  * `facts`. A client screen can also put its tabs and buttons there through `ComplianceSlot` (`lead`,
  * `corner`), which portals into the two empty slots drawn here.
  */
-export async function ComplianceFlowPage({ step, title, info, chip, facts, lead, actions, children }: {
+export async function ComplianceFlowPage({ step, title, info, chip, facts, tabs, actions, children }: {
   step: ComplianceStep;
   title?: string;
   info?: ReactNode;
   chip?: ReactNode;
   facts?: ReactNode;
-  lead?: ReactNode;
+  tabs?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -69,7 +69,7 @@ export async function ComplianceFlowPage({ step, title, info, chip, facts, lead,
       titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${heading}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
       // The facts never widen the title's column: they wrap in it, at least 360px wide (Accounting, 2026-11-03).
       meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
-      lead={<>{lead}<div id="compliance-lead" className="flex min-w-0 flex-wrap items-center gap-2 empty:hidden" /></>}
+      tabs={<>{tabs}<div id="compliance-lead" className="flex min-w-0 flex-1 flex-wrap items-end gap-2 empty:hidden" /></>}
       actions={<>{actions}<span id="compliance-corner" className="contents" /></>}
       rail={{
         label: "Compliance",

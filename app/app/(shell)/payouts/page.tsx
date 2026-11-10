@@ -65,7 +65,7 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
     <AccountingPage
       step="payouts"
       info="Each partner is paid by its rulebook: Model A, a flat rate once a transferred client's application is submitted; Model B, a share of the commission received on an issued policy. Every item goes into the ledger once. Run payouts makes a draft invoice for each partner whose pay schedule has ended, with every unpaid item locked to it; marking it paid stamps them PAID, so nothing is paid twice. Publishing shares the invoice and its PDF in the partner's portal and books the cost. Nothing here moves money."
-      lead={tabs}
+      tabs={tabs}
       actions={view === "invoices" && runs ? <>{live ? <RunPayouts readOnly={readOnly} /> : null}<PayoutActions partners={runs.partners} readOnly={readOnly} secondary={live} /></> : view === "ledger" && live ? <RunPayouts readOnly={readOnly} /> : undefined}
     >
       {view === "ledger" ? (ledger ? <LedgerBoard rows={ledger.rows} partners={ledger.partners} initialState={state} initialPartner={partner} /> : waiting)

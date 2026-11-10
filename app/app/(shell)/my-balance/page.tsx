@@ -54,7 +54,7 @@ export default async function MyBalancePage({ searchParams }: { searchParams: Pr
       step="splits"
       pathname="/app/my-balance"
       info="Your share of the commission the agency received, and the chargebacks that come back with it. Only your own figures."
-      lead={shown ? <ViewTabs label="My balance" value={view} tabs={[
+      tabs={shown ? <ViewTabs label="My balance" value={view} tabs={[
         { key: "entries", label: "Entries", count: shown.entries.length, href: "/app/my-balance" },
         { key: "runs", label: "Payout runs", count: shown.runs.length, href: "/app/my-balance?view=runs" },
       ]} /> : undefined}

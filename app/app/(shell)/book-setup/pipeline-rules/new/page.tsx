@@ -22,7 +22,7 @@ export default async function NewPipelineRulePage() {
   const readOnly = guard.entitlement.access === "read_only";
 
   return (
-    <DataInPage step="pipeline-rules" title="New rule" lead={<span className="flex items-center gap-3 text-sm text-muted-foreground"><StatusChip tone="warning">Forecast</StatusChip>Starts in forecast · version 1</span>}>
+    <DataInPage step="pipeline-rules" title="New rule" chip={<StatusChip tone="warning">Forecast</StatusChip>} facts="Starts in forecast · version 1">
       {!view.available ? (
         <Callout tone="warning" title={PIPELINE_RULES_PENDING_MESSAGE} />
       ) : (

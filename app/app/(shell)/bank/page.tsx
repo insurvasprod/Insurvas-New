@@ -77,7 +77,7 @@ export default async function BankPage({ searchParams }: { searchParams: Promise
     <AccountingPage
       step="bank"
       info={`Did the money the carriers said they paid land in the bank, and was each policy paid what you were promised? A deposit counts when it lands from the carrier's date to ${results?.windowDays ?? 21} days after (Settings › Accounting). Promised amounts come from your rate card. Nothing is matched until a person confirms it.`}
-      lead={tabs}
+      tabs={tabs}
       actions={data ? (view === "results"
         ? (!readOnly ? <Button asChild><Link href="/app/bank/check">Check a payment</Link></Button> : undefined)
         : <BankActions accounts={data.accounts} readOnly={readOnly} />) : undefined}

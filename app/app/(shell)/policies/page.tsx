@@ -65,7 +65,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
     // LA-4.6: what moved between the carriers' policy files.
     const changes = await listPolicyChanges(guard.context.tenantId);
     return (
-      <DataInPage step="policies" lead={lead} actions={actions}>
+      <DataInPage step="policies" tabs={lead} actions={actions}>
         <PolicyChangesTable
           changes={changes.changes}
           emptyTitle={changes.available ? "No policy has changed yet" : "Policy changes are not available yet"}
@@ -91,7 +91,7 @@ export default async function PoliciesPage({ searchParams }: { searchParams: Pro
   const listRows = rows.map((row) => ({ ...row, money: money?.byKey.get(`${row.carrierId}|${row.policyNumber}`) ?? null }));
 
   return (
-    <DataInPage step="policies" lead={lead} actions={actions}>
+    <DataInPage step="policies" tabs={lead} actions={actions}>
       {/* LA-4.13: the share of the book no rate can check, and the one place to fix it — one line (round 3). */}
       {unpriced && (
         <Callout tone="warning" title={`${unpriced.top.policies.toLocaleString("en-US")} ${unpriced.top.carrierName} ${unpriced.top.policies === 1 ? "policy" : "policies"}, $${Math.round(unpriced.top.monthlyCents / 100).toLocaleString("en-US")}/mo, have no rate, so their commission can't be checked${unpriced.carriers > 1 ? ` (${unpriced.policies.toLocaleString("en-US")} policies across ${unpriced.carriers} carriers in all)` : ""}.`}>

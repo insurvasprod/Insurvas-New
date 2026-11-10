@@ -54,7 +54,7 @@ export default async function PnlPage({ searchParams }: { searchParams: Promise<
     ? `${BASIS_NOTE[loaded.data.basis]} ${ACQUISITION_CONSEQUENCE} Under ${loaded.data.settings.threshold} policies the figures show counts, not a rate. Reported and received are never added together; every line opens its entries.`
     : undefined;
   return (
-    <AccountingPage step="pnl" info={info} lead={loaded ? <ViewTabs label="Profit & loss" value={view} tabs={pnlTabs(loaded.query)} /> : undefined}>
+    <AccountingPage step="pnl" info={info} tabs={loaded ? <ViewTabs label="Profit & loss" value={view} tabs={pnlTabs(loaded.query)} /> : undefined}>
       {content}
     </AccountingPage>
   );

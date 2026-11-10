@@ -84,7 +84,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   if (view === "accounts") {
     const accounts = await loadAccounts(guard.context.tenantId);
     return (
-      <DataInPage step="ledger" lead={sourceTabs}>
+      <DataInPage step="ledger" tabs={sourceTabs}>
         {accounts.available
           ? <CarrierAccounts orphanDays={accounts.orphanDays} statements={accounts.statements} orphans={accounts.orphans} files={accounts.files} carriers={accounts.carriers} readOnly={readOnly || (guard.role !== "owner" && guard.role !== "bookkeeper")} today={new Date().toISOString().slice(0, 10)} />
           : <Callout tone="warning" title={<>{ACCOUNTS_PENDING_MESSAGE}</>} />}
@@ -180,7 +180,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
       agentName: row.account ? null : names.agentOf(row.carrierId, row.policyNumber, row.agentUserId),
     }));
     return (
-      <DataInPage step="ledger" lead={sourceTabs} actions={headerActions}>
+      <DataInPage step="ledger" tabs={sourceTabs} actions={headerActions}>
         {notices}
         {book && !book.available && <Callout tone="warning" title={<>{LEDGER_PENDING_MESSAGE}</>} />}
         {book?.available && book.truncated && <Callout tone="warning" title={<>Showing the newest {book.cap.toLocaleString("en-US")} lines from carrier files; older lines, and their amounts, are left out of the list and the figures here.</>} />}
@@ -209,7 +209,7 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
   );
 
   return (
-    <DataInPage step="ledger" lead={sourceTabs} actions={headerActions}>
+    <DataInPage step="ledger" tabs={sourceTabs} actions={headerActions}>
       {!showExpected ? (
         <>
           {notices}

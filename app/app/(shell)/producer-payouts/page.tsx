@@ -29,7 +29,7 @@ export default async function ProducerPayoutsPage({ searchParams }: { searchPara
     <AccountingPage
       step="producerPayouts"
       info="Pay your team for a month. Each person has a pay plan: solo or sidekick, salary + bonus, or a big split. Run payroll shows a draft first and saves nothing; anyone below zero gets your choice to carry it, take a share this month, or let it go. Confirm records how you paid each person, stamps the month paid and gives each a private statement. Nothing here moves money."
-      lead={<ViewTabs label="Team payouts" value={tab} tabs={[
+      tabs={<ViewTabs label="Team payouts" value={tab} tabs={[
         { key: "run", label: "Run payroll", href: "/app/producer-payouts" },
         { key: "runs", label: "Runs", href: "/app/producer-payouts?tab=runs" },
         { key: "plans", label: "Pay plans", count: plans && !plans.pending ? plans.team.filter((m) => !m.plan).length || undefined : undefined, href: "/app/producer-payouts?tab=plans" },

@@ -57,7 +57,7 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
   if (view === "signals") {
     const legacy = await getLapseRisk(guard.context);
     return (
-      <DataInPage step="needs-you" title="Lapse risk" lead={tabs()} actions={readOnly || legacy.policies.length === 0 ? undefined : <RecordLapseSignal />}>
+      <DataInPage step="needs-you" title="Lapse risk" tabs={tabs()} actions={readOnly || legacy.policies.length === 0 ? undefined : <RecordLapseSignal />}>
         {legacy.policies.length === 0
           ? <LapseRiskEmpty notice={legacy.storage === "pending" ? LAPSE_SCHEMA_PENDING_MESSAGE : undefined} framed />
           : <LapseRiskBoard policies={legacy.policies} totals={legacy.totals} readOnly={readOnly} framed />}
@@ -71,7 +71,7 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const [board, rates] = await Promise.all([loadBoard(viewer), loadSaveRates(viewer)]);
   return (
-    <DataInPage step="needs-you" title="Lapse risk" lead={tabs(board.rows.length)}>
+    <DataInPage step="needs-you" title="Lapse risk" tabs={tabs(board.rows.length)}>
       <div className="m-stagger flex flex-col gap-6">
         <RetentionBoard rows={board.rows} rates={rates.available ? { calls: rates.calls, byReason: rates.byReason, byCarrier: rates.byCarrier, byAgent: rates.byAgent } : null} readOnly={readOnly} />
       </div>

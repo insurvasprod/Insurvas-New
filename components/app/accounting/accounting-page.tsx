@@ -57,18 +57,18 @@ async function openSteps(): Promise<RailStep[]> {
  * screen, so My balance keeps its own title.
  *
  * Foundation pass (2026-11-03, docs/accounting/FOUNDATION-PASS.md), as Book of business: everything above the
- * step is on the title line. `lead` holds the step's tabs, `actions` at most two buttons and a More menu, and
+ * step is on the title line. `tabs` holds the step's sub-page bar, `actions` at most two buttons and a More menu, and
  * `info` the step's (i) (what used to be a sentence over the table). A record under a step (an invoice, a
  * producer, a payee) passes its `title`, its status `chip` and one muted line of `facts`.
  */
-export async function AccountingPage({ step, pathname, title, info, chip, facts, lead, actions, children }: {
+export async function AccountingPage({ step, pathname, title, info, chip, facts, tabs, actions, children }: {
   step: AccountingStep;
   pathname?: string;
   title?: string;
   info?: ReactNode;
   chip?: ReactNode;
   facts?: ReactNode;
-  lead?: ReactNode;
+  tabs?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -85,7 +85,7 @@ export async function AccountingPage({ step, pathname, title, info, chip, facts,
       // The facts never widen the title's column (it sizes to its content beside the tabs): they wrap in it,
       // at least 360px wide, so a long line cannot squeeze the tabs at 1280 (walk 2026-11-03).
       meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
-      lead={lead}
+      tabs={tabs}
       actions={actions}
       rail={{ label: "Accounting", cookie: ACCOUNTING_RAIL_COOKIE, countsUrl: "/api/app/accounting/steps", waiting: ACCOUNTING_WAITING, steps, step, collapsed: jar.get(ACCOUNTING_RAIL_COOKIE)?.value === "collapsed" }}
     >
