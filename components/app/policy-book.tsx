@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 
 import { MoneyBar } from "@/components/app/book/policy/money-bar";
-import { ProvisionalBadge } from "@/components/app/provisional-badge";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -38,6 +37,8 @@ type Saved = { id: string; name: string; query: string };
 /** The columns that sort (board 6's seven; Commission and Next date read across, so they don't). */
 const COLUMNS: Array<{ label: string; sort?: SortKey; className?: string; title?: string }> = [
   { label: "Policy", sort: "policy" },
+  // Owner 2026-11-10: the client is its own column, not a line under the policy number, and carries no Provisional mark.
+  { label: "Client" },
   { label: "Carrier · product", sort: "carrier" },
   { label: "Health", sort: "dpd", title: "Paid to, payments behind, or the policy's status; sorted by days behind" },
   { label: "Premium", sort: "premium", className: "text-right", title: "Premium as the carrier bills it; sorted by its yearly amount" },
@@ -263,12 +264,11 @@ export function PolicyBook({ rows, strip, initialQuery, saved, savedAvailable, s
                 const m = row.money;
                 return (
                   <tr key={`${row.source ?? "carrier"}|${row.carrierId}|${row.policyNumber}`} className="group cursor-pointer" onClick={(event) => { if ((event.target as HTMLElement).closest("a, button")) return; router.push(href); }}>
-                    <td className="max-w-[180px]">
+                    <td className="max-w-[160px]">
                       <span className="block truncate font-mono text-sm font-semibold text-foreground">{row.policyNumber}</span>
-                      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="truncate">{row.clientName ?? "No client linked"}</span>
-                        {row.provisional && <ProvisionalBadge />}
-                      </span>
+                    </td>
+                    <td className="max-w-[180px]">
+                      <span className={row.clientName ? "block truncate text-foreground" : "block truncate text-muted-foreground"} title={row.clientName ?? undefined}>{row.clientName ?? "No client linked"}</span>
                     </td>
                     <td className="max-w-[170px]">
                       <span className="block truncate text-foreground" title={row.carrierName}>{row.carrierName}</span>
