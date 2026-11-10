@@ -75,7 +75,7 @@ export default async function PayoutRunPage({ params, searchParams }: { params: 
       title={run.partnerName}
       chip={<RunStatusChip status={run.status} paidOn={run.paidOn} />}
       facts={facts}
-      lead={<ViewTabs label="This run" value={tab} tabs={[
+      tabs={<ViewTabs label="This run" value={tab} tabs={[
         { key: "statement", label: "Statement", href: base },
         { key: "items", label: "Items", count: run.items.length, href: `${base}?tab=items` },
         { key: "disputes", label: "Disputes", count: openDisputes || null, tone: "danger", href: `${base}?tab=disputes` },

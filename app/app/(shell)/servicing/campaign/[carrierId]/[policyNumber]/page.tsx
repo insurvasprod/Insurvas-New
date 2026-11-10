@@ -51,7 +51,7 @@ export default async function PaperBillCallPage({ params, searchParams }: { para
       chip={<StatusChip tone={TONE[row.state]}>{STATE_LABELS[row.state]}</StatusChip>}
       facts={facts}
       breadcrumbs={retentionTrail("servicing", name, { label: "Paper bill → bank", href: "/app/servicing?view=campaign" })}
-      lead={<ViewTabs label={name} value={tab} tabs={[{ key: "call", label: "Call", href: base }, { key: "calls", label: "Calls", count: calls.length, href: `${base}?tab=calls` }]} />}
+      tabs={<ViewTabs label={name} value={tab} tabs={[{ key: "call", label: "Call", href: base }, { key: "calls", label: "Calls", count: calls.length, href: `${base}?tab=calls` }]} />}
       actions={next ? <Button asChild variant="outline"><Link href={callHref(next.carrierId, next.policyNumber)}>Next policy ›</Link></Button> : undefined}
     >
       {tab === "calls" ? <PaperBillCalls calls={calls} /> : (

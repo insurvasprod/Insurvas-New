@@ -70,7 +70,7 @@ export default async function ProducerPage({ params, searchParams }: { params: P
       title={person.name}
       chip={<StatusChip tone={owes ? "warning" : person.balanceCents > 0 ? "info" : "neutral"}>{owes ? "Owes the agency" : person.balanceCents > 0 ? "Owed" : "Settled"}</StatusChip>}
       facts={facts}
-      lead={<ViewTabs label={person.name} value={tab} tabs={[
+      tabs={<ViewTabs label={person.name} value={tab} tabs={[
         { key: "entries", label: "Entries", count: entries.length, href: base },
         { key: "splits", label: "Splits", count: splits.length, tone: splits.length ? undefined : "danger", href: `${base}?tab=splits` },
         { key: "runs", label: "Payout runs", count: runs.length, href: `${base}?tab=runs` },

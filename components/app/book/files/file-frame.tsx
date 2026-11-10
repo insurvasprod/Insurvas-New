@@ -49,7 +49,7 @@ export async function FileFrame({ head, tenantId, tab, counts, readOnly, more = 
     <DataInPage
       step="files"
       title={head.name}
-      lead={
+      tabs={
         <ViewTabs
           label="This file"
           value={tab}

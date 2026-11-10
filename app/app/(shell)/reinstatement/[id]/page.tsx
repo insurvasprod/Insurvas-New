@@ -86,7 +86,7 @@ export default async function ReinstatementCasePage({ params, searchParams }: { 
       chip={chip}
       facts={facts}
       breadcrumbs={retentionTrail("reinstatement", name)}
-      lead={<ViewTabs label={`Case of ${name}`} value={tab} tabs={[
+      tabs={<ViewTabs label={`Case of ${name}`} value={tab} tabs={[
         { key: "compare", label: "Reinstate or sell new", href: base },
         { key: "needs", label: "What the carrier needs", href: `${base}?tab=needs` },
         { key: "notes", label: "Notes", href: `${base}?tab=notes` },

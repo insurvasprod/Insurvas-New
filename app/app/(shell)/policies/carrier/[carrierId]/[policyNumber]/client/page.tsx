@@ -70,7 +70,8 @@ export default async function ChangeClientPage({ params, searchParams }: { param
     <DataInPage
       step="policies"
       title={`Change the client for ${policy.policyNumber}`}
-      lead={<PolicyLead status={statusLabel(policy.status)} tone={statusTone(policy.status)} facts={[client?.name ? `Linked now to ${client.name}` : "No client linked", policy.carrierName, carrierName ? `the carrier's file says ${carrierName}` : null]} />}
+      // The policy's status and facts are the title's chip and facts line (the title line holds no tabs, §8b).
+      facts={<PolicyLead status={statusLabel(policy.status)} tone={statusTone(policy.status)} facts={[client?.name ? `Linked now to ${client.name}` : "No client linked", policy.carrierName, carrierName ? `the carrier's file says ${carrierName}` : null]} />}
       actions={<Button asChild variant="outline"><Link href={backHref}>Cancel</Link></Button>}
     >
       <form method="get" role="search" className="flex max-w-[640px] items-center gap-2">

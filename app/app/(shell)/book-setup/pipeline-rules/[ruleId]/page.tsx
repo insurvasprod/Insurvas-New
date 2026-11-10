@@ -73,7 +73,7 @@ export default async function PipelineRulePage({ params, searchParams }: { param
       step="pipeline-rules"
       title={title}
       chip={<ModeChip mode={rule.mode} enabled={rule.enabled} />}
-      lead={<RuleTabs active={tab} base={base} counts={{ check: lines.length, versions: view.versions.length }} />}
+      tabs={<RuleTabs active={tab} base={base} counts={{ check: lines.length, versions: view.versions.length }} />}
       actions={<RuleActions ruleId={rule.id} name={rule.name} mode={rule.mode} enabled={rule.enabled} forecast={{ days: 7, wouldMoves: view.forecast.length, right, wrong: wrong.length }} readOnly={readOnly} previewHref={previewHref} renameHref={`${base}?tab=rule`} />}
     >
       {tab === "overview" && (

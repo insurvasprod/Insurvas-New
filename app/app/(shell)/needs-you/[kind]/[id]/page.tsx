@@ -87,7 +87,7 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
       chip={<StatusChip tone={item.tone}>{meta.label}</StatusChip>}
       facts={source}
       // The item's parts on the title line (UI-CONSISTENCY §8a), as the other steps' tabs are.
-      lead={<ItemTabs current={tab} hasRow={Boolean(page.row)} href={tabHref} />}
+      tabs={<ItemTabs current={tab} hasRow={Boolean(page.row)} href={tabHref} />}
       actions={nextHref ? <Button asChild variant="outline"><Link href={nextHref}>Skip</Link></Button> : undefined}
     >
       <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">

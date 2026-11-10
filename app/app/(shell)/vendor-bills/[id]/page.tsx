@@ -65,7 +65,7 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
       title={inv.sourceName}
       chip={<InvoiceStatusChip status={inv.status} paidOn={inv.paidOn} />}
       facts={facts}
-      lead={<ViewTabs label="This bill" value={tab} tabs={[
+      tabs={<ViewTabs label="This bill" value={tab} tabs={[
         { key: "lines", label: "Lines", count: inv.lines.length, href: base },
         { key: "count", label: "Compare to our count", count: s?.flagged ? 1 : null, tone: "danger", href: `${base}?tab=count` },
         { key: "ledger", label: "Booked", count: inv.entries.length, href: `${base}?tab=ledger` },

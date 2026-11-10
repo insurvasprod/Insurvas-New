@@ -86,7 +86,7 @@ export default async function RetentionCasePage({ params, searchParams }: { para
       title={name}
       facts={facts}
       breadcrumbs={retentionTrail("cases", name)}
-      lead={<ViewTabs label={name} value={tab} tabs={[
+      tabs={<ViewTabs label={name} value={tab} tabs={[
         { key: "do", label: "What to do", href: base },
         { key: "calls", label: "Calls", count: calls.length, href: `${base}?tab=calls` },
         { key: "policy", label: "Policy", href: `${base}?tab=policy` },
