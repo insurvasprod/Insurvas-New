@@ -1,0 +1,102 @@
+/* Life and health (owner, 9 Nov): a short band. The words on the left; on the right a framed stage
+   with a soft green glow, where two rows of product lines drift in opposite
+   directions, edges faded, still on hover. */
+.band { border-bottom: 1px solid var(--border); background: var(--canvas); }
+.inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; gap: clamp(28px, 4vw, 64px); width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(44px, 5vw, 64px) 0; }
+
+.eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--accent-ink); font-size: 15px; font-weight: 650; letter-spacing: -.005em; }
+.eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
+.heading { max-width: 25ch; margin: 0; color: var(--ink); font: 600 clamp(26px, 2.4vw, 34px)/1.16 var(--font-brand); letter-spacing: -.025em; text-wrap: balance; }
+.lede { max-width: 46ch; margin: 18px 0 0; color: var(--muted); font-size: clamp(15px, 1.2vw, 17px); line-height: 1.5; text-wrap: pretty; }
+
+/* The stage: a framed panel with a green glow rising from its foot. */
+.stage {
+  position: relative;
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: clamp(18px, 2vw, 26px) 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  background:
+    radial-gradient(120% 90% at 50% 120%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 62%),
+    var(--surface-sunken);
+  isolation: isolate;
+}
+
+.row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px; padding-left: clamp(16px, 1.8vw, 24px); }
+.rowLabel { display: inline-flex; align-items: center; gap: 8px; min-width: 96px; color: var(--ink); font-size: 14px; font-weight: 650; letter-spacing: -.005em; }
+.rowIcon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: var(--primary-soft); color: var(--accent-ink); }
+
+/* The drift: the track holds two identical halves and slides one half's width, then loops. Room above
+   and below so a lifted pill is never clipped. */
+.viewport {
+  overflow: hidden;
+  padding: 6px 0;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+}
+.track { display: flex; width: max-content; animation: drift 48s linear infinite; }
+.row[data-line="health"] .track { animation-duration: 42s; animation-direction: reverse; }
+.viewport:hover .track { animation-play-state: paused; }
+.set { display: flex; gap: 10px; margin: 0; padding: 0 10px 0 0; list-style: none; }
+
+/* A pill: its icon in a tinted well, a hairline edge lit from above, and a small lift under the pointer. */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 46px;
+  padding: 0 18px 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 86%, var(--surface-alt)));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 70%, transparent),
+    0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent),
+    0 6px 16px -10px color-mix(in srgb, var(--ink) 30%, transparent);
+  color: var(--ink);
+  font: 550 15px/1 var(--font-brand);
+  letter-spacing: -.01em;
+  white-space: nowrap;
+  transition: transform 220ms cubic-bezier(.23, 1, .32, 1), border-color 200ms ease, box-shadow 220ms ease;
+}
+.pill:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, var(--canvas) 70%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent),
+    0 10px 22px -12px color-mix(in srgb, var(--primary) 55%, transparent);
+}
+.pillIcon { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 50%; background: var(--surface-alt); color: var(--muted); }
+/* Health in the brand's tint, so the two rows read apart at a glance. */
+.row[data-line="health"] .pill { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
+.row[data-line="health"] .pillIcon { background: var(--primary-soft); color: var(--accent-ink); }
+
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* No motion: one set of each, wrapped, nothing faded, no lift. */
+@media (prefers-reduced-motion: reduce) {
+  .viewport { -webkit-mask-image: none; mask-image: none; }
+  .track { width: auto; animation: none; }
+  .set { flex-wrap: wrap; padding: 0; }
+  .set[aria-hidden="true"], .pill[aria-hidden="true"] { display: none; }
+  .pill, .pill:hover { transform: none; transition: none; }
+}
+
+@media (max-width: 860px) {
+  .inner { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  /* Phones: headings centred, as on the rest of the page; each row's label sits above its pills. */
+  .copy { display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .heading { margin-inline: auto; }
+  .stage { gap: 14px; }
+  .row { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 6px; padding-left: 0; }
+  .rowLabel { min-width: 0; }
+  .viewport { width: 100%; }
+  .pill { height: 42px; padding-right: 15px; font-size: 14px; }
+  .pillIcon { width: 30px; height: 30px; }
+}

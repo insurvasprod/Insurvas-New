@@ -9,6 +9,7 @@ import { LandingContact } from "@/components/marketing/landing-contact";
 import { LandingBento } from "@/components/marketing/landing-bento";
 import { LandingAudience } from "@/components/marketing/landing-audience";
 import { LandingTrust } from "@/components/marketing/landing-trust";
+import { LandingLines } from "@/components/marketing/landing-lines";
 import { LandingPricingTeaser } from "@/components/marketing/landing-pricing";
 import { LandingFaq } from "@/components/marketing/landing-faq";
 import { fetchPublicPlans } from "@/lib/publicPlans/queries";
@@ -42,6 +43,8 @@ export default async function Home() {
             without a call to action. */}
         <LandingHero />
         <LandingTrust />
+        {/* Not only life: the health lines too (owner, 9 Nov). */}
+        <LandingLines />
         {/* Problems, through Insurvas, out as fixes: one section since 6 Nov (owner); it replaced the five-tools section. */}
         <LandingAudience />
         <LandingBento />
