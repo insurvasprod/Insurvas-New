@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { LEAD_TYPE_LABELS, PAID_METHOD_LABELS } from "@/lib/accounting/invoicesCore";
+import { dayMonth, dayMonthYear } from "@/lib/format/dates";
 import { getInvoice, invoiceSources, InvoiceError } from "@/lib/accounting/invoiceStore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -44,40 +45,39 @@ export default async function InvoicePage({ params, searchParams }: { params: Pr
     if (error.status === 404) notFound();
     problem = error.message;
   }
-  if (!loaded) return <AccountingPage step="bills" title="Invoice"><TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard></AccountingPage>;
+  if (!loaded) return <AccountingPage step="bills" title="Vendor bill"><TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard></AccountingPage>;
   const { inv, sources } = loaded;
-  const campaign = (cid: string | null) => (cid ? sources.campaigns.find((c) => c.id === cid)?.name ?? "Campaign" : "Unattributed");
+  const campaign = (cid: string | null) => (cid ? sources.campaigns.find((c) => c.id === cid)?.name ?? "Campaign" : "No campaign");
   const s = inv.comparison.summary;
   const base = `/app/vendor-bills/${inv.id}`;
+  // One short line of facts (/ui-taste pass, owner 2026-11-09): the bill number, what it covers, when it is due or paid.
   const facts = [
-    inv.sourceName,
-    `dated ${inv.invoiceDate}`,
-    inv.periodStart ? `for ${inv.periodStart} to ${inv.periodEnd ?? "…"}` : null,
-    inv.dueDate ? `due ${inv.dueDate}` : null,
-    inv.paidOn ? `paid ${inv.paidOn}${inv.paidMethod ? ` by ${PAID_METHOD_LABELS[inv.paidMethod]}` : ""}${inv.paymentReference ? `, ref ${inv.paymentReference}` : ""}` : null,
-    inv.hasDocument ? inv.documentName ?? "Document attached" : "No document",
-    inv.voidReason ? `Void: ${inv.voidReason}` : null,
+    `Bill ${inv.invoiceNumber}`,
+    inv.periodStart ? `leads ${dayMonth(inv.periodStart)} – ${inv.periodEnd ? dayMonthYear(inv.periodEnd) : "…"}` : `dated ${dayMonthYear(inv.invoiceDate)}`,
+    inv.paidOn ? `paid ${dayMonthYear(inv.paidOn)}${inv.paidMethod ? ` by ${PAID_METHOD_LABELS[inv.paidMethod]}` : ""}${inv.paymentReference ? ` (${inv.paymentReference})` : ""}` : inv.dueDate ? `due ${dayMonthYear(inv.dueDate)}` : null,
+    inv.hasDocument ? null : "no document attached",
+    inv.voidReason ? `void: ${inv.voidReason}` : null,
   ].filter(Boolean).join(" · ");
 
   return (
     <AccountingPage
       step="bills"
-      title={inv.invoiceNumber}
+      title={inv.sourceName}
       chip={<InvoiceStatusChip status={inv.status} paidOn={inv.paidOn} />}
       facts={facts}
-      lead={<ViewTabs label="This invoice" value={tab} tabs={[
+      tabs={<ViewTabs label="This bill" value={tab} tabs={[
         { key: "lines", label: "Lines", count: inv.lines.length, href: base },
-        { key: "count", label: "Against our count", count: s?.flagged ? 1 : null, tone: "danger", href: `${base}?tab=count` },
-        { key: "ledger", label: "In the ledger", count: inv.entries.length, href: `${base}?tab=ledger` },
+        { key: "count", label: "Compare to our count", count: s?.flagged ? 1 : null, tone: "danger", href: `${base}?tab=count` },
+        { key: "ledger", label: "Booked", count: inv.entries.length, href: `${base}?tab=ledger` },
       ]} />}
       actions={<InvoiceActions readOnly={guard.entitlement.access === "read_only"} inv={{ id: inv.id, status: inv.status, sourceName: inv.sourceName, sourceType: inv.sourceType, sourceId: inv.sourceId, invoiceNumber: inv.invoiceNumber, taxCents: inv.taxCents, hasDocument: inv.hasDocument, lines: inv.lines, booked: inv.entries.length > 0 }} />}
     >
       {s?.flagged ? <Callout tone="warning" title={`Our count differs by ${money(Math.abs(s.differenceCents))}, more than your ${money(s.toleranceCents)} tolerance.`}>Check before paying; approving is still allowed.</Callout> : null}
       <StatStrip label="This invoice">
         <StatTile label="Total" value={money(inv.totalCents)} footnote={inv.taxCents ? `incl. ${money(inv.taxCents)} tax` : "no tax"} href={base} />
-        <StatTile label="Difference from our count" value={s ? money(s.differenceCents) : "—"} valueTone={s?.flagged ? "warning" : undefined} footnote={s ? `tolerance ${money(s.toleranceCents)}` : "nothing we can count"} href={`${base}?tab=count`} />
-        <StatTile label="Unattributed" value={money(inv.unattributed.amountCents)} valueTone={inv.unattributed.lines ? "warning" : undefined} footnote={`${inv.unattributed.lines} line${inv.unattributed.lines === 1 ? "" : "s"} with no campaign`} href={base} />
-        <StatTile label="In the ledger" value={String(inv.entries.length)} footnote={inv.entries.length ? "cost entries" : "booked on approval"} href={`${base}?tab=ledger`} />
+        <StatTile label="Billed vs our count" value={s ? money(s.differenceCents) : "—"} valueTone={s?.flagged ? "danger" : undefined} footnote={s ? (s.differenceCents ? `you allow ${money(s.toleranceCents)}` : "matches what you got") : "nothing we can count"} href={`${base}?tab=count`} />
+        <StatTile label="Not tied to a campaign" value={money(inv.unattributed.amountCents)} valueTone={inv.unattributed.lines ? "warning" : undefined} footnote={`${inv.unattributed.lines} line${inv.unattributed.lines === 1 ? "" : "s"} with no campaign`} href={base} />
+        <StatTile label="Booked in the P&L" value={inv.entries.length ? "Yes" : "Not yet"} footnote={inv.entries.length ? `${inv.entries.length} cost entr${inv.entries.length === 1 ? "y" : "ies"}` : "when you approve it"} href={`${base}?tab=ledger`} />
       </StatStrip>
 
       {tab === "count" ? (

@@ -6,6 +6,7 @@ import { useRef, useState, useTransition, type FormEvent } from "react";
 
 import { Callout } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { CheckBox } from "@/components/ui/check-box";
 import { cardSurface } from "@/components/ui/card";
 import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Field, control } from "@/components/ui/field";
@@ -15,6 +16,7 @@ import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Segmented } from "@/components/ui/view-tabs";
 import { Pager, paginate } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ENTITY_TYPES, EXEMPT_LABELS, EXEMPT_REASONS, maskTaxId, TAX_CATEGORIES, TAX_CATEGORY_LABELS, TAX_NOTICE, type ExemptReason, type TaxCategory } from "@/lib/accounting/taxCore";
@@ -140,26 +142,45 @@ export function ProfileForm({ row, year, readOnly }: { row: TaxRow; year: number
     }
   };
   const submit = (e: FormEvent) => { e.preventDefault(); void save(); };
+  // In the order the 1099 asks for it, each part a plain question (/ui-taste pass, owner 2026-11-09).
+  const section = "flex flex-col gap-3 border-t border-border pt-5 first:border-t-0 first:pt-0";
+  const heading = "m-0 text-sm font-semibold text-[var(--ink)]";
+  const entityLabel = (t: string) => (t === "llc" ? "LLC" : t.replace("_", " ").replace(/^./, (c) => c.toUpperCase()));
   return (
-    <form ref={scope} onSubmit={submit} className={`${cardSurface} flex flex-col gap-4 p-5`}>
-      <fieldset disabled={readOnly} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Field label="Legal name" htmlFor="tax-legal" hint="Goes on the form; it is often not the name you know them by." className="sm:col-span-2"><input id="tax-legal" className={control} maxLength={200} value={f.legal} onChange={(e) => setF({ ...f, legal: e.target.value })} placeholder="e.g. Apex Communications LLC" /></Field>
-        <Field label="Entity" htmlFor="tax-entity"><select id="tax-entity" className={control} value={f.entity} onChange={(e) => setF({ ...f, entity: e.target.value })}><option value="">Not known</option>{ENTITY_TYPES.map((t) => <option key={t} value={t}>{t.replace("_", " ")}</option>)}</select></Field>
-        <Field label="Tax ID type" htmlFor="tax-type"><select id="tax-type" className={control} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}><option value="ein">EIN</option><option value="ssn">SSN</option><option value="foreign">Foreign</option><option value="none">None on file</option></select></Field>
-        <Field label={p?.taxIdLast4 ? `Replace ${maskTaxId(p.taxIdType, p.taxIdLast4)}` : "Tax ID"} htmlFor="tax-id" hint="Encrypted, and shown masked."><input id="tax-id" className={control} autoComplete="off" disabled={f.type === "none"} value={f.taxId} onChange={(e) => setF({ ...f, taxId: e.target.value })} placeholder={p?.taxIdLast4 ? "Leave blank to keep" : ""} /></Field>
-        <Field label="Exempt from a 1099" htmlFor="tax-exempt"><select id="tax-exempt" className={control} value={f.exempt} onChange={(e) => setF({ ...f, exempt: e.target.value as ExemptReason | "" })}><option value="">Not exempt</option>{EXEMPT_REASONS.map((r) => <option key={r} value={r}>{EXEMPT_LABELS[r]}</option>)}</select></Field>
-        <Field label="Address" htmlFor="tax-line1" className="sm:col-span-2"><input id="tax-line1" className={control} maxLength={200} value={f.line1} onChange={(e) => setF({ ...f, line1: e.target.value })} placeholder={row.address ?? "Street"} /></Field>
-        <Field label="City" htmlFor="tax-city"><input id="tax-city" className={control} maxLength={100} value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} /></Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="State" htmlFor="tax-state"><input id="tax-state" className={control} maxLength={2} value={f.state} onChange={(e) => setF({ ...f, state: e.target.value.toUpperCase() })} /></Field>
-          <Field label="ZIP" htmlFor="tax-zip"><input id="tax-zip" className={control} maxLength={10} value={f.postal} onChange={(e) => setF({ ...f, postal: e.target.value })} /></Field>
-        </div>
-        <label className="flex items-center gap-2 self-end pb-2 text-sm"><input type="checkbox" checked={f.w9} onChange={(e) => setF({ ...f, w9: e.target.checked })} />W-9 on file</label>
+    <form ref={scope} onSubmit={submit} className={`${cardSurface} flex flex-col gap-5 p-5`}>
+      <fieldset disabled={readOnly} className="m-0 flex min-w-0 flex-col gap-5 border-0 p-0">
+        <section className={section}>
+          <h2 className={heading}>1 · Whose name goes on the 1099?</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <Field label="Legal name" htmlFor="tax-legal" hint="As on their W-9. It is often not the name you know them by." className="sm:col-span-2"><input id="tax-legal" className={control} maxLength={200} value={f.legal} onChange={(e) => setF({ ...f, legal: e.target.value })} placeholder="e.g. Apex Communications LLC" /></Field>
+            <Field label="Business type" htmlFor="tax-entity"><select id="tax-entity" className={control} value={f.entity} onChange={(e) => setF({ ...f, entity: e.target.value })}><option value="">Not known</option>{ENTITY_TYPES.map((t) => <option key={t} value={t}>{entityLabel(t)}</option>)}</select></Field>
+          </div>
+        </section>
+        <section className={section}>
+          <h2 className={heading}>2 · Their tax ID</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <Field label="Kind" htmlFor="tax-type"><select id="tax-type" className={control} value={f.type} onChange={(e) => setF({ ...f, type: e.target.value })}><option value="ein">EIN (business)</option><option value="ssn">SSN (person)</option><option value="foreign">Foreign</option><option value="none">Not on file yet</option></select></Field>
+            <Field label={p?.taxIdLast4 ? `New number (now ${maskTaxId(p.taxIdType, p.taxIdLast4)})` : "Number"} htmlFor="tax-id" hint="Stored encrypted. Only the last 4 digits are shown."><input id="tax-id" className={control} autoComplete="off" disabled={f.type === "none"} value={f.taxId} onChange={(e) => setF({ ...f, taxId: e.target.value })} placeholder={p?.taxIdLast4 ? "Leave blank to keep it" : ""} /></Field>
+            <Field label="Do they need a 1099?" htmlFor="tax-exempt"><select id="tax-exempt" className={control} value={f.exempt} onChange={(e) => setF({ ...f, exempt: e.target.value as ExemptReason | "" })}><option value="">Yes, if paid over the limit</option>{EXEMPT_REASONS.map((r) => <option key={r} value={r}>No: {EXEMPT_LABELS[r]}</option>)}</select></Field>
+          </div>
+          <label className="flex items-center gap-3 text-sm"><CheckBox checked={f.w9} onChange={(e) => setF({ ...f, w9: e.target.checked })} /><span><span className="font-medium">I have their signed W-9</span><span className="block text-xs text-muted-foreground">Attach the file from More › Attach the W-9.</span></span></label>
+        </section>
+        <section className={section}>
+          <h2 className={heading}>3 · Where to mail it</h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Field label="Street" htmlFor="tax-line1" className="sm:col-span-2"><input id="tax-line1" className={control} maxLength={200} value={f.line1} onChange={(e) => setF({ ...f, line1: e.target.value })} placeholder={row.address ?? "Street and number"} /></Field>
+            <Field label="City" htmlFor="tax-city"><input id="tax-city" className={control} maxLength={100} value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} /></Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="State" htmlFor="tax-state"><input id="tax-state" className={control} maxLength={2} placeholder="TX" value={f.state} onChange={(e) => setF({ ...f, state: e.target.value.toUpperCase() })} /></Field>
+              <Field label="ZIP" htmlFor="tax-zip"><input id="tax-zip" className={control} maxLength={10} value={f.postal} onChange={(e) => setF({ ...f, postal: e.target.value })} /></Field>
+            </div>
+          </div>
+        </section>
       </fieldset>
       {error ? <Callout tone="error" title={error} /> : null}
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
         <TaxNotice />
-        {!readOnly ? <span className="flex shrink-0 gap-2"><Button type="button" variant="outline" disabled={!dirty || busy} onClick={() => setF(blank)}>Discard</Button><Button type="submit" disabled={busy || !dirty}>{busy ? "Saving…" : "Save"}</Button></span> : null}
+        {!readOnly ? <span className="flex shrink-0 gap-2"><Button type="button" variant="ghost" disabled={!dirty || busy} onClick={() => setF(blank)}>Discard</Button><Button type="submit" disabled={busy || !dirty}>{busy ? "Saving…" : "Save tax details"}</Button></span> : null}
       </div>
       <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setF(blank)} what={`the tax details of ${row.nameOnForm}`} />
     </form>
@@ -170,7 +191,9 @@ export function TaxBoard({ data, view, readOnly }: { data: TaxData; view: TaxVie
   const router = useRouter();
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
-  const pageSize = useFittingPageSize(520, 45);
+  // Like Bank deposits (/ui-taste pass, owner 2026-11-09): chips by where each person stands for January.
+  const [who, setWho] = useState<"all" | "missing" | "ready">("all");
+  const pageSize = useFittingPageSize(520, 52);
   const [refreshing, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
   const years = Array.from({ length: 4 }, (_, i) => new Date().getUTCFullYear() - i);
@@ -178,7 +201,8 @@ export function TaxBoard({ data, view, readOnly }: { data: TaxData; view: TaxVie
   for (const t of data.totals) byCategory.set(t.taxCategory, (byCategory.get(t.taxCategory) ?? 0) + t.amountCents);
   const c = data.contractors;
   const needle = q.trim().toLowerCase();
-  const people = c.rows.filter((r) => !needle || r.nameOnForm.toLowerCase().includes(needle) || r.displayName.toLowerCase().includes(needle));
+  const standing = (r: TaxRow) => (r.missing.length && !r.exempt ? "missing" : "ready");
+  const people = c.rows.filter((r) => (who === "all" || standing(r) === who) && (!needle || r.nameOnForm.toLowerCase().includes(needle) || r.displayName.toLowerCase().includes(needle)));
   const shown = paginate(people, page, pageSize);
   const yearHref = (year: string) => `/app/tax?year=${year}${view === "contractors" ? "" : `&view=${view}`}`;
   const foot = <div className="flex w-full flex-wrap items-center justify-between gap-3"><TaxNotice />{view === "contractors" && people.length > pageSize ? <Pager page={shown.current} total={people.length} noun="contractors" pageSize={pageSize} onPage={setPage} /> : null}</div>;
@@ -195,24 +219,33 @@ export function TaxBoard({ data, view, readOnly }: { data: TaxData; view: TaxVie
         </>
       ) : null}
       <TableCard toolbar={
-        <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
-          {view === "contractors" ? <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search name" /> : null}
+        <DataToolbar actions={<>
           <select aria-label="Year" className={toolbarControl} value={data.year} onChange={(e) => router.push(yearHref(e.target.value))}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select>
+          <RefreshButton onClick={refresh} refreshing={refreshing} />
+        </>}>
+          {view === "contractors" ? <>
+            <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search name" />
+            <Segmented label="Who" value={who} onChange={(k) => { setWho(k); setPage(1); }} options={[
+              { key: "all", label: "All", count: c.rows.length },
+              { key: "missing", label: "Missing details", count: c.rows.filter((r) => standing(r) === "missing").length || null, tone: "danger" },
+              { key: "ready", label: "Ready", count: c.rows.filter((r) => standing(r) === "ready").length || null },
+            ]} />
+          </> : null}
         </DataToolbar>
       } footer={foot}>
         {view === "contractors" ? (
           c.rows.length === 0 ? <EmptyState title={`Nobody over ${money(c.thresholdCents)} in ${data.year}`} hint="Payments to partners, producers and lead vendors are counted here as they are marked paid." />
             : people.length === 0 ? <NoMatches noun="contractors" onClear={() => setQ("")} /> : (
             <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-              <thead><tr><th>Name on the form</th><th>Tax ID</th><th className="text-right">Paid</th><th>1099</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
+              <thead><tr><th className="w-[30%]">Name on the form</th><th className="w-[16%]">Tax ID</th><th className="w-[14%] text-right">Paid</th><th className="w-[20%]">1099</th><th>Next step</th></tr></thead>
               <tbody>
                 {shown.rows.map((r) => (
-                  <tr key={`${r.payeeType}-${r.payeeId}`}>
-                    <td><Link className="font-medium hover:underline" href={payeeHref(r, data.year)}>{r.nameOnForm}</Link><div className="text-xs text-muted-foreground">{r.displayName} · {r.payeeType}</div></td>
+                  <tr key={`${r.payeeType}-${r.payeeId}`} className="cursor-pointer" onClick={() => router.push(payeeHref(r, data.year))}>
+                    <td><Link className="font-medium hover:underline" href={payeeHref(r, data.year)} onClick={(e) => e.stopPropagation()}>{r.nameOnForm}</Link><div className="text-xs text-muted-foreground">{r.displayName} · {r.payeeType}</div></td>
                     <td className="tabular-nums">{maskTaxId(r.profile?.taxIdType ?? "none", r.profile?.taxIdLast4 ?? null)}</td>
                     <td className="text-right tabular-nums">{money(r.paidCents)}</td>
                     <td><TaxState row={r} /></td>
-                    <td className="text-right"><Button size="sm" variant="outline" asChild><Link href={payeeHref(r, data.year)}>{readOnly ? "Open" : "Details"}</Link></Button></td>
+                    <td>{!readOnly && standing(r) === "missing" ? <Button size="sm" variant="outline" asChild><Link href={payeeHref(r, data.year)} onClick={(e) => e.stopPropagation()}>Add {r.missing[0]}</Link></Button> : <span className="text-sm text-muted-foreground">Ready for January</span>}</td>
                   </tr>
                 ))}
               </tbody>

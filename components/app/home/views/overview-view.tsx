@@ -177,12 +177,29 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
   ) : weekCard(data, activityHref, series);
 
   // ── The money card, then today ──
+  // Round 3 draws the month's commission here (owner 2026-11-06: good news on the dashboard): the carriers' money in
+  // this month from the P&L statement, with profit and the month's policies under it. Without the books, the role's
+  // own money figures, then the dialer queue.
   const figures = moneyData?.figures ?? [];
-  const hero = figures.length
+  const statement = !viewProps.noMoney ? accounting?.statement ?? null : null;
+  const monthPolicies = rows ? rows.filter((row) => row.issueDate?.slice(0, 7) === month).length : null;
+  const commissionHero = statement && statement.inCents > 0 ? (
+    <DashHero
+      kicker={`COMMISSION · ${accounting!.month.label.split(" ")[0].toUpperCase()}`}
+      value={usd(statement.inCents).replace(/\.\d+$/, "")}
+      line={`in from carriers · ${accounting!.month.label}`}
+      facts={[
+        ...(statement.netProfitCents > 0 ? [{ label: "Profit", value: usd(statement.netProfitCents).replace(/\.\d+$/, "") }] : []),
+        ...(monthPolicies ? [{ label: "Policies issued", value: monthPolicies.toLocaleString("en-US") }] : []),
+      ]}
+      href={accounting!.hrefs.pnl ?? policiesHref ?? "/app/dashboard?view=accounting"}
+    />
+  ) : null;
+  const hero = commissionHero ?? (figures.length
     ? <DashHero kicker={figures[0].label.toUpperCase()} value={figures[0].value} line={figures[0].caption} facts={figures.slice(1, 3).map((figure) => ({ label: figure.label, value: figure.value }))} href={figures[0].href} />
     : dialerHref && data?.queueReady !== null && data?.queueReady !== undefined
       ? <DashHero kicker="READY TO DIAL" value={data.queueReady.toLocaleString("en-US")} line="leads in your queue" href={dialerHref} />
-      : null;
+      : null);
 
   const { items, total } = scheduleItems(data?.appointmentsTodayList ?? null, due, { appointments: calendarHref, callbacks: callbacksHref }, 12);
   const listItems: DashItem[] = items.map((item) => {
@@ -209,7 +226,8 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
   const middle = [left, funnel].filter(Boolean);
   const bottom = [side, right].filter(Boolean);
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4 pb-4">
+    // m-dash-ov (§ Motion, 2026-11-09): the cards rise in one after another, as DashLayout's do.
+    <div className="m-dash-ov flex w-full min-w-0 flex-col gap-4 pb-4">
       <DashNeedsLive items={needs} pendingHref={pendingHref} closeOutHref={closeOutHref} />
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-4">

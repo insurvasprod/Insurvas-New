@@ -60,7 +60,7 @@ export default async function ServicingRequestPage({ params, searchParams }: { p
       title={name}
       facts={facts}
       breadcrumbs={retentionTrail("servicing", name)}
-      lead={<ViewTabs label={name} value={tab} tabs={[
+      tabs={<ViewTabs label={name} value={tab} tabs={[
         { key: "progress", label: "Progress", href: base },
         { key: "change", label: "Change", href: `${base}?tab=change` },
         { key: "notes", label: "Notes", href: `${base}?tab=notes` },

@@ -60,7 +60,7 @@ export default async function NeedsYouPage({ searchParams }: { searchParams: Pro
         Every decision the carrier files leave for a person: a client to pick, a sale no carrier has, money that doesn&apos;t match, an agent code nobody owns. Each row&apos;s button says what to do; it opens the Review page at that item, and the row leaves the list when it is decided.
         <br /><br /><b>Mine</b> is what is assigned to you. <b>Agency</b> is everyone&apos;s. <b>Waiting on Insurvas</b> is a status word only Insurvas can map; nothing to do. <b>Closed</b> is the last 30 days. The oldest first; amber after 30 days, red after 90.
       </InfoTip>}
-      lead={<ViewTabs label="Needs you views" value={view} tabs={views.map((v) => ({ key: v, label: VIEW_LABELS[v], count: v === "closed" ? null : itemsOf(v).length, href: `/app/needs-you?view=${v}${fileQuery}` }))} />}
+      tabs={<ViewTabs label="Needs you views" value={view} tabs={views.map((v) => ({ key: v, label: VIEW_LABELS[v], count: v === "closed" ? null : itemsOf(v).length, href: `/app/needs-you?view=${v}${fileQuery}` }))} />}
       actions={<>{oldest ? <ReviewOldest fileId={file?.fileId ?? null} view={view} /> : null}<MoreMenu items={more} /></>}
     >
       {/* Round 3: the sources that could not be read, as one line. */}

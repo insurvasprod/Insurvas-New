@@ -134,7 +134,7 @@ export function BarSeries({
               <li key={bar.key} className={cn("flex h-full flex-col justify-end", barMaxWidth && "items-center")} title={`${bar.label}: ${format(bar.value)}${unit ? ` ${unit}` : ""}${bar.partial ? " (so far)" : ""}`}>
                 <span
                   className={cn(
-                    "m-bar-rise flex flex-col justify-end overflow-hidden rounded-t-[4px] rounded-b-[2px]",
+                    "m-bar-rise m-chart-tween flex flex-col justify-end overflow-hidden rounded-t-[4px] rounded-b-[2px]",
                     accentShare === null ? CHART_TONES.strong : CHART_TONES.faint,
                     bar.partial && "opacity-60",
                   )}
@@ -344,7 +344,7 @@ export function DonutChart({
     <figure className={cn("m-0 flex min-w-0 flex-col items-center gap-4", className)}>
       <figcaption className="sr-only">{summary}</figcaption>
       <div className="relative size-32 shrink-0" aria-hidden="true">
-        <svg viewBox="0 0 120 120" className="size-full -rotate-90">
+        <svg viewBox="0 0 120 120" className="m-sweep m-chart-tween size-full -rotate-90">
           <circle cx="60" cy="60" r={radius} fill="none" stroke="var(--surface-alt)" strokeWidth="14" />
           {arcs.map(({ segment, length, start }) => {
             const dash = Math.max(length - gap, 0.5);
@@ -366,7 +366,8 @@ export function DonutChart({
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="font-[family-name:var(--font-display)] text-2xl font-semibold leading-none tabular-nums text-foreground">{centerValue ?? format(total)}</span>
+          {/* Sized to the figure so "$1,659,471" stays inside the ring. */}
+          <span className={cn("font-[family-name:var(--font-display)] font-semibold leading-none tabular-nums text-foreground", (centerValue ?? format(total)).length > 9 ? "text-sm" : (centerValue ?? format(total)).length > 6 ? "text-base" : "text-2xl")}>{centerValue ?? format(total)}</span>
           {centerLabel && <span className="mt-1 text-xs text-muted-foreground">{centerLabel}</span>}
         </div>
       </div>
@@ -478,7 +479,7 @@ export function LineSeries({
           </span>
         ))}
         <div className="absolute inset-y-0 left-0" style={{ right: gutter }}>
-          <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="size-full overflow-visible">
+          <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="m-reveal-x m-chart-tween size-full overflow-visible">
             {compareLine && <path d={`${compareLine} L${width} ${height} L0 ${height} Z`} fill="var(--info)" fillOpacity="0.08" />}
             {compareLine && <path d={compareLine} fill="none" stroke="var(--info)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />}
             <path d={area} fill="var(--primary)" fillOpacity="0.12" />
@@ -560,7 +561,7 @@ export function SparkLine({ values, summary, className }: { values: readonly num
   return (
     <figure className={cn("relative m-0 h-10 min-w-0", className)} title={summary}>
       <figcaption className="sr-only">{summary}</figcaption>
-      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="size-full overflow-visible" aria-hidden="true">
+      <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="m-reveal-x m-chart-tween size-full overflow-visible" aria-hidden="true">
         <path d={`${line} L${width} ${height} L0 ${height} Z`} fill="var(--primary)" fillOpacity="0.12" />
         <path d={line} fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
       </svg>

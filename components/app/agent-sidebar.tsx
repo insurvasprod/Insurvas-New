@@ -3,6 +3,7 @@
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { IntentLink } from "@/components/ui/nav-pending";
 import {
   ArrowLeftRight,
   Award,
@@ -94,7 +95,7 @@ import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import { buildSidebarTree, initialOpenGroups, type ModuleAccess } from "@/lib/menu/sidebar";
 import { titleCaseNode } from "@/components/ui/title-case";
-import { Popover, PopoverAnchor, PopoverContent } from "@/components/ui/popover";
+import { Popover, PopoverAnchor, PopoverArrow, PopoverContent } from "@/components/ui/popover";
 import { leadsInStepOf } from "@/lib/leadSources/steps";
 import { complianceStepOf } from "@/lib/compliance/steps";
 import { reportsViewOf } from "@/lib/reports/views";
@@ -139,6 +140,26 @@ function isActivePath(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * Which page of a hover menu (CollapsedFlyout) is the one open now. isActivePath answers for a group's ONE
+ * entry ("any Accounting step lights Accounting"), so used per page it lit every Accounting page at once
+ * (owner 2026-11-08). Here the page whose own address holds the pathname wins; failing that (a record under a
+ * step, like /app/payouts/<id>), the page that is the same step; never more than one.
+ */
+const STEP_OF: ReadonlyArray<(pathname: string) => string | null> = [accountingStepOf, commissionsStepOf, retentionStepOf, agencyStepOf, complianceStepOf, leadsInStepOf, dataInStepOf, reportsViewOf];
+
+function currentFlyoutPage(pathname: string, items: MenuItem[]): string | null {
+  const own = items.filter((item) => pathname === item.path || pathname.startsWith(`${item.path}/`)).sort((a, b) => b.path.length - a.path.length)[0];
+  if (own) return own.key;
+  for (const stepOf of STEP_OF) {
+    const here = stepOf(pathname);
+    if (!here) continue;
+    const same = items.find((item) => stepOf(item.path) === here);
+    if (same) return same.key;
+  }
+  return null;
+}
+
 function NavItemLink({
   item,
   onNavigate,
@@ -155,7 +176,9 @@ function NavItemLink({
 
   return (
     <li>
-      <Link
+      {/* IntentLink (§ Motion, "instant feel"): resting on the item fetches its page, and the item looks chosen the
+          moment it is clicked while the page is on its way. */}
+      <IntentLink
         href={item.path}
         onClick={onNavigate}
         aria-label={label}
@@ -177,7 +200,7 @@ function NavItemLink({
             aria-label="On the way"
           />
         )}
-      </Link>
+      </IntentLink>
     </li>
   );
 }
@@ -263,6 +286,7 @@ const FLYOUT_CLOSE_MS = 180;
  */
 function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: string; icon: typeof BriefcaseBusiness; items: MenuItem[]; children: ReactNode }) {
   const pathname = usePathname();
+  const currentKey = currentFlyoutPage(pathname, items);
   const [open, setOpen] = useState(false);
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
   const show = () => {
@@ -294,8 +318,9 @@ function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: s
         // Drawn in the rail's own colours (owner 2026-10-30, "a nicer design"), so it reads as the sidebar opening.
         className="relative w-64 origin-left overflow-visible rounded-xl border-[var(--nav-line)] bg-[var(--nav-bg)] p-2 text-[var(--nav-ink)] shadow-[0_18px_40px_-12px_rgba(0,0,0,.55),0_0_0_1px_color-mix(in_srgb,var(--nav-success)_10%,transparent)] motion-safe:data-[state=open]:animate-[m-flyout-in_.16s_cubic-bezier(.2,.8,.2,1)_both] motion-safe:data-[state=closed]:animate-[m-flyout-out_.11s_ease-in_both]"
       >
-        {/* The nub that points back at the icon. */}
-        <span aria-hidden="true" className="absolute top-[18px] -left-[6px] size-3 rotate-45 rounded-[2px] border-b border-l border-[var(--nav-line)] bg-[var(--nav-bg)]" />
+        {/* The pointer back at the hovered icon. Radix keeps it on the icon's centre even when the panel slides up to
+            stay on screen (a group low in the rail, like Reports), so it never points at the icon above. */}
+        <PopoverArrow width={14} height={8} className="fill-[var(--nav-bg)] drop-shadow-[-1px_0_0_var(--nav-line)]" />
         <div className="flex items-center gap-2.5 px-2 pt-1 pb-2.5">
           <span className="inline-grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--nav-active-bg)] text-[var(--nav-success)]">
             <GroupIcon className="size-[18px]" strokeWidth={2} aria-hidden="true" />
@@ -309,7 +334,7 @@ function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: s
         <ul className="m-0 grid list-none gap-0.5 p-0">
           {items.map((item) => {
             const Icon = iconFor(item.icon);
-            const current = isActivePath(pathname, item.path);
+            const current = item.key === currentKey;
             const itemLabel = item.navLabel ?? item.label;
             return (
               <li key={item.key}>
@@ -624,13 +649,21 @@ function DesktopSidebar({ menu, moduleAccess }: { menu: MenuSection[]; moduleAcc
     // eslint-disable-next-line react-hooks/set-state-in-effect -- read the user's menu preference once
     try { if (window.localStorage.getItem("insurvas.app.navCollapsed") === "0") setIsCollapsed(false); } catch { /* storage blocked: start collapsed */ }
   }, []);
+  // The rail glides between its two widths when the person toggles it (§ Motion, 2026-11-09) — only then: restoring
+  // the remembered width as a page loads snaps, so no page opens with the menu sliding about.
+  const [moving, setMoving] = useState(false);
+  const movingTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(movingTimer.current), []);
   const setCollapsed = (next: boolean) => {
+    setMoving(true);
+    window.clearTimeout(movingTimer.current);
+    movingTimer.current = window.setTimeout(() => setMoving(false), 320);
     setIsCollapsed(next);
     try { window.localStorage.setItem("insurvas.app.navCollapsed", next ? "1" : "0"); } catch { /* storage blocked: the toggle still works */ }
   };
 
   return (
-    <aside data-print-hide className={`portal-agent-sidebar-desktop portal-agent-desktop-nav hidden md:flex md:flex-col ${isCollapsed ? "is-collapsed" : ""}`}>
+    <aside data-print-hide className={`portal-agent-sidebar-desktop portal-agent-desktop-nav hidden md:flex md:flex-col ${isCollapsed ? "is-collapsed" : ""} ${moving ? "is-moving" : ""}`}>
       <div className="portal-agent-sidebar-brand">
         <Link href={tree.home[0]?.path ?? "/app/dashboard"} aria-label="Insurvas home" className="portal-agent-desktop-brand-link">
           <InsurvasLogo size="sidebar" tone="dark" className="portal-agent-desktop-brand-full" />

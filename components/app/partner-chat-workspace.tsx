@@ -352,6 +352,11 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
   const resetList = () => { setVisibleCount(CONVERSATION_STEP); listNode?.scrollTo({ top: 0 }); };
   const updateCount = threadMessages.filter((item) => item.messageKind === "system_card").length;
   const shownMessages = threadMessages.filter((item) => threadView === "all" || (threadView === "updates") === (item.messageKind === "system_card"));
+  // The messages on screen when a conversation opens stay still; one that arrives after (sent or received) rises into
+  // the thread (§ Motion, Wave 7). Tracked per conversation, as state derived during render.
+  const [arrived, setArrived] = useState<{ channel: string | null; before: Set<string> }>({ channel: null, before: new Set() });
+  if (selected && arrived.channel !== selected.id) setArrived({ channel: selected.id, before: new Set(threadMessages.map((item) => item.id)) });
+  const isNew = (id: string) => arrived.channel === selected?.id && !arrived.before.has(id);
   // The details pane is closed until asked for: the thread gets the room. Esc closes it (DetailPanel).
   const [detailsOpen, setDetailsOpen] = useState(false);
   // The list folds to a rail and its width can be dragged (owner, 2026-10-27). Kept per browser; a
@@ -723,7 +728,7 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                     return (
                       <div key={item.id} id={`chat-msg-${item.id}`}>
                         {divider}
-                        <div className={cn("group flex flex-col items-end pl-10", continued ? "mt-1" : "mt-4", hitOutline(item.id))}>
+                        <div className={cn("group flex flex-col items-end pl-10", continued ? "mt-1" : "mt-4", isNew(item.id) && "m-msg-in", hitOutline(item.id))}>
                           {!continued && <span className="mb-1 text-xs tabular-nums text-muted-foreground">You · {clock(item.createdAt)}</span>}
                           {!attachmentOnly && (
                             <div className="flex max-w-full items-end gap-2">
@@ -744,7 +749,7 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                   return (
                     <div key={item.id} id={`chat-msg-${item.id}`}>
                       {divider}
-                      <div className={cn("group flex gap-3 pr-10", continued ? "mt-1" : "mt-4", hitOutline(item.id))}>
+                      <div className={cn("group flex gap-3 pr-10", continued ? "mt-1" : "mt-4", isNew(item.id) && "m-msg-in", hitOutline(item.id))}>
                         {continued
                           ? <span className="w-8 shrink-0 pt-2 text-right text-xs tabular-nums text-muted-foreground opacity-0 group-hover:opacity-100">{clock(item.createdAt)}</span>
                           : <span className="pt-5"><PersonFace name={name} partner={person?.scope === "partner"} /></span>}

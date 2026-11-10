@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { HomePanel } from "@/components/app/home/home-panel";
+import { CountUp } from "@/components/ui/count-up";
 import { GaugeRing, Ring } from "@/components/ui/ring";
 import { StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -57,7 +58,8 @@ export function DashLayout({ needs, big, side, left, right, hero, list }: {
   const fill = "lg:[&>*]:h-full lg:[&>*]:min-h-0 lg:[&>*]:overflow-hidden";
   const rows = [Boolean(big || side), Boolean(left || right)].filter(Boolean).length;
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1">
+    // m-dash (§ Motion, 2026-11-09): the cards rise in one after another — Needs you, the right column, then the two rows.
+    <div className="m-dash flex w-full min-w-0 flex-col gap-4 lg:min-h-0 lg:flex-1">
       {needs}
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 lg:min-h-0 lg:flex-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:min-h-0", rows === 2 ? "lg:grid-rows-[minmax(0,1fr)_minmax(0,1fr)]" : "lg:grid-rows-[minmax(0,1fr)]")}>
@@ -128,7 +130,7 @@ export function DashChart({ title, link, total, totalLine, change, legend, legen
   return (
     <HomePanel title={title} link={link} badge={legendTop ? key : undefined}>
       <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-        <span className="font-[family-name:var(--font-display)] text-[1.75rem] font-semibold leading-tight tabular-nums text-foreground">{total}</span>
+        <span className="font-[family-name:var(--font-display)] text-[1.75rem] font-semibold leading-tight tabular-nums text-foreground"><CountUp text={total} fromZero /></span>
         {totalLine && <span className="text-sm text-muted-foreground">{totalLine}</span>}
         {change}
         {!legendTop && key}
@@ -141,7 +143,7 @@ export function DashChart({ title, link, total, totalLine, change, legend, legen
 export type DashLine = { label: string; value: string; href?: string };
 
 /** One figure as a ring, with its few supporting lines under it, each a link. */
-export function DashRing({ title, link, value, max = 100, center, label, lines, tone = "primary" }: {
+export function DashRing({ title, link, value, max = 100, center, label, lines, tone = "primary", size = 104 }: {
   title: string;
   link?: { label: string; href: string };
   value: number;
@@ -150,11 +152,13 @@ export function DashRing({ title, link, value, max = 100, center, label, lines, 
   label: string;
   lines: readonly DashLine[];
   tone?: "primary" | "warning" | "danger";
+  /** The ring's diameter: 104 by default; a card whose ring is the point (a goal) draws it larger. */
+  size?: number;
 }) {
   return (
     <HomePanel title={title} link={link} bodyClassName="items-center gap-2.5">
-      <Ring value={value} max={max} size={104} tone={tone} label={label}>
-        <span className="font-[family-name:var(--font-display)] text-lg font-semibold">{center}</span>
+      <Ring value={value} max={max} size={size} tone={tone} label={label}>
+        <RingCenter text={center} size={size} />
       </Ring>
       <div className="flex w-full min-h-0 flex-col flex-wrap content-start gap-1.5 overflow-hidden [&>*]:w-full">
         {lines.map((line) => <LineRow key={line.label} line={line} />)}
@@ -189,7 +193,7 @@ export function DashPhone({ title, link, badge, gauge, bars, facts }: {
                   <span className="font-semibold tabular-nums text-foreground">{bar.shown}</span>
                 </span>
                 <span className="block h-1.5 rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
-                  <span className={cn("block h-full rounded-full", fill[bar.tone ?? "good"])} style={{ width: `${Math.round((bar.value / top) * 100)}%` }} />
+                  <span className={cn("m-bar-x m-chart-tween block h-full rounded-full", fill[bar.tone ?? "good"])} style={{ width: `${Math.round((bar.value / top) * 100)}%` }} />
                 </span>
                 {bar.note && <span className="truncate text-[0.6875rem] text-muted-foreground">{bar.note}</span>}
               </>
@@ -237,16 +241,12 @@ export function DashColumns({ title, sub, rate, change, steps, link }: { title: 
       badge={<span className="flex shrink-0 items-center gap-2"><span className="font-[family-name:var(--font-display)] text-[1.375rem] font-bold tabular-nums text-foreground">{rate}</span>{change}</span>}
     >
       <ul className="m-0 flex min-h-0 flex-1 list-none gap-2.5 p-0">
-        {steps.map((step, index) => {
-          const next = steps[index + 1]?.count ?? step.count;
-          const ghost = (part: number) => step.count - ((step.count - next) * part) / 3;
+        {steps.map((step) => {
           const body = (
             <>
               <span className="text-xs font-semibold tabular-nums text-foreground">{step.pct < 10 && step.pct % 1 ? step.pct.toFixed(1) : Math.round(step.pct)}%</span>
-              <span className="flex min-h-0 flex-1 items-end gap-[3px]" aria-hidden="true">
-                <span className="flex-1 rounded-[4px] bg-[var(--primary)]" style={{ height: height(step.count) }} />
-                <span className="flex-1 rounded-[4px] bg-[var(--surface-alt)]" style={{ height: height(ghost(1)) }} />
-                <span className="flex-1 rounded-[4px] bg-[var(--surface-alt)]" style={{ height: height(ghost(2)) }} />
+              <span className="relative flex min-h-0 flex-1 items-end overflow-hidden rounded-[6px] bg-[var(--surface-alt)]" aria-hidden="true">
+                <span className="m-bar-rise m-chart-tween w-full rounded-[6px] bg-[var(--primary)]" style={{ height: height(step.count) }} />
               </span>
               <span className="truncate text-xs text-muted-foreground">{step.label}</span>
               <span className="text-[0.8125rem] font-semibold tabular-nums text-foreground">{step.count.toLocaleString("en-US")}</span>
@@ -271,7 +271,7 @@ export function DashGoals({ title, sub, link, rows, empty = "Nothing yet." }: { 
           {rows.map((row) => {
             const body = (
               <>
-                <Ring value={Math.round(row.share * 100)} max={100} size={36} label={`${row.name}: ${Math.round(row.share * 100)}% of goal`} />
+                <Ring value={Math.round(row.share * 100)} max={100} size={46} label={`${row.name}: ${Math.round(row.share * 100)}% of goal`} />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-semibold">{row.name}</span>
                   <span className="truncate text-xs text-muted-foreground">{row.note}</span>
@@ -374,6 +374,16 @@ export function DashRecent({ title, sub, link, rows, empty = "Nothing yet." }: {
   );
 }
 
+/**
+ * The words in a ring's middle, sized to stay inside it ("3 of 3 saved" must not spill over the stroke): the
+ * longer the text and the smaller the ring, the smaller the type; past a few words it wraps onto two lines.
+ */
+function RingCenter({ text, size }: { text: string; size: number }) {
+  const room = (size - 28) / Math.max(1, text.length);
+  const type = room >= 17 ? "text-[1.75rem]" : room >= 13 ? "text-xl" : room >= 10 ? "text-base" : "text-sm";
+  return <span className={cn("block max-w-full px-3 text-center font-[family-name:var(--font-display)] font-semibold leading-tight", type)} style={{ maxWidth: size - 24 }}>{text}</span>;
+}
+
 function LineRow({ line }: { line: DashLine }) {
   const body = (
     <>
@@ -390,18 +400,18 @@ function LineRow({ line }: { line: DashLine }) {
 export type DashBar = { key: string; label: string; value: number; shown: string; tone?: DashTone; href?: string; /** A muted line under the bar: "24% of dials". */ note?: string };
 
 /** A list of labelled bars on one scale (why policies are at risk, where the money went). */
-export function DashBars({ title, period, link, rows, max }: { title: string; period?: string; link?: { label: string; href: string }; rows: readonly DashBar[]; max?: number }) {
+export function DashBars({ title, period, sub, link, rows, max }: { title: string; period?: string; /** A muted line under the title: what the bars mean. */ sub?: string; link?: { label: string; href: string }; rows: readonly DashBar[]; max?: number }) {
   const top = max ?? Math.max(1, ...rows.map((row) => row.value));
   const fill: Record<DashTone, string> = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]", good: "bg-[var(--primary)]", info: "bg-[var(--info)]", neutral: "bg-[var(--muted)]" };
   return (
-    <HomePanel title={title} period={period} link={link}>
+    <HomePanel title={title} period={period} sub={sub} link={link}>
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
         {rows.map((row) => {
           const body = (
             <>
               <span className="truncate">{row.label}</span>
               <span className="h-2.5 rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
-                <span className={cn("block h-full rounded-full", fill[row.tone ?? "good"])} style={{ width: `${Math.round((row.value / top) * 100)}%` }} />
+                <span className={cn("m-bar-x m-chart-tween block h-full rounded-full", fill[row.tone ?? "good"])} style={{ width: `${Math.round((row.value / top) * 100)}%` }} />
               </span>
               <span className="text-right font-semibold tabular-nums">{row.shown}</span>
             </>
@@ -424,13 +434,15 @@ export function DashFunnel({ title, period, link, rate, change, steps }: { title
         <span className="font-[family-name:var(--font-display)] text-[1.375rem] font-semibold tabular-nums text-foreground">{rate}</span>
         {change}
       </div>
-      <ol className="m-0 grid min-h-0 flex-1 list-none items-stretch gap-3 p-0" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
+      <ol className="m-0 grid min-h-0 flex-1 list-none items-stretch gap-3 overflow-hidden p-0" style={{ gridTemplateColumns: `repeat(${steps.length}, minmax(0, 1fr))` }}>
         {steps.map((step) => {
+          // A bar is measured against the biggest step, so it never climbs out of the card.
+          const top = Math.max(1, ...steps.map((each) => each.count));
           const body = (
             <>
-              <span className="text-xs font-semibold tabular-nums text-foreground">{step.pct < 10 ? step.pct.toFixed(1) : Math.round(step.pct)}%</span>
-              <span className="flex min-h-12 flex-1 items-end gap-0.5" aria-hidden="true">
-                <span className="w-full rounded-t-md bg-[var(--primary)]" style={{ height: `${Math.max(4, step.pct)}%` }} />
+              <span className="text-xs font-semibold tabular-nums text-foreground">{step.pct < 10 && step.pct % 1 ? step.pct.toFixed(1) : Math.round(step.pct)}%</span>
+              <span className="flex min-h-12 flex-1 items-end gap-0.5 overflow-hidden" aria-hidden="true">
+                <span className="m-bar-rise m-chart-tween w-full rounded-t-md bg-[var(--primary)]" style={{ height: `${Math.max(4, Math.min(100, (step.count / top) * 100))}%` }} />
               </span>
               <span className="truncate text-xs text-muted-foreground">{step.label}</span>
               <span className="text-sm font-semibold tabular-nums text-foreground">{step.count.toLocaleString("en-US")}</span>
@@ -474,9 +486,9 @@ export function DashHero({ kicker, value, line, facts, href }: { kicker: string;
       href={href}
       className="relative flex min-h-40 flex-col gap-1.5 overflow-hidden rounded-[18px] bg-[var(--brand-700)] p-[18px] text-[var(--on-dark)] no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
-      <svg aria-hidden="true" viewBox="0 0 260 140" className="pointer-events-none absolute -bottom-6 -right-8 h-[130px] w-[240px] opacity-55" fill="none" stroke="var(--primary)" strokeWidth="10" strokeLinecap="round"><path d="M10 110 C 60 20, 90 140, 140 60 S 220 40, 250 90" /></svg>
+      <svg aria-hidden="true" viewBox="0 0 260 140" className="m-reveal-x pointer-events-none absolute -bottom-6 -right-8 h-[130px] w-[240px] opacity-55" fill="none" stroke="var(--primary)" strokeWidth="10" strokeLinecap="round"><path d="M10 110 C 60 20, 90 140, 140 60 S 220 40, 250 90" /></svg>
       <span className="text-xs font-semibold tracking-[0.04em] opacity-80">{kicker}</span>
-      <span className="font-[family-name:var(--font-display)] text-[1.75rem] font-semibold leading-tight tabular-nums">{value}</span>
+      <span className="font-[family-name:var(--font-display)] text-[1.75rem] font-semibold leading-tight tabular-nums"><CountUp text={value} fromZero /></span>
       {line && <span className="text-xs opacity-85">{line}</span>}
       {facts && facts.length > 0 && (
         <span className="relative mt-auto flex flex-wrap gap-x-5 gap-y-1 pt-3 text-xs">

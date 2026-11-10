@@ -80,7 +80,9 @@ export async function LeadsInPage({ step, actions, ownContinue = false, children
       <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-2 lg:min-h-0">
         {/* The step scrolls inside its own column under its row; the rail stays put (owner 2026-10-28: no outer scroll). */}
         {/* [&>*]:shrink-0: a step's own wrapper never gives up height to the scroll box (a StatStrip squeezed to a line). */}
-        <div key={step} className="flex min-w-0 flex-col gap-4 [&>*]:shrink-0 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+        {/* data-page-content: the step's column is what moves between steps (§ Motion: down the menu slides from the
+            right, up from the left), and what dims while the next step loads; the title and the rail stay. */}
+        <div key={step} data-page-content className="m-content-in flex min-w-0 flex-col gap-4 [&>*]:shrink-0 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
           {children}
         </div>
       </div>

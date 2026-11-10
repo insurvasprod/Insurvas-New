@@ -28,20 +28,20 @@ async function openSteps(): Promise<RailStep[]> {
 }
 
 /**
- * The frame: the shared StepFrame with this page's steps and rail. `lead`: the step's own tabs.
+ * The frame: the shared StepFrame with this page's steps and rail. `tabs`: the step's sub-page bar.
  *
  * A record under a step (a save card, a servicing request, a reinstatement case; the pick of 2026-11-05,
  * docs/retention/CRITIQUE.md) passes its `title`, its status `chip`, one muted line of `facts` and its trail,
  * as Accounting's records do; `actions` holds at most two buttons and a More menu.
  */
-export async function RetentionPage({ step, title, info, chip, facts, breadcrumbs, lead, actions, children }: {
+export async function RetentionPage({ step, title, info, chip, facts, breadcrumbs, tabs, actions, children }: {
   step: RetentionStep;
   title?: string;
   info?: ReactNode;
   chip?: ReactNode;
   facts?: ReactNode;
   breadcrumbs?: Crumb[];
-  lead?: ReactNode;
+  tabs?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -61,7 +61,7 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
       titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${heading}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
       meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
       breadcrumbs={breadcrumbs}
-      lead={lead}
+      tabs={tabs}
       actions={actions}
       rail={{ label: "Retention", cookie: RETENTION_RAIL_COOKIE, steps, step, collapsed: jar.get(RETENTION_RAIL_COOKIE)?.value === "collapsed" }}
     >

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 
 import { ReportsRail } from "@/components/app/reports/reports-rail";
 import { ReportsHeader } from "@/components/app/reports/reports-slot";
+import { FRAME_GRID, FRAME_RAIL_CELL, FRAME_STEP, FRAME_STEP_CELL } from "@/components/app/step-frame/step-frame-layout";
 import { REPORTS_RAIL_COOKIE, reportsViewLabel, type ReportsView } from "@/lib/reports/views";
 
 /**
@@ -27,18 +28,17 @@ export async function ReportsPage({ view, title, info, chip, facts, children }: 
   const collapsed = jar.get(REPORTS_RAIL_COOKIE)?.value === "collapsed";
 
   return (
-    // The title and trail across the top, 24px over the content; then the rail and the view's column,
-    // starting on one line. The view scrolls inside its own column; the page never does (lg and up).
-    // One column under lg: minmax(0,1fr), or the rail's row of chips would stretch it past the phone's width.
-    <div data-step-frame className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)] lg:grid-cols-[auto_minmax(0,1fr)] lg:grid-rows-[min-content_minmax(0,1fr)] lg:gap-y-0">
+    // The title and trail across the top, 24px over the content; then the rail and the view's column, on
+    // StepFrameLayout's grid (shared with the loading state, ShellLoading, so switching views redraws the title and
+    // the rail where they were). The view scrolls inside its own column; the page never does (lg and up).
+    <div data-step-frame className={FRAME_GRID}>
       <ReportsHeader title={title ?? reportsViewLabel(view)} info={info} chip={chip} facts={facts}>
-        <div className="lg:col-start-1 lg:row-start-2 lg:min-h-0">
+        <div className={FRAME_RAIL_CELL}>
           <ReportsRail view={view} initialCollapsed={collapsed} />
         </div>
-        <div className="flex min-w-0 flex-col lg:col-start-2 lg:row-start-2 lg:min-h-0">
-          {/* The view rises in on every switch; rows, figures and bars bring their own motion. */}
-          {/* [&>*]:shrink-0: a view's own wrapper never gives up height to the scroll box (a StatStrip squeezed to a line). */}
-          <div key={view} className="flex min-w-0 flex-col gap-4 [&>*]:shrink-0 motion-safe:animate-[m-rise_.38s_cubic-bezier(.2,.8,.2,1)_both] lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1">
+        <div className={FRAME_STEP_CELL}>
+          {/* The view arrives in the one 150ms m-content-in on every switch; rows, figures and bars bring their own motion. */}
+          <div key={view} data-page-content className={FRAME_STEP}>
             {children}
           </div>
         </div>

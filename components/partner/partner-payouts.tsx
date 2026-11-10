@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
-import { Building2, CheckCircle2, Clock3, FileText, WalletCards } from "lucide-react";
+import { Building2, CheckCircle2, Clock3, Download, FileText, WalletCards } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -16,6 +16,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { Segmented } from "@/components/ui/view-tabs";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerStatement } from "@/lib/accounting/payoutsCore";
+import { pctLabel } from "@/lib/accounting/partnerPayoutCore";
 import { dayMonth, dayMonthYear } from "@/lib/format/dates";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
@@ -24,8 +25,14 @@ import { notify } from "@/lib/notify";
  * LA-7.4 · the partner's own statements, in the portal it already logs into: it arrives at the
  * month's conversation already knowing the number, and disputes the one line it disagrees with.
  * Only what partnerStatement() whitelists reaches this screen.
+ *
+ * 2026-11-06 (owner, partner payouts rework): each statement is an invoice with its number and a PDF to
+ * download; a commission share shows the commission on the partner's own policy it was taken from; and
+ * "Coming up" lists every client the partner sent with its stage and when payment can be expected.
  */
-type RunRow = { id: string; periodStart: string; periodEnd: string; status: "published" | "paid"; netCents: number; paidOn: string | null };
+type RunRow = { id: string; periodStart: string; periodEnd: string; status: "published" | "paid"; netCents: number; paidOn: string | null; invoiceNumber?: string | null };
+const refOf = (r: { id: string; invoiceNumber?: string | null }) => r.invoiceNumber || `Ref ${r.id.slice(0, 8).toUpperCase()}`;
+const pdfHref = (id: string) => `/api/partner/payouts/${id}/invoice`;
 const money = (c: number) => formatCentsAsCurrency(c);
 
 /**
@@ -78,7 +85,7 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
         <DialogHeader className="border-b border-border px-6 py-5 pr-14">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
-              <DialogTitle>{s ? `Commission statement · ${period(s.periodStart, s.periodEnd)}` : "Commission statement"}</DialogTitle>
+              <DialogTitle>{s ? `${s.invoiceNumber ? `Invoice ${s.invoiceNumber}` : "Commission statement"} · ${period(s.periodStart, s.periodEnd)}` : "Commission statement"}</DialogTitle>
               <DialogDescription className="mt-1">Payout summary and itemized transfers for this statement period.</DialogDescription>
             </div>
             {s ? <StatusChip tone={s.status === "paid" ? "good" : "info"}>{s.status === "paid" ? `Paid${s.paidOn ? ` · ${dayMonthYear(s.paidOn)}` : ""}` : "Published"}</StatusChip> : null}
@@ -88,7 +95,7 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
             <StatementMeta label="Transfers" value={`${s.items.length} ${s.items.length === 1 ? "item" : "items"}`} />
             <StatementMeta label="Statement period" value={period(s.periodStart, s.periodEnd)} />
             <StatementMeta label="Published" value={s.publishedAt ? dayMonthYear(s.publishedAt) : "—"} />
-            <StatementMeta label="Statement ref" value={s.id.slice(0, 8).toUpperCase()} mono />
+            <StatementMeta label={s.invoiceNumber ? "Invoice" : "Statement ref"} value={s.invoiceNumber ?? s.id.slice(0, 8).toUpperCase()} mono />
           </div> : null}
         </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
@@ -124,6 +131,26 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
                   </TableCard>
                   {s.rejectedCount ? <p className="mt-2 text-xs text-muted-foreground">Transfers rejected at the agency&apos;s compliance check are not billable. The count identifies records you may want to review.</p> : null}
                 </section>
+                {s.revenueShare?.policies?.length ? (
+                  <section aria-labelledby="statement-shares-heading">
+                    <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2"><h3 id="statement-shares-heading" className="m-0 text-base font-semibold">Commission shares</h3><span className="text-sm text-muted-foreground">your share of the commission received on each policy</span></div>
+                    <TableCard>
+                      <Table>
+                        <TableHeader><TableRow><TableHead>Policy</TableHead><TableHead className="text-right">Commission received</TableHead><TableHead className="w-20 text-right">Share</TableHead><TableHead className="w-32 text-right">Amount</TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {s.revenueShare.policies.map((pol, index) => (
+                            <TableRow key={`${pol.policyNumber}-${pol.occurredOn}-${index}`}>
+                              <TableCell className="font-medium">{pol.clientName ?? "Client"}<span className="block text-xs font-normal text-muted-foreground">{[pol.carrier, pol.policyNumber && `policy ${pol.policyNumber}`, dayMonth(pol.occurredOn)].filter(Boolean).join(" · ")}</span></TableCell>
+                              <TableCell className="text-right tabular-nums">{pol.commissionCents == null ? "—" : money(pol.commissionCents)}</TableCell>
+                              <TableCell className="text-right tabular-nums text-muted-foreground">{pol.ratePctBp == null ? "—" : pctLabel(pol.ratePctBp)}</TableCell>
+                              <TableCell className="text-right tabular-nums">{money(pol.amountCents)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableCard>
+                  </section>
+                ) : null}
                 {s.disputes.length ? <section aria-labelledby="statement-disputes-heading" className="border-t border-border pt-4"><h3 id="statement-disputes-heading" className="mb-3 text-sm font-semibold">Disputes</h3><div className="flex flex-col gap-2">{s.disputes.map((d) => <div key={d.id} className="rounded-md border border-border px-3 py-2 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><span className="font-medium">{d.reason}</span><StatusChip tone={d.status === "open" ? "warning" : "neutral"}>{d.status === "open" ? "Under review" : d.status}</StatusChip></div><p className="mb-0 mt-1 text-xs text-muted-foreground">Raised by {d.raisedBy} · {money(d.amountCents)}{d.resolutionNote ? ` · ${d.resolutionNote}` : ""}</p></div>)}</div></section> : null}
                 {s.footer ? <p className="m-0 border-t border-border pt-4 text-xs text-muted-foreground">{s.footer}</p> : null}
               </div>
@@ -142,7 +169,7 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
         <DialogFooter className="border-t border-border bg-card px-6 py-4 sm:justify-between">
           <div className="min-h-9" aria-live="polite">{busy ? <span className="text-sm text-muted-foreground">Sending dispute…</span> : null}</div>
           <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            {dispute ? <><Button variant="outline" disabled={busy} onClick={() => setDispute(null)}>Cancel dispute</Button><Button disabled={busy || !dispute.reason.trim()} onClick={() => void raise()}>Send dispute</Button></> : <><Button variant="outline" onClick={onClose}>Close statement</Button>{s ? <Button variant="secondary" onClick={() => setDispute({ itemId: null, reason: "", amount: "" })}>Dispute statement</Button> : null}</>}
+            {dispute ? <><Button variant="outline" disabled={busy} onClick={() => setDispute(null)}>Cancel dispute</Button><Button disabled={busy || !dispute.reason.trim()} onClick={() => void raise()}>Send dispute</Button></> : <><Button variant="outline" onClick={onClose}>Close statement</Button>{s ? <Button variant="outline" asChild><a href={pdfHref(s.id)}><Download aria-hidden="true" />Download PDF</a></Button> : null}{s ? <Button variant="secondary" onClick={() => setDispute({ itemId: null, reason: "", amount: "" })}>Dispute statement</Button> : null}</>}
           </div>
         </DialogFooter>
       </DialogContent>
@@ -150,8 +177,98 @@ function Statement({ id, onClose, partnerName }: { id: string; onClose: () => vo
   );
 }
 
+/**
+ * Partner payouts rework (owner, 2026-11-06) · "Coming up": every client the partner sent, where it stands
+ * (transferred, application submitted, issued, charged back), what it has earned, and when payment can be
+ * expected. The partner's own clients only (the route scopes it).
+ */
+type ClientRow = { dealId: string; clientName: string; transferredOn: string | null; submittedOn: string | null; issuedOn: string | null; policyNumber: string | null; carrier: string | null; chargedBackOn: string | null; payableCents: number; unpaidCents: number; invoicedCents: number; paidCents: number; openFrom: string | null; expectedOn: string | null };
+
+function stageOf(c: ClientRow): { label: string; tone: "neutral" | "info" | "good" | "danger" } {
+  if (c.chargedBackOn) return { label: "Charged back", tone: "danger" };
+  if (c.issuedOn) return { label: "Issued", tone: "good" };
+  if (c.submittedOn) return { label: "App submitted", tone: "info" };
+  return { label: "Transferred", tone: "neutral" };
+}
+
+function ComingUp() {
+  const [clients, setClients] = useState<ClientRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState("");
+  const pageSize = useFittingPageSize(380, 57);
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await fetch("/api/partner/payouts/upcoming", { cache: "no-store" });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.error ?? "Your clients could not be loaded");
+      setClients(body.clients as ClientRow[]);
+      setError(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Your clients could not be loaded");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+  useEffect(() => { const kickoff = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(kickoff); }, [load]);
+  const term = search.trim().toLowerCase();
+  const visible = (clients ?? []).filter((c) => !term || [c.clientName, c.policyNumber ?? "", c.carrier ?? ""].some((v) => v.toLowerCase().includes(term)));
+  const paged = paginate(visible, page, pageSize);
+  const unpaid = (clients ?? []).reduce((s, c) => s + c.unpaidCents, 0);
+  const next = (clients ?? []).map((c) => c.expectedOn).filter(Boolean).sort()[0] ?? null;
+  return (
+    <>
+      <KpiRow label="Coming up" className="lg:grid-cols-3">
+        <KpiTile icon={Clock3} label="Earned, not invoiced yet" value={clients === null ? "—" : money(unpaid)} note={clients === null ? undefined : next ? `next invoice around ${dayMonthYear(next)}` : "nothing waiting"} />
+        <KpiTile icon={FileText} label="On invoices, awaiting payment" value={clients === null ? "—" : money((clients ?? []).reduce((s, c) => s + c.invoicedCents, 0))} />
+        <KpiTile icon={CheckCircle2} label="Paid to date" value={clients === null ? "—" : money((clients ?? []).reduce((s, c) => s + c.paidCents, 0))} />
+      </KpiRow>
+      <TableCard
+        className="flex min-h-[24rem] flex-1 flex-col md:min-h-0"
+        bodyClassName="flex min-h-0 flex-1 flex-col"
+        toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={loading} labelClassName="sr-only" className="px-2.5" />}><ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search clients or policies" /></DataToolbar>}
+        footer={visible.length > pageSize ? <Pager page={paged.current} total={visible.length} noun={visible.length === 1 ? "client" : "clients"} pageSize={pageSize} onPage={setPage} /> : undefined}
+      >
+        {error ? <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="Not available" hint={error} /></div> : clients === null ? <SectionLoading rows={4} columns={5} /> : clients.length === 0 ? (
+          <div className="flex min-h-64 flex-1 items-center justify-center"><EmptyState title="No clients yet" hint="Each client you transfer appears here with its stage and when you can expect payment." /></div>
+        ) : (
+          <Table>
+            <TableHeader><TableRow><TableHead>Client</TableHead><TableHead>Stage</TableHead><TableHead className="text-right">Earned</TableHead><TableHead>Payment</TableHead></TableRow></TableHeader>
+            <TableBody>
+              {paged.rows.map((c) => {
+                const stage = stageOf(c);
+                return (
+                  <TableRow key={c.dealId}>
+                    <TableCell className="max-w-[320px]"><strong className="block truncate font-semibold text-foreground">{c.clientName}</strong><span className="block truncate text-xs text-muted-foreground">{c.transferredOn ? `Transferred ${dayMonth(c.transferredOn)}` : "Transferred"}{c.policyNumber ? ` · ${c.carrier ? `${c.carrier} ` : ""}${c.policyNumber}` : ""}</span></TableCell>
+                    <TableCell><StatusChip tone={stage.tone}>{stage.label}</StatusChip></TableCell>
+                    <TableCell className={`text-right tabular-nums ${c.payableCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{c.payableCents || c.unpaidCents ? money(c.payableCents) : <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell className="text-sm">{c.unpaidCents !== 0 && c.expectedOn ? <>Expected around {dayMonthYear(c.expectedOn)}</> : c.invoicedCents !== 0 ? "On an invoice, awaiting payment" : c.paidCents !== 0 ? "Paid" : <span className="text-muted-foreground">{c.issuedOn || c.submittedOn ? "Nothing payable yet" : "Not payable yet"}</span>}</TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        )}
+      </TableCard>
+    </>
+  );
+}
+
 /** Sample statements for `/design/organization`; a partner's own page never passes them. */
 export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; partnerName?: string }) {
+  // Invoices (the published statements) or Coming up (every client and when it pays). The sample shows invoices only.
+  const [view, setView] = useState<"invoices" | "upcoming">("invoices");
+  return (
+    <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
+      {sample ? null : <div><Segmented label="Commissions view" value={view} onChange={setView} options={[{ key: "invoices", label: "Invoices" }, { key: "upcoming", label: "Coming up" }]} /></div>}
+      {view === "upcoming" && !sample ? <ComingUp /> : <PartnerInvoices sample={sample} partnerName={partnerName} />}
+    </div>
+  );
+}
+
+function PartnerInvoices({ sample, partnerName }: { sample?: RunRow[]; partnerName?: string }) {
   const [runs, setRuns] = useState<RunRow[] | null>(sample ?? null);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
@@ -209,6 +326,7 @@ export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; par
       run.status === "paid" ? "paid" : "awaiting payment",
       money(run.netCents),
       run.paidOn ? dayMonthYear(run.paidOn) : "",
+      run.invoiceNumber ?? "",
     ].some((value) => value.toLowerCase().includes(searchTerm));
     return matchesStatus && matchesFrom && matchesTo && matchesSearch;
   });
@@ -300,12 +418,13 @@ export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; par
                 <TableRow key={r.id}>
                   <TableCell className="max-w-[320px]">
                     <strong className="block truncate font-semibold text-foreground">{period(r.periodStart, r.periodEnd)}</strong>
-                    <span className="block truncate font-mono text-xs text-muted-foreground">Ref {r.id.slice(0, 8).toUpperCase()}</span>
+                    <span className="block truncate font-mono text-xs text-muted-foreground">{refOf(r)}</span>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{money(r.netCents)}</TableCell>
                   <TableCell><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? "Paid" : "Published"}</StatusChip></TableCell>
                   <TableCell className={r.paidOn ? "tabular-nums" : "text-muted-foreground"}>{r.paidOn ? dayMonthYear(r.paidOn) : "Awaiting payment"}</TableCell>
                   <TableCell className="text-right">
+                    <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" asChild><a href={pdfHref(r.id)} title="Download the invoice PDF" aria-label={`Download the invoice PDF for ${period(r.periodStart, r.periodEnd)}`}><Download aria-hidden="true" /></a></Button>
                     <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground" onClick={() => setOpen(r.id)} title="Open the statement" aria-label={`Open the statement for ${period(r.periodStart, r.periodEnd)}`}><FileText aria-hidden="true" /></Button>
                   </TableCell>
                 </TableRow>

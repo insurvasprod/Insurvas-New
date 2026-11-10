@@ -74,7 +74,7 @@ export default async function EvidenceReportPage({ searchParams }: { searchParam
         title={title}
         chip={report.gaps.length ? <StatusChip tone={critical ? "danger" : "warning"}>{`${report.gaps.length} gap${report.gaps.length === 1 ? "" : "s"}`}</StatusChip> : <StatusChip tone="good">No gaps</StatusChip>}
         facts={facts}
-        lead={<ViewTabs label="This report" value={view} tabs={[
+        tabs={<ViewTabs label="This report" value={view} tabs={[
           { key: "gaps", label: "Gaps", count: report.gaps.length || null, tone: "danger", href: tabHref("gaps") },
           { key: "consent", label: "Consent", count: report.consent.length, href: tabHref("consent") },
           { key: "leads", label: "Where it came from", count: report.leads.length, href: tabHref("leads") },

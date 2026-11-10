@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { commitPayout, payoutPreview, readRuns } from "@/lib/agency/payoutStore";
+import { commitPayout, payoutPreview, readPayoutRules, readRuns } from "@/lib/agency/payoutStore";
 import { refusalResponse } from "@/lib/agency/rpc";
 import { NO_STORE, periodOf } from "@/lib/agency/http";
 import { audit } from "@/lib/audit/log";
@@ -17,8 +17,8 @@ export async function GET(request: NextRequest) {
   const period = periodOf(new URL(request.url));
   if (period instanceof NextResponse) return period;
   try {
-    const [preview, runs] = await Promise.all([payoutPreview(auth.context.tenantId, period.from, period.to), readRuns(auth.context.tenantId)]);
-    return NextResponse.json({ period, preview, runs }, { headers: NO_STORE });
+    const [preview, runs, rules] = await Promise.all([payoutPreview(auth.context.tenantId, period.from, period.to), readRuns(auth.context.tenantId), readPayoutRules(auth.context.tenantId)]);
+    return NextResponse.json({ period, preview, runs, rules }, { headers: NO_STORE });
   } catch (error) {
     return refusalResponse(error);
   }
@@ -29,13 +29,17 @@ const commitSchema = z.object({
   from: iso,
   to: iso,
   paidOn: iso,
-  method: z.string().trim().min(1, "Enter how you paid").max(60),
+  method: z.string().trim().max(60).optional().default(""),
   reference: z.string().trim().max(120).nullable().optional(),
   decisions: z.array(z.object({
     producerUserId: z.string().uuid(),
-    mode: z.enum(["pay_full", "withhold", "amount"]),
+    mode: z.enum(["pay_full", "withhold", "amount", "recover", "forgive"]),
     amountCents: z.number().int().min(0).nullable().optional(),
+    pctBp: z.number().int().min(1, "Take at least 1%.").max(10000, "Take at most 100%.").nullable().optional(),
     reason: z.string().trim().max(300).nullable().optional(),
+    method: z.string().trim().max(60).nullable().optional(),
+    reference: z.string().trim().max(120).nullable().optional(),
+    paidOn: iso.nullable().optional(),
   }).strict()).min(1, "Choose at least one producer to pay").max(500),
 }).strict();
 

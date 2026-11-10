@@ -1,11 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { Activity, Award, BadgeDollarSign, Brain, ChartColumn, ChartLine, ChartNoAxesCombined, ChevronsLeft, ChevronsRight, Gauge, Network, UserRoundCheck, type LucideIcon } from "lucide-react";
 
 import { useMenuSections } from "@/components/ui/page-trail";
+import { IntentLink } from "@/components/ui/nav-pending";
+import { rememberReports } from "@/components/app/step-frame/frame-memory";
 import { REPORTS_RAIL_COOKIE, REPORTS_VIEWS, sharedPeriod, type ReportsView } from "@/lib/reports/views";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,9 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
     return () => controller.abort();
   }, [hasActivity, view]);
 
+  // Remembered for the shell's loading state, which redraws this menu while the next view loads (frame-memory.ts).
+  useEffect(() => { rememberReports(collapsed); }, [collapsed]);
+
   const toggle = () => {
     const next = !collapsed;
     setCollapsed(next);
@@ -57,16 +61,19 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
       collapsed ? "lg:w-[72px] lg:px-2" : "lg:w-[248px]",
     )}>
       <ul className="m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-col lg:overflow-visible">
-        {views.map((item) => {
+        {views.map((item, index) => {
           const on = item.key === view;
+          // Down the rail slides forward, up it slides back (§ Motion).
+          const here = views.findIndex((v) => v.key === view);
           const waiting = item.key === "activity" ? closeOuts : 0;
           const sub = waiting > 0 ? `${waiting.toLocaleString("en-US")} to close out` : item.sub;
           const href = item.sharesPeriod && period ? `${item.href}?from=${period.from}&to=${period.to}` : item.href;
           const Icon = ICONS[item.key];
           return (
             <li key={item.key} className="shrink-0">
-              <Link
+              <IntentLink
                 href={href}
+                transitionTypes={on ? undefined : [here >= 0 && index < here ? "nav-back" : "nav-forward"]}
                 aria-current={on ? "page" : undefined}
                 title={collapsed ? `${item.label} · ${sub}` : undefined}
                 className={cn(
@@ -86,7 +93,7 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
                   ? <span aria-hidden="true" className="absolute top-1.5 right-2 hidden size-2.5 rounded-full bg-[var(--warning)] ring-2 ring-[var(--canvas)] lg:block" />
                   : <span className="inline-grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] px-[7px] text-xs font-bold text-[var(--warning-ink)] tabular-nums">{waiting.toLocaleString("en-US")}</span>
                 ) : null}
-              </Link>
+              </IntentLink>
             </li>
           );
         })}

@@ -5,75 +5,106 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { notify } from "@/lib/notify";
 
-import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { Pager, paginate } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
+import { Segmented } from "@/components/ui/view-tabs";
 import { StatusChip } from "@/components/ui/status-chip";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { MoreMenu } from "@/components/ui/more-menu";
-import { StepSlot } from "@/components/app/step-frame/step-slot";
-import { dollars, dollarsToCents } from "@/lib/agency/constants";
-import { BasisChip, Money } from "./money";
-import { PRODUCER_PAYOUTS_SLOT } from "./slots";
+import { ProgressSteps } from "@/components/ui/progress-steps";
+import { CheckBox } from "@/components/ui/check-box";
+import { dollars } from "@/lib/agency/constants";
+import { defaultChoice, draftPay, monthLabel, monthRange, PAY_METHODS, PAY_MODEL_LABELS, parsePctToBp, pctOf, previousMonth, type PayModel, type RunMode } from "@/lib/agency/payPlanCore";
+import { Money } from "./money";
 import { sendJson, useAgencyData } from "./use-agency-data";
 
 type Preview = {
   producerUserId: string; displayName: string; status: string; balanceBeforeCents: number; earnedCents: number; chargebackCents: number; periodCents: number;
-  balanceCents: number; recommendedMode: "pay_full" | "withhold"; recommendedPayCents: number; recommendedWithholdCents: number;
-  negativePolicies: Array<{ policy_number: string; amount_cents: number; occurred_on: string }>; alreadyRun: boolean;
+  balanceCents: number; negativePolicies: Array<{ policy_number: string; amount_cents: number; occurred_on: string }>; alreadyRun: boolean;
+  planModel: string | null; salaryCents: number; bonusCents: number; saveFeeCents: number; absorbedCount: number;
 };
-type Run = { id: string; producerUserId: string; periodStart: string; periodEnd: string; status: string; netCents: number; withheldCents: number; decisionMode: string | null; paidOn: string | null; paidMethod: string | null };
-type Decision = { include: boolean; mode: "pay_full" | "withhold" | "amount"; amount: string; reason: string };
+type Run = { id: string; producerUserId: string; periodStart: string; periodEnd: string; status: string; netCents: number; withheldCents: number; balanceAfterCents: number; decisionMode: string | null; paidOn: string | null; paidMethod: string | null; paymentReference: string | null };
+type Rules = { negativePolicy: string; recoveryPctBp: number };
+type Row = { include: boolean; mode: RunMode; pct: string; method: string; reference: string; paidOn: string };
+type Step = "pick" | "draft" | "confirm";
+type RunFilter = "all" | "paid" | "owes" | "nothing" | "void";
 
-function lastMonth() {
-  const now = new Date();
-  return {
-    from: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 10),
-    to: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0)).toISOString().slice(0, 10),
-  };
+const DECISION_LABEL: Record<string, string> = { withhold: "Took it all back", recover: "Took back a share", forgive: "Let it go", amount: "Stated amount", pay_full: "Paid in full" };
+const voided = (r: Run) => r.status === "void" || r.status === "voided";
+const below = (p: Preview) => p.balanceBeforeCents < 0 || p.balanceCents < 0;
+const today = () => new Date().toISOString().slice(0, 10);
+
+function recentMonths(count = 12): string[] {
+  const out: string[] = [];
+  let m = today().slice(0, 7);
+  for (let i = 0; i < count; i++) { out.push(m); m = previousMonth(`${m}-01`); }
+  return out;
 }
 
-const payFor = (p: Preview, d: Decision) => {
-  if (d.mode === "pay_full") return Math.max(p.periodCents, 0);
-  if (d.mode === "withhold") return Math.max(p.balanceCents, 0);
-  return dollarsToCents(d.amount) ?? 0;
-};
-
-const DECISION_LABEL: Record<string, string> = { withhold: "Withheld", amount: "Stated amount", pay_full: "In full" };
-const voided = (r: Run) => r.status === "void" || r.status === "voided";
-
 /**
- * AG-1.7 · the payout run, Accounting › Producer payouts (moved from Team 2026-11-03). Two tabs on the title line:
- * New run and Runs. The preview writes NOTHING. Producers with a negative balance come first, with the policies
- * behind it and a recommended withhold, so the owner decides before he pays — pay in full, withhold against the
- * balance, or pay a stated amount — and that decision is recorded with the run and printed on the statement.
- * Commit (on the title line) asks for the date, method and reference, and pays once per producer and period, on
- * the reported basis. No ACH: it records how you paid. A run's row opens its statement.
+ * Team payouts, Accounting › Producer payouts (owner's Accounting doc "Team Payouts", round 1 boards T3–T6,
+ * 2026-11-07). Run payroll is three steps on one page:
+ *   1 Month & team — pick the month (a run covers a whole month) and who is paid; a month already paid is shown.
+ *   2 Draft — nothing is saved. Base pay, commission share, bonuses and fees, chargebacks and what was owed from
+ *     before, per person. Anyone below zero gets the owner's choice: Carry it, Take N% this month, Let it go.
+ *   3 Confirm — how each person was paid (Bank transfer, Zelle, Check…), then Confirm marks the month PAID, gives
+ *     each person a private statement and books the payroll. A month cannot be paid twice; void a run to fix it.
+ * Runs lists what was paid; a row opens its statement. Void a run and Write off stay in each row's More.
  *
- * One producer-pay system (owner 2026-11-03, with the Accounting pass): LA-7.5's two corrections live here too, on
- * its own routes and the same ledger — Void a published or paid run (Runs, the row's More) and Write off a negative
- * balance (New run, the row's More). Both ask once, with the reason the ledger keeps. `moneyActions`: the plan has
- * Profit & loss and this person keeps the books (those routes' gate).
+ * /ui-taste pass (owner, 2026-11-08): the three steps are a progress bar (done steps checked, the current one
+ * filled) with one line under it saying what to do now, and Back / Next sit right beside it. The month picker is
+ * next to Refresh; the toolbar's left says how many people are chosen and what that pays. "Below zero" became
+ * "Owes from before", and the choice reads Take it all back first / Take back a share / Let it go.
  */
 export function PayoutsBoard({ tab, canCommit, moneyActions = false }: { tab: "run" | "runs"; canCommit: boolean; moneyActions?: boolean }) {
   const router = useRouter();
-  const [period, setPeriod] = useState(lastMonth);
-  const { data, error, loading, refreshing, reload } = useAgencyData<{ preview: Preview[]; runs: Run[] }>(`/api/app/agency/payouts?from=${period.from}&to=${period.to}`);
-  const [decisions, setDecisions] = useState<Record<string, Decision>>({});
-  const [confirming, setConfirming] = useState(false);
-  const [paidOn, setPaidOn] = useState(() => new Date().toISOString().slice(0, 10));
-  const [method, setMethod] = useState("ACH");
-  const [reference, setReference] = useState("");
+  const months = useMemo(() => recentMonths(), []);
+  const [month, setMonth] = useState(() => previousMonth(today()));
+  const period = monthRange(month);
+  const { data, error, loading, refreshing, reload } = useAgencyData<{ preview: Preview[]; runs: Run[]; rules?: Rules }>(`/api/app/agency/payouts?from=${period.from}&to=${period.to}`);
+  const [step, setStep] = useState<Step>("pick");
+  const [rows, setRows] = useState<Record<string, Row>>({});
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // A correction waiting for its reason: void a run, or write off a producer's negative balance.
   const [fix, setFix] = useState<null | { kind: "void"; run: Run } | { kind: "write_off"; producer: Preview }>(null);
   const [reason, setReason] = useState("");
+  const rules: Rules = data?.rules ?? { negativePolicy: "carry_forward", recoveryPctBp: 2000 };
+
+  useEffect(() => {
+    if (!data) return;
+    const choice = defaultChoice(data.rules?.negativePolicy);
+    const pct = pctOf(data.rules?.recoveryPctBp ?? 2000).replace(/%$/, "");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the choices reset each time a month's preview arrives
+    setRows(Object.fromEntries(data.preview.map((p) => [p.producerUserId, {
+      include: !p.alreadyRun && (p.periodCents !== 0 || p.balanceCents !== 0),
+      mode: below(p) ? choice : "pay_full", pct, method: "Bank transfer", reference: "", paidOn: today(),
+    }])));
+  }, [data]);
+
+  const preview = useMemo(() => data?.preview ?? [], [data]);
+  const names = useMemo(() => new Map(preview.map((p) => [p.producerUserId, p.displayName])), [preview]);
+  const [runPage, setRunPage] = useState(1);
+  const [runFilter, setRunFilter] = useState<RunFilter>("all");
+  const [runSearch, setRunSearch] = useState("");
+  const [runMonth, setRunMonth] = useState("all");
+  const runPageSize = useFittingPageSize(320, 45);
+  const chosen = preview.filter((p) => rows[p.producerUserId]?.include && !p.alreadyRun);
+  const pctBp = (r: Row) => parsePctToBp(r.pct) ?? rules.recoveryPctBp;
+  const payOf = (p: Preview) => {
+    const r = rows[p.producerUserId];
+    return draftPay({ beforeCents: p.balanceBeforeCents, periodCents: p.periodCents }, r?.mode ?? "pay_full", r ? pctBp(r) : rules.recoveryPctBp);
+  };
+  const totals = chosen.reduce((t, p) => {
+    const d = payOf(p);
+    return { pay: t.pay + d.payCents, salary: t.salary + p.salaryCents, shares: t.shares + p.earnedCents + p.bonusCents + p.saveFeeCents, back: t.back - p.chargebackCents + d.takenCents + Math.max(Math.max(p.periodCents, 0) - d.payCents - d.takenCents, 0) };
+  }, { pay: 0, salary: 0, shares: 0, back: 0 });
+  const set = (id: string, patch: Partial<Row>) => setRows((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
+  const paid = chosen.filter((p) => payOf(p).payCents > 0);
 
   async function correct() {
     if (!fix || !reason.trim()) return;
@@ -84,85 +115,49 @@ export function PayoutsBoard({ tab, canCommit, moneyActions = false }: { tab: "r
       : await sendJson("/api/app/accounting/producers", "POST", { op: "write_off", producer_user_id: fix.producer.producerUserId, reason: reason.trim() });
     setBusy(false);
     if (message) { setProblem(message); return; }
-    notify.done(fix.kind === "void" ? `The run is void. Its amount is back on the producer's balance.` : `${fix.producer.displayName}'s negative balance is written off. The agency carries it.`);
+    notify.done(fix.kind === "void" ? "The run is void. Its amount is back on their balance." : `${fix.producer.displayName}'s negative balance is written off. The agency carries it.`);
     setFix(null);
     setReason("");
     reload();
   }
 
-  useEffect(() => {
-    if (!data) return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- the decisions reset to the recommendation each time a preview arrives
-    setDecisions(Object.fromEntries(data.preview.map((p) => [p.producerUserId, { include: !p.alreadyRun && (p.periodCents !== 0 || p.balanceCents !== 0), mode: p.recommendedMode, amount: "", reason: p.recommendedMode === "withhold" ? "Withheld against a negative balance" : "" }])));
-  }, [data]);
-
-  const preview = useMemo(() => data?.preview ?? [], [data]);
-  const negative = preview.filter((p) => p.balanceCents < 0);
-  const positive = preview.filter((p) => p.balanceCents >= 0);
-  const names = useMemo(() => new Map(preview.map((p) => [p.producerUserId, p.displayName])), [preview]);
-  const [runPage, setRunPage] = useState(1);
-  const runPageSize = useFittingPageSize(320, 45);
-  const runs = paginate(data?.runs ?? [], runPage, runPageSize);
-  const chosen = preview.filter((p) => decisions[p.producerUserId]?.include);
-  const toPay = chosen.reduce((s, p) => s + payFor(p, decisions[p.producerUserId]), 0);
-  const withheld = chosen.reduce((s, p) => s + Math.max(Math.max(p.periodCents, 0) - payFor(p, decisions[p.producerUserId]), 0), 0);
-  const set = (id: string, patch: Partial<Decision>) => setDecisions((d) => ({ ...d, [id]: { ...d[id], ...patch } }));
-
-  async function commit() {
+  async function confirm() {
     setProblem(null);
     setBusy(true);
+    const first = paid[0] ? rows[paid[0].producerUserId] : null;
     const { error: message } = await sendJson("/api/app/agency/payouts", "POST", {
-      from: period.from, to: period.to, paidOn, method, reference: reference || null,
+      from: period.from, to: period.to, paidOn: first?.paidOn ?? today(), method: first?.method ?? "Bank transfer", reference: null,
       decisions: chosen.map((p) => {
-        const d = decisions[p.producerUserId];
-        return { producerUserId: p.producerUserId, mode: d.mode, amountCents: d.mode === "amount" ? dollarsToCents(d.amount) : null, reason: d.reason || null };
+        const r = rows[p.producerUserId];
+        const mode = below(p) ? r.mode : "pay_full";
+        return {
+          producerUserId: p.producerUserId, mode, pctBp: mode === "recover" ? pctBp(r) : null,
+          reason: mode === "withhold" ? "Carried: owed from before comes off first" : mode === "recover" ? `Took ${pctOf(pctBp(r))} of what was owed` : mode === "forgive" ? "Let it go" : null,
+          method: r.method, reference: r.reference || null, paidOn: r.paidOn,
+        };
       }),
     });
     setBusy(false);
     if (message) { setProblem(message); return; }
-    notify.done(`Paid ${chosen.length} producer${chosen.length === 1 ? "" : "s"} ${dollars(toPay)} for ${period.from} to ${period.to}. Each has a statement.`);
-    setConfirming(false);
+    notify.done(`${monthLabel(month)} is paid: ${chosen.length} ${chosen.length === 1 ? "person" : "people"}, ${dollars(totals.pay)}. Each has a private statement.`);
+    setStep("pick");
     router.push("/app/producer-payouts?tab=runs");
     reload();
   }
-
-  const decisionCell = (p: Preview) => {
-    const d = decisions[p.producerUserId];
-    if (!d) return null;
-    return (
-      <div className="flex flex-wrap items-center gap-2">
-        <select aria-label={`Decision for ${p.displayName}`} className={toolbarControl} value={d.mode} disabled={!d.include} onChange={(e) => set(p.producerUserId, { mode: e.target.value as Decision["mode"] })}>
-          <option value="pay_full">Pay this period in full</option>
-          <option value="withhold">Withhold against the balance</option>
-          <option value="amount">Pay a stated amount</option>
-        </select>
-        {d.mode === "amount" && <input aria-label="Amount" inputMode="decimal" placeholder="$" className={`${toolbarControl} w-24`} value={d.amount} onChange={(e) => set(p.producerUserId, { amount: e.target.value })} />}
-      </div>
-    );
-  };
-
-  const include = (p: Preview) => <input type="checkbox" aria-label={`Include ${p.displayName}`} checked={decisions[p.producerUserId]?.include ?? false} disabled={p.alreadyRun} onChange={(e) => set(p.producerUserId, { include: e.target.checked })} />;
-  // The period and Refresh sit on the first card, whichever that is.
-  const toolbar = (
-    <DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />}>
-      <label className="flex items-center gap-2 text-sm">From<input type="date" className={toolbarControl} value={period.from} onChange={(e) => setPeriod({ ...period, from: e.target.value })} /></label>
-      <label className="flex items-center gap-2 text-sm">To<input type="date" className={toolbarControl} value={period.to} onChange={(e) => setPeriod({ ...period, to: e.target.value })} /></label>
-    </DataToolbar>
-  );
 
   const correction = (
     <ConfirmDialog
       open={fix !== null}
       onOpenChange={(open) => { if (!open) setFix(null); }}
       title={fix?.kind === "void" ? `Void ${names.get(fix.run.producerUserId) ?? "this"}'s run for ${fix.run.periodStart} to ${fix.run.periodEnd}?` : fix?.kind === "write_off" ? `Write off ${fix.producer.displayName}'s balance of ${dollars(fix.producer.balanceCents)}?` : ""}
-      description={fix?.kind === "void" ? "Its amount goes back on the producer's balance and the statement shows the run as void. It cannot be un-voided; pay the period again instead." : "The agency stops recovering it: the balance goes to zero with a write-off entry in the ledger. It cannot be undone."}
-      confirmLabel={busy ? "Saving…" : fix?.kind === "void" ? "Void run" : "Write it off"}
+      description={fix?.kind === "void" ? "Use this when the month was paid wrong. The pay goes back on their balance, their statement shows the run as void, and you can run the month again. It cannot be undone." : "Use this when you will never get the money back. Their balance goes to zero and the agency carries the loss. It cannot be undone."}
+      confirmLabel={busy ? "Saving…" : fix?.kind === "void" ? "Void this run" : "Write it off"}
       busy={busy}
       confirmDisabled={!reason.trim()}
       onConfirm={() => void correct()}
       fields={
         <div className="grid gap-3 text-sm">
-          <label className="grid gap-1 font-medium">Reason<input className={toolbarControl} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder={fix?.kind === "void" ? "e.g. Paid the wrong period" : "e.g. Left the agency, not recoverable"} /></label>
+          <label className="grid gap-1 font-medium">Why? (kept on the record)<input className={toolbarControl} value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder={fix?.kind === "void" ? "e.g. Paid the wrong month" : "e.g. Left the agency, not recoverable"} /></label>
           {problem && <p role="alert" className="text-[var(--error-ink)]">{problem}</p>}
         </div>
       }
@@ -170,104 +165,210 @@ export function PayoutsBoard({ tab, canCommit, moneyActions = false }: { tab: "r
   );
 
   if (error) return <TableCard><ErrorState detail={error} /></TableCard>;
-  if (loading || !data) return <TableCard><SectionLoading rows={5} columns={7} label="Loading the preview" /></TableCard>;
+  if (loading || !data) return <TableCard><SectionLoading rows={5} columns={7} label="Loading the month" /></TableCard>;
 
   if (tab === "runs") {
+    // One row per person per month, like Bank deposits' results: a status chip says where each one stands,
+    // chips filter by it, the month sits by Refresh, and the row opens the private statement.
+    const runState = (r: Run): RunFilter => (voided(r) ? "void" : r.balanceAfterCents < 0 ? "owes" : r.paidOn ? "paid" : "nothing");
+    const runMonths = [...new Set(data.runs.map((r) => r.periodStart.slice(0, 7)))].sort().reverse();
+    const needle = runSearch.trim().toLowerCase();
+    const visibleRuns = data.runs
+      .filter((r) => runMonth === "all" || r.periodStart.slice(0, 7) === runMonth)
+      .filter((r) => runFilter === "all" || runState(r) === runFilter)
+      .filter((r) => !needle || (names.get(r.producerUserId) ?? "").toLowerCase().includes(needle));
+    const shownRuns = paginate(visibleRuns, runPage, runPageSize);
+    const count = (f: RunFilter) => data.runs.filter((r) => (runMonth === "all" || r.periodStart.slice(0, 7) === runMonth) && runState(r) === f).length;
+    const pickRuns = (f: RunFilter) => { setRunFilter(f); setRunPage(1); };
+    const when = (r: Run) => (r.periodStart.slice(0, 7) === r.periodEnd.slice(0, 7) && r.periodStart.endsWith("-01") ? monthLabel(r.periodStart.slice(0, 7)) : `${r.periodStart} – ${r.periodEnd}`);
+    const how = (r: Run) => [r.paidMethod === "ach" ? "Bank transfer" : r.paidMethod, r.paymentReference].filter(Boolean).join(" · ");
     return (
       <>
-      <TableCard toolbar={<DataToolbar actions={<RefreshButton onClick={reload} refreshing={refreshing} />} />} footer={data.runs.length ? <Pager page={runs.current} total={data.runs.length} noun="runs" pageSize={runPageSize} onPage={setRunPage} /> : undefined}>
-        {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Each committed run appears here, one row per producer, with their statement." action={canCommit ? <Button asChild><Link href="/app/producer-payouts">New run</Link></Button> : undefined} /> : (
-          <Table>
-            <TableHeader><TableRow><TableHead>Producer</TableHead><TableHead>Period</TableHead><TableHead>Decision</TableHead><TableHead className="text-right">Paid</TableHead><TableHead className="text-right">Withheld</TableHead><TableHead>How</TableHead><TableHead className="text-right"><span className="sr-only">Open</span></TableHead></TableRow></TableHeader>
-            <TableBody>
-              {runs.rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium"><Link className="hover:underline" href={`/app/producer-statements/${r.id}`}>{names.get(r.producerUserId) ?? "Producer"}</Link></TableCell>
-                  <TableCell className="tabular-nums">{r.periodStart} – {r.periodEnd}</TableCell>
-                  <TableCell>{(r.decisionMode && DECISION_LABEL[r.decisionMode]) ?? "—"}</TableCell>
-                  <TableCell className="text-right"><Money cents={r.netCents} /></TableCell>
-                  <TableCell className="text-right"><Money cents={r.withheldCents} /></TableCell>
-                  <TableCell>{voided(r) ? <StatusChip tone="neutral">Void</StatusChip> : r.paidOn ? `${r.paidMethod ?? ""} ${r.paidOn}` : "Nothing to pay"}</TableCell>
-                  <TableCell className="text-right"><span className="inline-flex items-center gap-1"><Button asChild size="sm" variant="outline"><Link href={`/app/producer-statements/${r.id}`}>Statement</Link></Button>{moneyActions && !voided(r) && <MoreMenu row label={`More for ${names.get(r.producerUserId) ?? "this run"}`} items={[{ label: "Void run", onSelect: () => { setReason(""); setProblem(null); setFix({ kind: "void", run: r }); } }]} />}</span></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </TableCard>
-      {correction}
+        <TableCard
+          toolbar={data.runs.length === 0 ? undefined : (
+            <DataToolbar actions={<>
+              <select aria-label="Month" className={toolbarControl} value={runMonth} onChange={(e) => { setRunMonth(e.target.value); setRunPage(1); }}>
+                <option value="all">All months</option>
+                {runMonths.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}
+              </select>
+              <RefreshButton onClick={reload} refreshing={refreshing} />
+            </>}>
+              <ToolbarSearch value={runSearch} onChange={(v) => { setRunSearch(v); setRunPage(1); }} placeholder="Search team member" />
+              <Segmented label="Run status" value={runFilter} onChange={pickRuns} options={[
+                { key: "all", label: "All" },
+                { key: "paid", label: "Paid", count: count("paid") || null },
+                { key: "owes", label: "Still owes", count: count("owes") || null, tone: "danger" },
+                { key: "nothing", label: "Nothing to pay", count: count("nothing") || null },
+                { key: "void", label: "Void", count: count("void") || null },
+              ]} />
+            </DataToolbar>
+          )}
+          footer={visibleRuns.length > runPageSize ? <Pager page={shownRuns.current} total={visibleRuns.length} noun="runs" pageSize={runPageSize} onPage={setRunPage} /> : undefined}
+        >
+          {data.runs.length === 0 ? <EmptyState title="No payroll run yet" hint="Each month you confirm appears here, one row per person, with their private statement." action={canCommit ? <Button asChild><Link href="/app/producer-payouts">Run payroll</Link></Button> : undefined} />
+            : visibleRuns.length === 0 ? <NoMatches noun="runs" onClear={() => { setRunSearch(""); setRunMonth("all"); pickRuns("all"); }} /> : (
+            <Table>
+              <TableHeader><TableRow><TableHead className="w-[24%]">Team member</TableHead><TableHead className="w-[16%]">Month</TableHead><TableHead className="w-[14%] text-right">Paid</TableHead><TableHead className="w-[22%]">How</TableHead><TableHead>Status</TableHead><TableHead className="w-12"><span className="sr-only">More</span></TableHead></TableRow></TableHeader>
+              <TableBody>
+                {shownRuns.rows.map((r) => {
+                  const state = runState(r);
+                  return (
+                    <TableRow key={r.id} className="cursor-pointer" onClick={() => router.push(`/app/producer-statements/${r.id}`)}>
+                      <TableCell><Link className="font-medium hover:underline" href={`/app/producer-statements/${r.id}`} onClick={(e) => e.stopPropagation()}>{names.get(r.producerUserId) ?? "Team member"}</Link>{r.decisionMode && r.decisionMode !== "pay_full" ? <div className="text-xs text-muted-foreground">{DECISION_LABEL[r.decisionMode] ?? ""}</div> : null}</TableCell>
+                      <TableCell className="tabular-nums">{when(r)}</TableCell>
+                      <TableCell className="text-right"><Money cents={r.netCents} /></TableCell>
+                      <TableCell>{r.paidOn && !voided(r) ? <>{how(r) || "Paid"}<div className="text-xs text-muted-foreground tabular-nums">{r.paidOn}</div></> : <span className="text-muted-foreground">—</span>}</TableCell>
+                      <TableCell>{state === "void" ? <StatusChip tone="neutral">Void</StatusChip> : state === "owes" ? <StatusChip tone="danger">Still owes {dollars(-r.balanceAfterCents)}</StatusChip> : state === "paid" ? <StatusChip tone="good">Paid</StatusChip> : <StatusChip tone="neutral">Nothing to pay</StatusChip>}</TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>{moneyActions && !voided(r) ? <MoreMenu row label={`More for ${names.get(r.producerUserId) ?? "this run"}`} items={[{ label: "Open the statement", href: `/app/producer-statements/${r.id}` }, { label: "Void this run", onSelect: () => { setReason(""); setProblem(null); setFix({ kind: "void", run: r }); } }]} /> : null}</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </TableCard>
+        {correction}
       </>
     );
   }
 
+  const model = (p: Preview) => (p.planModel ? PAY_MODEL_LABELS[p.planModel as PayModel] ?? p.planModel : "Contract level");
+  const payable = preview.filter((p) => !p.alreadyRun);
+  const allChosen = payable.length > 0 && chosen.length === payable.length;
+  const owesBefore = (p: Preview) => (p.balanceBeforeCents < 0 ? -p.balanceBeforeCents : 0);
+  const progress = (
+    <ProgressSteps
+      label="Run payroll"
+      current={step}
+      onSelect={(s) => setStep(s)}
+      steps={[{ key: "pick", label: "Choose month & people" }, { key: "draft", label: "Check the draft" }, { key: "confirm", label: "Record how you paid" }]}
+    />
+  );
+  // Back and Next sit with the steps, so the next move is always where the eye already is.
+  const nav = canCommit ? (
+    <div className="flex shrink-0 items-center gap-2">
+      {step !== "pick" ? <Button variant="outline" onClick={() => setStep(step === "confirm" ? "draft" : "pick")} disabled={busy}>Back</Button> : null}
+      {step === "pick" ? <Button onClick={() => setStep("draft")} disabled={!chosen.length}>Next: check the draft</Button>
+        : step === "draft" ? <Button onClick={() => setStep("confirm")} disabled={!chosen.length}>Next: record how you paid</Button>
+        : <Button onClick={() => void confirm()} disabled={busy || !chosen.length}>{busy ? "Saving…" : "Confirm and mark paid"}</Button>}
+    </div>
+  ) : null;
+  const toolbar = (
+    <DataToolbar actions={<>
+      <label className="flex items-center gap-2 text-sm text-muted-foreground">Month<select aria-label="Month" className={toolbarControl} value={month} onChange={(e) => { setMonth(e.target.value); setStep("pick"); }}>{months.map((m) => <option key={m} value={m}>{monthLabel(m)}</option>)}</select></label>
+      <RefreshButton onClick={reload} refreshing={refreshing} />
+    </>}>
+      <span className="text-sm">
+        <span className="font-semibold tabular-nums">{chosen.length}</span> of {payable.length} {payable.length === 1 ? "person" : "people"} chosen
+        {chosen.length ? <> · <span className="font-semibold tabular-nums">{dollars(totals.pay)}</span> to pay</> : null}
+        {step !== "pick" && totals.back ? <> · <span className="font-semibold tabular-nums text-[var(--error-ink)]">{dollars(totals.back)}</span> taken back</> : null}
+      </span>
+    </DataToolbar>
+  );
+
   return (
     <>
-      {canCommit && <StepSlot id={PRODUCER_PAYOUTS_SLOT}><Button onClick={() => { setProblem(null); setConfirming(true); }} disabled={!chosen.length}>Commit run</Button></StepSlot>}
-      <StatStrip label="This run">
-        <StatTile label="To pay · reported" value={dollars(toPay)} />
-        <StatTile label="Withheld" value={dollars(withheld)} />
-        <StatTile label="Negative balances" value={String(negative.length)} valueTone={negative.length ? "danger" : undefined} />
-        <StatTile label="Producers" value={String(chosen.length)} footnote={`of ${preview.length}`} />
-      </StatStrip>
-      {negative.length > 0 && (
-        <TableCard toolbar={toolbar} title="Negative balances: decide before committing">
-          <Table>
-            <TableHeader><TableRow><TableHead><span className="sr-only">Include</span></TableHead><TableHead>Producer</TableHead><TableHead className="text-right">Opening</TableHead><TableHead className="text-right">This period</TableHead><TableHead className="text-right">Balance</TableHead><TableHead>Behind it</TableHead><TableHead>Decision</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {negative.map((p) => (
-                <TableRow key={p.producerUserId} className="bg-[var(--error-surface)]">
-                  <TableCell>{include(p)}</TableCell>
-                  <TableCell className="font-medium">{p.displayName}{p.status !== "active" && <StatusChip tone="neutral" className="ml-2">{p.status}</StatusChip>}</TableCell>
-                  <TableCell className="text-right"><Money cents={p.balanceBeforeCents} /></TableCell>
-                  <TableCell className="text-right"><Money cents={p.periodCents} /></TableCell>
-                  <TableCell className="text-right"><Money cents={p.balanceCents} /></TableCell>
-                  <TableCell className="text-xs">{p.negativePolicies.slice(-3).map((x) => `${x.policy_number} ${dollars(x.amount_cents)}`).join(" · ") || "—"}</TableCell>
-                  <TableCell><span className="inline-flex items-center gap-1">{decisionCell(p)}{moneyActions && <MoreMenu row label={`More for ${p.displayName}`} items={[{ label: "Write off the balance", onSelect: () => { setReason(""); setProblem(null); setFix({ kind: "write_off", producer: p }); } }]} />}</span></TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-3">{progress}{nav}</div>
+
+      {step === "pick" ? (
+        <TableCard toolbar={toolbar}>
+          {preview.length === 0 ? <EmptyState title="No one to pay" hint="Team members appear here once they have joined the agency." /> : (
+            <Table>
+              <TableHeader><TableRow>
+                <TableHead className="w-20"><label className="inline-flex items-center gap-2"><CheckBox aria-label="Pay everyone" checked={allChosen} mixed={!allChosen && chosen.length > 0} disabled={!canCommit || !payable.length} onChange={(e) => setRows((d) => Object.fromEntries(Object.entries(d).map(([k, v]) => [k, { ...v, include: e.target.checked && !preview.find((p) => p.producerUserId === k)?.alreadyRun }])))} />Pay</label></TableHead>
+                <TableHead className="w-[22%]">Team member</TableHead><TableHead className="w-[18%]">Pay plan</TableHead><TableHead className="w-[18%] text-right">Earned in {monthLabel(month)}</TableHead><TableHead className="w-[18%] text-right">Owes from before</TableHead><TableHead className="text-right">Status</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {preview.map((p) => (
+                  <TableRow key={p.producerUserId} className={p.alreadyRun ? "opacity-70" : undefined}>
+                    <TableCell><CheckBox aria-label={`Pay ${p.displayName}`} checked={rows[p.producerUserId]?.include ?? false} disabled={p.alreadyRun || !canCommit} onChange={(e) => set(p.producerUserId, { include: e.target.checked })} /></TableCell>
+                    <TableCell className="font-medium">{p.displayName}{p.status !== "active" && <StatusChip tone="neutral" className="ml-2">{p.status}</StatusChip>}</TableCell>
+                    <TableCell>{p.planModel === "solo_owner" ? <span className="text-muted-foreground">{model(p)} · not on payroll</span> : model(p)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{p.periodCents === 0 ? <span className="text-muted-foreground">—</span> : dollars(p.periodCents)}</TableCell>
+                    <TableCell className={`text-right tabular-nums ${owesBefore(p) ? "text-[var(--error-ink)]" : ""}`}>{owesBefore(p) ? dollars(owesBefore(p)) : <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell className="text-right">{p.alreadyRun ? <StatusChip tone="good">Already paid</StatusChip> : p.periodCents === 0 && p.balanceCents === 0 ? <span className="text-muted-foreground">Nothing to pay</span> : rows[p.producerUserId]?.include ? <StatusChip tone="info">Will be paid</StatusChip> : <span className="text-muted-foreground">Not this time</span>}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </TableCard>
+      ) : (
+        <>
+          {step === "draft" ? (
+            <TableCard toolbar={toolbar}>
+              <Table>
+                <TableHeader><TableRow><TableHead className="w-[22%]">Team member</TableHead><TableHead className="w-[18%] text-right">Earned this month</TableHead><TableHead className="w-[14%] text-right">Owes from before</TableHead><TableHead>What to do with what they owe</TableHead><TableHead className="w-[12%] text-right">Pay</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {chosen.map((p) => {
+                    const r = rows[p.producerUserId];
+                    const d = payOf(p);
+                    // The month in one figure, with what made it up underneath.
+                    const parts = [
+                      p.salaryCents ? `${dollars(p.salaryCents)} base` : null,
+                      p.earnedCents ? `${dollars(p.earnedCents)} commission` : null,
+                      p.bonusCents + p.saveFeeCents ? `${dollars(p.bonusCents + p.saveFeeCents)} bonuses` : null,
+                      p.chargebackCents ? `${dollars(p.chargebackCents)} chargebacks` : null,
+                    ].filter(Boolean).join(" · ");
+                    const mode = r.mode === "pay_full" ? "withhold" : r.mode;
+                    return (
+                      <TableRow key={p.producerUserId}>
+                        <TableCell><div className="font-medium">{p.displayName}</div><div className="text-xs text-muted-foreground">{model(p)}</div></TableCell>
+                        <TableCell className="text-right"><div className="font-medium tabular-nums">{dollars(p.periodCents)}</div>{parts ? <div className="text-xs text-muted-foreground">{parts}</div> : null}{p.absorbedCount ? <div className="text-xs text-muted-foreground">{p.absorbedCount} chargeback{p.absorbedCount === 1 ? "" : "s"} absorbed by the agency</div> : null}</TableCell>
+                        <TableCell className={`text-right tabular-nums ${owesBefore(p) ? "text-[var(--error-ink)]" : ""}`}>{owesBefore(p) ? dollars(owesBefore(p)) : <span className="text-muted-foreground">—</span>}</TableCell>
+                        <TableCell>
+                          {below(p) ? (
+                            <div className="flex flex-col gap-1.5">
+                              <span className="inline-flex flex-nowrap items-center gap-2">
+                                <span role="radiogroup" aria-label={`What to do with what ${p.displayName} owes`} className="inline-flex h-8 items-center rounded-lg border border-border bg-[var(--surface-alt)] p-0.5">
+                                  {([["withhold", "Take it all back"], ["recover", "Take a share"], ["forgive", "Let it go"]] as const).map(([k, l]) => (
+                                    <button key={k} type="button" role="radio" aria-checked={mode === k} disabled={!canCommit} onClick={() => set(p.producerUserId, { mode: k })}
+                                      className={`h-7 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${mode === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{l}</button>
+                                  ))}
+                                </span>
+                                {mode === "recover" ? <label className="inline-flex items-center gap-1 text-sm"><input aria-label="Share to take back" inputMode="decimal" className={`${toolbarControl} w-16`} value={r.pct} onChange={(e) => set(p.producerUserId, { pct: e.target.value })} />%</label> : null}
+                                {moneyActions && <MoreMenu row label={`More for ${p.displayName}`} items={[{ label: "Write off everything they owe", onSelect: () => { setReason(""); setProblem(null); setFix({ kind: "write_off", producer: p }); } }]} />}
+                              </span>
+                              <span className="text-xs text-muted-foreground">{d.takenCents ? `${dollars(d.takenCents)} taken back. ` : ""}{d.afterCents < 0 ? `Still owes ${dollars(-d.afterCents)} after this.` : d.forgivenCents ? `${dollars(d.forgivenCents)} let go.` : "Owes nothing after this."}</span>
+                            </div>
+                          ) : <span className="text-muted-foreground">Owes nothing</span>}
+                        </TableCell>
+                        <TableCell className="text-right font-semibold"><Money cents={d.payCents} /></TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </TableCard>
+          ) : (
+            <TableCard toolbar={toolbar}>
+              <Table>
+                <TableHeader><TableRow><TableHead>Team member</TableHead><TableHead className="text-right">Pay</TableHead><TableHead>How did you pay them?</TableHead><TableHead>Reference</TableHead><TableHead>Paid on</TableHead></TableRow></TableHeader>
+                <TableBody>
+                  {chosen.map((p) => {
+                    const r = rows[p.producerUserId];
+                    const pay = payOf(p).payCents;
+                    return (
+                      <TableRow key={p.producerUserId}>
+                        <TableCell className="font-medium">{p.displayName}</TableCell>
+                        <TableCell className="text-right"><Money cents={pay} /></TableCell>
+                        {pay > 0 ? (
+                          <>
+                            <TableCell><select aria-label={`How ${p.displayName} was paid`} className={toolbarControl} value={r.method} onChange={(e) => set(p.producerUserId, { method: e.target.value })}>{PAY_METHODS.map((m) => <option key={m}>{m}</option>)}</select></TableCell>
+                            <TableCell><input aria-label={`Reference for ${p.displayName}`} className={toolbarControl} placeholder={r.method === "Check" ? "Check number" : r.method === "Zelle" ? "Zelle confirmation" : "Optional"} value={r.reference} maxLength={120} onChange={(e) => set(p.producerUserId, { reference: e.target.value })} /></TableCell>
+                            <TableCell><input type="date" aria-label={`Date ${p.displayName} was paid`} className={toolbarControl} value={r.paidOn} onChange={(e) => set(p.producerUserId, { paidOn: e.target.value })} /></TableCell>
+                          </>
+                        ) : <TableCell colSpan={3} className="text-muted-foreground">Nothing to pay this month. The month still closes for them.</TableCell>}
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+              {problem && <p role="alert" className="px-4 pb-3 text-sm text-[var(--error-ink)]">{problem}</p>}
+            </TableCard>
+          )}
+        </>
       )}
-      <TableCard title="Ready to pay" toolbar={negative.length ? undefined : toolbar}>
-        {positive.length === 0 ? <EmptyState title="Nothing to pay in this period" hint="Earned commission appears here once carrier statements for the period are posted." /> : (
-          <Table>
-            <TableHeader><TableRow><TableHead><span className="sr-only">Include</span></TableHead><TableHead>Producer</TableHead><TableHead className="text-right">Earned <BasisChip basis="reported" /></TableHead><TableHead className="text-right">Charged back</TableHead><TableHead className="text-right">Opening</TableHead><TableHead className="text-right">Payout</TableHead><TableHead>Decision</TableHead></TableRow></TableHeader>
-            <TableBody>
-              {positive.map((p) => (
-                <TableRow key={p.producerUserId}>
-                  <TableCell>{include(p)}</TableCell>
-                  <TableCell className="font-medium">{p.displayName}{p.alreadyRun && <StatusChip tone="good" className="ml-2">Already paid for this period</StatusChip>}</TableCell>
-                  <TableCell className="text-right"><Money cents={p.earnedCents} /></TableCell>
-                  <TableCell className="text-right"><Money cents={p.chargebackCents} /></TableCell>
-                  <TableCell className="text-right"><Money cents={p.balanceBeforeCents} /></TableCell>
-                  <TableCell className="text-right"><Money cents={decisions[p.producerUserId] ? payFor(p, decisions[p.producerUserId]) : 0} /></TableCell>
-                  <TableCell>{decisionCell(p)}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </TableCard>
-      <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
-        title={`Pay ${chosen.length} producer${chosen.length === 1 ? "" : "s"} ${dollars(toPay)}`}
-        description={`For ${period.from} to ${period.to}. Each producer gets a statement. A period cannot be paid twice.${withheld > 0 ? ` ${dollars(withheld)} is withheld and stays on those balances; the reason prints on their statements.` : ""}`}
-        confirmLabel={busy ? "Paying…" : "Commit run"}
-        destructive={false}
-        busy={busy}
-        confirmDisabled={!paidOn || !method}
-        onConfirm={() => void commit()}
-        fields={
-          <div className="grid gap-3 text-sm">
-            <label className="grid gap-1 font-medium">Paid on<input type="date" className={toolbarControl} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} /></label>
-            <label className="grid gap-1 font-medium">How<select className={toolbarControl} value={method} onChange={(e) => setMethod(e.target.value)}><option>ACH</option><option>Check</option><option>Wire</option><option>Other</option></select></label>
-            <label className="grid gap-1 font-medium">Reference<input className={toolbarControl} placeholder="e.g. BATCH-2026-10" value={reference} onChange={(e) => setReference(e.target.value)} /></label>
-            {problem && <p role="alert" className="text-[var(--error-ink)]">{problem}</p>}
-          </div>
-        }
-      />
       {correction}
     </>
   );

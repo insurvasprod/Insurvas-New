@@ -117,6 +117,8 @@ export const DATA_SUBJECT_MAP: Record<string, SubjectTable> = {
   policy_match: { action: "keep", reason: "The link between a policy and its sale: ids only, part of the policy record." },
   application_review: { action: "keep", reason: "AG-1.11 · a review of a producer's paperwork: ids, error types and the reviewer's note to the producer; the application it points at is anonymised with it." },
   commission_entry: { action: "keep", reason: "Commission ledger: amounts and policy numbers, no personal identifiers." },
+  // Partner payouts rework (20261106110000): what a partner earned on each transfer or policy.
+  partner_ledger_entry: { action: "keep", reason: "Partner payout ledger: ids, amounts, rates and policy numbers; part of the financial record the agency must keep. The client's name is read from the lead, never stored here." },
   // Setup › Pipeline rules (20261102100000): what a rule did to a card. lead_id is set null when the lead goes.
   pipeline_rule_evaluation: { action: "keep", reason: "What a card-move rule did to a card: ids, stages, policy numbers, amounts and the rule's own note wording; no name, number or birth date." },
   pipeline_rule_hold: { action: "keep", reason: "Two card-move rules that disagreed about a card: ids, stages and policy numbers only." },
@@ -170,6 +172,8 @@ export const NOT_CONSUMER = [
   "compliance_complaint_checklist", "compliance_index_reconciliation", "audit_log", "legal_acceptances",
   // LA-7.8: the agency's own payees (call centres, producers, lead vendors) and who looked up their tax IDs — not consumers.
   "payee_tax_profile", "payee_tax_reveal_log",
+  // Partner payouts rework (20261106110000): who at a partner company receives its payouts (name, email, method) — not a consumer.
+  "partner_payout_profile",
   // Carrier fact reports (20261027200000): an agency owner telling Insurvas a carrier's portal, policy
   // number format or products are wrong. Carrier facts and the reporting user — never a customer.
   "carrier_fact_reports",

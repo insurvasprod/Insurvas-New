@@ -32,6 +32,7 @@ export const REGISTRY_ALERT_EVENTS = [
   "webhook_disabled",
   "allowance_near_cap",
   "return_window_closing",
+  "recurring_expense_due",
 ] as const;
 
 export type AgentAlertEvent = AgentAlertSettingEvent | (typeof REGISTRY_ALERT_EVENTS)[number];

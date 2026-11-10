@@ -3,14 +3,15 @@ import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
 import { EXPENSE_CATEGORIES } from "@/lib/accounting/expensesCore";
-import { attachReceipt, classifyExpense, confirmExpense, ExpenseError, markExpensePaid, receiptUrl, updateExpense, voidExpense } from "@/lib/accounting/expenseStore";
+import { attachReceipt, classifyExpense, confirmExpense, ExpenseError, markExpensePaid, okExpense, receiptUrl, updateExpense, voidExpense } from "@/lib/accounting/expenseStore";
 import { PAID_METHODS } from "@/lib/accounting/invoicesCore";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
 /**
  * LA-7.3 (Notion sprint) · one expense: edit a template (future months only) or an unconfirmed
  * instance; confirm (books it), mark paid, void (reverses), set acquisition or overhead; the receipt.
- * Owner and bookkeeper only.
+ * Owner and bookkeeper only. `ok` (owner, 2026-11-06): a bill that came back is booked and stamped paid
+ * in one step — paid today unless a date is given.
  */
 const ROLES = ["owner", "bookkeeper"] as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -27,6 +28,7 @@ const edit = z.object({
 
 const action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("confirm") }).strict(),
+  z.object({ action: z.literal("ok"), paid_on: isoDate.optional(), method: z.enum(PAID_METHODS).nullable().optional(), reference: z.string().trim().max(200).nullable().optional() }).strict(),
   z.object({ action: z.literal("void"), reason: z.string().trim().min(1).max(500) }).strict(),
   z.object({ action: z.literal("paid"), paid_on: isoDate, method: z.enum(PAID_METHODS).nullable(), reference: z.string().trim().max(200).nullable() }).strict(),
   z.object({ action: z.literal("classify"), is_acquisition_cost: z.boolean() }).strict(),
@@ -87,6 +89,10 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (b.action === "confirm") {
       await confirmExpense(tenantId, id, userId);
       await audit({ actorType: "tenant", actorId: userId, action: "accounting.expense_confirmed", targetType: "expense", targetId: id, metadata: { tenantId }, request });
+    } else if (b.action === "ok") {
+      const paidOn = b.paid_on ?? new Date().toISOString().slice(0, 10);
+      await okExpense(tenantId, id, userId, { paidOn, method: b.method ?? null, reference: b.reference ?? null });
+      await audit({ actorType: "tenant", actorId: userId, action: "accounting.expense_confirmed", targetType: "expense", targetId: id, metadata: { tenantId, paidOn, ok: true }, request });
     } else if (b.action === "void") {
       const reversed = await voidExpense(tenantId, id, b.reason, userId);
       await audit({ actorType: "tenant", actorId: userId, action: "accounting.expense_voided", targetType: "expense", targetId: id, metadata: { tenantId, reversed }, request });

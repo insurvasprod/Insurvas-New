@@ -48,6 +48,30 @@ export function TabTrack({ className, children, ...rest }: { className: string; 
     };
   }, []);
 
+  // The chosen tab's pill slides from tab to tab (§ Motion, "indicator", 2026-11-09) instead of jumping: one pill
+  // under the row, sized to the chosen tab — or to the tab just clicked while its view is on its way (a pending
+  // marker inside it, nav-pending.tsx). It jumps into place the first time and only glides after that.
+  const [pill, setPill] = useState<{ left: number; top: number; width: number; height: number; glide: boolean } | null>(null);
+  useEffect(() => {
+    const track = ref.current;
+    if (!track) return;
+    let frame = 0;
+    const place = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const tabs = [...track.querySelectorAll<HTMLElement>(':scope > [role="tab"]')];
+        const on = tabs.find((tab) => tab.querySelector(":scope > [data-nav-pending]")) ?? tabs.find((tab) => tab.getAttribute("aria-selected") === "true");
+        setPill((now) => (on ? { left: on.offsetLeft, top: on.offsetTop, width: on.offsetWidth, height: on.offsetHeight, glide: now !== null } : null));
+      });
+    };
+    place();
+    const changes = new MutationObserver(place);
+    changes.observe(track, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-selected"] });
+    const sizes = new ResizeObserver(place);
+    sizes.observe(track);
+    return () => { cancelAnimationFrame(frame); changes.disconnect(); sizes.disconnect(); };
+  }, []);
+
   const fade = edges.start && edges.end
     ? "linear-gradient(to right, transparent, black 28px, black calc(100% - 28px), transparent)"
     : edges.start
@@ -60,9 +84,17 @@ export function TabTrack({ className, children, ...rest }: { className: string; 
     <div
       ref={ref}
       {...rest}
-      className={cn(className, "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden")}
+      data-tab-track={pill ? "pill" : ""}
+      className={cn(className, "relative isolate [scrollbar-width:none] [&::-webkit-scrollbar]:hidden")}
       style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
     >
+      {pill && (
+        <span
+          aria-hidden="true"
+          data-tab-pill={pill.glide ? "glide" : ""}
+          style={{ transform: `translate(${pill.left}px, ${pill.top}px)`, width: pill.width, height: pill.height }}
+        />
+      )}
       {children}
     </div>
   );

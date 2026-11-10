@@ -104,12 +104,14 @@ function LeadFormDialog({ open, onOpenChange, template, stages, readOnly, onCrea
 
 type Column = { id: string; name: string; color: string; stage: PipelineStage | null };
 
-function PipelineCard({ lead, selected, readOnly, now, money, late, onSelect, onDragStart }: { lead: Lead; selected: boolean; readOnly: boolean; now: number; money: boolean; late: boolean; onSelect: () => void; onDragStart: () => void }) {
+function PipelineCard({ lead, selected, readOnly, now, money, late, dragging = false, onSelect, onDragStart, onDragEnd }: { lead: Lead; selected: boolean; readOnly: boolean; now: number; money: boolean; late: boolean; dragging?: boolean; onSelect: () => void; onDragStart: () => void; onDragEnd?: () => void }) {
   const premium = money && lead.monthly_premium_cents != null ? annual(lead.monthly_premium_cents) : null;
   // Time in the current stage when it is known (20260925100000); until then, time since arrival.
   const stageMs = inStageMs(lead, now);
   return (
-    <article draggable={!readOnly} onDragStart={onDragStart} className={cn("m-card w-full shrink-0 overflow-hidden rounded-xl border m-glass-inset", !readOnly && "cursor-grab active:cursor-grabbing", late ? "border-[color-mix(in_srgb,var(--error)_55%,transparent)]" : "border-border", selected && "border-[var(--primary)] shadow-[var(--shadow-hover)]")}>
+    // m-drop-in (§ Motion, Wave 3): a card settles into its column — on the first draw, after "Show more", and where it
+    // lands when moved; the card being dragged fades back in place until it is dropped.
+    <article draggable={!readOnly} onDragStart={onDragStart} onDragEnd={onDragEnd} data-dragging={dragging ? "" : undefined} className={cn("m-drop-in m-card w-full shrink-0 overflow-hidden rounded-xl border m-glass-inset", !readOnly && "cursor-grab active:cursor-grabbing", late ? "border-[color-mix(in_srgb,var(--error)_55%,transparent)]" : "border-border", selected && "border-[var(--primary)] shadow-[var(--shadow-hover)]")}>
       <button type="button" onClick={onSelect} className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left" title={readOnly ? undefined : "Open to see the lead, or drag it to another stage — you will be asked which disposition"}>
         <span aria-hidden className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-xs font-semibold text-[var(--accent-ink)]">{initials(leadName(lead))}</span>
         <span className="min-w-0 flex-1">
@@ -155,7 +157,7 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
           <section
             key={column.id}
             aria-label={`${column.name}: ${columnLeads.length} ${columnLeads.length === 1 ? "lead" : "leads"}`}
-            className={cn("m-glass flex min-h-0 min-w-[240px] flex-1 basis-0 flex-col overflow-hidden rounded-xl border border-t-[3px] border-border", dragOver === column.id && "border-[var(--primary)] bg-[var(--primary-soft)]")}
+            className={cn("m-glass flex min-h-0 min-w-[240px] flex-1 basis-0 flex-col overflow-hidden rounded-xl border border-t-[3px] border-border transition-colors duration-[var(--t-micro)]", dragOver === column.id && "border-[var(--primary)] bg-[var(--primary-soft)]")}
             style={{ borderTopColor: column.color }}
             onDragOver={(event) => { if (column.id === UNMAPPED || readOnly) return; event.preventDefault(); setDragOver(column.id); }}
             onDragLeave={() => setDragOver(null)}
@@ -175,7 +177,7 @@ function PipelineBoard({ stages, leads, selectedId, readOnly, now, money, contex
             </header>
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-2.5">
               {/* Closed columns show their leads like every other column — no "Show closed" click first. */}
-              {columnLeads.slice(0, shown[column.id] ?? BOARD_PAGE).map((lead) => <PipelineCard key={lead.id} lead={lead} selected={lead.id === selectedId} readOnly={readOnly} now={now} money={money} late={isOverdue(lead, context, now)} onSelect={() => onSelect(lead)} onDragStart={() => setDraggedId(lead.id)} />)}
+              {columnLeads.slice(0, shown[column.id] ?? BOARD_PAGE).map((lead) => <PipelineCard key={lead.id} lead={lead} selected={lead.id === selectedId} readOnly={readOnly} now={now} money={money} late={isOverdue(lead, context, now)} onSelect={() => onSelect(lead)} dragging={lead.id === draggedId} onDragStart={() => setDraggedId(lead.id)} onDragEnd={() => { setDraggedId(null); setDragOver(null); }} />)}
               {columnLeads.length > (shown[column.id] ?? BOARD_PAGE) && (
                 <div className="flex flex-col items-center gap-1.5 pt-1">
                   <span className="text-xs tabular-nums text-muted-foreground">Showing {(shown[column.id] ?? BOARD_PAGE).toLocaleString()} of {columnLeads.length.toLocaleString()}</span>
@@ -421,7 +423,8 @@ export function LeadWorkspace() {
           }
         >
           {/* The board's columns sit inset; Stages, Table and List render bare, edge to edge in the card. */}
-          <div className={view === "board" ? "pt-3" : undefined}>
+          {/* Keyed by the view, so switching board / table / list / stages settles the new view in (§ Motion). */}
+          <div key={view} className={cn("m-content-in", view === "board" && "pt-3")}>
             {view === "stages" && (
               <StagesView
                 pipelines={activePipeline ? [activePipeline] : []}

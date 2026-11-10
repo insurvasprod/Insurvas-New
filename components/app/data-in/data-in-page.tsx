@@ -33,14 +33,15 @@ async function openSteps(): Promise<Set<DataInStep>> {
 }
 
 /** The frame: the shared StepFrame, with the step's area, its rail and badges. */
-export async function DataInPage({ step, title, chip, facts, lead, actions, breadcrumbs, children }: {
+export async function DataInPage({ step, title, chip, facts, tabs, actions, breadcrumbs, children }: {
   step: DataInStep;
   title?: string;
   /** A record's status chip, beside its title (round 3, owner 2026-11-02). */
   chip?: ReactNode;
   /** A record's one muted line of facts, under its title. */
   facts?: ReactNode;
-  lead?: ReactNode;
+  /** The step's sub-pages or views (ViewTabs): the sub-page bar under the title. */
+  tabs?: ReactNode;
   actions?: ReactNode;
   /** A record under a record (a file's row): its own trail, so the parent record is a link. */
   breadcrumbs?: Crumb[];
@@ -56,7 +57,7 @@ export async function DataInPage({ step, title, chip, facts, lead, actions, brea
       title={title ?? dataInStepLabel(step)}
       titleInfo={chip}
       meta={facts}
-      lead={lead}
+      tabs={tabs}
       actions={actions}
       breadcrumbs={breadcrumbs}
       rail={{ label: AREA_LABELS[area], cookie, countsUrl: "/api/app/data-in/steps", waiting: DATA_IN_WAITING, steps: areaSteps(area).filter((item) => open.has(item.key)), step, collapsed: jar.get(cookie)?.value === "collapsed" }}

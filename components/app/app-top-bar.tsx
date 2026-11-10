@@ -989,6 +989,8 @@ function TopBarSignOut({ endpoint, redirect }: { endpoint: string; redirect: str
     try {
       const response = await fetch(endpoint, { method: "POST" });
       if (!response.ok) throw new Error("Sign out could not be completed");
+      // The workspace dims and settles back while the sign-in page comes (§ Motion, Wave 8; globals.css shell-leave).
+      document.documentElement.classList.add("shell-leave");
       router.push(redirect);
       router.refresh();
     } catch (cause) {

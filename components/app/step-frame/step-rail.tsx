@@ -1,9 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ArrowLeftRight, BookUser, BriefcaseBusiness, Calculator, Settings, ChevronsLeft, ChevronsRight, CircleAlert, CreditCard, FileChartColumn, Files, FileText, Import, Landmark, Link2, Receipt, ReceiptText, Scale, Split, UserRoundSearch, Wallet, ChartLine, LifeBuoy, Wrench, HeartHandshake, ChartNoAxesCombined, ShieldCheck, PhoneOff, LockKeyhole, UserX, FileSearch, BadgeCheck, WalletCards, HandCoins, UserRoundCheck, Network, Banknote, type LucideIcon } from "lucide-react";
 
+import { IntentLink } from "@/components/ui/nav-pending";
+import { countsFor, rememberCounts, rememberRail } from "@/components/app/step-frame/frame-memory";
 import { cn } from "@/lib/utils";
 
 /** A rail entry. `icon` names one of ICONS (the sidebar's own icon for the page). */
@@ -56,7 +57,8 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
     const on = row?.querySelector<HTMLElement>("[aria-current=page]");
     if (row && on && row.scrollWidth > row.clientWidth) row.scrollTo({ left: row.scrollLeft + on.getBoundingClientRect().left - row.getBoundingClientRect().left - 8 });
   }, [step]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
+  // The last counts this tab saw for the rail, so a redrawn rail (the next step, the loading state) keeps its badges.
+  const [counts, setCounts] = useState<Record<string, number>>(() => countsFor(countsUrl));
   // A decision made in place (no step change) asks for the counts again (STEP_COUNTS_EVENT).
   const [asked, setAsked] = useState(0);
   useEffect(() => {
@@ -70,10 +72,13 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
     let stale = false;
     fetch(countsUrl, { cache: "no-store" })
       .then((response) => (response.ok ? response.json() : null))
-      .then((body: { counts?: Record<string, number> } | null) => { if (!stale && body?.counts) setCounts(body.counts); })
+      .then((body: { counts?: Record<string, number> } | null) => { if (!stale && body?.counts) { rememberCounts(countsUrl, body.counts); setCounts(body.counts); } })
       .catch(() => {});
     return () => { stale = true; };
   }, [step, countsUrl, asked]);
+
+  // Remembered for the shell's loading state, which redraws this rail while the next step loads (frame-memory.ts).
+  useEffect(() => { rememberRail({ label, cookie, countsUrl, waiting, steps, foot, collapsed }); });
 
   return (
     <nav aria-label={label} data-collapsed={collapsed ? "" : undefined} className={cn(
@@ -81,16 +86,19 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
       collapsed ? "lg:w-[72px] lg:px-2" : "lg:w-[248px]",
     )}>
       <ul ref={list} className="m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-col lg:overflow-visible">
-        {steps.map((item) => {
+        {steps.map((item, index) => {
           const on = item.key === step;
+          // A step further down slides the content up from the right, one further up from the left (§ Motion).
+          const here = steps.findIndex((s) => s.key === step);
           const Icon = ICONS[item.icon] ?? Files;
           const n = counts[item.key] ?? 0;
           const words = waiting[item.key];
           const note = n > 0 && words ? `${n.toLocaleString("en-US")} ${n === 1 ? words[0] : words[1]}` : null;
           return (
             <li key={item.key} className="shrink-0">
-              <Link
+              <IntentLink
                 href={item.href}
+                transitionTypes={on ? undefined : [here >= 0 && index < here ? "nav-back" : "nav-forward"]}
                 aria-current={on ? "page" : undefined}
                 title={collapsed ? (note ? `${item.label} · ${note}` : item.label) : note ?? undefined}
                 className={cn(
@@ -112,13 +120,13 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
                   ? <span aria-hidden="true" className="absolute top-1.5 right-2 hidden size-2.5 rounded-full bg-[var(--warning)] ring-2 ring-[var(--canvas)] lg:block" />
                   : <span aria-label={note} className="inline-grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] px-[7px] text-xs font-bold text-[var(--warning-ink)] tabular-nums">{n >= 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : n.toLocaleString("en-US")}</span>
                 ) : null}
-              </Link>
+              </IntentLink>
             </li>
           );
         })}
       </ul>
       {foot && (
-        <Link
+        <IntentLink
           href={foot.href}
           title={collapsed ? foot.label : undefined}
           className={cn(
@@ -128,7 +136,7 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
         >
           <Settings className="size-4 shrink-0" aria-hidden="true" />
           <span className={cn(collapsed && "sr-only")}>{foot.label}</span>
-        </Link>
+        </IntentLink>
       )}
       <button
         type="button"

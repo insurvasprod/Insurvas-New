@@ -16,9 +16,11 @@ export const PARTNER_STATUS_LABELS: Record<PartnerStatus, string> = {
   offboarded: "Offboarded",
 };
 
-export const PARTNER_PAYOUT_MODELS = ["per_transfer", "per_lead", "per_sale", "per_issued_policy", "revenue_share"] as const;
+// per_submitted_application is Model A of the payout rulebook (owner, 2026-11-06; 20261106100000).
+export const PARTNER_PAYOUT_MODELS = ["per_submitted_application", "per_transfer", "per_lead", "per_sale", "per_issued_policy", "revenue_share"] as const;
 export type PartnerPayoutModel = (typeof PARTNER_PAYOUT_MODELS)[number];
 export const PARTNER_PAYOUT_MODEL_LABELS: Record<PartnerPayoutModel, string> = {
+  per_submitted_application: "Per submitted application",
   per_transfer: "Per transfer",
   per_lead: "Per lead",
   per_sale: "Per sale",

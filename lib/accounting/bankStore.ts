@@ -7,6 +7,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { mappingProblem, parseBankCsv, suggestColumnMap, type ColumnMap } from "./bankCore";
 import type { MatchStatus } from "./bankLabels";
+import { addDays, closestDeposit, moneyState, paymentVerdict, policyState, shortBy, type MoneyState, type PaymentVerdict, type PolicyInput, type PolicyState } from "./bankResultsCore";
 
 /**
  * LA-7.6 (Notion sprint, Module 7 — Accounting) · bank deposits, server side. Imports go through
@@ -168,6 +169,152 @@ export async function removeMatch(tenantId: string, by: string, matchId: string)
   const { error } = await db().from("deposit_match").delete().eq("tenant_id", tenantId).eq("id", matchId).is("confirmed_by", null);
   if (error) fail(error);
   await db().rpc("refresh_bank_match_status", { p_transaction_id: m.bank_transaction_id });
+}
+
+// ─── Results (owner's Accounting doc, "The Bank Matchmaker", 2026-11-07) ───────────────────────────
+// One verdict per carrier payment, read from what is already recorded: the statement, its deposit
+// matches and LA-4.15's per-policy findings. Nothing here writes.
+
+export type PaymentPolicy = {
+  policyNumber: string;
+  paidCents: number;
+  rateBp: number | null;
+  promisedCents: number | null;
+  state: PolicyState;
+  shortCents: number;
+  findingId: string | null;
+};
+export type PaymentDeposit = { matchId: string; transactionId: string; postedOn: string; amountCents: number; appliedCents: number; descriptionRaw: string; accountId: string; confirmed: boolean };
+export type PaymentResult = {
+  id: string;
+  carrierId: string;
+  carrierName: string;
+  statementDate: string;
+  paidCents: number;
+  fileId: string | null;
+  money: MoneyState;
+  dueBy: string;
+  missingCents: number;
+  shortCents: number;
+  verdict: PaymentVerdict;
+  deposits: PaymentDeposit[];
+  policies: PaymentPolicy[];
+};
+
+async function bankRules(tenantId: string) {
+  const { data } = await db().from("accounting_settings").select("bank_window_days, bank_amount_tolerance_cents").eq("tenant_id", tenantId).maybeSingle();
+  return { windowDays: Number(data?.bank_window_days ?? 21), toleranceCents: Number(data?.bank_amount_tolerance_cents ?? 0) };
+}
+
+/** Carrier payments since `since` (or one payment by id), each with its deposits, policies and verdict. */
+export async function paymentResults(tenantId: string, opts: { since?: string; statementId?: string; today?: string } = {}): Promise<{ rows: PaymentResult[]; windowDays: number; bankThrough: string | null }> {
+  const today = opts.today ?? new Date().toISOString().slice(0, 10);
+  let sq = db().from("carrier_account_statement").select("id, carrier_id, statement_date, amount_paid_cents, file_id").eq("tenant_id", tenantId).gt("amount_paid_cents", 0);
+  if (opts.statementId) sq = sq.eq("id", opts.statementId);
+  else if (opts.since) sq = sq.gte("statement_date", opts.since);
+  const [stmts, rules, latest, carriers] = await Promise.all([
+    sq.order("statement_date", { ascending: false }).limit(300),
+    bankRules(tenantId),
+    db().from("bank_transaction").select("posted_on").eq("tenant_id", tenantId).order("posted_on", { ascending: false }).limit(1),
+    db().from("carriers").select("id, name"),
+  ]);
+  if (stmts.error) fail(stmts.error);
+  const list = (stmts.data ?? []) as Loose[];
+  const bankThrough = ((latest.data ?? []) as Loose[])[0]?.posted_on ?? null;
+  const name = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
+  if (!list.length) return { rows: [], windowDays: rules.windowDays, bankThrough };
+
+  const ids = list.map((s) => s.id as string);
+  const carrierIds = [...new Set(list.map((s) => s.carrier_id as string))];
+  const dates = [...new Set(list.map((s) => s.statement_date as string))];
+  const fileIds = list.map((s) => s.file_id as string | null).filter((f): f is string => !!f);
+  const [matches, byDate, byFile] = await Promise.all([
+    db().from("deposit_match").select("id, carrier_account_statement_id, amount_applied_cents, confirmed_by, bank_transaction!inner(id, posted_on, amount_cents, description_raw, bank_account_id)").eq("tenant_id", tenantId).in("carrier_account_statement_id", ids),
+    db().from("commission_entry").select("carrier_id, statement_date, file_id, policy_number, amount_cents").eq("tenant_id", tenantId).in("carrier_id", carrierIds).in("statement_date", dates).limit(10000),
+    fileIds.length ? db().from("commission_entry").select("carrier_id, statement_date, file_id, policy_number, amount_cents").eq("tenant_id", tenantId).in("file_id", fileIds).limit(10000) : Promise.resolve({ data: [] }),
+  ]);
+  if (matches.error) fail(matches.error);
+
+  // Each statement's policies: lines from its own file, else lines of that carrier dated that statement day.
+  const stmtByFile = new Map(list.filter((s) => s.file_id).map((s) => [s.file_id as string, s.id as string]));
+  const stmtByDay = new Map(list.map((s) => [`${s.carrier_id}|${s.statement_date}`, s.id as string]));
+  const paid = new Map<string, Map<string, number>>();
+  const seen = new Set<string>();
+  for (const e of [...((byFile.data ?? []) as Loose[]), ...((byDate.data ?? []) as Loose[])]) {
+    const sid = (e.file_id && stmtByFile.get(e.file_id)) || stmtByDay.get(`${e.carrier_id}|${e.statement_date}`);
+    if (!sid) continue;
+    const key = `${sid}|${e.file_id}|${e.policy_number}|${e.amount_cents}|${e.statement_date}`;
+    if (seen.has(key)) continue; // the same line found both ways
+    seen.add(key);
+    const m = paid.get(sid) ?? new Map<string, number>();
+    m.set(e.policy_number, (m.get(e.policy_number) ?? 0) + Number(e.amount_cents));
+    paid.set(sid, m);
+  }
+  const policyNumbers = [...new Set([...paid.values()].flatMap((m) => [...m.keys()]))];
+  const [findingsRes, expectedRes] = policyNumbers.length
+    ? await Promise.all([
+        db().from("commission_discrepancy").select("id, carrier_id, policy_number, discrepancy_type, expected_amount_cents, reported_amount_cents, difference_cents").eq("tenant_id", tenantId).in("status", ["open", "disputed"]).in("discrepancy_type", ["missing", "short_paid", "mis_rated", "over_paid"]).in("policy_number", policyNumbers.slice(0, 1000)),
+        db().from("expected_commission").select("carrier_id, policy_number, policy_year, rate_bp_applied, expected_amount_cents, expected_advance_cents").eq("tenant_id", tenantId).in("policy_number", policyNumbers.slice(0, 1000)).order("policy_year"),
+      ])
+    : [{ data: [] }, { data: [] }];
+  // One finding per policy: one that says it was underpaid (or not paid) outranks an overpayment.
+  const asInput = (f: Loose): PolicyInput["finding"] => ({ type: f.discrepancy_type, expectedCents: f.expected_amount_cents === null ? null : Number(f.expected_amount_cents), reportedCents: f.reported_amount_cents === null ? null : Number(f.reported_amount_cents), differenceCents: f.difference_cents === null ? null : Number(f.difference_cents) });
+  const isShort = (f: Loose) => policyState({ finding: asInput(f), expected: null }) === "short";
+  const finding = new Map<string, Loose>();
+  for (const f of (findingsRes.data ?? []) as Loose[]) {
+    const k = `${f.carrier_id}|${f.policy_number}`;
+    const prev = finding.get(k);
+    if (!prev || (!isShort(prev) && isShort(f))) finding.set(k, f);
+  }
+  const expected = new Map<string, Loose>();
+  for (const x of (expectedRes.data ?? []) as Loose[]) if (!expected.has(`${x.carrier_id}|${x.policy_number}`)) expected.set(`${x.carrier_id}|${x.policy_number}`, x);
+
+  const deposits = new Map<string, PaymentDeposit[]>();
+  for (const m of (matches.data ?? []) as Loose[]) {
+    const t = m.bank_transaction;
+    const d = deposits.get(m.carrier_account_statement_id) ?? [];
+    d.push({ matchId: m.id, transactionId: t.id, postedOn: t.posted_on, amountCents: Number(t.amount_cents), appliedCents: Number(m.amount_applied_cents), descriptionRaw: t.description_raw, accountId: t.bank_account_id, confirmed: !!m.confirmed_by });
+    deposits.set(m.carrier_account_statement_id, d);
+  }
+
+  const rows = list.map((s): PaymentResult => {
+    const dep = deposits.get(s.id) ?? [];
+    const confirmedCents = dep.filter((d) => d.confirmed).reduce((n, d) => n + d.appliedCents, 0);
+    const suggestedCents = dep.filter((d) => !d.confirmed).reduce((n, d) => n + d.appliedCents, 0);
+    const money = moneyState({ paidCents: Number(s.amount_paid_cents), confirmedCents, suggestedCents, statementDate: s.statement_date, windowDays: rules.windowDays, toleranceCents: rules.toleranceCents, today, bankThrough });
+    const policies = [...(paid.get(s.id) ?? new Map<string, number>()).entries()].map(([policyNumber, paidCents]): PaymentPolicy => {
+      const f = finding.get(`${s.carrier_id}|${policyNumber}`);
+      const x = expected.get(`${s.carrier_id}|${policyNumber}`);
+      const input: PolicyInput = {
+        finding: f ? asInput(f) : null,
+        expected: x ? { rateBp: x.rate_bp_applied === null ? null : Number(x.rate_bp_applied), amountCents: x.expected_amount_cents === null ? null : Number(x.expected_advance_cents ?? x.expected_amount_cents) } : null,
+      };
+      const state = policyState(input);
+      return {
+        policyNumber, paidCents, state,
+        rateBp: input.expected?.rateBp ?? null,
+        promisedCents: f?.expected_amount_cents != null ? Number(f.expected_amount_cents) : input.expected?.amountCents ?? null,
+        shortCents: state === "short" ? shortBy(input) : 0,
+        findingId: f?.id ?? null,
+      };
+    }).sort((a, b) => b.shortCents - a.shortCents || a.policyNumber.localeCompare(b.policyNumber));
+    return {
+      id: s.id, carrierId: s.carrier_id, carrierName: name.get(s.carrier_id) ?? "Carrier", statementDate: s.statement_date, paidCents: Number(s.amount_paid_cents), fileId: s.file_id ?? null,
+      money: money.state, dueBy: money.dueBy, missingCents: money.missingCents,
+      shortCents: policies.reduce((n, p) => n + p.shortCents, 0),
+      verdict: paymentVerdict(money.state, policies.map((p) => p.state)),
+      deposits: dep.sort((a, b) => a.postedOn.localeCompare(b.postedOn)), policies,
+    };
+  });
+  return { rows, windowDays: rules.windowDays, bankThrough };
+}
+
+/** For a payment nothing matched: the nearest unmatched deposit, to link in one click. */
+export async function nearestDeposit(tenantId: string, statementDate: string, paidCents: number, windowDays: number) {
+  const { data } = await db().from("bank_transaction").select("id, posted_on, amount_cents, description_raw, bank_account_id").eq("tenant_id", tenantId).gt("amount_cents", 0)
+    .in("match_status", ["unmatched", "suggested", "partially_matched"]).gte("posted_on", statementDate).lte("posted_on", addDays(statementDate, windowDays + 7)).limit(200);
+  const near = closestDeposit(((data ?? []) as Loose[]).map((t) => ({ id: t.id as string, postedOn: t.posted_on as string, amountCents: Number(t.amount_cents), descriptionRaw: t.description_raw as string, accountId: t.bank_account_id as string })), statementDate, paidCents, windowDays);
+  return near;
 }
 
 export async function setIgnored(tenantId: string, transactionId: string, reason: string | null) {

@@ -8,6 +8,7 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { RISK_LABELS, statusLabel } from "@/lib/ingestion/policyBook";
 import type { loadPolicy, SourceField } from "@/lib/ingestion/policyBookStore";
 import { riskFootnote } from "@/lib/ingestion/policyCurrent";
+import { paymentsBehind } from "@/lib/ingestion/policyMoney";
 import { carrierPolicyHref, nextDateThatMatters } from "@/lib/ingestion/policyPage";
 import { fileHref, rowHref } from "@/lib/ingestion/trace";
 
@@ -58,6 +59,9 @@ export function PolicyOverviewTab({ view, provisional = false }: { view: PolicyV
   const next = nextDateThatMatters(policy);
   const field = (label: string) => source.fields.find((f) => f.label === label);
   const behind = policy.daysPastDue ?? 0;
+  // Owner 2026-11-10: "7 payments behind" is said on the Paid to card (not beside the name), and only while behind.
+  const owed = behind > 0 ? paymentsBehind(policy.paidTo, policy.asOf, policy.premiumMode) : null;
+  const behindWords = owed ? `${owed} ${owed === 1 ? "payment" : "payments"} behind · ${behind.toLocaleString("en-US")} days` : `${behind.toLocaleString("en-US")} days behind`;
   const monthly = policy.annualCents === null ? null : Math.round(policy.annualCents / 12);
   const mode = policy.premiumMode ? MODE[policy.premiumMode] ?? ` ${policy.premiumMode}` : "";
 
@@ -85,7 +89,7 @@ export function PolicyOverviewTab({ view, provisional = false }: { view: PolicyV
     <>
       <StatStrip label="This policy">
         <StatTile label="Status" labelTitle={provenance(field("Status")) ?? undefined} value={asIs(statusLabel(policy.status))} valueTone={policy.status ? STATUS_TONE[policy.status] : undefined} footnote={policy.statusRaw ? `carrier says “${policy.statusRaw}”` : "no status in the file"} />
-        <StatTile label="Paid to" labelTitle={provenance(field("Paid-to date")) ?? undefined} value={asIs(fileDay(policy.paidTo))} valueTone={behind > 0 ? "danger" : undefined} footnote={[behind > 0 ? `${behind.toLocaleString("en-US")} days behind` : "up to date", policy.monthsPaid !== null ? `${policy.monthsPaid} ${policy.monthsPaid === 1 ? "month" : "months"} paid` : null].filter(Boolean).join(" · ")} />
+        <StatTile label="Paid to" labelTitle={provenance(field("Paid-to date")) ?? undefined} value={asIs(fileDay(policy.paidTo))} valueTone={behind > 0 ? "danger" : undefined} footnote={[behind > 0 ? behindWords : "up to date", policy.monthsPaid !== null ? `${policy.monthsPaid} ${policy.monthsPaid === 1 ? "month" : "months"} paid` : null].filter(Boolean).join(" · ")} />
         <StatTile label="Risk" value={asIs(RISK_LABELS[policy.riskBand])} valueTone={RISK_TONE[policy.riskBand]} footnote={riskFootnote(policy) || "nothing past due"} />
         <StatTile label="Premium" labelTitle={provenance(field("Premium")) ?? undefined} value={asIs(policy.premiumCents !== null ? dollars(policy.premiumCents) : monthly !== null ? dollars(monthly) : "—")} unit={policy.premiumCents !== null ? mode : monthly !== null ? "/mo" : undefined} footnote={policy.faceCents !== null ? `face ${dollars(policy.faceCents).replace(/\.00$/, "")}` : "face not in the file"} />
         <StatTile label={next?.label ?? "Next date"} value={asIs(next ? fileDay(next.date) : "None")} valueTone={next ? "warning" : undefined} footnote={next?.detail ?? (behind > 0 ? "nothing is due while it's behind" : "nothing due")} />

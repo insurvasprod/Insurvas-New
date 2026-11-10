@@ -50,16 +50,27 @@ function inScope<Q extends { in(column: string, values: readonly string[]): Q }>
 const PAGE = 1000;
 const CHUNK = 200;
 
-/** Every row of a query, a page at a time (the API returns at most 1,000 at once). */
-async function everyRow(build: () => Loose, max = 50_000): Promise<{ rows: Loose[]; error: Loose }> {
+/**
+ * Every row of a query (the API returns at most 1,000 at once): the first page, then while pages come back full,
+ * the next three at once rather than one after another (perf pass 2026-11-08, as Compare's `pages`). `build()` must
+ * be ordered. `truncated`: `max` was reached with more to read.
+ */
+export async function everyRow(build: () => Loose, max = 50_000): Promise<{ rows: Loose[]; error: Loose; truncated: boolean }> {
   const rows: Loose[] = [];
-  for (let from = 0; from < max; from += PAGE) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error) return { rows, error };
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE) break;
+  const first = await build().range(0, PAGE - 1);
+  if (first.error) return { rows, error: first.error, truncated: false };
+  rows.push(...(first.data ?? []));
+  if (!first.data || first.data.length < PAGE) return { rows, error: null, truncated: false };
+  for (let from = PAGE; from < max; from += 3 * PAGE) {
+    const starts = [from, from + PAGE, from + 2 * PAGE].filter((at) => at < max);
+    const batch = await Promise.all(starts.map((at) => build().range(at, at + PAGE - 1)));
+    for (const { data, error } of batch) {
+      if (error) return { rows, error, truncated: false };
+      rows.push(...(data ?? []));
+      if (!data || data.length < PAGE) return { rows, error: null, truncated: false };
+    }
   }
-  return { rows, error: null };
+  return { rows, error: null, truncated: true };
 }
 
 /** Rows whose id is in a long list, in parallel chunks (a URL holds only so many ids). */
@@ -100,14 +111,21 @@ const leadPersonName = (values: Loose) => {
 };
 const productOf = (row: Loose) => [row.product_code, row.product_tier].filter(Boolean).join(" · ") || null;
 
-/** Names for the people, carriers and lead sources a set of policy rows points at. */
-async function namesFor(tenantId: string, rows: Loose[]) {
-  const [carriers, contacts, users, vendors, campaigns] = await Promise.all([
+/** The carrier library and the agency's lead vendors and campaigns: the names that need no policy row. */
+function libraryNames(tenantId: string) {
+  return Promise.all([
     db().from("carriers").select("id, name"),
-    byIds("contacts", "id, first_name, last_name, provisional", rows.map((row) => row.contact_id), tenantId),
-    byIds("users", "id, name, email", rows.map((row) => row.agent_user_id)),
     db().from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId),
     db().from("tenant_campaigns").select("id, name, vendor_id, effective_cost_per_record_cents").eq("tenant_id", tenantId),
+  ]) as Promise<[Loose, Loose, Loose]>;
+}
+
+/** Names for the people, carriers and lead sources a set of policy rows points at; `library` may already be on its way. */
+async function namesFor(tenantId: string, rows: Loose[], library = libraryNames(tenantId)) {
+  const [[carriers, vendors, campaigns], contacts, users] = await Promise.all([
+    library,
+    byIds("contacts", "id, first_name, last_name, provisional", rows.map((row) => row.contact_id), tenantId),
+    byIds("users", "id, name, email", rows.map((row) => row.agent_user_id)),
   ]);
   return {
     carrier: new Map<string, string>((carriers.data ?? []).map((row: Loose) => [row.id, row.name])),
@@ -187,12 +205,17 @@ export type AwaitingSale = { carrierId: string | null; carrierName: string; poli
  * sale whose carrier and number the book already holds is left out, so the carrier's own row takes
  * over the moment its file arrives. A producer sees the sales they worked.
  */
-async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policyNumber: string }): Promise<AwaitingSale[]> {
+/**
+ * `since` (yyyy-mm-dd): only sales issued that day or later. `lean`: leave out the client's name, which reads every
+ * sale's lead record — for a caller that only counts and sums (Compare, perf pass 2026-11-08).
+ */
+async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policyNumber: string }, options: { since?: string; lean?: boolean } = {}): Promise<AwaitingSale[]> {
   // Every page (the API answers 1,000 rows a request; a .limit(5000) used to stop there without saying so), ordered
   // along tenant_issued_policies_number_idx with carrier as the tail (tenant, carrier, number is unique).
   const query = () => {
     const q = db().from("tenant_issued_policies").select("lead_id, deal_id, carrier, policy_number, issued_at, product_line").eq("tenant_id", viewer.tenantId).eq("status", "issued").not("policy_number", "is", null);
-    return (only ? q.eq("policy_number", only.policyNumber) : q).order("policy_number").order("carrier");
+    const since = options.since ? q.gte("issued_at", options.since) : q;
+    return (only ? since.eq("policy_number", only.policyNumber) : since).order("policy_number").order("carrier");
   };
   const [{ rows: data, error }, carrierRead] = await Promise.all([everyRow(query), db().from("carriers").select("id, name, code")]);
   if (error) {
@@ -217,7 +240,7 @@ async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policy
   const waiting = sales.filter(({ row, carrier }) => !carrier || !known.has(`${carrier.id}|${row.policy_number}`));
   const [deals, leads] = await Promise.all([
     byIds("deal_flow", "id, worked_by, insured_name, monthly_premium_cents, face_amount_cents, product_type", waiting.map(({ row }) => row.deal_id), viewer.tenantId),
-    byIds("agent_leads", "id, values", waiting.map(({ row }) => row.lead_id), viewer.tenantId),
+    options.lean ? Promise.resolve([] as Loose[]) : byIds("agent_leads", "id, values", waiting.map(({ row }) => row.lead_id), viewer.tenantId),
   ]);
   const dealById = new Map<string, Loose>(deals.map((deal: Loose) => [deal.id, deal]));
   const leadById = new Map<string, Loose>(leads.map((lead: Loose) => [lead.id, lead]));
@@ -239,8 +262,8 @@ async function issuedAwaiting(viewer: Viewer, only?: { carrierId: string; policy
 }
 
 /** The recorded sales still waiting for their carrier's file, as rows of the one Policies list. */
-export async function loadIssuedAwaiting(viewer: Viewer): Promise<BookRow[]> {
-  return (await issuedAwaiting(viewer)).map((sale): BookRow => ({
+export async function loadIssuedAwaiting(viewer: Viewer, options: { since?: string; lean?: boolean } = {}): Promise<BookRow[]> {
+  return (await issuedAwaiting(viewer, undefined, options)).map((sale): BookRow => ({
     carrierId: sale.carrierId ?? `issued:${sale.carrierName.trim().toLowerCase()}`, carrierName: sale.carrierName, policyNumber: sale.policyNumber,
     clientName: sale.clientName, contactId: null, provisional: false, product: sale.product,
     premiumCents: sale.monthlyCents, premiumMode: sale.monthlyCents === null ? null : "monthly", annualCents: sale.monthlyCents === null ? null : sale.monthlyCents * 12, faceCents: sale.faceCents,
@@ -266,6 +289,8 @@ export async function loadBook(viewer: Viewer) {
     everyRow(() => db().from("expected_commission").select("carrier_id, policy_number").eq("tenant_id", viewer.tenantId).eq("confidence", "no_rate_card").order("carrier_id").order("policy_number").order("policy_year")),
   ]);
   side.catch(() => {});
+  const library = libraryNames(viewer.tenantId);
+  library.catch(() => {});
   const read = await everyRow(() => {
     // Ordered along the primary key (tenant first), so each page is an index range, not a scan.
     let query = db().from("policy_current").select(CURRENT_COLUMNS).eq("tenant_id", viewer.tenantId);
@@ -277,7 +302,7 @@ export async function loadBook(viewer: Viewer) {
     throw new Error(`Could not load the policies: ${read.error.message}`);
   }
   const [names, [notes, filters, unpricedRead], sales] = await Promise.all([
-    namesFor(viewer.tenantId, read.rows), side,
+    namesFor(viewer.tenantId, read.rows, library), side,
     saleNames(viewer.tenantId, read.rows),
   ]);
   const rows: BookRow[] = read.rows.map((row: Loose): BookRow => {

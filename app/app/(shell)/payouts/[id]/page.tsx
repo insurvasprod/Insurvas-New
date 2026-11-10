@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { PAID_METHOD_LABELS } from "@/lib/accounting/invoicesCore";
 import { ITEM_LABELS } from "@/lib/accounting/payoutsCore";
+import { invoiceRef, pctLabel } from "@/lib/accounting/partnerPayoutCore";
+import { dayMonth, dayMonthYear } from "@/lib/format/dates";
 import { getRun, PayoutError } from "@/lib/accounting/payoutStore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
@@ -21,12 +23,20 @@ import { ViewTabs } from "@/components/ui/view-tabs";
  * are Statement (what the partner reads: compliance rejections as a count only, never commission), Items
  * (each priced item, disputable while a draft), Disputes (resolved once published) and Terms used (frozen
  * with the draft). Owner and bookkeeper only; opening it writes nothing.
+ *
+ * 2026-11-06 (owner, partner payouts rework): a run is the partner's invoice — numbered, with its PDF in More,
+ * each item showing its client or policy and how it was worked out (a flat rate, or a share of the commission
+ * received), and Publish & share puts it in the partner's portal.
  */
 type Tab = "statement" | "items" | "disputes" | "terms";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const money = (c: number) => formatCentsAsCurrency(c);
-const MODEL: Record<string, string> = { per_transfer: "per transfer", per_lead: "per lead", per_sale: "per sale", per_issued_policy: "per issued policy", revenue_share: "revenue share" };
-const BILLABLE = ["transfer", "lead", "sale", "issued_policy", "revenue_share", "adjustment"];
+const MODEL: Record<string, string> = { per_submitted_application: "per submitted application", per_transfer: "per transfer", per_lead: "per lead", per_sale: "per sale", per_issued_policy: "per issued policy", revenue_share: "revenue share" };
+const BILLABLE = ["submitted_application", "transfer", "lead", "sale", "issued_policy", "revenue_share", "adjustment", "clawback", "carried_balance"];
+/** How an item was worked out: "50% of $1,000.00", or the flat rate. */
+const howWorked = (i: { itemType: string; ratePctBp: number | null; basisCents?: number | null; rateAppliedCents: number | null }) =>
+  i.itemType === "revenue_share" && i.ratePctBp != null && i.basisCents != null ? `${pctLabel(i.ratePctBp)} of ${money(i.basisCents)}`
+    : i.rateAppliedCents != null && i.itemType !== "credit" && i.itemType !== "adjustment" ? `${money(i.rateAppliedCents)} each` : null;
 const OUTCOME: Record<string, string> = { open: "Open", accepted: "Accepted, paid on the next run", upheld: "Upheld, stays deducted", void: "Void, its run was voided" };
 
 export default async function PayoutRunPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ tab?: string }> }) {
@@ -50,12 +60,13 @@ export default async function PayoutRunPage({ params, searchParams }: { params: 
   const readOnly = guard.entitlement.access === "read_only";
   const base = `/app/payouts/${run.id}`;
   const openDisputes = run.disputes.filter((d) => d.status === "open").length;
+  // One short line (/ui-taste pass, owner 2026-11-09): which invoice, which pay period, and where it stands.
   const facts = [
-    `${run.periodStart} to ${run.periodEnd}`,
-    `${money(run.netCents)} net payable`,
-    run.status === "draft" ? "the partner sees nothing until it is published" : null,
-    run.paidOn ? `paid ${run.paidOn}${run.paidMethod ? ` by ${PAID_METHOD_LABELS[run.paidMethod]}` : ""}${run.paymentReference ? `, ref ${run.paymentReference}` : ""}` : null,
-    run.voidReason ? `Void: ${run.voidReason}` : null,
+    `Invoice ${invoiceRef({ id: run.id, invoiceNumber: run.invoiceNumber })}`,
+    `${dayMonth(run.periodStart)} – ${dayMonthYear(run.periodEnd)}`,
+    run.status === "draft" ? "only you can see it until you publish" : null,
+    run.paidOn ? `paid ${dayMonthYear(run.paidOn)}${run.paidMethod ? ` by ${PAID_METHOD_LABELS[run.paidMethod]}` : ""}${run.paymentReference ? ` (${run.paymentReference})` : ""}` : null,
+    run.voidReason ? `void: ${run.voidReason}` : null,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -64,7 +75,7 @@ export default async function PayoutRunPage({ params, searchParams }: { params: 
       title={run.partnerName}
       chip={<RunStatusChip status={run.status} paidOn={run.paidOn} />}
       facts={facts}
-      lead={<ViewTabs label="This run" value={tab} tabs={[
+      tabs={<ViewTabs label="This run" value={tab} tabs={[
         { key: "statement", label: "Statement", href: base },
         { key: "items", label: "Items", count: run.items.length, href: `${base}?tab=items` },
         { key: "disputes", label: "Disputes", count: openDisputes || null, tone: "danger", href: `${base}?tab=disputes` },
@@ -82,8 +93,8 @@ export default async function PayoutRunPage({ params, searchParams }: { params: 
       {tab === "items" ? (
         <PagedTableCard total={run.items.length} noun="items">
           {run.items.length === 0 ? <EmptyState title="No items" hint="Nothing the partner delivered in this period was priced." /> : (
-            <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-              <thead><tr><th>Date</th><th>Item</th><th className="text-right">Amount</th><th className="text-right"><span className="sr-only">Dispute</span></th></tr></thead>
+            <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
+              <thead><tr><th>Date</th><th>Item</th><th>Client · policy</th><th>How</th><th className="text-right">Amount</th><th className="text-right"><span className="sr-only">Dispute</span></th></tr></thead>
               <PagedBody>
                 {run.items.map((i) => {
                   const disputed = run.disputes.some((d) => d.itemId === i.id);
@@ -91,7 +102,9 @@ export default async function PayoutRunPage({ params, searchParams }: { params: 
                     <tr key={i.id}>
                       <td className="tabular-nums">{i.occurredOn}</td>
                       <td>{ITEM_LABELS[i.itemType]}{i.note ? <span className="text-xs text-muted-foreground"> · {i.note}</span> : null}{disputed ? <span className="text-xs text-[var(--warning-ink)]"> · disputed</span> : null}</td>
-                      <td className="text-right tabular-nums">{money(i.amountCents)}</td>
+                      <td>{i.clientName ?? (i.policyNumber ? "" : <span className="text-muted-foreground">—</span>)}{i.policyNumber ? <span className="block text-xs text-muted-foreground">{i.carrier ? `${i.carrier} · ` : ""}{i.policyNumber}</span> : null}</td>
+                      <td className="text-muted-foreground">{howWorked(i) ?? ""}</td>
+                      <td className={`text-right tabular-nums ${i.amountCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{money(i.amountCents)}</td>
                       <td className="text-right">{run.status === "draft" && BILLABLE.includes(i.itemType) && !disputed && !readOnly ? <DisputeItem runId={run.id} itemId={i.id} label={`${ITEM_LABELS[i.itemType]} of ${i.occurredOn}`} /> : null}</td>
                     </tr>
                   );
@@ -127,16 +140,24 @@ export default async function PayoutRunPage({ params, searchParams }: { params: 
           </table>
         </TableCard>
       ) : (
-        <TableCard footer={<p className="text-xs text-muted-foreground">What the partner reads: compliance rejections as a count only, and no commission details.</p>}>
+        <TableCard footer={<p className="text-xs text-muted-foreground">This is what the partner sees in their portal and on the PDF.</p>}>
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
             <thead><tr><th>Activity</th><th className="text-right">Count</th><th className="text-right">Rate</th><th className="text-right">Amount</th></tr></thead>
             <tbody>
-              {run.lines.filter((l) => l.itemType !== "rejected" && l.itemType !== "credit").map((l) => (
+              {run.lines.filter((l) => l.itemType !== "rejected" && l.itemType !== "credit" && l.itemType !== "revenue_share").map((l) => (
                 <tr key={`${l.itemType}-${l.rateCents}`}>
                   <td>{l.label}</td>
                   <td className="text-right tabular-nums">{l.itemType === "revenue_share" ? "" : l.count}</td>
                   <td className="text-right tabular-nums text-muted-foreground">{l.rateCents != null ? `@ ${money(l.rateCents)}` : ""}</td>
                   <td className="text-right tabular-nums">{money(l.amountCents)}</td>
+                </tr>
+              ))}
+              {run.items.filter((i) => i.itemType === "revenue_share").map((i) => (
+                <tr key={i.id}>
+                  <td>Commission share<span className="text-xs text-muted-foreground"> · {[i.clientName, i.policyNumber && `policy ${i.policyNumber}`].filter(Boolean).join(" · ") || i.occurredOn}</span></td>
+                  <td />
+                  <td className="text-right tabular-nums text-muted-foreground">{howWorked(i) ?? ""}</td>
+                  <td className={`text-right tabular-nums ${i.amountCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{money(i.amountCents)}</td>
                 </tr>
               ))}
               {run.partnerView?.rejectedCount ? <tr><td>{ITEM_LABELS.rejected}</td><td className="text-right tabular-nums">{run.partnerView.rejectedCount}</td><td /><td className="text-right text-muted-foreground">—</td></tr> : null}

@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
  */
 export function HomePanel({
   title,
+  icon,
   period,
   sub,
   badge,
@@ -22,6 +23,8 @@ export function HomePanel({
   bodyClassName,
 }: {
   title: string;
+  /** A mark before the title (a person's initials). */
+  icon?: ReactNode;
   /** Muted after the title: "14 days", "today". */
   period?: string;
   /** A muted line under the title: "Last 7 days". */
@@ -40,12 +43,13 @@ export function HomePanel({
   return (
     <section aria-label={title} data-size="panel" className={cn("m-glass flex min-w-0 flex-col rounded-lg border border-border", className)}>
       <header className="flex min-h-12 items-center gap-2 px-4 pt-3">
+        {icon}
         <div className="flex min-w-0 flex-1 flex-col">
           <h2 className="m-0 min-w-0 truncate font-[family-name:var(--font-display)] text-[0.9375rem] font-semibold leading-snug tracking-[-0.01em] text-foreground">
             {title}
             {period && <span className="font-[family-name:var(--font-sans)] text-[0.8125rem] font-normal tracking-normal text-muted-foreground"> · {period}</span>}
           </h2>
-          {sub && <span className="truncate text-xs text-muted-foreground">{sub}</span>}
+          {sub && <span className="line-clamp-2 text-xs text-muted-foreground">{sub}</span>}
         </div>
         {badge}
         {link && (roundLink ? <PanelRoundLink href={link.href} label={link.label} /> : <PanelLink href={link.href}>{link.label}</PanelLink>)}

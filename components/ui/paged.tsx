@@ -19,22 +19,39 @@ import { MAX_ROWS } from "@/components/ui/use-fitting-page-size";
  */
 const PAGE = 10;
 
-const PagedContext = createContext<{ page: number; setPage: (page: number) => void; pageSize: number } | null>(null);
+type PageTurn = "next" | "prev" | null;
 
-export function PagedProvider({ pageSize = PAGE, children }: { pageSize?: number; children: ReactNode }) {
-  const [page, setPage] = useState(1);
-  const size = Math.max(1, Math.min(pageSize, MAX_ROWS));
-  return <PagedContext.Provider value={{ page, setPage, pageSize: size }}>{children}</PagedContext.Provider>;
+/**
+ * For a list paged with the `Pager` directly (not PagedBody): which way the last page turn went, for the rows'
+ * `data-page-turn`; key the rows' container by the page so the new page's rows come in (§ Motion, "rows-page").
+ */
+export function usePageTurn(page: number): "next" | "prev" | undefined {
+  const [seen, setSeen] = useState<{ page: number; turn?: "next" | "prev" }>({ page });
+  if (seen.page !== page) setSeen({ page, turn: page > seen.page ? "next" : "prev" });
+  return seen.page === page ? seen.turn : page > seen.page ? "next" : "prev";
 }
 
-/** The rows of the current page. Renders a `<tbody>` unless `as` says otherwise (`ul`, `ol`, `div`). */
+const PagedContext = createContext<{ page: number; setPage: (page: number) => void; pageSize: number; turn: PageTurn } | null>(null);
+
+export function PagedProvider({ pageSize = PAGE, children }: { pageSize?: number; children: ReactNode }) {
+  const [{ page, turn }, setState] = useState<{ page: number; turn: PageTurn }>({ page: 1, turn: null });
+  const setPage = (next: number) => setState((now) => ({ page: next, turn: next === now.page ? now.turn : next > now.page ? "next" : "prev" }));
+  const size = Math.max(1, Math.min(pageSize, MAX_ROWS));
+  return <PagedContext.Provider value={{ page, setPage, pageSize: size, turn }}>{children}</PagedContext.Provider>;
+}
+
+/**
+ * The rows of the current page. Renders a `<tbody>` unless `as` says otherwise (`ul`, `ol`, `div`).
+ * Turning the page (§ Motion, "rows-page"): the new page's rows come in 8px from the side the pager moved toward,
+ * eight at most one after another; the first page drawn does not move.
+ */
 export function PagedBody({ as: Tag = "tbody", className, label, children }: { as?: "tbody" | "ul" | "ol" | "div"; className?: string; label?: string; children: ReactNode }) {
   const paged = useContext(PagedContext);
   const rows = Children.toArray(children);
   const shown = paged ? paginate(rows, paged.page, paged.pageSize).rows : rows;
   // data-paged-body: what useCardPageSize measures when the rows are not a <tbody> (it looked for it, and nothing
   // set it, so a list stayed at 10 rows; Compliance foundation pass 2026-11-03).
-  return <Tag className={className} aria-label={label} data-paged-body={Tag === "tbody" ? undefined : ""}>{shown}</Tag>;
+  return <Tag key={paged?.page ?? 1} className={className} aria-label={label} data-paged-body={Tag === "tbody" ? undefined : ""} data-page-turn={paged?.turn ?? undefined}>{shown}</Tag>;
 }
 
 /** The Pager for the surrounding PagedProvider; draws nothing when every row fits one page. */

@@ -63,6 +63,9 @@ export const NOTIFICATION_EVENTS: readonly NotificationEvent[] = [
   // ── Money ────────────────────────────────────────────────────────────────────────────────────
   // LA-2.19: a vendor's return window closes within three days with money still claimable. Written daily by
   // emit_return_window_alerts (20261026100000) to the owner and the bookkeeper — the roles Returns opens for.
+  // Expenses tracker (owner, 2026-11-06): a monthly bill came back and waits for its OK. Written by
+  // generate_recurring_expenses (20261106120000), once per bill per month.
+  { key: "recurring_expense_due", label: "Monthly bill to OK", description: "A monthly bill came back and waits for you to OK it before it is booked and marked paid.", group: "Money", owned_by_module: "LA-7.3", defaults: on(true, false, true), supports_digest: true, is_protected: false, required_feature: "profit_and_loss", roles: ["owner", "bookkeeper"], kinds: ["recurring_expense_due"], email: "outbox" },
   { key: "return_window_closing", label: "Return window closing", description: "A vendor's return window closes soon and bad leads are still unclaimed.", group: "Money", owned_by_module: "LA-2.19", defaults: on(true, true), supports_digest: false, is_protected: false, required_feature: "true_cpa", roles: ["owner", "bookkeeper"], kinds: ["return_window_closing"], email: "outbox" },
   { key: "carrier_status_unmapped", label: "Carrier status needs mapping", description: "A carrier file used a policy status the layout does not know.", group: "Money", owned_by_module: "LA-4.6", defaults: on(false, true), supports_digest: true, is_protected: false, required_feature: "statement_ingestion", roles: ["owner", "bookkeeper"], kinds: [], email: "sender" },
   // ── Retention ────────────────────────────────────────────────────────────────────────────────

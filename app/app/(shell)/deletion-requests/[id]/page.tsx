@@ -71,7 +71,7 @@ export default async function DeletionRequestPage({ params, searchParams }: { pa
       title={deletionWho(r)}
       chip={<StatusChip tone={DELETION_TONE[r.status as DeletionStatus]}>{STATUS_LABELS[r.status as DeletionStatus] ?? r.status}</StatusChip>}
       facts={facts}
-      lead={<ViewTabs label="This request" value={tab} tabs={[
+      tabs={<ViewTabs label="This request" value={tab} tabs={[
         { key: "held", label: r.status === "completed" ? "What was deleted" : "What we hold", href: base },
         { key: "trail", label: "Audit trail", count: events.length || null, href: `${base}?tab=trail` },
       ]} />}

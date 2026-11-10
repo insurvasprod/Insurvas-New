@@ -13,6 +13,7 @@ import { LockIcon, SettingsSectionProvider } from "@/components/app/settings/pri
 import { PageHeader } from "@/components/ui/page-header";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { LoadingRows } from "@/components/ui/page-states";
+import { useStepDirection } from "@/components/ui/use-step-direction";
 import { groupSections, parseSettingsHash, searchSettings, sectionHref, visibleSections } from "@/lib/settings/registry";
 import { revealAnchor } from "@/lib/settings/revealAnchor";
 import type { SettingsSection } from "@/lib/settings/sections";
@@ -158,6 +159,9 @@ export function AgentSettingsTabs({
       ?? inPage.find((tab) => tab.id === activeId) ?? inPage.find((tab) => tab.id === firstAvailable),
     [activeId, firstAvailable, inPage, routeSection, visible]
   );
+  // A section further down the menu slides in from the right, one further up from the left (§ Motion, Wave 7).
+  const sectionOrder = useMemo(() => visible.map((tab) => tab.id), [visible]);
+  const sectionEnter = useStepDirection(active?.id, sectionOrder);
 
   // The six fixed groups, in order; a group with nothing visible in it is not drawn at all.
   const grouped = useMemo(() => groupSections(visible), [visible]);
@@ -581,6 +585,7 @@ export function AgentSettingsTabs({
             aria-label={titleCase(active.label)}
             tabIndex={-1}
             key={active.id}
+            data-enter={sectionEnter === "area" ? undefined : sectionEnter}
           >
             <SettingsSectionProvider value={{ title: active.label, description: active.short ?? active.description, id: active.id, history: false, framed: !guiding, actionsSlot, leadSlot }}>
               {/* A routed section's board handles its own read-only state. */}

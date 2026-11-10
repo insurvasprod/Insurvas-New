@@ -13,6 +13,7 @@ export type PartnerTerm = {
 };
 
 const UNIT: Record<string, string> = {
+  per_submitted_application: "submitted application",
   per_transfer: "transfer",
   per_lead: "lead",
   per_sale: "sale",

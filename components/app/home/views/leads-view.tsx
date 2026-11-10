@@ -1,4 +1,8 @@
 import { HomePanel } from "@/components/app/home/home-panel";
+import { firstOpenable } from "@/lib/dashboard/roleHome";
+import { monthOf } from "@/lib/dashboard/views/agency";
+import { dayKey, loadSalesSnapshot } from "@/lib/dashboard/views/sales";
+import { funnelCard } from "./agency-cards";
 import { DashChart, DashFunnel, DashHero, DashLayout, DashList, DashNeeds, DashTable } from "@/components/app/home/dash/dash-kit";
 import { DonutChart, LineSeries, type ChartTone } from "@/components/ui/chart";
 import { dollars, loadLeadsView } from "@/lib/dashboard/views/leads";
@@ -36,8 +40,17 @@ export function leadsFunnelCard(data: Awaited<ReturnType<typeof loadLeadsView>>)
   return left;
 }
 
+/** The Applications page, as data (lib/menu: no menu key inside a conditional). */
+const SALES_PAGE = ["sell.applications"] as const;
+
 export async function LeadsView(props: DashViewProps) {
-  const data = await loadLeadsView(props);
+  // Lead to policy reads the same cases and applications as the Overview and the agency dashboard, so the three
+  // funnels agree and every step is one cohort (the dial funnel's steps came from different lists).
+  const salesHref = firstOpenable(SALES_PAGE, props.available, props.context.role, props.solo);
+  const [data, deals] = await Promise.all([
+    loadLeadsView(props),
+    salesHref ? loadSalesSnapshot(props.context.tenantId, props.scope).catch(() => null) : Promise.resolve(null),
+  ]);
   const n = (value: number) => value.toLocaleString("en-US");
 
   const needs = data.needs ? <DashNeeds items={data.needs} /> : null;
@@ -70,7 +83,8 @@ export async function LeadsView(props: DashViewProps) {
     </HomePanel>
   ) : null;
 
-  const left = leadsFunnelCard(data);
+  const month = monthOf(dayKey(props.now, props.zone));
+  const left = funnelCard({ leads: data.chart?.totalIn ?? null, called: data.chart?.totalCalled ?? null, quotes: deals?.quotes ?? null, apps: deals?.applications ?? null, month, zone: props.zone, href: data.funnel?.href ?? data.chart?.href ?? salesHref }) ?? leadsFunnelCard(data);
 
   const right = data.vendors ? (
     <DashTable

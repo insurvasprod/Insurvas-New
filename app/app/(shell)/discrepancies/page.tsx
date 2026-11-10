@@ -62,7 +62,7 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   return (
     <CommissionsPage
       step="discrepancies"
-      lead={
+      tabs={
         <ViewTabs
             label="Pay issue views"
             active={tab}

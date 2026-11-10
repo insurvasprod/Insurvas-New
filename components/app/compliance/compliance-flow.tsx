@@ -25,12 +25,15 @@ async function openSteps(): Promise<{ open: Set<ComplianceStep>; owner: boolean 
   // Licences & appointments keeps its own route's rule (owner and producer), agency or not.
   if (vault.entitled && actAsPage(vault, ["owner", "producer"])) open.add("appointments");
   if (!anyGuard) return { open, owner: false };
-  // AG-0.5: inside an agency every step is the owner's and admins' business; a narrow session opens none.
-  if ((await scopeFor(anyGuard.context)) !== null) return { open, owner: false };
+  // AG-0.5: inside an agency every step is the owner's and admins' business; a narrow session opens none. The scope and
+  // the evidence rule are read at once, not one after the other (perf pass 2026-11-08).
+  const mayEvidence = litigation.entitled && actAsPage(litigation, ["owner", "producer"]);
+  const [scope, reports] = await Promise.all([scopeFor(anyGuard.context), mayEvidence ? mayGenerateReports(litigation.context.tenantId, litigation.role) : false]);
+  if (scope !== null) return { open, owner: false };
   if (tcpa.entitled && actAsPage(tcpa, ["owner", "producer"])) { open.add("overview"); open.add("complaints"); open.add("deletions"); }
   if (tcpa.entitled && actAsPage(tcpa, ["owner", "producer", "assistant", "setter"])) open.add("dnc");
   if (consent.entitled && actAsPage(consent, ["owner", "producer", "assistant"])) open.add("consent");
-  if (litigation.entitled && actAsPage(litigation, ["owner", "producer"]) && (await mayGenerateReports(litigation.context.tenantId, litigation.role))) open.add("evidence");
+  if (mayEvidence && reports) open.add("evidence");
   return { open, owner: tcpa.entitled && tcpa.role === "owner" };
 }
 
@@ -44,13 +47,13 @@ async function openSteps(): Promise<{ open: Set<ComplianceStep>; owner: boolean 
  * `facts`. A client screen can also put its tabs and buttons there through `ComplianceSlot` (`lead`,
  * `corner`), which portals into the two empty slots drawn here.
  */
-export async function ComplianceFlowPage({ step, title, info, chip, facts, lead, actions, children }: {
+export async function ComplianceFlowPage({ step, title, info, chip, facts, tabs, actions, children }: {
   step: ComplianceStep;
   title?: string;
   info?: ReactNode;
   chip?: ReactNode;
   facts?: ReactNode;
-  lead?: ReactNode;
+  tabs?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -66,7 +69,7 @@ export async function ComplianceFlowPage({ step, title, info, chip, facts, lead,
       titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${heading}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
       // The facts never widen the title's column: they wrap in it, at least 360px wide (Accounting, 2026-11-03).
       meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
-      lead={<>{lead}<div id="compliance-lead" className="flex min-w-0 flex-wrap items-center gap-2 empty:hidden" /></>}
+      tabs={<>{tabs}<div id="compliance-lead" className="flex min-w-0 flex-1 flex-wrap items-end gap-2 empty:hidden" /></>}
       actions={<>{actions}<span id="compliance-corner" className="contents" /></>}
       rail={{
         label: "Compliance",

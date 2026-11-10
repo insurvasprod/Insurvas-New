@@ -7,13 +7,16 @@ import { LoadingRows } from "./page-states";
  * in flight. Shaped like the page that is coming — the header's actions, the stat strip, then the
  * table card with its toolbar — at the page's full width, so nothing jumps when the data arrives.
  * Inside an already-drawn page use `SectionLoading` (components/ui/page-states.tsx) instead.
+ *
+ * `header={false}` leaves out the header's shape, for a frame that draws the real title around it (ShellLoading,
+ * a merged page's step loading under its own title and rail).
  */
-export function PageLoading({ strip = true, rows = 8 }: { strip?: boolean; rows?: number }) {
+export function PageLoading({ strip = true, rows = 8, header = true }: { strip?: boolean; rows?: number; header?: boolean }) {
   return (
     <div role="status" aria-live="polite" className="space-y-6">
       <span className="sr-only">Loading</span>
       {/* The header's shape (owner 2026-10-30): the trail, then the title with the actions on its line. */}
-      <div aria-hidden="true" className="flex flex-col gap-1.5">
+      {header && <div aria-hidden="true" className="flex flex-col gap-1.5">
         <div className="flex min-h-6 items-center"><div className="h-3 w-32 m-skel rounded-full" /></div>
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
           <div className="h-7 w-48 max-w-[60%] m-skel rounded-md" />
@@ -22,7 +25,7 @@ export function PageLoading({ strip = true, rows = 8 }: { strip?: boolean; rows?
             <div className="h-9 w-28 m-skel rounded-md" />
           </div>
         </div>
-      </div>
+      </div>}
       {strip && (
         <div aria-hidden="true" className="overflow-hidden rounded-lg border border-border">
           <div className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">

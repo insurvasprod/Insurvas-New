@@ -28,9 +28,11 @@ What lives here and which rule owns it:
 | Loading, empty and error states | `page-states.tsx`, `page-loading.tsx` | §7 |
 | Side panel, tabs, info tip | `detail-panel.tsx`, `view-tabs.tsx`, `info-tip.tsx` | §8 |
 | Compact icon switch for dense page views | `view-tabs.tsx` (`IconViewSwitch`) | §6 |
+| Moving between views without a reload: `IntentLink` (a tab or rail link: hover prefetch, pending mark), `useNavTransition` + `NavPending` (a control that needs the server), `setParamsInPlace` (a pure view toggle: no round trip). The content dims (`data-page-content`) and arrives in the one 150ms `m-content-in` | `nav-pending.tsx` | §8 |
 | Searchable select (one choice, search at the top; a quick filter beside a search): `SelectMenu` | `select-menu.tsx` | §5, §6a |
 | Dialog, confirm, sheet, popover, menu, toast, search | `dialog.tsx`, `confirm-dialog.tsx`, `sheet.tsx`, `popover.tsx`, `dropdown-menu.tsx`, `toaster.tsx` (raise toasts with `lib/notify`), `search-command.tsx` | §11 |
 | Status chip | `status-chip.tsx` | §12 |
+| Motion: overlay enter/exit, the panel's exit, the tab pill (`tab-track.tsx`), page turns (`paged.tsx`), chart tweens, page transitions (`components/portal/portal-page-transition.tsx`), links that prefetch and show pending (`nav-pending.tsx`) | the motion layer in `app/globals.css`; see `/app/motion-lab` | §18 |
 
 Do not: add a second component that does what one of these does, name a colour (use tokens), or
 add page-specific styling. Extend the component instead.

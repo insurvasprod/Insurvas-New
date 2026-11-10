@@ -116,11 +116,12 @@ export function AuthLayout({
             )}
             {steps && (
               <ViewTransition name="auth-steps" share="auth-still" default="none">
-                <div><AuthSteps {...steps} compact={single} /></div>
+                <div data-auth-steps=""><AuthSteps {...steps} compact={single} /></div>
               </ViewTransition>
             )}
             <ViewTransition name="auth-step-body" share="auth-step" enter="auth-rise" exit="auth-fade" default="none">
-              <div>
+              {/* data-auth-step-body: on a sign-up step this slides in from the right while the bars hold (globals.css). */}
+              <div data-auth-step-body="">
                 {heading && !(single && steps) && <div data-auth-heading-slot="">{heading}</div>}
                 <div data-auth-card="">
                   {back && <AuthBack href={back.href} label={back.label} />}

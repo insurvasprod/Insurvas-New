@@ -35,11 +35,11 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
     problem = error.message;
   }
   if (loaded?.initial && !EDITABLE.includes(loaded.initial.status)) {
-    return <AccountingPage step="bills" title={`Invoice ${loaded.initial.invoiceNumber}`}><TableCard><EmptyState title="This invoice can no longer change" hint="An approved, paid or void invoice is corrected by voiding it, never by editing." /></TableCard></AccountingPage>;
+    return <AccountingPage step="bills" title={`Bill ${loaded.initial.invoiceNumber}`}><TableCard><EmptyState title="This bill can no longer be changed" hint="Once a bill is approved, paid or void, correct it by voiding it and entering it again." /></TableCard></AccountingPage>;
   }
   const templateId = template === "first" ? loaded?.templates[0]?.id : template && UUID.test(template) ? template : undefined;
   return (
-    <AccountingPage step="bills" title={loaded?.initial ? `Edit invoice ${loaded.initial.invoiceNumber}` : "Enter an invoice"} facts={loaded?.initial ? loaded.initial.sourceName : undefined}>
+    <AccountingPage step="bills" title={loaded?.initial ? `Edit bill ${loaded.initial.invoiceNumber}` : "Enter a bill"} facts={loaded?.initial ? loaded.initial.sourceName : undefined}>
       {loaded ? <InvoiceEntry sources={loaded.sources} templates={loaded.templates} initial={loaded.initial} templateId={templateId} /> : <TableCard><EmptyState title="Not switched on yet" hint={problem ?? ""} /></TableCard>}
     </AccountingPage>
   );

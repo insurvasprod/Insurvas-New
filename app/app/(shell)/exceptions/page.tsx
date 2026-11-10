@@ -45,7 +45,7 @@ export default async function ExceptionsPage({ searchParams }: { searchParams: P
   ) : undefined;
 
   return (
-    <DataInPage step="needs-you" title="Exceptions" lead={tabs}>
+    <DataInPage step="needs-you" title="Exceptions" tabs={tabs}>
       {!view.available ? (
         // §3: a blocked state raises a bell alert, never a box on the page.
         <Callout tone="warning" title={QUEUES_PENDING_MESSAGE} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -57,6 +57,9 @@ const BACKDROP = "fixed inset-x-0 bottom-0 top-[var(--top-bar-h)] z-40 bg-[rgba(
 
 /** Fields and widgets that use Escape themselves (clearing a search, closing a list). */
 const OWNS_ESCAPE = "textarea, select, input[type=search], [contenteditable=''], [contenteditable='true'], [role=combobox], [aria-haspopup][aria-expanded='true'], [data-escape-local]";
+/** The panel's exit, as `--t-float-out` in globals.css. */
+const PANEL_EXIT_MS = 120;
+
 /** Layers that sit over the panel and close first. */
 const OPEN_LAYER = "[role=dialog][data-state=open], [role=alertdialog][data-state=open], [role=menu][data-state=open], [role=listbox][data-state=open]";
 
@@ -65,6 +68,20 @@ export function DetailPanel({ mode, title, subtitle, status, actions, footer, ch
   const panelRef = useRef<HTMLElement>(null);
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  // A close the person asks for (X, Escape, the backdrop) slides the panel back out to its edge before the caller
+  // unmounts it (§ Motion, "panel": 160ms out; at once under reduced motion). A caller that drops the panel itself,
+  // after a save, still cuts.
+  const [closing, setClosing] = useState(false);
+  const exitTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(exitTimer.current), []);
+  const requestClose = () => {
+    if (closing) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) { onCloseRef.current(); return; }
+    setClosing(true);
+    exitTimer.current = window.setTimeout(() => onCloseRef.current(), PANEL_EXIT_MS);
+  };
+  const requestCloseRef = useRef(requestClose);
+  useEffect(() => { requestCloseRef.current = requestClose; });
 
   // Escape closes the panel — once the field or layer that owns the key has had it.
   useEffect(() => {
@@ -73,7 +90,7 @@ export function DetailPanel({ mode, title, subtitle, status, actions, footer, ch
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest(OWNS_ESCAPE)) return;
       if (document.querySelector(OPEN_LAYER)) return;
-      onCloseRef.current();
+      requestCloseRef.current();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -97,8 +114,8 @@ export function DetailPanel({ mode, title, subtitle, status, actions, footer, ch
 
   return (
     <>
-      {backdrop && <div aria-hidden="true" className={backdrop} onClick={() => onCloseRef.current()} />}
-      <aside ref={panelRef} id={id} tabIndex={-1} aria-labelledby={titleId} data-slot="detail-panel" data-mode={mode} className={cn(FRAME, frame, className)}>
+      {backdrop && <div aria-hidden="true" data-slot="detail-panel-backdrop" data-state={closing ? "closed" : "open"} className={backdrop} onClick={() => requestClose()} />}
+      <aside ref={panelRef} id={id} tabIndex={-1} aria-labelledby={titleId} data-slot="detail-panel" data-mode={mode} data-state={closing ? "closed" : "open"} className={cn(FRAME, frame, className)}>
         <div className="flex shrink-0 items-start gap-3 border-b border-border py-3 pr-3 pl-4">
           <div className="min-w-0 flex-1">
             <h2 id={titleId} className="m-0 truncate text-base font-semibold text-foreground" title={typeof title === "string" ? title : undefined}>{title}</h2>
@@ -106,7 +123,7 @@ export function DetailPanel({ mode, title, subtitle, status, actions, footer, ch
             {status && <div className="mt-1.5 flex flex-wrap items-center gap-2">{status}</div>}
           </div>
           {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-          <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={closeLabel} title={`${closeLabel} (Esc)`} onClick={onClose}><X aria-hidden="true" /></Button>
+          <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-label={closeLabel} title={`${closeLabel} (Esc)`} onClick={requestClose}><X aria-hidden="true" /></Button>
         </div>
         <div className={cn("min-h-0 flex-1 overflow-y-auto", bodyClassName ?? "flex flex-col gap-4 p-4")}>{children}</div>
         {footer && <div className="flex shrink-0 flex-wrap items-center gap-2 border-t border-border bg-card px-4 py-3">{footer}</div>}

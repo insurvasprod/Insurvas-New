@@ -12,6 +12,7 @@ import { AuthShowcase } from "@/components/app/auth-showcase";
 import { AuthAlert, AuthField, AuthInput, AuthSecondary, AuthSubmit } from "@/components/portal/auth-controls";
 import { GoogleButton } from "@/components/portal/google-button";
 import { OtpInput } from "@/components/app/otp-input";
+import { markShellEntrance } from "@/components/app/shell-entrance";
 import { SIGN_IN_LINK_MINUTES, TRUSTED_DEVICE_DAYS } from "@/lib/tenantAuth/signInConstants";
 import type { MaintenanceStatus } from "@/lib/system/constants";
 
@@ -190,7 +191,7 @@ export function TenantAuthWorkspace({
       const body = await response.json().catch(() => null);
       if (!response.ok) { setLoginError(signInError(response, body, "Something went wrong")); return; }
       if (body?.twoFactor) { setLinkToken(null); setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
-      router.replace(body?.redirectTo ?? "/app/dashboard");
+      markShellEntrance(); router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
       setLoginError("Could not sign in. Check your connection and try again.");
     } finally {
@@ -211,7 +212,7 @@ export function TenantAuthWorkspace({
       // Straight to the landing page, once. The old push("/app") + refresh() rendered the landing page
       // twice and bounced through /app's redirect — the slowest part of "11 seconds after login".
       // Nothing above the shell reads the session, so no refresh is needed for the new cookie.
-      router.replace(body?.redirectTo ?? "/app/dashboard");
+      markShellEntrance(); router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
       setLoginError("Could not sign in. Check your connection and try again.");
     } finally {
@@ -231,7 +232,7 @@ export function TenantAuthWorkspace({
       const body = await response.json().catch(() => null);
       if (response.status === 401 && /Sign in again/.test(body?.error ?? "")) { setTwoFactorStep(false); setLoginError(body.error); return; }
       if (!response.ok) { setLoginError(signInError(response, body, "That code is not right.")); if (!useRecoveryCode) setTwoFactorCode(""); return; }
-      router.replace(body?.redirectTo ?? "/app/dashboard");
+      markShellEntrance(); router.replace(body?.redirectTo ?? "/app/dashboard");
     } catch {
       setLoginError("Could not check the code. Check your connection and try again.");
     } finally {

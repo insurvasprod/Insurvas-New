@@ -19,7 +19,7 @@ export const ACCOUNTING_STEPS: { key: AccountingStep; label: string; href: strin
   // LA-7.4 (owner 2026-11-03): partner payout runs moved here from Partners, where Module 7 puts them.
   { key: "payouts", label: "Partner payouts", href: "/app/payouts", icon: "wallet-cards" },
   // AG-1.7 (owner 2026-11-03): the agency's producer payout runs, moved here from Team at the same address.
-  { key: "producerPayouts", label: "Producer payouts", href: "/app/producer-payouts", icon: "banknote" },
+  { key: "producerPayouts", label: "Team payouts", href: "/app/producer-payouts", icon: "banknote" },
   { key: "splits", label: "Producer splits", href: "/app/producer-splits", icon: "split" },
   // AG-1.6 (owner 2026-11-03): policies two producers share, moved here from Team at the same address.
   { key: "commissionSplits", label: "Commission splits", href: "/app/commission-splits", icon: "hand-coins" },

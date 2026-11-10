@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Partner payouts mockups</title>
+<!-- Build reference for the partner payouts rework (owner prompt 2026-11-06). Four screens in the
+     foundation-v3 look (docs/design/foundation-v3/mockup.html): Rulebook, Ledger, Run payouts,
+     Invoice + partner Commissions. Static; numbers are illustrative. -->
+<style>
+  :root { --ink:#0d4037; --muted:#5b6670; --line:#e3e7ea; --card:#fff; --alt:#f5f7f6; --accent:#07d6a0; --accent-ink:#06775a; --warn:#9a6200; --bad:#b42318; --bg:#eef2f0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 Inter, system-ui, sans-serif; color:var(--ink); background:var(--bg); padding:24px 16px; }
+  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:32px 0 8px; } .trail { color:var(--muted); font-size:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:20px; margin-top:12px; max-width:1100px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; } .between { justify-content:space-between; }
+  .tabs a { padding:6px 12px; border-radius:8px; color:var(--muted); text-decoration:none; } .tabs a.on { background:var(--alt); color:var(--ink); font-weight:600; }
+  .btn { border:0; border-radius:8px; padding:8px 14px; background:var(--accent); color:var(--ink); font-weight:600; } .btn.o { background:#fff; border:1px solid var(--line); }
+  table { width:100%; border-collapse:collapse; } th { text-align:left; font-weight:600; font-size:12px; color:var(--muted); height:40px; border-bottom:1px solid var(--line); } td { height:44px; border-bottom:1px solid var(--line); } .r { text-align:right; font-variant-numeric:tabular-nums; }
+  .chip { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; background:var(--alt); } .good { background:#e5f4e4; color:#1f6b2a; } .info { background:#e7f1fb; color:#1d4f86; } .warn { background:#f9eeda; color:var(--warn); } .bad { background:#fbebeb; color:var(--bad); }
+  .step { display:grid; grid-template-columns:28px 1fr; gap:12px; padding:16px 0; border-top:1px solid var(--line); } .step:first-child { border-top:0; }
+  .n { width:28px; height:28px; border-radius:50%; background:var(--alt); display:grid; place-items:center; font-weight:700; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; }
+  label { display:block; font-size:12px; color:var(--muted); margin-bottom:4px; } .ctl { width:100%; height:36px; border:1px solid var(--line); border-radius:8px; padding:0 10px; background:#fff; }
+  .opt { border:1px solid var(--line); border-radius:10px; padding:12px; } .opt.on { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .strip { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; margin-top:12px; max-width:1100px; } .tile { background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px; } .tile b { display:block; font-size:22px; }
+  .stages span { font-size:12px; color:var(--muted); } .stages span.done { color:var(--ink); font-weight:600; }
+  .paper { background:#fff; max-width:720px; border:1px solid var(--line); padding:32px; margin-top:12px; }
+</style>
+</head>
+<body>
+
+<h2>1 · Rulebook (partner record › Commercial terms › Payout rulebook, a form page)</h2>
+<div class="trail">Partners › Apex Health › Payout rulebook</div>
+<div class="card">
+  <div class="step"><div class="n">1</div><div><b>How do they win?</b>
+    <div class="grid" style="margin-top:8px">
+      <div class="opt on"><b>Model A · Quick win</b><br><span class="trail">Paid once a transfer is successful and the client's application is submitted.</span></div>
+      <div class="opt"><b>Model B · Long game</b><br><span class="trail">Paid a share of the commission we receive once the policy is issued.</span></div>
+    </div></div></div>
+  <div class="step"><div class="n">2</div><div><b>How much?</b>
+    <div class="grid" style="margin-top:8px"><div><label>Flat rate per submitted application ($)</label><input class="ctl" value="10.00"></div><div><label>Starts on</label><input class="ctl" value="2026-11-06"></div></div></div></div>
+  <div class="step"><div class="n">3</div><div><b>When are they paid?</b>
+    <div class="grid" style="margin-top:8px"><div><label>Pay schedule</label><select class="ctl"><option>Every 7 days (weekly)</option><option>Every 15 days</option><option>Every 30 days (monthly)</option></select></div>
+    <div><label>Chargebacks</label><select class="ctl"><option>The partner shares them (taken back on the next invoice)</option><option>The agency absorbs them</option></select></div></div></div></div>
+  <div class="step"><div class="n">4</div><div><b>Who gets the money?</b>
+    <div class="grid" style="margin-top:8px"><div><label>Name</label><input class="ctl" value="Dana Whitfield"></div><div><label>Email</label><input class="ctl" value="payouts@apexhealth.test"></div><div><label>Payment method</label><select class="ctl"><option>Bank transfer</option><option>PayPal</option><option>Zelle</option><option>Check</option></select></div></div>
+    <p class="trail">No account numbers are stored here.</p></div></div>
+  <div class="row" style="justify-content:flex-end"><button class="btn o">Discard</button><button class="btn">Save rulebook</button></div>
+</div>
+
+<h2>2 · Accounting › Partner payouts › Ledger</h2>
+<div class="row between" style="max-width:1100px"><div><div class="trail">Accounting › Partner payouts</div><h1>Partner payouts</h1></div>
+  <div class="row"><span class="tabs"><a>Invoices</a><a class="on">Ledger</a><a>Rulebooks</a></span><button class="btn">Run payouts</button></div></div>
+<div class="strip"><div class="tile">Unpaid, not invoiced<b>$1,240.00</b><span class="trail">38 items</span></div><div class="tile">On invoices, unpaid<b>$3,410.00</b><span class="trail">4 invoices</span></div><div class="tile">Paid this month<b>$5,980.00</b></div><div class="tile">Clawbacks waiting<b>−$90.00</b></div></div>
+<div class="card">
+  <table><thead><tr><th>Partner</th><th>Client</th><th>Stage</th><th class="r">Amount</th><th>Expected</th><th>Status</th></tr></thead><tbody>
+  <tr><td>Apex Health</td><td>M. Ortega</td><td class="stages"><span class="done">Transferred</span> → <span class="done">App submitted</span> → <span>Issued</span></td><td class="r">$10.00</td><td>Nov 9</td><td><span class="chip warn">Unpaid</span></td></tr>
+  <tr><td>Harbor Marketing</td><td>J. Lee · AMAM 0119990312</td><td class="stages"><span class="done">Transferred</span> → <span class="done">App submitted</span> → <span class="done">Issued</span></td><td class="r">$500.00<br><span class="trail">50% of $1,000.00</span></td><td>Nov 15</td><td><span class="chip info">On INV-202611-0004</span></td></tr>
+  <tr><td>Apex Health</td><td>R. Diaz</td><td class="stages"><span class="done">Issued</span> → <span class="done" style="color:var(--bad)">Charged back</span></td><td class="r">−$10.00</td><td>Nov 16</td><td><span class="chip bad">Clawback</span></td></tr>
+  <tr><td>Apex Health</td><td>T. Nguyen</td><td class="stages"><span class="done">Transferred</span> → <span class="done">App submitted</span></td><td class="r">$10.00</td><td>Paid Nov 2</td><td><span class="chip good">PAID</span></td></tr>
+  </tbody></table>
+</div>
+
+<h2>3 · Run payouts (confirm pop-up)</h2>
+<div class="card" style="max-width:560px">
+  <b>Run payouts for 3 partners?</b><p class="trail">Each partner whose pay schedule has ended gets a draft invoice with every unpaid item. Items are locked to the invoice so they are never paid twice. Nothing is paid from here.</p>
+  <table><thead><tr><th>Partner</th><th>Cycle</th><th class="r">Items</th><th class="r">Net</th></tr></thead><tbody>
+  <tr><td>Apex Health</td><td>Oct 27 – Nov 2 · weekly</td><td class="r">14</td><td class="r">$130.00</td></tr>
+  <tr><td>Harbor Marketing</td><td>Oct 16 – Oct 31 · 15 days</td><td class="r">3</td><td class="r">$1,420.00</td></tr>
+  <tr><td>SeniorSavers</td><td>Oct 2026 · monthly</td><td class="r">22</td><td class="r">$880.00</td></tr>
+  </tbody></table>
+  <div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn o">Not now</button><button class="btn">Create 3 invoices</button></div>
+</div>
+
+<h2>4a · The invoice PDF</h2>
+<div class="paper">
+  <div class="row between"><div><b style="font-size:18px">Invoice INV-202611-0004</b><div class="trail">Harbor Marketing Co · Oct 16 – Oct 31, 2026</div></div><div class="r"><b>Ellery &amp; Fields</b><div class="trail">12 Main St, Austin TX</div></div></div>
+  <p class="trail">Pay to: Tara Quinn · payouts@harbor.test · Bank transfer · Expected Nov 3</p>
+  <table><thead><tr><th>Policy</th><th>Carrier</th><th class="r">Commission received</th><th class="r">Share</th><th class="r">Amount</th></tr></thead><tbody>
+  <tr><td>J. Lee · 0119990312</td><td>AMAM</td><td class="r">$1,000.00</td><td class="r">50%</td><td class="r">$500.00</td></tr>
+  <tr><td>K. Moss · 0119990318</td><td>AMAM</td><td class="r">$1,840.00</td><td class="r">50%</td><td class="r">$920.00</td></tr>
+  <tr><td>Chargeback · A. Pratt</td><td>AMAM</td><td class="r">−$0.00</td><td class="r">50%</td><td class="r">$0.00</td></tr>
+  <tr><td colspan="4"><b>Total</b></td><td class="r"><b>$1,420.00</b></td></tr></tbody></table>
+</div>
+
+<h2>4b · Partner portal › Commissions</h2>
+<div class="card">
+  <div class="row between"><b>Commissions</b><span class="tabs"><a class="on">Invoices</a><a>Coming up</a></span></div>
+  <table><thead><tr><th>Invoice</th><th>Period</th><th class="r">Amount</th><th>Status</th><th></th></tr></thead><tbody>
+  <tr><td>INV-202611-0004</td><td>Oct 16 – Oct 31</td><td class="r">$1,420.00</td><td><span class="chip info">Awaiting payment</span></td><td class="r">Download PDF · Open</td></tr>
+  <tr><td>INV-202610-0002</td><td>Oct 1 – Oct 15</td><td class="r">$760.00</td><td><span class="chip good">Paid Oct 20</span></td><td class="r">Download PDF · Open</td></tr>
+  </tbody></table>
+  <p class="trail">Coming up: each client you sent, its stage (Transferred → App submitted → Issued) and when you can expect payment.</p>
+</div>
+</body>
+</html>

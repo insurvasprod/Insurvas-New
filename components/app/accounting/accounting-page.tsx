@@ -26,11 +26,17 @@ async function openSteps(): Promise<RailStep[]> {
   // One producer pay (owner 2026-11-03, "merge them"). A solo agent's plan has none (LA-7.5: agencies only). On
   // an agency it is AG-1.5/1.7's (Producer payouts + Commission splits, My pay; decision D5: one ledger), so the
   // LA-7.5 Splits step, its writer already off there (D4), is offered only to a tenant with neither audience.
-  const audience = money.entitled ? await getPlanAudience(money.context.tenantId) : null;
+  // The plan's audience and the session's scope are both read here, after the page's own data: at once, not one after
+  // the other (perf pass 2026-11-08).
+  const returnsRole = returns.entitled && actAsPage(returns, ["owner", "producer", "bookkeeper"]);
+  const [audience, scope] = await Promise.all([
+    money.entitled ? getPlanAudience(money.context.tenantId) : null,
+    returnsRole ? scopeFor(returns.context) : undefined,
+  ]);
   const legacySplits = audience !== "individual" && audience !== "agency";
   const producer = money.entitled && actAsPage(money, ["producer"]);
   // Vendor bills opens on invoices (owner, bookkeeper) or on returns (also a producer; never a narrow agency session).
-  const mayReturns = returns.entitled && actAsPage(returns, ["owner", "producer", "bookkeeper"]) && (await scopeFor(returns.context)) === null;
+  const mayReturns = returnsRole && scope === null;
   const open = new Set<AccountingStep>();
   if (keeper) { open.add("pnl"); open.add("bank"); open.add("expenses"); if (legacySplits) open.add("splits"); }
   if (producer && legacySplits) open.add("splits");
@@ -51,18 +57,18 @@ async function openSteps(): Promise<RailStep[]> {
  * screen, so My balance keeps its own title.
  *
  * Foundation pass (2026-11-03, docs/accounting/FOUNDATION-PASS.md), as Book of business: everything above the
- * step is on the title line. `lead` holds the step's tabs, `actions` at most two buttons and a More menu, and
+ * step is on the title line. `tabs` holds the step's sub-page bar, `actions` at most two buttons and a More menu, and
  * `info` the step's (i) (what used to be a sentence over the table). A record under a step (an invoice, a
  * producer, a payee) passes its `title`, its status `chip` and one muted line of `facts`.
  */
-export async function AccountingPage({ step, pathname, title, info, chip, facts, lead, actions, children }: {
+export async function AccountingPage({ step, pathname, title, info, chip, facts, tabs, actions, children }: {
   step: AccountingStep;
   pathname?: string;
   title?: string;
   info?: ReactNode;
   chip?: ReactNode;
   facts?: ReactNode;
-  lead?: ReactNode;
+  tabs?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -79,7 +85,7 @@ export async function AccountingPage({ step, pathname, title, info, chip, facts,
       // The facts never widen the title's column (it sizes to its content beside the tabs): they wrap in it,
       // at least 360px wide, so a long line cannot squeeze the tabs at 1280 (walk 2026-11-03).
       meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
-      lead={lead}
+      tabs={tabs}
       actions={actions}
       rail={{ label: "Accounting", cookie: ACCOUNTING_RAIL_COOKIE, countsUrl: "/api/app/accounting/steps", waiting: ACCOUNTING_WAITING, steps, step, collapsed: jar.get(ACCOUNTING_RAIL_COOKIE)?.value === "collapsed" }}
     >

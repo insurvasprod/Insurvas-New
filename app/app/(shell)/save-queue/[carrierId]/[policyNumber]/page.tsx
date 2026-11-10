@@ -83,7 +83,7 @@ export default async function SaveCardPage({ params, searchParams }: { params: P
       chip={<StatusChip tone={BAND_TONE[card.band] ?? "neutral"} dot={false} title={`Predicted, ${card.confidence} confidence. Not something the carrier reported.`} className="border border-dashed border-current">{card.score} · {card.band[0].toUpperCase() + card.band.slice(1)}</StatusChip>}
       facts={facts}
       breadcrumbs={retentionTrail("save", name)}
-      lead={<ViewTabs label={name} value={tab} tabs={[
+      tabs={<ViewTabs label={name} value={tab} tabs={[
         { key: "why", label: "Why", href: base },
         { key: "fix", label: "Fix", count: fixes.length || null, href: `${base}?tab=fix` },
         { key: "calls", label: "Calls", count: calls.length, href: `${base}?tab=calls` },

@@ -71,7 +71,7 @@ export default async function ConsentRecordPage({ params, searchParams }: { para
       title={record.leadName}
       chip={<StatusChip tone={TONE[record.status]}>{CONSENT_STATUS_LABELS[record.status]}</StatusChip>}
       facts={facts}
-      lead={<ViewTabs label="This certificate" value={tab} tabs={[
+      tabs={<ViewTabs label="This certificate" value={tab} tabs={[
         { key: "details", label: "Details", href: base },
         { key: "copy", label: "Our stored copy", href: `${base}?tab=copy` },
       ]} />}

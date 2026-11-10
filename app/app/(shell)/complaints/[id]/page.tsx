@@ -73,7 +73,7 @@ export default async function ComplaintPage({ params, searchParams }: { params: 
       title={complaintTitle(c)}
       chip={<StatusChip tone={COMPLAINT_TONE[c.countdown.tone]}>{c.countdown.label}</StatusChip>}
       facts={facts}
-      lead={<ViewTabs label="This complaint" value={tab} tabs={[
+      tabs={<ViewTabs label="This complaint" value={tab} tabs={[
         { key: "complaint", label: "Complaint", href: base },
         { key: "response", label: "Response", href: `${base}?tab=response` },
         { key: "files", label: "Files", count: filesCount || null, href: `${base}?tab=files` },

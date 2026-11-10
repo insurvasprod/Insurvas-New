@@ -1,8 +1,11 @@
+import Link from "next/link";
+
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { PartnersWorkspace, type PartnerExtraTab } from "@/components/app/partners-workspace";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { PartnerQualityDetailWorkspace } from "@/components/app/partner-quality-detail";
 import { PayoutsBoard } from "@/components/app/accounting/payouts-board";
+import { Button } from "@/components/ui/button";
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { scopeFor } from "@/lib/agency/visibility";
 import { listRuns, PayoutError } from "@/lib/accounting/payoutStore";
@@ -62,13 +65,20 @@ export default async function PublisherDetailPage({
       });
       const partner = loaded?.partners.find((row) => row.id === id);
       if (loaded && partner) {
+        // The payout rulebook (owner, 2026-11-06) is set in Accounting › Partner payouts; linked from here.
         extraTabs.payouts = (
-          <PayoutsBoard
-            runs={loaded.runs.filter((run) => run.partnerId === id)}
-            partners={[partner]}
-            readOnly={payouts.entitlement.access === "read_only"}
-            partnerFixed
-          />
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="m-0 text-sm text-muted-foreground">How this partner wins, how much, when they are paid and who gets the money.</p>
+              <Button variant="outline" size="sm" asChild><Link href={`/app/payouts/rulebook/${id}`}>Payout rulebook</Link></Button>
+            </div>
+            <PayoutsBoard
+              runs={loaded.runs.filter((run) => run.partnerId === id)}
+              partners={[partner]}
+              readOnly={payouts.entitlement.access === "read_only"}
+              partnerFixed
+            />
+          </>
         );
       }
     }

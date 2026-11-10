@@ -1,12 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AlignLeft, ChevronsLeft, ChevronsRight, Download, GitBranch, RotateCw, SquareCheck, Trash, type LucideIcon } from "lucide-react";
 
 import { RAIL_COOKIE, leadsInStepStatus, type LeadsInStep } from "@/lib/leadSources/steps";
 import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
 import { cn } from "@/lib/utils";
+import { IntentLink } from "@/components/ui/nav-pending";
+import { rememberLeadsIn } from "@/components/app/step-frame/frame-memory";
 
 type RailStep = { key: LeadsInStep; label: string; sub: string; href: string };
 
@@ -70,6 +71,8 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
     setCollapsed(next);
     try { document.cookie = `${RAIL_COOKIE}=${next ? "collapsed" : "open"}; path=/; max-age=31536000; SameSite=Lax`; } catch { /* still toggles for this visit */ }
   };
+  // Remembered for the shell's loading state, which redraws this title and menu while the next step loads (frame-memory.ts).
+  useEffect(() => { rememberLeadsIn({ steps, collapsed }); }, [steps, collapsed]);
   const [counts, setCounts] = useState<Partial<Record<LeadsInStep, number>>>({});
   const [reviewHref, setReviewHref] = useState<string | null>(null);
   useEffect(() => {
@@ -93,16 +96,19 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
       collapsed ? "lg:w-[72px] lg:px-2" : "lg:w-[248px]",
     )}>
       <ul className="m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-col lg:overflow-visible">
-        {steps.map((item) => {
+        {steps.map((item, index) => {
           const on = item.key === step;
+          // Down the menu slides forward, up it slides back (§ Motion).
+          const here = steps.findIndex((s) => s.key === step);
           const n = counts[item.key];
           const status = n === undefined ? null : leadsInStepStatus(item.key, n);
           const href = item.key === "review" && !on ? reviewHref ?? item.href : item.href;
           const Icon = ICONS[item.key] ?? AlignLeft;
           return (
             <li key={item.key} className="shrink-0">
-              <Link
+              <IntentLink
                 href={href}
+                transitionTypes={on ? undefined : [here >= 0 && index < here ? "nav-back" : "nav-forward"]}
                 aria-current={on ? "page" : undefined}
                 title={collapsed ? `${item.label} · ${status?.text ?? item.sub}` : undefined}
                 className={cn(
@@ -124,7 +130,7 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
                   ? <span aria-hidden="true" className="absolute top-1.5 right-2 hidden size-2.5 rounded-full bg-[var(--warning)] ring-2 ring-[var(--canvas)] lg:block" />
                   : <span className="inline-grid h-5 min-w-[22px] shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--warning)_18%,transparent)] px-[7px] text-xs font-bold text-[var(--warning-ink)] tabular-nums">{badgeFigure(n)}</span>
                 ) : null}
-              </Link>
+              </IntentLink>
             </li>
           );
         })}

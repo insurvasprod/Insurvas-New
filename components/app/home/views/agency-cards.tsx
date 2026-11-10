@@ -39,7 +39,7 @@ export function premiumCard({ rows, apps, today, zone, policiesHref }: { rows: r
     { label: "Policies issued", value: n(issuedCount) },
     { label: "Submitted", value: dollars(submitted) },
     { label: "Average policy", value: issuedCount ? `${dollars(ytd / issuedCount)}/yr` : "—" },
-    { label: "Best month", value: best.issued ? `${best.label} · ${dollars(best.issued)}` : "—" },
+    { label: best.issued ? `Best month · ${best.label}` : "Best month", value: best.issued ? dollars(best.issued) : "—" },
   ];
   return (
     <DashChart
@@ -59,9 +59,9 @@ export function premiumCard({ rows, apps, today, zone, policiesHref }: { rows: r
         unit="issued"
         hrefFor={policiesHref ? (point) => `${policiesHref}?from=${point.key}-01&to=${lastDay(point.key)}` : undefined}
       />
-      <dl className="m-0 mt-2 grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+      <dl className="m-0 mt-2 grid shrink-0 grid-cols-2 gap-2 2xl:grid-cols-4 @container">
         {facts.map((fact) => (
-          <div key={fact.label} className="min-w-0 rounded-xl bg-[var(--surface-alt)] px-3 py-2">
+          <div key={fact.label} title={`${fact.label}: ${fact.value}`} className="min-w-0 overflow-hidden rounded-xl bg-[var(--surface-alt)] px-3 py-2">
             <dt className="truncate text-[0.6875rem] text-muted-foreground">{fact.label}</dt>
             <dd className="m-0 truncate text-[0.8125rem] font-semibold tabular-nums text-foreground">{fact.value}</dd>
           </div>
@@ -116,6 +116,7 @@ export function goalCard({ rows, apps, month, previous, zone, policiesHref, appl
   const monthHref = policiesHref ? `${policiesHref}?from=${month}-01&to=${lastDay(month)}` : undefined;
   return (
     <DashRing
+      size={150}
       title={`${monthName(month)} goal`}
       link={monthHref ? { label: "Policies", href: monthHref } : undefined}
       value={share}

@@ -51,7 +51,7 @@ export default async function ProducerSplitsPage({ searchParams }: { searchParam
     <AccountingPage
       step="splits"
       info={data ? <>A negative balance is shown, never reset. This agency&apos;s rule: {policy}. <Link className="underline" href="/app/accounting-settings">Change it in Accounting settings</Link>.</> : undefined}
-      lead={data ? <ViewTabs label="Producer splits" value={view} tabs={[
+      tabs={data ? <ViewTabs label="Producer splits" value={view} tabs={[
         { key: "producers", label: "Producers", count: data.people.length, href: "/app/producer-splits" },
         { key: "runs", label: "Payout runs", count: data.runs.filter((r) => r.status === "draft").length || null, href: "/app/producer-splits?view=runs" },
       ]} /> : undefined}

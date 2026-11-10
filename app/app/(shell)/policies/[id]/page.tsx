@@ -187,7 +187,7 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
       title={`${row.policy_number} · ${row.insured_name}`}
       chip={<StatusChip tone={status.tone}>{status.label}</StatusChip>}
       facts={<PolicyLead facts={[row.carrier, row.product, row.annual_premium_cents !== null ? `${statementMoney(Math.round(row.annual_premium_cents / 12))}/mo` : null, `lead source ${leadSource}`, "entered by hand"]} />}
-      lead={<ViewTabs label="This policy" value={tab} tabs={tabs.map((item) => ({ ...item, href: hrefs[item.key] }))} />}
+      tabs={<ViewTabs label="This policy" value={tab} tabs={tabs.map((item) => ({ ...item, href: hrefs[item.key] }))} />}
       actions={<><RecordLapseSignal policy={{ id: row.id, status: row.status }} /><PolicyMoreMenu links={[]} policyNumber={row.policy_number} /></>}
     >
 

@@ -73,7 +73,7 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   }
   if (clawed !== null && money) {
     const change = clawedBefore !== null ? pctChange(clawed, clawedBefore) : null;
-    tiles.push(<StatTile key="chargebacks" label="Chargebacks" value={dollars(clawed)} valueTone={clawed > 0 ? "warning" : undefined} delta={change !== null ? { value: change, goodWhen: "down" } : undefined} footnote={clawedBy ? `Clawed back · ${n(clawedBy)} ${clawedBy === 1 ? "producer" : "producers"}` : "Nothing clawed back"} href={links.ledger ?? undefined} />);
+    tiles.push(<StatTile key="chargebacks" label="Chargebacks" value={dollars(clawed)} valueTone={clawed > 0 ? "warning" : undefined} delta={change ? { value: change, goodWhen: "down" } : undefined} footnote={clawedBy ? `Clawed back · ${n(clawedBy)} ${clawedBy === 1 ? "producer" : "producers"}` : "Nothing clawed back"} href={links.ledger ?? undefined} />);
   }
   const strip = tiles.length ? <StatStrip label={`The agency in ${name}`}>{tiles}</StatStrip> : null;
 
@@ -146,9 +146,8 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   ) : null;
 
   /* ── Right column: the commission card, received vs expected, recent activity ──────────────── */
-  // The carriers' money in this month (the P&L statement's own "in"), and what the pay issues say is still owed.
+  // The carriers' money in this month (the P&L statement's own "in").
   const received = accounting?.statement?.inCents ?? null;
-  const owedShort = accounting?.payIssuesOwedCents ?? null;
   const books = accounting?.month.label ?? name;
   const hero = money && received !== null ? (
     <DashHero
@@ -162,16 +161,19 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
       href={links.ledger ?? accounting?.hrefs.pnl ?? "/app/ledger"}
     />
   ) : null;
-  const expected = received !== null && owedShort !== null ? received + owedShort : null;
+  // Received vs expected: the month's commission the bank confirms against what the carriers reported for it — one
+  // month on both sides (the Accounting view's own figure). Without a bank feed there is nothing to compare, so the
+  // card is left out rather than set against every pay issue ever opened.
+  const banked = accounting?.receivedCents ?? null;
   const payIssues = accounting?.needs.payIssues ?? null;
-  const receivedCard = money && received !== null && expected !== null ? (
+  const receivedCard = money && received !== null && received > 0 && banked !== null ? (
     <DashReceived
       title="Received vs expected"
-      received={dollars(received)}
-      expected={dollars(expected)}
-      pct={expected ? Math.round((received / expected) * 100) : 100}
-      short={owedShort ? { text: `${dollars(owedShort)} still owed${payIssues ? ` · ${n(payIssues)} pay ${payIssues === 1 ? "issue" : "issues"}` : ""}`, href: links.discrepancies ?? undefined } : undefined}
-      href={links.ledger ?? undefined}
+      received={dollars(banked)}
+      expected={dollars(received)}
+      pct={Math.min(100, Math.round((banked / received) * 100))}
+      short={banked < received ? { text: `${dollars(received - banked)} to come${payIssues ? ` · ${n(payIssues)} pay ${payIssues === 1 ? "issue" : "issues"}` : ""}`, href: links.discrepancies ?? undefined } : undefined}
+      href={accounting?.hrefs.bank ?? links.ledger ?? undefined}
     />
   ) : null;
 
@@ -196,7 +198,8 @@ export async function AgencyView({ props, period }: { props: DashViewProps; peri
   const row1 = [premium, funnel].filter(Boolean);
   const row2 = [goalsCard, carriers, statesCard].filter(Boolean);
   return (
-    <div className="flex w-full min-w-0 flex-col gap-4 pb-4">
+    // m-dash-ov (§ Motion, 2026-11-09): the cards rise in one after another.
+    <div className="m-dash-ov flex w-full min-w-0 flex-col gap-4 pb-4">
       {strip}
       <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="flex min-w-0 flex-col gap-4">

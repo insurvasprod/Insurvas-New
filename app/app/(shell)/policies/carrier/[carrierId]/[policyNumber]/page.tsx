@@ -11,7 +11,6 @@ import { PolicyCommissionsTab } from "@/components/app/book/policy/commissions-t
 import { PolicyFilesTab } from "@/components/app/book/policy/files-tab";
 import { PolicyHistoryTab } from "@/components/app/book/policy/history-tab";
 import { PolicyOverviewTab } from "@/components/app/book/policy/overview-tab";
-import { PolicyLead } from "@/components/app/book/policy/policy-head";
 import { PolicyMoreMenu, type MoreLink } from "@/components/app/book/policy/policy-islands";
 import { PolicyPipelineTab } from "@/components/app/book/policy/pipeline-tab";
 import { Button } from "@/components/ui/button";
@@ -29,14 +28,12 @@ import { policyHealth } from "@/lib/ingestion/policyMoney";
 import { loadCurrentLinkId, loadPolicyGrace } from "@/lib/ingestion/policyMoneyStore";
 import { loadIssuedAwaitingOne, loadPolicy, PolicyBookError } from "@/lib/ingestion/policyBookStore";
 import { MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
-import { agentMismatchLine, cardMoveHistoryRows, carrierPolicyHref, changeClientHref, mergeHistory, POLICY_TABS, policyTabOf, saleCameFrom, showsProvisional, type PolicyTab } from "@/lib/ingestion/policyPage";
+import { cardMoveHistoryRows, carrierPolicyHref, changeClientHref, mergeHistory, POLICY_TABS, policyTabOf, saleCameFrom, showsProvisional, type PolicyTab } from "@/lib/ingestion/policyPage";
 import { loadPolicyFiles, loadPolicyFindings, loadPolicyHistory, loadPolicyLink, loadPolicyPipeline, policyKeys, policyTabCounts, STAGE_HISTORY_PENDING_MESSAGE, type PolicyPipeline } from "@/lib/ingestion/policyPageStore";
 import { isRecordUuid } from "@/lib/ingestion/path";
 import { loadPolicyRuleEvents, type EvaluationRow } from "@/lib/pipelineRules/store";
 import { openLadderCaseId } from "@/lib/retention/cases/store";
 
-const LINK = "font-medium text-[var(--accent-ink)] hover:underline";
-const money = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
 /**
  * Book of business › Policies › one policy (LA-4.11; round 2 of the Book of business, 2026-11-02): a detail
@@ -93,7 +90,6 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
   // ── the header: the health chip, the muted facts, one button and More ──
   const late = (policy.daysPastDue ?? 0) > 0;
   const atRiskCents = view.ledger.unearned?.atRiskCents ?? null;
-  const monthly = policy.annualCents === null ? null : Math.round(policy.annualCents / 12);
   const health = policyHealth({ status: policy.status, paidTo: policy.paidTo, daysPastDue: policy.daysPastDue, asOf: policy.asOf, premiumMode: policy.premiumMode });
   const canLink = canEditLink && !readOnly;
   // Round 6: the Save queue is retired (call of 2026-11-05); an open Retention case for this policy is the place to work it.
@@ -118,21 +114,9 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
       <PolicyMoreMenu links={primary ? links.slice(1) : links} policyNumber={policy.policyNumber} unlink={linkId ? { matchId: linkId, clientName, disabledReason: readOnly ? "The account is read-only." : null } : null} />
     </>
   );
-  // Round 3: the Overview's three status lines, as chips and links on the header's facts line.
-  const saleState = sale ? (sale.outcome ? sale.outcome.replaceAll("_", " ") : sale.status ? sale.status.replaceAll("_", " ") : null) : null;
-  // QA 2026-11-03: the carrier pays one producer, the sale names another — said once, plainly.
-  const mismatch = keys?.sale ? agentMismatchLine(keys.carrierAgent, { userId: keys.sale.agentUserId, name: keys.sale.agentName }) : null;
-  // Round 6: risk and status as marks, the long words in tooltips. Provisional is an amber dot (its "Check the
-  // client" is on the Overview's Client row); the application is ⋯ › Open the application, its state in the tooltip.
+  // Owner 2026-11-10: no line under the client's name. The policy number, carrier and product are in the
+  // Overview's strip and Policy card; Provisional and "Check the client" are on its Client row.
   const provisional = showsProvisional(client?.provisional, keys?.link);
-  const notices = (
-    <>
-      {mismatch && <span className="inline-flex items-center gap-1.5" title="The writing number on the carrier's row maps to a different producer than the one who sold it"><StatusChip tone="warning">{mismatch}</StatusChip></span>}
-      {provisional && <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--warning-ink)]" title="This client was built from the carrier's file: check it against your leads"><span aria-hidden="true" className="size-2 rounded-full bg-[var(--warning)]" />Provisional</span>}
-      {sale && <Link href={`/app/applications/${sale.caseId}`} className={LINK} title={`Linked to ${sale.name ? `${sale.name}'s` : "an"} application${saleState ? ` · ${saleState}` : ""}`}>Application</Link>}
-      {!client && !sale && <span className="inline-flex items-center gap-1.5"><StatusChip tone="warning">No client linked</StatusChip>{canLink ? null : <Link href={carrierPolicyHref(policy.carrierId, policy.policyNumber, "client")} className={LINK}>See the Client tab</Link>}</span>}
-    </>
-  );
 
   // Notes is reached from More › Add a note; it shows as a tab only while it is open.
   const tabs = POLICY_TABS.filter((item) => item.key !== "notes" || tab === "notes").map((item) => ({
@@ -147,9 +131,9 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
     <DataInPage
       step="policies"
       title={title}
-      chip={<span title={policy.statusRaw ? `The carrier's word: ${policy.statusRaw}` : undefined}><StatusChip tone={health.tone}>{health.label}</StatusChip></span>}
-      facts={<PolicyLead number={policy.policyNumber} facts={[policy.carrierName, policy.product, monthly !== null ? `${money(monthly)}/mo` : policy.premiumCents !== null ? money(policy.premiumCents) : null, policy.agentName ? `agent ${policy.agentName}` : null]} notices={notices} />}
-      lead={<ViewTabs label="This policy" value={tab} tabs={tabs.map((item) => ({ ...item, href: hrefs[item.key] }))} />}
+      // Owner 2026-11-10: while behind, "N payments behind" is on the Paid to card, not beside the name.
+      chip={late ? undefined : <span title={policy.statusRaw ? `The carrier's word: ${policy.statusRaw}` : undefined}><StatusChip tone={health.tone}>{health.label}</StatusChip></span>}
+      tabs={<ViewTabs label="This policy" value={tab} tabs={tabs.map((item) => ({ ...item, href: hrefs[item.key] }))} />}
       actions={actions}
     >
       {await tabBody()}

@@ -6533,6 +6533,7 @@ export type Database = {
       partner_type: "publisher" | "marketing" | "affiliate";
       partner_status: "draft" | "active" | "paused" | "offboarded";
       partner_payout_model:
+        | "per_submitted_application"
         | "per_transfer"
         | "per_lead"
         | "per_sale"

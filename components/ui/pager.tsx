@@ -130,12 +130,49 @@ function Step({ to, off, current = false, label, hrefFor, onPage, className, chi
     className,
   );
   if (current) return <span className={look} aria-current="page" aria-label={label}>{children}</span>;
-  if (hrefFor && !off) return <Link href={hrefFor(to)} className={look} aria-label={label} scroll={false}>{children}</Link>;
+  if (hrefFor && !off) return <Link href={hrefFor(to)} className={look} aria-label={label} scroll={false} onClick={(event) => markPageTurn(event.currentTarget, to, true)}>{children}</Link>;
   return (
-    <button type="button" className={look} aria-label={label} disabled={off} onClick={() => onPage?.(to)}>
+    <button type="button" className={look} aria-label={label} disabled={off} onClick={(event) => { markPageTurn(event.currentTarget, to); onPage?.(to); }}>
       {children}
     </button>
   );
+}
+
+/**
+ * A list paged in the browser turns its page with motion wherever it is (§ Motion, "rows-page"): the click stamps the
+ * direction on its own card's rows just before the next page is drawn, so the rows that mount come in from that
+ * side; the stamp goes again once they have, so a later filter or refresh does not slide. A list that keys its rows
+ * itself (PagedBody, usePageTurn) already carries its own stamp and is left alone.
+ *
+ * `server`: a page fetched by its address arrives after a round trip, so the stamp waits for the rows to change —
+ * stamping at the click would set the old rows moving — and is given up if nothing arrives in 10s.
+ */
+function markPageTurn(button: HTMLElement, to: number, server = false) {
+  const card = button.closest('[data-slot="table-card"]');
+  const rows = card?.querySelector<HTMLElement>("tbody, [data-paged-body], ul[aria-label]");
+  if (!card || !rows || rows.hasAttribute("data-page-turn")) return;
+  // Previous and First go back; a numbered page goes back when it is lower than the page on show.
+  const label = button.getAttribute("aria-label") ?? "";
+  const current = Number(button.closest("nav")?.querySelector('[aria-current="page"]')?.textContent?.replace(/\D/g, "") || NaN);
+  const turn = /^(Previous|First)/.test(label) || (Number.isFinite(current) && to < current) ? "prev" : "next";
+  const stamp = (target: HTMLElement) => {
+    target.dataset.pageTurn = turn;
+    window.setTimeout(() => { delete target.dataset.pageTurn; }, 450);
+  };
+  if (!server) { stamp(rows); return; }
+  const watched = card as HTMLElement;
+  const ROWS = "tbody, [data-paged-body], ul[aria-label]";
+  const watch = new MutationObserver((records) => {
+    // Only the rows changing counts — not the pager's own pending marker, which lands in the card first.
+    const rowsChanged = records.some((record) => (record.target instanceof Element && record.target.closest(ROWS)) || [...record.addedNodes].some((node) => node instanceof Element && node.matches(ROWS)));
+    const now = rowsChanged ? watched.querySelector<HTMLElement>(ROWS) : null;
+    if (!now) return;
+    watch.disconnect();
+    window.clearTimeout(giveUp);
+    stamp(now);
+  });
+  watch.observe(watched, { childList: true, subtree: true });
+  const giveUp = window.setTimeout(() => watch.disconnect(), 10_000);
 }
 
 /** Clamp a 1-based page number to the rows that exist, and slice them. */
