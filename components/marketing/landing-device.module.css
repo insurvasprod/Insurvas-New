@@ -382,8 +382,29 @@ button.navItem:focus-visible { outline: 2px solid var(--primary); outline-offset
 .invite[data-show="true"] .inviteChip { opacity: 1; transform: none; transition: opacity 180ms cubic-bezier(.23, 1, .32, 1), transform 240ms cubic-bezier(.23, 1, .32, 1); }
 /* Touch screens have their own page tabs; the invite and its corner cue are for a mouse. Below 900px
    the page tabs take over for everyone, and the laptop is too small to carry a label this size. */
-@media (hover: none), (pointer: coarse) { .invite, .cues, .rail::after, .bezel::after { display: none; } }
-@media (max-width: 900px) { .cues { display: none; } }
+@media (hover: none), (pointer: coarse) { .invite, .rail::after, .bezel::after { display: none; } }
+/* Tablets and phones on their side carry the page tabs above the laptop, right where the label would
+   sit, so the cue stays off there. */
+@media (min-width: 641px) and (max-width: 900px), (pointer: coarse) and (min-width: 641px) { .cues { display: none; } }
+
+/* The words follow the input: "pick" for a mouse, "tap" for a finger. */
+.cueTouch { display: none; }
+@media (hover: none), (pointer: coarse) { .cueMouse { display: none; } .cueTouch { display: inline; } }
+
+/* Phones (owner, 12 Nov: "the one that tells us press… is not there"). The same cue, a size down, in
+   the gap between the hero's buttons and the laptop: the label above the top-left corner and the arrow
+   curving from its right end into the bezel. Until a page is chosen, by a tab or in the sidebar. */
+@media (max-width: 640px) {
+  .corner { top: -5px; width: 22px; height: 22px; }
+  .cornerLeft { left: -5px; border-radius: 9px 0 0; }
+  .cornerRight { right: -5px; border-radius: 0 9px 0 0; }
+  .cueLabel { left: 2px; bottom: calc(100% + 30px); gap: 5px; padding: 6px 8px 6px 11px; font-size: 12px; }
+  .cueLabel svg { width: 13px; height: 13px; }
+  .cueArrow { left: 118px; bottom: calc(100% - 6px); width: 21px; height: 40px; }
+  /* Room for the label between the hero's buttons and the laptop: without it the label met the
+     "See how it works" button. */
+  .stage { margin-top: 84px; }
+}
 @media (prefers-reduced-motion: reduce) {
   .device[data-hover]:not([data-learnt]) .rail::after { animation: none; opacity: .8; }
   .inviteChip, .invite[data-show="true"] .inviteChip { transform: none; }

@@ -319,7 +319,7 @@ export function LandingDevice() {
         <div className={styles.cues} aria-hidden="true">
           <span className={`${styles.corner} ${styles.cornerLeft}`} />
           <span className={`${styles.corner} ${styles.cornerRight}`} />
-          <span className={styles.cueLabel}>Pick a page to explore<ArrowRight /></span>
+          <span className={styles.cueLabel}><span className={styles.cueMouse}>Pick a page to explore</span><span className={styles.cueTouch}>Tap a page to explore</span><ArrowRight /></span>
           {/* The viewBox is cropped to the path, so none of the drawn height is wasted on margin.
               It runs out from under the label's right end and sweeps down into the screen. */}
           <svg className={styles.cueArrow} viewBox="22 6 84 160" aria-hidden="true">

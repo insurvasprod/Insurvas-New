@@ -161,7 +161,8 @@
   .tag { bottom: 16px; font-size: 11px; }
   .scene[data-side="then"] .tag { left: 16px; }
   .scene[data-side="now"] .tag { right: 16px; }
-  .content { padding: 0 18px 120px; }
+  /* Centred in the frame (owner, 12 Nov: "more in the center"); the knob and the tag sit below. */
+  .content { padding: 0 18px 24px; }
   .headline { font-size: clamp(30px, 9vw, 40px); }
     .groups { margin-top: 20px; gap: 8px; }
   .group { gap: 6px; }
