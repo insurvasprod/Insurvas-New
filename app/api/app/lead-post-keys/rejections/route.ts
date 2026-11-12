@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { refusedPosts } from "@/lib/leadPost/boardStore";
 import { REASON_WORDS } from "@/lib/leadPost/board";
+import { csvCell } from "@/lib/csv/cell";
 
 /**
  * Round 8 · the Rejections tab: refused posts in a window (today in the viewer's zone, 7 or 30
@@ -10,7 +11,6 @@ import { REASON_WORDS } from "@/lib/leadPost/board";
  */
 const ROLES = ["owner"] as const;
 
-const csvCell = (value: string) => (/[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value);
 
 export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("lead_import", ROLES);

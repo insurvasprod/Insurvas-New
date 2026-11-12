@@ -85,7 +85,6 @@
     "components/app/dialer/lead-column.tsx": 1,
     "components/app/lapse-risk-board.tsx": 1,
     "components/app/lapse-risk-empty.tsx": 1,
-    "components/app/lead-post-keys-settings.tsx": 1,
     "components/app/settings/sales/templates-builder.tsx": 1,
     "components/app/statement-import.tsx": 1
   },

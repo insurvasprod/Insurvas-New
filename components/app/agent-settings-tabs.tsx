@@ -21,7 +21,7 @@ import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { cn } from "@/lib/utils";
 
 /** Pages whose tabs are a fixed header and whose cards scroll in their own area (owner 2026-11-03). */
-const OWN_SCROLL: ReadonlySet<string> = new Set(["my-profile", "business-identity", "billing", "pipelines", "form-templates", "sales-process"]);
+const OWN_SCROLL: ReadonlySet<string> = new Set(["my-profile", "business-identity", "billing", "pipelines", "form-templates", "sales-process", "lead-posting", "cadence"]);
 import { titleCaseNode } from "@/components/ui/title-case";
 import { titleCase } from "@/lib/format/titleCase";
 

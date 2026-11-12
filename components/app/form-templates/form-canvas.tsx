@@ -54,7 +54,7 @@ function QuestionCard({ field, placed, picked, changed, dropping, onPick, onDrag
   const lands = applicationFieldsFor(field.field_key);
   const required = field.is_required || placed.is_required;
   return (
-    <div className={cn("min-w-0", placementWidth(field, placed) === "full" && "sm:col-span-2")} onDragOver={onDragOver} onDrop={onDrop}>
+    <div className={cn("min-w-0", placementWidth(field, placed) === "full" && "@xl:col-span-2")} onDragOver={onDragOver} onDrop={onDrop}>
       {dropping && <div aria-hidden="true" className="mb-2 h-9 rounded-[10px] border-2 border-dashed border-[var(--primary)] bg-[var(--primary-soft)]" />}
       <div
         draggable
@@ -153,7 +153,7 @@ export function FormCanvas({ form, fields, page, onPage, picked, changed, onPick
   }
 
   return (
-    <section aria-label="The form" className="m-glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-[var(--border)]">
+    <section aria-label="The form" className="@container m-glass flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-[var(--border)]">
       <div className="m-glass-head flex min-w-0 items-center gap-2 border-b border-[var(--border)] px-3" onDragOver={(event) => { if (carries(event)) event.preventDefault(); }} onDrop={dropOnTabs}>
         <div className="min-w-0 flex-1 overflow-x-auto py-2"><Segmented label="Pages" value={section?.section_key ?? ""} onChange={onPage} options={pages} /></div>
         <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={onAddPage}><Plus aria-hidden="true" />Page</Button>
@@ -168,7 +168,7 @@ export function FormCanvas({ form, fields, page, onPage, picked, changed, onPick
               <Button type="button" variant="ghost" size="sm" className="text-[var(--error-ink)]" disabled={form.sections.length < 2} onClick={() => onRemovePage(section.section_key)}>Remove page</Button>
             </div>
             <p className="m-0 text-xs text-[var(--muted)]">Partners see this page {ORDINALS[sectionIndex] ?? `number ${sectionIndex + 1}`}. Drag a field by its handle, or drag one in from the left.</p>
-            <div className="grid gap-2.5 sm:grid-cols-2" onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(null); }}>
+            <div className="grid gap-2.5 @xl:grid-cols-2" onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setOver(null); }}>
               {section.fields.map((placed, index) => {
                 const field = byKey.get(placed.field_key);
                 if (!field) return null;
@@ -195,7 +195,7 @@ export function FormCanvas({ form, fields, page, onPage, picked, changed, onPick
                 );
               })}
               <div
-                className={cn("flex min-h-12 items-center justify-center rounded-[10px] border-2 border-dashed text-sm sm:col-span-2", over?.section === section.section_key && over.index === section.fields.length ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border)] text-[var(--muted)]")}
+                className={cn("flex min-h-12 items-center justify-center rounded-[10px] border-2 border-dashed text-sm @xl:col-span-2", over?.section === section.section_key && over.index === section.fields.length ? "border-[var(--primary)] bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "border-[var(--border)] text-[var(--muted)]")}
                 onDragOver={(event) => overAt(event, section.section_key, section.fields.length)}
                 onDrop={(event) => dropAt(event, section.section_key, section.fields.length)}
               >

@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ActiveFilters, ClearFiltersButton, DataToolbar, FilterField, FilterPopover, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { HoverPeek } from "@/components/ui/hover-peek";
 import { Pager, paginate } from "@/components/ui/pager";
 import { TableCard } from "@/components/ui/table-card";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -270,8 +271,13 @@ function Row({ r, f, isOwner, viewerId, acrossSteps }: { r: CaseRow; f: ListFilt
   const touchTitle = [r.contactAttempts > 0 ? `${r.contactAttempts} ${r.contactAttempts === 1 ? "try" : "tries"}` : null, whose ? `owner: ${whose}` : null].filter(Boolean).join(" · ");
   return (
     <LinkRow href={href} className="m-row">
-      <td className="whitespace-nowrap font-medium text-foreground" title={nameTitle}>
-        <Link href={href} className="underline-offset-2 hover:underline">{name}</Link>
+      <td className="whitespace-nowrap font-medium text-foreground">
+        {/* The name is the case page; resting on it shows a read-only peek of the facts one line leaves out. */}
+        <HoverPeek trigger={<Link href={href} className="underline-offset-2 hover:underline">{name}</Link>}>
+          <b className="text-sm text-foreground">{name} · {STEP_LABELS[r.step]}</b>
+          <span className="text-foreground">{nameTitle}</span>
+          <span className="text-muted-foreground">Last: {touchText(r)}{r.contactAttempts ? ` · ${r.contactAttempts} ${r.contactAttempts === 1 ? "try" : "tries"}` : ""}</span>
+        </HoverPeek>
       </td>
       <td className="whitespace-nowrap" title={`${acrossSteps ? `${STEP_LABELS[r.step]} · ` : ""}${why}${waiting ? " · with the carrier" : ""}`}>{REASON_LABELS[r.reason]}</td>
       <td className="whitespace-nowrap text-right tabular-nums" title={[owed, stake].filter(Boolean).join(" · ") || undefined}>{r.monthlyCents === null ? <span className="text-muted-foreground">—</span> : cents2(r.monthlyCents)}</td>

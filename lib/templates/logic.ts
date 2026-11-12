@@ -126,8 +126,9 @@ export function withLogic(field: TemplateFormField, logic: TemplateLogic | null)
   const cleaned = cleanLogic(logic);
   if (!cleaned) return { ...next, show_when: null };
   const shadow = conditionShadow(cleaned);
-  // A boolean answer is stored "true" / "false": the shadow carries that, so a format-1 reader agrees.
-  if (shadow) return { ...next, show_when: { field_key: shadow.field_key, equals: norm(shadow.equals) === "true" || norm(shadow.equals) === "false" ? norm(shadow.equals) : shadow.equals } };
+  // Stored exactly as picked: the rule editor offers a yes / no answer as "true" / "false", the way
+  // the partner form stores it, so a format-1 reader (strict string equality) agrees.
+  if (shadow) return { ...next, show_when: shadow };
   return { ...next, show_when: null, logic: cleaned };
 }
 

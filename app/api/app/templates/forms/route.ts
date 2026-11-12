@@ -22,10 +22,14 @@ export async function GET() {
       throw error;
     });
     const forms = await listForms(auth.context.tenantId, caps);
-    const products = available?.products ?? [];
-    const names = new Map(products.map((product) => [product.code, product.name]));
+    // A form is listed for every product the agency still sells; a copy left from a product it no
+    // longer sells (or its plan dropped) stays out, as the builder cannot open it.
+    const sold = new Set((available?.products ?? []).map((product) => product.code));
+    const listed = forms.filter((form) => sold.has(form.product_code));
+    const names = new Map((available?.products ?? []).map((product) => [product.code, product.name]));
+    const products = (available?.products ?? []).filter((product) => listed.some((form) => form.product_code === product.code));
     return NextResponse.json(
-      { forms: forms.map((form) => ({ ...form, product_name: names.get(form.product_code) ?? form.product_code })), products, capabilities: caps, noProducts: !available },
+      { forms: listed.map((form) => ({ ...form, product_name: names.get(form.product_code) ?? form.product_code })), products, capabilities: caps, noProducts: !available },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

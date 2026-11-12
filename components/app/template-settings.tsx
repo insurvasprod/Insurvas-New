@@ -110,6 +110,9 @@ export function TemplateSettings() {
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
   const [draftsOnLive, setDraftsOnLive] = useState<number | null>(null);
   const [days, setDays] = useState<7 | 30 | 90>(30);
+  /** The capabilities as last read, for loaders that run outside a render. */
+  const capsRef = useRef<Capabilities>(NO_CAPABILITIES);
+  useEffect(() => { capsRef.current = caps; }, [caps]);
 
   const loadList = useCallback(async () => {
     setListLoading(true);
@@ -157,7 +160,7 @@ export function TemplateSettings() {
     const key = loadedVariant ? `variant-${loadedVariant.id}` : loaded.tenant_template_id;
     // The draft picks up where it was left: Insurvas first (when that is live), then this computer.
     let restored: TemplateDraft | null = null;
-    if (!loadedVariant) {
+    if (!loadedVariant && capsRef.current.drafts) {
       const server = await fetch(`/api/app/templates/${loaded.tenant_template_id}/draft`, { cache: "no-store" }).then(async (res) => (res.ok ? (await res.json()).draft : null)).catch(() => null);
       if (server && server.base_revision === live && server.draft && Array.isArray(server.draft.fields)) restored = server.draft as TemplateDraft;
     }
@@ -353,7 +356,8 @@ export function TemplateSettings() {
   if (!current || !draft || !saved || loading) {
     return (
       <SettingsStack className="min-h-0 flex-1 gap-3">
-        <SettingsSectionHeader />
+        {/* Loading keeps the title and its tabs; only the card shows bars (settings foundation board). */}
+        <SettingsSectionHeader tabs={<ViewTabs label="Form" value={tab} onChange={setTab} tabs={[{ key: "build", label: "Build" }, { key: "settings", label: "Settings" }, { key: "results", label: "Results" }, { key: "versions", label: "Versions" }]} />} />
         <button type="button" onClick={backToList} className="self-start text-sm font-semibold text-[var(--accent-ink)] underline-offset-4 hover:underline">Application forms</button>
         {error ? (
           <div className="m-glass rounded-[12px] border border-[var(--border)] p-6">
@@ -606,7 +610,7 @@ export function TemplateSettings() {
             onAddType={locked ? null : (type) => openPage && addField(newField(type), openPage.section_key, openPage.fields.length)}
             matched={{ matched: matchedCount([...placed]), total: placed.size }}
           />
-          <div className="flex min-h-0 shrink-0 lg:w-[340px] xl:w-[400px]">
+          <div className="flex min-h-0 shrink-0 lg:w-[300px] 2xl:w-[400px]">
             {picked?.sectionKey !== null && questionEditor ? questionEditor : (
               <div className="m-glass flex w-full flex-col items-center justify-center gap-2 rounded-[12px] border border-dashed border-[var(--border-strong)] p-6 text-center">
                 <strong className="text-sm font-semibold text-[var(--ink)]">Pick a question to change it</strong>
