@@ -33,9 +33,47 @@
 .itemText { margin: 6px 0 0; color: var(--muted); font-size: 15px; line-height: 1.55; }
 .foot { margin: clamp(40px, 5vw, 64px) 0 0; color: var(--muted); font-size: 13px; }
 
+/* ── Motion (owner, 7 Nov: things show up as you scroll) ─────────────────────────────────────────
+   The header settles in on load, one line after another. The trail (roadmap-trail.tsx): one rail from
+   the first stop to the last, filling with green as you read; a stop lights as the fill reaches it; a
+   quarter's cards rise into place as it comes into view. Ease-out, under 600ms, transform and opacity
+   only. Hidden states apply only once the script has set [data-motion], so the page reads without it. */
+.head > * { animation: rise 620ms cubic-bezier(.22, 1, .36, 1) both; }
+.head > :nth-child(2) { animation-delay: 70ms; }
+.head > :nth-child(3) { animation-delay: 140ms; }
+.head > :nth-child(4) { animation-delay: 210ms; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+
+.trailWrap { position: relative; }
+.rail { position: absolute; left: 4px; display: none; width: 2px; overflow: hidden; border-radius: 2px; background: var(--border); pointer-events: none; }
+.railFill { position: absolute; inset: 0; background: var(--primary); transform: scaleY(0); transform-origin: top; }
+.trailWrap[data-motion] .rail { display: block; }
+/* The one rail replaces the pieces drawn between the stops. */
+.trailWrap[data-motion] .group .when::after { display: none; }
+
+.when i { z-index: 1; transition: transform 380ms cubic-bezier(.22, 1, .36, 1), box-shadow 380ms cubic-bezier(.22, 1, .36, 1); }
+/* Every stop sits on the page's ground, so the rail passes behind it, not through it. */
+.trailWrap[data-motion] .when i { background-color: var(--color-page-bg); }
+.trailWrap[data-motion] .group[data-status="shipped"] .when i { background: var(--primary); }
+.trailWrap[data-motion] .group[data-status="progress"] .when i { background: var(--warning); }
+.when i[data-reached] { box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 22%, transparent); transform: scale(1.15); }
+
+.trailWrap[data-motion] .when, .trailWrap[data-motion] .item { opacity: 0; transform: translateY(16px); transition: opacity 520ms cubic-bezier(.22, 1, .36, 1), transform 560ms cubic-bezier(.22, 1, .36, 1); }
+.trailWrap[data-motion] .item { transition-delay: calc(80ms + var(--i, 0) * 70ms); }
+.trailWrap[data-motion] .group[data-in] .when, .trailWrap[data-motion] .group[data-in] .item { opacity: 1; transform: none; }
+
+/* A card answers the pointer: its edge warms toward the brand. */
+.item { transition: border-color 200ms ease; }
+@media (hover: hover) and (pointer: fine) { .item:hover { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); } }
+
 @media (max-width: 760px) {
   .page { width: calc(100% - 32px); }
   .group { grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .when { display: flex; align-items: baseline; gap: 10px; }
   .group:not(:last-child) .when::after { display: none; }
+  /* Phones: the stops sit inline with their names, so no rail; the reveals stay. */
+  .trailWrap[data-motion] .rail { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .head > * { animation: none; }
 }

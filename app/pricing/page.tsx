@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { PricingPage } from "@/components/public/pricing-page";
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
+import { SmoothScroll } from "@/components/marketing/smooth-scroll";
 import { fetchPublicAddons } from "@/lib/publicPlans/addons";
 import { fetchPublicPlans } from "@/lib/publicPlans/queries";
 
@@ -27,6 +28,7 @@ export default async function PublicPricingPage({ searchParams }: { searchParams
   if (plansResult.status === "rejected") console.error("[pricing] plans unavailable:", plansResult.reason);
   return (
     <div className="type-brand landing-type min-h-screen bg-[var(--color-page-bg)]">
+      <SmoothScroll />
       <SiteHeader current="pricing" floating />
       <PricingPage plans={plans} addons={addons} initialAudience={query.for === "agency" ? "agency" : "individual"} loadError={plansResult.status === "rejected" ? "Pricing is temporarily unavailable. Please try again shortly." : null} />
       <SiteFooter />

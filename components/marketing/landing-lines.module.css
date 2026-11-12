@@ -1,0 +1,184 @@
+/* Life and health as a before and after (owner, 10 Nov; tasks/landing-life-health/spec.md). One frame,
+   two drawn scenes, a slider between them. The scenes are deep olive in both themes; the band around
+   them follows the page. */
+/* A section of its own, edge to edge (owner, 10 Nov: "full width, remove the title"). The scenes are
+   deep olive in both themes. */
+.band { position: relative; background: #0d4037; }
+:global(.dark) .band { background: #031310; }
+/* The section's name, for screen readers only: the scenes carry it visually. */
+.eyebrow { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
+/* ── The frame ───────────────────────────────────────────────────────────────────────────────── */
+.frame {
+  position: relative;
+  isolation: isolate;
+  /* owner, 10 Nov: "a bit smaller in length". Never taller than the screen (a phone on its side). */
+  height: clamp(min(500px, 100svh), 70svh, 700px);
+  overflow: hidden;
+  background: #0d4037;
+  cursor: ew-resize;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.layer { position: absolute; inset: 0; }
+/* "Then" is cut off at the divider by two transforms moving against each other (landing-lines.tsx). */
+.clip { overflow: hidden; z-index: 1; }
+.clip, .clip > .layer { will-change: transform; }
+
+/* ── A scene ─────────────────────────────────────────────────────────────────────────────────── */
+.scene {
+  position: absolute;
+  isolation: isolate; /* its own stack, so "Now"'s words never rise through "Then" */
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #eaf6f2;
+  /* The sky of Framer's Particle Wave Shader, sampled from its own demo: rgb(3 8 3). Flat on
+     purpose — the field supplies all the light, and a lit ground under it only greys it out. */
+  background: rgb(3 8 3);
+}
+/* Light theme (owner, 12 Nov: "it should have different colours in light mode"): the ground is the
+   brand's deep olive ink, #0d4037 — the green of the trust band's photo and the footer — and the
+   particles come from the brand's own mint ramp below. Dark keeps the reference's night. */
+:global(html:not(.dark)) .scene { background: #0d4037; }
+:global(.dark) .frame { background: #031310; }
+
+/* ── The background ────────────────────────────────────────────────────────────────────────────
+   A rolling landscape of particles, each hanging a line to a floor far below, drawn with WebGL —
+   `particles-waves.tsx` has the picture and why it is a shader now. The owner asked for Framer's
+   Particle Wave Shader, exactly (12 Nov). Earlier passes here were a Canvas 2D version of it, a
+   field of dots, a cove of light trails, blurred ribbons, and a lit floor in perspective.
+
+   The palette is sampled from the reference's own particles, left to right: the median hue of
+   single lit points (87°, 104°, 134°), at full value. The shader scales them, and where thousands
+   overlap, additive blending carries them towards white by itself — the bright seams. This leaves
+   the brand ramp on purpose: the owner asked for the reference exactly, and the brand green (164°)
+   is teal-er than anything in it. The canvas reads them as tokens, so the component names no
+   colour (§9). */
+.field {
+  --wave-1: rgb(188 255 105);
+  --wave-2: rgb(153 255 118);
+  --wave-3: rgb(100 255 137);
+
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Light theme: the light end of the brand ramp — soft mint, light mint, soft mint — so the particles
+   read as light against the deep green rather than green on green (owner, 12 Nov: "make the dots
+   brighter, you can't tell anything"). The gain and size are read by the canvas: more light per
+   particle and a slightly larger dot, since this ground is far brighter than the night. */
+:global(html:not(.dark)) .field {
+  --wave-1: rgb(197 255 237);
+  --wave-2: rgb(143 245 213);
+  --wave-3: rgb(197 255 237);
+  --wave-gain: 1.7;
+  --wave-size: 1.25;
+}
+/* Edge to edge, as the reference runs. */
+.field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+/* A scrim under the words. The light moves, so without it the headline's contrast would move with
+   it; this holds the middle of the frame dark enough for white type whatever the trails do. */
+.bloom {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 40% at 50% 38%, rgb(2 12 10 / 44%), rgb(2 12 10 / 0) 78%);
+}
+:global(html:not(.dark)) .bloom { background: radial-gradient(60% 40% at 50% 38%, rgb(8 44 38 / 50%), rgb(8 44 38 / 0) 78%); }
+
+
+/* Film grain and a vignette, so the light reads as photographed rather than drawn. */
+.grain {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  /* A vignette only. This used to carry a white fractal noise as well, at 5% — film grain, for a
+     drawn floor. Over a field of light it was a grey haze across the whole band: it is what
+     raised ours above the reference's mean brightness while halving its highlights. */
+  background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(3 8 3 / 70%) 100%);
+  opacity: .55;
+  pointer-events: none;
+}
+:global(html:not(.dark)) .grain { background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(6 33 28 / 70%) 100%); }
+
+.tag { position: absolute; z-index: 2; bottom: clamp(20px, 3vw, 36px); display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(234 246 242 / 18%); border-radius: 999px; background: rgb(3 19 16 / 45%); padding: 6px 12px; color: rgb(234 246 242 / 86%); font: 650 12px/1 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; }
+.tag::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
+.scene[data-side="then"] .tag { left: clamp(20px, 3vw, 40px); }
+.scene[data-side="now"] .tag { right: clamp(20px, 3vw, 40px); color: #4fe3bb; border-color: rgb(79 227 187 / 40%); }
+.scene[data-side="now"] .tag::before { box-shadow: 0 0 10px #4fe3bb; }
+
+.content { position: relative; z-index: 2; display: grid; align-self: center; justify-items: center; gap: 0; max-width: 940px; padding: 0 clamp(24px, 5vw, 64px) clamp(70px, 12vh, 120px); text-align: center; }
+.headline { margin: 0; color: #f3fbf8; font: 600 clamp(34px, 4.6vw, 68px)/1.02 var(--font-brand); letter-spacing: -.035em; text-wrap: balance; text-shadow: 0 10px 40px rgb(2 12 10 / 55%); }
+.headline em { padding-right: .015em; font-family: var(--font-accent-serif); font-size: 1.12em; font-style: italic; font-weight: 400; letter-spacing: -.01em; background: linear-gradient(180deg, #c5ffed 0%, #07d6a0 85%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+.groups { display: grid; justify-items: center; gap: 10px; margin-top: 26px; }
+.group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.groupLabel { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; color: #4fe3bb; font: 650 13px/1 var(--font-sans); }
+.groupLabel svg { width: 15px; height: 15px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgb(234 246 242 / 16%); border-radius: 999px; background: rgb(234 246 242 / 6%); padding: 7px 13px 7px 10px; color: #eaf6f2; font: 550 13.5px/1 var(--font-sans); white-space: nowrap; }
+.chip svg { width: 14px; height: 14px; color: #4fe3bb; }
+/* The field is bright where it rises behind the chips, so a see-through chip loses its words in it
+   (owner, 12 Nov). A tinted glass ground keeps them legible over any part of it, in both themes. */
+.chip { background: rgb(4 24 20 / 62%); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+:global(html:not(.dark)) .chip { background: rgb(8 44 38 / 70%); }
+.groupLabel { border-radius: 999px; background: rgb(4 24 20 / 62%); padding: 7px 10px; -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+:global(html:not(.dark)) .groupLabel { background: rgb(8 44 38 / 70%); }
+
+/* ── The slider ──────────────────────────────────────────────────────────────────────────────── */
+.handle { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: 0; will-change: transform; outline: none; }
+.handle::before { position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: linear-gradient(180deg, transparent, rgb(197 255 237 / 90%) 18%, rgb(197 255 237 / 90%) 82%, transparent); box-shadow: 0 0 18px 1px rgb(79 227 187 / 55%); content: ""; }
+.knob {
+  position: absolute;
+  top: 50%;
+  left: -26px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0;
+  width: 52px;
+  height: 52px;
+  margin-top: -26px;
+  border: 1px solid rgb(197 255 237 / 55%);
+  border-radius: 50%;
+  background: rgb(6 35 29 / 82%);
+  color: #c5ffed;
+  box-shadow: 0 0 0 6px rgb(7 214 160 / 12%), 0 12px 30px -8px rgb(2 12 10 / 80%), inset 0 1px 0 rgb(255 255 255 / 12%);
+  transition: scale 200ms cubic-bezier(.23, 1, .32, 1), box-shadow 200ms ease;
+  will-change: transform;
+}
+.knob svg { width: 17px; height: 17px; margin: 0 -2px; }
+.frame[data-dragging] .knob, .knob:active { scale: .94; }
+@media (hover: hover) and (pointer: fine) { .frame:hover .knob { box-shadow: 0 0 0 8px rgb(7 214 160 / 18%), 0 12px 30px -8px rgb(2 12 10 / 80%), inset 0 1px 0 rgb(255 255 255 / 12%); } }
+.handle:focus-visible .knob { outline: 2px solid #4fe3bb; outline-offset: 4px; }
+
+/* Phones: a taller frame, the type and chips a step smaller. */
+@media (max-width: 760px) {
+  .frame { height: clamp(560px, 78svh, 680px); }
+  .tag { bottom: 16px; font-size: 11px; }
+  .scene[data-side="then"] .tag { left: 16px; }
+  .scene[data-side="now"] .tag { right: 16px; }
+  /* Centred in the frame (owner, 12 Nov: "more in the center"); the knob and the tag sit below. */
+  .content { padding: 0 18px 24px; }
+  .headline { font-size: clamp(30px, 9vw, 40px); }
+    .groups { margin-top: 20px; gap: 8px; }
+  .group { gap: 6px; }
+  .chip { padding: 6px 10px 6px 8px; font-size: 12.5px; }
+  /* Low on the frame, in the light below the chips, so it never sits on the words. */
+  .knob { top: 86%; width: 46px; height: 46px; left: -23px; margin-top: -23px; }
+}
+/* A phone on its side: the frame is the whole screen, and the floating header sits over its top, so
+   the words start below it and take a step down in size. */
+@media (max-height: 500px) and (orientation: landscape) {
+  .content { align-self: start; padding: 84px 24px 56px; }
+  .headline { font-size: clamp(26px, 6.5vh, 34px); }
+  .groups { margin-top: 14px; gap: 6px; }
+  .chip { padding: 5px 10px 5px 8px; font-size: 12px; }
+  .tag { bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .knob { transition: none; }
+}

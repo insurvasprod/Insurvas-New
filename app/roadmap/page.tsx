@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { RoadmapPage } from "@/components/marketing/roadmap-page";
 import { SiteFooter } from "@/components/public/site-footer";
 import { SiteHeader } from "@/components/public/site-header";
+import { SmoothScroll } from "@/components/marketing/smooth-scroll";
 
 export const metadata: Metadata = {
   title: "Roadmap · Insurvas",
@@ -12,6 +13,7 @@ export const metadata: Metadata = {
 export default function PublicRoadmapPage() {
   return (
     <div className="type-brand landing-type min-h-screen bg-[var(--color-page-bg)]">
+      <SmoothScroll />
       <SiteHeader floating />
       <RoadmapPage />
       <SiteFooter />

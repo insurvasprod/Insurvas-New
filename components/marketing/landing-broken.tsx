@@ -1,16 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useRef, useState } from "react";
-import { ArrowLeft, ArrowRight } from "lucide-react";
+import { useEffect, useRef } from "react";
+import { Check, ChevronDown } from "lucide-react";
 
+import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import styles from "@/components/marketing/landing-broken.module.css";
 
 /**
- * "What's broken today" (2026-11-04, owner, copy from "Insurvas OS Landing.md"): seven leaks as a
- * row of photo cards you can scroll. Each card is a real photograph (public/marketing/README.md has
- * the sources and licences) and the problem in one line; choosing a card opens what Insurvas does
- * about it, and on which plan, underneath. The cards are pressed buttons, not tabs: they scroll.
+ * "What's broken today": seven leaks, each a real photograph (public/marketing/README.md has the
+ * sources and licences), the problem in one line and the fix Insurvas brings, on the plan shown.
  */
 const LEAKS = [
   {
@@ -115,64 +114,239 @@ const LEAKS = [
   },
 ];
 
-export function LandingBroken() {
-  const [index, setIndex] = useState(0);
-  const rowRef = useRef<HTMLDivElement>(null);
-  const leak = LEAKS[index];
+/**
+ * The journey (owner, 6 Nov; it replaces the separate five-tools section). One tall section in three
+ * parts on the page: the seven problems with their photos at the top, the Insurvas gate in the middle,
+ * and the seven fixes at the bottom. As the visitor scrolls, the problem cards travel down with them,
+ * pass one by one behind the gate (where each turns into its fix), and spread out into the solved
+ * grid below, photos and all. Scrolling back up plays it backwards.
+ *
+ * Every frame works the cards' positions out from scratch, from where each card lives, where the gate
+ * is, where its solved place is, and where the scroll is. Nothing is recorded, so a late image, a
+ * resize or a live reload cannot leave a card aiming at an old spot. The vertical travel moves with
+ * the page: a card is in its own place while the problems are in view, behind the gate as the gate
+ * crosses the middle of the screen, and in its solved place once the fixes are in view, so it stays
+ * on screen the whole way. On phones the cards are slim rows, so the journey fits there too. Short
+ * screens (a phone on its side) and reduced motion get the two grids as they are.
+ */
+function offsetWithin(el: HTMLElement, root: HTMLElement) {
+  let x = 0;
+  let y = 0;
+  let node: HTMLElement | null = el;
+  while (node && node !== root) {
+    x += node.offsetLeft;
+    y += node.offsetTop;
+    node = node.offsetParent as HTMLElement | null;
+  }
+  return { x: x + el.offsetWidth / 2, y: y + el.offsetHeight / 2, h: el.offsetHeight };
+}
 
-  const scroll = (by: number) => {
-    const row = rowRef.current;
-    const card = row?.querySelector("button");
-    if (!row || !card) return;
-    row.scrollBy({ left: by * (card.getBoundingClientRect().width + 16), behavior: "smooth" });
-  };
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
+const easeOut = (t: number) => 1 - (1 - t) ** 3;
+const smooth = (t: number) => t * t * (3 - 2 * t);
+
+function Face({ leak, side }: { leak: (typeof LEAKS)[number]; side: "problem" | "fix" }) {
+  return (
+    <div className={styles.face} data-face={side}>
+      <span className={styles.photo}>
+        <Image src={leak.photo} alt="" fill sizes="(max-width: 760px) 75vw, 260px" />
+        {side === "fix" && <span className={styles.solved}><Check aria-hidden="true" />Solved</span>}
+      </span>
+      <span className={styles.text}>
+        <span className={styles.tab}>{side === "fix" ? `${leak.tab} · ${leak.plan}` : leak.tab}</span>
+        <span className={styles.title}>{side === "fix" ? leak.fix : leak.broken}</span>
+      </span>
+    </div>
+  );
+}
+
+export function LandingBroken() {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+    const scene = window.matchMedia("(min-height: 560px) and (prefers-reduced-motion: no-preference)");
+    const cards = [...section.querySelectorAll<HTMLElement>("[data-card]")];
+    const flips = cards.map((card) => card.querySelector<HTMLElement>("[data-flip]")!);
+    const slots = [...section.querySelectorAll<HTMLElement>("[data-slot]")];
+    const gate = section.querySelector<HTMLElement>("[data-gate]")!;
+    const problems = section.querySelector<HTMLElement>("[data-problems]")!;
+    const solved = section.querySelector<HTMLElement>("[data-solved]")!;
+    const aura = section.querySelector<HTMLElement>("[data-aura]")!;
+    const burst = section.querySelector<HTMLElement>("[data-burst]")!;
+    const cue = section.querySelector<HTMLElement>("[data-cue]")!;
+    let frame = 0;
+
+    // Where everything sits within the section, measured when the layout changes and never per
+    // frame: reading an offset after writing a transform makes the browser restyle the page, and
+    // the old loop did that once per card, every frame. Transforms do not move offsets, so a
+    // measurement stays true while the cards travel.
+    type Box = ReturnType<typeof offsetWithin>;
+    let geo: { cards: Box[]; slots: Box[]; gate: Box; from: Box; to: Box } | null = null;
+    const measure = () => {
+      geo = {
+        cards: cards.map((card) => offsetWithin(card, section)),
+        slots: slots.map((slot) => offsetWithin(slot, section)),
+        gate: offsetWithin(gate, section),
+        from: offsetWithin(problems, section),
+        to: offsetWithin(solved, section),
+      };
+    };
+    // What was last written, so an unchanged value is never written again.
+    const written = new Map<HTMLElement, string>();
+    const put = (el: HTMLElement, prop: "transform" | "opacity", value: string) => {
+      const key = `${prop}:${value}`;
+      if (written.get(el) === key) return;
+      written.set(el, key);
+      el.style[prop] = value;
+    };
+    const writtenFlip: boolean[] = cards.map(() => false);
+
+    const clear = () => {
+      cards.forEach((card) => { card.style.transform = ""; });
+      flips.forEach((flip) => { flip.style.transform = ""; });
+      [aura, burst, cue].forEach((el) => { el.style.opacity = ""; el.style.transform = ""; });
+      written.clear();
+      writtenFlip.fill(false);
+    };
+
+    const update = () => {
+      frame = 0;
+      if (!scene.matches) { delete section.dataset.mode; clear(); geo = null; return; }
+      if (section.dataset.mode !== "scene") { section.dataset.mode = "scene"; geo = null; }
+      if (!geo) measure();
+      const { cards: home, slots: place, gate: g, from, to } = geo!;
+      // The one read a frame, before any write: how far the page has scrolled into the section.
+      const scroll = -section.getBoundingClientRect().top;
+      const vh = window.innerHeight;
+      // Keller, 10 Nov: "I'm scrolling, I'm looking, and then, oh, it's starting to move." The
+      // problems hold still for a short stretch while they come into view, then set off.
+      const leave = 0.04;
+      // They set off the moment they are wholly on screen (owner, 11 Nov: they had scrolled up under
+      // the menu bar before they moved), or once centred if that comes first; the journey ends once
+      // the fixes sit fully in view. The hold comes before the set-off point, so solve for the start
+      // that puts t = leave exactly there. (Boxes are measured by their centres: offsetWithin.)
+      const setOff = Math.min(from.y + from.h / 2 - vh + 24, from.y - vh / 2 + Math.min(40, (vh - from.h) / 2 - 80));
+      const end = to.y + to.h / 2 - vh + 28;
+      const start = (setOff - leave * end) / (1 - leave);
+      const range = Math.max(1, end - start);
+      const t = clamp01((scroll - start) / range);
+      const atGate = clamp01((g.y - vh / 2 - start) / range);
+      let glow = 0;
+      cards.forEach((card, i) => {
+        const a = home[i];
+        const b = place[i];
+        const through = Math.min(0.9, Math.max(leave + 0.1, atGate + (i - 3) * 0.022));
+        const land = i < 4 ? 0.95 : 0.995; // the bottom row lands as its row comes fully into view
+        let x = a.x;
+        let y = a.y;
+        let scale = 1;
+        let tilt = 0;
+        let fixed = false;
+        if (t > leave && t < through) {
+          const u = (t - leave) / (through - leave);
+          x = lerp(a.x, g.x + (i - 3) * 6, easeInOut(u));
+          y = lerp(a.y, g.y, u);
+          scale = lerp(1, 0.46, u);
+          tilt = 18 * u;
+        } else if (t >= through) {
+          fixed = true;
+          const u = clamp01((t - through) / (land - through));
+          x = lerp(g.x + (i - 3) * 6, b.x, easeOut(u));
+          y = lerp(g.y, b.y, u);
+          scale = lerp(0.46, 1, easeOut(u));
+          tilt = 18 * (1 - u);
+        }
+        glow = Math.max(glow, 1 - Math.abs(t - through) / 0.05);
+        put(card, "transform", t <= leave ? "" : `translate3d(${(x - a.x).toFixed(1)}px, ${(y - a.y).toFixed(1)}px, 0) perspective(900px) rotateX(${tilt.toFixed(2)}deg) scale(${scale.toFixed(4)})`);
+        if (writtenFlip[i] !== fixed) { writtenFlip[i] = fixed; flips[i].style.transform = fixed ? "rotateY(180deg)" : ""; }
+      });
+
+      // Keller: "there should be colour here… the colour break, and it's behind… then there's more
+      // colour that breaks out." Light rises behind the scene as the cards set off, bursts behind
+      // the gate as each one goes through, and settles once they have landed.
+      const rise = smooth(clamp01((t - leave * 0.6) / 0.16));
+      const settle = smooth(clamp01((t - 0.85) / 0.15));
+      put(aura, "opacity", (rise * (1 - 0.35 * settle)).toFixed(3));
+      put(aura, "transform", `scale(${(0.86 + 0.14 * rise).toFixed(3)})`);
+      const burstOn = clamp01(glow);
+      put(burst, "opacity", burstOn.toFixed(3));
+      put(burst, "transform", `scale(${(0.85 + 0.25 * burstOn).toFixed(3)})`);
+      // The cue under the problems: it has scrolled into view by the end of the hold, and fades as
+      // the cards set off.
+      put(cue, "opacity", (1 - clamp01((t - leave * 0.7) / (leave * 0.4))).toFixed(3));
+    };
+    const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    // A resize, or the section's own content changing size (a font, an image), moves the places.
+    const remeasure = () => { geo = null; schedule(); };
+
+    update();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", remeasure);
+    scene.addEventListener("change", remeasure);
+    const watch = new ResizeObserver(remeasure);
+    watch.observe(section);
+    return () => {
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", remeasure);
+      scene.removeEventListener("change", remeasure);
+      watch.disconnect();
+      window.cancelAnimationFrame(frame);
+      delete section.dataset.mode;
+      clear();
+    };
+  }, []);
 
   return (
-    <div className={styles.broken}>
-      <div className={styles.controls}>
-        <p className={styles.count}>{index + 1} of {LEAKS.length} · <b>{leak.tab}</b></p>
-        <div className={styles.arrows}>
-          <button type="button" onClick={() => scroll(-1)} aria-label="Scroll back"><ArrowLeft aria-hidden="true" /></button>
-          <button type="button" onClick={() => scroll(1)} aria-label="Scroll on"><ArrowRight aria-hidden="true" /></button>
-        </div>
-      </div>
+    <section ref={sectionRef} id="industries" aria-labelledby="audience-title" className={styles.section}>
+      {/* The light behind the journey (see above): it stays with the screen while the cards travel. */}
+      <span className={styles.aura} data-aura="" aria-hidden="true" />
+      <div className={styles.inner}>
+        <header className={styles.head}>
+          <p className={styles.eyebrow}>What’s broken today</p>
+          <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
+          <p className={styles.lede}>Each one costs you money every month.</p>
+        </header>
 
-      <div ref={rowRef} className={styles.row} role="group" aria-label="What’s broken today">
-        {LEAKS.map((item, i) => (
-          <button
-            key={item.key}
-            type="button"
-            aria-pressed={i === index}
-            aria-controls="leak-panel"
-            className={styles.card}
-            onClick={() => setIndex(i)}
-          >
-            <span className={styles.photo}>
-              <Image src={item.photo} alt="" fill sizes="(max-width: 640px) 80vw, 320px" />
-            </span>
-            <span className={styles.cardText}>
-              <span className={styles.cardTab}>{item.tab}</span>
-              <span className={styles.cardTitle}>{item.broken}</span>
-            </span>
-          </button>
-        ))}
-      </div>
+        <ul className={styles.grid} data-problems="">
+          {LEAKS.map((leak) => (
+            <li key={leak.key} className={styles.card} data-card="">
+              <div className={styles.flip} data-flip="">
+                <Face leak={leak} side="problem" />
+                <Face leak={leak} side="fix" />
+              </div>
+            </li>
+          ))}
+        </ul>
+        {/* Only where the cards really travel; it fades as they set off. */}
+        <p className={styles.cue} data-cue="" aria-hidden="true">Scroll, and watch them get fixed<ChevronDown /></p>
 
-      <div id="leak-panel" className={styles.panel} aria-live="polite" key={leak.key}>
-        <div className={styles.panelProblem}>
-          <p className={styles.tag}>Broken today</p>
-          <p className={styles.problem}>{leak.broken}</p>
-          <p className={styles.body}>{leak.body}</p>
+        {/* The gate: the five tools go in, one system comes out (Umar's A3, in one line). */}
+        <div className={styles.gateZone}>
+          <p className={styles.gateNote}>A CRM, a dialer, two spreadsheets and a prayer</p>
+          <span className={styles.burst} data-burst="" aria-hidden="true" />
+          <div className={styles.gate} data-gate="">
+            <InsurvasLogo variant="wordmark" tone="dark" size="public" alt="Insurvas" />
+            <span className={styles.gateScan} aria-hidden="true" />
+          </div>
+          <p className={styles.gateNote} data-out="">One system, built by people who ran the floor</p>
         </div>
-        <div className={styles.panelFix}>
-          <p className={styles.plan}>With Insurvas <b>{leak.plan}</b></p>
-          <p className={styles.fix}>{leak.fix}</p>
-          <ul className={styles.points}>
-            {leak.points.map((point) => <li key={point}>{point}</li>)}
-          </ul>
-          {"note" in leak && leak.note && <p className={styles.note}>{leak.note}</p>}
-        </div>
+
+        <header className={styles.head} data-solved-head="">
+          <p className={styles.eyebrow}>With Insurvas</p>
+          <h2 className={styles.heading}>Seven fixes, in one workspace.</h2>
+        </header>
+        <ul className={styles.grid} data-solved="">
+          {LEAKS.map((leak) => (
+            <li key={leak.key} className={styles.card} data-slot="">
+              <div className={styles.flip}><Face leak={leak} side="fix" /></div>
+            </li>
+          ))}
+        </ul>
       </div>
-    </div>
+    </section>
   );
 }

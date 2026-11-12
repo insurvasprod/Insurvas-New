@@ -36,6 +36,8 @@ const COLUMNS: Array<{ title: string; links: Array<{ href: string; label: string
       { href: "/pricing", label: "Pricing" },
       { href: "/roadmap", label: "Roadmap" },
       { href: "/#faq", label: "FAQ" },
+      // The landing page's contact form (Umar, 4 Nov: "How will people contact us?").
+      { href: "/#contact", label: "Contact us" },
     ],
   },
   {
@@ -72,22 +74,29 @@ export async function SiteFooter() {
   const legalLinks = await publishedLegalLinks();
   const columns = legalLinks.length > 0 ? [...COLUMNS, { title: "Legal", links: legalLinks }] : COLUMNS;
   return (
-    <footer className="relative isolate overflow-hidden bg-[var(--footer-bg)] px-4 pb-12 pt-12 sm:px-6 lg:px-16">
+    // The same deep olive as every dark band on the public pages (the hero, the roadmap, the
+    // contact form), not the lighter brand olive it used to be (owner, 6 Nov: one dark, everywhere).
+    <footer className="relative isolate overflow-hidden bg-[color-mix(in_srgb,var(--footer-bg)_62%,black)] px-4 pb-12 pt-16 sm:px-6 lg:px-16">
+      {/* Where the footer starts: a hairline that fades at both ends, since the footer shares the
+          page's dark and needs a line to read as its own part (owner, 6 Nov). */}
+      <div aria-hidden="true" className={styles.edge} />
       <div className="relative mx-auto max-w-7xl">
         {/* The wordmark, wide and faded, behind the brand block and the link columns (owner, 2026-11-04). */}
         <div aria-hidden="true" className={styles.watermark} />
-        <div className="relative grid gap-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
-          <div>
+        {/* Phones (owner, 6 Nov): the brand block across the top, the link groups two to a row, and the
+            copyright on its own line at the bottom. */}
+        <div className="relative grid grid-cols-2 gap-x-6 gap-y-10 md:grid-cols-[1.4fr_repeat(3,minmax(0,1fr))]">
+          <div className="col-span-2 md:col-span-1">
             <Link href="/" className="inline-flex no-underline">
               <InsurvasLogo size="auth" tone="dark" alt="Insurvas" />
             </Link>
             <p className="mt-4 max-w-[280px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)]">
-              The Complete OS for life insurance sales teams.
+              The operating system for life insurance sales teams.
             </p>
-            <div className="mt-6">
+            <div className="mt-6 hidden md:block">
               <MarketingCta href="/signup">Start free trial</MarketingCta>
             </div>
-            <p className="mt-6 text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</p>
+            <p className="mt-6 hidden text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)] md:block">© {new Date().getFullYear()} Insurvas Inc. All rights reserved.</p>
           </div>
 
           {columns.map((column) => (
@@ -98,7 +107,7 @@ export async function SiteFooter() {
                   <Link
                     key={item.href}
                     href={item.href}
-                    className="block py-[5px] text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)] no-underline hover:text-[var(--nav-ink)]"
+                    className="block py-2 text-base md:py-[5px] md:text-sm leading-normal tracking-[-0.02em] text-[var(--nav-muted)] no-underline hover:text-[var(--nav-ink)]"
                   >
                     {item.label}
                   </Link>
@@ -106,6 +115,11 @@ export async function SiteFooter() {
               </div>
             </div>
           ))}
+        </div>
+        {/* Phones: the copyright bottom left, the trial button in the bottom right corner (Umar, 6 Nov). */}
+        <div className="relative mt-10 flex items-center justify-between gap-4 border-t border-[rgb(234_246_242/10%)] pt-6 md:hidden">
+          <p className="text-xs leading-normal tracking-[-0.01em] text-[var(--nav-muted)]">© {new Date().getFullYear()} Insurvas Inc.<br />All rights reserved.</p>
+          <MarketingCta href="/signup">Start free trial</MarketingCta>
         </div>
       </div>
     </footer>

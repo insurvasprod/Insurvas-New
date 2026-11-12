@@ -33,13 +33,17 @@ import { ThemeSwitch } from "@/components/public/theme-switch";
  * the full page, not the teaser, because it is a destination people expect to land on and `key`
  * marks it current there.
  * One list, both layouts — the bar and the popover menu below xl both render it.
+ *
+ * Roadmap left the bar on 11 Nov (Artin: "it just looks too unorganized… maybe remove one of the
+ * sections, like, maybe a roadmap"). It is the one item here that is neither the product, the price
+ * nor an answer to a buying question, and it keeps two ways in: the landing page's own roadmap band
+ * ("See the full roadmap →") and the footer's Product column. The page itself is untouched.
  */
 const NAV: Array<{ href: string; label: string; key?: "home" | "pricing" }> = [
   { href: "/", label: "Home", key: "home" },
   { href: "/#industries", label: "Who it's for" },
   { href: "/#features", label: "Features" },
   { href: "/pricing", label: "Pricing", key: "pricing" },
-  { href: "/roadmap", label: "Roadmap" },
   { href: "/#faq", label: "FAQ" },
 ];
 
@@ -71,14 +75,20 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
       >
         {/* No aria-current here since 2026-11-03: the nav carries an explicit Home item, and marking
             both it and the logo would announce the current page twice. */}
-        <Link href="/" className="flex shrink-0 items-center no-underline">
+        <Link href="/" className="flex min-h-11 shrink-0 items-center no-underline">
           {/* Named, so it glides into the sign-in form's logo (AuthBrand). */}
           <ViewTransition name="brand-logo" share="ribbon-morph" default="none">
             <InsurvasLogo size="public" alt="Insurvas" className={styles.introLogo} />
           </ViewTransition>
         </Link>
 
-        <nav aria-label="Primary" className="mx-auto hidden max-w-2xl flex-1 items-center justify-evenly gap-2 xl:flex xl:gap-4">
+        {/* One tight group, centred (Artin, 11 Nov: "try to make them more neatly placed… just
+            reduce the distance between these sections, but at the point that it's still readable").
+            It used to be `max-w-2xl justify-evenly`, which spread five labels of different widths
+            across a fixed 672px box, so the gaps between them were arbitrary and never matched —
+            the scattered look he kept circling. Now the group is as wide as its links and the gap
+            is one value. */}
+        <nav aria-label="Primary" className="mx-auto hidden flex-1 items-center justify-center gap-1 xl:flex">
           {NAV.map((item) => {
             const active = item.key && current === item.key;
             return (
@@ -86,7 +96,7 @@ export function SiteHeader({ current, floating = false }: { current?: "home" | "
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold tracking-[-0.01em] no-underline transition-colors ${active ? "bg-[var(--surface-alt)] text-foreground" : "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--surface-alt)_80%,transparent)] hover:text-foreground"}`}
+                className={`whitespace-nowrap rounded-full px-3 py-2 text-sm font-semibold tracking-[-0.01em] no-underline transition-colors ${active ? "bg-[var(--surface-alt)] text-foreground" : "text-muted-foreground hover:bg-[color-mix(in_srgb,var(--surface-alt)_80%,transparent)] hover:text-foreground"}`}
               >
                 {item.label}
               </Link>

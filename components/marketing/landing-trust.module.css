@@ -1,0 +1,78 @@
+/* The trust band (Umar, 4 Nov, A2.1; owner, 6 Nov: more visual, less text). A graded photo with the
+   figures along its foot on the left; the statement and a short three-stop line on the right. */
+.band { border-bottom: 1px solid var(--border); background: var(--canvas); }
+.inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: stretch; gap: clamp(32px, 5vw, 80px); width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0; }
+
+/* The photo: graded into the deep green so it belongs to the page, darker at its foot for the figures. */
+.photo { position: relative; min-height: 440px; margin: 0; overflow: hidden; border-radius: 24px; background: color-mix(in srgb, var(--footer-bg) 62%, black); clip-path: inset(0 0 0 0 round 24px); }
+.img { object-fit: cover; object-position: 58% 30%; filter: grayscale(.35) contrast(1.05); }
+.grade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 30%, color-mix(in srgb, var(--footer-bg) 55%, black) 100%),
+    color-mix(in srgb, var(--footer-bg) 38%, transparent);
+  mix-blend-mode: normal;
+}
+.figures { position: absolute; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; padding: 0 clamp(20px, 2.4vw, 32px) clamp(20px, 2.4vw, 30px); }
+.figure { display: grid; gap: 4px; border-top: 1px solid rgb(234 246 242 / 28%); padding-top: 14px; }
+.figure b { color: var(--on-dark); font: 600 clamp(28px, 3vw, 44px)/1 var(--font-brand); letter-spacing: -.03em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.figure small { color: rgb(234 246 242 / 78%); font-size: 13.5px; }
+
+/* The copy: label, statement, then the line. */
+.copy { display: flex; flex-direction: column; justify-content: center; }
+.label { margin: 0 0 14px; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
+.title { max-width: 20ch; margin: 0; color: var(--ink); font: 600 clamp(28px, 3vw, 44px)/1.08 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
+
+/* Three stops down a hairline; the last one, today, in the brand green. */
+.line { position: relative; display: grid; gap: 22px; margin: clamp(28px, 3.4vw, 44px) 0 0; padding: 0 0 0 30px; list-style: none; }
+/* --line-end (set in landing-trust.tsx) ends the rule at the middle of Today's dot. */
+.line::before { position: absolute; top: 8px; bottom: var(--line-end, 8px); left: 6px; width: 1px; background: linear-gradient(180deg, var(--border-strong) 0%, var(--border-strong) 60%, var(--primary) 100%); content: ""; }
+.stop { position: relative; display: grid; gap: 4px; }
+/* The green that flows down the line with the scroll (landing-trust.tsx), over the grey rule. */
+.fill { position: absolute; top: 8px; bottom: var(--line-end, 8px); left: 6px; width: 2px; margin-left: -.5px; border-radius: 2px; background: var(--primary); transform: scaleY(0); transform-origin: 50% 0; }
+.line:not([data-scroll="true"]) .fill { display: none; }
+/* Scroll-driven: a stop waits, dimmed and a little low, until the flow reaches it. */
+.line[data-scroll="true"] .stop { opacity: .28; transform: translateY(10px); transition: opacity 500ms cubic-bezier(.23, 1, .32, 1), transform 600ms cubic-bezier(.23, 1, .32, 1); }
+.line[data-scroll="true"] .stop[data-on="true"] { opacity: 1; transform: none; }
+.line[data-scroll="true"] .stop .dot { transition: border-color 300ms ease, background-color 300ms ease, box-shadow 300ms ease; }
+.line[data-scroll="true"] .stop[data-on="true"] .dot { border-color: var(--primary); }
+.line[data-scroll="true"] .stop[data-now="true"]:not([data-on="true"]) .dot { border-color: var(--border-strong); background: var(--canvas); box-shadow: none; }
+.dot { position: absolute; top: 3px; left: -30px; width: 13px; height: 13px; box-sizing: border-box; border: 2px solid var(--border-strong); border-radius: 50%; background: var(--canvas); }
+.stop[data-now="true"] .dot { border-color: var(--primary); background: var(--primary); box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary) 20%, transparent); }
+.when { color: var(--muted); font-size: 13px; font-weight: 600; }
+.stop[data-now="true"] .when { color: var(--accent-ink); }
+.text { max-width: 40ch; margin: 0; color: var(--ink); font: 500 clamp(16px, 1.3vw, 18px)/1.45 var(--font-brand); letter-spacing: -.01em; }
+
+/* Before the entrance, only when a script will run it. */
+.inner[data-state="waiting"] .photo { clip-path: inset(100% 0 0 0 round 24px); }
+.inner[data-state="waiting"] [data-figure] { opacity: 0; }
+
+@media (max-width: 860px) {
+  .inner { grid-template-columns: minmax(0, 1fr); }
+  .copy { order: -1; }
+  .photo { min-height: 340px; }
+}
+@media (max-width: 640px) {
+  /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
+  .copy { align-items: center; text-align: center; }
+  .title { margin-inline: auto; }
+  /* The line runs down the middle: each stop's dot on it, the words centred under the dot, on the
+     page's ground so the rule shows only between the stops. */
+  .line { align-self: stretch; gap: 26px; padding: 0; justify-items: center; }
+  .line::before, .fill { top: 0; bottom: 0; left: 50%; }
+  .stop { justify-items: center; padding-top: 24px; background: var(--canvas); }
+  /* The stop's ground hides the rule behind its words, so the ground never fades or moves: only the
+     dot and the words inside it do. Faded as a whole (as on a computer), the ground let the rule show
+     through the text until the stop lit (owner, 7 Nov). */
+  .line[data-scroll="true"] .stop { opacity: 1; transform: none; }
+  .line[data-scroll="true"] .stop > * { opacity: .28; transform: translateY(10px); transition: opacity 500ms cubic-bezier(.23, 1, .32, 1), transform 600ms cubic-bezier(.23, 1, .32, 1); }
+  .line[data-scroll="true"] .stop[data-on="true"] > * { opacity: 1; transform: none; }
+  .line[data-scroll="true"] .stop > .dot { transform: none; transition: opacity 500ms cubic-bezier(.23, 1, .32, 1), border-color 300ms ease, background-color 300ms ease, box-shadow 300ms ease; }
+  .dot { top: 0; left: 50%; margin-left: -6.5px; }
+  .text { max-width: 32ch; }
+  .inner { width: calc(100% - 32px); padding: 44px 0; }
+  .figures { gap: 10px; }
+  .figure b { font-size: 26px; }
+  .figure small { font-size: 12px; }
+}
