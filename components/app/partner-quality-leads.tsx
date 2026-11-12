@@ -162,6 +162,7 @@ function PartnerQualityLeadsChart({ partnerId, metric, period, label, dispositio
       setLoading(false);
     }
   }, [firstKey, partnerId, metric, period, disposition, member]);
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the first read: load() marks itself loading before it fetches
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { if (error && data) notify.fail("These leads did not reload", { detail: "The chart shown is from the last load." }); }, [error]); // eslint-disable-line react-hooks/exhaustive-deps
 

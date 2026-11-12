@@ -39,6 +39,8 @@ import { load as loadResource, peek, readResource, seed } from "@/lib/client/res
  */
 const TABS = ["calls", "outcomes", "days"] as const;
 const DAY = 86_400_000;
+/** Days from `iso` to now (1–180), read when the side reads load, never while rendering. */
+const daysSince = (iso: string) => Math.min(180, Math.max(1, Math.ceil((Date.now() - Date.parse(iso)) / DAY)));
 
 type SetterDays = {
   scope: "team" | "own";
@@ -128,17 +130,19 @@ export function ActivityAgentDetail({ agentId, role, initialPeriod }: { agentId:
   // Each fails quietly: the page still shows the calls without it.
   const [mixReport, setMixReport] = useState<ActivityReport | null>(null);
   const rangeFrom = range.from;
-  const loadSide = useCallback((fresh = false) => {
+  // A plain function (the compiler memoizes it); the effect below re-reads when a key it uses changes.
+  const loadSide = (fresh = false) => {
     const read = <T,>(k: string) => (fresh ? loadResource<T>(k) : readResource<T>(k));
     // A setter's days: the setter report reaches back from today far enough to cover the window's start.
-    const daysKey = `/api/app/scorecard?days=${Math.min(180, Math.max(1, Math.ceil((Date.now() - Date.parse(rangeFrom)) / DAY)))}`;
+    const daysKey = `/api/app/scorecard?days=${daysSince(rangeFrom)}`;
+    // Without an outcome filter the mix is the report itself (row below), so the side read is skipped.
     if (disposition) void read<ActivityReport>(mixKey).then(setMixReport, () => setMixReport(null));
-    else setMixReport(null);
     void read<ActivityWeeks>(weeksKey).then((body) => setWeeks(body.weeks), () => setWeeks(null));
     void read<ActivityReport>(teamKey).then((body) => setTeam(body.scorecard), () => setTeam(null));
     void read<SetterDays>(daysKey).then(setDays, () => setDays(null));
-  }, [disposition, mixKey, weeksKey, teamKey, rangeFrom]);
-  useEffect(() => { loadSide(); }, [loadSide]);
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSide reads exactly these keys
+  useEffect(() => { loadSide(); }, [disposition, mixKey, weeksKey, teamKey, rangeFrom]);
 
   const row = (disposition ? mixReport : report)?.scorecard.find((item) => item.agent_user_id === agentId) ?? null;
   const name = row?.agent_name ?? (report ? "Agent" : null);

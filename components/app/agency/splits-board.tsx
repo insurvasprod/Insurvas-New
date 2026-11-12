@@ -155,6 +155,7 @@ function SplitDialog({ split, prefill, people, canEdit, onClose }: { split?: Spl
   const missingLevel = canEdit && levels.data && policy && other && levelOf(other)?.producerLevelBps == null ? `${name(other)} has no contract level with ${carrierName}. Set it on their Carriers tab first.` : null;
   const shareError = !parts ? (many ? "Enter each share as a percent." : "Enter the writer's share as a percent between 1 and 99.") : total !== 10000 ? `The shares add up to ${bpsToPercent(total)}; they must make 100%.` : null;
 
+  const partsKey = JSON.stringify(parts);
   const preview = useMemo(() => {
     const cents = dollarsToCents(premium);
     const lv = levelOf(writer);
@@ -162,7 +163,7 @@ function SplitDialog({ split, prefill, people, canEdit, onClose }: { split?: Spl
     const result = computeOverride({ annualPremiumCents: cents, agencyLevelBps: lv.agencyLevelBps, producerLevelBps: lv.producerLevelBps });
     return { result, split: result.producerPoolCents === null ? null : splitPool(result.producerPoolCents, parts) };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [premium, levels.data, writer, JSON.stringify(parts), total, policy?.carrierId]);
+  }, [premium, levels.data, writer, partsKey, total, policy?.carrierId]);
 
   // The writer is the policy's writing producer once a policy is chosen (New split).
   useEffect(() => {

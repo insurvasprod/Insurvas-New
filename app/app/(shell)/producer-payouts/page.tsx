@@ -55,14 +55,15 @@ export default async function ProducerPayoutsPage({ searchParams }: { searchPara
     return { month: now, rows: await preview(now) };
   };
 
-  let problem: string | null = null;
-  const [draft, runs, plans, rules, records] = await Promise.all([
-    pickMonth().catch((error: unknown) => { problem = error instanceof Error ? error.message : "The month could not be read."; return null; }),
+  const [picked, runs, plans, rules, records] = await Promise.all([
+    pickMonth().catch((error: unknown) => ({ problem: error instanceof Error ? error.message : "The month could not be read." })),
     readRuns(tenantId, undefined, { includeVoid: true }).catch(() => null),
     listTeamPlans(tenantId).catch(() => null),
     readPayoutRules(tenantId).catch(() => ({ negativePolicy: "carry_forward", recoveryPctBp: 2000 })),
     producerRecordIds(tenantId).catch(() => new Map<string, string>()),
   ]);
+  const draft = "problem" in picked ? null : picked;
+  const problem = "problem" in picked ? picked.problem : null;
   const month = draft?.month ?? chosen ?? previousMonth(today());
   const keep = `period=${month}`;
   const names = Object.fromEntries([...(plans?.team ?? []).map((m) => [m.userId, m.name] as const), ...(draft?.rows ?? []).map((p) => [p.producerUserId, p.displayName] as const)]);
