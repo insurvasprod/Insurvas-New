@@ -12,6 +12,11 @@
     radial-gradient(50% 40% at 50% 70%, color-mix(in srgb, var(--accent-ink, var(--primary)) 25%, transparent), transparent 70%);
   filter: blur(30px);
   opacity: .9;
+  /* Fades in from its top edge. The hero's device frame clips at the top of the laptop, which cut
+     this glow off in a straight line across the middle while its sides faded out (owner, 10 Nov:
+     "it's stopping kind of in a line"). Faded, it ends softly on all three sides. */
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, transparent 9%, #000 36%);
+  mask-image: linear-gradient(180deg, transparent 0%, transparent 9%, #000 36%);
   pointer-events: none;
 }
 /* The rounded outline the device sits in front of. */
@@ -47,7 +52,7 @@
 
 /* The sidebar, as the app draws it opened (components/app/agent-sidebar.tsx): the dark rail, the logo
    row over a hairline as tall as the top bar, then the sections, Today open. */
-.rail { display: flex; flex-direction: column; background: var(--nav-bg); color: var(--nav-ink); }
+.rail { position: relative; display: flex; flex-direction: column; background: var(--nav-bg); color: var(--nav-ink); }
 .brand { display: flex; height: 56px; flex: none; align-items: center; justify-content: space-between; box-sizing: border-box; border-bottom: 1px solid var(--nav-line); padding: 0 16px 0 18px; }
 .brand > svg { width: 17px; height: 17px; color: var(--nav-muted); }
 .navList { display: grid; align-content: start; gap: 1px; padding: 10px 10px 0; }
@@ -258,6 +263,156 @@ button.navItem:focus-visible { outline: 2px solid var(--primary); outline-offset
   .navTimer { display: none; }
 }
 
+/* ── The hover invite (Keller, 10 Nov; landing-device.tsx) ──────────────────────────────────────
+   A mouse over the laptop: the bezel lights, the sidebar pulses, a chip trails the pointer. Only
+   opacity and transform change, each on its own small layer, so nothing is laid out or repainted
+   per frame. The rings are fixed shadows on pseudo-elements; it is their opacity that moves. */
+.bezel::after {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--primary) 75%, transparent), 0 0 90px -12px color-mix(in srgb, var(--primary) 60%, transparent);
+  opacity: 0;
+  transition: opacity 260ms ease-out;
+  content: "";
+  pointer-events: none;
+}
+.device[data-hover] .bezel::after { opacity: 1; transition: opacity 360ms cubic-bezier(.23, 1, .32, 1); }
+.rail::after {
+  position: absolute;
+  z-index: 1;
+  inset: 8px;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--primary) 80%, white), 0 0 34px -4px color-mix(in srgb, var(--primary) 50%, transparent);
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+  content: "";
+  pointer-events: none;
+}
+/* Pulses until a page has been chosen; after that the lesson is learnt and it stays quiet. */
+.device[data-hover]:not([data-learnt]) .rail::after { animation: railInvite 2.2s ease-in-out infinite; }
+@keyframes railInvite { 0%, 100% { opacity: .3; } 50% { opacity: 1; } }
+
+/* ── The resting cue in the top corners (Artin, 11 Nov; landing-device.tsx) ─────────────────────
+   "Something in the corners at the top, so top right and top left… indicating that, hey, something's
+   going on here", which holds instead of fading away instantly, and does not "cover any part of the
+   dashboard". One cue on one 3.6s cycle, not a set of competing hints: the two brackets brighten and
+   the arrow draws together, and the label holds still as the anchor. The arrow's tip stops on the
+   bezel's padding, 8px below the device's top edge, so it points into the screen without ever
+   crossing it. It all gives way the moment a mouse arrives (the chip takes over) or a page is
+   chosen. */
+.cues { position: absolute; z-index: 3; inset: 0; opacity: 1; transition: opacity 240ms ease-out; pointer-events: none; }
+.device[data-hover] .cues, .device[data-learnt] .cues { opacity: 0; }
+.corner {
+  position: absolute;
+  top: -7px;
+  width: 30px;
+  height: 30px;
+  border: 2px solid color-mix(in srgb, var(--primary) 85%, transparent);
+  opacity: .35;
+  animation: cueCorner 3.6s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+.cornerLeft { left: -7px; border-right: 0; border-bottom: 0; border-radius: 12px 0 0; }
+.cornerRight { right: -7px; border-left: 0; border-bottom: 0; border-radius: 0 12px 0 0; }
+@keyframes cueCorner { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+
+/* Above the laptop's top-LEFT corner, up near the header (owner, 12 Nov). The left column is the
+   one with room: the hero's headline and sub-line are centred, so on a wide window they both stop
+   well to the right of this label and it can climb into the gap under the header. How far up it can
+   go is set by whichever of the two reaches furthest left at that width — the sub-line below 1240,
+   the headline above it. 90px clears both from 960 up, and is where the owner put it on 12 Nov:
+   lower than the 170px it briefly sat at, in the clear gap rather than level with the sub-line's
+   own text. One value at every width, so the breakpoint that carried the taller lift is gone. */
+.cueLabel {
+  position: absolute;
+  left: 14px;
+  bottom: calc(100% + 90px);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  background: var(--primary);
+  padding: 7px 10px 7px 13px;
+  color: var(--on-primary);
+  font: 700 13px/1 var(--font-sans);
+  white-space: nowrap;
+  box-shadow: 0 14px 30px -10px color-mix(in srgb, var(--primary) 70%, transparent), 0 2px 6px rgb(0 0 0 / 25%);
+}
+.cueLabel svg { width: 15px; height: 15px; flex: none; }
+/* Starts just under the label's right end — not behind it — and sweeps down and in. Its tip lands
+   on the bezel's 13px padding, so it points into the screen without ever crossing onto it (Artin:
+   not "cover any part of the dashboard"). The box keeps the viewBox's 0.525 aspect at both lifts,
+   so the curve scales rather than stretching. */
+.cueArrow { position: absolute; left: 108px; bottom: calc(100% - 8px); width: 53px; height: 100px; overflow: visible; will-change: opacity; }
+.cueArrow path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--primary) 92%, white);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  /* The path is ~221 user units long; the dash is just over it, so the draw starts at once. */
+  stroke-dasharray: 225;
+  animation: cueDraw 3.6s cubic-bezier(.4, 0, .2, 1) infinite;
+}
+@keyframes cueDraw {
+  0% { stroke-dashoffset: 225; opacity: 0; }
+  10% { opacity: 1; }
+  50%, 78% { stroke-dashoffset: 0; opacity: 1; }
+  92%, 100% { stroke-dashoffset: 0; opacity: 0; }
+}
+
+.invite { position: absolute; z-index: 5; top: 0; left: 0; pointer-events: none; will-change: transform; }
+.inviteChip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: var(--primary);
+  padding: 9px 15px 9px 12px;
+  color: var(--on-primary);
+  font: 700 14px/1 var(--font-sans);
+  white-space: nowrap;
+  box-shadow: 0 14px 30px -10px color-mix(in srgb, var(--primary) 70%, transparent), 0 2px 6px rgb(0 0 0 / 25%);
+  opacity: 0;
+  transform: scale(.9);
+  transform-origin: 0 0;
+  transition: opacity 120ms ease-out, transform 120ms ease-out;
+}
+.inviteChip svg { width: 16px; height: 16px; flex: none; }
+.invite[data-show="true"] .inviteChip { opacity: 1; transform: none; transition: opacity 180ms cubic-bezier(.23, 1, .32, 1), transform 240ms cubic-bezier(.23, 1, .32, 1); }
+/* Touch screens have their own page tabs; the invite and its corner cue are for a mouse. Below 900px
+   the page tabs take over for everyone, and the laptop is too small to carry a label this size. */
+@media (hover: none), (pointer: coarse) { .invite, .rail::after, .bezel::after { display: none; } }
+/* Tablets and phones on their side carry the page tabs above the laptop, right where the label would
+   sit, so the cue stays off there. */
+@media (min-width: 641px) and (max-width: 900px), (pointer: coarse) and (min-width: 641px) { .cues { display: none; } }
+
+/* The words follow the input: "pick" for a mouse, "tap" for a finger. */
+.cueTouch { display: none; }
+@media (hover: none), (pointer: coarse) { .cueMouse { display: none; } .cueTouch { display: inline; } }
+
+/* Phones (owner, 12 Nov: "the one that tells us press… is not there"). The same cue, a size down, in
+   the gap between the hero's buttons and the laptop: the label above the top-left corner and the arrow
+   curving from its right end into the bezel. Until a page is chosen, by a tab or in the sidebar. */
+@media (max-width: 640px) {
+  .corner { top: -5px; width: 22px; height: 22px; }
+  .cornerLeft { left: -5px; border-radius: 9px 0 0; }
+  .cornerRight { right: -5px; border-radius: 0 9px 0 0; }
+  .cueLabel { left: 2px; bottom: calc(100% + 30px); gap: 5px; padding: 6px 8px 6px 11px; font-size: 12px; }
+  .cueLabel svg { width: 13px; height: 13px; }
+  .cueArrow { left: 118px; bottom: calc(100% - 6px); width: 21px; height: 40px; }
+  /* Room for the label between the hero's buttons and the laptop: without it the label met the
+     "See how it works" button. */
+  .stage { margin-top: 84px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .device[data-hover]:not([data-learnt]) .rail::after { animation: none; opacity: .8; }
+  .inviteChip, .invite[data-show="true"] .inviteChip { transform: none; }
+  /* The cue still says what it says — it just says it once, finished and still. */
+  .corner { animation: none; opacity: .85; }
+  .cueArrow path { animation: none; stroke-dashoffset: 0; }
+}
+
 /* The page tabs under the device: shown on touch screens only, 44px tall (owner, 6 Nov: every phone). */
 .pageTabs { display: none; }
 @media (pointer: coarse), (max-width: 900px) {
@@ -267,6 +422,13 @@ button.navItem:focus-visible { outline: 2px solid var(--primary); outline-offset
   .pageTabs button:active { transform: scale(.96); }
   .pageTabs button[aria-pressed="true"] { border-color: transparent; background: var(--primary); color: var(--on-primary); }
   .pageTabs button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+}
+
+/* Tablets and phones on their side: the laptop is tall there, and the hero cuts it off at the bottom,
+   so tabs below it were cut off too and could not be reached. They go above it instead. */
+@media (min-width: 641px) and (max-width: 900px), (pointer: coarse) and (min-width: 641px) {
+  .stage { display: flex; flex-direction: column; }
+  .pageTabs { order: -1; margin: 0 auto 16px; }
 }
 
 /* Lead workspace, Lead flow and Daily deal flow (owner, 6 Nov). */

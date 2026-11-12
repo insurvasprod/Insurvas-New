@@ -73,6 +73,25 @@ export function LandingTrust() {
   // The line plays by itself, once, when the band comes into view (owner, 6 Nov: not tied to the
   // scroll): Year one shows, the green flows down to Year two and reveals it, then on to Today.
   const lineRef = useRef<HTMLOListElement>(null);
+
+  // The line stops at the middle of Today's dot, not at the foot of Today's words. The words wrap,
+  // so measure it and keep it measured.
+  useEffect(() => {
+    const line = lineRef.current;
+    const stops = line?.querySelectorAll<HTMLElement>("[data-stop]");
+    const last = stops?.[stops.length - 1];
+    const dot = last?.querySelector<HTMLElement>("[data-dot]");
+    if (!line || !last || !dot) return;
+    const measure = () => {
+      const end = line.clientHeight - (last.offsetTop + dot.offsetTop + dot.offsetHeight / 2);
+      line.style.setProperty("--line-end", `${Math.max(0, end)}px`);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(line);
+    return () => { ro.disconnect(); line.style.removeProperty("--line-end"); };
+  }, []);
+
   useEffect(() => {
     const line = lineRef.current;
     if (!line || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -130,7 +149,7 @@ export function LandingTrust() {
             <span className={styles.fill} data-fill="" aria-hidden="true" />
             {STOPS.map((stop, i) => (
               <li key={stop.when} className={styles.stop} data-stop="" data-now={i === STOPS.length - 1}>
-                <span className={styles.dot} aria-hidden="true" />
+                <span className={styles.dot} data-dot="" aria-hidden="true" />
                 <span className={styles.when}>{stop.when}</span>
                 <p className={styles.text}>{stop.text}</p>
               </li>

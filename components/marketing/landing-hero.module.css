@@ -61,7 +61,11 @@
 .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 26px; }
 
 /* The device sits under the copy and runs off the bottom of the hero into the next section. */
-.deviceWrap { position: relative; max-height: clamp(380px, 46vw, 640px); overflow: hidden; }
+/* It clips only at the bottom, where the device runs off the hero. Clipping every side cut the
+   glows round the device (its halo, the hover light on its bezel) off in a straight line just
+   under the buttons (owner, 10 Nov: "I can still see slightly bit of the line there"). The hero
+   itself clips its sides. */
+.deviceWrap { position: relative; max-height: clamp(380px, 46vw, 640px); clip-path: inset(-600px -100vw 0 -100vw); }
 .deviceWrap::after { position: absolute; z-index: 3; right: 0; bottom: 0; left: 0; height: 160px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--footer-bg) 62%, black) 90%); content: ""; pointer-events: none; }
 
 /* Hidden start state for the entrance, only when a script will animate it. A late fallback makes

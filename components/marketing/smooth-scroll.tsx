@@ -20,7 +20,9 @@ import "lenis/dist/lenis.css";
 export function SmoothScroll() {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const lenis = new Lenis({ autoRaf: true, anchors: true, allowNestedScroll: true, stopInertiaOnNavigate: true });
+    // A longer, softer glide than Lenis's default (lerp .1): each wheel step eases out over more
+    // frames, and a slightly shorter step keeps the stacked cards from rushing past (owner, 10 Nov).
+    const lenis = new Lenis({ autoRaf: true, anchors: true, allowNestedScroll: true, stopInertiaOnNavigate: true, lerp: 0.07, wheelMultiplier: 0.9 });
     return () => lenis.destroy();
   }, []);
   return null;

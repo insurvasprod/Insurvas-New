@@ -26,10 +26,11 @@
 
 /* Three stops down a hairline; the last one, today, in the brand green. */
 .line { position: relative; display: grid; gap: 22px; margin: clamp(28px, 3.4vw, 44px) 0 0; padding: 0 0 0 30px; list-style: none; }
-.line::before { position: absolute; top: 8px; bottom: 8px; left: 6px; width: 1px; background: linear-gradient(180deg, var(--border-strong) 0%, var(--border-strong) 60%, var(--primary) 100%); content: ""; }
+/* --line-end (set in landing-trust.tsx) ends the rule at the middle of Today's dot. */
+.line::before { position: absolute; top: 8px; bottom: var(--line-end, 8px); left: 6px; width: 1px; background: linear-gradient(180deg, var(--border-strong) 0%, var(--border-strong) 60%, var(--primary) 100%); content: ""; }
 .stop { position: relative; display: grid; gap: 4px; }
 /* The green that flows down the line with the scroll (landing-trust.tsx), over the grey rule. */
-.fill { position: absolute; top: 8px; bottom: 8px; left: 6px; width: 2px; margin-left: -.5px; border-radius: 2px; background: var(--primary); transform: scaleY(0); transform-origin: 50% 0; }
+.fill { position: absolute; top: 8px; bottom: var(--line-end, 8px); left: 6px; width: 2px; margin-left: -.5px; border-radius: 2px; background: var(--primary); transform: scaleY(0); transform-origin: 50% 0; }
 .line:not([data-scroll="true"]) .fill { display: none; }
 /* Scroll-driven: a stop waits, dimmed and a little low, until the flow reaches it. */
 .line[data-scroll="true"] .stop { opacity: .28; transform: translateY(10px); transition: opacity 500ms cubic-bezier(.23, 1, .32, 1), transform 600ms cubic-bezier(.23, 1, .32, 1); }
