@@ -89,11 +89,11 @@ export function DateTimePicker({ id, value, onChange, disabled = false }: { id: 
         >
           <div className="w-[252px]">
             <div className="mb-2 flex items-center justify-between">
-              <button type="button" aria-label="Previous month" className="inline-flex size-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
+              <button type="button" aria-label="Previous month" className="inline-flex size-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--hover-wash)] hover:text-[var(--ink)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}>
                 <ChevronLeft className="size-4" aria-hidden="true" />
               </button>
               <span className="text-sm font-semibold">{month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</span>
-              <button type="button" aria-label="Next month" className="inline-flex size-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>
+              <button type="button" aria-label="Next month" className="inline-flex size-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--hover-wash)] hover:text-[var(--ink)]" onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}>
                 <ChevronRight className="size-4" aria-hidden="true" />
               </button>
             </div>
@@ -112,8 +112,8 @@ export function DateTimePicker({ id, value, onChange, disabled = false }: { id: 
                       chosen && sameDay(day, chosen)
                         ? "bg-[var(--primary)] font-semibold text-[var(--on-primary)]"
                         : sameDay(day, today)
-                          ? "border border-[var(--primary)] text-[var(--ink)] hover:bg-[var(--surface-alt)]"
-                          : "text-[var(--body)] hover:bg-[var(--surface-alt)]",
+                          ? "border border-[var(--primary)] text-[var(--ink)] hover:bg-[var(--hover-wash)]"
+                          : "text-[var(--body)] hover:bg-[var(--hover-wash)]",
                     )}
                   >
                     {day.getDate()}
@@ -138,7 +138,7 @@ export function DateTimePicker({ id, value, onChange, disabled = false }: { id: 
                     onClick={() => pickTime(minutes)}
                     className={cn(
                       "h-8 shrink-0 whitespace-nowrap rounded-md px-2 text-left text-sm tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      on ? "bg-[var(--primary)] font-semibold text-[var(--on-primary)]" : "text-[var(--body)] hover:bg-[var(--surface-alt)]",
+                      on ? "bg-[var(--primary)] font-semibold text-[var(--on-primary)]" : "text-[var(--body)] hover:bg-[var(--hover-wash)]",
                     )}
                   >
                     {clock(minutes)}

@@ -81,7 +81,7 @@ export function HomeTeam({ leaders, href, className }: { leaders: NonNullable<No
               <span className="truncate text-sm font-medium text-foreground">{leader.name}</span>
               <span className="text-xs tabular-nums text-muted-foreground"><span className="font-semibold text-foreground">{formatCount(leader.dials)}</span> · {reach}%</span>
               <span className="col-start-2 col-end-4 block h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]" aria-hidden="true">
-                <span className={cn("m-bar-rise block h-full rounded-full", index === 0 ? "bg-[var(--primary)]" : "bg-[color-mix(in_srgb,var(--primary)_45%,var(--surface-alt))]")} style={{ width: `${(leader.dials / max) * 100}%` }} />
+                <span className={cn("m-bar-rise block h-full rounded-full", index === 0 ? "bg-[var(--highlight)]" : "bg-[color-mix(in_srgb,var(--primary)_45%,var(--surface-alt))]")} style={{ width: `${(leader.dials / max) * 100}%` }} />
               </span>
             </li>
           );

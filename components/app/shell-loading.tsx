@@ -35,7 +35,7 @@ export function ShellLoading() {
       <StepFrameLayout
         stepKey={step.key}
         busy
-        header={exact ? <PageHeader title={step.label} lead={<TabsRoom />} className={FRAME_HEADER} /> : <HeaderShape />}
+        header={exact ? <PageHeader title={step.label} tabs={<TabsRoom />} className={FRAME_HEADER} /> : <HeaderShape />}
         rail={<StepRail label={rail.label} cookie={rail.cookie} countsUrl={rail.countsUrl} waiting={rail.waiting} steps={rail.steps} step={step.key} initialCollapsed={rail.collapsed} foot={rail.foot} />}
       >
         <PageLoading header={false} />
@@ -51,7 +51,7 @@ export function ShellLoading() {
       <StepFrameLayout
         stepKey={step.key}
         busy
-        header={exact ? <PageHeader title={step.label} lead={<TabsRoom />} className={FRAME_HEADER} /> : <HeaderShape />}
+        header={exact ? <PageHeader title={step.label} tabs={<TabsRoom />} className={FRAME_HEADER} /> : <HeaderShape />}
         rail={<LeadsInRail steps={frame.steps as Parameters<typeof LeadsInRail>[0]["steps"]} step={step.key as LeadsInStep} initialCollapsed={frame.collapsed} />}
       >
         <PageLoading header={false} />
@@ -84,8 +84,14 @@ export function ShellLoading() {
 }
 
 /** Holds the height of the tabs that most steps draw on the title's line, so the step does not drop when they arrive. */
+/** The sub-page bar's place while the step loads: its hairline and two quiet tab shapes, so the step does not jump. */
 function TabsRoom() {
-  return <span aria-hidden="true" className="block h-9" />;
+  return (
+    <div aria-hidden="true" data-tabs-room="" className="flex h-[2.5rem] flex-1 items-center gap-5 border-b border-border">
+      <span className="h-3 w-16 m-skel rounded-full" />
+      <span className="h-3 w-20 m-skel rounded-full" />
+    </div>
+  );
 }
 
 /** A page under a step (a record): its title is not known yet, so its shape, as PageLoading draws it. */

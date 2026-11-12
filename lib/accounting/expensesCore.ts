@@ -127,3 +127,95 @@ export function shiftMonth(month: string, by: number): string {
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+
+// ─── round 7 (owner 2026-11-10, mockups-r7/accounting.html §3): rows open the expense ─────────────
+
+const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+/** "2026-11" (or any date in it) → "November 2026". */
+export function monthName(month: string): string {
+  const [y, m] = month.slice(0, 7).split("-").map(Number);
+  return `${MONTH_NAMES[m - 1]} ${y}`;
+}
+
+/** "2026-11-04" → "Nov 4", with the year when it is not `thisYear`. */
+export function shortDate(iso: string, thisYear = new Date().getUTCFullYear()): string {
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return `${MONTH_NAMES[m - 1].slice(0, 3)} ${d}${y === thisYear ? "" : `, ${y}`}`;
+}
+
+/** The fields the round-7 helpers read; an ExpenseRow has them all. */
+export type ExpenseShape = { id: string; vendorName: string; status: ExpenseStatus; incurredOn: string; paidOn: string | null; parentExpenseId: string | null; hasReceipt: boolean };
+
+/** A monthly bill's copy (or the bill itself) is for a month; a one-off is for a day. */
+export const isMonthly = (e: Pick<ExpenseShape, "status" | "parentExpenseId">) => e.status === "template" || e.parentExpenseId !== null;
+
+/** The For column: "Nov 2026" for a month, "Nov 4" for a one-off. */
+export function expenseFor(e: Pick<ExpenseShape, "status" | "parentExpenseId" | "incurredOn">, thisYear?: number): string {
+  if (!isMonthly(e)) return shortDate(e.incurredOn, thisYear);
+  const name = monthName(e.incurredOn);
+  return `${name.slice(0, 3)} ${name.slice(-4)}`;
+}
+
+/** The expense page's title: "CloseRight CRM · November 2026", "Office supplies · Nov 4", "Dialer · Monthly bill". */
+export function expenseTitle(e: Pick<ExpenseShape, "vendorName" | "status" | "parentExpenseId" | "incurredOn">, thisYear?: number): string {
+  if (e.status === "template") return `${e.vendorName} · Monthly bill`;
+  return `${e.vendorName} · ${e.parentExpenseId ? monthName(e.incurredOn) : shortDate(e.incurredOn, thisYear)}`;
+}
+
+/** A stepper's short name for a neighbour: "Dialer · Nov", "Office supplies · Nov 4". */
+export function expenseShortName(e: Pick<ExpenseShape, "vendorName" | "status" | "parentExpenseId" | "incurredOn">, thisYear?: number): string {
+  if (e.status === "template") return `${e.vendorName} · monthly`;
+  return `${e.vendorName} · ${e.parentExpenseId ? monthName(e.incurredOn).slice(0, 3) : shortDate(e.incurredOn, thisYear)}`;
+}
+
+export type ExpenseState = "waiting" | "unpaid" | "paid" | "void" | "template";
+export function expenseState(e: Pick<ExpenseShape, "status" | "paidOn">): ExpenseState {
+  if (e.status === "unconfirmed") return "waiting";
+  if (e.status === "template") return "template";
+  if (e.status === "void") return "void";
+  return e.paidOn ? "paid" : "unpaid";
+}
+
+/** The Next step column, in words; the step itself is taken on the expense's page. */
+export function nextStepFor(e: Pick<ExpenseShape, "status" | "paidOn" | "hasReceipt">): string {
+  const state = expenseState(e);
+  if (state === "waiting") return "OK it";
+  if (state === "unpaid") return "Mark paid";
+  if (state === "paid" && !e.hasReceipt) return "Attach the receipt";
+  if (state === "template") return "Comes back each month";
+  return "Nothing to do";
+}
+
+/**
+ * The lists an expense page can be opened from (`?from=`), so ‹ › walk the list as it was shown: the To OK tab,
+ * All expenses and its status chips, Monthly bills, and a monthly bill's Months tab.
+ */
+export const EXPENSE_LISTS = ["confirm", "all", "paid", "unpaid", "void", "recurring", "months"] as const;
+export type ExpenseList = (typeof EXPENSE_LISTS)[number];
+
+export function inExpenseList<T extends Pick<ExpenseShape, "status" | "paidOn" | "parentExpenseId">>(e: T, list: ExpenseList, parentId: string | null = null): boolean {
+  const state = expenseState(e);
+  switch (list) {
+    case "confirm": return state === "waiting";
+    case "all": return state === "paid" || state === "unpaid" || state === "void";
+    case "paid": case "unpaid": case "void": return state === list;
+    case "recurring": return state === "template";
+    case "months": return parentId !== null && e.parentExpenseId === parentId;
+  }
+}
+
+/** The list a page opened without `?from=` belongs to. */
+export const homeListOf = (e: Pick<ExpenseShape, "status" | "paidOn">): ExpenseList => {
+  const state = expenseState(e);
+  return state === "waiting" ? "confirm" : state === "template" ? "recurring" : "all";
+};
+
+/** An expense's page, remembering the list it was opened from. */
+export const expenseHref = (id: string, from?: ExpenseList, tab?: "months" | "receipt") => {
+  const p = new URLSearchParams();
+  if (tab) p.set("tab", tab);
+  if (from) p.set("from", from);
+  const q = p.toString();
+  return `/app/expenses/${id}${q ? `?${q}` : ""}`;
+};

@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { NoteField } from "@/components/ui/note-field";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+
+import { StepSlot } from "@/components/app/step-frame/step-slot";
+import { LeaveGuard } from "@/components/ui/leave-guard";
 
 import { Button } from "@/components/ui/button";
 import { cardInset, cardSurface } from "@/components/ui/card";
@@ -25,8 +28,15 @@ const DAYS = Array.from({ length: 28 }, (_, i) => i + 1);
  * instructions. From a save-queue card it also logs the call (LA-5.3) and links the two.
  *
  * `onDone` gets the new request's id.
+ *
+ * `slot` (round 7, owner pick 2·3, 2026-11-10: New request is its own page with the save on its title line): the
+ * two saves, "Save, send later" and "Record as sent", go to that title-line slot instead of the form's foot; the
+ * call's fields stay open (no "I have sent it" tick); what is missing is said on the error line; and leaving with
+ * changes asks first (LeaveGuard).
  */
-export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fromQueue, initialOutcome = "reached_agreed", initialNote = "", onCancel, onDone }: {
+export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fromQueue, initialOutcome = "reached_agreed", initialNote = "", slot, onCancel, onDone }: {
+  /** The title line's StepSlotTarget id, on the New request page. */
+  slot?: string;
   carrierId: string;
   policyNumber: string;
   type: RequestType;
@@ -86,9 +96,24 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
     if (type === "payment_method_change") return { type, to_method: toMethod || null, account_last4: last4.trim() || null };
     return { type, address: address.trim() || null, zip: zip.trim() || null, state: state.trim() || null };
   }
-  const ready = prefill && !openSame && (type !== "draft_date_change" || day !== "") && (!sendNow || method !== "") && (type !== "payment_method_change" || toMethod !== "" || /^\d{4}$/.test(last4)) && (type !== "address_change" || address.trim() || zip.trim() || state.trim());
+  /** What still stops a save, in words for the error line; null when it can go. */
+  const problem = (send: boolean): string | null => {
+    if (!prefill) return "The policy is still being read.";
+    if (openSame) return "This policy already has an open request of this kind. Finish or cancel it on Waiting on the carrier first.";
+    if (type === "draft_date_change" && day === "") return "Choose the new payment date.";
+    if (type === "payment_method_change" && toMethod === "" && !/^\d{4}$/.test(last4)) return "Choose the new way to pay, or give the last four digits.";
+    if (type === "address_change" && !(address.trim() || zip.trim() || state.trim())) return "Give the new address, ZIP or state.";
+    if (send && method === "") return "Say how you asked the carrier.";
+    return null;
+  };
+  const ready = problem(sendNow) === null;
+  const [touched, setTouched] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const leaveScope = useRef<HTMLFormElement>(null);
 
-  async function save() {
+  async function save(send: boolean): Promise<boolean> {
+    const missing = problem(send);
+    if (missing) { setError(missing); return false; }
     setBusy(true);
     setError(null);
     try {
@@ -97,16 +122,19 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "create", carrier_id: carrierId, policy_number: policyNumber, origin, change: change(),
-          send: sendNow ? { method, form_ref: formRef.trim() || null, reference: reference.trim() || null, expected_effective_date: effective || null } : null,
+          send: send ? { method, form_ref: formRef.trim() || null, reference: reference.trim() || null, expected_effective_date: effective || null } : null,
           note: note.trim() || null, from_queue: fromQueue ? { outcome } : null,
         }),
       });
       const data = (await response.json().catch(() => ({}))) as { error?: string; id?: string };
       if (!response.ok) throw new Error(data.error ?? "The request could not be opened.");
-      notify.done(sendNow ? "Sent. It stays open until a carrier file shows the change." : "Saved as not sent yet. Mark it sent when you have asked the carrier.");
+      notify.done(send ? "Sent. It stays open until a carrier file shows the change." : "Saved as not sent yet. Mark it sent when you have asked the carrier.");
+      setSaved(true);
       onDone(data.id ?? null);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "The request could not be opened.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -114,14 +142,25 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
 
   if (loadError) return <div className={`${cardSurface} p-5`}><p className="m-0 text-sm text-[var(--error-ink)]">{loadError}</p></div>;
   if (!prefill) return <div className={`${cardSurface} p-5`}><SectionLoading rows={3} columns={2} label="Reading the policy" /></div>;
+  // On the New request page the call's fields are always open and the two saves sit on the title line.
+  const showCall = slot ? true : sendNow;
 
   return (
-    <form className={`${cardSurface} flex flex-col gap-4 p-5`} onSubmit={(e) => { e.preventDefault(); if (ready && !busy) void save(); }}>
+    <form ref={leaveScope} className={`${cardSurface} flex flex-col gap-4 p-5`} onChange={() => setTouched(true)} onSubmit={(e) => { e.preventDefault(); if (!busy && (slot || ready)) void save(slot ? false : sendNow); }}>
+      {slot && (
+        <>
+          <StepSlot id={slot}>
+            <Button type="button" variant="outline" disabled={busy} onClick={() => void save(false)}>{busy ? "Saving…" : "Save, send later"}</Button>
+            <Button type="button" disabled={busy} onClick={() => void save(true)}>Record as sent</Button>
+          </StepSlot>
+          <LeaveGuard dirty={touched && !saved} scope={leaveScope} onSave={() => save(false)} onDiscard={() => setTouched(false)} what="this request" />
+        </>
+      )}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="m-0 text-base font-semibold text-foreground">{REQUEST_LABELS[type]}{prefill.clientName ? ` for ${personName(prefill.clientName)}` : ""}</h2>
         <span className="text-xs text-muted-foreground">{prefill.carrierName} · {policyNumber} · open until a carrier file shows the change</span>
       </div>
-      {openSame && <p className="m-0 text-sm text-[var(--warning-ink)]">This policy already has an open request of this kind. Finish or cancel it on Servicing first.</p>}
+      {openSame && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">This policy already has an open request of this kind. Finish or cancel it on Waiting on the carrier first.</p>}
 
       <div className={`${cardInset} px-3 py-2 text-sm`}>
         <span className="block font-semibold text-foreground">How {prefill.carrierName} does it</span>
@@ -184,13 +223,16 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
         )}
       </div>
 
-      <label className="flex items-center gap-2 text-sm font-medium text-foreground">
-        <input type="checkbox" className={checkboxControl} checked={sendNow} onChange={(e) => setSendNow(e.target.checked)} />
-        I have sent it to the carrier
-      </label>
-      {sendNow && (
+      {!slot && (
+        <label className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <input type="checkbox" className={checkboxControl} checked={sendNow} onChange={(e) => setSendNow(e.target.checked)} />
+          I have sent it to the carrier
+        </label>
+      )}
+      {slot && <h3 className="m-0 text-sm font-semibold text-foreground">The call</h3>}
+      {showCall && (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <Field label="How" htmlFor="svc-via" required>
+          <Field label={slot ? "How you asked" : "How"} htmlFor="svc-via" required={!slot}>
             <select id="svc-via" className={control} value={method} onChange={(e) => setMethod(e.target.value as CarrierMethod | "")}>
               <option value="">Choose…</option>
               {CARRIER_METHODS.map((m) => <option key={m} value={m}>{CARRIER_METHOD_LABELS[m]}</option>)}
@@ -205,10 +247,12 @@ export function ServicingRequestForm({ carrierId, policyNumber, type, origin, fr
       <Field label="Note" htmlFor="svc-note"><NoteField id="svc-note"  maxLength={2000} value={note} onChange={setNote} /></Field>
       {/* On a page a Callout goes to the bell: an error the user must fix stays beside the button (§11). */}
       {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
-      <div className="flex flex-wrap justify-end gap-2">
-        {onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}
-        <Button type="submit" disabled={!ready || busy}>{busy ? "Saving…" : sendNow ? "Record as sent" : "Save, send later"}</Button>
-      </div>
+      {!slot && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {onCancel && <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>}
+          <Button type="submit" disabled={!ready || busy}>{busy ? "Saving…" : sendNow ? "Record as sent" : "Save, send later"}</Button>
+        </div>
+      )}
     </form>
   );
 }

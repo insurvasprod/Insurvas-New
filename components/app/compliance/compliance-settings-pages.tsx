@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouteSheet } from "@/components/app/route-sheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -56,6 +57,7 @@ export function DeadlinePage({ regulator, preset, readOnly }: { regulator: strin
 
 function DeadlineForm({ bundle, regulator, preset, readOnly }: { bundle: ReturnType<typeof useComplianceBundle> & { data: Bundle }; regulator: string | null; preset: string | null; readOnly: boolean }) {
   const router = useRouter();
+  const sheet = useRouteSheet();
   const { data, busy, write } = bundle;
   const existing = regulator ? data.deadlines.rows.find((r) => r.regulator === regulator) ?? null : null;
   const set = new Set(data.deadlines.rows.map((r) => r.regulator));
@@ -76,7 +78,8 @@ function DeadlineForm({ bundle, regulator, preset, readOnly }: { bundle: ReturnT
   };
   return (
     <div className="flex flex-col gap-6">
-      <SettingsSectionHeader trail={<Crumbs tab="Complaints" anchor="deadlines" here={existing ? regulatorName(existing.regulator) : "Add a deadline"} />} />
+      {/* In a route sheet the panel names it (route-sheet.tsx). */}
+      {!sheet && <SettingsSectionHeader trail={<Crumbs tab="Complaints" anchor="deadlines" here={existing ? regulatorName(existing.regulator) : "Add a deadline"} />} />}
       <LeaveGuard dirty={dirty && !busy} onSave={valid ? save : undefined} onDiscard={() => undefined} what="this deadline" />
       <FormSections>
         <FormSection title={existing ? "Response deadline" : "A new response deadline"} info="Statutory days to answer a state insurance department or the FTC. Unset means no countdown, never a guessed default.">
@@ -211,6 +214,7 @@ export function NewHoldPage({ readOnly }: { readOnly: boolean }) {
 
 function NewHold({ bundle, readOnly }: { bundle: ReturnType<typeof useComplianceBundle> & { data: Bundle }; readOnly: boolean }) {
   const router = useRouter();
+  const sheet = useRouteSheet();
   const { busy, write } = bundle;
   const [scope, setScope] = useState<HoldScope>("phone_digits");
   const [value, setValue] = useState("");
@@ -226,7 +230,7 @@ function NewHold({ bundle, readOnly }: { bundle: ReturnType<typeof useCompliance
   };
   return (
     <div className="flex flex-col gap-6">
-      <SettingsSectionHeader trail={<Crumbs tab="Holds & deletion" anchor="holds" here="Place a hold" />} />
+      {!sheet && <SettingsSectionHeader trail={<Crumbs tab="Holds & deletion" anchor="holds" here="Place a hold" />} />}
       <LeaveGuard dirty={dirty && !busy} onSave={valid ? place : undefined} onDiscard={() => undefined} what="this hold" />
       <FormSections>
         <FormSection title="A legal hold" info="Records under a hold are never deleted, by the purge or a deletion request, until you release it.">
@@ -271,8 +275,12 @@ function HoldView({ bundle, id, readOnly }: { bundle: ReturnType<typeof useCompl
   return (
     <div className="flex flex-col gap-6">
       <SettingsSectionHeader
-        trail={<Crumbs tab="Holds & deletion" anchor="holds" here={`${HOLD_SCOPE_LABELS[hold.scope]}${hold.scopeValue ? `: ${hold.scopeValue}` : ""}`} aside={hold.releasedAt ? <StatusChip tone="neutral">Released</StatusChip> : <StatusChip tone="info">In force</StatusChip>} />}
-        actions={!readOnly && !hold.releasedAt ? <Button variant="outline" disabled={busy} onClick={() => { setWhy(""); setReleasing(true); }}>Release hold</Button> : undefined} />
+        trail={<Crumbs tab="Holds & deletion" anchor="holds" here={`${HOLD_SCOPE_LABELS[hold.scope]}${hold.scopeValue ? `: ${hold.scopeValue}` : ""}`} aside={hold.releasedAt ? <StatusChip tone="neutral">Released</StatusChip> : hold.sourceOpen ? <StatusChip tone="warning">{hold.reason === "complaint" ? "Complaint open" : "Dispute open"}</StatusChip> : <StatusChip tone="good">In force</StatusChip>} />}
+        // Round 7 (Notion LA-6.6): an automatic hold whose complaint or dispute is still open cannot be released (the
+        // database refuses it), so its button is off and says why instead of failing after the confirm.
+        actions={!readOnly && !hold.releasedAt ? (hold.sourceOpen
+          ? <Button variant="outline" disabled title={`Released automatically when its ${hold.reason === "complaint" ? "complaint" : "dispute"} is closed`}>Release hold</Button>
+          : <Button variant="outline" disabled={busy} onClick={() => { setWhy(""); setReleasing(true); }}>Release hold</Button>) : undefined} />
       <FormSections>
         <FormSection title="This hold" info="Nothing it covers is deleted, by the purge or a deletion request, while it is in force.">
           <dl className="m-0 grid gap-x-6 gap-y-1.5 text-sm @xl:grid-cols-[12rem_minmax(0,1fr)]">
@@ -282,7 +290,7 @@ function HoldView({ bundle, id, readOnly }: { bundle: ReturnType<typeof useCompl
             <dt className="text-[var(--muted)]">Note</dt><dd className="m-0 text-[var(--ink)]">{hold.note ?? "—"}</dd>
             {hold.releasedAt && <><dt className="text-[var(--muted)]">Released</dt><dd className="m-0 text-[var(--ink)]">{dateTime(hold.releasedAt, zone)}{hold.releaseNote ? `: ${hold.releaseNote}` : ""}</dd></>}
           </dl>
-          {hold.automatic && !hold.releasedAt && <LockedNote>An automatic hold is released only once its {hold.reason === "complaint" ? "complaint" : "dispute"} is closed.</LockedNote>}
+          {hold.sourceOpen && <LockedNote>An automatic hold is released only once its {hold.reason === "complaint" ? "complaint" : "dispute"} is closed.</LockedNote>}
         </FormSection>
       </FormSections>
       <ConfirmDialog open={releasing} onOpenChange={setReleasing} busy={busy}

@@ -187,7 +187,27 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
     <div className="flex flex-col gap-6">
       {/* Saving and publishing check the whole map, so the guard offers Discard or Stay. */}
       <LeaveGuard dirty={editable && dirty} onDiscard={() => setDraft(draftOf(open))} what={`the draft of ${open.name}`} />
-      <AdminPageHeader title={open.name} subtitle={`${FILE_TYPE_LABELS[open.fileType]} · ${layoutKey}${removed ? " · deleted" : ""}`} backHref="/admin/layout-maps" backLabel="Layout maps" />
+      <AdminPageHeader title={open.name} subtitle={`${FILE_TYPE_LABELS[open.fileType]} · ${layoutKey}${removed ? " · deleted" : ""}`} backHref="/admin/layout-maps" backLabel="Layout maps"
+        // The page's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
+        tabs={
+          <ViewTabs
+            label="Layout views"
+            value={tab}
+            onChange={setTab}
+            tabs={[{ key: "columns", label: "Columns", count: draft.entries.length }, { key: "settings", label: "File settings" }, { key: "carriers", label: "Carriers", count: assignments.length }, { key: "versions", label: "Versions", count: versions.length }]}
+          />
+        }
+        actions={
+            <>
+              {sorted.length > 1 && (
+                <select aria-label="Version" className={toolbarControl} value={open.id} disabled={busy !== null} onChange={(event) => { setOpenId(event.target.value); setPage(1); }}>
+                  {sorted.map((map) => <option key={map.id} value={map.id}>v{map.version} · {STATUS[map.status].label}</option>)}
+                </select>
+              )}
+              {actions}
+            </>
+        }
+      />
 
       <StatStrip label="This layout">
         <StatTile label="Version" value={`v${open.version}`} footnote={STATUS[open.status].label.toLowerCase()} />
@@ -196,23 +216,6 @@ export function LayoutDetail({ layoutKey, initialVersions, initialAssignments, c
         <StatTile label="Kept as information" value={kept.toLocaleString("en-US")} footnote="shown to the agent with each row" />
         <StatTile label="Carriers" value={assignments.length.toLocaleString("en-US")} footnote={assignments.length ? assignments.map((row) => row.carrierName).join(", ") : "none yet"} />
       </StatStrip>
-
-      <ViewTabs
-        label="Layout views"
-        value={tab}
-        onChange={setTab}
-        tabs={[{ key: "columns", label: "Columns", count: draft.entries.length }, { key: "settings", label: "File settings" }, { key: "carriers", label: "Carriers", count: assignments.length }, { key: "versions", label: "Versions", count: versions.length }]}
-        actions={
-          <>
-            {sorted.length > 1 && (
-              <select aria-label="Version" className={toolbarControl} value={open.id} disabled={busy !== null} onChange={(event) => { setOpenId(event.target.value); setPage(1); }}>
-                {sorted.map((map) => <option key={map.id} value={map.id}>v{map.version} · {STATUS[map.status].label}</option>)}
-              </select>
-            )}
-            {actions}
-          </>
-        }
-      />
 
       {errors.length > 0 && (
         <ul role="alert" className="m-0 list-disc space-y-1 rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] py-3 pl-8 pr-4 text-sm text-[var(--error-ink)]">

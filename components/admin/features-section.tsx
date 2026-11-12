@@ -69,6 +69,8 @@ export function FeaturesSection({
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Features"
+        // The page's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
+        tabs={<UnderlineTabs label="Features" tabs={tabs.map((t) => ({ key: t.id, label: t.label }))} value={tab} onChange={setTab} idPrefix={`${baseId}-tab`} controls={(key) => `${baseId}-panel-${key}`} />}
         actions={
           <Button type="button" onClick={() => setCreating(true)}>
             New feature
@@ -92,15 +94,6 @@ export function FeaturesSection({
       })()}
 
       {title && <Callout tone="warning" title={title} />}
-
-      <UnderlineTabs
-        label="Features"
-        tabs={tabs.map((t) => ({ key: t.id, label: t.label }))}
-        value={tab}
-        onChange={setTab}
-        idPrefix={`${baseId}-tab`}
-        controls={(key) => `${baseId}-panel-${key}`}
-      />
 
       <div
         role="tabpanel"

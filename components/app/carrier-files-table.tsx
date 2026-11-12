@@ -4,12 +4,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 
-import { Button } from "@/components/ui/button";
-import { Download } from "lucide-react";
-
 import { ClearFiltersButton, DataToolbar, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { notify } from "@/lib/notify";
-import { Callout } from "@/components/app/settings/primitives";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
@@ -56,8 +52,10 @@ const LIT_FOR_MS = 4000;
  *
  * Round 3 (owner 2026-11-02): the Files step's chips (All · Needs you · Failed · Missing) sit on top as
  * `chips` and pick `show` by the address, so the old stage select is gone. The toolbar is one row
- * (search, carrier, type; how it arrived and when sit under "More filters"), and the columns fit the card
- * at 1280: the row count sits under the file's name, the actions are a download icon and Open.
+ * (search, carrier, type; how it arrived and when sit under "More filters").
+ *
+ * One line per row (owner 2026-11-11): File · Carrier · Type · Date · Stages · Where it is. The row opens the
+ * file's page (Download is there); the row count and a failed file's reason are tooltips.
  */
 /**
  * A file's problem in a few words for its row: the part before the explanation ("Totals don't add up:
@@ -80,8 +78,6 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
   const [page, setPage] = useState(1);
   // "Last N days" counts back from when the list was opened.
   const [openedAt] = useState(() => Date.now());
-  const [opening, setOpening] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
   // What sits above the rows at 1440x900: the header, the figures, the chips, the toolbar and the column heads.
   const pageSize = useFittingPageSize(540, 45);
 
@@ -143,21 +139,6 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
   const filtered = Boolean(query.trim() || carrier || type !== "all" || source !== "all" || period !== "all");
   const clear = () => { setQuery(""); setCarrier(""); setType("all"); setSource("all"); setPeriod("all"); setPage(1); };
 
-  async function download(id: string) {
-    setOpening(id);
-    setProblem(null);
-    try {
-      const response = await fetch(`/api/app/carrier-files/${id}/file`);
-      const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
-      if (!response.ok || !data.url) throw new Error(data.error ?? "The file could not be opened.");
-      window.location.assign(data.url);
-    } catch (reason) {
-      setProblem(reason instanceof Error ? reason.message : "The file could not be opened.");
-    } finally {
-      setOpening(null);
-    }
-  }
-
   return (
     <TableCard
       className="flex min-h-[calc(100dvh-var(--top-bar-h)-332px)] flex-col [&>.overflow-x-auto]:flex-1"
@@ -166,7 +147,7 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
         <DataToolbar actions={<>
           {filtered && <ClearFiltersButton onClick={clear} />}
           {/* No Refresh button: the list keeps itself current while anything is being read (owner 2026-11-05). */}
-          <span role="status" aria-live="polite" className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+          <span role="status" aria-live="polite" className="inline-flex items-center gap-2 text-sm text-foreground">
             {reading.length ? (
               <><span aria-hidden="true" className="size-2 rounded-full bg-[var(--primary)] motion-safe:animate-pulse" />Reading {reading.length === 1 ? "1 file" : `${reading.length} files`}…</>
             ) : (
@@ -195,56 +176,46 @@ export function CarrierFilesTable({ files, stages, emptyTitle, emptyHint, show, 
       </div>}
       footer={files.length ? <Pager page={current} pageSize={pageSize} total={visible.length} onPage={setPage} noun={visible.length === 1 ? "file" : "files"} suffix={also ? `newest first · ${also}` : "newest first"} /> : undefined}
     >
-      {/* To the bell, not the page (owner 2026-11-02): Callout raises it there. */}
-      {problem && <Callout tone="error" title={problem} />}
       {files.length === 0 ? (
         <EmptyState title={emptyTitle} hint={emptyHint} />
       ) : visible.length === 0 ? (
         <NoMatches noun="files" onClear={clear} />
       ) : (
-        <table className="portal-lead-table w-full min-w-[854px] table-fixed text-left text-sm">
+        <table className="portal-lead-table w-full text-left text-sm">
           <thead>
             <tr>
-              <th className="w-[104px]">Date</th>
-              <th className="w-[116px]">Carrier</th>
-              <th className="w-[96px]">Type</th>
               <th>File</th>
-              <th className="w-[156px]">Stages</th>
-              <th className="w-[150px]">Where it is</th>
-              <th className="w-[112px] text-right"><span className="sr-only">Actions</span></th>
+              <th>Carrier</th>
+              <th>Type</th>
+              <th>Date</th>
+              <th>Stages</th>
+              <th>Where it is</th>
             </tr>
           </thead>
           <tbody className="m-seq">
+            {/* One line per row (owner 2026-11-11): the file name first, plain values, the one chip says where it is.
+                The row count, size, door and sender are the name's tooltip; a failed file's reason is the chip's. The
+                whole row opens the file's page, where Download sits. */}
             {rows.map((file) => {
               const from = file.source === "upload" ? file.uploadedByName ?? "A former member" : file.source === "email" ? file.emailFrom ?? "Unknown sender" : file.agency ?? "A script";
               const view = stages?.[file.id];
+              const reason = file.status === "failed" ? file.errorDetail : file.rawError;
+              const rowsWord = file.rowCount !== null ? ` · ${file.rowCount.toLocaleString("en-US")} ${file.rowCount === 1 ? "row" : "rows"}` : "";
               return (
-                <tr key={file.id} className={`m-row transition-colors duration-700 ${lit[file.id] ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)]" : ""}`}>
-                  <td className="tabular-nums" title={`Arrived ${fileDay(file.receivedAt)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{fileDay(file.fileDate)}</td>
-                  <td>{file.carrierName ? <span className="block truncate font-semibold text-foreground" title={file.carrierName}>{file.carrierName}</span> : <span className="text-muted-foreground">No carrier yet</span>}</td>
-                  <td className="truncate">{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">—</span>}</td>
-                  <td>
-                    <Link href={fileHref(file.id)} className="block truncate text-foreground hover:underline" title={`${file.originalFilename} · ${fileSize(file.fileBytes)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{file.originalFilename}</Link>
-                    {/* The reason in a few words (owner 2026-11-02: "make it shorter"); the whole sentence is the tooltip. */}
-                    {file.status === "failed" && file.errorDetail && <span className={`block truncate text-xs ${file.waitingForLayout ? "text-muted-foreground" : "text-[var(--error-ink)]"}`} title={file.errorDetail}>{shortReason(file.errorDetail)}</span>}
-                    {file.status !== "failed" && file.rawError && <span className="block truncate text-xs text-[var(--error-ink)]" title={file.rawError}>{shortReason(file.rawError)}</span>}
-                    {file.status !== "failed" && !file.rawError && file.rowCount !== null && <span className="block truncate text-xs tabular-nums text-muted-foreground" title="Rows kept exactly as they arrived">{file.rowCount.toLocaleString("en-US")} {file.rowCount === 1 ? "row" : "rows"}</span>}
+                <tr key={file.id} className={`m-row cursor-pointer transition-colors duration-700 ${lit[file.id] ? "bg-[color-mix(in_srgb,var(--primary)_14%,transparent)]" : ""}`} onClick={() => router.push(fileHref(file.id))}>
+                  <td className="whitespace-nowrap font-medium text-foreground">
+                    <Link href={fileHref(file.id)} className="hover:underline" onClick={(event) => event.stopPropagation()} title={`${file.originalFilename}${rowsWord} · ${fileSize(file.fileBytes)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{file.originalFilename}</Link>
                   </td>
+                  <td className="whitespace-nowrap">{file.carrierName ?? <span className="text-muted-foreground" title="No carrier yet">—</span>}</td>
+                  <td className="whitespace-nowrap">{file.fileType ? FILE_TYPE_LABELS[file.fileType] : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground" title={`Arrived ${fileDay(file.receivedAt)} · ${FILE_SOURCE_LABELS[file.source]} · ${from}`}>{fileDay(file.fileDate)}</td>
                   <td>{view ? <StageStrip stages={view.stages} fileType={file.fileType} reading={whereOf(file) === "running"} /> : <span className="text-muted-foreground">—</span>}</td>
-                  <td className="truncate">
+                  <td className="whitespace-nowrap">
                     {view ? (
-                      <StatusChip tone={view.where.tone}>{view.where.label}</StatusChip>
+                      <StatusChip tone={view.where.tone} title={reason ?? undefined}>{view.where.label}</StatusChip>
                     ) : (
-                      <StatusChip tone={STATUS_TONE[file.status]}>{file.status === "parsed" && file.parserVersion ? `${FILE_STATUS_LABELS.parsed} · v${file.parserVersion}` : FILE_STATUS_LABELS[file.status]}</StatusChip>
+                      <StatusChip tone={STATUS_TONE[file.status]} title={reason ?? undefined}>{file.status === "parsed" && file.parserVersion ? `${FILE_STATUS_LABELS.parsed} · v${file.parserVersion}` : FILE_STATUS_LABELS[file.status]}</StatusChip>
                     )}
-                  </td>
-                  <td className="text-right">
-                    <span className="inline-flex items-center gap-1">
-                      <Button type="button" variant="ghost" size="icon-sm" disabled={opening === file.id} onClick={() => void download(file.id)} aria-label={`Download ${file.originalFilename}`} title={opening === file.id ? "Opening…" : "Download the original"}>
-                        <Download aria-hidden="true" />
-                      </Button>
-                      <Button asChild size="sm" variant="outline"><Link href={fileHref(file.id)} aria-label={`Open ${file.originalFilename}`}>Open</Link></Button>
-                    </span>
                   </td>
                 </tr>
               );

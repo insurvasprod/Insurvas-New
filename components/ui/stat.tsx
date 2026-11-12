@@ -43,7 +43,7 @@ export function DeltaChip({
     good === null
       ? "bg-[var(--surface-alt)] text-[var(--body)]"
       : good
-        ? "bg-[var(--success-surface)] text-[var(--success-ink)]"
+        ? "bg-[var(--highlight-soft)] text-[var(--highlight-ink)]"
         : "bg-[var(--error-surface)] text-[var(--error-ink)]";
 
   // The arrow is a second encoding, so direction survives without colour.
@@ -77,7 +77,8 @@ export function DeltaChip({
 
 // `primary` is the one brand-green bar allowed: progress the reader is actively working through
 // (a setup checklist), never a measurement they merely observe.
-export type MeterTone = "neutral" | "good" | "info" | "warning" | "danger" | "primary";
+/** `highlight` is gold, the third brand colour: a goal reached, a record (never a status). */
+export type MeterTone = "neutral" | "good" | "info" | "warning" | "danger" | "primary" | "highlight";
 
 const VALUE_TONE: Record<MeterTone, string> = {
   neutral: "text-foreground",
@@ -86,6 +87,7 @@ const VALUE_TONE: Record<MeterTone, string> = {
   warning: "text-[var(--warning-ink)]",
   danger: "text-[var(--error-ink)]",
   primary: "text-[var(--accent-ink)]",
+  highlight: "text-[var(--highlight-ink)]",
 };
 
 const METER: Record<MeterTone, string> = {
@@ -95,6 +97,7 @@ const METER: Record<MeterTone, string> = {
   warning: "bg-[var(--warning)]",
   danger: "bg-[var(--error)]",
   primary: "bg-[var(--primary)]",
+  highlight: "bg-[var(--highlight)]",
 };
 
 /**
@@ -146,17 +149,23 @@ export function Meter({
  * Deliberately unlabelled and unreadable as data: it says "climbing" or "falling" at a glance and
  * nothing more. Anyone who needs the numbers opens the report, so this stays decorative and is
  * hidden from screen readers — the figure beside it is the accessible fact.
+ *
+ * It draws itself in once, left to right, as the kit's charts do (Reports round 7, 2026-11-11: `m-chart-line`, or
+ * `m-chart-reveal` when stretched, then the head lands, `m-chart-dot`). `fill` stretches it to its box's width (a tile's chart under the figure).
  */
 export function Sparkline({
   points,
   tone = "neutral",
   width = 88,
   height = 30,
+  fill = false,
 }: {
   points: number[];
   tone?: MeterTone;
   width?: number;
   height?: number;
+  /** Stretch to the parent's width at `height` (the line keeps its 2px stroke), rather than a fixed `width`. */
+  fill?: boolean;
 }) {
   if (points.length < 2) return null;
 
@@ -169,7 +178,9 @@ export function Sparkline({
           ? "var(--warning)"
           : tone === "info"
             ? "var(--info)"
-            : "var(--muted)";
+            : tone === "primary"
+              ? "var(--primary)"
+              : "var(--muted)";
 
   const min = Math.min(...points);
   const max = Math.max(...points);
@@ -182,11 +193,24 @@ export function Sparkline({
   const lastX = pad + (points.length - 1) * step;
   const lastY = y(points[points.length - 1]);
 
+  if (fill) {
+    // Stretched, a circle would turn into an ellipse: the head is a dot laid over the line instead.
+    return (
+      <span className="relative block w-full" style={{ height }} aria-hidden="true">
+        {/* Stretched, the dash offset would be measured on screen and stop short: it reveals by a clip instead. */}
+        <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" fill="none" focusable="false" className="m-chart-reveal block overflow-visible">
+          <path d={d} stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        </svg>
+        <span className="m-chart-dot absolute size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-[var(--surface)]" style={{ left: `${(lastX / width) * 100}%`, top: lastY, background: stroke }} />
+      </span>
+    );
+  }
+
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} fill="none" aria-hidden="true" focusable="false">
-      <path d={d} stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path className="m-chart-line" pathLength={1} d={d} stroke={stroke} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       {/* The ring is the card's own ground, so the head reads as a dot rather than a blob. */}
-      <circle cx={lastX} cy={lastY} r="3" fill={stroke} stroke="var(--surface)" strokeWidth="2" />
+      <circle className="m-chart-dot" cx={lastX} cy={lastY} r="3" fill={stroke} stroke="var(--surface)" strokeWidth="2" />
     </svg>
   );
 }
@@ -244,7 +268,12 @@ export function StatTile({
   reserveFootnote?: boolean;
   unit?: string;
   delta?: { value: number; unit?: string; goodWhen?: "up" | "down" | "neither" };
-  trend?: { points: number[]; tone?: MeterTone };
+  /**
+   * A small line of the figure over time (the owner's 0·C pick, 2026-11-11: cards that carry a chart). Beside the
+   * figure by default; `placement: "under"` draws it the tile's full width under the figure, as the Reports cards do.
+   * `tone: "primary"` is the brand line; it draws itself in on load.
+   */
+  trend?: { points: number[]; tone?: MeterTone; placement?: "beside" | "under" };
   /** A figure that is a fraction of something — seats used, capacity filled — draws its bar here. */
   meter?: { value: number; max?: number; tone?: MeterTone; label: string };
   footnote?: ReactNode;
@@ -254,7 +283,7 @@ export function StatTile({
     // m-stat-tile: inside a <StatStrip> the tile loses its own border, radius and shadow and
     // becomes one cell of the strip (app/globals.css).
     "m-stat-tile rounded-lg border border-border bg-card px-4 py-3 shadow-[var(--shadow-rest)]",
-    href && "block outline-none transition-colors hover:bg-[var(--surface-alt)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+    href && "block outline-none transition-colors hover:bg-[var(--hover-wash)] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
     className
   );
   const body = (
@@ -274,8 +303,14 @@ export function StatTile({
           {valueSize !== "text" && (typeof value === "number" || (typeof value === "string" && /\d/.test(value))) ? <CountUp text={String(value)} /> : value}
           {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
         </span>
-        {trend && <Sparkline points={trend.points} tone={trend.tone} />}
+        {trend && trend.placement !== "under" && <Sparkline points={trend.points} tone={trend.tone} />}
       </div>
+
+      {trend && trend.placement === "under" && trend.points.length > 1 && (
+        <div className="mt-2">
+          <Sparkline points={trend.points} tone={trend.tone} width={120} height={32} fill />
+        </div>
+      )}
 
       {meter && (
         <Meter

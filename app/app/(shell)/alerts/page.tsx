@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { AlertCentre } from "@/components/app/alert-centre";
 import { SlaDigestCard, SlaJobStrip } from "@/components/app/sla-job-digest";
 import { ErrorState } from "@/components/ui/page-states";
-import { PageHeader } from "@/components/ui/page-header";
 import { listAlertCentre } from "@/lib/agentAlerts/service";
 import { getSlaDailyDigests, getSlaJobStatus } from "@/lib/queueSla/digest";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -38,11 +37,11 @@ export default async function AlertCentrePage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader title="Alert centre" description="Alerts clear when the work is claimed, not read." />
-      {job
-        ? <SlaJobStrip status={job} nowMs={now.getTime()} />
-        : <ErrorState title="SLA job status did not load" detail="Reload the page to try again. Nothing has changed." />}
+      {/* The header is drawn by AlertCentre, so its views sit on the title's line (UI-CONSISTENCY §8b). */}
       <AlertCentre
+        strip={job
+          ? <SlaJobStrip status={job} nowMs={now.getTime()} />
+          : <ErrorState title="SLA job status did not load" detail="Reload the page to try again. Nothing has changed." />}
         lists={centre ? { open: centre.open, resolved: centre.resolved } : null}
         canClaim={holdsAnyRole(contextRoles(context), ["owner", "producer", "assistant"])}
         // Before 20260925709910 the strip's one line already says the update is pending; one is enough,

@@ -12,7 +12,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * Reports › Team activity › an agent (foundation pass 2026-11-03): the panel that opened beside the Agents
  * table, as a page. The same gate as Team activity; /api/app/activity applies the same roles and narrows a
- * setter to their own rows on its own.
+ * setter to their own rows on its own. A record page: it opens on the table, with the Table · Chart switch (round 7).
  */
 export default async function ActivityAgentPage({ params, searchParams }: { params: Promise<{ agentId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const guard = await guardPage("outbound_dialing");
@@ -21,7 +21,7 @@ export default async function ActivityAgentPage({ params, searchParams }: { para
   const [{ agentId }, query] = await Promise.all([params, searchParams]);
   if (!UUID.test(agentId)) notFound();
   return (
-    <ReportsPage view="activity" title="Agent">
+    <ReportsPage view="activity" title="Agent" show="table">
       <ActivityAgentDetail agentId={agentId} role={guard.role} initialPeriod={sharedPeriod(query)} />
     </ReportsPage>
   );

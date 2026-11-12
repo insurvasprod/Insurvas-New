@@ -276,7 +276,7 @@ export function LeadListAutoAssign({ lists, members, onDone }: {
                   <span className="flex min-w-0 flex-1 flex-col gap-1">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className="truncate text-sm font-semibold text-[var(--ink)]">{person.name}</span>
-                      <span className={`shrink-0 text-sm font-semibold tabular-nums ${person.gained > 0 ? "text-[var(--success-ink)]" : "text-[var(--muted)]"}`}>+{count(person.gained)}</span>
+                      <span className={`shrink-0 text-sm font-semibold tabular-nums ${person.gained > 0 ? "text-[var(--highlight-ink)]" : "text-[var(--muted)]"}`}>+{count(person.gained)}</span>
                     </span>
                     <span className="flex items-center gap-2">
                       <Meter value={after} max={Math.max(person.capacity, 1)} tone={tone} label={`${person.name}: ${after} open of ${person.capacity}`} className="flex-1" />

@@ -25,6 +25,7 @@ import { cardTitle, type ChatSearchHit, type PartnerMessage } from "@/lib/partne
 import { canManage, canPost, ROLE_HINT, ROLE_LABEL, type ChannelMember, type ChannelRole } from "@/lib/partnerChat/groupRules";
 import { cn } from "@/lib/utils";
 import { MONTHS } from "@/lib/format/dates";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 /**
  * Partner chat (owner, 2026-10-28): conversations on the left, the thread taking the rest, and the
@@ -43,6 +44,8 @@ type PartnerFacts = { partnerId: string; status: string; transfersToday: number;
 
 const NO_STATE: ConversationState = { pinnedAt: null, archivedAt: null, deletedAt: null };
 
+/** The page's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws the last answer at once. */
+const CHAT_KEY = "/api/app/partner-chat";
 function normalize(data: ChatResponse): { channels: Channel[]; directory: DirectoryUser[]; facts: Record<string, PartnerFacts> } {
   const channels = data.channels.map((item) => ({ ...item.channel, messages: item.messages, unreadCount: item.unreadCount, realtimeTopic: item.realtimeTopic, othersReadAt: item.othersReadAt ?? null, members: item.members ?? [], state: item.state ?? NO_STATE }));
   const tenantUsers = data.directory.tenantUsers.map((item) => ({ id: item.users.id, name: item.users.name, email: item.users.email, label: `${item.users.name} · ${item.users.email}`, scope: "agent" as const, role: item.role }));
@@ -128,7 +131,7 @@ function CollapsedRail({ label, badge, onExpand }: { label: string; badge?: numb
   return (
     <button type="button" onClick={onExpand} aria-label={`Show ${label.toLowerCase()}`} title={`Show ${label.toLowerCase()}`} className="m-glass hidden min-h-0 flex-col items-center gap-3 rounded-xl border border-border py-3 text-muted-foreground hover:text-foreground md:flex">
       <PanelLeftOpen className="size-4" aria-hidden="true" />
-      {badge ? <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--primary)] px-1 text-xs font-semibold text-[var(--primary-foreground)]">{badge}</span> : null}
+      {badge ? <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[var(--highlight)] px-1 text-xs font-semibold text-[var(--on-highlight)]">{badge}</span> : null}
       <span className="text-xs font-semibold [writing-mode:vertical-rl]">{label}</span>
     </button>
   );
@@ -197,10 +200,16 @@ const ROLE_CHOICES: ChannelRole[] = ["admin", "member", "viewer"];
  * partner's latest one (the partner record's Message button, 2026-10-25).
  */
 export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLinks = false }: { partnerId?: string; openPartnerId?: string; recordLinks?: boolean } = {}) {
-  const [data, setData] = useState<{ channels: Channel[]; directory: DirectoryUser[]; facts: Record<string, PartnerFacts> }>({ channels: [], directory: [], facts: {} });
-  const [loaded, setLoaded] = useState(false);
+  // The kept answer on a client navigation (nothing while hydrating a fresh document; the mount effect fills it in).
+  const [seeded] = useState(() => seed<ChatResponse>(CHAT_KEY, true)?.data ?? null);
+  const [data, setData] = useState<{ channels: Channel[]; directory: DirectoryUser[]; facts: Record<string, PartnerFacts> }>(() => {
+    if (!seeded) return { channels: [], directory: [], facts: {} };
+    const all = normalize(seeded);
+    return partnerId ? { ...all, channels: all.channels.filter((channel) => channel.partner_id === partnerId) } : all;
+  });
+  const [loaded, setLoaded] = useState(() => seeded !== null);
   // The signed-in person, from the server: their own messages sit on the right of the thread.
-  const [viewerId, setViewerId] = useState<string | null>(null);
+  const [viewerId, setViewerId] = useState<string | null>(() => seeded?.viewerId ?? null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -222,22 +231,28 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
     if (text) setDraft((current) => (current.trim() ? `${current.replace(/\s+$/, "")} ${text}` : text));
   }, []));
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/app/partner-chat", { cache: "no-store" });
-    const body = await response.json().catch(() => null) as ChatResponse | { error?: string } | null;
-    if (!response.ok) throw new Error(body && "error" in body ? body.error : "Could not load partner chat");
-    const all = normalize(body as ChatResponse);
+  // Draws one answer from the chat API (the kept one, or a fresh one).
+  const apply = useCallback((body: ChatResponse) => {
+    const all = normalize(body);
     const next = partnerId ? { ...all, channels: all.channels.filter((channel) => channel.partner_id === partnerId) } : all;
-    setData(next); setViewerId((body as ChatResponse).viewerId ?? null); setLoaded(true);
+    setData(next); setViewerId(body.viewerId ?? null); setLoaded(true);
     // Open on the conversation with the latest activity, not whichever happens to sort first: an empty
     // channel on top made the whole screen look blank. Archived conversations are not opened unasked.
     const open = next.channels.filter((channel) => !channel.state.archivedAt);
     setSelectedId((current) => current && next.channels.some((channel) => channel.id === current) ? current : byActivity(openPartnerId ? open.filter((channel) => channel.partner_id === openPartnerId) : [])[0]?.id ?? byActivity(open)[0]?.id ?? null);
     return next;
   }, [partnerId, openPartnerId]);
+  // The read goes through the app's cache (speed pass 2026-11-09): `fresh` after a change or a broadcast.
+  const load = useCallback(async (fresh = false) => apply(await (fresh ? loadResource<ChatResponse>(CHAT_KEY, { persist: true }) : readResource<ChatResponse>(CHAT_KEY, { persist: true }))), [apply]);
+  useEffect(() => {
+    // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+    const kept = peek<ChatResponse>(CHAT_KEY, true);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+    if (kept?.data) apply(kept.data);
+  }, [apply]);
   useEffect(() => { const timer = window.setTimeout(() => { void load().catch((reason: unknown) => { setLoaded(true); setError(reason instanceof Error ? reason.message : "Could not load partner chat"); }); }, 0); return () => window.clearTimeout(timer); }, [load]);
   // Live: a broadcast on the selected channel reloads it, and opening a channel marks it read.
-  useEffect(() => { const selected = data.channels.find((channel) => channel.id === selectedId); if (!selected) return; const supabase = getSupabaseBrowserClient(); let channel: RealtimeChannel | null = null; if (supabase) channel = supabase.channel(selected.realtimeTopic).on("broadcast", { event: "message" }, () => { void load(); }).subscribe(); void fetch("/api/app/partner-chat", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel_id: selected.id }) }); return () => { if (channel && supabase) void supabase.removeChannel(channel); }; }, [data.channels, load, selectedId]);
+  useEffect(() => { const selected = data.channels.find((channel) => channel.id === selectedId); if (!selected) return; const supabase = getSupabaseBrowserClient(); let channel: RealtimeChannel | null = null; if (supabase) channel = supabase.channel(selected.realtimeTopic).on("broadcast", { event: "message" }, () => { void load(true); }).subscribe(); void fetch("/api/app/partner-chat", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channel_id: selected.id }) }); return () => { if (channel && supabase) void supabase.removeChannel(channel); }; }, [data.channels, load, selectedId]);
 
   const selected = data.channels.find((channel) => channel.id === selectedId) ?? null;
   const stopDictation = dictation.stop;
@@ -402,7 +417,7 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
   }
   /** A group change: run it, say so, and reload the conversation. False when it was refused. */
   async function groupAction(body: Record<string, unknown>, done: string) {
-    try { await post(body); notify.done(done); await load(); return true; } catch (reason) { notify.block(reason instanceof Error ? reason.message : "Could not change the group"); return false; }
+    try { await post(body); notify.done(done); await load(true); return true; } catch (reason) { notify.block(reason instanceof Error ? reason.message : "Could not change the group"); return false; }
   }
 
   async function createChannel() {
@@ -414,17 +429,17 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
       if (newType === "group") await Promise.all(recipientIds.filter((userId) => (newRoles[userId] ?? "member") !== "member").map((userId) => post({ action: "set_member", channel_id: id, user_id: userId, role: newRoles[userId], can_add_members: false }).catch(() => null)));
       setChannelName(""); setRecipientIds([]); setNewRoles({}); setNewConversationOpen(false);
       notify.done(newType === "direct" ? "Direct message ready" : "Group created");
-      await load(); setSelectedId(id); setListFilter("all");
+      await load(true); setSelectedId(id); setListFilter("all");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not create the conversation"); } finally { setBusy(false); }
   }
   async function send() {
     if (!selected || (!draft.trim() && files.length === 0)) return; dictation.stop(); setBusy(true); setError(null);
-    try { const form = new FormData(); form.set("channel_id", selected.id); form.set("message", draft.trim() || (files.length === 1 ? "Shared an attachment" : `Shared ${files.length} attachments`)); files.forEach((file) => form.append("files", file)); const response = await fetch("/api/app/partner-chat", { method: "POST", body: form }); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Message could not be sent"); setDraft(""); setFiles([]); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Message could not be sent"); } finally { setBusy(false); }
+    try { const form = new FormData(); form.set("channel_id", selected.id); form.set("message", draft.trim() || (files.length === 1 ? "Shared an attachment" : `Shared ${files.length} attachments`)); files.forEach((file) => form.append("files", file)); const response = await fetch("/api/app/partner-chat", { method: "POST", body: form }); const body = await response.json().catch(() => null); if (!response.ok) throw new Error(body?.error ?? "Message could not be sent"); setDraft(""); setFiles([]); await load(true); } catch (reason) { setError(reason instanceof Error ? reason.message : "Message could not be sent"); } finally { setBusy(false); }
   }
   /** Close or reopen a conversation for everyone (a group's owner and admins). */
   async function setClosed(next: boolean) {
     if (!selected) return; setBusy(true); setError(null);
-    try { await post({ action: next ? "archive_channel" : "restore_channel", channel_id: selected.id }); notify.done(next ? "Conversation closed" : "Conversation reopened"); await load(); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not change the conversation"); } finally { setBusy(false); }
+    try { await post({ action: next ? "archive_channel" : "restore_channel", channel_id: selected.id }); notify.done(next ? "Conversation closed" : "Conversation reopened"); await load(true); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not change the conversation"); } finally { setBusy(false); }
   }
   /** This person's pin, archive or delete: shown at once, undone if the server refuses. */
   async function setState(channel: Channel, change: { pinned?: boolean; archived?: boolean; deleted?: true }) {
@@ -442,7 +457,7 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
       notify.done(change.deleted ? "Conversation deleted" : change.archived === true ? "Archived" : change.archived === false ? "Moved back to your conversations" : change.pinned ? "Pinned" : "Unpinned", change.archived === true || change.pinned !== undefined ? { action: { label: "Undo", onClick: () => { void setState({ ...channel, state: { ...before } }, change.archived === true ? { archived: false } : { pinned: !change.pinned }); } } } : undefined);
     } catch (reason) {
       notify.block(reason instanceof Error ? reason.message : "Could not change the conversation");
-      await load();
+      await load(true);
     }
   }
   /** Pin, archive and delete, in the list's row menu and the thread header's. */
@@ -541,11 +556,11 @@ export function AgentPartnerChatWorkspace({ partnerId, openPartnerId, recordLink
                             <span className="truncate">{channel.name}</span>
                             {pinned && <Pin className="size-3 shrink-0 text-muted-foreground" aria-label="Pinned" />}
                           </span>
-                          <span className={cn("shrink-0 text-xs tabular-nums transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0", unread ? "font-semibold text-[var(--accent-ink)]" : "text-muted-foreground")}>{last ? listTime(last.createdAt) : ""}</span>
+                          <span className={cn("shrink-0 text-xs tabular-nums transition-opacity group-hover/row:opacity-0 group-focus-within/row:opacity-0", unread ? "font-semibold text-[var(--highlight-ink)]" : "text-muted-foreground")}>{last ? listTime(last.createdAt) : ""}</span>
                         </span>
                         <span className="mt-0.5 flex items-center justify-between gap-2">
                           <span className={cn("truncate text-xs", unread ? "text-[var(--body)]" : "text-muted-foreground")}>{channel.status === "active" ? "" : "Closed · "}{channelPreview(channel)}</span>
-                          {unread && <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--primary)] px-1 text-xs font-semibold leading-none text-[var(--primary-foreground)]" aria-label={`${channel.unreadCount} unread`}>{channel.unreadCount}</span>}
+                          {unread && <span className="inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-[var(--highlight)] px-1 text-xs font-semibold leading-none text-[var(--on-highlight)]" aria-label={`${channel.unreadCount} unread`}>{channel.unreadCount}</span>}
                         </span>
                       </span>
                     </button>

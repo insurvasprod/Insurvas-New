@@ -5,7 +5,6 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { BulkResolve } from "@/components/app/book/needs-you/bulk-resolve";
-import { Button } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -14,7 +13,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
-import { ageShort, GROUP_LABELS, groupCounts, KIND_META, NEEDS_YOU_GROUPS, searchItems, searchParam, type NeedsYouGroup, type NeedsYouItem, type NeedsYouView } from "@/lib/needsYou/kinds";
+import { ageShort, GROUP_LABELS, groupCounts, KIND_META, NEEDS_YOU_GROUPS, searchItems, searchParam, type NeedsYouGroup, type NeedsYouItem, type NeedsYouKind, type NeedsYouView } from "@/lib/needsYou/kinds";
 
 const EMPTY: Record<NeedsYouView, { title: string; hint: string }> = {
   mine: { title: "Nothing waits for you", hint: "When a carrier file leaves a decision that is yours — a client to pick, a sale no carrier has, money that doesn't match — it appears here." },
@@ -23,11 +22,20 @@ const EMPTY: Record<NeedsYouView, { title: string; hint: string }> = {
   closed: { title: "Nothing closed in the last 30 days", hint: "Decisions made here, on Exceptions or on Policy matching appear here for 30 days." },
 };
 
-/** How long an item has waited, toned: amber past a month, red past a quarter (round 6), so the oldest stand out. */
+/** How long an item has waited: a period, so plain and muted (owner 2026-11-11: colour only in a chip). */
 function Age({ days }: { days: number }) {
-  const tone = days >= 90 ? "text-[var(--error-ink)] font-semibold" : days >= 30 ? "text-[var(--warning-ink)] font-semibold" : "text-foreground";
-  return <span className={`tabular-nums ${tone}`}>{ageShort(days)}</span>;
+  return <span className="whitespace-nowrap tabular-nums text-muted-foreground">{ageShort(days)}</span>;
 }
+
+/**
+ * The row's short next step (owner 2026-11-11: a short verb and ›, the same weight on every row); the kind's
+ * whole "what to do" sentence is the cell's tooltip.
+ */
+const NEXT_VERB: Record<NeedsYouKind, string> = {
+  "pick-client": "Pick", "no-sale": "Confirm", "no-carrier": "Find", "same-person": "Decide", "existing-book": "Review",
+  "commission-no-policy": "Find", "unknown-policy": "Find", money: "Check", credit: "Credit", agent: "Map",
+  "status-word": "Open", rules: "Decide", file: "Fix",
+};
 
 /** Items of one kind from one file fold into one line once there are this many. */
 const FOLD_AT = 3;
@@ -159,15 +167,17 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
       {every.length === 0 ? <EmptyState title={EMPTY[view].title} hint={EMPTY[view].hint} />
         : shown.length === 0 ? <NoMatches noun="items" onClear={() => { pick("all"); search(""); }} />
         : (
-          <table className="portal-lead-table w-full min-w-[980px] table-fixed text-left text-sm">
+          <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
             <thead>
               <tr>
-                <th className="w-[150px]">Kind</th>
-                <th className="w-[24%]">About</th>
+                {/* Owner 2026-11-10: the subject first (what the row is about), then what kind of decision, why, who, how long. */}
+                {/* Owner 2026-11-11: one line per row, one chip (the kind; danger when escalated), a short next step. A closed row opens on a click, so it has no chevron column. */}
+                <th>About</th>
+                <th>Kind</th>
                 <th>{closed ? "How it ended" : "Why"}</th>
-                <th className="w-[140px]">Owner</th>
-                <th className="w-[76px]" title={closed ? undefined : "How long it has waited. Amber after 30 days, red after 90."}>{closed ? "Closed" : "Waiting"}</th>
-                <th className="w-[220px] text-right">{closed ? <span className="sr-only">Open</span> : "What to do"}</th>
+                <th>Owner</th>
+                <th title={closed ? undefined : "How long it has waited"}>{closed ? "Closed" : "Waiting"}</th>
+                {!closed && <th>What to do</th>}
               </tr>
             </thead>
             <tbody>
@@ -177,17 +187,14 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                   const first = f.items[0];
                   return (
                     <tr key={f.key} className="cursor-pointer" onClick={() => router.push(reviewOf(f))}>
+                      {/* The count opens the line's items in this list (it was "See all"); the row opens them on Review. */}
+                      <td className="whitespace-nowrap font-medium text-foreground"><button type="button" className="hover:underline" title={`See the ${f.label} one by one`} onClick={(event) => { event.stopPropagation(); setFolded(f.key); setPage(1); }}>{f.label}</button> · {f.where}</td>
                       <td><StatusChip tone={first.tone}>{KIND_META[first.kind].label}</StatusChip></td>
-                      <td className="truncate font-semibold text-foreground" title={f.where}>{f.label} <span className="font-normal text-muted-foreground">· {f.where}</span></td>
-                      <td className="truncate text-foreground" title={first.kind === "no-sale" ? "No sale or application on record: a new client was made from each row" : first.why}>{first.kind === "no-sale" ? "No sale on record" : "A person picks the client"}</td>
-                      <td className="text-foreground">{f.items.every((i) => i.who === first.who) ? first.who : "Several people"}</td>
+                      <td className="whitespace-nowrap" title={first.kind === "no-sale" ? "No sale or application on record: a new client was made from each row" : first.why}>{first.kind === "no-sale" ? "No sale on record" : "A person picks the client"}</td>
+                      <td className="whitespace-nowrap">{f.items.every((i) => i.who === first.who) ? first.who : "Several people"}</td>
                       <td><Age days={Math.max(...f.items.map((i) => i.ageDays))} /></td>
-                      <td className="text-right">
-                        <span className="inline-flex gap-2">
-                          <Button type="button" variant="ghost" size="sm" title={`See the ${f.label} one by one`} onClick={(event) => { event.stopPropagation(); setFolded(f.key); setPage(1); }}>See all</Button>
-                          <Button asChild variant="outline" size="sm"><Link href={reviewOf(f)} onClick={(event) => event.stopPropagation()}>{/* A line of many: the verb on all of them ("Confirm all"), so the button stays short. */}{`${KIND_META[first.kind].todo.split(" ")[0]} all`}</Link></Button>
-                        </span>
-                      </td>
+                      {/* A line of many: the verb on all of them ("Confirm all ›"). */}
+                      <td className="whitespace-nowrap" title={`${KIND_META[first.kind].todo}, all of them`}><Link href={reviewOf(f)} onClick={(event) => event.stopPropagation()} className="hover:underline">{`${NEXT_VERB[first.kind]} all`} ›</Link></td>
                     </tr>
                   );
                 }
@@ -196,17 +203,14 @@ export function NeedsYouList({ items: every, view, fromFile = null, readOnly = f
                 const go = closed ? href(item) : reviewItem(item);
                 return (
                   <tr key={key} className="cursor-pointer" onClick={() => router.push(go)}>
-                    <td><StatusChip tone={item.tone}>{KIND_META[item.kind].label}</StatusChip></td>
-                    <td className="truncate font-semibold text-foreground" title={item.about}>{item.about}</td>
-                    <td className="truncate text-foreground" title={closed ? item.closedAs ?? "Closed" : item.why}>{closed ? item.closedAs ?? "Closed" : item.why}</td>
-                    <td className="text-foreground"><span className="inline-flex flex-wrap items-center gap-2">{item.who}{item.escalated && !closed && <StatusChip tone="danger">Escalated</StatusChip>}</span></td>
-                    <td>{closed ? <span className="tabular-nums text-foreground">{fileDay(item.closedAt ?? null)}</span> : <Age days={item.ageDays} />}</td>
-                    <td className="text-right">
-                      {/* Round 6 (owner 2026-11-06: "know exactly what to do"): every open row's one button says what to do, the same button on every row. */}
-                      {closed
-                        ? <Link href={go} onClick={(event) => event.stopPropagation()} className="text-muted-foreground hover:text-foreground" aria-label={`Open ${item.about}`}>›</Link>
-                        : <Button asChild variant="outline" size="sm"><Link href={go} onClick={(event) => event.stopPropagation()}>{KIND_META[item.kind].todo}</Link></Button>}
-                    </td>
+                    <td className="whitespace-nowrap font-medium text-foreground">{item.about}</td>
+                    {/* One chip: the kind, turned danger and saying so when the item is escalated. */}
+                    <td><StatusChip tone={item.escalated && !closed ? "danger" : item.tone}>{item.escalated && !closed ? `${KIND_META[item.kind].label} · escalated` : KIND_META[item.kind].label}</StatusChip></td>
+                    <td className="whitespace-nowrap">{closed ? item.closedAs ?? "Closed" : item.why}</td>
+                    <td className="whitespace-nowrap">{item.who}</td>
+                    <td>{closed ? <span className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(item.closedAt ?? null)}</span> : <Age days={item.ageDays} />}</td>
+                    {/* Round 6 (owner 2026-11-06: "know exactly what to do"): every open row's next step — a short verb, the whole sentence its tooltip. */}
+                    {!closed && <td className="whitespace-nowrap" title={KIND_META[item.kind].todo}><Link href={go} onClick={(event) => event.stopPropagation()} className="hover:underline">{NEXT_VERB[item.kind]} ›</Link></td>}
                   </tr>
                 );
               })}

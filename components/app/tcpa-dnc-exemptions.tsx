@@ -1,8 +1,9 @@
 "use client";
 
+import { DismissButton } from "@/components/app/route-sheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { ShieldCheck } from "lucide-react";
 import { notify } from "@/lib/notify";
 
@@ -17,7 +18,6 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
-import { Callout } from "@/components/app/settings/primitives";
 import { formatPhone, normalizeDigits } from "@/lib/suppression/constants";
 import {
   CLEARED_LIST_LABELS,
@@ -46,6 +46,10 @@ import { cn } from "@/lib/utils";
  * Foundation pass (2026-11-03): recording one is a page of its own (/app/tcpa/exemptions/new, was a form
  * pop-up); revoking is a confirm with its reason; the table keeps to the card's width (the note and the
  * revoke reason are each a second line, the last use sits under the count).
+ *
+ * Round 7, board 2·A2 (2026-11-11): one line a row in six columns, one chip (the state). The certificate, the note,
+ * who recorded it and the revoke reason are the cells' tooltips; the row opens the number's evidence report; the
+ * next step is Revoke › (a confirm with its reason) for the owner while it still clears DNC.
  */
 
 type Loaded = { schemaReady: boolean; exemptions: DncExemption[]; uses: DncExemptionUse[]; canEdit: boolean };
@@ -70,7 +74,10 @@ const STATE_CHIP: Record<DncExemption["state"], { tone: "good" | "neutral" | "wa
 
 const th = "bg-[var(--surface-alt)] px-3 py-2 text-left text-xs font-semibold leading-[1.33] whitespace-nowrap text-muted-foreground";
 const td = "border-t border-border px-3 py-2 text-sm leading-normal tracking-[-0.02em] text-[var(--body)]";
-const sub = "block max-w-[240px] truncate text-xs text-muted-foreground";
+const first = `${td} whitespace-nowrap font-medium text-foreground`;
+const muted = `${td} whitespace-nowrap tabular-nums text-muted-foreground`;
+const opensFrom = (event: MouseEvent<HTMLElement>) => !(event.target as HTMLElement).closest("a, button, input, select, textarea, label");
+const evidenceHref = (digits: string) => `/app/evidence-report?phone=${digits}`;
 const today = () => new Date().toISOString().slice(0, 10);
 const NEW_EXEMPTION = "/app/tcpa/exemptions/new";
 
@@ -78,6 +85,7 @@ type Draft = { phone: string; basis: DncExemptionBasis; consentArtefactId: strin
 const EMPTY: Draft = { phone: "", basis: "existing_business_relationship", consentArtefactId: "", relationshipKind: "purchase", relationshipDate: "", note: "" };
 
 export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onChanged?: () => void; className?: string; pageSize?: number }) {
+  const router = useRouter();
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
@@ -170,47 +178,49 @@ export function TcpaDncExemptions({ onChanged, className, pageSize = 10 }: { onC
               <th className={`${th} text-right`}>Lead</th>
             </tr></thead>
             <tbody>{usesPage.rows.map((use) => <tr key={use.id} className="m-row">
-              <td className={`${td} whitespace-nowrap tabular-nums`}>{stamp(use.usedAt)}</td>
-              <td className={`${td} whitespace-nowrap font-semibold tabular-nums text-foreground`}>{formatPhone(use.phoneDigits || numberOf.get(use.exemptionId) || "")}</td>
-              <td className={td}>{EXEMPTION_USE_LABELS[use.context] ?? use.context}</td>
-              <td className={td}>{use.clearedLists.map((list) => CLEARED_LIST_LABELS[list] ?? list).join(" and ") || "DNC"}</td>
-              <td className={td}>{use.userName ?? "—"}</td>
-              <td className={`${td} text-right`}>{use.leadId ? <a className="text-[var(--accent-ink)] hover:underline" href={`/app/leads/${use.leadId}`}>Open lead</a> : "—"}</td>
+              <td className={`${first} tabular-nums`}>{stamp(use.usedAt)}</td>
+              <td className={`${td} whitespace-nowrap tabular-nums`}>{formatPhone(use.phoneDigits || numberOf.get(use.exemptionId) || "")}</td>
+              <td className={`${td} whitespace-nowrap`}>{EXEMPTION_USE_LABELS[use.context] ?? use.context}</td>
+              <td className={`${td} whitespace-nowrap`}>{use.clearedLists.map((list) => CLEARED_LIST_LABELS[list] ?? list).join(" and ") || "DNC"}</td>
+              <td className={`${td} max-w-[180px] truncate whitespace-nowrap`} title={use.userName ?? undefined}>{use.userName ?? <span className="text-muted-foreground">—</span>}</td>
+              <td className={`${td} whitespace-nowrap text-right`}>{use.leadId ? <Link className="hover:underline" href={`/app/leads/${use.leadId}`}>Open lead ›</Link> : <span className="text-muted-foreground">—</span>}</td>
             </tr>)}</tbody>
           </table>
         )
         : exemptions.length === 0 ? <EmptyState title="No exemptions recorded" hint="Federal and state DNC numbers are refused until an owner records consent or a business relationship." action={loaded.canEdit ? record : undefined} />
         : matching.length === 0 ? <NoMatches noun="exemptions" onClear={() => { setSearch(""); setPage(1); }} />
-        : <table className="w-full min-w-[860px] border-collapse text-left">
+        : <table className="w-full min-w-[760px] border-collapse text-left">
             <thead><tr>
               <th className={th}>Number</th>
               <th className={th}>Basis</th>
               <th className={th}>Expires</th>
-              <th className={th}>State</th>
               <th className={`${th} text-right`}>Uses</th>
-              <th className={th}>Recorded</th>
-              <th className={`${th} text-right`}><span className="sr-only">Action</span></th>
+              <th className={th}>Status</th>
+              <th className={`${th} text-right`}>Next step</th>
             </tr></thead>
-            <tbody>{shown.map((row) => <tr key={row.id} className="m-row">
-              <td className={`${td} whitespace-nowrap font-semibold tabular-nums text-foreground`}>{formatPhone(row.phoneDigits)}</td>
-              <td className={td}>
-                <span className="whitespace-nowrap">{DNC_EXEMPTION_BASIS_LABELS[row.basis]}</span>
-                <span className={sub}>
-                  {row.basis === "written_consent"
-                    ? <>{PROVIDER[row.certificateProvider ?? ""] ?? "Certificate"}{row.certificateUrl ? <> · <a className="text-[var(--accent-ink)] hover:underline" href={row.certificateUrl} target="_blank" rel="noreferrer">certificate</a></> : null}</>
-                    : <>{row.relationshipKind ? RELATIONSHIP_KIND_LABELS[row.relationshipKind] : "Relationship"} on {day(row.relationshipDate)}</>}
-                  {row.note ? <span title={row.note}> · “{row.note}”</span> : null}
-                </span>
-              </td>
-              <td className={`${td} whitespace-nowrap tabular-nums`}>{row.basis === "written_consent" ? "No expiry" : day(row.expiresAt)}</td>
-              <td className={td}>
-                <StatusChip tone={STATE_CHIP[row.state].tone}>{STATE_CHIP[row.state].label}</StatusChip>
-                {row.state === "revoked" && row.revokeReason ? <span className={sub} title={row.revokeReason}>{row.revokeReason}{row.revokedByName ? ` · ${row.revokedByName}` : ""}</span> : null}
-              </td>
-              <td className={`${td} text-right tabular-nums`}>{row.uses.toLocaleString()}{row.lastUsedAt ? <span className="block text-xs text-muted-foreground">last {stamp(row.lastUsedAt)}</span> : null}</td>
-              <td className={`${td} whitespace-nowrap tabular-nums`}>{day(row.recordedAt)}{row.recordedByName ? <span className="block text-xs text-muted-foreground">{row.recordedByName}</span> : null}</td>
-              <td className={`${td} text-right`}>{loaded.canEdit && row.state !== "revoked" ? <Button type="button" variant="outline" size="sm" onClick={() => { setRevoking(row); setReason(""); }}>Revoke</Button> : null}</td>
-            </tr>)}</tbody>
+            <tbody>{shown.map((row) => {
+              const evidence = row.basis === "written_consent"
+                ? `${PROVIDER[row.certificateProvider ?? ""] ?? "Certificate"}${row.certificateUrl ? " · opens the certificate" : ""}`
+                : `${row.relationshipKind ? RELATIONSHIP_KIND_LABELS[row.relationshipKind] : "Relationship"} on ${day(row.relationshipDate)}`;
+              const basisTitle = [evidence, row.note ? `“${row.note}”` : ""].filter(Boolean).join(" · ");
+              const recorded = `Recorded ${day(row.recordedAt)}${row.recordedByName ? ` by ${row.recordedByName}` : ""}`;
+              const stateTitle = row.state === "revoked" && row.revokeReason ? `${row.revokeReason}${row.revokedByName ? ` · ${row.revokedByName}` : ""}` : undefined;
+              const canRevoke = loaded.canEdit && row.state !== "revoked";
+              return <tr key={row.id} className="m-row cursor-pointer" onClick={(event) => { if (opensFrom(event)) router.push(evidenceHref(row.phoneDigits)); }}>
+                <td className={`${first} tabular-nums`}><Link href={evidenceHref(row.phoneDigits)} className="outline-none hover:underline focus-visible:underline" title={recorded}>{formatPhone(row.phoneDigits)}</Link></td>
+                <td className={`${td} max-w-[260px] truncate whitespace-nowrap`} title={basisTitle}>
+                  {row.basis === "written_consent" && row.certificateUrl
+                    ? <a className="hover:underline" href={row.certificateUrl} target="_blank" rel="noreferrer">{DNC_EXEMPTION_BASIS_LABELS[row.basis]}</a>
+                    : DNC_EXEMPTION_BASIS_LABELS[row.basis]}
+                </td>
+                <td className={muted}>{row.basis === "written_consent" ? "No expiry" : day(row.expiresAt)}</td>
+                <td className={`${td} whitespace-nowrap text-right tabular-nums`} title={row.lastUsedAt ? `Last used ${stamp(row.lastUsedAt)}` : undefined}>{row.uses.toLocaleString()}</td>
+                <td className={td}><StatusChip tone={STATE_CHIP[row.state].tone} title={stateTitle}>{STATE_CHIP[row.state].label}</StatusChip></td>
+                <td className={`${td} whitespace-nowrap text-right`}>{canRevoke
+                  ? <button type="button" className="outline-none hover:underline focus-visible:underline" title="Put this number back on federal and state DNC" onClick={() => { setRevoking(row); setReason(""); }}>Revoke ›</button>
+                  : <span aria-hidden="true">Open ›</span>}</td>
+              </tr>;
+            })}</tbody>
           </table>}
 
       <ConfirmDialog
@@ -328,9 +338,9 @@ export function TcpaExemptionForm() {
           <input id="exemption-date" type="date" required max={today()} value={draft.relationshipDate} onChange={(event) => setDraft({ ...draft, relationshipDate: event.target.value })} className={control} />
         </Field>
       </div>}
-      {error ? <Callout tone="error" title={error} /> : null}
+      {error ? <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p> : null}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" asChild><Link href="/app/tcpa?tab=exemptions">Discard</Link></Button>
+        <DismissButton href="/app/tcpa?tab=exemptions">Discard</DismissButton>
         <Button type="submit" disabled={busy || !canSave}>{busy ? "Saving…" : "Record exemption"}</Button>
       </div>
       <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setDraft(EMPTY)} what="this exemption" />

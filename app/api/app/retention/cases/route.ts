@@ -7,6 +7,7 @@ import { ACTION_TAKEN, CONTACT_OUTCOMES } from "@/lib/retention/constants";
 import { CaseError, FIX_KINDS, addNote, assignCase, closeCase, linkServicing, logCaseCall, openManualCase, recordFix } from "@/lib/retention/cases/store";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
+import { PERSON_REASONS } from "@/lib/retention/cases/ladder";
 
 /**
  * The Retention ladder (owner 2026-11-05, docs/retention/SPEC.md) · what a person does on a case: log a call,
@@ -24,7 +25,7 @@ const body = z.discriminatedUnion("action", [
   z.object({ action: z.literal("note"), id, note: z.string().trim().min(1, "Write the note first.").max(2000) }).strict(),
   z.object({ action: z.literal("assign"), id, user_id: z.string().refine(isRecordUuid, "Choose who.") }).strict(),
   z.object({ action: z.literal("close"), id, as: z.enum(["closed_no_save", "lost"]), reason: z.string().trim().max(1000) }).strict(),
-  z.object({ action: z.literal("open"), carrier_id: z.string().refine(isRecordUuid, "Choose the policy."), policy_number: z.string().trim().min(1).max(120), reason: z.literal("payment_date_change"), note: z.string().trim().max(2000).nullable() }).strict(),
+  z.object({ action: z.literal("open"), carrier_id: z.string().refine(isRecordUuid, "Choose the policy."), policy_number: z.string().trim().min(1).max(120), reason: z.enum(PERSON_REASONS, { message: "Choose why." }), note: z.string().trim().max(2000).nullable() }).strict(),
 ]);
 
 export async function POST(request: NextRequest) {

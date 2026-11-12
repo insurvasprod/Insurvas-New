@@ -59,7 +59,7 @@ export function ToggleChip({
         "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)] disabled:cursor-not-allowed disabled:opacity-50",
         selected
           ? "border-transparent bg-[var(--primary-soft)] text-[var(--accent-ink)]"
-          : "border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] text-[var(--body)] hover:border-[var(--border-strong)] hover:bg-[var(--surface-alt)]",
+          : "border-[var(--border)] bg-[color-mix(in_srgb,var(--color-card)_55%,transparent)] text-[var(--body)] hover:border-[var(--border-strong)] hover:bg-[var(--hover-wash)]",
         className,
       )}
     >

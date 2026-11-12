@@ -59,6 +59,8 @@ export type RecentPost = {
   reasonCode: string;
   processingMs: number | null;
   leadId: string | null;
+  /** A test post (round 8, 20261112100100): nothing was created or charged. */
+  isTest?: boolean;
 };
 
 export type VendorRejection = { vendorId: string; reasonCode: string; count: number };
@@ -88,6 +90,8 @@ export const REJECTION_LABELS: Record<string, string> = {
   missing_consent_ip: "Missing consent IP",
   invalid_date_of_birth: "Unparseable date of birth",
   state_not_licensed: "State not licensed",
+  daily_cap_reached: "Daily cap reached",
+  outside_posting_hours: "Outside posting hours",
 };
 
 /** Red where the lead itself is unusable or undialable; amber where the post could succeed later. */

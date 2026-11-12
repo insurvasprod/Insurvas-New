@@ -55,18 +55,18 @@ export function PolicyPipelineTab({ pipeline, leadId, undo, pendingMessage }: {
             <PagedBody>
               {rows.map((row) => row.kind === "move" ? (
                 <tr key={row.move.id}>
-                  <td className="tabular-nums text-muted-foreground">{fileDay(row.at)}</td>
-                  <td>{row.move.from ? <span className="text-muted-foreground">{row.move.from} → </span> : null}<strong className="font-semibold text-foreground">{row.move.to}</strong>{row.move.pipeline && <span className="text-muted-foreground"> · {row.move.pipeline}</span>}</td>
-                  <td className="text-muted-foreground">{moveSourceWord(row.move.source)}{row.move.outcome ? ` · ${row.move.outcome}` : ""}</td>
-                  <td className="text-muted-foreground">{row.move.by ?? (row.move.source === "application_sync" ? "Insurvas" : "—")}</td>
-                  <td className="text-right">{undo && undo.moveId === row.move.id && leadId ? <UndoMove leadId={leadId} from={row.move.to} to={undo.backTo} disabledReason={undo.disabledReason} /> : null}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(row.at)}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground" title={row.move.pipeline ?? undefined}>{row.move.from ? `${row.move.from} → ${row.move.to}` : row.move.to}</td>
+                  <td className="whitespace-nowrap">{moveSourceWord(row.move.source)}{row.move.outcome ? ` · ${row.move.outcome}` : ""}</td>
+                  <td className="whitespace-nowrap">{row.move.by ?? (row.move.source === "application_sync" ? "Insurvas" : <span className="text-muted-foreground">—</span>)}</td>
+                  <td className="whitespace-nowrap text-right">{undo && undo.moveId === row.move.id && leadId ? <UndoMove leadId={leadId} from={row.move.to} to={undo.backTo} disabledReason={undo.disabledReason} /> : null}</td>
                 </tr>
               ) : (
                 <tr key={`rule-${row.at}-${row.line.text}`}>
-                  <td className="tabular-nums text-muted-foreground">{fileDay(row.at)}</td>
-                  <td>{row.line.text}</td>
-                  <td className="text-muted-foreground">{row.line.reason ?? "—"}</td>
-                  <td>{row.line.mode === "live" ? <span className="text-muted-foreground">{row.line.rule ?? "A rule"}</span> : <StatusChip tone={row.line.mode === "forecast" ? "warning" : "neutral"}>{row.line.mode === "forecast" ? "Forecast" : "Skipped"}</StatusChip>}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(row.at)}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{row.line.text}</td>
+                  <td className="max-w-[320px] truncate" title={row.line.reason ?? undefined}>{row.line.reason ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap">{row.line.mode === "live" ? (row.line.rule ?? "A rule") : <StatusChip tone={row.line.mode === "forecast" ? "warning" : "neutral"}>{row.line.mode === "forecast" ? "Forecast" : "Skipped"}</StatusChip>}</td>
                   <td />
                 </tr>
               ))}

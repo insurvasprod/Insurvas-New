@@ -1,33 +1,49 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { getPlanAudience } from "@/lib/agency/audience";
-import { BASIS_LABELS, PAYS_ON_LABELS, PRODUCER_ENTRY_LABELS, percent } from "@/lib/accounting/producersCore";
+import { PRODUCER_ENTRY_LABELS, percent, type ProducerEntry } from "@/lib/accounting/producersCore";
 import { ProducerError, producerEntries, producersOverview } from "@/lib/accounting/producerStore";
 import { formatCentsAsCurrency } from "@/lib/money";
 import { policyHref } from "@/lib/ingestion/fileStages";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AccountingPage } from "@/components/app/accounting/accounting-page";
-import { AddSplitForm, ProducerActions, RunsTable } from "@/components/app/accounting/producers-board";
-import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { RecordStepper, neighboursOf } from "@/components/app/accounting/record-stepper";
+import { AddSplitForm, EntriesTable, ProducerActions, RunsTable, SplitsTable, type EntryFilter, type EntryKind, type EntryRow } from "@/components/app/accounting/producers-board";
+import { currentSplit, dateLabel, monthYearLabel, splitText } from "@/lib/accounting/producerLabels";
 import { EmptyState } from "@/components/ui/page-states";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ViewTabs } from "@/components/ui/view-tabs";
 
 /**
- * Accounting › Producer splits › a producer (LA-7.5; foundation pass 2026-11-03, was a side sheet). The title is
- * the producer with whether they are owed or owe the agency, one line of facts, Draft a run and More; the
- * tabs are Entries (every share and chargeback, newest first), Splits (the effective-dated rules and Add a
- * split) and Payout runs. Owner and bookkeeper only; opening it writes nothing.
+ * Accounting › Producer splits › a producer (LA-7.5; foundation pass 2026-11-03, was a side sheet).
+ * Round 7, 4·1–4·2 (owner 2026-11-10, docs/la4/mockups-r7/accounting.html): the title is the producer's name
+ * alone; the facts line became the strip (Split · Balance · Owed to date · Clawed back · Last run), each
+ * figure a link to the tab it counts. ‹ › name the neighbouring producers in the list's order. Entries opens
+ * the policy behind each line; Splits' title-line primary is Add a split (a dialog); a run row opens the run
+ * dialog. Owner and bookkeeper only; opening it writes nothing.
  */
 type Tab = "entries" | "splits" | "runs";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const money = (c: number) => formatCentsAsCurrency(c);
+const KIND: Record<string, EntryKind> = { split_advance: "share", split_earned: "share", split_chargeback: "chargeback" };
+const OF_ENTRY: Record<string, string> = { split_advance: " of advance", split_earned: " of earned commission" };
 
-export default async function ProducerPage({ params, searchParams }: { params: Promise<{ userId: string }>; searchParams: Promise<{ tab?: string }> }) {
+/** A ledger line as the Entries tab draws it: the policy's Commissions tab is where it came from. */
+function entryRow(e: ProducerEntry): EntryRow {
+  return {
+    id: e.id, occurredOn: e.occurredOn, what: PRODUCER_ENTRY_LABELS[e.entryType] ?? e.entryType, reason: e.reason, policyNumber: e.policyNumber,
+    // LA-7.5: an entry opens what caused it, the commission on its policy (the policy's Commissions tab).
+    href: e.policyNumber && e.carrierId ? policyHref(e.carrierId, e.policyNumber, "commissions") : null,
+    split: e.splitPctBpApplied != null ? `${percent(e.splitPctBpApplied)}${OF_ENTRY[e.entryType] ?? ""}` : null,
+    amountCents: e.amountCents, kind: KIND[e.entryType] ?? "other",
+  };
+}
+
+export default async function ProducerPage({ params, searchParams }: { params: Promise<{ userId: string }>; searchParams: Promise<{ tab?: string; show?: string; run?: string }> }) {
   const guard = await guardPage("profit_and_loss");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Producer splits" description="What each producer is owed, and what they owe back." />;
   if (!actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Producer splits" detail="Only owners and bookkeepers can see every producer's balance." />;
@@ -38,8 +54,9 @@ export default async function ProducerPage({ params, searchParams }: { params: P
   if (audience === "individual") return <RoleGateNotice reason="solo" featureLabel="Producer splits" detail="Producer splits share commission between an agency and its producers, so they open once you work as an agency." action={{ href: "/app/pnl", label: "Open Profit & loss" }} />;
   const { userId } = await params;
   if (!UUID.test(userId)) notFound();
-  const asked = (await searchParams).tab;
-  const tab: Tab = asked === "splits" || asked === "runs" ? asked : "entries";
+  const asked = await searchParams;
+  const tab: Tab = asked.tab === "splits" || asked.tab === "runs" ? asked.tab : "entries";
+  const show: EntryFilter = asked.show === "shares" || asked.show === "chargebacks" ? asked.show : "all";
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
   let loaded: { data: Awaited<ReturnType<typeof producersOverview>>; entries: Awaited<ReturnType<typeof producerEntries>> } | null = null;
@@ -57,60 +74,43 @@ export default async function ProducerPage({ params, searchParams }: { params: P
   if (!person) notFound();
   const splits = data.splits.filter((s) => s.producerUserId === userId);
   const runs = data.runs.filter((r) => r.producerUserId === userId);
-  const today = new Date().toISOString().slice(0, 10);
-  const current = splits.find((s) => !s.carrierId && !s.productCode && s.effectiveFrom <= today);
-  const carrier = (id: string | null) => (id ? data.carriers.find((c) => c.id === id)?.name ?? "Carrier" : "All carriers");
-  const owes = person.balanceCents < 0;
+  const current = currentSplit(data.splits, userId);
+  const rows = entries.map(entryRow);
+  const chargebacks = rows.filter((e) => e.kind === "chargeback").length;
+  const firstShare = rows.filter((e) => e.kind === "share").at(-1);
+  const lastRun = runs.find((r) => r.status !== "void");
   const base = `/app/producer-splits/${userId}`;
-  const facts = [current ? `${percent(current.splitPctBp)} of ${current.basis === "both" ? "advance + earned" : current.basis}` : "No split recorded", `Balance ${money(person.balanceCents)}`, `Owed to date ${money(person.owedCents)}`, `Clawed back ${money(person.clawedBackCents)}`].join(" · ");
+  const at = (t: Tab) => (t === "entries" ? base : `${base}?tab=${t}`);
+  // ‹ › walk the Producers list in the order it is drawn, staying on the same tab.
+  const near = neighboursOf(data.people, userId, (p) => p.userId);
+  const neighbour = (p: typeof person | null) => (p ? { href: `/app/producer-splits/${p.userId}${tab === "entries" ? "" : `?tab=${tab}`}`, label: p.name } : null);
+  const carried = data.settings.negativePolicy === "cap" ? "recovered from the next runs" : data.settings.negativePolicy === "write_off" ? "to write off" : "carried";
+  const otherRules = splits.filter((s) => s.id !== current?.id).length;
 
   return (
     <AccountingPage
       step="splits"
       title={person.name}
-      chip={<StatusChip tone={owes ? "warning" : person.balanceCents > 0 ? "info" : "neutral"}>{owes ? "Owes the agency" : person.balanceCents > 0 ? "Owed" : "Settled"}</StatusChip>}
-      facts={facts}
       tabs={<ViewTabs label={person.name} value={tab} tabs={[
-        { key: "entries", label: "Entries", count: entries.length, href: base },
-        { key: "splits", label: "Splits", count: splits.length, tone: splits.length ? undefined : "danger", href: `${base}?tab=splits` },
-        { key: "runs", label: "Payout runs", count: runs.length, href: `${base}?tab=runs` },
+        { key: "entries", label: "Entries", count: entries.length, href: at("entries") },
+        { key: "splits", label: "Splits", count: splits.length, tone: splits.length ? undefined : "danger", href: at("splits") },
+        { key: "runs", label: "Payout runs", count: runs.length, href: at("runs") },
       ]} />}
-      actions={<ProducerActions person={person} readOnly={readOnly} />}
+      stepper={<RecordStepper previous={neighbour(near.previous)} next={neighbour(near.next)} noun="producer" />}
+      actions={<>
+        {tab === "splits" ? <AddSplitForm person={person} carriers={data.carriers} defaults={data.settings} readOnly={readOnly} /> : <ProducerActions person={person} readOnly={readOnly} />}
+      </>}
     >
-      {tab === "runs" ? <RunsTable runs={runs} readOnly={readOnly} />
-        : tab === "splits" ? (
-          <>
-            <TableCard>
-              {splits.length === 0 ? <EmptyState title="No split recorded" hint="Nothing is owed to this producer until one is." /> : (
-                <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-                  <thead><tr><th className="w-[130px]">From</th><th className="w-[100px] text-right">Share</th><th>Of</th><th>Carrier</th><th>Product</th><th>Owed</th></tr></thead>
-                  <tbody>{splits.map((s) => <tr key={s.id}><td className="tabular-nums">{s.effectiveFrom}</td><td className="text-right tabular-nums">{percent(s.splitPctBp)}</td><td>{BASIS_LABELS[s.basis]}</td><td>{carrier(s.carrierId)}</td><td>{s.productCode ?? "All products"}</td><td>{PAYS_ON_LABELS[s.paysOn]}</td></tr>)}</tbody>
-                </table>
-              )}
-            </TableCard>
-            {!readOnly ? <AddSplitForm person={person} carriers={data.carriers} defaults={data.settings} /> : null}
-          </>
-        ) : (
-          <PagedTableCard total={entries.length} noun="entries">
-            {entries.length === 0 ? <EmptyState title="Nothing yet" hint="Shares appear here as the carriers' commission arrives." /> : (
-              <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-                <thead><tr><th className="w-[120px]">Date</th><th>What</th><th className="w-[160px]">Policy</th><th className="w-[90px] text-right">Split</th><th className="w-[140px] text-right">Amount</th></tr></thead>
-                <PagedBody>
-                  {entries.map((e) => (
-                    <tr key={e.id}>
-                      <td className="tabular-nums">{e.occurredOn}</td>
-                      <td>{PRODUCER_ENTRY_LABELS[e.entryType] ?? e.entryType}{e.reason ? <div className="text-xs text-muted-foreground">{e.reason}</div> : null}</td>
-                      {/* LA-7.5: an entry opens what caused it, the commission on its policy (the policy's Commissions tab). */}
-                      <td className="font-mono text-xs">{e.policyNumber && e.carrierId ? <Link className="text-[var(--accent-ink)] hover:underline" href={policyHref(e.carrierId, e.policyNumber, "commissions")}>{e.policyNumber}</Link> : e.policyNumber ?? "—"}</td>
-                      <td className="text-right tabular-nums">{e.splitPctBpApplied != null ? percent(e.splitPctBpApplied) : "—"}</td>
-                      <td className={`text-right tabular-nums ${e.amountCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{money(e.amountCents)}</td>
-                    </tr>
-                  ))}
-                </PagedBody>
-              </table>
-            )}
-          </PagedTableCard>
-        )}
+      <StatStrip label={`${person.name}'s balance`}>
+        <StatTile label="Split" valueSize="text" value={splitText(current)} footnote={current ? `from ${dateLabel(current.effectiveFrom)} · all carriers${otherRules ? ` · ${otherRules} more rule${otherRules === 1 ? "" : "s"}` : ""}` : <StatusChip tone="danger">Nothing is owed until one is</StatusChip>} href={at("splits")} />
+        <StatTile label="Balance" value={money(person.balanceCents)} footnote={person.balanceCents < 0 ? <><StatusChip tone="danger">Owes the agency</StatusChip> {carried}</> : person.balanceCents > 0 ? "owed to them" : "settled"} />
+        <StatTile label="Owed to date" value={money(person.owedCents)} footnote={firstShare ? `since ${monthYearLabel(firstShare.occurredOn)}` : "no shares yet"} href={`${base}?show=shares`} />
+        <StatTile label="Clawed back" value={money(person.clawedBackCents)} footnote={`${chargebacks} chargeback${chargebacks === 1 ? "" : "s"}`} href={`${base}?show=chargebacks`} />
+        <StatTile label="Last run" value={lastRun ? money(lastRun.netCents) : "—"} footnote={lastRun ? `${monthYearLabel(lastRun.periodStart)} · ${lastRun.status === "paid" && lastRun.paidOn ? `paid ${dateLabel(lastRun.paidOn)}` : lastRun.status}` : "no runs yet"} href={lastRun ? `${base}?tab=runs&run=${lastRun.id}` : at("runs")} />
+      </StatStrip>
+      {tab === "runs" ? <RunsTable key={asked.run ?? "runs"} runs={runs} readOnly={readOnly} openRunId={asked.run} />
+        : tab === "splits" ? <SplitsTable splits={splits} carriers={data.carriers} />
+        : <EntriesTable key={show} rows={rows} show={show} />}
     </AccountingPage>
   );
 }

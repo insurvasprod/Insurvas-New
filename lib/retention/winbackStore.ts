@@ -214,7 +214,7 @@ export type WinbackRow = {
   age: number | null;
 };
 
-export type ClaimRow = { id: string; carrierName: string; policyNumber: string; clientName: string | null; reason: string; createdAt: string };
+export type ClaimRow = { id: string; carrierId: string; carrierName: string; policyNumber: string; clientName: string | null; reason: string; createdAt: string };
 
 export type Winback = {
   available: true;
@@ -301,7 +301,7 @@ export async function loadWinback(viewer: Viewer, options: { release: boolean } 
       phone: r.contact_id ? contactOf.get(r.contact_id)?.primary_phone ?? null : null, state: r.contact_id ? contactOf.get(r.contact_id)?.state ?? null : null,
       age: r.contact_id ? ageOf(contactOf.get(r.contact_id)?.dob ?? null) : null,
     })),
-    claims: claims.map((c) => ({ id: c.id, carrierName: carrierName.get(c.carrier_id) ?? "Carrier not known", policyNumber: c.policy_number, clientName: c.contact_id ? nameOf.get(c.contact_id) || null : null, reason: c.reason, createdAt: c.created_at })),
+    claims: claims.map((c) => ({ id: c.id, carrierId: c.carrier_id, carrierName: carrierName.get(c.carrier_id) ?? "Carrier not known", policyNumber: c.policy_number, clientName: c.contact_id ? nameOf.get(c.contact_id) || null : null, reason: c.reason, createdAt: c.created_at })),
   };
 }
 

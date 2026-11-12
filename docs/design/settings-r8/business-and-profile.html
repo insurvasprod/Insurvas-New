@@ -1,0 +1,967 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Identity and Profile</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Board-only extras, built from kit tokens only. */
+.sp{flex:1}
+.lnk{color:var(--accent-ink);font-weight:500;text-decoration:none}
+.body.col{flex-direction:column}
+.cardrow{flex-direction:row}
+.colwrap{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+/* sticky section index (A) */
+.index{width:208px;flex:none;padding:12px 0 12px 12px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:2px}
+.index a{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);padding:7px 10px;border-radius:8px;text-decoration:none;margin-right:12px}
+.index a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.index a .mk{margin-left:auto;font-size:12px;font-weight:600}
+.mk.ok{color:var(--ok)}
+.mk.warn{color:var(--warn)}
+.index .foot{margin-top:auto;padding:10px 22px 0 10px;font-size:12px;color:var(--muted)}
+/* documents-ready progress line */
+.docline{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--rule);font-size:12px;color:var(--body);flex-wrap:wrap}
+.docline b{font-size:12px;color:var(--ink)}
+.prog{height:6px;border-radius:999px;background:var(--band);overflow:hidden;box-shadow:inset 0 0 0 1px var(--tile-edge)}
+.prog i{display:block;height:100%;background:var(--primary);border-radius:inherit}
+.docline .prog{flex:0 0 140px}
+.need .input{border-color:var(--warn);box-shadow:inset 3px 0 0 var(--warn)}
+.help.warn{color:var(--warn)}
+.f3{display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px 18px}
+.fsec.anchor{scroll-margin-top:8px}
+.sec-h{display:flex;align-items:baseline;gap:10px}
+.sec-h h4{font-size:16px;margin:0 0 2px}
+.sec-h .end{margin-left:auto}
+/* key / value */
+.kv{display:grid;grid-template-columns:170px 1fr;gap:10px 16px;align-items:center;font-size:14px;margin:0}
+.kv dt{font-size:12px;color:var(--muted);margin:0}
+.kv dd{margin:0;color:var(--ink);min-width:0;display:flex;align-items:center;gap:8px}
+/* one-line rows */
+.line{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.line:last-child{border-bottom:0}
+.line b{color:var(--ink);font-weight:500}
+.line .end{margin-left:auto;display:flex;gap:8px;align-items:center}
+.line small{font-size:12px;color:var(--muted)}
+/* logo */
+.mark{width:64px;height:64px;border-radius:14px;background:var(--ink);color:var(--card);display:grid;place-items:center;font-weight:700;font-size:16px;letter-spacing:.02em;flex:none}
+.mark.sm{width:36px;height:36px;border-radius:9px;font-size:12px}
+.av.lg{width:56px;height:56px;font-size:16px}
+.drop{border:1.5px dashed var(--border-strong);border-radius:12px;background:var(--band);padding:18px;text-align:center;font-size:14px;color:var(--body)}
+.drop small{display:block;font-size:12px;color:var(--muted);margin-top:4px}
+.crop{position:relative;height:220px;border-radius:12px;background:var(--code);border:1px solid var(--tile-edge);display:grid;place-items:center;overflow:hidden}
+.crop .frame{width:150px;height:150px;border-radius:14px;box-shadow:0 0 0 999px var(--backdrop);outline:2px solid var(--card);display:grid;place-items:center}
+.crop .frame .mark{width:120px;height:120px;font-size:24px;border-radius:18px}
+.slider{height:4px;border-radius:999px;background:var(--band);position:relative;flex:1;box-shadow:inset 0 0 0 1px var(--tile-edge)}
+.slider i{position:absolute;left:0;top:0;bottom:0;width:42%;background:var(--primary);border-radius:inherit}
+.slider b{position:absolute;left:42%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:var(--card);box-shadow:0 0 0 2px var(--primary)}
+/* paper previews */
+.paper{background:var(--card);border:1px solid var(--card-border);border-radius:10px;box-shadow:var(--shadow);padding:22px 24px;font-size:12px;color:var(--body);line-height:1.6}
+.paper .lh{display:flex;align-items:center;gap:12px;padding-bottom:12px;margin-bottom:14px;border-bottom:2px solid var(--ink)}
+.paper .lh b{display:block;font-size:14px;color:var(--ink)}
+.paper .lh small{display:block;font-size:12px;color:var(--muted)}
+.paper .addr{margin-left:auto;text-align:right;font-size:12px;color:var(--muted)}
+.paper p{margin:0 0 10px}
+.paper .ft{margin-top:14px;padding-top:10px;border-top:1px solid var(--rule);font-size:12px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap}
+.miss{background:var(--warn-s);color:var(--warn);border-radius:4px;padding:0 4px;font-weight:600}
+.live{outline:2px solid var(--ring);outline-offset:2px;border-radius:4px}
+.split2{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:12px;flex:1;min-height:0}
+.split2 > .card{min-height:0}
+.jump{display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--rule);flex-wrap:wrap;align-items:center}
+.jump a{font-size:12px;font-weight:500;color:var(--muted);padding:4px 10px;border-radius:999px;border:1px solid var(--border);text-decoration:none}
+.jump a.on{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.agent{display:flex;gap:12px;align-items:center;padding:14px;border:1px solid var(--card-border);border-radius:12px;background:var(--card)}
+.agent b{display:block;font-size:16px;color:var(--ink)}
+.agent small{display:block;font-size:12px;color:var(--muted)}
+/* accordion (C) */
+.acc{border-bottom:1px solid var(--rule)}
+.acc-h{display:flex;align-items:center;gap:12px;padding:14px 16px}
+.acc-h b{font-size:16px;color:var(--ink);display:block}
+.acc-h small{font-size:12px;color:var(--muted);display:block}
+.acc-h .chev{width:22px;height:22px;border-radius:6px;display:grid;place-items:center;color:var(--muted);font-size:12px;flex:none;background:var(--band)}
+.acc-h .end{margin-left:auto;display:flex;gap:8px;align-items:center}
+.acc.open .acc-h{background:var(--band)}
+.acc.open .acc-h .chev{background:var(--primary-soft);color:var(--accent-ink)}
+.acc-b{padding:6px 16px 18px 50px}
+/* overlays side by side */
+.dialog.left{left:30%}
+.dialog.right{left:72%}
+.dialog .row.end{justify-content:flex-end;margin-top:14px}
+.hr{border-top:1px solid var(--rule);margin:14px 0}
+.qr{width:136px;height:136px;border-radius:8px;border:8px solid var(--card);box-shadow:0 0 0 1px var(--border);background:repeating-conic-gradient(var(--ink) 0 25%,var(--card) 0 50%) 0 0/16px 16px;flex:none}
+.otp{display:flex;gap:6px}
+.otp span{width:38px;height:44px;border-radius:8px;border:1px solid var(--border-strong);display:grid;place-items:center;font-size:16px;font-weight:600;color:var(--ink);background:var(--card)}
+.otp span.focus{outline:2px solid var(--ring);outline-offset:1px}
+.codes{display:grid;grid-template-columns:1fr 1fr;gap:6px 18px;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:12px 14px}
+.danger-sec{border:1px solid var(--card-border);border-radius:12px;padding:4px 14px}
+.bg-dim{opacity:.55}
+.sheet tbody td,.card tbody td{max-width:280px;overflow:hidden;text-overflow:ellipsis}
+td.c,th.c{text-align:center}
+.seg.sm span{font-size:12px;padding:4px 10px}
+.input.sm{height:30px;font-size:12px}
+.states.two{grid-template-columns:repeat(2,1fr)}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Business identity &amp; My profile</h1>
+  <p class="lead">Business identity is who the agency is on paper: names and numbers carriers check, the address and logo printed on every letter and statement, and how partners reach you. My profile is the same for one person: your details, how you sign in, and which alerts reach you. Today both are split into tabs, so a field the documents need sits on a different tab from the list that says it is missing, and each page has more than one way to save. Your ask: each one becomes a single page whose form scrolls inside one card, with the title pinned and one save bar.</p>
+  <div class="notes">
+    <div><b>1 · Four tabs for one form</b>Business identity spreads 17 fields over Business, Contact &amp; address, Documents &amp; logo and Partners &amp; owner. The documents list says "needs a business email", but the email box is two tabs away.</div>
+    <div><b>2 · Three ways to save</b>The save bar for most fields, a separate Save button for partner support, and the profile photo that saves the moment you pick it. You can't tell what is kept.</div>
+    <div><b>3 · Internals on show</b>Partners &amp; owner prints the raw workspace ID. Owners have no use for it; support asks for it once a year.</div>
+    <div><b>4 · Security is hidden behind a tab</b>Two-step verification being off is only seen if you open Sign-in &amp; security. History is tabs inside a tab (Everything / Profile / Sign-in).</div>
+    <div><b>5 · Two of everything, unexplained</b>Business time zone and your time zone; business phone, your phone and partner support phone. Each needs one plain line saying which is which.</div>
+    <div><b>6 · Problems arrive as notices</b>"Saving needs a database update" and save errors draw cards above the form and push it down. They belong on the status line.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · Index + scrolling form</button><button data-opt-btn="B">B · Form + live preview</button><button data-opt-btn="C">C · Sections that fold</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION A ═══════════════════════════════ -->
+  <div class="opt A">
+
+    <div class="sec"><h2>A1 · Business identity, top of the form</h2><span>left index stays put, right side scrolls · documents-ready line ties to the field it needs · one save bar</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a class="on">Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Business identity</h3><div class="acts"><span class="btn g">History</span><span class="btn o">Preview a letter</span></div></div>
+        <div class="status warn"><span class="dot"></span>2 unsaved changes · last saved by Demo Agent on Nov 10</div>
+        <div class="body">
+          <div class="card flex1 cardrow">
+            <nav class="index">
+              <a class="on">Business <span class="mk ok">✓</span></a>
+              <a>Contact &amp; address <span class="mk warn">1 to add</span></a>
+              <a>Documents &amp; logo <span class="mk ok">✓</span></a>
+              <a>Partners &amp; owner <span class="mk ok">✓</span></a>
+              <div class="foot">Everything here saves together with the bar below.</div>
+            </nav>
+            <div class="colwrap">
+              <div class="docline"><b>Documents ready · 4 of 5</b><span class="prog"><i style="width:80%"></i></span><span>Client welcome letter needs a <b>business email</b></span><a class="lnk">Add it ›</a><span class="sp"></span><a class="lnk">See all documents</a></div>
+              <div class="scroll"><div class="card-b">
+                <div class="fsec anchor"><h4>Business</h4><p>The names and numbers carriers and clients see.</p>
+                  <div class="fgrid">
+                    <div><label class="l">Trading name</label><div class="input">Ellery &amp; Fields</div><div class="help">Printed on client documents.</div></div>
+                    <div><label class="l">Legal name</label><div class="input focus">Ellery &amp; Fields Insurance Group LLC</div><div class="help">Used on tax forms and carrier contracts.</div></div>
+                    <div><label class="l">Entity type</label><div class="input">Limited liability company (LLC) <span class="end">▾</span></div></div>
+                    <div><label class="l">National producer number (NPN)</label><div class="input">18442987 <span class="end"><span class="chip ok">Checked with NIPR</span></span></div><div class="help">Last checked Nov 4.</div></div>
+                    <div><label class="l">Tax ID</label><div class="row"><span class="seg sm"><span class="on">EIN</span><span>Social Security number</span></span></div><div class="input" style="margin-top:8px">••-•••7265 <span class="end"><a class="lnk">Reveal</a> · <a class="lnk">Replace</a> · <a class="lnk">Remove</a></span></div></div>
+                    <div><label class="l">Business time zone</label><div class="input">Central (Chicago) <span class="end">▾</span></div><div class="help">For reports and daily summaries. Your own time zone is on My profile; calling hours follow each client's state.</div></div>
+                  </div>
+                </div>
+                <div class="fsec anchor"><h4>Contact &amp; address</h4><p>Printed on letters, statements and the client portal.</p>
+                  <div class="fgrid">
+                    <div class="full"><label class="l">Street address</label><div class="input">2200 Ross Ave</div></div>
+                    <div class="full"><label class="l">Address line 2</label><div class="input">Suite 4100</div></div>
+                  </div>
+                  <div class="f3" style="margin-top:12px"><div><label class="l">City</label><div class="input">Dallas</div></div><div><label class="l">State</label><div class="input">Texas <span class="end">▾</span></div></div><div><label class="l">ZIP code</label><div class="input focus">75201</div></div></div>
+                  <div class="fgrid" style="margin-top:12px">
+                    <div><label class="l">Business phone</label><div class="input">(214) 555-0148</div><div class="help">The agency's main line. Your own number is on My profile.</div></div>
+                    <div class="need"><label class="l">Business email</label><div class="input ph">Add an email clients can reply to</div><div class="help warn">The client welcome letter needs this.</div></div>
+                    <div class="full"><label class="l">Website</label><div class="input">elleryfields.com</div></div>
+                  </div>
+                </div>
+              </div></div>
+              <div class="savebar"><span>2 unsaved changes · legal name, ZIP code</span><span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save changes</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A2 · Same page, scrolled to Documents &amp; logo and Partners &amp; owner</h2><span>partner support joins the one save bar · ownership read-only · workspace ID only behind "Show technical details"</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a class="on">Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Business identity</h3><div class="acts"><span class="btn g">History</span><span class="btn o">Preview a letter</span></div></div>
+        <div class="status"><span class="dot"></span>Saved · changed by Demo Agent on Nov 10</div>
+        <div class="body">
+          <div class="card flex1 cardrow">
+            <nav class="index">
+              <a>Business <span class="mk ok">✓</span></a>
+              <a>Contact &amp; address <span class="mk warn">1 to add</span></a>
+              <a class="on">Documents &amp; logo <span class="mk ok">✓</span></a>
+              <a>Partners &amp; owner <span class="mk ok">✓</span></a>
+              <div class="foot">Everything here saves together with the bar below.</div>
+            </nav>
+            <div class="colwrap">
+              <div class="docline"><b>Documents ready · 4 of 5</b><span class="prog"><i style="width:80%"></i></span><span>Client welcome letter needs a <b>business email</b></span><a class="lnk">Add it ›</a><span class="sp"></span><a class="lnk">See all documents</a></div>
+              <div class="scroll"><div class="card-b">
+                <div class="fsec anchor"><h4>Documents &amp; logo</h4><p>Every letter and statement checks these details before it is made.</p>
+                  <div class="row" style="gap:16px;align-items:center">
+                    <span class="mark">E&amp;F</span>
+                    <div><b style="font-size:14px;color:var(--ink)">elleryfields-logo.png</b><div class="small muted">PNG · 212 KB · added Oct 2</div><div class="row" style="margin-top:6px"><span class="btn o sm">Replace</span><span class="btn g sm">Remove</span></div></div>
+                    <span class="sp"></span><span class="small muted" style="max-width:240px">PNG or JPEG, up to 512 KB. Without a logo, documents print your trading name as text.</span>
+                  </div>
+                  <div style="margin-top:14px">
+                    <div class="line"><b>Commission statement</b><small>name, address, logo</small><span class="end"><span class="chip ok">Ready</span></span></div>
+                    <div class="line"><b>Partner payout statement</b><small>legal name, tax ID, address</small><span class="end"><span class="chip ok">Ready</span></span></div>
+                    <div class="line"><b>Carrier discrepancy letter</b><small>legal name, NPN, phone</small><span class="end"><span class="chip ok">Ready</span></span></div>
+                    <div class="line"><b>Year-end 1099 summary</b><small>legal name, tax ID</small><span class="end"><span class="chip ok">Ready</span></span></div>
+                    <div class="line"><b>Client welcome letter</b><small>address, business email</small><span class="end"><a class="lnk small">Add business email ›</a><span class="chip warn">Needs 1 detail</span></span></div>
+                  </div>
+                </div>
+                <div class="fsec anchor"><h4>Partners &amp; owner</h4><p>How partners reach you about payouts and leads. Saved with everything else.</p>
+                  <div class="fgrid">
+                    <div><label class="l">Partner support email</label><div class="input">partners@elleryfields.com</div></div>
+                    <div><label class="l">Partner support phone</label><div class="input">(214) 555-0190</div><div class="help">Shown in the partner portal only.</div></div>
+                  </div>
+                  <div class="hr"></div>
+                  <dl class="kv">
+                    <dt>Owner</dt><dd><span class="av">DA</span>Demo Agent <a class="lnk small">Hand over ownership</a></dd>
+                    <dt>Agency since</dt><dd>March 14, 2026</dd>
+                    <dt>Plan</dt><dd>Agency Pro <a class="lnk small">Plan &amp; billing ›</a></dd>
+                  </dl>
+                  <details open style="margin-top:12px"><summary class="small" style="cursor:pointer;color:var(--accent-ink);font-weight:600">Show technical details</summary>
+                    <div class="small muted" style="margin:8px 0 6px">Support may ask for this. You never need to type it.</div>
+                    <div class="copy" style="max-width:460px"><span class="v">Workspace d6f3950f-2b1c-4e0a-9a7d-5c81e3f04b22</span><span class="btn g sm">Copy</span></div>
+                  </details>
+                </div>
+              </div></div>
+              <div class="card-f small muted"><span>All changes saved</span><span class="sp"></span><span class="btn p sm d">Save changes</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A3 · My profile, top of the form</h2><span>same frame: Profile · Producer record · Sign-in &amp; security · Alerts · photo now saves with the bar · History moves to a sheet</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>My profile</h3><div class="acts"><span class="btn g">History</span><span class="btn o">Open my producer record</span></div></div>
+        <div class="status warn"><span class="dot"></span>1 unsaved change · two-step verification is off — <a class="lnk">turn it on</a></div>
+        <div class="body">
+          <div class="card flex1 cardrow">
+            <nav class="index">
+              <a class="on">Profile <span class="mk ok">✓</span></a>
+              <a>Producer record</a>
+              <a>Sign-in &amp; security <span class="mk warn">1 to do</span></a>
+              <a>Alerts <span class="mk">2 off</span></a>
+              <div class="foot">Email, password and two-step have their own confirm. Everything else saves with the bar.</div>
+            </nav>
+            <div class="colwrap">
+              <div class="scroll"><div class="card-b">
+                <div class="fsec anchor"><h4>Profile</h4><p>How clients and teammates see you.</p>
+                  <div class="row" style="gap:14px;margin-bottom:14px"><span class="av lg">DA</span><div><div class="row"><span class="btn o sm">Change photo</span><span class="btn g sm">Remove</span></div><div class="help">JPEG or PNG, square works best. Saves with the bar below.</div></div></div>
+                  <div class="fgrid">
+                    <div><label class="l">First name</label><div class="input">Demo</div></div>
+                    <div><label class="l">Last name</label><div class="input">Agent</div></div>
+                    <div><label class="l">Mobile phone</label><div class="input focus">(214) 555-0112</div><div class="help">Yours. The agency line is on Business identity.</div></div>
+                    <div><label class="l">Your time zone</label><div class="input">Central (Chicago) <span class="end">▾</span></div><div class="help">How times show for you only.</div></div>
+                    <div class="full"><label class="l">Languages you speak with clients</label><div class="input"><span class="chip n">English ✕</span><span class="chip n">Spanish ✕</span><span class="muted small">Add a language</span></div><div class="help">Inbound calls in Spanish can be routed to you.</div></div>
+                    <div><label class="l">Your NPN</label><div class="input">20918844 <span class="end"><span class="chip ok">Checked with NIPR</span></span></div></div>
+                    <div><label class="l">Licence numbers</label><div class="input">TX 2876301 · OK 3301987 <span class="end"><a class="lnk">Add</a></span></div></div>
+                    <div class="full"><label class="l">Licensed states</label><div class="row"><span class="chip n">Texas</span><span class="chip n">Oklahoma</span><span class="chip n">Louisiana</span><span class="chip n">Arkansas</span><span class="chip n">Florida</span><a class="lnk small">Change on your producer record ›</a></div><div class="help">Read-only here: one home for licences, on your producer record.</div></div>
+                  </div>
+                </div>
+                <div class="fsec anchor"><h4>Producer record</h4><p>What the agency holds about you as a producer.</p>
+                  <dl class="kv"><dt>Role</dt><dd>Owner · producer</dd><dt>Team</dt><dd>Dallas office</dd><dt>Appointed carriers</dt><dd>9 carriers <a class="lnk small">See them ›</a></dd><dt>Pay plan</dt><dd>Owner split · 100% <a class="lnk small">Open my record ›</a></dd></dl>
+                </div>
+              </div></div>
+              <div class="savebar"><span>1 unsaved change · mobile phone</span><span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save changes</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A4 · My profile, scrolled to Sign-in &amp; security and Alerts</h2><span>security rows open dialogs or sheets · alerts table is part of the page and saves with the bar · protected alerts locked</span></div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>My profile</h3><div class="acts"><span class="btn g">History</span><span class="btn o">Open my producer record</span></div></div>
+        <div class="status warn"><span class="dot"></span>2 unsaved changes · two-step verification is off — <a class="lnk">turn it on</a></div>
+        <div class="body">
+          <div class="card flex1 cardrow">
+            <nav class="index">
+              <a>Profile <span class="mk ok">✓</span></a>
+              <a>Producer record</a>
+              <a>Sign-in &amp; security <span class="mk warn">1 to do</span></a>
+              <a class="on">Alerts <span class="mk">2 off</span></a>
+              <div class="foot">Email, password and two-step have their own confirm. Everything else saves with the bar.</div>
+            </nav>
+            <div class="colwrap">
+              <div class="scroll"><div class="card-b">
+                <div class="fsec anchor"><h4>Sign-in &amp; security</h4><p>Each of these asks you to confirm in its own window.</p>
+                  <div class="line"><b>Email</b><small>demo.agent@elleryfields.com</small><span class="end"><span class="btn o sm">Change email</span></span></div>
+                  <div class="line"><b>Password</b><small>changed Sep 2</small><span class="end"><span class="btn o sm">Change password</span></span></div>
+                  <div class="line"><b>Two-step verification</b><small>a code from an app each time you sign in</small><span class="end"><span class="chip warn">Off</span><span class="btn p sm">Turn on</span></span></div>
+                  <div class="line"><b>Where you're signed in</b><small>3 devices · this one in Dallas, TX</small><span class="end"><span class="btn o sm">See devices</span></span></div>
+                  <div class="danger-sec" style="margin-top:12px">
+                    <div class="line"><b>Sign out of every other device</b><small>you stay signed in here</small><span class="end"><span class="btn o sm">Sign out others</span></span></div>
+                    <div class="line"><b>Close my account</b><small>owners hand the agency to someone else first</small><span class="end"><span class="btn danger sm">Close account</span></span></div>
+                  </div>
+                </div>
+                <div class="fsec anchor"><h4>Alerts</h4><p>Where each alert reaches you. Alerts marked Always on can't be switched off: missing one causes harm that can't be undone.</p>
+                  <div class="row" style="margin-bottom:10px"><span class="switch on"></span><b style="font-size:14px">Quiet hours</b><span class="input sm" style="width:96px">9:00 PM</span><span class="small muted">to</span><span class="input sm" style="width:96px">7:00 AM</span><span class="small muted">Central · email and browser wait; Always on still comes through</span></div>
+                  <div class="row" style="margin-bottom:8px"><span class="seg sm"><span class="on">All 12</span><span>Off 2</span><span>Always on 3</span></span><span class="sp"></span><span class="input sm ph" style="width:200px">Find an alert</span></div>
+                  <div class="card" style="border-radius:12px"><table>
+                    <thead><tr><th>Alert</th><th class="c">In app</th><th class="c">Browser</th><th>Email</th></tr></thead>
+                    <tbody>
+                      <tr><td>A new lead is assigned to you</td><td class="c"><span class="switch on"></span></td><td class="c"><span class="switch on"></span></td><td><span class="seg sm"><span class="on">Right away</span><span>Daily digest</span><span>Off</span></span></td></tr>
+                      <tr><td>A callback is due <span class="chip n">Always on</span></td><td class="c"><span class="switch on" style="opacity:.5"></span></td><td class="c"><span class="switch on" style="opacity:.5"></span></td><td><span class="seg sm"><span class="on">Right away</span></span></td></tr>
+                      <tr class="s"><td>An application needs a signature</td><td class="c"><span class="switch on"></span></td><td class="c"><span class="switch"></span></td><td><span class="seg sm"><span>Right away</span><span class="on">Daily digest</span><span>Off</span></span></td></tr>
+                      <tr><td>A policy is issued</td><td class="c"><span class="switch on"></span></td><td class="c"><span class="switch"></span></td><td><span class="seg sm"><span>Right away</span><span class="on">Daily digest</span><span>Off</span></span></td></tr>
+                      <tr><td>A chargeback hits your book <span class="chip n">Always on</span></td><td class="c"><span class="switch on" style="opacity:.5"></span></td><td class="c"><span class="switch on" style="opacity:.5"></span></td><td><span class="seg sm"><span class="on">Right away</span></span></td></tr>
+                      <tr><td>A commission statement is ready</td><td class="c"><span class="switch on"></span></td><td class="c"><span class="switch"></span></td><td><span class="seg sm"><span>Right away</span><span>Daily digest</span><span class="on">Off</span></span></td></tr>
+                      <tr><td>A teammate mentions you</td><td class="c"><span class="switch"></span></td><td class="c"><span class="switch"></span></td><td><span class="seg sm"><span>Right away</span><span>Daily digest</span><span class="on">Off</span></span></td></tr>
+                    </tbody>
+                  </table></div>
+                </div>
+              </div></div>
+              <div class="savebar"><span>2 unsaved changes · alerts</span><span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save changes</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION B ═══════════════════════════════ -->
+  <div class="opt B">
+    <div class="sec"><h2>B1 · Business identity: form left, "How you appear" right</h2><span>jump chips index the form · the preview lights up the field you're typing in</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a class="on">Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Business identity</h3><div class="acts"><span class="btn g">History</span></div></div>
+        <div class="status warn"><span class="dot"></span>1 unsaved change · last saved by Demo Agent on Nov 10</div>
+        <div class="body">
+          <div class="split2">
+            <div class="card">
+              <div class="jump"><a>Business</a><a class="on">Contact &amp; address · 1</a><a>Documents &amp; logo</a><a>Partners &amp; owner</a></div>
+              <div class="scroll"><div class="card-b">
+                <div class="fsec"><h4>Contact &amp; address</h4><p>Printed on letters, statements and the client portal.</p>
+                  <div class="fgrid">
+                    <div class="full"><label class="l">Street address</label><div class="input">2200 Ross Ave</div></div>
+                    <div class="full"><label class="l">Address line 2</label><div class="input focus">Suite 4100</div></div>
+                  </div>
+                  <div class="f3" style="margin-top:12px"><div><label class="l">City</label><div class="input">Dallas</div></div><div><label class="l">State</label><div class="input">Texas <span class="end">▾</span></div></div><div><label class="l">ZIP code</label><div class="input">75201</div></div></div>
+                  <div class="fgrid" style="margin-top:12px">
+                    <div><label class="l">Business phone</label><div class="input">(214) 555-0148</div></div>
+                    <div class="need"><label class="l">Business email</label><div class="input ph">Add an email clients can reply to</div><div class="help warn">The client welcome letter needs this.</div></div>
+                  </div>
+                </div>
+                <div class="fsec"><h4>Documents &amp; logo</h4><p>Without a logo, documents print your trading name.</p>
+                  <div class="row"><span class="mark sm">E&amp;F</span><span class="small muted">elleryfields-logo.png · 212 KB</span><span class="btn o sm">Replace</span></div>
+                </div>
+              </div></div>
+              <div class="savebar"><span>1 unsaved change</span><span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save changes</span></div>
+            </div>
+            <div class="card">
+              <div class="card-h"><b>How you appear</b><div class="r"><span class="seg sm"><span class="on">Letterhead</span><span>Payout statement</span><span>Client portal</span></span></div></div>
+              <div class="scroll"><div class="card-b">
+                <div class="paper">
+                  <div class="lh"><span class="mark sm">E&amp;F</span><div><b>Ellery &amp; Fields</b><small>Ellery &amp; Fields Insurance Group LLC</small></div><div class="addr">2200 Ross Ave, <span class="live">Suite 4100</span><br>Dallas, TX 75201<br>(214) 555-0148</div></div>
+                  <p>November 12, 2026</p>
+                  <p>Dear Maria Lopez,</p>
+                  <p>Welcome to Ellery &amp; Fields. Your Final Expense policy with Mutual of Omaha is now in force…</p>
+                  <div class="ft"><span>NPN 18442987</span><span>elleryfields.com</span><span class="miss">business email missing</span></div>
+                </div>
+              </div></div>
+              <div class="card-f small"><span class="muted">Documents ready 4 of 5</span><span class="sp"></span><a class="lnk">Preview full letter</a></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B2 · My profile: form left, "How others see you" right</h2><span>client portal card · email signature · team list</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>My profile</h3><div class="acts"><span class="btn g">History</span></div></div>
+        <div class="status warn"><span class="dot"></span>Two-step verification is off — <a class="lnk">turn it on</a></div>
+        <div class="body">
+          <div class="split2">
+            <div class="card">
+              <div class="jump"><a class="on">Profile</a><a>Producer record</a><a>Sign-in &amp; security · 1</a><a>Alerts</a></div>
+              <div class="scroll"><div class="card-b">
+                <div class="fsec"><h4>Profile</h4><p>How clients and teammates see you.</p>
+                  <div class="row" style="gap:14px;margin-bottom:14px"><span class="av lg">DA</span><span class="btn o sm">Change photo</span></div>
+                  <div class="fgrid">
+                    <div><label class="l">First name</label><div class="input">Demo</div></div>
+                    <div><label class="l">Last name</label><div class="input">Agent</div></div>
+                    <div><label class="l">Mobile phone</label><div class="input">(214) 555-0112</div></div>
+                    <div><label class="l">Your time zone</label><div class="input">Central (Chicago) <span class="end">▾</span></div></div>
+                    <div class="full"><label class="l">Languages</label><div class="input focus"><span class="chip n">English ✕</span><span class="chip n">Spanish ✕</span></div></div>
+                  </div>
+                </div>
+                <div class="fsec"><h4>Sign-in &amp; security</h4>
+                  <div class="line"><b>Two-step verification</b><span class="end"><span class="chip warn">Off</span><span class="btn p sm">Turn on</span></span></div>
+                  <div class="line"><b>Email</b><small>demo.agent@elleryfields.com</small><span class="end"><span class="btn o sm">Change</span></span></div>
+                </div>
+              </div></div>
+              <div class="card-f small muted"><span>All changes saved</span><span class="sp"></span><span class="btn p sm d">Save changes</span></div>
+            </div>
+            <div class="card">
+              <div class="card-h"><b>How others see you</b><div class="r"><span class="seg sm"><span class="on">Client portal</span><span>Email signature</span><span>Team list</span></span></div></div>
+              <div class="scroll"><div class="card-b">
+                <div class="small muted" style="margin-bottom:8px">Your clients see this card on their portal.</div>
+                <div class="agent"><span class="av lg">DA</span><div><b>Demo Agent</b><small>Licensed in TX, OK, LA, AR, FL · NPN 20918844</small><small>(214) 555-0112 · <span class="live">English, Spanish</span></small></div></div>
+                <div class="hr"></div>
+                <div class="small muted" style="margin-bottom:8px">Email signature</div>
+                <div class="paper" style="padding:14px 16px"><b style="color:var(--ink)">Demo Agent</b><br>Licensed agent · Ellery &amp; Fields<br>(214) 555-0112 · demo.agent@elleryfields.com</div>
+              </div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION C ═══════════════════════════════ -->
+  <div class="opt C">
+    <div class="sec"><h2>C1 · Business identity as sections that fold</h2><span>each section shows a summary and a completeness chip when closed · one card scrolls · one save bar</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a class="on">Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Business identity</h3><div class="acts"><span class="btn g">History</span><span class="btn o">Preview a letter</span></div></div>
+        <div class="status warn"><span class="dot"></span>1 unsaved change · last saved by Demo Agent on Nov 10</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><b>4 sections · 1 detail to add</b><div class="r"><a class="lnk small">Open all</a><span class="muted small">·</span><a class="lnk small">Close all</a></div></div>
+            <div class="scroll">
+              <div class="acc"><div class="acc-h"><span class="chev">▸</span><div><b>Business</b><small>Ellery &amp; Fields · LLC · NPN 18442987 · EIN ••7265 · Central time</small></div><span class="end"><span class="chip ok">Complete</span></span></div></div>
+              <div class="acc open"><div class="acc-h"><span class="chev">▾</span><div><b>Contact &amp; address</b><small>2200 Ross Ave, Suite 4100, Dallas, TX 75201</small></div><span class="end"><span class="chip warn">1 to add</span></span></div>
+                <div class="acc-b">
+                  <div class="fgrid"><div class="full"><label class="l">Street address</label><div class="input">2200 Ross Ave</div></div><div class="full"><label class="l">Address line 2</label><div class="input">Suite 4100</div></div></div>
+                  <div class="f3" style="margin-top:12px"><div><label class="l">City</label><div class="input">Dallas</div></div><div><label class="l">State</label><div class="input">Texas <span class="end">▾</span></div></div><div><label class="l">ZIP code</label><div class="input">75201</div></div></div>
+                  <div class="fgrid" style="margin-top:12px"><div><label class="l">Business phone</label><div class="input">(214) 555-0148</div></div><div class="need"><label class="l">Business email</label><div class="input focus">hello@elleryfields.com</div><div class="help warn">The client welcome letter needs this.</div></div><div class="full"><label class="l">Website</label><div class="input">elleryfields.com</div></div></div>
+                </div>
+              </div>
+              <div class="acc"><div class="acc-h"><span class="chev">▸</span><div><b>Documents &amp; logo</b><small>Logo added · 4 of 5 documents ready</small></div><span class="end"><span class="chip warn">4 of 5 ready</span></span></div></div>
+              <div class="acc"><div class="acc-h"><span class="chev">▸</span><div><b>Partners &amp; owner</b><small>partners@elleryfields.com · (214) 555-0190 · owner Demo Agent</small></div><span class="end"><span class="chip ok">Complete</span></span></div></div>
+            </div>
+            <div class="savebar"><span>1 unsaved change · business email</span><span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save changes</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C2 · My profile as sections that fold</h2><span>Sign-in &amp; security opened; the others summarised</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>My profile</h3><div class="acts"><span class="btn g">History</span><span class="btn o">Open my producer record</span></div></div>
+        <div class="status warn"><span class="dot"></span>Two-step verification is off — <a class="lnk">turn it on</a></div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><b>4 sections · 1 to do</b><div class="r"><a class="lnk small">Open all</a><span class="muted small">·</span><a class="lnk small">Close all</a></div></div>
+            <div class="scroll">
+              <div class="acc"><div class="acc-h"><span class="chev">▸</span><span class="av">DA</span><div><b>Profile</b><small>Demo Agent · (214) 555-0112 · Central · English, Spanish · NPN 20918844</small></div><span class="end"><span class="chip ok">Complete</span></span></div></div>
+              <div class="acc"><div class="acc-h"><span class="chev">▸</span><div><b>Producer record</b><small>Owner · producer · Dallas office · 9 carriers · licensed in 5 states</small></div><span class="end"><span class="chip n">Read-only</span></span></div></div>
+              <div class="acc open"><div class="acc-h"><span class="chev">▾</span><div><b>Sign-in &amp; security</b><small>Password changed Sep 2 · 3 devices</small></div><span class="end"><span class="chip warn">Two-step off</span></span></div>
+                <div class="acc-b">
+                  <div class="line"><b>Email</b><small>demo.agent@elleryfields.com</small><span class="end"><span class="btn o sm">Change email</span></span></div>
+                  <div class="line"><b>Password</b><small>changed Sep 2</small><span class="end"><span class="btn o sm">Change password</span></span></div>
+                  <div class="line"><b>Two-step verification</b><small>a code from an app each time you sign in</small><span class="end"><span class="btn p sm">Turn on</span></span></div>
+                  <div class="line"><b>Where you're signed in</b><small>3 devices</small><span class="end"><span class="btn o sm">See devices</span></span></div>
+                  <div class="line"><b>Close my account</b><small>owners hand the agency over first</small><span class="end"><span class="btn danger sm">Close account</span></span></div>
+                </div>
+              </div>
+              <div class="acc"><div class="acc-h"><span class="chev">▸</span><div><b>Alerts</b><small>12 alerts · quiet hours 9 PM–7 AM · 3 always on</small></div><span class="end"><span class="chip n">2 off</span></span></div></div>
+            </div>
+            <div class="card-f small muted"><span>All changes saved</span><span class="sp"></span><span class="btn p sm d">Save changes</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ EDIT SURFACES (every option) ═══════════════════════════════ -->
+  <div class="sec"><h2>Edit surfaces · used by every option</h2><span>drawn over option A; B and C open the same dialogs and sheets</span></div>
+
+  <div class="sec"><h2>E1 · Tax ID: reveal and remove confirms</h2><span>reveal shows for 30 seconds and is written to history · remove says what stops</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a class="on">Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Agency</div>
+      <div class="head"><h3>Business identity</h3><div class="acts"><span class="btn g">History</span><span class="btn o">Preview a letter</span></div></div>
+      <div class="status"><span class="dot"></span>Saved · changed by Demo Agent on Nov 10</div>
+      <div class="body"><div class="card flex1"><div class="card-b bg-dim"><div class="fsec"><h4>Business</h4><div class="fgrid"><div><label class="l">Legal name</label><div class="input">Ellery &amp; Fields Insurance Group LLC</div></div><div><label class="l">Tax ID</label><div class="input">••-•••7265</div></div></div></div></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <div class="dialog left">
+      <h4>Show the full tax ID?</h4>
+      <p>It shows for 30 seconds, then hides again. Each time it's shown is kept in Settings history with your name.</p>
+      <div class="input dis">EIN · ••-•••7265</div>
+      <div class="row end"><span class="btn g">Cancel</span><span class="btn p">Show it</span></div>
+    </div>
+    <div class="dialog right">
+      <h4>Remove the tax ID?</h4>
+      <p>Partner payout statements and year-end 1099 summaries stop until a new one is added. Statements already sent keep it.</p>
+      <div class="small muted">Removed tax IDs can't be brought back; you'd type it again.</div>
+      <div class="row end"><span class="btn g">Keep it</span><span class="btn danger">Remove tax ID</span></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>E2 · Logo: upload and crop</h2><span>right sheet · drop, crop to square, see it on the letterhead · "Use this logo" puts it in the page's save bar</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a class="on">Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Agency</div>
+      <div class="head"><h3>Business identity</h3></div>
+      <div class="status"><span class="dot"></span>Saved · changed by Demo Agent on Nov 10</div>
+      <div class="body"><div class="card flex1"><div class="card-b bg-dim"><div class="fsec"><h4>Documents &amp; logo</h4><div class="row"><span class="mark">E&amp;F</span><span class="btn o sm">Replace</span></div></div></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><span class="ic">L</span><div><b>Your logo</b><div class="small muted">Printed on letters, statements and the client portal</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="drop">Drop a PNG or JPEG here, or <a class="lnk">choose a file</a><small>Up to 512 KB. Square works best; we'll help you crop.</small></div>
+        <div class="small" style="margin:14px 0 6px;font-weight:600;color:var(--ink)">elleryfields-logo-2026.png · 348 KB</div>
+        <div class="crop"><div class="frame"><span class="mark">E&amp;F</span></div></div>
+        <div class="row" style="margin-top:12px"><span class="small muted">Zoom</span><span class="slider"><i></i><b></b></span><span class="btn g sm">Reset</span></div>
+        <div class="hr"></div>
+        <div class="small muted" style="margin-bottom:6px">On the letterhead</div>
+        <div class="paper" style="padding:12px 14px"><div class="lh" style="margin:0;padding:0;border:0"><span class="mark sm">E&amp;F</span><div><b>Ellery &amp; Fields</b><small>Ellery &amp; Fields Insurance Group LLC</small></div></div></div>
+      </div>
+      <div class="sheet-f"><span class="btn g">Cancel</span><span class="btn p">Use this logo</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>E3 · Preview a letter</h2><span>wide sheet · pick the document · a missing detail shows in place with a link to the field</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a class="on">Business identity</a><a>Team &amp; access <small>17/25</small></a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Agency</div>
+      <div class="head"><h3>Business identity</h3></div>
+      <div class="status"><span class="dot"></span>Saved · changed by Demo Agent on Nov 10</div>
+      <div class="body"><div class="card flex1"></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><b>Preview a letter</b><span class="x">✕</span></div>
+      <div style="padding:12px 18px 0"><span class="seg sm"><span class="on">Client welcome letter</span><span>Commission statement</span><span>Discrepancy letter</span><span>1099 summary</span></span></div>
+      <div class="sheet-b">
+        <div class="paper">
+          <div class="lh"><span class="mark sm">E&amp;F</span><div><b>Ellery &amp; Fields</b><small>Ellery &amp; Fields Insurance Group LLC</small></div><div class="addr">2200 Ross Ave, Suite 4100<br>Dallas, TX 75201<br>(214) 555-0148</div></div>
+          <p>November 12, 2026</p>
+          <p>Maria Lopez<br>418 Elm Street<br>Garland, TX 75040</p>
+          <p>Dear Maria,</p>
+          <p>Welcome to Ellery &amp; Fields. Your Final Expense policy with Mutual of Omaha, number MOO-2219034, is now in force. Your first draft is on December 3.</p>
+          <p>If anything changes, reply to <span class="miss">business email missing</span> or call us on (214) 555-0148.</p>
+          <p>Kind regards,<br>Demo Agent</p>
+          <div class="ft"><span>NPN 18442987</span><span>elleryfields.com</span></div>
+        </div>
+      </div>
+      <div class="sheet-f"><span class="small muted" style="margin-right:auto">1 detail missing · <a class="lnk">Add business email</a></span><span class="btn o">Download sample PDF</span><span class="btn p">Done</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>E4 · Change email and change password</h2><span>own confirm, outside the save bar · email changes only after the new address is confirmed</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Your account</div>
+      <div class="head"><h3>My profile</h3></div>
+      <div class="status"><span class="dot"></span>Saved · you changed your phone on Nov 8</div>
+      <div class="body"><div class="card flex1"></div></div>
+    </div>
+    <div class="scrim"></div>
+    <div class="dialog left">
+      <h4>Change your sign-in email</h4>
+      <p>We'll send a link to the new address. Until you open it, you keep signing in with the old one.</p>
+      <label class="l">New email</label><div class="input focus">demo@elleryfields.com</div>
+      <label class="l" style="margin-top:10px">Your password</label><div class="input">••••••••••</div>
+      <div class="row end"><span class="btn g">Cancel</span><span class="btn p">Send the link</span></div>
+    </div>
+    <div class="dialog right">
+      <h4>Change your password</h4>
+      <p>Other devices stay signed in unless you tick the box.</p>
+      <label class="l">Current password</label><div class="input">••••••••••</div>
+      <label class="l" style="margin-top:10px">New password</label><div class="input">•••••••••••••</div><div class="prog" style="margin-top:6px"><i style="width:75%"></i></div><div class="help">Strong · 13 characters</div>
+      <div class="row" style="margin-top:10px"><span class="check on"></span><span class="small">Sign out of every other device</span></div>
+      <div class="row end"><span class="btn g">Cancel</span><span class="btn p">Change password</span></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>E5 · Two-step verification setup</h2><span>right sheet in three steps · scan, type a code, keep the backup codes</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Your account</div>
+      <div class="head"><h3>My profile</h3></div>
+      <div class="status warn"><span class="dot"></span>Two-step verification is off</div>
+      <div class="body"><div class="card flex1"></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><b>Turn on two-step verification</b><span class="x">✕</span></div>
+      <div style="padding:12px 18px;border-bottom:1px solid var(--rule)"><div class="steps"><span class="done"><i>✓</i>Scan</span><em></em><span class="on"><i>2</i>Type the code</span><em></em><span><i>3</i>Backup codes</span></div></div>
+      <div class="sheet-b">
+        <div class="row" style="gap:16px;align-items:flex-start"><span class="qr"></span><div class="small" style="color:var(--body)">Open Google Authenticator, 1Password or Authy and scan this.<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--accent-ink);font-weight:600">Can't scan? Show the setup key</summary><div class="copy" style="margin-top:6px"><span class="v">JBSW Y3DP EHPK 3PXP</span><span class="btn g sm">Copy</span></div></details></div></div>
+        <div class="hr"></div>
+        <label class="l">The 6-digit code from the app</label>
+        <div class="otp"><span>4</span><span>8</span><span>2</span><span class="focus">0</span><span></span><span></span></div>
+        <div class="help">It changes every 30 seconds.</div>
+        <div class="hr"></div>
+        <div class="small muted" style="margin-bottom:6px">Next: 10 backup codes, each works once</div>
+        <div class="codes bg-dim"><span>7KQ2-9MXD</span><span>P4RT-2LWN</span><span>H8VB-6CJE</span><span>Z3NF-1QSA</span><span>•••• ••••</span><span>•••• ••••</span></div>
+      </div>
+      <div class="sheet-f"><span class="btn g">Back</span><span class="btn p">Check code</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>E6 · Where you're signed in</h2><span>right sheet · one line per device · sign one out or all others</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Your account</div>
+      <div class="head"><h3>My profile</h3></div>
+      <div class="status"><span class="dot"></span>Saved · you changed your phone on Nov 8</div>
+      <div class="body"><div class="card flex1"></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><b>Where you're signed in</b><span class="x">✕</span></div>
+      <div class="sheet-b" style="padding:0">
+        <table><thead><tr><th>Device</th><th>Where</th><th>Last active</th><th></th></tr></thead><tbody>
+          <tr><td>Chrome on Windows <span class="chip info">This device</span></td><td>Dallas, TX</td><td>Now</td><td></td></tr>
+          <tr><td>Safari on iPhone</td><td>Dallas, TX</td><td>2 hours ago</td><td><span class="btn o sm">Sign out</span></td></tr>
+          <tr><td>Edge on Windows</td><td>Fort Worth, TX</td><td>6 days ago</td><td><span class="btn o sm">Sign out</span></td></tr>
+        </tbody></table>
+        <div class="small muted" style="padding:12px 18px">Don't recognise one? Sign it out and change your password.</div>
+      </div>
+      <div class="sheet-f"><span class="btn o" style="margin-right:auto">Sign out of every other device</span><span class="btn p">Done</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>E7 · History sheet</h2><span>replaces the History tab and its nested tabs · one line per change · filter, not tabs</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a class="on">My profile</a><a>Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Your account</div>
+      <div class="head"><h3>My profile</h3></div>
+      <div class="status"><span class="dot"></span>Saved · you changed your phone on Nov 8</div>
+      <div class="body"><div class="card flex1"></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><b>History</b><span class="small muted">My profile and sign-in</span><span class="x">✕</span></div>
+      <div style="padding:12px 18px;border-bottom:1px solid var(--rule)" class="row"><span class="seg sm"><span class="on">Everything</span><span>Profile</span><span>Sign-in</span><span>Alerts</span></span><span class="sp"></span><span class="input sm" style="width:150px">Last 90 days <span class="end">▾</span></span></div>
+      <div class="sheet-b" style="padding:0">
+        <table><thead><tr><th>When</th><th>Who</th><th>What changed</th></tr></thead><tbody>
+          <tr><td>Nov 8, 4:12 PM</td><td>Demo Agent</td><td>Mobile phone: (214) 555-0101 → (214) 555-0112</td></tr>
+          <tr><td>Nov 8, 4:12 PM</td><td>Demo Agent</td><td>Languages: added Spanish</td></tr>
+          <tr><td>Nov 2, 9:30 AM</td><td>Demo Agent</td><td>Signed in on Safari on iPhone, Dallas, TX</td></tr>
+          <tr><td>Oct 21, 6:05 PM</td><td>Demo Agent</td><td>Alerts: policy issued email → daily digest</td></tr>
+          <tr><td>Sep 2, 11:48 AM</td><td>Demo Agent</td><td>Password changed</td></tr>
+          <tr><td>Aug 30, 3:20 PM</td><td>Dana Ruiz</td><td>Licensed states: added Florida <span class="chip n">From producer record</span></td></tr>
+        </tbody></table>
+      </div>
+      <div class="sheet-f"><a class="lnk small" style="margin-right:auto;align-self:center">Open full Settings history ›</a><span class="btn p">Done</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>States</h2><span>loading keeps title, index and save bar · empty · error · and the status line in each case</span></div>
+  <div class="states">
+    <div class="card"><div class="card-h"><b>Loading</b></div><div class="card-b" style="display:flex;gap:14px"><div style="width:120px"><div class="skel"></div><div class="skel"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:80%"></div></div><div style="flex:1"><div class="skel" style="width:40%"></div><div class="skel"></div><div class="skel" style="width:85%"></div><div class="skel" style="width:60%"></div><div class="skel"></div></div></div></div>
+    <div class="card"><div class="card-h"><b>Empty · first visit</b></div><div class="empty"><span class="ic">E</span><b>Tell clients and carriers who you are</b><p>Start with your legal name and NPN. The logo can be added once you've saved.</p><span class="btn p">Start with the business</span></div></div>
+    <div class="card"><div class="card-h"><b>Error</b></div><div class="card-b"><div class="status bad" style="margin:0 0 10px"><span class="dot"></span>Couldn't load your business identity. <a class="lnk">Retry</a></div><div class="small muted">The title and index stay; the card shows this line and a Retry. Nothing you typed is lost.</div></div></div>
+  </div>
+  <div class="states two">
+    <div class="card"><div class="card-h"><b>Status line, every case</b></div><div class="card-b">
+      <div class="status"><span class="dot"></span>Saved · changed by Demo Agent on Nov 10</div>
+      <div class="status warn"><span class="dot"></span>2 unsaved changes · leaving asks first</div>
+      <div class="status bad"><span class="dot"></span>Couldn't save. Check your connection and try again. <a class="lnk">Retry</a></div>
+      <div class="status warn"><span class="dot"></span>Saving here needs a database update. Your changes are kept.</div>
+      <div class="status"><span class="dot"></span>Only the agency owner can change this page. You can read it.</div>
+    </div></div>
+    <div class="card"><div class="card-h"><b>Toasts</b></div><div class="card-b row" style="flex-direction:column;align-items:flex-start;gap:8px">
+      <span class="toast"><i></i>Business identity saved</span>
+      <span class="toast"><i></i>Tax ID hidden again</span>
+      <span class="toast"><i></i>Check your new inbox to finish the email change</span>
+    </div></div>
+  </div>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose · the edit surfaces and states come with every option</span></div>
+  <div class="pick">
+    <div class="rec"><b>A · Index + scrolling form (recommended)</b>One card; a sticky section index on the left with a done mark per section; the form scrolls on the right. It's the frame already approved on the foundation board.
+      <ul><li>4 tabs become 4 sections on one page, for both pages</li><li>Documents-ready becomes a slim progress line that links straight to the missing field, and the field is marked</li><li>Partner support and the photo join the one save bar; email, password and two-step keep their own confirm</li><li>History is a sheet, not tabs in a tab</li><li>Workspace ID only behind "Show technical details" + Copy</li></ul></div>
+    <div><b>B · Form + live preview</b>Same single scrolling form, with a "How you appear" card beside it (letterhead, payout statement, client portal; for My profile, client card and email signature).
+      <ul><li>You see the letter change as you type</li><li>Jump chips instead of a side index</li><li>Narrower form; the preview costs a third of the width on every visit</li></ul></div>
+    <div><b>C · Sections that fold</b>Each section is a row with a one-line summary and a completeness chip; open one or all.
+      <ul><li>Shortest first view: the whole agency in four lines</li><li>Problems show on the closed row ("1 to add", "Two-step off")</li><li>More clicks to edit, and an open section can hide what is unsaved in another</li></ul></div>
+  </div>
+</div>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

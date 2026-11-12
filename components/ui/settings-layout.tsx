@@ -87,7 +87,7 @@ export function SettingsLayout({
           "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           isActive
             ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]"
-            : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground",
+            : "text-muted-foreground hover:bg-[var(--hover-wash)] hover:text-foreground",
           foldedRail && "w-10 justify-center px-0"
         )}
       >
@@ -120,10 +120,10 @@ export function SettingsLayout({
           <div className={cn("mb-1 flex min-w-0 items-center gap-1.5", groups && "shrink-0", foldedRail && "flex-col")}>
             {foldedRail ? (
               <>
-                <button type="button" onClick={() => toggleFold(false)} aria-label="Show the settings menu" title="Show menu" className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
+                <button type="button" onClick={() => toggleFold(false)} aria-label="Show the settings menu" title="Show menu" className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
                   <PanelLeftOpen className="size-4" aria-hidden="true" />
                 </button>
-                {searchable && <button type="button" onClick={() => { toggleFold(false); requestAnimationFrame(() => searchRef.current?.focus()); }} aria-label={`Search ${searchNoun}`} title={`Search ${searchNoun}`} className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
+                {searchable && <button type="button" onClick={() => { toggleFold(false); requestAnimationFrame(() => searchRef.current?.focus()); }} aria-label={`Search ${searchNoun}`} title={`Search ${searchNoun}`} className="inline-flex size-9 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]">
                   <Search className="size-4" aria-hidden="true" />
                 </button>}
               </>
@@ -132,10 +132,10 @@ export function SettingsLayout({
                 <span className="sr-only">Search {searchNoun}</span>
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
                 <input ref={searchRef} type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${searchNoun}`} className="h-9 w-full rounded-[8px] border border-input bg-background pr-9 pl-9 text-sm text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" />
-                {query && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={`Clear ${searchNoun} search`} className="absolute right-1.5 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"><X className="size-3.5" aria-hidden="true" /></button>}
+                {query && <button type="button" onClick={() => { setQuery(""); searchRef.current?.focus(); }} aria-label={`Clear ${searchNoun} search`} className="absolute right-1.5 top-1/2 inline-flex size-7 -translate-y-1/2 items-center justify-center rounded-[6px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]"><X className="size-3.5" aria-hidden="true" /></button>}
               </label>
             )}
-            {collapsible && !foldedRail && <button type="button" onClick={() => toggleFold(true)} aria-label="Hide the settings menu" title="Hide menu" className="hidden size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] lg:inline-flex"><PanelLeftClose className="size-4" aria-hidden="true" /></button>}
+            {collapsible && !foldedRail && <button type="button" onClick={() => toggleFold(true)} aria-label="Hide the settings menu" title="Hide menu" className="hidden size-9 shrink-0 items-center justify-center rounded-[8px] border-0 bg-transparent text-muted-foreground hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] lg:inline-flex"><PanelLeftClose className="size-4" aria-hidden="true" /></button>}
           </div>
         )}
         <nav
@@ -164,7 +164,7 @@ export function SettingsLayout({
               className={cn(
                 "flex min-h-10 w-10 shrink-0 items-center justify-center rounded-[8px] px-0 py-2 text-left text-sm font-medium transition-colors",
                 "outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-                isActive ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]" : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground"
+                isActive ? "bg-[var(--primary-soft)] font-semibold text-[var(--accent-ink)]" : "text-muted-foreground hover:bg-[var(--hover-wash)] hover:text-foreground"
               )}
             >
               {section.icon && <span className="grid size-5 shrink-0 place-items-center">{section.icon}</span>}
@@ -186,7 +186,7 @@ export function SettingsLayout({
                     if (next.has(group.key)) next.delete(group.key); else next.add(group.key);
                     return next;
                   })}
-                  className="portal-settings-group-label flex w-full items-center gap-2 rounded-[8px] border-0 bg-transparent text-left transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+                  className="portal-settings-group-label flex w-full items-center gap-2 rounded-[8px] border-0 bg-transparent text-left transition-colors hover:bg-[var(--hover-wash)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
                 >
                   <span className="min-w-0 flex-1 truncate">{group.label}</span>
                   {!open && <span className="shrink-0 text-xs font-medium tabular-nums text-[var(--muted)]">{group.items.length}</span>}

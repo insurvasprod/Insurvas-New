@@ -124,10 +124,10 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
           <PagedBody>
             {expected.map((entry) => (
               <tr key={entry.id}>
-                <td className="tabular-nums">{statementDay(entry.postedOn)}</td>
-                <td>{entry.kind === "advance" ? "Advance" : entry.kind === "chargeback" ? "Chargeback" : `Commission, year ${entry.policyYear}`}</td>
-                <td className="text-right tabular-nums">{entry.rateBp === null ? "—" : `${(entry.rateBp / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`}</td>
-                <td className={`text-right font-semibold tabular-nums ${entry.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(entry.amountCents)}</td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{statementDay(entry.postedOn)}</td>
+                <td className="whitespace-nowrap font-medium text-foreground">{entry.kind === "advance" ? "Advance" : entry.kind === "chargeback" ? "Chargeback" : `Commission, year ${entry.policyYear}`}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{entry.rateBp === null ? <span className="text-muted-foreground">—</span> : `${(entry.rateBp / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{statementMoney(entry.amountCents)}</td>
               </tr>
             ))}
           </PagedBody>
@@ -145,11 +145,11 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
           <PagedBody>
             {lines.map((line) => (
               <tr key={line.id}>
-                <td className="tabular-nums">{statementDay(line.postedOn)}</td>
-                <td className="max-w-[360px] truncate"><Link href={`/app/statements/${line.statementId}`} title={`${line.carrierName} · ${statementPeriod(line.periodStart, line.periodEnd)}`} className="font-semibold text-foreground underline-offset-2 hover:underline">{line.carrierName} · {statementPeriod(line.periodStart, line.periodEnd)}</Link></td>
-                <td className="text-right tabular-nums">{line.lineNumber}</td>
-                <td>{STATEMENT_KIND_LABELS[line.kind]}</td>
-                <td className={`text-right font-semibold tabular-nums ${line.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(line.amountCents)}</td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{statementDay(line.postedOn)}</td>
+                <td className="whitespace-nowrap font-medium text-foreground"><Link href={`/app/statements/${line.statementId}`} className="underline-offset-2 hover:underline">{line.carrierName} · {statementPeriod(line.periodStart, line.periodEnd)}</Link></td>
+                <td className="whitespace-nowrap text-right tabular-nums">{line.lineNumber}</td>
+                <td className="whitespace-nowrap">{STATEMENT_KIND_LABELS[line.kind]}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{statementMoney(line.amountCents)}</td>
               </tr>
             ))}
           </PagedBody>
@@ -158,15 +158,15 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
     </PagedTableCard>
   ) : null;
   const discrepancyTable = (
-    <PagedTableCard title="Open discrepancies" total={open.length} noun="discrepancies" suffix={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>} footer={<Link href="/app/discrepancies" className="font-semibold underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
+    <PagedTableCard title="Open discrepancies" total={open.length} noun="discrepancies" suffix={<Link href="/app/discrepancies" className="text-foreground underline-offset-2 hover:underline">Work them in Discrepancies</Link>} footer={<Link href="/app/discrepancies" className="text-foreground underline-offset-2 hover:underline">Work them in Discrepancies</Link>}>
       <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
         <thead><tr><th className="w-[200px]">Kind</th><th>What happened</th><th className="w-[120px] text-right">Owed</th></tr></thead>
         <PagedBody>
           {open.map((item) => (
             <tr key={item.id}>
-              <td className="font-semibold text-foreground">{DISCREPANCY_KIND_LABELS[item.kind].label}</td>
+              <td className="whitespace-nowrap font-medium text-foreground">{DISCREPANCY_KIND_LABELS[item.kind].label}</td>
               <td className="max-w-[520px] truncate" title={item.detail?.explanation}>{item.detail?.explanation}</td>
-              <td className="text-right font-semibold tabular-nums">{statementMoney(item.owedCents)}</td>
+              <td className="whitespace-nowrap text-right tabular-nums">{statementMoney(item.owedCents)}</td>
             </tr>
           ))}
         </PagedBody>
@@ -218,12 +218,11 @@ export default async function PolicyPage({ params, searchParams }: { params: Pro
           <StatStrip label="This policy's money">
             <StatTile label="Advance received" value={statementMoney(advanceReceived)} footnote={advanceExpected ? `${statementMoney(advanceExpected)} expected` : "no advance on this contract"} />
             <StatTile label="Earned to date" value={statementMoney(earned)} footnote={chargedBack ? `${statementMoney(chargedBack)} charged back` : "what your contract expects so far"} />
-            <StatTile label="Carrier paid" value={statementMoney(received)} valueTone={lines.length && received < earned - chargedBack - 100 ? "warning" : undefined} footnote={`${lines.length.toLocaleString("en-US")} accepted statement ${lines.length === 1 ? "line" : "lines"}`} />
+            <StatTile label="Carrier paid" value={statementMoney(received)} footnote={lines.length && received < earned - chargedBack - 100 ? <span title={`${lines.length.toLocaleString("en-US")} accepted statement ${lines.length === 1 ? "line" : "lines"}`}><StatusChip tone="warning">{`${statementMoney(earned - chargedBack - received)} short`}</StatusChip></span> : `${lines.length.toLocaleString("en-US")} accepted statement ${lines.length === 1 ? "line" : "lines"}`} />
             <StatTile
               label="Chargeback exposure"
               value={exposure ? statementMoney(exposure.exposureCents) : "$0.00"}
-              valueTone={exposure ? "warning" : undefined}
-              footnote={exposure ? `until ${statementDay(exposure.clawbackEndsOn)} · ${exposure.clawbackType}` : row.status === "active" ? "outside the clawback window" : "not in force"}
+              footnote={exposure ? <span title={exposure.clawbackType}><StatusChip tone="warning">{`Until ${statementDay(exposure.clawbackEndsOn)}`}</StatusChip></span> : row.status === "active" ? "outside the clawback window" : "not in force"}
             />
           </StatStrip>
 

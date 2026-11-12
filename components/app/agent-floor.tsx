@@ -3,7 +3,7 @@
 import { StatusChip } from "@/components/ui/status-chip";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Inbox } from "lucide-react";
+import { Inbox, Settings2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ClearFiltersButton, DataToolbar, FilterButton, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
@@ -14,11 +14,10 @@ import { callHref, secondsSince, shortDuration, useFloor, type Call, type Callba
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Callout, st, type PillTone, pillTone } from "@/components/app/settings/primitives";
-import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, TABLET_QUERY, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
+import { ActionButton, CardActions, CardList, cardItem, COMPACT_TOOLBAR, useMediaQuery, WIDE_QUERY, type RowAction } from "@/components/app/responsive-list";
 import { productLineLabel } from "@/lib/format/productLine";
 import { languageKey, languageName } from "@/lib/transferInbox/constants";
 import { cn } from "@/lib/utils";
@@ -32,11 +31,6 @@ const useFloorPageSize = () => useFittingPageSize(560, 49);
 type FloorPages = { calls: number; roster: number; queue: number; callbacks: number };
 type FloorTab = "calls" | "roster" | "callbacks";
 
-/** The viewer's calendar day of an instant, as the date input writes it ("2026-10-05"). */
-function localDay(value: string) {
-  const at = new Date(value);
-  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString("en-CA");
-}
 const FIRST_PAGES: FloorPages = { calls: 1, roster: 1, queue: 1, callbacks: 1 };
 
 /* ── time ──────────────────────────────────────────────────────────────── */
@@ -211,10 +205,11 @@ function NeedsYou({ floor, now, currentUserId, isOwner, readOnly, saving, onNudg
   const late = floor.waiting.filter((item) => secondsSince(item.queuedAt, now) >= limit).sort((a, b) => new Date(a.queuedAt).getTime() - new Date(b.queuedAt).getTime());
   const forgotten = floor.onCalls.filter((call) => secondsSince(call.startedAt, now) >= FORGOTTEN_AFTER_S).sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
   const count = late.length + forgotten.length;
-  const row = "flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] px-4 py-3";
+  // A column of its own beside the lists (owner 2026-11-09): each row is the person, why, then its fixes.
+  const row = "flex flex-col gap-2 border-t border-[var(--border)] px-4 py-3";
   return (
-    <TableCard title="Needs you" description={count ? "Fix these first." : undefined} action={count > 0 ? <StatusChip tone="danger" dot={false}>{count}</StatusChip> : undefined}>
-      {count === 0 && <p className="m-0 px-4 py-3 text-sm text-[var(--muted)]">Nothing needs you right now. Nobody has waited too long and every call taken is moving.</p>}
+    <TableCard title="Needs you" action={count > 0 ? <StatusChip tone="danger" dot={false}>{count}</StatusChip> : undefined} className="lg:min-h-0" bodyClassName="lg:overflow-y-auto">
+      {count === 0 && <p className="m-0 border-t border-[var(--border)] px-4 py-3 text-sm text-[var(--body)]">Nothing needs you right now. Nobody has waited too long and every call taken is moving.</p>}
       {late.map((item) => (
         <div key={item.id} className={row}>
           <span className="min-w-0">
@@ -233,7 +228,7 @@ function NeedsYou({ floor, now, currentUserId, isOwner, readOnly, saving, onNudg
           <div key={call.id} className={row}>
             <span className="min-w-0">
               <span className="block text-sm font-semibold text-[var(--ink)]">{call.customer} · taken by {mine ? "you" : call.agentName}</span>
-              <span className={st.sub}>Taken {callClock(secondsSince(call.startedAt, now))} ago, no outcome. The call was probably never finished.</span>
+              <span className={st.sub}>Taken {callClock(secondsSince(call.startedAt, now))} ago · no outcome yet</span>
             </span>
             <span className="flex flex-wrap gap-2">
               {mine && <Button asChild size="sm"><Link href={callHref(call.id, "finish")}>Finish it</Link></Button>}
@@ -668,13 +663,11 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   // Layout (2026-10-09 mobile): from lg the page is drawn wide. Below lg the lists are cards and the
   // filters sit behind a Filters button; below md (a phone) the line moves to a bar fixed to the bottom.
   const wide = useMediaQuery(WIDE_QUERY);
-  const phone = !useMediaQuery(TABLET_QUERY);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   // One list on screen at a time, picked with the tabs under the title. Search, the date and the
   // tab's own filter narrow that list; the transfer queue has its own search in its side panel.
   const [tab, setTab] = useState<FloorTab>("roster");
-  const [day, setDay] = useState("");
   const [agentFilter, setAgentFilter] = useState("");
   const [rosterFilter, setRosterFilter] = useState<RosterState | "">("");
   const [ownerFilter, setOwnerFilter] = useState("");
@@ -682,12 +675,11 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const [queueOpen, setQueueOpen] = useState(false);
   const normalizedSearch = search.trim().toLowerCase();
   const matches = useCallback((value: string | null | undefined) => !normalizedSearch || String(value ?? "").toLowerCase().includes(normalizedSearch), [normalizedSearch]);
-  const onDay = useCallback((value: string | null | undefined) => !day || (value ? localDay(value) === day : false), [day]);
-  const members = useMemo(() => (floor?.members ?? []).filter((member) => [member.name, member.call?.customer, member.call?.partnerName].some(matches) && (!rosterFilter || rosterState(member, now) === rosterFilter) && onDay(member.call?.startedAt ?? member.statusChangedAt ?? member.lastSeenAt)), [floor?.members, matches, rosterFilter, now, onDay]);
+  const members = useMemo(() => (floor?.members ?? []).filter((member) => [member.name, member.call?.customer, member.call?.partnerName].some(matches) && (!rosterFilter || rosterState(member, now) === rosterFilter)), [floor?.members, matches, rosterFilter, now]);
   const queueNeedle = queueSearch.trim().toLowerCase();
   const waiting = useMemo(() => (floor?.waiting ?? []).filter((item) => !queueNeedle || [item.customer, item.productLine, productLineLabel(item.productLine), item.state, item.partnerName, item.ownerName, item.language].some((value) => String(value ?? "").toLowerCase().includes(queueNeedle))), [floor?.waiting, queueNeedle]);
-  const callbacks = useMemo(() => (floor?.callbacks ?? []).filter((item) => [item.customerName, item.customerTime, item.customerTimezone, item.note, item.productName, item.assigneeName].some(matches) && (!ownerFilter || item.assigneeName === ownerFilter) && (!day || onDay(item.scheduledAtUtc))), [floor?.callbacks, matches, ownerFilter, day, onDay]);
-  const onCalls = useMemo(() => (floor?.onCalls ?? []).filter((call) => [call.agentName, call.customer, call.partnerName, call.buffer?.name, productLineLabel(call.productLine)].some(matches) && (!agentFilter || call.agentName === agentFilter) && onDay(call.startedAt)), [floor?.onCalls, matches, agentFilter, onDay]);
+  const callbacks = useMemo(() => (floor?.callbacks ?? []).filter((item) => [item.customerName, item.customerTime, item.customerTimezone, item.note, item.productName, item.assigneeName].some(matches) && (!ownerFilter || item.assigneeName === ownerFilter)), [floor?.callbacks, matches, ownerFilter]);
+  const onCalls = useMemo(() => (floor?.onCalls ?? []).filter((call) => [call.agentName, call.customer, call.partnerName, call.buffer?.name, productLineLabel(call.productLine)].some(matches) && (!agentFilter || call.agentName === agentFilter)), [floor?.onCalls, matches, agentFilter]);
   const callAgents = useMemo(() => [...new Set((floor?.onCalls ?? []).map((call) => call.agentName))].sort(), [floor?.onCalls]);
   const callbackOwners = useMemo(() => [...new Set((floor?.callbacks ?? []).map((item) => item.assigneeName).filter((name): name is string => Boolean(name) && name !== "Assigned agent"))].sort(), [floor?.callbacks]);
   // One page per list. Any new search or filter starts every list again at its first page.
@@ -695,8 +687,8 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   const pageTo = (list: keyof FloorPages) => (page: number) => setPages((current) => ({ ...current, [list]: page }));
   const changeSearch = (value: string) => { setSearch(value); setPages(FIRST_PAGES); };
   const refilter = <T,>(set: (value: T) => void) => (value: T) => { set(value); setPages(FIRST_PAGES); };
-  const filtersOn = Boolean(normalizedSearch || day || (tab === "calls" && agentFilter) || (tab === "roster" && rosterFilter) || (tab === "callbacks" && ownerFilter));
-  const clearFilters = () => { setSearch(""); setDay(""); setAgentFilter(""); setRosterFilter(""); setOwnerFilter(""); setPages(FIRST_PAGES); };
+  const filtersOn = Boolean(normalizedSearch || (tab === "calls" && agentFilter) || (tab === "roster" && rosterFilter) || (tab === "callbacks" && ownerFilter));
+  const clearFilters = () => { setSearch(""); setAgentFilter(""); setRosterFilter(""); setOwnerFilter(""); setPages(FIRST_PAGES); };
 
   // A new transfer while the panel is shut: the bookmark shows a short note beside it.
   const [arrival, setArrival] = useState<string | null>(null);
@@ -732,13 +724,18 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     return { onFloor, available, average, longest, closed, delta, staleCalls, dueToday, overdue };
   }, [floor, now]);
 
+  // Your own status sits on the left, beside the title (owner 2026-11-09), and opens Inbound where you change it.
   const own = floor?.ownStatus ?? "off";
-  const ownLabel = own === "ready" ? "You are taking calls" : own === "on_break" ? "You are on a break" : "You are not taking calls";
-  const header = (
-    <div className="flex flex-col gap-2">
-      <PageHeader title="Team" breadcrumbs={[{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: "Team" }]} actions={<><Link href="/app/inbound" className="text-sm font-semibold text-muted-foreground hover:text-foreground">{ownLabel} ›</Link>{role === "owner" && <Button asChild variant="outline"><Link href="/app/settings#queue-sla">Inbound settings</Link></Button>}</>} />
-    </div>
+  const ownChip = (
+    <Link href="/app/inbound" title="Change it on Inbound" className="ml-2 rounded-full outline-none hover:opacity-85 focus-visible:ring-2 focus-visible:ring-ring">
+      <StatusChip tone={own === "ready" ? "good" : own === "on_break" ? "warning" : "neutral"} dot>{own === "ready" ? "You are taking calls" : own === "on_break" ? "You are on a break" : "You are not taking calls"}</StatusChip>
+    </Link>
   );
+  const settingsButton = role === "owner" ? <Button asChild variant="outline"><Link href="/app/settings#queue-sla"><Settings2 aria-hidden="true" />Inbound settings</Link></Button> : null;
+  const headerFor = (actions: React.ReactNode) => (
+    <PageHeader title="Team" breadcrumbs={[{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: "Team" }]} titleInfo={ownChip} tabs={<TeamViews current="now" />} actions={actions} />
+  );
+  const header = headerFor(settingsButton);
 
   if (!floor) {
     if (!(error && !loading)) return <PageLoading />;
@@ -761,18 +758,16 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
       <span className="font-semibold text-[var(--body)]">{liveLabel}</span> · updated {updated}
     </span>
   );
-  const tabs: Array<{ key: FloorTab; label: string; count: number }> = [
+  // The lists' tabs carry what the old totals strip said: how many, and red when something is late.
+  const tabs: Array<{ key: FloorTab; label: string; count: number; tone?: "danger" }> = [
     { key: "roster", label: "People", count: floor.members.length },
-    { key: "calls", label: "On a call", count: floor.onCalls.length },
-    { key: "callbacks", label: "Callbacks due", count: floor.callbacks.length },
+    { key: "calls", label: "On a call", count: floor.onCalls.length, tone: k.staleCalls ? "danger" : undefined },
+    { key: "callbacks", label: "Callbacks due", count: floor.callbacks.length, tone: k.overdue ? "danger" : undefined },
   ];
-  // The toolbar is the same on every tab — search, date, the tab's own filter, Refresh — so the
-  // controls never move when the agent switches lists.
-  // Below lg (2026-10-09 mobile) the search takes the first row; the date and the tab's filter are
-  // the same controls behind a Filters button, opening in the toolbar band; Clear and Refresh stay.
+  // One toolbar for every tab (search, the tab's own filter, Refresh), so the controls never move. Below lg
+  // the filter sits behind a Filters button; Clear and Refresh stay.
   const control = wide ? toolbarControl : cn(toolbarControl, "w-full");
   const tabFilter = (tab === "calls" && agentFilter) || (tab === "roster" && rosterFilter) || (tab === "callbacks" && ownerFilter);
-  const dateFilter = <input type="date" aria-label={tab === "callbacks" ? "Due on" : tab === "calls" ? "Call started on" : "Active on"} className={control} value={day} onChange={(event) => refilter(setDay)(event.target.value)} />;
   const listFilter = (
     <>
       {tab === "calls" && (
@@ -797,14 +792,8 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
   );
   const searchBox = <ToolbarSearch value={search} onChange={changeSearch} placeholder={tab === "calls" ? "Search agent, customer, partner" : tab === "roster" ? "Search agent or customer" : "Search customer, note, owner"} />;
   const toolbar = wide ? (
-    <DataToolbar
-      actions={<>
-        {filtersOn && <ClearFiltersButton onClick={clearFilters} />}
-        <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
-      </>}
-    >
+    <DataToolbar actions={<>{filtersOn && <ClearFiltersButton onClick={clearFilters} />}<RefreshButton onClick={() => void refresh()} refreshing={refreshing} /></>}>
       {searchBox}
-      {dateFilter}
       {listFilter}
     </DataToolbar>
   ) : (
@@ -812,7 +801,7 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
       <DataToolbar
         className={COMPACT_TOOLBAR}
         actions={<>
-          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={(day ? 1 : 0) + (tabFilter ? 1 : 0)} aria-controls="floor-filters" />
+          <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={tabFilter ? 1 : 0} aria-controls="floor-filters" />
           <span className="ml-auto flex flex-wrap items-center gap-2">
             {filtersOn && <ClearFiltersButton onClick={clearFilters} />}
             <RefreshButton onClick={() => void refresh()} refreshing={refreshing} />
@@ -821,13 +810,15 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
       >
         {searchBox}
       </DataToolbar>
-      <FilterPanel id="floor-filters" open={filtersOpen} className="w-full border-b-0 px-0 py-0">{dateFilter}{listFilter}</FilterPanel>
+      <FilterPanel id="floor-filters" open={filtersOpen} className="w-full border-b-0 px-0 py-0">{listFilter}</FilterPanel>
     </>
   );
 
   const openQueue = () => { setQueueOpen(true); setArrival(null); };
-  // Below lg the bookmark would sit on the cards' buttons: the queue is a button instead — in the
-  // header on a tablet, in the bottom bar on a phone. A new arrival shows on it in place of its name.
+  // The line is one button on the title's line (owner 2026-11-09: was a bookmark on the window's edge and, on a
+  // phone, a bar fixed to the foot). Its count turns amber or red with the longest wait; a new arrival shows
+  // on it in place of its name.
+  const lateTone = k.longest >= thresholds.redSeconds ? "danger" : k.longest >= thresholds.amberSeconds ? "warning" : null;
   const queueButton = (
     <>
       <Button
@@ -835,79 +826,41 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
         variant="outline"
         onClick={openQueue}
         aria-label={`Open the line, ${waitingCount} waiting`}
-        className={cn("max-w-full", phone && "w-full", waitingCount && "border-[var(--primary)]")}
+        title={waitingCount ? `Longest wait ${waitLabel(k.longest)} · too long at ${thresholdLabel(thresholds.redSeconds)}` : "Nobody is waiting"}
+        className={cn("max-w-full", waitingCount && "border-[var(--primary)]")}
       >
         <Inbox className="text-[var(--accent-ink)]" aria-hidden="true" />
         <span className="min-w-0 truncate">{arrival ?? "In line"}</span>
-        <span className={cn("inline-flex min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums", waitingCount ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{waitingCount}</span>
+        <span className={cn("inline-flex min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums", lateTone === "danger" ? "bg-[var(--error-surface)] text-[var(--error-ink)]" : lateTone === "warning" ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : waitingCount ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{waitingCount}</span>
       </Button>
       <span role="status" className="sr-only">{arrival ?? ""}</span>
     </>
   );
 
   return (
-    // On a phone the page keeps room at its foot for the bottom bar, so the bar never covers a card.
-    <div className={cn("m-stagger flex w-full min-w-0 flex-col gap-6", phone && "pb-[calc(6rem+env(safe-area-inset-bottom))]")}>
-      {header}
-      <TeamViews current="now" />
-
-      <StatStrip label="Floor totals">
-        <StatTile label="In line" value={waitingCount} valueTone={k.longest >= thresholds.redSeconds ? "danger" : k.longest >= thresholds.amberSeconds ? "warning" : undefined} footnote={waitingCount ? `longest ${waitLabel(k.longest)} · too long at ${thresholdLabel(thresholds.redSeconds)}` : "nobody waiting"} />
-        <StatTile label="Taking calls" value={`${k.available} of ${k.onFloor}`} footnote="free now, of everyone present" />
-        <StatTile label="On a call" value={floor.onCalls.length} valueTone={k.staleCalls ? "warning" : undefined} footnote={k.staleCalls ? `${k.staleCalls} taken over 4 h ago` : "calls taken and not finished"} />
-        <StatTile label="Callbacks due today" value={k.dueToday} valueTone={k.overdue ? "danger" : undefined} footnote={k.overdue ? `${k.overdue} overdue` : "none overdue"} />
-      </StatStrip>
-
-      <NeedsYou floor={floor} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} onNudge={(id) => void sendNudge(id, null)} onClaim={(id) => void claim(id)} onRelease={(call) => void release(call, "unassign")} />
+    // One column of the window's height (owner 2026-11-09, UI-CONSISTENCY §2): the lists on the left and
+    // Needs you on the right fill what is left under the title and scroll inside. On a phone the page scrolls.
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
+      {headerFor(<>{queueButton}{settingsButton}</>)}
 
       {readOnly && <Callout tone="warning" title="Your agency’s account is paused: you can look, but not take callers or change calls." />}
       {floor.truncated && <Callout tone="warning" title="Showing the 500 callers who have waited longest." />}
       {error && <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">Refresh to see the latest. {error}<Button type="button" variant="outline" onClick={() => void refresh()}>Refresh</Button></span>} />}
 
-      <PendingHandoffs items={floor.pendingHandoffs} readOnly={readOnly} saving={saving} now={now} compact={!wide} onAccept={(id, workItemId) => void accept(id, workItemId)} />
-
-      {/* Which list to look at, right above it; below lg the tabs scroll sideways instead of wrapping. */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <ViewTabs label="Floor lists" tabs={tabs} value={tab} onChange={(key) => { setTab(key); setPages(FIRST_PAGES); }} idPrefix="floor-tab" controls="floor-tabpanel" />
-        {!wide && !phone && queueButton}
-      </div>
-
-      <div key={tab} id="floor-tabpanel" role="tabpanel" aria-labelledby={`floor-tab-${tab}`}>
-        {tab === "calls" && <OnCalls calls={onCalls} filtered={filtersOn} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} compact={!wide} page={pages.calls} onPage={pageTo("calls")} onRelease={(call, action) => void release(call, action)} onClear={clearFilters} onOpenQueue={openQueue} toolbar={toolbar} />}
-        {tab === "roster" && <Roster members={members} searching={filtersOn} now={now} currentUserId={currentUserId} isOwner={role === "owner"} canAsk={Boolean(headOfQueue)} readOnly={readOnly} saving={saving} compact={!wide} page={pages.roster} onPage={pageTo("roster")} onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)} onClear={clearFilters} toolbar={toolbar} />}
-        {tab === "callbacks" && <CallbacksTable items={callbacks} searching={filtersOn} compact={!wide} page={pages.callbacks} onPage={pageTo("callbacks")} onClear={clearFilters} toolbar={toolbar} />}
-      </div>
-
-      {/* The transfer queue hangs off the right edge like a bookmark, with the waiting count on it,
-          and opens as a side panel over the page. A transfer that arrives while it is shut shows a
-          short note beside the bookmark. The bookmark stays mounted (hidden) while the queue is open,
-          so closing the queue hands focus back to it. From lg only (2026-10-09 mobile); below lg it
-          is the queue button above. */}
-      {wide && <div className={cn("fixed right-0 top-1/2 z-40 flex -translate-y-1/2 items-center gap-2", queueOpen && "hidden")}>
-        {arrival && (
-          <button type="button" onClick={() => { setQueueOpen(true); setArrival(null); }} className="m-row max-w-[260px] rounded-lg border border-border bg-card px-3 py-2 text-left text-sm font-semibold text-foreground shadow-[0_8px_24px_rgba(0,0,0,.18)]" role="status">
-            {arrival}
-            <span className="block text-xs font-normal text-muted-foreground">Open the line to take it</span>
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => { setQueueOpen(true); setArrival(null); }}
-          aria-label={`Open the line, ${waitingCount} waiting`}
-          className={cn("flex flex-col items-center gap-2 rounded-l-lg border border-r-0 border-border bg-card px-2 py-3 shadow-[0_4px_16px_rgba(0,0,0,.14)] hover:bg-[var(--surface-alt)]", waitingCount && "border-[var(--primary)]")}
-        >
-          <Inbox className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />
-          <span className="text-xs font-semibold text-foreground [writing-mode:vertical-rl]">In line</span>
-          <span className={cn("inline-flex min-w-6 items-center justify-center rounded-full px-1.5 text-xs font-semibold tabular-nums", waitingCount ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-muted-foreground")}>{waitingCount}</span>
-        </button>
-      </div>}
-      {/* A phone's bottom bar: the queue, and your status under the thumb. Fixed to the screen's foot,
-          above the home indicator (safe-area inset); the queue's sheet and the menu drawer cover it. */}
-      {phone && (
-        <div className="fixed inset-x-0 bottom-0 z-30 flex flex-col gap-2 border-t border-border bg-card px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] shadow-[var(--shadow-overlay)]">
-          {queueButton}
+      <div className="grid min-w-0 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_minmax(320px,380px)]">
+        <div className="flex min-w-0 flex-col gap-3 lg:min-h-0">
+          <PendingHandoffs items={floor.pendingHandoffs} readOnly={readOnly} saving={saving} now={now} compact={!wide} onAccept={(id, workItemId) => void accept(id, workItemId)} />
+          <ViewTabs label="Floor lists" tabs={tabs} value={tab} onChange={(key) => { setTab(key); setPages(FIRST_PAGES); }} idPrefix="floor-tab" controls="floor-tabpanel" actions={tab === "roster" ? <span className="text-xs text-[var(--body)]">{k.available} of {k.onFloor} present taking calls</span> : undefined} />
+          <div key={tab} id="floor-tabpanel" role="tabpanel" aria-labelledby={`floor-tab-${tab}`} className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1 lg:[&>[data-slot=table-card]]:min-h-0 lg:[&>[data-slot=table-card]]:flex-1 lg:[&>[data-slot=table-card]>div.flex-1]:overflow-y-auto">
+            {tab === "calls" && <OnCalls calls={onCalls} filtered={filtersOn} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} compact={!wide} page={pages.calls} onPage={pageTo("calls")} onRelease={(call, action) => void release(call, action)} onClear={clearFilters} onOpenQueue={openQueue} toolbar={toolbar} />}
+            {tab === "roster" && <Roster members={members} searching={filtersOn} now={now} currentUserId={currentUserId} isOwner={role === "owner"} canAsk={Boolean(headOfQueue)} readOnly={readOnly} saving={saving} compact={!wide} page={pages.roster} onPage={pageTo("roster")} onAsk={(member) => headOfQueue && void sendNudge(headOfQueue.id, member)} onClear={clearFilters} toolbar={toolbar} />}
+            {tab === "callbacks" && <CallbacksTable items={callbacks} searching={filtersOn} compact={!wide} page={pages.callbacks} onPage={pageTo("callbacks")} onClear={clearFilters} toolbar={toolbar} />}
+          </div>
         </div>
-      )}
+
+        <NeedsYou floor={floor} now={now} currentUserId={currentUserId} isOwner={role === "owner"} readOnly={readOnly} saving={saving} onNudge={(id) => void sendNudge(id, null)} onClaim={(id) => void claim(id)} onRelease={(call) => void release(call, "unassign")} />
+      </div>
+
       {queueOpen && (
         <TransferQueue
           items={waiting}
@@ -933,3 +886,4 @@ export function AgentFloor({ currentUserId, readOnly, role }: { currentUserId: s
     </div>
   );
 }
+

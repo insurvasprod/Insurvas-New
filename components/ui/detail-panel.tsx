@@ -53,7 +53,7 @@ const OVERLAY_LG = "lg:left-auto lg:w-[420px] lg:border-t-0 lg:border-l";
 // Written out in full: Tailwind only sees class names that appear literally.
 const SPLIT_LG = "lg:static lg:z-auto lg:w-[30%] lg:min-w-[360px] lg:shrink-0 lg:rounded-lg lg:border lg:border-border lg:shadow-[var(--shadow-rest)] lg:bg-[color-mix(in_srgb,var(--color-card)_var(--glass-alpha),transparent)] lg:backdrop-blur-[20px] lg:backdrop-saturate-150";
 const SPLIT_XL = "xl:static xl:z-auto xl:w-[30%] xl:min-w-[360px] xl:shrink-0 xl:rounded-lg xl:border xl:border-border xl:shadow-[var(--shadow-rest)] xl:bg-[color-mix(in_srgb,var(--color-card)_var(--glass-alpha),transparent)] xl:backdrop-blur-[20px] xl:backdrop-saturate-150";
-const BACKDROP = "fixed inset-x-0 bottom-0 top-[var(--top-bar-h)] z-40 bg-[rgba(16,24,32,0.42)]";
+const BACKDROP = "fixed inset-x-0 bottom-0 top-[var(--top-bar-h)] z-40 bg-[var(--backdrop)]";
 
 /** Fields and widgets that use Escape themselves (clearing a search, closing a list). */
 const OWNS_ESCAPE = "textarea, select, input[type=search], [contenteditable=''], [contenteditable='true'], [role=combobox], [aria-haspopup][aria-expanded='true'], [data-escape-local]";

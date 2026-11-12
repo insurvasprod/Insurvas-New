@@ -37,11 +37,11 @@ export default async function CouponsPage() {
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
+        tabs={<BillingTabs />}
         title="Coupons"
         description="Whop promo codes that lower what the customer is charged."
         actions={<CouponCreateDialog plans={plans ? plans.filter((p) => !p.is_archived) : null} />}
       />
-      <BillingTabs />
 
       <BoardStatGrid>
         <BoardStatTile

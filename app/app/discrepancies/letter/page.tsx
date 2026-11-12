@@ -29,8 +29,8 @@ export const metadata: Metadata = { title: "Commission dispute" };
  */
 export default async function DisputeLetterPage({ searchParams }: { searchParams: Promise<{ carrier?: string; ids?: string }> }) {
   const guard = await guardPage("discrepancy_report");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Discrepancies" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
-  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Discrepancies" detail="Dispute letters are prepared by the account owner or a bookkeeper." />;
+  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Pay issues" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
+  if (!actAsPagePermission(guard, "statements.view")) return <RoleGateNotice featureLabel="Pay issues" detail="Dispute letters are prepared by the account owner or a bookkeeper." />;
 
   const { carrier = "", ids = "" } = await searchParams;
   let letter: Awaited<ReturnType<typeof getDisputeLetter>>;
@@ -50,7 +50,7 @@ export default async function DisputeLetterPage({ searchParams }: { searchParams
   if (!letter) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-16 text-center text-sm text-muted-foreground">
-        Choose one carrier&rsquo;s discrepancies on the Discrepancies page, then open the letter again.
+        Choose one carrier&rsquo;s pay issues on Pay issues, then open the letter again.
       </main>
     );
   }

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { getVendorCostPerPolicy } from "@/lib/vendorScorecard/service";
@@ -34,13 +35,25 @@ const CHUNK = 200;
 /** The countdown that reads red on the call list (LA-4.16): "call today". */
 const CLOSING_SOON_DAYS = 3;
 
+/**
+ * Every row of an ordered read: the first page, then three pages at a time (perf pass 2026-11-09, the pattern of
+ * policyBookStore's everyRow). The same rows in the same order as one page after another; it stops at the first
+ * short page or error, as before.
+ */
 async function everyRow(build: () => Loose, max = 100_000): Promise<{ rows: Loose[]; error: Loose }> {
   const rows: Loose[] = [];
-  for (let from = 0; from < max; from += PAGE) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error) return { rows, error };
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE) break;
+  const first = await build().range(0, PAGE - 1);
+  if (first.error) return { rows, error: first.error };
+  rows.push(...(first.data ?? []));
+  if (!first.data || first.data.length < PAGE) return { rows, error: null };
+  for (let from = PAGE; from < max; from += 3 * PAGE) {
+    const starts = [from, from + PAGE, from + 2 * PAGE].filter((at) => at < max);
+    const batch = await Promise.all(starts.map((at) => build().range(at, at + PAGE - 1)));
+    for (const { data, error } of batch) {
+      if (error) return { rows, error };
+      rows.push(...(data ?? []));
+      if (!data || data.length < PAGE) return { rows, error: null };
+    }
   }
   return { rows, error: null };
 }
@@ -76,48 +89,49 @@ export type ScorecardData = {
   scoped: boolean;
 };
 
-export async function loadScorecards(viewer: Viewer, period: { from: string; to: string }, options: { withClients?: boolean; withSpend?: boolean } = {}): Promise<ScorecardData | { available: false }> {
-  const scoped = viewer.role === "producer";
-  const t = viewer.tenantId;
+/**
+ * The book behind every scorecard, whatever the period: the policies, their ledger totals, names, notes, settings, the
+ * week totals and the day's summary. Read once per request per (tenant, producer, clients) through React cache(), so
+ * the agency dashboard's two months, the persistency figure and the home's money card share one read (perf pass
+ * 2026-11-09). Only the submissions and the spend depend on the period; loadScorecards reads those beside it.
+ */
+const loadBook = cache(async (t: string, producerUserId: string | null, withClients: boolean) => {
+  const scoped = producerUserId !== null;
+  // Reads that need neither the policies nor their latest day start with the policy read, not after it.
+  const early = Promise.all([
+    everyRow(() => db().from("commission_policy_totals").select("carrier_id, policy_number, advanced_cents, charged_back_cents, net_received_cents").eq("tenant_id", t).order("carrier_id").order("policy_number")),
+    db().from("carriers").select("id, name"),
+    db().from("tenant_lead_vendors").select("id, name").eq("tenant_id", t),
+    db().from("tenant_campaigns").select("id, name, vendor_id").eq("tenant_id", t),
+    db().from("tenants").select("name").eq("id", t).maybeSingle(),
+    everyRow(() => db().from("policy_annotation").select("carrier_id, policy_number, lead_vendor_id, lead_campaign_id").eq("tenant_id", t).order("carrier_id").order("policy_number")),
+    db().from("book_insight_settings").select("min_sample").eq("tenant_id", t).maybeSingle(),
+  ]);
+  early.catch(() => undefined);
   const read = await everyRow(() => {
     let query = db().from("policy_current").select(POLICY_COLUMNS).eq("tenant_id", t);
-    if (scoped) query = query.eq("agent_user_id", viewer.userId);
+    if (scoped) query = query.eq("agent_user_id", producerUserId);
     return query.order("carrier_id").order("policy_number");
   });
   if (read.error) {
-    if (isSchemaGap(read.error)) return { available: false };
+    if (isSchemaGap(read.error)) return { available: false as const };
     throw new Error(`Could not load the policies: ${read.error.message}`);
   }
   const rows = read.rows;
   const today = rows.reduce((max: string, r: Loose) => (r.as_of > max ? r.as_of : max), "") || new Date().toISOString().slice(0, 10);
   const since = addDays(today, -1);
 
-  // The LA-2 spend report (about a second: it is the whole lead funnel) only for the view that needs it, in parallel with the rest.
-  const spendRead: Promise<Array<[string, number]> | null> = scoped || !options.withSpend ? Promise.resolve(null) : getVendorCostPerPolicy(t, period)
-    .then((report) => (report.available ? report.rows.map((v): [string, number] => [v.vendor_id, Number(v.net_spend_cents ?? v.total_spend_cents ?? 0)]) : null))
-    .catch((error) => { console.error("[scorecards] lead spend could not be read", error); return null; });
-  const [money, carriers, users, vendors, campaigns, tenant, notes, settings, weeks, subs, changes, chargebackLines, contacts] = await Promise.all([
-    everyRow(() => db().from("commission_policy_totals").select("carrier_id, policy_number, advanced_cents, charged_back_cents, net_received_cents").eq("tenant_id", t).order("carrier_id").order("policy_number")),
-    db().from("carriers").select("id, name"),
+  const [[money, carriers, vendors, campaigns, tenant, notes, settings], users, weeks, changes, chargebackLines, contacts] = await Promise.all([
+    early,
     byIds("users", "id, name, email", rows.map((r: Loose) => r.agent_user_id)),
-    db().from("tenant_lead_vendors").select("id, name").eq("tenant_id", t),
-    db().from("tenant_campaigns").select("id, name, vendor_id").eq("tenant_id", t),
-    db().from("tenants").select("name").eq("id", t).maybeSingle(),
-    everyRow(() => db().from("policy_annotation").select("carrier_id, policy_number, lead_vendor_id, lead_campaign_id").eq("tenant_id", t).order("carrier_id").order("policy_number")),
-    db().from("book_insight_settings").select("min_sample").eq("tenant_id", t).maybeSingle(),
-    db().rpc("commission_week_totals", { p_tenant_id: t, p_from: addDays(today, -7 * 13), p_to: today, p_agent_user_id: scoped ? viewer.userId : null }),
-    everyRow(() => {
-      let query = db().from("tenant_application_submissions").select("application_id, carrier_id, submitted_at").eq("tenant_id", t).gte("submitted_at", `${period.from}T00:00:00Z`).lt("submitted_at", `${addDays(period.to, 1)}T00:00:00Z`);
-      if (scoped) query = query.eq("created_by", viewer.userId);
-      return query.order("submitted_at").order("id");
-    }),
+    db().rpc("commission_week_totals", { p_tenant_id: t, p_from: addDays(today, -7 * 13), p_to: today, p_agent_user_id: scoped ? producerUserId : null }),
     everyRow(() => db().from("policy_change").select("carrier_id, policy_number, old_value, new_value, to_snapshot_date").eq("tenant_id", t).eq("field_name", "status_normalized").gte("to_snapshot_date", addDays(today, -LATEST_FILE_DAYS)).order("to_snapshot_date").order("policy_number").order("id")),
     everyRow(() => {
       let query = db().from("commission_entry").select("amount_cents").eq("tenant_id", t).eq("entry_type", "chargeback").gte("created_at", `${since}T00:00:00Z`);
-      if (scoped) query = query.eq("agent_user_id", viewer.userId);
+      if (scoped) query = query.eq("agent_user_id", producerUserId);
       return query.order("created_at").order("id");
     }),
-    options.withClients ? byIds("contacts", "id, first_name, last_name", rows.map((r: Loose) => r.contact_id), t) : Promise.resolve([]),
+    withClients ? byIds("contacts", "id, first_name, last_name", rows.map((r: Loose) => r.contact_id), t) : Promise.resolve([]),
   ]);
 
   const moneyRows = money.error ? [] : money.rows;
@@ -179,8 +193,6 @@ export async function loadScorecards(viewer: Viewer, period: { from: string; to:
     weekTotals = (weeks.data ?? []).map((w: Loose) => ({ week: w.week_start, type: w.entry_type, cents: Number(w.amount_cents), entries: Number(w.entries) }));
   }
 
-  const spend = await spendRead;
-
   // The day's summary: what each carrier's latest policy file changed (whatever its cadence, a week
   // at most), today's chargebacks, the call list's red rows. A policy counts once, and only while it
   // still has that status: one that lapsed and was paid up again in the same file is not "lapsed".
@@ -205,16 +217,29 @@ export async function loadScorecards(viewer: Viewer, period: { from: string; to:
     minSample,
   });
 
+  return { available: true as const, today, policies, minSample, settingsAvailable, weeks: weekTotals, summary };
+});
+
+export async function loadScorecards(viewer: Viewer, period: { from: string; to: string }, options: { withClients?: boolean; withSpend?: boolean } = {}): Promise<ScorecardData | { available: false }> {
+  const scoped = viewer.role === "producer";
+  const t = viewer.tenantId;
+  // The period's own reads go beside the book (they need neither the policies nor their day).
+  const subsRead = everyRow(() => {
+    let query = db().from("tenant_application_submissions").select("application_id, carrier_id, submitted_at").eq("tenant_id", t).gte("submitted_at", `${period.from}T00:00:00Z`).lt("submitted_at", `${addDays(period.to, 1)}T00:00:00Z`);
+    if (scoped) query = query.eq("created_by", viewer.userId);
+    return query.order("submitted_at").order("id");
+  });
+  // The LA-2 spend report (about a second: it is the whole lead funnel) only for the view that needs it, in parallel with the rest.
+  const spendRead: Promise<Array<[string, number]> | null> = scoped || !options.withSpend ? Promise.resolve(null) : getVendorCostPerPolicy(t, period)
+    .then((report) => (report.available ? report.rows.map((v): [string, number] => [v.vendor_id, Number(v.net_spend_cents ?? v.total_spend_cents ?? 0)]) : null))
+    .catch((error) => { console.error("[scorecards] lead spend could not be read", error); return null; });
+  const [book, subs, spend] = await Promise.all([loadBook(t, scoped ? viewer.userId : null, Boolean(options.withClients)), subsRead, spendRead]);
+  if (!book.available) return { available: false };
+
   return {
-    available: true,
-    today,
-    policies,
-    minSample,
-    settingsAvailable,
-    weeks: weekTotals,
+    ...book,
     submissions: (subs.error ? [] : subs.rows).filter((s: Loose) => s.application_id).map((s: Loose) => ({ applicationId: s.application_id, carrierId: s.carrier_id, submittedOn: String(s.submitted_at).slice(0, 10) })),
     spend,
-    summary,
     scoped,
   };
 }

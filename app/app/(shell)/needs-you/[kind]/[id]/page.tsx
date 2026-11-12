@@ -75,7 +75,6 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
   const place = neighbours(items, kind, id);
   const nextHref = place.next ? `${place.next.href}?from=${from}` : null;
   const meta = KIND_META[kind];
-  const source = page.row ? `row ${page.row.rowNumber} of ${page.row.fileName}` : meta.source;
   const waits = waitsLine(page.detail);
   const tab = itemTab(askedTab, Boolean(page.row));
   const tabHref = (next: ItemTab) => `${item.href}?from=${from}${next === "row" ? "&tab=row" : ""}`;
@@ -84,16 +83,17 @@ export default async function NeedsYouItemPage({ params, searchParams }: { param
     <DataInPage
       step="needs-you"
       title={item.about}
-      chip={<StatusChip tone={item.tone}>{meta.label}</StatusChip>}
-      facts={source}
       // The item's parts on the title line (UI-CONSISTENCY §8a), as the other steps' tabs are.
       tabs={<ItemTabs current={tab} hasRow={Boolean(page.row)} href={tabHref} />}
       actions={nextHref ? <Button asChild variant="outline"><Link href={nextHref}>Skip</Link></Button> : undefined}
     >
-      <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm text-muted-foreground">
-        <span>Waiting <strong className="font-semibold text-foreground">{ageLong(item.ageDays)}</strong></span>
-        <span className="inline-flex items-center gap-2">Owner <strong className="font-semibold text-foreground">{item.who}</strong>{item.escalated && <StatusChip tone="danger">Escalated</StatusChip>}</span>
-        {place.index >= 0 && <span>Item <strong className="font-semibold tabular-nums text-foreground">{place.index + 1} of {place.total}</strong></span>}
+      {/* Owner 2026-11-10: nothing beside or under the title; the kind leads the item's own line. */}
+      {/* Owner 2026-11-11: one plain line, one chip (the kind; an escalated item's chip turns danger and says so). */}
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-foreground">
+        <StatusChip tone={item.escalated ? "danger" : item.tone}>{item.escalated ? `${meta.label} · escalated` : meta.label}</StatusChip>
+        <span className="whitespace-nowrap">Waiting {ageLong(item.ageDays)}</span>
+        <span className="whitespace-nowrap">Owner {item.who}</span>
+        {place.index >= 0 && <span className="whitespace-nowrap tabular-nums">Item {place.index + 1} of {place.total}</span>}
         <span>{item.why}</span>
       </div>
       {waits && <p className="m-0 text-sm text-muted-foreground">{waits}</p>}

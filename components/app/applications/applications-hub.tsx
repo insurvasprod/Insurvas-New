@@ -47,7 +47,7 @@ export function ApplicationsHub({ view, tabs, calculator, calculatorOpen = false
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
         title="Applications"
-        lead={tabs.length > 1 ? (
+        tabs={tabs.length > 1 ? (
           <ViewTabs
             label="Application views"
             value={view}

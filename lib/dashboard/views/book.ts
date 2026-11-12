@@ -237,14 +237,24 @@ type Loose = any;
 
 const PAGE = 1000;
 
-/** Every row of a query, a page at a time, up to `max`; null when a page fails. */
+/**
+ * Every row of a query, up to `max`; null when a page fails. The first page, then three at a time (perf pass
+ * 2026-11-09): the same rows in the same order as one page after another.
+ */
 async function pages(build: () => Loose, max = 20_000): Promise<Loose[] | null> {
   const rows: Loose[] = [];
-  for (let from = 0; from < max; from += PAGE) {
-    const { data, error } = await build().range(from, from + PAGE - 1);
-    if (error) return null;
-    rows.push(...(data ?? []));
-    if (!data || data.length < PAGE) break;
+  const first = await build().range(0, PAGE - 1);
+  if (first.error) return null;
+  rows.push(...(first.data ?? []));
+  if (!first.data || first.data.length < PAGE) return rows;
+  for (let from = PAGE; from < max; from += 3 * PAGE) {
+    const starts = [from, from + PAGE, from + 2 * PAGE].filter((at) => at < max);
+    const batch = await Promise.all(starts.map((at) => build().range(at, at + PAGE - 1)));
+    for (const { data, error } of batch) {
+      if (error) return null;
+      rows.push(...(data ?? []));
+      if (!data || data.length < PAGE) return rows;
+    }
   }
   return rows;
 }
@@ -267,8 +277,10 @@ export async function loadBookView(props: DashViewProps): Promise<BookViewData> 
     import("@/lib/ingestion/fileOutcomeStore"),
     import("@/lib/ingestion/snapshotStore"),
   ]);
-  const { context, available, scope, solo, zone, now, noMoney } = props;
+  const { context, available, scope, solo, zone, now, noMoney, forOverview } = props;
   const { tenantId, userId, role } = context;
+  // The Overview draws no files, changes or standing: those reads are its own view's.
+  const full = !forOverview;
   const db = (): Loose => getSupabaseServiceClient();
   const open = (key: string) => firstOpenable([key], available, role, solo);
   const wide = scope === null;
@@ -299,10 +311,10 @@ export async function loadBookView(props: DashViewProps): Promise<BookViewData> 
     matchingHref ? safe(head(count("policy_match_review").eq("status", "open"))) : null,
     // A sale no carrier has: the owner and bookkeepers every one, a producer those assigned to them.
     needsHref ? safe(head((keeper ? count("queue_item") : count("queue_item").eq("assigned_to_user_id", userId)).eq("status", "open").eq("queue_type", "no_policy"))) : null,
-    filesHref ? safe(registry.listCarrierFiles(tenantId, 60)) : null,
-    changesHref ? safe(snapshots.listPolicyChanges(tenantId, 300)) : null,
+    filesHref && full ? safe(registry.listCarrierFiles(tenantId, 60)) : null,
+    changesHref && full ? safe(snapshots.listPolicyChanges(tenantId, 300)) : null,
     policiesHref ? safe(pages(() => db().from("policy_change").select("carrier_id, policy_number, to_snapshot_date").eq("tenant_id", tenantId).eq("field_name", "status_normalized").eq("new_value", "lapsed").gte("to_snapshot_date", `${keys[0]}-01`).order("to_snapshot_date").order("id"))) : null,
-    policiesHref && ledgerHref ? safe(pages(() => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents").eq("tenant_id", tenantId).or("entry_type.eq.chargeback,corrects_type.eq.chargeback").order("id"))) : null,
+    policiesHref && ledgerHref && full ? safe(pages(() => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents").eq("tenant_id", tenantId).or("entry_type.eq.chargeback,corrects_type.eq.chargeback").order("id"))) : null,
   ]);
 
   // The book: exactly the rows the Policies list shows this reader.

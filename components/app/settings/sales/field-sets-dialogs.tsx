@@ -6,10 +6,12 @@
  * dialogs speak of interviews and quotes), and use one set for other carriers.
  */
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
+import { ThreeWay } from "@/components/app/settings/sales-process/parts";
 import type { QuestionDraft } from "@/lib/salesSettings/fieldSetView";
 import type { NamedCarrier, ProductLine } from "@/lib/salesSettings/views";
 
@@ -151,9 +153,9 @@ export function FieldSetRetireDialog({ pair, version, fallback, onConfirm, onClo
  * form calls it and its help line; its key and type stay, because autofill maps, copy-assist and QA
  * rely on them. The agency's own question changes everything, and can be removed.
  */
-export function QuestionDialog({ mode, builtIn, initial, groups, types, onSubmit, onRemove, onClose }: {
+export function QuestionDialog({ mode, builtIn, initial, groups, types, onSubmit, onRemove, onClose, pair, extra }: {
   mode: "add" | "edit";
-  /** Set when editing a built-in field: its own name, type and key, shown locked. */
+  /** Set when editing a built-in field: its own name and type, shown locked. */
   builtIn?: { key: string; name: string; typeLabel: string; sensitive: boolean } | null;
   initial: QuestionDraft;
   groups: readonly { key: string; label: string }[];
@@ -161,34 +163,49 @@ export function QuestionDialog({ mode, builtIn, initial, groups, types, onSubmit
   onSubmit: (draft: QuestionDraft) => void;
   onRemove?: () => void;
   onClose: () => void;
+  /** "American Amicable · Final Expense": the sheet's subtitle. */
+  pair?: string;
+  /** More sections under the field's own (round 8: where autofill puts it, the set's versions). */
+  extra?: ReactNode;
 }) {
+  // Settings round 8 (sales-process board, Carrier application): a field opens as a right sheet, not a dialog.
   const [draft, setDraft] = useState<QuestionDraft>(initial);
   const [optionsText, setOptionsText] = useState(initial.options.join("\n"));
   const set = (p: Partial<QuestionDraft>) => setDraft((d) => ({ ...d, ...p }));
   const options = optionsText.split("\n").map((o) => o.trim()).filter(Boolean);
   const issue = !builtIn && !draft.label.trim() ? "Write the question." : !builtIn && draft.type === "choice" && options.length === 0 ? "Add at least one choice, one per line." : null;
-  const title = builtIn ? `Edit ${builtIn.name}` : mode === "add" ? "Add a question" : "Edit question";
+  const title = builtIn ? builtIn.name : mode === "add" ? "Add a question" : draft.label || "Your question";
   return (
-    <SalesDialog
-      open
-      onOpenChange={(open) => !open && onClose()}
+    <Sheet
       title={title}
-      description={builtIn
-        ? "A built-in field. Its key and type stay as they are: autofill maps, copy-assist and pre-submit QA rely on them."
-        : "Your own question, asked in the application step. Agents must answer it before Submit when it is Required."}
+      subtitle={pair}
+      onClose={onClose}
+      footer={
+        <>
+          {onRemove && <Button type="button" variant="ghost" className="text-[var(--error-ink)]" onClick={onRemove}>Remove question</Button>}
+          <span className="ml-auto flex gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+            <WithReason reason={issue}>
+              <Button type="button" disabled={Boolean(issue)} onClick={() => onSubmit({ ...draft, options })}>{mode === "add" ? "Add question" : "Save to draft"}</Button>
+            </WithReason>
+          </span>
+        </>
+      }
     >
-      <div className="flex flex-col gap-4">
+      <section aria-label="On the Application step" className="flex flex-col gap-4 border-b border-[var(--border)] pb-5">
+        <div>
+          <h3 className="m-0 text-sm font-semibold text-[var(--ink)]">On the Application step</h3>
+          <p className="m-0 text-xs text-[var(--muted)]">
+            {builtIn
+              ? `A built-in field (${builtIn.typeLabel.toLowerCase()}${builtIn.sensitive ? ", masked, each reveal is logged" : ""}). Its type stays: autofill maps, copy-assist and pre-submit checks rely on it.`
+              : "Your own question. Agents must answer it before Submit when it is Required."}
+          </p>
+        </div>
+        <ThreeWay size="md" label="Asked as" value={draft.state} onChange={(state) => set({ state })} options={[{ key: "optional", label: "Optional" }, { key: "required", label: "Required" }]} />
         {builtIn ? (
-          <>
-            <p className="m-0 flex flex-wrap items-center gap-2 text-xs text-[var(--body)]">
-              <span className="rounded-badge bg-[var(--surface-alt)] px-2 py-0.5 font-semibold text-[var(--ink)]">{builtIn.typeLabel}</span>
-              <code className="font-mono">{builtIn.key}</code>
-              {builtIn.sensitive && <span className="font-semibold text-[var(--error-ink)]">Masked, each reveal is logged</span>}
-            </p>
-            <Field label="What the carrier's form calls it" htmlFor="fs-q-label" hint={`Leave it as "${builtIn.name}" when the form uses the same words.`}>
-              <input id="fs-q-label" className={control} value={draft.label} placeholder={builtIn.name} onChange={(e) => set({ label: e.target.value })} />
-            </Field>
-          </>
+          <Field label="Label the agent sees" htmlFor="fs-q-label" hint={`Leave it as "${builtIn.name}" when the carrier's form uses the same words.`}>
+            <input id="fs-q-label" className={control} value={draft.label} placeholder={builtIn.name} onChange={(e) => set({ label: e.target.value })} />
+          </Field>
         ) : (
           <>
             <Field label="Question" htmlFor="fs-q-label" required>
@@ -213,30 +230,13 @@ export function QuestionDialog({ mode, builtIn, initial, groups, types, onSubmit
             )}
           </>
         )}
-        <Field label="Help for the agent" htmlFor="fs-q-help" hint="Shown under the field in the application step. Optional.">
+        <Field label="Help under it" htmlFor="fs-q-help" hint="Shown under the field in the application step. Optional.">
           <textarea id="fs-q-help" className={`${control} min-h-20 py-2`} value={draft.help} maxLength={300} placeholder="For example: as written on the insured's driver's licence" onChange={(e) => set({ help: e.target.value })} />
         </Field>
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className="mb-2 text-sm font-semibold text-[var(--ink)]">Asked as</legend>
-          <div className="flex flex-wrap gap-2">
-            {(["optional", "required"] as const).map((s) => (
-              <label key={s} className="flex cursor-pointer items-center gap-2 rounded-md border border-[var(--border)] px-3 py-2 text-sm text-[var(--ink)] has-[:checked]:border-[var(--brand-500)] has-[:checked]:bg-[var(--primary-soft)]">
-                <input type="radio" name="fs-q-state" className={checkbox} checked={draft.state === s} onChange={() => set({ state: s })} />
-                {s === "required" ? "Required: must be filled before Submit" : "Optional: can stay blank"}
-              </label>
-            ))}
-          </div>
-        </fieldset>
         {issue && <p role="alert" className="m-0 text-xs leading-[1.5] text-[var(--error-ink)]">{issue}</p>}
-        <DialogActions>
-          {onRemove && <Button type="button" variant="destructive" className="mr-auto" onClick={onRemove}>Remove question</Button>}
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <WithReason reason={issue}>
-            <Button type="button" disabled={Boolean(issue)} onClick={() => onSubmit({ ...draft, options })}>{mode === "add" ? "Add question" : "Done"}</Button>
-          </WithReason>
-        </DialogActions>
-      </div>
-    </SalesDialog>
+      </section>
+      {extra}
+    </Sheet>
   );
 }
 

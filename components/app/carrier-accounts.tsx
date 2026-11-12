@@ -93,9 +93,9 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
   return (
     <>
       <StatStrip label="Carrier accounts">
-        <StatTile label="Debit balances" value={debit.length ? signed(debit.reduce((sum, c) => sum + (c.latest?.closingCents ?? 0), 0)) : "None"} valueTone={debit.length ? "danger" : undefined} footnote={debit.length ? `owed to ${debit.length} ${debit.length === 1 ? "carrier" : "carriers"}; paid nothing until cleared` : "no carrier is holding your commission"} />
-        <StatTile label="Statements that don't add up" value={flagged.toLocaleString("en-US")} valueTone={flagged ? "warning" : undefined} footnote="their lines are held out of totals" />
-        <StatTile label="Missing statements" value={gaps.toLocaleString("en-US")} valueTone={gaps ? "warning" : undefined} footnote="every balance after a gap is unverified" />
+        <StatTile label="Debit balances" value={debit.length ? signed(debit.reduce((sum, c) => sum + (c.latest?.closingCents ?? 0), 0)) : "None"} footnote={debit.length ? <span title="Paid nothing until cleared"><StatusChip tone="danger">{`Owed to ${debit.length} ${debit.length === 1 ? "carrier" : "carriers"}`}</StatusChip></span> : "no carrier is holding your commission"} />
+        <StatTile label="Statements that don't add up" value={flagged.toLocaleString("en-US")} footnote={flagged ? <StatusChip tone="warning">Lines held out of totals</StatusChip> : "their lines are held out of totals"} />
+        <StatTile label="Missing statements" value={gaps.toLocaleString("en-US")} footnote={gaps ? <span title="Every balance after a gap is unverified"><StatusChip tone="warning">Balances unverified</StatusChip></span> : "every balance after a gap is unverified"} />
         <StatTile label="Unattributed commission" value={orphans.length ? signed(orphanCents) : "None"} footnote={orphans.length ? (() => { const n = orphans.reduce((s, o) => s + o.policies, 0); return `${n} ${n === 1 ? "policy" : "policies"} no policy file has shown yet`; })() : "every line has its policy"} />
       </StatStrip>
 
@@ -105,7 +105,7 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
             {!readOnly && <Button type="button" onClick={() => { setForm({ date: today }); setOpen(true); }} disabled={!carriers.length} title={carriers.length ? undefined : "Upload a commission file first"}>Add statement totals</Button>}
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
           </>}>
-            <span className="text-sm text-muted-foreground">Oldest statement first, per carrier</span>
+            <span className="text-sm text-foreground">Oldest statement first, per carrier</span>
           </DataToolbar>
         }
         footer={statementRows.length ? <Pager page={shown.current} total={statementRows.length} noun="statements" pageSize={pageSize} onPage={setPage} /> : undefined}
@@ -132,20 +132,17 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
                 // A carrier's name heads its first statement, and the first row of a page.
                 return (
                   <tr key={s.id}>
-                    <td className="font-semibold text-foreground">{index === 0 || position === 0 ? carrier.carrierName : ""}{index === 0 && carrier.growingDebit && <span className="block text-xs font-normal text-[var(--error-ink)]">debit growing{carrier.fallingFor > 1 ? ` for ${carrier.fallingFor} statements` : ""}</span>}</td>
-                    <td className="tabular-nums">{fileDay(s.statementDate)}</td>
-                    <td className="text-right tabular-nums">{signed(s.openingCents)}</td>
-                    <td className="text-right tabular-nums" title={s.entriesCents !== null ? `Its ${s.entries} lines add up to ${signed(s.entriesCents)}` : "No commission file attached"}>{signed(s.activityCents)}</td>
-                    <td className={`text-right font-semibold tabular-nums ${s.closingCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{signed(s.closingCents)}{s.closingCents < 0 && <span className="block text-xs font-normal">debit</span>}</td>
-                    <td className={`text-right tabular-nums ${s.changeCents === null ? "text-muted-foreground" : s.changeCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{s.changeCents === null ? "—" : `${s.changeCents > 0 ? "+" : ""}${signed(s.changeCents)}`}</td>
-                    <td className="text-right tabular-nums">{s.amountPaidCents !== null ? signed(s.amountPaidCents) : "—"}{s.heldCents ? <span className="block text-xs text-muted-foreground">{signed(s.heldCents)} held</span> : null}</td>
-                    <td>
-                      <span className="flex flex-wrap gap-1">
-                        {problem ? <StatusChip tone="danger">Doesn&apos;t add up</StatusChip> : <StatusChip tone="good">Adds up</StatusChip>}
-                        {!s.continuityOk && <StatusChip tone="warning">Statement missing before</StatusChip>}
-                      </span>
-                      {problem && <span className="mt-0.5 block text-xs text-[var(--error-ink)]">{problem}</span>}
-                      {!s.continuityOk && <span className="mt-0.5 block text-xs text-muted-foreground">Opens at {signed(s.openingCents)}; the statement of {fileDay(s.previousStatementDate)} closed differently.</span>}
+                    {/* Owner 2026-11-11: one line, one colour. "Debit growing" is the carrier's tooltip, held the Paid's, and
+                        what is wrong with a statement its chip's; a debit reads by its minus sign. */}
+                    <td className="whitespace-nowrap font-medium text-foreground" title={index === 0 && carrier.growingDebit ? `Debit growing${carrier.fallingFor > 1 ? ` for ${carrier.fallingFor} statements` : ""}` : undefined}>{index === 0 || position === 0 ? carrier.carrierName : ""}</td>
+                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(s.statementDate)}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums">{signed(s.openingCents)}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums" title={s.entriesCents !== null ? `Its ${s.entries} lines add up to ${signed(s.entriesCents)}` : "No commission file attached"}>{signed(s.activityCents)}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums" title={s.closingCents < 0 ? "A debit: you owe the carrier" : undefined}>{signed(s.closingCents)}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums">{s.changeCents === null ? <span className="text-muted-foreground">—</span> : `${s.changeCents > 0 ? "+" : ""}${signed(s.changeCents)}`}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums" title={s.heldCents ? `${signed(s.heldCents)} held` : undefined}>{s.amountPaidCents !== null ? signed(s.amountPaidCents) : <span className="text-muted-foreground">—</span>}</td>
+                    <td className="whitespace-nowrap" title={[problem, !s.continuityOk ? `Statement missing before: opens at ${signed(s.openingCents)}; the statement of ${fileDay(s.previousStatementDate)} closed differently.` : null].filter(Boolean).join(" · ") || undefined}>
+                      {problem ? <StatusChip tone="danger">Doesn&apos;t add up</StatusChip> : !s.continuityOk ? <StatusChip tone="warning">Statement missing before</StatusChip> : <StatusChip tone="good">Adds up</StatusChip>}
                     </td>
                   </tr>
                 );
@@ -162,12 +159,12 @@ export function CarrierAccounts({ statements, orphans, files, carriers, readOnly
             <PagedBody>
               {orphans.map((o) => (
                 <tr key={o.carrierId}>
-                  <td className="font-semibold text-foreground">{o.carrierName}</td>
-                  <td className="text-right tabular-nums">{o.policies}</td>
-                  <td className="text-right tabular-nums">{o.lines}</td>
-                  <td className="text-right tabular-nums">{signed(o.amountCents)}{o.heldCents ? <span className="block text-xs text-muted-foreground">{signed(o.heldCents)} held</span> : null}</td>
-                  <td className="tabular-nums">{fileDay(o.oldest)}</td>
-                  <td className={`text-right tabular-nums ${o.pastThreshold ? "text-[var(--warning-ink)]" : "text-muted-foreground"}`}>{o.pastThreshold}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{o.carrierName}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{o.policies}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{o.lines}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums" title={o.heldCents ? `${signed(o.heldCents)} held` : undefined}>{signed(o.amountCents)}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(o.oldest)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{o.pastThreshold ? <StatusChip tone="warning">{`${o.pastThreshold} past ${orphanDays} days`}</StatusChip> : <span className="text-muted-foreground">0</span>}</td>
                 </tr>
               ))}
             </PagedBody>

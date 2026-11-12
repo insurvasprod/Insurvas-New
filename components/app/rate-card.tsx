@@ -84,37 +84,35 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
         {carriers.length === 0 ? (
           <EmptyState title="No policies from carrier files yet" hint="The rate card is set up per carrier you hold policies with. Import your book first." />
         ) : (
-          <table className="portal-lead-table w-full min-w-[960px] text-left text-sm">
+          <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
             <thead>
               <tr>
                 <th className="min-w-[180px]">Carrier</th>
-                <th className="w-[90px] text-right">Policies</th>
-                <th className="w-[120px] text-right">Monthly premium</th>
+                <th className="w-[100px] text-right" title="Monthly premium on hover">Policies</th>
                 <th className="w-[150px]" title="When the carrier pays: on issue, or once the first premium drafts">Pays</th>
                 <th className="w-[110px] text-right" title="Your contract level with the carrier">Your level</th>
-                <th className="w-[80px] text-right">Rates</th>
-                <th className="w-[170px]" title="Policies the rate card can price today">Can be checked</th>
-                <th className="w-[96px] text-right"><span className="sr-only">Actions</span></th>
+                <th className="w-[150px]" title="Policies the rate card can price today">Can be checked</th>
+                <th className="w-[120px]">Next step</th>
               </tr>
             </thead>
             <PagedBody>
               {carriers.map((c) => {
                 const share = c.monthlyCents ? Math.floor((c.pricedMonthlyCents * 100) / c.monthlyCents) : 0;
+                // Round 6: the verb says what is missing — "Add rates" while policies can't be priced.
+                const verb = readOnly ? "Open" : c.policies > 0 && c.pricedPolicies === c.policies ? "Edit rates" : "Add rates";
+                const openRow = () => { setForm({}); setOpenId(c.carrierId); };
                 return (
-                  <tr key={c.carrierId}>
-                    <td><span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{c.carrierName}</span></td>
-                    <td className="text-right tabular-nums">{c.policies.toLocaleString("en-US")}</td>
-                    <td className="text-right tabular-nums">{whole(c.monthlyCents)}</td>
-                    <td>{c.trigger ? <>{TRIGGER_LABELS[c.trigger]}<span className="block text-xs text-muted-foreground">{c.lagDays !== null ? `usually within ${c.lagDays} days` : "lag not set"}</span></> : <span className="text-[var(--warning-ink)]">Not set</span>}</td>
-                    <td className="text-right tabular-nums">{c.levelBp !== null ? `${bpToPercent(c.levelBp)}%` : <span className="text-[var(--warning-ink)]">Not set</span>}</td>
-                    <td className="text-right tabular-nums">{c.schedules.length}</td>
+                  <tr key={c.carrierId} className="cursor-pointer" onClick={openRow}>
+                    <td className="whitespace-nowrap font-medium text-foreground">{c.carrierName}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums" title={`${whole(c.monthlyCents)} monthly premium`}>{c.policies.toLocaleString("en-US")}</td>
+                    <td className="whitespace-nowrap" title={c.trigger ? (c.lagDays !== null ? `Usually within ${c.lagDays} days` : "Lag not set") : undefined}>{c.trigger ? TRIGGER_LABELS[c.trigger] : "Not set"}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums">{c.levelBp !== null ? `${bpToPercent(c.levelBp)}%` : "Not set"}</td>
                     <td>
-                      {c.policies === 0 ? <span className="text-muted-foreground">No policies yet</span> : <>
-                        <StatusChip tone={c.pricedPolicies === c.policies ? "good" : c.pricedPolicies ? "warning" : "danger"}>{c.pricedPolicies === c.policies ? "All" : c.pricedPolicies ? `${c.pricedPolicies} of ${c.policies}` : "None"}</StatusChip>
-                        <span className="block text-xs text-muted-foreground">{share}% of premium</span>
-                      </>}
+                      {c.policies === 0 ? <span className="text-muted-foreground" title="No policies yet">—</span> : (
+                        <StatusChip tone={c.pricedPolicies === c.policies ? "good" : c.pricedPolicies ? "warning" : "danger"} title={`${share}% of premium`}>{c.pricedPolicies === c.policies ? "All" : c.pricedPolicies ? `${c.pricedPolicies} of ${c.policies}` : "None"}</StatusChip>
+                      )}
                     </td>
-                    <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setForm({}); setOpenId(c.carrierId); }}>{/* Round 6: the verb says what is missing — "Add rates" while policies can't be priced. */}{readOnly ? "Open" : c.policies > 0 && c.pricedPolicies === c.policies ? "Edit rates" : "Add rates"}</Button></td>
+                    <td className="whitespace-nowrap"><button type="button" className="hover:underline" title={`${c.schedules.length} ${c.schedules.length === 1 ? "rate" : "rates"} set`} onClick={(e) => { e.stopPropagation(); openRow(); }}>{verb} ›</button></td>
                   </tr>
                 );
               })}
@@ -160,7 +158,7 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                     <PagedBody as="ul" className="m-0 grid list-none gap-2 p-0">
                       {productRows.map((row) => (
                         <li key={row.code} className="grid items-center gap-2 sm:grid-cols-[1fr_220px_auto]">
-                          <span><span className="font-mono text-xs text-foreground">{row.code}</span> <span className="text-xs text-muted-foreground">· {row.note}</span></span>
+                          <span className="whitespace-nowrap font-mono text-sm text-foreground" title={row.note}>{row.code}</span>
                           <SelectMenu label={`Product family for ${row.code}`} className="w-full" matchTriggerWidth disabled={readOnly || busy} value={field(`fam:${row.code}`, row.family)} options={families(row.family ? "Use Insurvas' match" : "Choose a product family")} onChange={(value) => set(`fam:${row.code}`, value)} />
                           <Button type="button" size="sm" variant="outline" disabled={field(`fam:${row.code}`, row.family) === row.family} onClick={() => void post({ action: "map_product", carrier_id: open.carrierId, carrier_product_code: row.code, product_code: field(`fam:${row.code}`) || null }, "Product matched.")}>Save</Button>
                         </li>
@@ -179,22 +177,24 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                       <thead><tr className="text-xs text-muted-foreground"><th className="py-1 font-medium">Product family</th><th className="py-1 font-medium">Level</th><th className="py-1 font-medium">Year</th><th className="py-1 font-medium">Rate</th><th className="py-1 font-medium">From</th><th className="py-1 font-medium">Age bands</th></tr></thead>
                       <PagedBody>
                         {open.schedules.map((s) => (
-                          <tr key={s.id} className="border-t border-border align-top">
-                            <td className="py-1.5">{s.familyName}</td>
+                          <tr key={s.id} className="border-t border-border">
+                            <td className="whitespace-nowrap py-1.5 font-medium">{s.familyName}</td>
                             <td className="py-1.5 tabular-nums">{bpToPercent(s.levelBp)}%</td>
                             <td className="py-1.5 tabular-nums">{s.policyYear}{s.appliesOnward ? "+" : ""}</td>
-                            <td className="py-1.5 font-semibold tabular-nums">{bpToPercent(s.rateBp)}%</td>
-                            <td className="py-1.5 tabular-nums">{fileDay(s.effectiveFrom)}</td>
+                            <td className="py-1.5 tabular-nums">{bpToPercent(s.rateBp)}%</td>
+                            <td className="whitespace-nowrap py-1.5 tabular-nums text-muted-foreground">{fileDay(s.effectiveFrom)}</td>
                             <td className="py-1.5">
-                              {s.bands.map((b) => <span key={b.id} className="block text-xs">{b.ageMin}–{b.ageMax}: {bpToPercent(b.rateBp)}%</span>)}
+                              <span className="flex items-center gap-2 whitespace-nowrap">
+                              {s.bands.length > 0 ? <span className="tabular-nums">{s.bands.map((b) => `${b.ageMin}–${b.ageMax}: ${bpToPercent(b.rateBp)}%`).join(", ")}</span> : readOnly ? <span className="text-muted-foreground">—</span> : null}
                               {!readOnly && (
-                                <span className="mt-1 inline-flex items-center gap-1">
+                                <span className="inline-flex items-center gap-1">
                                   <Input aria-label="Band from age" className="w-14" inputMode="numeric" placeholder="80" value={field(`bmin:${s.id}`)} onChange={(e) => set(`bmin:${s.id}`, e.target.value.replace(/\D/g, ""))} />
                                   <Input aria-label="Band to age" className="w-14" inputMode="numeric" placeholder="85" value={field(`bmax:${s.id}`)} onChange={(e) => set(`bmax:${s.id}`, e.target.value.replace(/\D/g, ""))} />
                                   <Input aria-label="Band rate (%)" className="w-16" inputMode="decimal" placeholder="110" value={field(`brate:${s.id}`)} onChange={(e) => set(`brate:${s.id}`, e.target.value)} />
                                   <Button type="button" size="sm" variant="outline" disabled={!field(`bmin:${s.id}`) || !field(`bmax:${s.id}`) || !field(`brate:${s.id}`)} onClick={() => { const rate = percentToBp(field(`brate:${s.id}`)); if (rate === null) return notify.block("Enter the band's rate as a percentage."); void post({ action: "add_band", carrier_id: open.carrierId, schedule_id: s.id, age_min: Number(field(`bmin:${s.id}`)), age_max: Number(field(`bmax:${s.id}`)), rate_bp: rate }, "Age band added."); }}>Add band</Button>
                                 </span>
                               )}
+                              </span>
                             </td>
                           </tr>
                         ))}
@@ -230,12 +230,12 @@ export function RateCardWorkspace({ carriers, products, readOnly, today }: { car
                       <PagedBody>
                         {open.advanceRules.map((r) => (
                           <tr key={`${r.productCode}|${r.effectiveFrom}`} className="border-t border-border">
-                            <td className="py-1.5">{r.familyName}</td>
-                            <td className="py-1.5 text-right tabular-nums">{r.advanceMonths} months</td>
-                            <td className="py-1.5 text-right font-semibold tabular-nums">{bpToPercent(r.advancePctBp)}%</td>
-                            <td className="py-1.5 text-right tabular-nums">{r.clawbackMonths} months</td>
+                            <td className="whitespace-nowrap py-1.5 font-medium">{r.familyName}</td>
+                            <td className="whitespace-nowrap py-1.5 text-right tabular-nums">{r.advanceMonths} months</td>
+                            <td className="py-1.5 text-right tabular-nums">{bpToPercent(r.advancePctBp)}%</td>
+                            <td className="whitespace-nowrap py-1.5 text-right tabular-nums">{r.clawbackMonths} months</td>
                             <td className="py-1.5 pl-4">{r.clawbackType === "full" ? "Full" : "Prorated"}</td>
-                            <td className="py-1.5 tabular-nums">{fileDay(r.effectiveFrom)}</td>
+                            <td className="whitespace-nowrap py-1.5 tabular-nums text-muted-foreground">{fileDay(r.effectiveFrom)}</td>
                           </tr>
                         ))}
                       </PagedBody>

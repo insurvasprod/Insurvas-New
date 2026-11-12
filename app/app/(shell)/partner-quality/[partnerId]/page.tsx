@@ -17,8 +17,14 @@ export default async function PartnerQualityDetailPage({ params, searchParams }:
   if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Partner quality" detail="Owners, producers, and bookkeepers can review partner lead quality." />;
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Partner quality" detail="In an agency, the owner and admins review partner quality." />;
-  const [{ partnerId }, query] = await Promise.all([params, searchParams]);
+  const [{ partnerId }, query, records] = await Promise.all([params, searchParams, guardPage("publisher_records")]);
   if (!UUID.test(partnerId)) notFound();
-  // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
-  return <ReportsPage view="partner"><PartnerQualityDetailWorkspace partnerId={partnerId} initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} framed /></ReportsPage>;
+  // ⋯ › Open the partner's record (/app/publishers/[id]) for someone who may open partner records.
+  const recordLinks = records.entitled && actAsPage(records, ["owner", "bookkeeper"]);
+  // Reports round 7 (owner pick 8·A, 2026-11-11): six tabs, ‹ › and the "Table · Chart" switch on the title line.
+  return (
+    <ReportsPage view="partner" show="chart">
+      <PartnerQualityDetailWorkspace partnerId={partnerId} initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} framed />
+    </ReportsPage>
+  );
 }

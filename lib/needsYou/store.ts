@@ -245,10 +245,11 @@ export const unknownPolicyWhy = (amountCents: number, firstSeen: string) => `${d
  * The orphans old enough to tell someone about, one row per policy, from commission_orphan_policies
  * (20261103303000): only those rows are read. Null before that view exists, so the caller reads lines instead.
  */
-async function orphanPoliciesFromView(tenantId: string, today: string, raised: ReadonlySet<string>): Promise<UnknownPolicy[] | null> {
+async function orphanPoliciesFromView(tenantId: string, today: string, raisedRead: Promise<ReadonlySet<string>>): Promise<UnknownPolicy[] | null> {
   const cutoff = new Date(Date.parse(`${today}T00:00:00Z`) - ORPHAN_NOTICE_DAYS * 86_400_000).toISOString().slice(0, 10);
   const read = await db().from("commission_orphan_policies").select("carrier_id, policy_number, first_seen, lines, amount_cents, held_cents, agent_identifiers, file_ids").eq("tenant_id", tenantId).lte("first_seen", cutoff).order("first_seen").limit(5000);
   if (read.error) return isSchemaGap(read.error) ? null : Promise.reject(read.error);
+  const raised = await raisedRead;
   return ((read.data ?? []) as Loose[])
     .filter((r) => !raised.has(orphanSubjectKey(r.carrier_id, r.policy_number)))
     .map((r) => ({ carrierId: r.carrier_id, policyNumber: r.policy_number, lines: Number(r.lines), amountCents: Number(r.amount_cents), heldCents: Number(r.held_cents), firstSeen: String(r.first_seen).slice(0, 10), fileIds: (r.file_ids ?? []) as string[], agentCodes: (r.agent_identifiers ?? []) as string[] }));
@@ -257,9 +258,12 @@ async function orphanPoliciesFromView(tenantId: string, today: string, raised: R
 async function unknownPolicyItems(scope: NeedsYouScope, names: Names, today: string): Promise<Part> {
   if (!scope.keeper) return EMPTY;
   const t = scope.tenantId;
-  const raisedRows = await allRows(() => db().from("queue_item").select("id, subject_key").eq("tenant_id", t).eq("queue_type", "orphan_commission").order("id"), 20_000);
-  const raisedKeys = new Set(rows(raisedRows).map((q: Loose) => String(q.subject_key)));
-  let policies = await orphanPoliciesFromView(t, today, raisedKeys);
+  // The items already raised are read beside the orphan view (perf pass 2026-11-09), not before it.
+  const raisedRead = allRows(() => db().from("queue_item").select("id, subject_key").eq("tenant_id", t).eq("queue_type", "orphan_commission").order("id"), 20_000)
+    .then((raisedRows) => new Set(rows(raisedRows).map((q: Loose) => String(q.subject_key))) as ReadonlySet<string>);
+  raisedRead.catch(() => undefined);
+  let policies = await orphanPoliciesFromView(t, today, raisedRead);
+  const raisedKeys = await raisedRead;
   if (policies === null) {
     // Before 20261103303000: the summary says which carriers have one old enough, then their lines are compared here.
     const summary = await db().from("commission_orphan_summary").select("carrier_id, orphan_policies, oldest_orphan_date").eq("tenant_id", t);
@@ -401,6 +405,8 @@ async function ruleHolds(scope: NeedsYouScope, names: Names, today: string): Pro
   if (!scope.keeper) return EMPTY;
   const read = await listRuleHolds(scope.tenantId, 1000);
   if (!read.available) return { ...EMPTY, notes: [PIPELINE_RULES_PENDING_MESSAGE] };
+  // No hold, nothing to name: the board is not read for an empty list (perf pass 2026-11-09).
+  if (!read.holds.length) return EMPTY;
   const words = await holdWords(scope.tenantId, read.holds);
   return {
     open: read.holds.map((h) => {
@@ -426,16 +432,17 @@ export const ORPHANS_PENDING_MESSAGE = "Commission lines on policies we don't ha
  * added to `search` for every item tied to a file — its ref, or the files its lines came from (`extra`). One
  * read of the files' names; a failed read leaves the search without them, never the list.
  */
-async function addFileNames(tenantId: string, items: NeedsYouItem[], extra: ReadonlyMap<string, string[]>): Promise<void> {
+async function addFileNames(tenantId: string, items: NeedsYouItem[], extra: ReadonlyMap<string, string[]>): Promise<() => void> {
   const of = (entry: NeedsYouItem) => [...new Set([entry.ref?.fileId, ...(extra.get(`${entry.kind}:${entry.id}`) ?? [])].filter((id): id is string => Boolean(id)))];
   const ids = [...new Set(items.flatMap(of))];
-  if (!ids.length) return;
+  if (!ids.length) return () => undefined;
   const read = await byIds(ids, (part) => db().from("file_registry").select("id, storage_path").eq("tenant_id", tenantId).in("id", part)).catch(() => ({ data: [] as Loose[] }));
   const name = new Map<string, string>(read.data.map((f: Loose) => [f.id, fileNameOf(f)]));
-  for (const entry of items) {
+  // Read now, written when called: the caller reads both kinds of names at once and adds them in order.
+  return () => { for (const entry of items) {
     const words = of(entry).map((id) => name.get(id)).filter(Boolean);
     if (words.length) entry.search = [entry.search, ...words].filter(Boolean).join(" ");
-  }
+  } };
 }
 
 /**
@@ -443,10 +450,10 @@ async function addFileNames(tenantId: string, items: NeedsYouItem[], extra: Read
  * Quinn Testmore's chargeback was open): the policy's current client is added to `search` for every item that
  * names a policy. Batched reads; a failed read leaves the search without names, never the list.
  */
-async function addClientNames(tenantId: string, items: NeedsYouItem[]): Promise<void> {
+async function addClientNames(tenantId: string, items: NeedsYouItem[]): Promise<() => void> {
   const named = items.filter((entry) => entry.ref?.policyNumber && entry.ref.carrierId);
   const policies = [...new Set(named.map((entry) => entry.ref!.policyNumber as string))];
-  if (!policies.length) return;
+  if (!policies.length) return () => undefined;
   const current = await byIds(policies, (part) => db().from("policy_current").select("carrier_id, policy_number, contact_id").eq("tenant_id", tenantId).in("policy_number", part)).catch(() => ({ data: [] as Loose[] }));
   const contactIds = [...new Set(current.data.map((row: Loose) => row.contact_id).filter(Boolean))] as string[];
   const contacts = contactIds.length ? await byIds(contactIds, (part) => db().from("contacts").select("id, first_name, last_name").eq("tenant_id", tenantId).in("id", part)).catch(() => ({ data: [] as Loose[] })) : { data: [] as Loose[] };
@@ -456,10 +463,10 @@ async function addClientNames(tenantId: string, items: NeedsYouItem[]): Promise<
     const name = row.contact_id ? person.get(row.contact_id) : undefined;
     if (name) client.set(`${row.carrier_id}:${row.policy_number}`, name);
   }
-  for (const entry of named) {
+  return () => { for (const entry of named) {
     const name = client.get(`${entry.ref!.carrierId}:${entry.ref!.policyNumber}`);
     if (name) entry.search = [entry.search, name].filter(Boolean).join(" ");
-  }
+  } };
 }
 
 /** Every open decision this person may see, oldest first, and what closed in the last 30 days. */
@@ -478,8 +485,13 @@ export async function loadNeedsYou(scope: NeedsYouScope): Promise<NeedsYouList> 
     guarded("Paid on a policy we don’t have", ORPHANS_PENDING_MESSAGE, () => unknownPolicyItems(scope, names, today)),
   ]);
   const open = parts.flatMap((p) => p.open);
-  await addFileNames(scope.tenantId, open, new Map(parts.flatMap((p) => [...(p.files ?? new Map<string, string[]>())])));
-  await addClientNames(scope.tenantId, open);
+  // Both names read at once (perf pass 2026-11-09), then added in their old order: the file's, then the client's.
+  const [withFileNames, withClientNames] = await Promise.all([
+    addFileNames(scope.tenantId, open, new Map(parts.flatMap((p) => [...(p.files ?? new Map<string, string[]>())]))),
+    addClientNames(scope.tenantId, open),
+  ]);
+  withFileNames();
+  withClientNames();
   return {
     open: open.sort(byOldest),
     closed: parts.flatMap((p) => p.closed).sort((a, b) => String(b.closedAt ?? "").localeCompare(String(a.closedAt ?? ""))),

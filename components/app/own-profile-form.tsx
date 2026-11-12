@@ -102,7 +102,7 @@ function ProfilePicture({ name, email, version, onChange }: { name: string; emai
   return (
     <div id="profile-about" className="flex flex-col gap-1.5">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <span className="inline-flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]">
+        <span className="inline-flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--highlight-soft)] text-base font-semibold text-[var(--highlight-ink)]">
           {version
             // eslint-disable-next-line @next/next/no-img-element -- a session-bound redirect to a signed URL; next/image cannot optimise it
             ? <img src={`/api/app/profile/avatar?v=${encodeURIComponent(version)}`} alt="Your profile picture" className="size-full object-cover" />

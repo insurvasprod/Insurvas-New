@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
+import { PageHeader } from "@/components/ui/page-header";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
 import { EmptyState, ErrorState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
@@ -117,12 +118,14 @@ export function PageRefreshButton() {
   return <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />;
 }
 
-export function AlertCentre({ lists, canClaim, digest }: {
+export function AlertCentre({ lists, canClaim, digest, strip }: {
   /** Null when the queue could not be read: the lists say so instead of claiming nothing is open. */
   lists: { open: CentreEntry[]; resolved: CentreEntry[] } | null;
   canClaim: boolean;
   /** The daily digest (or the line saying it could not be read), drawn as the third tab. */
   digest?: ReactNode;
+  /** The SLA job's line, drawn under the header (the header lives here so its views sit on the title's line). */
+  strip?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("open");
   const [search, setSearch] = useState("");
@@ -166,7 +169,8 @@ export function AlertCentre({ lists, canClaim, digest }: {
 
   return (
     <>
-      <ViewTabs
+      {/* The views are the page's sub-page bar, on the title's line (UI-CONSISTENCY §8b). */}
+      <PageHeader title="Alert centre" description="Alerts clear when the work is claimed, not read." tabs={<ViewTabs
         label="Alert centre views"
         idPrefix="alert-view"
         value={tab}
@@ -176,7 +180,8 @@ export function AlertCentre({ lists, canClaim, digest }: {
           { key: "resolved", label: "Resolved this week", count: lists ? resolved.length : null },
           ...(digest ? [{ key: "digest" as const, label: "Daily digest" }] : []),
         ]}
-      />
+      />} />
+      {strip}
 
       <div role="tabpanel" aria-labelledby={`alert-view-${tab}`} className="flex min-w-0 flex-col">
       {tab === "digest" && digest ? digest : !lists ? (

@@ -111,14 +111,19 @@ export function PaperBillCalls({ calls }: { calls: ConversionCall[] }) {
         <table className="portal-lead-table w-full text-left text-sm">
           <thead><tr><th className="w-[120px]">When</th><th>What happened</th><th>Note</th><th className="w-[160px]">By</th></tr></thead>
           <tbody>
-            {calls.map((c, i) => (
-              <tr key={`${c.at}-${i}`}>
-                <td className="tabular-nums">{fileDay(c.at.slice(0, 10))}</td>
-                <td>{CONVERSION_OUTCOME_LABELS[c.outcome] ?? c.outcome}{c.declineReason ? <span className="block text-xs text-muted-foreground">{c.declineReason}</span> : null}{c.servicingRequestId ? <Link href={`/app/servicing/${c.servicingRequestId}`} className="block text-xs text-[var(--accent-ink)] hover:underline">The request</Link> : null}</td>
-                <td><span className="line-clamp-2 whitespace-normal text-muted-foreground" title={c.note ?? undefined}>{c.note ?? "—"}</span></td>
-                <td className="truncate">{c.by ?? "—"}</td>
-              </tr>
-            ))}
+            {calls.map((c, i) => {
+              // One line per call (owner 2026-11-11): why they said no joins the note; the request is the outcome's link.
+              const said = CONVERSION_OUTCOME_LABELS[c.outcome] ?? c.outcome;
+              const note = [c.declineReason, c.note].filter(Boolean).join(" · ");
+              return (
+                <tr key={`${c.at}-${i}`}>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(c.at.slice(0, 10))}</td>
+                  <td className="whitespace-nowrap">{c.servicingRequestId ? <Link href={`/app/servicing/${c.servicingRequestId}`} className="hover:underline" title="Open the request">{said}</Link> : said}</td>
+                  <td>{note ? <span className="block max-w-[420px] truncate" title={note}>{note}</span> : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap">{c.by ?? <span className="text-muted-foreground">—</span>}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

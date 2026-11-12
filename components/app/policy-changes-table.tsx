@@ -90,12 +90,12 @@ export function PolicyChangesTable({ changes, emptyTitle, emptyHint }: { changes
           <tbody className="m-seq">
             {rows.map((change) => (
               <tr key={change.id} className="m-row">
-                <td className="font-semibold tabular-nums text-foreground"><Link href={`/app/policies/carrier/${change.carrierId}/${encodeURIComponent(change.policyNumber)}`} className="hover:underline">{change.policyNumber}</Link></td>
-                <td><span className="block whitespace-normal break-words leading-snug">{change.carrierName}</span></td>
-                <td>{TRACKED_FIELD_LABELS[change.fieldName]}</td>
-                <td className="text-muted-foreground" title={change.oldValue ?? ""}><span className="block max-w-[160px] truncate">{shown(change.fieldName, change.oldValue)}</span></td>
-                <td className="font-semibold text-foreground" title={change.newValue ?? ""}><span className="block max-w-[160px] truncate">{shown(change.fieldName, change.newValue)}</span></td>
-                <td className="tabular-nums text-muted-foreground"><Link href={fileHref(change.toFileId)} className="hover:text-foreground hover:underline" title="Open the file that showed the new value">{changeWindow(change.fromDate, change.toDate, fileDay)}</Link></td>
+                <td className="whitespace-nowrap font-medium tabular-nums text-foreground"><Link href={`/app/policies/carrier/${change.carrierId}/${encodeURIComponent(change.policyNumber)}`} className="hover:underline">{change.policyNumber}</Link></td>
+                <td className="whitespace-nowrap">{change.carrierName}</td>
+                <td className="whitespace-nowrap">{TRACKED_FIELD_LABELS[change.fieldName]}</td>
+                <td className="whitespace-nowrap" title={change.oldValue ?? ""}>{change.oldValue === null ? <span className="text-muted-foreground">—</span> : shown(change.fieldName, change.oldValue)}</td>
+                <td className="whitespace-nowrap" title={change.newValue ?? ""}>{change.newValue === null ? <span className="text-muted-foreground">—</span> : shown(change.fieldName, change.newValue)}</td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground"><Link href={fileHref(change.toFileId)} className="hover:text-foreground hover:underline" title="Open the file that showed the new value">{changeWindow(change.fromDate, change.toDate, fileDay)}</Link></td>
               </tr>
             ))}
           </tbody>

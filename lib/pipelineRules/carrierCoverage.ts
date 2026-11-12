@@ -48,17 +48,24 @@ const quiet = (read: Loose) => (read?.error ? [] : (read?.data ?? [])) as Loose[
 
 /** Every carrier the agency works with (Settings › Carriers, plus any still holding in-force policies), sorted by policies affected. */
 export const loadCarrierCoverage = cache(async (tenantId: string): Promise<{ available: boolean; asOf: string; carriers: CarrierCoverage[]; authors: Record<string, { createdBy: string | null; verifiedBy: string | null }> }> => {
-  const asOf = await agencyToday(tenantId);
-  const [carriers, rules, settings, counts, on, contacts, assignments, own, guidance] = await Promise.all([
+  // Perf pass 2026-11-09: today and the layout maps are read beside the rest (the maps as soon as the layouts are back).
+  const assignmentsRead: Promise<Loose> = Promise.resolve(db().from("carrier_layout_assignment").select("tenant_id, carrier_id, file_type, layout_key").or(`tenant_id.eq.${tenantId},tenant_id.is.null`));
+  const mapsRead: Promise<Loose[]> = assignmentsRead.then(async (assignments) => {
+    const keys = [...new Set(quiet(assignments).map((row) => row.layout_key as string))];
+    return keys.length ? quiet(await db().from("carrier_layout_map").select("tenant_id, layout_key, name, version, status").in("layout_key", keys).eq("status", "published").or(`tenant_id.eq.${tenantId},tenant_id.is.null`)) : [];
+  });
+  const [asOf, carriers, rules, settings, counts, on, contacts, assignments, own, guidance, maps] = await Promise.all([
+    agencyToday(tenantId),
     db().from("carriers").select("id, name, portal_origin, reference_pattern").eq("is_active", true).order("name"),
     db().from("carrier_retention_rule").select("*").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(5000),
     db().from("carrier_operating_settings").select("*").or(`tenant_id.eq.${tenantId},tenant_id.is.null`).limit(2000),
     db().rpc("in_force_policy_counts", { p_tenant_id: tenantId }),
     carrierIdsOn(tenantId),
     db().from("tenant_carrier_commission_contacts").select("carrier_id, address, email, updated_at").eq("tenant_id", tenantId),
-    db().from("carrier_layout_assignment").select("tenant_id, carrier_id, file_type, layout_key").or(`tenant_id.eq.${tenantId},tenant_id.is.null`),
+    assignmentsRead,
     db().from("tenant_carrier_settings").select("carrier_id, portal_origin, reference_pattern, updated_at").eq("tenant_id", tenantId),
     db().from("carrier_portal_guidance").select("carrier_id, where_in_portal, report_name, format_hint"),
+    mapsRead,
   ]);
   for (const read of [rules, settings]) {
     if (read.error) {
@@ -77,8 +84,6 @@ export const loadCarrierCoverage = cache(async (tenantId: string): Promise<{ ava
   const layoutRows = quiet(assignments);
 
   // The version each layout reads files with: its newest published map (the agency's own over Insurvas's).
-  const keys = [...new Set(layoutRows.map((row) => row.layout_key as string))];
-  const maps = keys.length ? quiet(await db().from("carrier_layout_map").select("tenant_id, layout_key, name, version, status").in("layout_key", keys).eq("status", "published").or(`tenant_id.eq.${tenantId},tenant_id.is.null`)) : [];
   const mapOf = (key: string) => maps.filter((m) => m.layout_key === key).sort((a, b) => Number(b.tenant_id === tenantId) - Number(a.tenant_id === tenantId) || Number(b.version) - Number(a.version))[0] ?? null;
 
   const rows = ((carriers.data ?? []) as Loose[]).filter((carrier) => on.has(carrier.id) || (inForce.get(carrier.id) ?? 0) > 0).map((carrier): CarrierCoverage => {

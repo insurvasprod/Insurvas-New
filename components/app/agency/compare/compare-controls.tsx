@@ -216,7 +216,7 @@ export type PeopleRow = { id: string; name: string; initials: string; note: stri
 
 /** A person's mark: their initials in a small round badge (the mockup's avatar). */
 export function PersonMark({ text }: { text: string }) {
-  return <span aria-hidden="true" className="inline-grid size-8 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--primary)_16%,transparent)] text-[0.6875rem] font-bold text-[var(--accent-ink)]">{text}</span>;
+  return <span aria-hidden="true" className="inline-grid size-8 shrink-0 place-items-center rounded-full bg-[var(--highlight-soft)] text-[0.6875rem] font-bold text-[var(--highlight-ink)]">{text}</span>;
 }
 
 /** The period's daily figure as a small line, the last day marked (the table's Trend column). */

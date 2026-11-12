@@ -1,7 +1,10 @@
 "use client";
 
-import { useCallback, type ComponentProps, type ReactNode } from "react";
+import { useCallback, type ComponentProps, type MouseEvent, type ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { buttonVariants } from "@/components/ui/button";
 import { Pager as SharedPager, paginate as sharedPaginate } from "@/components/ui/pager";
 import { PeriodPicker } from "@/components/app/reports/period-picker";
 import { PARTNER_TYPE_LABELS, type PartnerType } from "@/lib/partners/constants";
@@ -20,6 +23,31 @@ export type Period = { from: string; to: string };
 export const validPeriod = validPartnerQualityPeriod;
 
 export function periodQuery(period: Period) { return new URLSearchParams({ from: period.from, to: period.to }).toString(); }
+
+/**
+ * Put the period into the address in place, keeping every other parameter (`?show=`, the tab, the sort), so a
+ * partner's page, the way back and a reload use the same one.
+ */
+export function replacePeriodInUrl(period: Period) {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.set("from", period.from);
+    url.searchParams.set("to", period.to);
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch { /* not fatal */ }
+}
+
+/** Set (or, with null, remove) address parameters in place; Next's useSearchParams follows. */
+export function replaceParams(values: Record<string, string | null>) {
+  try {
+    const url = new URL(window.location.href);
+    for (const [key, value] of Object.entries(values)) {
+      if (value == null || value === "") url.searchParams.delete(key);
+      else url.searchParams.set(key, value);
+    }
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch { /* not fatal */ }
+}
 export function percent(value: number | null | undefined) { return value == null ? "—" : `${value.toFixed(1)}%`; }
 export function count(value: number) { return value.toLocaleString(); }
 export function dateText(value: string) { return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)); }
@@ -41,6 +69,14 @@ export function Prior({ value, label }: { value: string; label: string }) {
 /** A figure in a table cell that opens the leads behind it. */
 export function MetricCell({ children, label, onClick }: { children: ReactNode; label: string; onClick: () => void }) {
   return <button type="button" className="rounded px-1 font-normal tabular-nums text-[var(--body)]! underline-offset-4 hover:bg-transparent! hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]" aria-label={label} onClick={onClick}>{children}</button>;
+}
+
+/**
+ * A figure in a one-line row that opens the leads behind it (the row itself opens its record, so the click
+ * stops here). Plain figure, one text colour: the underline shows on hover.
+ */
+export function FigureLink({ href, label, children }: { href: string; label: string; children: ReactNode }) {
+  return <Link href={href} aria-label={label} onClick={(event: MouseEvent) => event.stopPropagation()} className="tabular-nums text-[var(--body)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">{children}</Link>;
 }
 
 export function SortButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -82,6 +118,21 @@ export function downloadCsv(filename: string, header: string[], rows: (string | 
   const link = document.createElement("a");
   link.href = url; link.download = filename; link.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * ‹ › on a partner's page (Reports round 7, 8·4): the partners either side in the list's order, each button naming
+ * the partner it opens. Small and truncated, so the tabs, these, the switch and ⋯ keep one line at 1600px with the
+ * rail open; the full name is the button's title.
+ */
+export function PartnerStepper({ previous, next }: { previous?: { href: string; label: string } | null; next?: { href: string; label: string } | null }) {
+  if (!previous && !next) return null;
+  return (
+    <span className="ml-auto flex shrink-0 items-center gap-1.5 self-center">
+      {previous && <Link href={previous.href} className={buttonVariants({ variant: "outline", size: "sm" })} title={`Previous partner: ${previous.label}`}><ChevronLeft aria-hidden="true" /><span className="max-w-24 truncate">{previous.label}</span></Link>}
+      {next && <Link href={next.href} className={buttonVariants({ variant: "outline", size: "sm" })} title={`Next partner: ${next.label}`}><span className="max-w-24 truncate">{next.label}</span><ChevronRight aria-hidden="true" /></Link>}
+    </span>
+  );
 }
 
 // ── Drill-down ────────────────────────────────────────────────────────────────────────────────

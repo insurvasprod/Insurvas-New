@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { BookOpen, Calculator, FilePenLine, LifeBuoy, ShieldCheck, Users } from "lucide-react";
 
 import { DashBars, DashChart, DashHero, DashList, DashModules, DashPhone, DashRecent, DashTable, type DashBar, type DashItem, type DashLine, type DashNeed, type DashTone } from "@/components/app/home/dash/dash-kit";
@@ -39,12 +39,13 @@ import type { DashViewProps } from "./view-props";
  *                  (the `side` card renders in the bottom-left slot, `left` beside the chart)
  *   right column   the money card, then today's callbacks and appointments
  *
- * Each module's figures come from that module's own view loader (the same reads its view shows), only for
- * the modules this reader's views offer, all at once. Every read keeps the view's scope and role rules.
+ * Each module's figures come from that module's own view loader, read for the Overview (`forOverview`: only
+ * what the Overview draws), only for the modules this reader's views offer, all at once. Every read keeps the
+ * view's scope and role rules.
  */
 type Pending = { awaitingPolicyNumber: { count: number }; waitingOnClient: { count: number }; counteroffersExpiring: { count: number } } | null;
 
-export async function OverviewView({ today, money, callbacks, links, pendingHref, closeOutHref, activityHref, calendarHref, callbacksHref, dialerHref, leadHref, upgrade, zone, views, viewProps, sales }: {
+type OverviewProps = {
   today: Promise<DashboardToday | null>;
   money: Promise<DashboardMoney | null> | null;
   callbacks: Promise<ReadonlyArray<DueCallback & { leadId?: string }> | null>;
@@ -65,23 +66,78 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
   viewProps: DashViewProps;
   /** Sales has no view: its page and pending cases, when the reader may open applications. */
   sales: { href: string; pending: Promise<Pending>; snapshot: Promise<SalesSnapshot<ApplicationRow> | null> } | null;
-}) {
+};
+
+/** Every read the Overview makes, started once, together; each row awaits only the ones it draws. */
+type Reads = {
+  data: Promise<DashboardToday | null>;
+  money: Promise<DashboardMoney | null>;
+  due: Promise<ReadonlyArray<DueCallback & { leadId?: string }> | null>;
+  leads: Promise<Awaited<ReturnType<typeof loadLeadsView>> | null>;
+  retention: Promise<Awaited<ReturnType<typeof loadRetentionView>> | null>;
+  book: Promise<Awaited<ReturnType<typeof loadBookView>> | null>;
+  accounting: Promise<Awaited<ReturnType<typeof loadAccountingView>> | null>;
+  compliance: Promise<Awaited<ReturnType<typeof loadComplianceView>> | null>;
+  pending: Promise<Pending>;
+  deals: Promise<SalesSnapshot<ApplicationRow> | null>;
+};
+type RowProps = OverviewProps & { reads: Reads };
+
+const fill = "lg:[&>*]:h-full lg:[&>*]:min-h-0 lg:[&>*]:overflow-hidden";
+const column = "flex flex-col gap-4 xl:absolute xl:inset-0 xl:[&>*:last-child]:min-h-0 xl:[&>*:last-child]:flex-1 xl:[&>*:last-child]:overflow-hidden";
+
+/**
+ * Speed pass 2026-11-10: the reads still start together, but the page no longer waits for the slowest of
+ * them. Each row is its own Suspense boundary holding its own height, so the calls, the money card and
+ * Today arrive as soon as their reads do; and the module loaders read only what the Overview draws
+ * (`forOverview`), not their whole views. The rows render the same elements as before, so the stagger
+ * (m-dash-ov) still applies as each row lands.
+ */
+export function OverviewView(props: OverviewProps) {
+  const { views, viewProps, sales, today, money, callbacks } = props;
   const has = (key: DashboardViewKey) => views.includes(key);
   const safe = <T,>(read: () => Promise<T>) => read().catch(() => null);
-  const [data, moneyData, due, leads, retention, book, accounting, compliance, pending, deals] = await Promise.all([
-    today,
-    money ?? Promise.resolve(null),
-    callbacks,
-    has("leads") ? safe(() => loadLeadsView(viewProps)) : null,
-    has("retention") ? safe(() => loadRetentionView(viewProps)) : null,
-    has("book") ? safe(() => loadBookView(viewProps)) : null,
-    has("accounting") ? safe(() => loadAccountingView(viewProps)) : null,
-    has("compliance") ? safe(() => loadComplianceView(viewProps)) : null,
-    sales ? sales.pending.catch(() => null) : null,
-    sales ? sales.snapshot.catch(() => null) : null,
-  ]);
+  const lite: DashViewProps = { ...viewProps, forOverview: true };
+  const reads: Reads = {
+    data: today,
+    money: money ?? Promise.resolve(null),
+    due: callbacks,
+    leads: has("leads") ? safe(() => loadLeadsView(lite)) : Promise.resolve(null),
+    retention: has("retention") ? safe(() => loadRetentionView(lite)) : Promise.resolve(null),
+    book: has("book") ? safe(() => loadBookView(lite)) : Promise.resolve(null),
+    accounting: has("accounting") ? safe(() => loadAccountingView(lite)) : Promise.resolve(null),
+    compliance: has("compliance") ? safe(() => loadComplianceView(lite)) : Promise.resolve(null),
+    pending: sales ? sales.pending.catch(() => null) : Promise.resolve(null),
+    deals: sales ? sales.snapshot.catch(() => null) : Promise.resolve(null),
+  };
+  const row = { ...props, reads };
+  const grid = (cols: string) => cn("grid min-w-0 grid-cols-1 gap-4", cols);
 
-  // ── Needs you: today's own items, then every module's, most urgent first (the strip keeps six) ──
+  // ── Round 3 screen 1, as drawn: premium · goal, then modules · lead to policy, the money card and Today beside
+  // them ending on the same line as Lead to policy; under them (a little scroll, owner 2026-11-06) the phone and
+  // the recent business of round 2. ──
+  return (
+    // m-dash-ov (§ Motion, 2026-11-09): the cards rise in one after another, as DashLayout's do.
+    <div className="m-dash-ov flex w-full min-w-0 flex-col gap-4 pb-4">
+      <Suspense fallback={<NeedsSkeleton />}><NeedsRow {...row} /></Suspense>
+      <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <Suspense fallback={<RowSkeleton className={grid("lg:h-[380px] lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]")} cards={2} />}><TopRow {...row} /></Suspense>
+          <Suspense fallback={<RowSkeleton className={grid("lg:h-[330px] lg:grid-cols-2")} cards={2} />}><MiddleRow {...row} /></Suspense>
+        </div>
+        {/* Today ends where Lead to policy ends: the column takes the rows' height and never sets it. */}
+        <div className="relative min-w-0">
+          <Suspense fallback={<RowSkeleton className={column} cards={2} />}><RightColumn {...row} /></Suspense>
+        </div>
+      </div>
+      <Suspense fallback={<RowSkeleton className={grid("lg:h-[320px] lg:grid-cols-2")} cards={2} />}><BottomRow {...row} /></Suspense>
+    </div>
+  );
+}
+
+/** Needs you: today's own items, then every module's, most urgent first (the strip keeps six). */
+async function NeedsRow({ reads, links, upgrade, pendingHref, closeOutHref }: RowProps) {
+  const [data, moneyData, leads, retention, book, accounting, compliance] = await Promise.all([reads.data, reads.money, reads.leads, reads.retention, reads.book, reads.accounting, reads.compliance]);
   const needs: DashNeed[] = attentionItems(data, links).map((item) => ({ key: item.key, count: item.count, label: sentence(item.label), detail: item.detail, tone: item.tone, href: item.href }));
   if (upgrade && moneyData?.exposurePolicies) {
     needs.push({ key: "upgrade", count: moneyData.exposurePolicies, label: moneyData.exposurePolicies === 1 ? "Policy you could protect" : "Policies you could protect", detail: "Inside the chargeback window", tone: "info", href: upgrade.featureHref });
@@ -89,12 +145,15 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
   for (const item of [...(leads?.needs ?? []), ...(retention ? retentionNeeds(retention) : []), ...(book?.needs ?? []), ...(accounting ? accountingNeeds(accounting) : []), ...(compliance ? complianceNeeds(compliance) : [])]) {
     if (!needs.some((need) => need.key === item.key)) needs.push(item);
   }
+  return <DashNeedsLive items={needs} pendingHref={pendingHref} closeOutHref={closeOutHref} />;
+}
 
-  // ── Big: policies issued (the Book view's own chart); without the book, the last fourteen days of calls ──
+/** Big: premium submitted and issued (else the Book view's chart, else the calls) beside the month's goal. */
+async function TopRow({ reads, zone, viewProps, activityHref, sales }: RowProps) {
+  const [data, book, deals, retention] = await Promise.all([reads.data, reads.book, reads.deals, reads.retention]);
   const series = data?.series ?? [];
   const bookChart = book ? bookIssuedChart(book) : null;
-  const nowMs = viewProps.now;
-  const todayKey = dayKey(nowMs, zone);
+  const todayKey = dayKey(viewProps.now, zone);
   const month = monthOf(todayKey);
   const previous = monthOf(todayKey, -1);
   const rows = book?.book?.rows ?? null;
@@ -104,9 +163,87 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
   const big = premium ?? bookChart ?? callsChart(data, activityHref, series);
   // The month's goal beside it: issued against last month's issued (no goal is stored), placement, persistency.
   const goal = rows && !viewProps.noMoney ? goalCard({ rows, apps: deals?.applications ?? null, month, previous, zone, policiesHref, applicationsHref: sales?.href ?? null, persistency: retention?.persistency13 ?? null, persistencyHref: retention?.links.persistency ? `${retention.links.persistency}?view=persistency` : null }) : null;
-  // Lead to policy: leads in this month, called, quoted, apps, issued — the agency dashboard's own card.
-  const funnel = funnelCard({ leads: leads?.chart?.totalIn ?? null, called: leads?.chart?.totalCalled ?? null, quotes: deals?.quotes ?? null, apps: deals?.applications ?? null, month, zone, href: leads?.funnel?.href ?? leads?.chart?.href ?? sales?.href ?? null });
+  const top = [big, goal].filter(Boolean);
+  return <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[380px]", fill, top.length === 2 && "lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]")}>{big}{goal}</div>;
+}
 
+/** Your modules — exactly the modules of the plan, each with its one figure, opening its view — beside lead to policy. */
+async function MiddleRow({ reads, views, viewProps, zone, sales }: RowProps) {
+  const has = (key: DashboardViewKey) => views.includes(key);
+  const [leads, retention, book, accounting, compliance, pending, deals] = await Promise.all([reads.leads, reads.retention, reads.book, reads.accounting, reads.compliance, reads.pending, reads.deals]);
+  const pendingCount = pending ? pending.awaitingPolicyNumber.count + pending.waitingOnClient.count + pending.counteroffersExpiring.count : null;
+  const noMoney = viewProps.noMoney;
+  const modules: Array<{ key: string; label: string; figure: string; line: string; href: string; icon: ReactNode }> = [];
+  const add = (key: string, label: string, icon: ReactNode, href: string, headline: { figure: string; line: string } | null) => modules.push({ key, label, icon, href, figure: headline?.figure ?? "Open", line: headline?.line ?? "" });
+  if (has("leads")) add("leads", "Leads", <Users className="size-4" aria-hidden="true" />, "/app/dashboard?view=leads", leads ? leadsHeadline(leads) : null);
+  if (sales) add("sales", "Sales", <FilePenLine className="size-4" aria-hidden="true" />, sales.href, pendingCount === null ? null : { figure: pendingCount.toLocaleString("en-US"), line: pendingCount === 1 ? "case pending" : "cases pending" });
+  if (has("retention")) add("retention", "Retention", <LifeBuoy className="size-4" aria-hidden="true" />, "/app/dashboard?view=retention", retention ? retentionHeadline(retention, noMoney) : null);
+  if (has("book")) add("book", "Book of business", <BookOpen className="size-4" aria-hidden="true" />, "/app/dashboard?view=book", book ? bookHeadline(book) : null);
+  if (has("accounting")) add("accounting", "Accounting", <Calculator className="size-4" aria-hidden="true" />, "/app/dashboard?view=accounting", accounting ? accountingHeadline(accounting) : null);
+  if (has("compliance")) add("compliance", "Compliance", <ShieldCheck className="size-4" aria-hidden="true" />, "/app/dashboard?view=compliance", compliance ? complianceHeadline(compliance) : null);
+  const left = modules.length ? <DashModules modules={modules} /> : null;
+  // Lead to policy: leads in this month, called, quoted, apps, issued — the agency dashboard's own card.
+  const month = monthOf(dayKey(viewProps.now, zone));
+  const funnel = funnelCard({ leads: leads?.chart?.totalIn ?? null, called: leads?.chart?.totalCalled ?? null, quotes: deals?.quotes ?? null, apps: deals?.applications ?? null, month, zone, href: leads?.funnel?.href ?? leads?.chart?.href ?? sales?.href ?? null });
+  const middle = [left, funnel].filter(Boolean);
+  if (!middle.length) return null;
+  return <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[330px]", fill, middle.length === 2 && "lg:grid-cols-2")}>{left}{funnel}</div>;
+}
+
+/** The money card, then today's callbacks and appointments. */
+async function RightColumn({ reads, viewProps, zone, dialerHref, calendarHref, callbacksHref, leadHref }: RowProps) {
+  const [data, moneyData, due, book, accounting] = await Promise.all([reads.data, reads.money, reads.due, reads.book, reads.accounting]);
+  // Round 3 draws the month's commission here (owner 2026-11-06: good news on the dashboard): the carriers' money in
+  // this month from the P&L statement, with profit and the month's policies under it. Without the books, the role's
+  // own money figures, then the dialer queue.
+  const figures = moneyData?.figures ?? [];
+  const rows = book?.book?.rows ?? null;
+  const policiesHref = book?.links.policies ?? null;
+  const month = monthOf(dayKey(viewProps.now, zone));
+  const statement = !viewProps.noMoney ? accounting?.statement ?? null : null;
+  const monthPolicies = rows ? rows.filter((row) => row.issueDate?.slice(0, 7) === month).length : null;
+  const commissionHero = statement && statement.inCents > 0 ? (
+    <DashHero
+      kicker={`COMMISSION · ${accounting!.month.label.split(" ")[0].toUpperCase()}`}
+      value={usd(statement.inCents).replace(/\.\d+$/, "")}
+      line={`in from carriers · ${accounting!.month.label}`}
+      facts={[
+        ...(statement.netProfitCents > 0 ? [{ label: "Profit", value: usd(statement.netProfitCents).replace(/\.\d+$/, "") }] : []),
+        ...(monthPolicies ? [{ label: "Policies issued", value: monthPolicies.toLocaleString("en-US") }] : []),
+      ]}
+      href={accounting!.hrefs.pnl ?? policiesHref ?? "/app/dashboard?view=accounting"}
+    />
+  ) : null;
+  const hero = commissionHero ?? (figures.length
+    ? <DashHero kicker={figures[0].label.toUpperCase()} value={figures[0].value} line={figures[0].caption} facts={figures.slice(1, 3).map((figure) => ({ label: figure.label, value: figure.value }))} href={figures[0].href} />
+    : dialerHref && data?.queueReady !== null && data?.queueReady !== undefined
+      ? <DashHero kicker="READY TO DIAL" value={data.queueReady.toLocaleString("en-US")} line="leads in your queue" href={dialerHref} />
+      : null);
+
+  const { items, total } = scheduleItems(data?.appointmentsTodayList ?? null, due, { appointments: calendarHref, callbacks: callbacksHref }, 12);
+  const listItems: DashItem[] = items.map((item) => {
+    const leadId = item.kind === "callback" ? due?.find((callback) => `c-${callback.id}` === item.id)?.leadId : undefined;
+    return {
+      key: item.id,
+      mark: item.kind === "appointment" ? "◷" : "☏",
+      tone: item.late ? "danger" : item.kind === "appointment" ? "info" : "neutral",
+      title: item.name,
+      detail: item.kind === "appointment" ? `Appointment${item.who ? ` · ${item.who}` : ""}` : item.late ? "Callback · overdue" : "Callback",
+      value: item.late ? "Now" : clock(item.atUtc, zone),
+      href: (leadId ? leadHref(leadId) : null) ?? item.href,
+    };
+  });
+  const list = callbacksHref || calendarHref
+    ? <DashList title="Today" period={total ? `${total} ${total === 1 ? "thing" : "things"}` : undefined} link={{ label: calendarHref ? "Calendar" : "Callbacks", href: (calendarHref ?? callbacksHref) as string }} items={listItems} empty="Nothing booked for today." />
+    : null;
+  return <div className={column}>{hero}{list}</div>;
+}
+
+/** "On the phone today" beside "My recent business"; without sales, the week's calls. */
+async function BottomRow({ reads, viewProps, zone, activityHref, calendarHref, dialerHref, sales }: RowProps) {
+  const [data, deals] = await Promise.all([reads.data, reads.deals]);
+  const series = data?.series ?? [];
+  const nowMs = viewProps.now;
   // ── Side: "On the phone today" — dials against the fortnight's best day, today's steps, three facts ──
   const rate = data?.contactRatePct ?? null;
   const last = series[series.length - 1];
@@ -145,19 +282,6 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
     );
   })() : null;
 
-  // ── Left: Your modules — exactly the modules of the plan, each with its one figure, opening its view ──
-  const pendingCount = pending ? pending.awaitingPolicyNumber.count + pending.waitingOnClient.count + pending.counteroffersExpiring.count : null;
-  const noMoney = viewProps.noMoney;
-  const modules: Array<{ key: string; label: string; figure: string; line: string; href: string; icon: ReactNode }> = [];
-  const add = (key: string, label: string, icon: ReactNode, href: string, headline: { figure: string; line: string } | null) => modules.push({ key, label, icon, href, figure: headline?.figure ?? "Open", line: headline?.line ?? "" });
-  if (has("leads")) add("leads", "Leads", <Users className="size-4" aria-hidden="true" />, "/app/dashboard?view=leads", leads ? leadsHeadline(leads) : null);
-  if (sales) add("sales", "Sales", <FilePenLine className="size-4" aria-hidden="true" />, sales.href, pendingCount === null ? null : { figure: pendingCount.toLocaleString("en-US"), line: pendingCount === 1 ? "case pending" : "cases pending" });
-  if (has("retention")) add("retention", "Retention", <LifeBuoy className="size-4" aria-hidden="true" />, "/app/dashboard?view=retention", retention ? retentionHeadline(retention, noMoney) : null);
-  if (has("book")) add("book", "Book of business", <BookOpen className="size-4" aria-hidden="true" />, "/app/dashboard?view=book", book ? bookHeadline(book) : null);
-  if (has("accounting")) add("accounting", "Accounting", <Calculator className="size-4" aria-hidden="true" />, "/app/dashboard?view=accounting", accounting ? accountingHeadline(accounting) : null);
-  if (has("compliance")) add("compliance", "Compliance", <ShieldCheck className="size-4" aria-hidden="true" />, "/app/dashboard?view=compliance", compliance ? complianceHeadline(compliance) : null);
-  const left = modules.length ? <DashModules modules={modules} /> : null;
-
   // ── Right: "My recent business" — the cases worked in the last seven days; without sales, the week's calls ──
   const right = sales && deals ? (
     <DashRecent
@@ -175,71 +299,40 @@ export async function OverviewView({ today, money, callbacks, links, pendingHref
       empty="No case worked in the last seven days."
     />
   ) : weekCard(data, activityHref, series);
-
-  // ── The money card, then today ──
-  // Round 3 draws the month's commission here (owner 2026-11-06: good news on the dashboard): the carriers' money in
-  // this month from the P&L statement, with profit and the month's policies under it. Without the books, the role's
-  // own money figures, then the dialer queue.
-  const figures = moneyData?.figures ?? [];
-  const statement = !viewProps.noMoney ? accounting?.statement ?? null : null;
-  const monthPolicies = rows ? rows.filter((row) => row.issueDate?.slice(0, 7) === month).length : null;
-  const commissionHero = statement && statement.inCents > 0 ? (
-    <DashHero
-      kicker={`COMMISSION · ${accounting!.month.label.split(" ")[0].toUpperCase()}`}
-      value={usd(statement.inCents).replace(/\.\d+$/, "")}
-      line={`in from carriers · ${accounting!.month.label}`}
-      facts={[
-        ...(statement.netProfitCents > 0 ? [{ label: "Profit", value: usd(statement.netProfitCents).replace(/\.\d+$/, "") }] : []),
-        ...(monthPolicies ? [{ label: "Policies issued", value: monthPolicies.toLocaleString("en-US") }] : []),
-      ]}
-      href={accounting!.hrefs.pnl ?? policiesHref ?? "/app/dashboard?view=accounting"}
-    />
-  ) : null;
-  const hero = commissionHero ?? (figures.length
-    ? <DashHero kicker={figures[0].label.toUpperCase()} value={figures[0].value} line={figures[0].caption} facts={figures.slice(1, 3).map((figure) => ({ label: figure.label, value: figure.value }))} href={figures[0].href} />
-    : dialerHref && data?.queueReady !== null && data?.queueReady !== undefined
-      ? <DashHero kicker="READY TO DIAL" value={data.queueReady.toLocaleString("en-US")} line="leads in your queue" href={dialerHref} />
-      : null);
-
-  const { items, total } = scheduleItems(data?.appointmentsTodayList ?? null, due, { appointments: calendarHref, callbacks: callbacksHref }, 12);
-  const listItems: DashItem[] = items.map((item) => {
-    const leadId = item.kind === "callback" ? due?.find((callback) => `c-${callback.id}` === item.id)?.leadId : undefined;
-    return {
-      key: item.id,
-      mark: item.kind === "appointment" ? "◷" : "☏",
-      tone: item.late ? "danger" : item.kind === "appointment" ? "info" : "neutral",
-      title: item.name,
-      detail: item.kind === "appointment" ? `Appointment${item.who ? ` · ${item.who}` : ""}` : item.late ? "Callback · overdue" : "Callback",
-      value: item.late ? "Now" : clock(item.atUtc, zone),
-      href: (leadId ? leadHref(leadId) : null) ?? item.href,
-    };
-  });
-  const list = callbacksHref || calendarHref
-    ? <DashList title="Today" period={total ? `${total} ${total === 1 ? "thing" : "things"}` : undefined} link={{ label: calendarHref ? "Calendar" : "Callbacks", href: (calendarHref ?? callbacksHref) as string }} items={listItems} empty="Nothing booked for today." />
-    : null;
-
-  // ── Round 3 screen 1, as drawn: premium · goal, then modules · lead to policy, the money card and Today beside
-  // them ending on the same line as Lead to policy; under them (a little scroll, owner 2026-11-06) the phone and
-  // the recent business of round 2. ──
-  const fill = "lg:[&>*]:h-full lg:[&>*]:min-h-0 lg:[&>*]:overflow-hidden";
-  const top = [big, goal].filter(Boolean);
-  const middle = [left, funnel].filter(Boolean);
   const bottom = [side, right].filter(Boolean);
+  if (!bottom.length) return null;
+  return <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[320px]", fill, bottom.length === 2 && "lg:grid-cols-2")}>{side}{right}</div>;
+}
+
+/** A row's place while its reads arrive: its own height and columns, so nothing moves when the cards land. */
+function RowSkeleton({ className, cards }: { className: string; cards: number }) {
   return (
-    // m-dash-ov (§ Motion, 2026-11-09): the cards rise in one after another, as DashLayout's do.
-    <div className="m-dash-ov flex w-full min-w-0 flex-col gap-4 pb-4">
-      <DashNeedsLive items={needs} pendingHref={pendingHref} closeOutHref={closeOutHref} />
-      <div className="grid min-w-0 grid-cols-1 items-stretch gap-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_340px]">
-        <div className="flex min-w-0 flex-col gap-4">
-          {top.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[380px]", fill, top.length === 2 && "lg:grid-cols-[minmax(0,1.75fr)_minmax(0,1fr)]")}>{big}{goal}</div>}
-          {middle.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[330px]", fill, middle.length === 2 && "lg:grid-cols-2")}>{left}{funnel}</div>}
+    <div aria-hidden="true" className={cn(className, fill)}>
+      {Array.from({ length: cards }).map((_, index) => (
+        <div key={index} className="flex min-h-40 flex-col gap-3 rounded-lg border border-border bg-card p-4">
+          <div className="h-3 w-28 m-skel rounded-full" />
+          <div className="h-7 w-20 m-skel rounded-md" />
+          <div className="mt-auto h-24 w-full m-skel rounded-md" />
         </div>
-        {/* Today ends where Lead to policy ends: the column takes the rows' height and never sets it. */}
-        <div className="relative min-w-0">
-          <div className="flex flex-col gap-4 xl:absolute xl:inset-0 xl:[&>*:last-child]:min-h-0 xl:[&>*:last-child]:flex-1 xl:[&>*:last-child]:overflow-hidden">{hero}{list}</div>
-        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The needs strip's place, in the standard figure strip's shape. */
+function NeedsSkeleton() {
+  return (
+    <div role="status" aria-live="polite" className="overflow-hidden rounded-lg border border-border">
+      <span className="sr-only">Loading</span>
+      <div aria-hidden="true" className="grid grid-cols-2 gap-px bg-border sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, index) => (
+          <div key={index} className="space-y-2.5 bg-card px-4 py-3.5">
+            <div className="h-3 w-20 m-skel rounded-full" />
+            <div className="h-6 w-14 m-skel rounded-md" />
+            <div className="h-3 w-32 max-w-full m-skel rounded-full" />
+          </div>
+        ))}
       </div>
-      {bottom.length > 0 && <div className={cn("grid min-w-0 grid-cols-1 gap-4 lg:h-[320px]", fill, bottom.length === 2 && "lg:grid-cols-2")}>{side}{right}</div>}
     </div>
   );
 }

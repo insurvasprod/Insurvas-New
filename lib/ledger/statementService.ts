@@ -226,6 +226,21 @@ export async function listStatements(tenantId: string): Promise<{ available: boo
   return { available: true, statements: statements.rows.map((row) => summarise(row, byId.get(row.id), carriers, names)) };
 }
 
+/**
+ * The net of the lines still waiting for a person (proposed or without a match), per statement, in cents (round 7,
+ * Statements' "net waiting"). Voided statements' lines are left to the caller to drop. Empty before the migration.
+ */
+export async function listWaitingCents(tenantId: string): Promise<Record<string, number>> {
+  const { rows, error } = await readAll<{ id: string; statement_id: string; amount_cents: number | string | null }>(() => db().from("tenant_commission_statement_lines").select("id, statement_id, amount_cents").eq("tenant_id", tenantId).in("review_status", ["proposed", "unmatched"]).order("statement_id").order("line_number"));
+  if (error) {
+    if (isPending(error)) return {};
+    throw new Error(`Could not load the waiting lines: ${error.message}`);
+  }
+  const out: Record<string, number> = {};
+  for (const row of rows) out[row.statement_id] = (out[row.statement_id] ?? 0) + Number(row.amount_cents ?? 0);
+  return out;
+}
+
 type LineRow = {
   id: string; line_number: number; raw: Record<string, string>; policy_number: string | null; insured_name: string | null; amount_cents: number | string | null;
   kind: StatementLineKind | null; line_date: string | null; parse_error: string | null; review_status: StatementLineReview; reviewed_by: string | null; reviewed_at: string | null;

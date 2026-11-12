@@ -160,23 +160,21 @@ export function StatementEntriesTable({ entries, canOpenStatements }: { entries:
               const source = `${entry.carrierName} · ${statementPeriod(entry.periodStart, entry.periodEnd)}`;
               return (
                 <tr key={entry.id} className="m-row">
-                  <td className="tabular-nums">{statementDay(entry.postedOn)}</td>
-                  <td className="font-semibold text-foreground">{entry.policyNumber}</td>
-                  <td className="max-w-[200px] truncate" title={entry.insuredName}>{entry.insuredName}</td>
-                  <td><StatusChip tone={KIND_TONE[entry.kind]} dot={false}>{STATEMENT_KIND_LABELS[entry.kind]}</StatusChip></td>
-                  <td className={`text-right font-semibold tabular-nums ${entry.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{statementMoney(entry.amountCents)}</td>
-                  <td className="max-w-[240px] truncate" title={source}>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{statementDay(entry.postedOn)}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{entry.policyNumber}</td>
+                  <td className="whitespace-nowrap">{entry.insuredName}</td>
+                  <td className="whitespace-nowrap"><StatusChip tone={KIND_TONE[entry.kind]} dot={false}>{STATEMENT_KIND_LABELS[entry.kind]}</StatusChip></td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{statementMoney(entry.amountCents)}</td>
+                  <td className="whitespace-nowrap">
                     {canOpenStatements ? (
-                      <Link href={`/app/statements/${entry.statementId}`} className="font-semibold text-foreground underline-offset-2 hover:underline">{source}</Link>
-                    ) : (
-                      <span className="font-semibold text-foreground">{source}</span>
-                    )}
+                      <Link href={`/app/statements/${entry.statementId}`} className="text-foreground underline-offset-2 hover:underline">{source}</Link>
+                    ) : source}
                   </td>
-                  <td className="max-w-[200px] truncate text-muted-foreground" title={entry.fileName}>{entry.fileName}</td>
-                  <td className="text-right tabular-nums text-muted-foreground">{entry.lineNumber}</td>
-                  <td className="max-w-[150px] truncate" title={entry.acceptedByName ?? "A former member"}>{entry.acceptedByName ?? "A former member"}</td>
-                  <td className="tabular-nums">{statementDay(entry.acceptedAt)}</td>
-                  <td className="text-muted-foreground">{entry.method === "manual" ? "matched by hand" : "exact match"}</td>
+                  <td className="whitespace-nowrap">{entry.fileName}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{entry.lineNumber}</td>
+                  <td className="whitespace-nowrap">{entry.acceptedByName ?? "A former member"}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{statementDay(entry.acceptedAt)}</td>
+                  <td className="whitespace-nowrap">{entry.method === "manual" ? "Matched by hand" : "Exact match"}</td>
                 </tr>
               );
             })}
@@ -240,14 +238,14 @@ export function ReconciliationTable({ rows, policies }: { rows: ReconciliationRo
               const periods = row.periods.map((period) => statementPeriod(period.start, period.end)).join(", ");
               return (
                 <tr key={row.policyId} className="m-row">
-                  <td className="font-semibold text-foreground">{policy?.policyNumber ?? "Policy"}</td>
-                  <td className="max-w-[200px] truncate" title={policy?.insuredName}>{policy?.insuredName ?? "—"}</td>
-                  <td className="max-w-[180px] truncate" title={policy?.carrierName}>{policy?.carrierName ?? "—"}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{policy?.policyNumber ?? "Policy"}</td>
+                  <td className="whitespace-nowrap">{policy?.insuredName ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap">{policy?.carrierName ?? <span className="text-muted-foreground">—</span>}</td>
                   <td className="max-w-[260px] truncate text-muted-foreground" title={periods}>{periods}</td>
-                  <td className="text-right tabular-nums">{row.status === "unpriced" ? "—" : statementMoney(row.expectedCents)}</td>
-                  <td className="text-right tabular-nums">{statementMoney(row.receivedCents)}</td>
-                  <td className={`text-right font-semibold tabular-nums ${row.status === "short" ? "text-[var(--error-ink)]" : "text-foreground"}`}>{row.status === "unpriced" ? "—" : `${row.differenceCents > 0 ? "+" : ""}${statementMoney(row.differenceCents)}`}</td>
-                  <td><StatusChip tone={RECONCILE[row.status].tone}>{RECONCILE[row.status].label}</StatusChip></td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{row.status === "unpriced" ? <span className="text-muted-foreground">—</span> : statementMoney(row.expectedCents)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{statementMoney(row.receivedCents)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{row.status === "unpriced" ? <span className="text-muted-foreground">—</span> : `${row.differenceCents > 0 ? "+" : ""}${statementMoney(row.differenceCents)}`}</td>
+                  <td className="whitespace-nowrap"><StatusChip tone={RECONCILE[row.status].tone}>{RECONCILE[row.status].label}</StatusChip></td>
                 </tr>
               );
             })}
@@ -309,15 +307,15 @@ export function ExpectedEntriesTable({ entries, summary }: { entries: LedgerEntr
           <tbody className="m-seq">
             {rows.map((entry) => (
               <tr key={entry.id} className="m-row">
-                <td className="tabular-nums">{day(entry.postedOn)}</td>
-                <td className="font-semibold text-foreground">{entry.policyNumber}</td>
-                <td className="max-w-[200px] truncate" title={entry.insuredName}>{entry.insuredName}</td>
-                <td className="max-w-[180px] truncate" title={entry.carrierName}>{entry.carrierName}</td>
-                <td className="max-w-[200px] truncate" title={entry.productName}>{entry.productName}</td>
-                <td><StatusChip tone={KIND_TONE[entry.kind]} dot={false}>{EXPECTED_KIND[entry.kind]}</StatusChip></td>
-                <td className="text-right tabular-nums">{entry.policyYear}</td>
-                <td className="text-right tabular-nums">{entry.rateBp == null ? "—" : `${(entry.rateBp / 100).toFixed(2)}%`}</td>
-                <td className={`text-right font-semibold tabular-nums ${entry.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{money(entry.amountCents)}</td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{day(entry.postedOn)}</td>
+                <td className="whitespace-nowrap font-medium text-foreground">{entry.policyNumber}</td>
+                <td className="whitespace-nowrap">{entry.insuredName}</td>
+                <td className="whitespace-nowrap">{entry.carrierName}</td>
+                <td className="whitespace-nowrap">{entry.productName}</td>
+                <td className="whitespace-nowrap"><StatusChip tone={KIND_TONE[entry.kind]} dot={false}>{EXPECTED_KIND[entry.kind]}</StatusChip></td>
+                <td className="whitespace-nowrap text-right tabular-nums">{entry.policyYear}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{entry.rateBp == null ? <span className="text-muted-foreground">—</span> : `${(entry.rateBp / 100).toFixed(2)}%`}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{money(entry.amountCents)}</td>
               </tr>
             ))}
           </tbody>

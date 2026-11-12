@@ -52,7 +52,7 @@ export function GiveToDialog({ open, onOpenChange, count, people, currentHolder,
             const on = chosen === person.id;
             return (
               <button key={person.id} type="button" role="radio" aria-checked={on} onClick={() => setChosen(person.id)} className={cn("flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors", on ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]")}>
-                <span aria-hidden="true" className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--surface-alt)] text-xs font-semibold text-[var(--body)]">{person.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("")}</span>
+                <span aria-hidden="true" className="inline-flex size-8 shrink-0 items-center justify-center rounded-full bg-[var(--highlight-soft)] text-xs font-semibold text-[var(--highlight-ink)]">{person.name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("")}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium text-foreground">{person.name}{person.id === viewerId && <span className="font-normal text-muted-foreground"> (you)</span>}</span>
                   <span className="block text-xs text-muted-foreground">{ROLE_WORD[person.role] ?? person.role}</span>

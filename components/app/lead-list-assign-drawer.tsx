@@ -275,7 +275,7 @@ export function LeadListAssignDrawer({ campaignId, listName, assignable, default
         <Button type="button" variant={outline ? "outline" : "default"} onPointerEnter={() => void prefetchListPreview(campaignId)} onFocus={() => void prefetchListPreview(campaignId)}>{label ?? `Assign the ${count(assignable)}`}</Button>
       </DialogPrimitive.Trigger>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[rgba(10,12,16,0.55)] transition-opacity duration-200 starting:opacity-0" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[var(--backdrop)] transition-opacity duration-200 starting:opacity-0" />
         <DialogPrimitive.Content
           className={cn(
             "fixed inset-y-0 right-0 z-50 flex h-full w-full flex-col overflow-hidden border-l border-[var(--border-strong)] bg-[var(--surface)] shadow-[-24px_0_64px_rgba(0,0,0,0.24)] outline-none",

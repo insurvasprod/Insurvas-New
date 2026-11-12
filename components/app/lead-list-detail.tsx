@@ -66,7 +66,7 @@ function fullDay(iso: string, timeZone: string | null) {
 function HealthRow({ label, value, of, tone }: { label: string; value: number | null; of: number; tone: MeterTone }) {
   const ink: Record<MeterTone, string> = {
     neutral: "text-[var(--body)]", good: "text-[var(--success-ink)]", info: "text-[var(--info-ink)]",
-    warning: "text-[var(--warning-ink)]", danger: "text-[var(--error-ink)]", primary: "text-[var(--accent-ink)]",
+    warning: "text-[var(--warning-ink)]", danger: "text-[var(--error-ink)]", primary: "text-[var(--accent-ink)]", highlight: "text-[var(--highlight-ink)]",
   };
   return (
     <div className="flex items-center gap-3.5 border-t border-border py-[11px]">

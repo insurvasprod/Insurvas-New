@@ -1,7 +1,5 @@
-import Link from "next/link";
-
-import { cn } from "@/lib/utils";
 import { useSolo } from "@/components/app/solo-context";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
 /**
  * Team's two views (Inbound A, 2026-10-27; was the Queue/Floor switch): Now (who needs you, the
@@ -12,25 +10,15 @@ export function TeamViews({ current }: { current: "now" | "all" }) {
   // Solo mode: there is no Now (the team) to switch to, so no switch at all.
   const solo = useSolo();
   if (solo) return null;
-  const views = [
-    { key: "now", label: "Now", href: "/app/inbound/team" },
-    { key: "all", label: "All callers", href: "/app/inbound/team?tab=all" },
-  ] as const;
+  // The sub-page bar (owner 2026-11-09): link tabs passed as PageHeader `tabs`, on the title's line.
   return (
-    <nav aria-label="Team views" className="inline-flex h-9 w-fit items-center gap-0.5 rounded-lg border border-border p-0.5">
-      {views.map((view) => (
-        <Link
-          key={view.key}
-          href={view.href}
-          aria-current={view.key === current ? "page" : undefined}
-          className={cn(
-            "inline-flex h-8 items-center rounded-md px-3.5 text-sm font-semibold no-underline transition-colors",
-            view.key === current ? "bg-[var(--primary)] text-[var(--on-primary)]" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {view.label}
-        </Link>
-      ))}
-    </nav>
+    <ViewTabs
+      label="Team views"
+      value={current}
+      tabs={[
+        { key: "now", label: "Now", href: "/app/inbound/team" },
+        { key: "all", label: "All callers", href: "/app/inbound/team?tab=all" },
+      ]}
+    />
   );
 }

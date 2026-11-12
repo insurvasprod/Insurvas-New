@@ -12,8 +12,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Pager, paginate } from "@/components/ui/pager";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { ageLabel, ageTone } from "@/lib/agency/routingCore";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 type PoolLead = { workItemId: string; leadId: string; name: string; state: string | null; productLine: string | null; queuedAt: string; ageMinutes: number };
+/** The pool's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws the last answer at once. */
+const POOL_KEY = "/api/app/agency/pool";
 
 /**
  * AG-0.10 · the agency's unassigned pool, oldest first, every lead with its age — an unassigned lead is a lead
@@ -30,29 +33,34 @@ export function UnassignedPool({ onCount, fill = false, bare = false, refreshKey
   /** Bumped by the page's one Refresh to reload the pool. */
   refreshKey?: number;
 } = {}) {
-  const [rows, setRows] = useState<PoolLead[] | null>(null);
+  const [rows, setRows] = useState<PoolLead[] | null>(() => seed<{ pool?: PoolLead[] }>(POOL_KEY, true)?.data?.pool ?? null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  const load = useCallback(async () => {
+  // `fresh` on Refresh and Try again, so the answer is never a kept one.
+  const load = useCallback(async (fresh = false) => {
     setRefreshing(true);
     setError("");
     try {
-      const res = await fetch("/api/app/agency/pool", { cache: "no-store" });
-      const body = await res.json().catch(() => null);
-      if (!res.ok) setError(body?.error ?? "Could not load the unassigned pool");
-      else { const pool: PoolLead[] = body.pool ?? []; setRows(pool); onCount?.(pool.length); }
-    } catch {
-      setError("Could not load the unassigned pool. Check your connection and try again.");
+      const body = await (fresh ? loadResource<{ pool?: PoolLead[] }>(POOL_KEY, { persist: true }) : readResource<{ pool?: PoolLead[] }>(POOL_KEY, { persist: true }));
+      const pool: PoolLead[] = body?.pool ?? []; setRows(pool); onCount?.(pool.length);
+    } catch (error) {
+      // A server refusal says why; a request that never arrived is the connection.
+      setError(error instanceof Error && "status" in error ? error.message : "Could not load the unassigned pool. Check your connection and try again.");
     } finally {
       setRefreshing(false);
     }
   }, [onCount]);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount, and again on the page's Refresh
-  useEffect(() => { void load(); }, [load, refreshKey]);
+  useEffect(() => {
+    // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+    const kept = peek<{ pool?: PoolLead[] }>(POOL_KEY, true)?.data?.pool;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+    if (kept) setRows((current) => current ?? kept);
+    void load(refreshKey > 0);
+  }, [load, refreshKey]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -64,7 +72,7 @@ export function UnassignedPool({ onCount, fill = false, bare = false, refreshKey
   const searchBox = <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setPage(1); }} placeholder="Search name or state" label="Search the pool" />;
   const pager = rows && filtered.length ? <Pager page={safePage} total={filtered.length} noun="leads" pageSize={pageSize} onPage={setPage} /> : undefined;
   const body = error ? (
-    <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
+    <ErrorState detail={error} action={<Button type="button" variant="outline" onClick={() => void load(true)}>Try again</Button>} />
   ) : rows === null ? (
     <SectionLoading rows={4} columns={4} label="Loading the pool" />
   ) : rows.length === 0 ? (
@@ -109,7 +117,7 @@ export function UnassignedPool({ onCount, fill = false, bare = false, refreshKey
       title="Unassigned pool"
       className={fill ? "flex min-w-0 flex-col lg:min-h-0 lg:flex-1 [&>.overflow-x-auto]:flex-1 lg:[&>.overflow-x-auto]:min-h-0 lg:[&>.overflow-x-auto]:overflow-y-auto" : undefined}
       toolbar={
-        <DataToolbar actions={<RefreshButton onClick={() => void load()} refreshing={refreshing} />}>
+        <DataToolbar actions={<RefreshButton onClick={() => void load(true)} refreshing={refreshing} />}>
           {searchBox}
         </DataToolbar>
       }

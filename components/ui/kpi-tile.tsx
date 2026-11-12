@@ -52,7 +52,7 @@ export function KpiTile({
   const up = change ? change.value > 0 : false;
   const flat = change ? change.value === 0 : false;
   const good = change && !flat && (change.good === "neither" ? null : change.good === (up ? "up" : "down"));
-  const tone = good === null || flat || !change ? "text-[var(--body)]" : good ? "text-[var(--success-ink)]" : "text-[var(--error-ink)]";
+  const tone = good === null || flat || !change ? "text-[var(--body)]" : good ? "text-[var(--highlight-ink)]" : "text-[var(--error-ink)]";
   return (
     <div className={cn("m-glass flex min-w-0 flex-col rounded-lg border border-border px-4 py-3", className)}>
       <div className="flex items-center justify-between gap-3">

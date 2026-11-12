@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { deadlineSetup } from "@/lib/compliance/complaintStore";
 import { listHolds, listRules, listRuns } from "@/lib/compliance/retentionStore";
+import { listReconciliations } from "@/lib/compliance/recordIndex";
 import {
   copyPlatformRule,
   deleteTenantRule,
@@ -38,7 +39,7 @@ const fail = (error: unknown) => {
 
 async function bundle(tenantId: string) {
   const db = getSupabaseServiceClient();
-  const [settings, deadlines, rules, holds, runs, changes, team] = await Promise.all([
+  const [settings, deadlines, rules, holds, runs, changes, team, indexChecks] = await Promise.all([
     loadComplianceSettings(tenantId),
     deadlineSetup(tenantId),
     listRules(tenantId).catch(() => []),
@@ -46,10 +47,12 @@ async function bundle(tenantId: string) {
     listRuns(tenantId, 10).catch(() => []),
     recentChanges(tenantId),
     db.from("tenant_users").select("user_id, role, users!inner(name, email)").eq("tenant_id", tenantId).not("accepted_at", "is", null),
+    // LA-6.1 (round 7): the nightly index checks, newest first; a non-zero missing count is a bug.
+    listReconciliations(tenantId, 14).catch(() => []),
   ]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const people = ((team.data ?? []) as any[]).map((m) => ({ id: m.user_id as string, role: m.role as string, name: (m.users?.name as string | null) ?? (m.users?.email as string) ?? "Unnamed" }));
-  return { settings, caps: PLATFORM_CAPS, deadlines, rules, holds, runs, changes, team: people };
+  return { settings, caps: PLATFORM_CAPS, deadlines, rules, holds, runs, changes, team: people, indexChecks };
 }
 
 export async function GET() {

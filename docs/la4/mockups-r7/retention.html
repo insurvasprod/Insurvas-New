@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retention R7</title>
+<style>
+/* Foundation v3 dark tokens (docs/design/foundation-v3/mockup.html). Text sizes: 12 / 14 / 16 only; buttons 14. */
+:root{--canvas:#101715;--surface:#18211E;--raised:#202B26;--hi:#26332E;--text:#F2F6F4;--muted:#9FB0A7;--faint:#6F8079;--border:#2A3631;--input:#55665F;--primary:#35D6AA;--pfg:#0B2119;--psoft:#173A30;--pink:#6BE3C1;--good:#6BE3C1;--goodbg:#173A30;--info:#A4C0F8;--infobg:#172A4A;--warn:#F3C266;--warnbg:#3A2B0C;--bad:#F7A1A1;--badbg:#3F1A1A;--scrim:rgba(0,0,0,.6);--r:16px;--rc:8px}
+*{box-sizing:border-box}
+html,body{margin:0;background:#080d0b;color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--pink);text-decoration:none}
+h1{font-size:16px;margin:0;font-weight:700;letter-spacing:-.005em}
+h2{font-size:16px;margin:0;font-weight:700}
+h3{font-size:14px;margin:0;font-weight:700}
+p{margin:0}
+.wrap{max-width:1560px;margin:0 auto;padding:24px 16px 96px}
+.lead{color:var(--muted);max-width:1100px;margin:8px 0 0}
+.toc{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;margin:12px 0 8px;background:#080d0b;border-bottom:1px solid var(--border)}
+.toc a{border:1px solid var(--border);border-radius:var(--rc);padding:6px 12px;font-size:14px;color:var(--muted);font-weight:600}
+.toc a.big{color:var(--text);border-color:#1f5a49;background:var(--psoft)}
+.screen{margin:56px 0 0;padding-top:8px;border-top:2px solid var(--border)}
+.screen>h2{font-size:16px;margin:16px 0 4px}
+.sub{color:var(--muted);font-size:14px}
+.board{margin:32px 0}
+.cap{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin:0 0 10px}
+.cap b{font-size:12px;letter-spacing:.06em;color:var(--primary)}
+.cap span{color:var(--muted);font-size:14px}
+.rec{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--pfg);background:var(--primary);border-radius:6px;padding:2px 8px}
+.alt{display:inline-flex;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 8px}
+.notes{max-width:1200px;color:var(--muted);font-size:14px;margin:10px 4px 0;padding-left:18px}
+.notes li{margin:3px 0}.notes b{color:var(--text)}
+/* the app frame */
+.frame{background:var(--canvas);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.app{display:grid;grid-template-columns:56px 208px minmax(0,1fr);min-height:640px}
+.app.tall{min-height:720px}
+.side{border-right:1px solid var(--border);background:#0a110f}
+.side i{display:block;width:30px;height:30px;border-radius:8px;background:var(--raised);margin:14px auto}
+.side i.on{background:var(--psoft);box-shadow:inset 0 0 0 1px #1f5a49}
+.rail{border-right:1px solid var(--border);padding:16px 10px;display:flex;flex-direction:column;gap:2px}
+.rail .rl{font-size:12px;color:var(--faint);font-weight:600;padding:0 10px 8px}
+.rail a{padding:9px 10px;border-radius:var(--rc);color:var(--muted);font-weight:600;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.rail a.on{background:var(--psoft);color:var(--text);font-weight:700}
+.rail small{font-size:12px;border-radius:6px;padding:0 6px;font-weight:700}
+.rail small.w{background:var(--warnbg);color:var(--warn)}.rail small.r{background:var(--badbg);color:var(--bad)}
+.main{padding:16px 20px 0;display:flex;flex-direction:column;gap:16px;min-width:0}
+.trail{font-size:12px;color:var(--muted)}.trail b{color:var(--text);font-weight:600}.trail a{color:var(--muted)}
+/* title line: title, (i), sub-page bar, buttons; one hairline to the end */
+.tl{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:0}
+.tl h1{padding-bottom:10px;display:flex;align-items:center;gap:8px}
+.ib{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--faint);color:var(--faint);font-size:12px;font-weight:700;font-style:normal}
+.ut{display:flex;gap:2px}
+.ut span{padding:8px 10px 9px;font-size:14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.ut span.on{color:var(--text);border-bottom-color:var(--primary)}
+.n{font-size:12px;background:var(--raised);border-radius:6px;padding:0 6px;margin-left:6px;color:var(--muted);font-weight:600}
+.n.r{color:var(--bad);background:var(--badbg)}.n.w{color:var(--warn);background:var(--warnbg)}
+.tl .sp{flex:1}
+.tl .acts{display:flex;gap:8px;padding-bottom:6px;flex-wrap:wrap}
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--rc);border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:14px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--pfg);border-color:var(--primary)}
+.btn.g{background:none;border-color:transparent;color:var(--muted)}
+.btn.d{color:var(--bad);border-color:#5a2a2a;background:none}
+.btn.dp{background:#d65a5a;border-color:#d65a5a;color:#1a0707}
+.btn.sm{height:32px;padding:0 10px}
+.btn.ic{width:36px;padding:0;justify-content:center}
+.btn.off{opacity:.45}
+.tc{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:var(--rc);border:1px solid var(--border);font-weight:600;font-size:14px;color:var(--muted)}
+.tc.on{border-color:var(--primary);background:var(--psoft);color:var(--text)}
+.inp{height:36px;border:1px solid var(--input);background:var(--canvas);border-radius:var(--rc);padding:0 12px;color:var(--text);display:flex;align-items:center;gap:8px;font-size:14px;min-width:0}
+.inp.ph{color:var(--faint)}.inp.sel:after{content:"▾";margin-left:auto;color:var(--faint);font-size:12px}
+.inp.err{border-color:var(--bad)}.inp.focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(53,214,170,.25)}
+.inp.ta{height:72px;align-items:flex-start;padding-top:8px;line-height:1.45}
+.lbl{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;display:flex;gap:6px;align-items:center}
+.hint{font-size:12px;color:var(--faint);margin-top:4px}
+.errl{font-size:12px;color:var(--bad);font-weight:600;margin-top:4px}
+.fg{display:grid;gap:14px}.fg2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.fg3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.fg4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.box{width:16px;height:16px;border:1.5px solid var(--faint);border-radius:4px;display:inline-block;vertical-align:middle}.box.x{background:var(--primary);border-color:var(--primary)}
+/* cards and tables */
+.card{background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.09);border-radius:var(--r);min-width:0}
+.hd{display:flex;align-items:center;gap:10px;padding:12px 16px}.hd .sp{flex:1}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border)}.toolbar .sp{flex:1}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;height:40px;padding:0 14px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:6px 14px;height:44px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr.lk td{cursor:pointer}tr.lk:hover td{background:rgba(255,255,255,.025)}
+tr.sel td{background:var(--psoft)}
+td.r,th.r{text-align:right}
+.chev{color:var(--faint);text-align:right;width:36px}
+.foot{display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:12px;color:var(--muted)}.foot .sp{flex:1}
+.pager{display:inline-flex;gap:4px}.pager span{min-width:30px;height:30px;border:1px solid var(--border);border-radius:var(--rc);display:inline-grid;place-items:center;font-size:12px}
+.pager span.on{border-color:var(--primary);color:var(--text)}
+.fill{flex:1;min-height:0;display:flex;flex-direction:column}
+.fill .card{flex:1;display:flex;flex-direction:column;border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom:0}
+.fill .card .grow{flex:1}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.st:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.w{color:var(--warn);background:var(--warnbg)}.g1{color:var(--good);background:var(--goodbg)}.i{color:var(--info);background:var(--infobg)}.b{color:var(--bad);background:var(--badbg)}.z{color:var(--muted);background:var(--raised)}
+.m{color:var(--muted)}.f{color:var(--faint)}.sm12{font-size:12px}.bold{font-weight:700}
+.red{color:var(--bad)}.amb{color:var(--warn)}.grn{color:var(--good)}
+.mono{font-family:ui-monospace,"Geist Mono",Consolas,monospace;font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid rgba(255,255,255,.09);border-radius:var(--r);background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015))}
+.strip>div{padding:12px 16px;border-right:1px solid var(--border)}.strip>div:last-child{border-right:0}
+.strip .l{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.strip .v{font-size:16px;font-weight:700;margin-top:4px}.strip .fn{font-size:12px;color:var(--muted)}
+/* window dots and matrix cells */
+.dots{display:inline-flex;gap:4px;vertical-align:middle}.dots i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dv{background:var(--good)}.du{background:var(--muted)}.dm{border:2px solid var(--bad)}
+.wc{display:inline-flex;align-items:center;gap:6px;min-width:96px;height:30px;padding:0 10px;border-radius:var(--rc);border:1px solid var(--border);font-weight:600;font-size:14px}
+.wc i{width:8px;height:8px;border-radius:50%}
+.wc.ms{border:1px dashed #7a3a3a;color:var(--bad);background:rgba(63,26,26,.4)}
+.wc.un{color:var(--text)}
+.wc.hov{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+/* overlays */
+.stage{position:relative;background:var(--canvas);border:1px solid var(--border);border-radius:16px;padding:28px;display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;overflow:hidden}
+.stage.scr{background:repeating-linear-gradient(135deg,#0c1210 0 12px,#0e1513 12px 24px)}
+.dlg{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.6);width:440px;display:flex;flex-direction:column}
+.dlg.lg{width:560px}.dlg.xl{width:720px}.dlg.x2{width:960px}.dlg.cf{width:400px}
+.dlg .dh{padding:18px 20px 0;display:flex;gap:10px;align-items:flex-start}.dlg .dh .sp{flex:1}
+.dlg .dh .x{color:var(--faint);font-size:16px}
+.dlg .dd{color:var(--muted);font-size:14px;padding:6px 20px 0}
+.dlg .db{padding:16px 20px;display:grid;gap:14px}
+.dlg .df{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}.dlg .df .sp{flex:1}
+.lbltag{font-size:12px;color:var(--faint);margin-bottom:8px}
+.menu{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:6px;width:224px}
+.menu div{padding:8px 10px;border-radius:7px;font-size:14px}.menu div.on{background:var(--raised)}.menu hr{border:0;border-top:1px solid var(--border);margin:4px 0}
+.pop{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:12px;width:520px}
+.toast{display:flex;gap:10px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-weight:600;width:350px;font-size:14px}
+.toast .tk{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none}
+.toast .ok{background:var(--goodbg);color:var(--good)}.toast .bd{background:var(--badbg);color:var(--bad)}.toast .wn{background:var(--warnbg);color:var(--warn)}
+.toast small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.toast .u{margin-left:auto;color:var(--pink);font-size:14px}
+.kv{display:grid;grid-template-columns:150px 1fr;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.kv div{padding:8px 12px;border-bottom:1px solid var(--border);font-size:14px}.kv div:nth-last-child(-n+2){border-bottom:0}.kv .k{color:var(--muted);font-size:12px;font-weight:600;background:rgba(255,255,255,.02)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:48px 24px;color:var(--muted)}
+.empty b{color:var(--text);font-size:16px}
+.drop{border:1.5px dashed var(--input);border-radius:12px;padding:20px;text-align:center;color:var(--muted)}
+.drop b{color:var(--text)}
+.track{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.track div .bar{height:4px;border-radius:4px;background:var(--border)}.track div.on .bar,.track div.dn .bar{background:var(--primary)}
+.track div .lb{font-size:12px;font-weight:700;margin-top:6px}.track div .sb{font-size:12px;color:var(--muted)}
+.todo{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid var(--border);min-height:44px}
+.ring{width:18px;height:18px;border-radius:50%;border:2px solid var(--input)}.ring.x{background:var(--primary);border-color:var(--primary)}
+.sent{padding:14px 16px;border-top:1px solid var(--border);color:#cfdad5;line-height:1.6}.sent b{color:var(--text)}
+.col{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.rc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface);display:grid;gap:4px}
+.grp td{background:rgba(255,255,255,.025);font-weight:700;height:36px}
+/* phones */
+.phones{display:flex;gap:28px;flex-wrap:wrap}
+.phone{width:375px;border:1px solid var(--border);border-radius:28px;background:var(--canvas);overflow:hidden;display:flex;flex-direction:column;min-height:720px}
+.phone .pb{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.phone .pm{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.phone .ut{overflow:hidden}
+.pc{border:1px solid rgba(255,255,255,.09);border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));padding:12px;display:grid;gap:8px}
+.pc .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+/* edit map */
+.ed{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.ed th{background:var(--raised);border-top:0}.ed td{vertical-align:top;padding:10px 14px;height:auto}
+.ed td:first-child{font-weight:600;white-space:nowrap}
+.sh{background:var(--psoft)!important;color:var(--text)!important;font-weight:700}
+.crit{padding:16px 20px}.crit ol{margin:0;padding-left:20px;color:var(--muted)}.crit li{margin:4px 0}.crit b{color:var(--text)}
+.dirgrid{display:grid;gap:8px;grid-template-columns:repeat(3,1fr);margin-top:12px}
+.dirgrid div{border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--muted)}.dirgrid div.pick{border-color:var(--primary)}
+.dirgrid b{color:var(--text)}
+</style>
+<style>
+/* Retention additions */
+.rail .foot2{margin-top:auto;border-top:1px solid var(--border);padding-top:10px}
+.rail .foot2 a{font-weight:600}
+.nx{color:var(--pink);font-weight:600;white-space:nowrap}
+.nx.u{color:var(--bad)}
+.who{display:block;font-weight:700;color:var(--text)}
+.pn{display:block;font-size:12px;color:var(--muted)}
+.big{font-size:16px;font-weight:700}
+.ladbar{height:6px;border-radius:6px}
+.stepl{display:grid;grid-template-columns:28px 1fr auto;gap:12px;align-items:start;padding:12px 16px;border-top:1px solid var(--border)}
+.stepl .dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;border:1px solid var(--border);color:var(--muted)}
+.stepl .dot.now{border:2px solid var(--primary);color:var(--primary)}
+.stepl .dot.dn{background:var(--primary);color:var(--pfg);border-color:var(--primary)}
+.say{border-left:2px solid var(--primary);padding:6px 10px;color:#cfdad5;font-size:14px;margin-top:6px}
+.kan{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:16px}
+.cal{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:16px}
+.cal div{border:1px solid var(--border);border-radius:10px;padding:10px;min-height:120px;display:flex;flex-direction:column;gap:6px}
+.cal b{font-size:12px;color:var(--muted)}
+.tg{display:inline-block;width:32px;height:18px;border-radius:9px;background:var(--primary);position:relative;vertical-align:middle}.tg:after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--pfg)}
+.tg.off{background:var(--raised)}.tg.off:after{left:2px;right:auto;background:var(--faint)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Retention · round 7</h1>
+<p class="lead">Owner 2026-11-10: "rearrange the Retention area so it's easy for the user to navigate and always obvious what to do next." Every Retention page and Retention settings: <b>Cases</b>, <b>Waiting on the carrier</b>, <b>Win-back</b>, <b>Lapse risk</b>, <b>Scorecard</b>, <b>Results</b>, <b>Retention settings</b>, and their record pages (a case, a request, a former client, a person). For each: a short critique of today's screen (walked live on Ellery &amp; Fields, 2026-11-10), two or three directions with one marked, then everything the marked direction opens: tabs, tables, every button and its pop-up, confirm, toast, error line, empty state, read-only and the phone view. The edit map closes the file. Copy is taken from the code (components/app/retention/*, servicing-board, winback-board, retention-settings-board, ladder-rules-board); the figures are the demo agency's.</p>
+<ul class="notes">
+<li><b>Rules applied on every board:</b> the title alone on its line, with only its (i) beside it; tabs and buttons on the title line over one hairline (the setters underline bar, the 2026-11-09 foundation: "sub-pages are tabs on the title line" is read as that bar); a record page's ‹ › buttons name the neighbour; full width; tables fill to the window foot with search, filters and column headers fixed and the rows scrolling inside; no notice cards: a warning is a count on its tab or row; text 12 / 14 / 16 only.</li>
+<li><b>Nothing is decided inside a table row, and nothing opens in a side panel.</b> A row is a link to its own page or its dialog. Each edit names its surface: <span class="st i">Dialog</span> for a short edit that keeps context, <span class="st z">Own page</span> for a long form, <span class="st w">Confirm</span> for a step that loses something. Every figure and name is a link to its filtered page.</li>
+</ul>
+<nav class="toc"><a class="big" href="#s0">0 · The area</a><a class="big" href="#s1">1 · Cases</a><a href="#s1-case">1 a case</a><a href="#s1-pop">1 pop-ups</a><a class="big" href="#s2">2 · Waiting on the carrier</a><a href="#s2-rec">2 a request</a><a class="big" href="#s3">3 · Win-back</a><a href="#s3-rec">3 a former client</a><a class="big" href="#s4">4 · Lapse risk</a><a class="big" href="#s5">5 · Scorecard</a><a class="big" href="#s6">6 · Results</a><a class="big" href="#s7">7 · Retention settings</a><a href="#s7-pop">7 pop-ups</a><a class="big" href="#map">Edit map</a></nav>
+
+<!-- ═══════════════════════════════════ 0 · THE AREA ═══════════════════════════════════ -->
+<section class="screen" id="s0">
+<h2>0 · The area: where each Retention page lives</h2>
+<p class="sub">Today: Retention rail (Cases · Waiting on the carrier · Win-back), Reports rail (Retention scorecard, Retention results), Carrier sync › Needs you (Lapse risk), Settings › Retention (four tabs plus two pages off buttons)</p>
+
+<section class="board"><div class="cap"><b>0·0 CRITIQUE</b><span>the area as a whole</span></div>
+<div class="card crit"><ol>
+<li><b>Retention is spread over four menus.</b> The work is on the Retention rail; the scorecard and results are two rows deep in Reports among nine sales reports; Lapse risk sits in Carrier sync › Needs you, and its first tab (Call list) throws you into Retention › Cases; settings are in Settings. Nobody can find "how are we doing" from where the work is.</li>
+<li><b>Half of it still speaks the retired radar.</b> Results asks "Do the bands come true?", Settings › Start here opens on "The save queue takes … Today your queue would hold 16 cards", and Holdout measures "working the save queue". The owner retired the predictive queue on 2026-11-05; the ladder (Cases) has no settings tab of its own: Ladder rules is a button inside Start here.</li>
+<li><b>Old addresses answer with odd pages.</b> /app/save-queue still draws the retired queue, /app/reinstatement?view=cases a "Reinstatement record", /app/lapse-risk?view=signals an empty board under Carrier sync.</li>
+<li><b>What to do next is never one place.</b> The rail has no counts, so a rep can't see that 319 cases are past due or that 1 request needs checking until they open each step.</li>
+</ol></div></section>
+
+<section class="board" id="s0-dir"><div class="cap"><b>0·A ONE RAIL, WORK THEN MEASURE</b><span class="rec">Recommended</span><span>Cases · Waiting on the carrier · Win-back · Scorecard · Results on the Retention rail, each with its count; Retention settings at the rail's foot</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="cases"></div>
+<div class="main" style="padding-bottom:16px">
+<div class="trail"><a>Retention</a> › <b>Cases</b></div>
+<div class="tl"><h1>Cases <i class="ib">i</i></h1><div class="ut"><span class="on">Payment problem<span class="n w">668</span></span><span>Pending lapse<span class="n r">401</span></span><span>Can reinstate<span class="n r">5</span></span><span>Lost<span class="n">2</span></span><span>Paperwork<span class="n">21</span></span><span>Closed<span class="n">3</span></span></div><span class="sp"></span><div class="acts"><span class="btn">New case</span><span class="btn p">Work the next case</span></div></div>
+<div class="card" style="padding:16px 20px"><table><tr><th>Rail entry</th><th>Address</th><th>Count on the rail</th><th>Who sees it</th><th>Was</th></tr>
+<tr><td class="bold">Cases</td><td class="mono">/app/retention</td><td><span class="n r">319</span> past due</td><td class="m">owner, producer, retention</td><td class="m">Retention › Cases (title "Retention")</td></tr>
+<tr><td class="bold">Waiting on the carrier</td><td class="mono">/app/servicing</td><td><span class="n w">2</span> to check or send</td><td class="m">owner, producer, retention</td><td class="m">same</td></tr>
+<tr><td class="bold">Win-back</td><td class="mono">/app/reinstatement</td><td><span class="n w">3</span> to call now</td><td class="m">owner, producer</td><td class="m">same</td></tr>
+<tr><td class="bold">Scorecard</td><td class="mono">/app/retention-scorecard</td><td class="m">—</td><td class="m">everyone: their own card; owner: all</td><td class="m">Reports › Retention scorecard</td></tr>
+<tr><td class="bold">Results</td><td class="mono">/app/retention-results</td><td class="m">—</td><td class="m">owner</td><td class="m">Reports › Retention results</td></tr>
+<tr><td class="bold">Retention settings ⚙</td><td class="mono">/app/retention-settings</td><td class="m">—</td><td class="m">owner</td><td class="m">only in Settings (stays there too)</td></tr>
+</table></div>
+</div></div></div>
+<ul class="notes"><li><b>Work first, then the numbers,</b> in the order a rep's day runs. The rail count is the one warning: past-due cases, requests to check or send, clients to call now.</li><li><b>Reports keeps two rows</b> ("Retention scorecard", "Retention results") that open these pages, so old habits still land.</li><li><b>Retired addresses redirect:</b> /app/save-queue → Cases; /app/reinstatement?view=cases → Cases › Lapsed, can reinstate; /app/lapse-risk → Cases (board 4).</li></ul></section>
+
+<section class="board"><div class="cap"><b>0·B NO RAIL, ONE TITLE LINE</b><span class="alt">Direction B</span><span>Retention is one page; its five parts are the sub-page bar</span></div>
+<div class="frame"><div class="app" style="grid-template-columns:56px minmax(0,1fr);min-height:220px"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="main" style="padding-bottom:16px">
+<div class="trail"><b>Retention</b></div>
+<div class="tl"><h1>Retention <i class="ib">i</i></h1><div class="ut"><span class="on">Cases<span class="n r">319</span></span><span>Waiting on the carrier<span class="n w">2</span></span><span>Win-back<span class="n w">3</span></span><span>Scorecard</span><span>Results</span></div><span class="sp"></span><div class="acts"><span class="btn p">Work the next case</span></div></div>
+<p class="m">The ladder steps then need a second row of tabs (Payment problem · Pending lapse …) under the first: two bars, which the foundation forbids.</p>
+</div></div></div></section>
+
+<section class="board"><div class="cap"><b>0·C WORK HERE, MEASURE IN REPORTS</b><span class="alt">Direction C</span><span>today's split, tidied: the rail gets counts; scorecard and results stay in Reports</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail"><div class="rl">Retention</div><a class="on">Cases<small class="r">319</small></a><a>Waiting on the carrier<small class="w">2</small></a><a>Win-back<small class="w">3</small></a></div>
+<div class="main" style="padding-bottom:16px"><p class="m">Least change. A team lead still leaves the work to see how it went, and the radar's settings still head Retention settings.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · One rail, work then measure ✓</b><br>Everything Retention in one place, in day order; each count says where to go.</div><div><b>B · No rail</b><br>Clean, but the ladder needs the bar and there is only one.</div><div><b>C · Measure in Reports</b><br>Smallest change; keeps the split.</div></div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 1 · CASES ═══════════════════════════════════ -->
+<section class="screen" id="s1">
+<h2>1 · Cases</h2>
+<p class="sub">/app/retention?step=payment|lapse|lapsed|lost|paperwork|closed, /app/retention/[id]?tab=do|calls|policy|history, /app/retention/new · LadderBoard, RiskCards, CaseActions, WhatToDo, CaseCalls</p>
+
+<section class="board"><div class="cap"><b>1·0 CRITIQUE</b><span>today's list and case page</span></div>
+<div class="card crit"><ol>
+<li><b>The ladder cards eat the page.</b> Six cards take a third of the height at 1440×900; the table under them shows five rows of 1,097. The title reads "Retention", not "Cases", and Mine/All are the tabs while the real views (the steps) are cards.</li>
+<li><b>Every row carries the same filled button.</b> "Get the First Payment" ×5 in a row, all green, so nothing stands out; it is a decision button inside the row.</li>
+<li><b>The deadline contradicts itself.</b> "215 over · Apr 9" beside "the carrier still lists it active", and the case page says "If it is still unpaid on Apr 9, 2026, the policy lapses" seven months after Apr 9. 319 cases sit in Past due for the same reason.</li>
+<li><b>The case page has no way to the next case.</b> Working 1,097 means back, scroll, page 2, click. The call is logged in an inline form, the note is a box on the page, and "No phone on file" is an orange sentence in the steps.</li>
+<li><b>No phone is the normal state</b> (most demo cases), shown as an orange word on every row, never as something you can filter to and fix.</li>
+</ol></div></section>
+
+<section class="board" id="s1-dir"><div class="cap"><b>1·A THE LADDER AS TABS</b><span class="rec">Recommended</span><span>the steps are the sub-page bar with their counts; the table fills the window; the next step is a word in the row, not a button</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="cases"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <b>Cases</b></div>
+<div class="tl"><h1>Cases <i class="ib">i</i></h1><div class="ut"><span>Payment problem<span class="n w">668</span></span><span class="on">Pending lapse<span class="n r">401</span></span><span>Can reinstate<span class="n r">5</span></span><span>Lost<span class="n">2</span></span><span>Paperwork<span class="n">21</span></span><span>Closed<span class="n">3</span></span></div><span class="sp"></span><div class="acts"><span class="btn">New case</span><span class="btn p">Work the next case</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Client, policy or phone</span><span class="tc">Mine <span class="n">214</span></span><span class="tc on">Past due <span class="n r">319</span></span><span class="tc">This week <span class="n w">71</span></span><span class="tc">No carrier window <span class="n">11</span></span><span class="tc">No phone <span class="n w">388</span></span><span class="btn">Filters</span><span class="sp"></span><span class="m sm12">$24,054/mo at stake</span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th>Client · policy</th><th>Why</th><th class="r">$/mo · at stake</th><th class="r">Deadline</th><th>Last touch</th><th>Owner</th><th>Next step</th></tr>
+<tr class="grp"><td colspan="7"><span class="red">● Past due</span> <span class="n">319</span></td></tr>
+<tr class="lk"><td><span class="who">Stephanie Adams</span><a class="pn">Americo AM09232886 · Eagle Select I NS</a></td><td>First payment missed<span class="pn">the carrier still lists it active</span></td><td class="r">$103.20<span class="pn">first premium due</span></td><td class="r"><span class="red bold">Window closed</span><span class="pn">Apr 9 · ask the carrier</span></td><td class="m">Not called yet</td><td><a>Ruth Alvarez</a></td><td><span class="nx u">Get the first payment ›</span></td></tr>
+<tr class="lk"><td><span class="who">Ray George</span><a class="pn">Americo AM09986209 · Eagle Select I NS</a></td><td>First payment missed<span class="pn">the carrier still lists it active</span></td><td class="r">$105.21<span class="pn">first premium due</span></td><td class="r"><span class="red bold">Window closed</span><span class="pn">May 15 · ask the carrier</span></td><td class="m">Not called yet</td><td><a>Ruth Alvarez</a></td><td><span class="nx u">Get the first payment ›</span></td></tr>
+<tr class="lk"><td><span class="who">Cameron Sandoval</span><a class="pn">Americo AM09865853 · Eagle Select I NS</a></td><td>First payment missed<span class="pn">the carrier still lists it active</span></td><td class="r">$60.94<span class="pn">first premium due</span></td><td class="r"><span class="red bold">Window closed</span><span class="pn">May 17 · ask the carrier</span></td><td>No answer · Nov 4<span class="pn">2 tries</span></td><td><a>Ruth Alvarez</a></td><td><span class="nx u">Get the first payment ›</span></td></tr>
+<tr class="lk"><td><span class="who">Leslie Smith</span><a class="pn">Americo AM09644454 · Eagle Select I SM</a></td><td>First payment missed<span class="pn">the carrier still lists it active</span></td><td class="r">$48.24<span class="pn">first premium due</span></td><td class="r"><span class="red bold">Window closed</span><span class="pn">Jun 1 · ask the carrier</span></td><td class="m">Not called yet</td><td><a>Ruth Alvarez</a></td><td><span class="nx u">Get the first payment ›</span></td></tr>
+<tr class="grp"><td colspan="7"><span class="amb">● Due this week</span> <span class="n">71</span></td></tr>
+<tr class="lk"><td><span class="who">Marisol Vega</span><a class="pn">American Amicable 0119384420 · Senior Choice</a></td><td>Lapse notice<span class="pn">carrier: "Lapse Pending"</span></td><td class="r">$58.70<span class="pn amb">$704 advance</span></td><td class="r"><span class="big amb">3</span><span class="pn">left · Nov 13</span></td><td>Promised to pay · Nov 8<span class="pn">1 try</span></td><td><a>Dana Whitfield</a></td><td><span class="nx">Take the payment ›</span></td></tr>
+<tr class="lk"><td><span class="who">Owen Testbrook</span><a class="pn">Mutual of Omaha MOO-5521907 · Living Promise</a></td><td>Draft bounced<span class="pn">NSF on Nov 1</span></td><td class="r">$41.12<span class="pn amb">$493 advance</span></td><td class="r"><span class="big amb">6</span><span class="pn">left · Nov 16</span></td><td class="m">Not called yet</td><td><a>Dana Whitfield</a></td><td><span class="nx">Fix the bank or the date ›</span></td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">By urgency: past due, this week, later, no carrier window · from the carrier files<span class="sp"></span>Showing 1–25 of 401 cases <span class="pager"><span>‹</span><span class="on">1</span><span>2</span><span>…</span><span>17</span><span>›</span></span></div>
+</div></div></div></div></div>
+<ul class="notes">
+<li><b>The steps are the tabs.</b> Payment problem · Pending lapse · Can reinstate (the step "Lapsed, can reinstate", shortened so the bar fits at 1440) · Lost · Paperwork · Closed, each with its count (no "All" tab: the search finds a client on any step and the row names its step); the tone is the warning (red: something past due; amber: due this week). Today's six cards go; their money moves to the toolbar's right ("$24,054/mo at stake" for the tab on show).</li>
+<li><b>Mine</b> leaves the title line for a toolbar chip beside Past due · This week · No carrier window · No phone. <b>Filters</b> keeps Owner, Carrier, Why and Last touch in its pop-over; applied ones show as chips.</li>
+<li><b>A row is a link</b> to the case page (on the What to do tab). The next step is accent words, red when urgent; no button in the row. The policy number opens the policy; the owner opens Cases filtered to that person.</li>
+<li><b>The deadline tells the truth.</b> A window that closed while the carrier still lists the policy active reads "Window closed · ask the carrier", not "215 over".</li>
+<li><b>Fit:</b> the bar and both buttons fit one line from 1,600px with the rail open; below that the rail collapses to its icons (the foundation rule: the tabs then follow the title), so nothing wraps at 1,440.</li><li><b>Work the next case</b> opens the most urgent case in this tab's order; the case page's ‹ › then walk the same list.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·B A SLIM LADDER STRIP</b><span class="alt">Direction B</span><span>the ladder kept as one 56px strip of steps above the table; Mine · All stay the tabs</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="cases"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <b>Cases</b></div>
+<div class="tl"><h1>Cases <i class="ib">i</i></h1><div class="ut"><span class="on">All<span class="n">1,097</span></span><span>Mine<span class="n">214</span></span></div><span class="sp"></span><div class="acts"><span class="btn">New case</span><span class="btn p">Work the next case</span></div></div>
+<div class="strip" style="grid-template-columns:repeat(6,1fr)"><div><div class="l">Payment problem</div><div class="v amb">668</div><div class="fn">$39,300/mo</div></div><div style="background:var(--psoft)"><div class="l">Pending lapse</div><div class="v red">401</div><div class="fn">319 past due</div></div><div><div class="l">Can reinstate</div><div class="v red">5</div><div class="fn">$250/mo</div></div><div><div class="l">Lost</div><div class="v">2</div><div class="fn">this month</div></div><div><div class="l">Paperwork</div><div class="v">21</div><div class="fn">beside the ladder</div></div><div><div class="l">Closed</div><div class="v">3</div><div class="fn">3 saved</div></div></div>
+<div class="fill"><div class="card"><div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Client, policy or phone</span><span class="btn">Filters</span></div><table class="grow"><tr><th>Client · policy</th><th>Why</th><th class="r">$/mo</th><th class="r">Deadline</th><th>Next step</th></tr><tr class="lk"><td><b>Stephanie Adams</b></td><td>First payment missed</td><td class="r">$103.20</td><td class="r red">Window closed</td><td class="nx u">Get the first payment ›</td></tr><tr><td colspan="5" style="border:0"></td></tr></table></div></div>
+</div></div></div>
+<ul class="notes"><li>Keeps the ladder's money at a glance, but two ways to choose a view (strip and tabs) on one screen, and the strip is a second bar in all but name.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·C ONE CASE AT A TIME</b><span class="alt">Direction C</span><span>Cases opens on the next case itself; the list is a tab</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="cases"></div>
+<div class="main" style="padding-bottom:16px">
+<div class="trail"><a>Retention</a> › <b>Cases</b></div>
+<div class="tl"><h1>Cases <i class="ib">i</i></h1><div class="ut"><span class="on">Next up<span class="n r">319</span></span><span>List<span class="n">1,097</span></span><span>Closed<span class="n">3</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Skip</span><span class="btn p">Log the call</span></div></div>
+<div class="card" style="padding:16px 20px;display:grid;gap:8px"><span class="big">Stephanie Adams</span><span class="m">Americo AM09232886 · $103.20/mo · First payment missed · window closed Apr 9</span><div class="say">"Your first payment hasn't reached the carrier, so the policy hasn't started yet. Can we get it set up with the right account or date?"</div></div>
+<p class="m">Fast for a rep with a quota; an owner loses the overview, and the Next up order hides why a case was chosen.</p>
+</div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · The ladder as tabs ✓</b><br>One bar, one table that fills the window; the case page walks the list.</div><div><b>B · Slim ladder strip</b><br>Keeps money in view; two pickers.</div><div><b>C · One case at a time</b><br>A dialer-like flow; poor for owners.</div></div></section>
+
+<!-- 1 · case page -->
+<section class="board" id="s1-case"><div class="cap"><b>1·1 A CASE · WHAT TO DO</b><span class="rec">A</span><span>/app/retention/[id]: title alone; What to do · Calls · Policy · History on the title line; ‹ › name the next and previous case in the list's order</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="cases"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <a>Cases</a> › <a>Pending lapse</a> › <b>Ray George</b></div>
+<div class="tl"><h1>Ray George</h1><div class="ut"><span class="on">What to do</span><span>Calls<span class="n">0</span></span><span>Policy</span><span>History<span class="n">3</span></span></div><span class="sp"></span><div class="acts"><span class="btn">‹ Stephanie Adams</span><span class="btn">Cameron Sandoval ›</span><span class="btn p">Log the call</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Stage</div><div class="v red">Pending lapse</div><div class="fn"><a>401 in this step</a></div></div><div><div class="l">Deadline</div><div class="v red">Window closed</div><div class="fn">May 15, 2026 · carrier still active</div></div><div><div class="l">Premium</div><div class="v">$105.21/mo</div><div class="fn">first premium due</div></div><div><div class="l">Phone</div><div class="v amb">None on file</div><div class="fn"><a>Add one from the application ›</a></div></div><div><div class="l">Owner</div><div class="v"><a style="color:var(--text)">Ruth Alvarez</a></div><div class="fn">not worked yet</div></div></div>
+<div class="fill"><div class="two" style="flex:1;align-items:stretch">
+<div class="card" style="display:flex;flex-direction:column"><div class="hd"><h3>What to do</h3><span class="sp"></span><span class="m sm12">step 1 of 3</span></div>
+<div class="stepl"><span class="dot now">1</span><div><b>Call the client</b><div class="say">"Your first payment hasn't reached the carrier, so the policy hasn't started yet. Can we get it set up with the right account or date?"</div></div><span class="btn sm p">Log the call</span></div>
+<div class="stepl"><span class="dot">2</span><div class="m">Take the payment, or fix the bank or the date</div><span class="btn sm">Record the payment</span></div>
+<div class="stepl"><span class="dot">3</span><div class="m">The next carrier file closes it</div><span></span></div>
+<div class="stepl" style="margin-top:auto"><span></span><div class="m sm12">The carrier's window closed May 15, 2026; its latest file (Sep 1) still lists the policy active. Ask the carrier where it stands.</div><span class="btn sm">Add a note</span></div>
+</div>
+<div class="card"><div class="hd"><h3>From the files</h3><span class="sp"></span><a class="sm12">Americo file of Sep 1 ›</a></div>
+<table><tr><td class="m sm12" style="width:140px">Carrier says</td><td>The carrier still lists it active <span class="m">("Active (Inforce)")</span></td></tr>
+<tr><td class="m sm12">Latest file</td><td>Sep 1, 2026</td></tr><tr><td class="m sm12">Paid to</td><td>—</td></tr><tr><td class="m sm12">Deadline</td><td>May 15, 2026</td></tr><tr><td class="m sm12">Policy</td><td><a>Americo AM09986209</a> · Eagle Select I NS · $10,000</td></tr><tr><td class="m sm12">Written by</td><td><a>Marcus Bell</a></td></tr><tr><td class="m sm12">Worked</td><td>Not worked yet</td></tr></table></div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Title alone:</b> today's progress-bar card and its sentence become the strip; every value links (the stage to Cases filtered to that step, the owner to their cases, the policy to its page, the file to the policy's file history).</li><li><b>‹ Stephanie Adams · Cameron Sandoval ›</b> follow the list the case was opened from (its tab, filters and order); on the first or last case that button is gone.</li><li><b>Each step's button opens its dialog</b> (1·4): the call, the payment, the request to the carrier. The note box leaves the page for "Add a note". The primary on the title line is the current step's button, so it is the same wherever you scroll.</li><li><b>⋯</b>: Assign (owner), Add a note, Close without a save, Open the policy.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·2 A CASE · CALLS, POLICY, HISTORY</b><span class="rec">A</span><span>three read tabs; the call is logged in a dialog, never in a form on the tab</span></div>
+<div class="two">
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:420px">
+<div class="tl"><h1>Cameron Sandoval</h1><div class="ut"><span>What to do</span><span class="on">Calls<span class="n">2</span></span><span>Policy</span><span>History<span class="n">5</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Log a call</span></div></div>
+<div class="card"><table><tr><th>When</th><th>What happened</th><th>What was done</th><th>Note</th></tr>
+<tr><td class="m">Nov 4, 2026</td><td>No answer</td><td class="m">Left a voicemail</td><td class="m">Second try, evening</td></tr>
+<tr><td class="m">Oct 28, 2026</td><td>No answer</td><td class="m">Nothing</td><td class="m">—</td></tr></table>
+<div class="foot">Each call on this policy, including those logged on Lapse risk before · unreachable after 5 tries</div></div></div></div>
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:420px">
+<div class="tl"><h1>Cameron Sandoval</h1><div class="ut"><span>What to do</span><span>Calls<span class="n">2</span></span><span class="on">Policy</span><span>History<span class="n">5</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Open the policy</span></div></div>
+<div class="kv"><div class="k">Status</div><div>Issued, first payment not received <span class="m">("IssNotPaid")</span></div><div class="k">Written by</div><div><a>Marcus Bell</a></div><div class="k">Client's state</div><div>TX</div><div class="k">Draft day</div><div>The 3rd of the month</div><div class="k">Effective</div><div>May 17, 2026</div><div class="k">Premium</div><div>$60.94 monthly</div><div class="k">Face amount</div><div>$10,000</div><div class="k">Pays by</div><div>bank draft</div><div class="k">Latest file</div><div><a>Sep 1, 2026</a></div></div>
+</div></div></div>
+<div class="frame" style="margin-top:16px"><div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Cameron Sandoval</h1><div class="ut"><span>What to do</span><span>Calls<span class="n">2</span></span><span>Policy</span><span class="on">History<span class="n">5</span></span></div><span class="sp"></span></div>
+<div class="card"><table><tr><th style="width:140px">When</th><th>What</th><th style="width:260px">Who</th></tr>
+<tr><td class="m">Nov 4, 2026</td><td>Call: no answer · Second try, evening</td><td>Ruth Alvarez</td></tr>
+<tr><td class="m">Oct 28, 2026</td><td>Call: no answer</td><td>Ruth Alvarez</td></tr>
+<tr><td class="m">Oct 16, 2026</td><td>Assigned</td><td>Dana Whitfield</td></tr>
+<tr><td class="m">Sep 1, 2026</td><td>Moved: Payment problem → Pending lapse (First payment missed)</td><td><a>Americo file of Sep 1, 2026</a></td></tr>
+<tr><td class="m">Jun 1, 2026</td><td>Opened: Payment problem, First payment missed</td><td><a>Americo file of Jun 1, 2026</a></td></tr></table>
+<div class="foot">Everything the files and people did on this case, newest first</div></div></div></div>
+</section>
+
+<section class="board" id="s1-pop"><div class="cap"><b>1·3 THE STEP DIALOGS</b><span class="st i">Dialog · md 440</span><span>Log the call · Record the payment · Add a note · Mark it done (paperwork) — opened from the step, the title line or ⋯</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Log the call (title line, step 1, Calls tab)</div><div class="dlg"><div class="dh"><h2>Log a call with Ray George</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">No phone on file: find a number on the application, or ask the carrier.</p>
+<div class="db"><div><div class="lbl">What happened</div><div class="inp sel focus">Promised to pay</div></div><div><div class="lbl">What you did</div><div class="chips"><span class="tc">Nothing</span><span class="tc on">Payment taken</span><span class="tc">New draft date</span><span class="tc">New bank or card</span></div></div><div><div class="lbl">Note</div><div class="inp ta">Paying Friday by card over the phone</div></div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Log the call</span></div></div></div>
+<div><div class="lbltag">Record the payment (step 2) · with its error line</div><div class="dlg"><div class="dh"><h2>Payment taken</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">It stays here until a carrier file shows it.</p>
+<div class="db"><div class="fg2"><div><div class="lbl">Amount ($)</div><div class="inp err">105.2.1</div><div class="errl">An amount like 63.48</div></div><div><div class="lbl">When</div><div class="inp">Nov 10, 2026</div></div></div><div><div class="lbl">How</div><div class="chips"><span class="tc on">Card over the phone</span><span class="tc">Bank draft run again</span><span class="tc">Carrier's payment line</span><span class="tc">Mailed check</span></div></div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Record the payment</span></div></div></div>
+<div><div class="lbltag">Add a note (⋯, step foot)</div><div class="dlg"><div class="dh"><h2>Note on Ray George</h2><span class="sp"></span><span class="x">✕</span></div>
+<div class="db"><div class="inp ta ph">What happened, what was promised…  🎙</div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save the note</span></div></div></div>
+<div><div class="lbltag">Paperwork · Mark it done (replaces the checklist ticks)</div><div class="dlg"><div class="dh"><h2>Pending manual action · Leah Price</h2><span class="sp"></span><span class="m sm12">2 of 3</span><span class="x">✕</span></div><p class="dd">Step 2: Got it from the client.</p>
+<div class="db"><div><div class="lbl">What you got</div><div class="inp">Signed bank authorisation</div></div><div><div class="lbl">On</div><div class="inp">Nov 10, 2026</div></div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Mark it done</span></div></div></div>
+</div>
+<ul class="notes"><li><b>Why dialogs:</b> each is two or three fields and keeps the case behind it. Today the call form sits on the Calls tab and the note and checklist on What to do, so the page changed shape as you typed.</li><li>A step that sends something to the carrier (a new date, a new bank, a switch to bank payment) opens <b>New request</b> already filled in (board 2·4), its own page, and comes back to the case.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·4 ASSIGN, CLOSE, NEW CASE, CONFIRMS, TOASTS</b><span>everything in ⋯ and the title line</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Assign (⋯, owner) · Dialog md</div><div class="dlg"><div class="dh"><h2>Assign Ray George</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div><div class="lbl">Who works it</div><div class="inp sel">Dana Whitfield</div><div class="hint">Ruth Alvarez has it today.</div></div></div><div class="df"><span class="sp"></span><span class="btn">Back</span><span class="btn p">Assign</span></div></div></div>
+<div><div class="lbltag">Close without a save (⋯) · Confirm</div><div class="dlg"><div class="dh"><h2>Close without a save?</h2></div><p class="dd">Ray George leaves Cases. It is not counted as saved; a later file can open it again.</p><div class="db"><div class="chips"><span class="tc on">The client wants to cancel</span><span class="tc">The client can't afford it</span><span class="tc">Duplicate case</span><span class="tc">Not our policy</span><span class="tc">Other</span></div><div><div class="lbl">Note</div><div class="inp ph">Optional</div></div></div><div class="df"><span class="sp"></span><span class="btn">Keep it open</span><span class="btn dp">Close without a save</span></div></div></div>
+<div><div class="lbltag">Lost: Close to win-back (title line) · Confirm</div><div class="dlg"><div class="dh"><h2>Close to win-back?</h2></div><p class="dd">Nothing left to save: the files show the policy gone. Close it to win-back; the client is called again after the cooling-off.</p><div class="db"><div><div class="lbl">Why it was lost</div><div class="chips"><span class="tc on">Lapsed past the carrier's window</span><span class="tc">Charged back</span><span class="tc">The client cancelled</span><span class="tc">Other</span></div></div></div><div class="df"><span class="sp"></span><span class="btn">Keep it open</span><span class="btn p">Close to win-back</span></div></div></div>
+<div><div class="lbltag">New case (title line) · Dialog md (was its own page)</div><div class="dlg"><div class="dh"><h2>New case</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">For something a person heard before the files show it.</p><div class="db"><div><div class="lbl">Policy</div><div class="inp focus">⌕ AM0998</div><div class="menu" style="width:100%;margin-top:4px"><div class="on">Ray George · Americo AM09986209</div><div>Ruby Gaines · Americo AM09981775</div></div></div><div><div class="lbl">Why</div><div class="inp sel">Asked to cancel</div></div><div><div class="lbl">Note</div><div class="inp ph">What they said</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Open the case</span></div></div></div>
+<div style="display:grid;gap:10px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><span>Logged.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Noted. It stays here until a carrier file shows it.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Note saved.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Assigned.<small>Ray George is Dana Whitfield's now.</small></span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Closed without a save.</span><span class="u">Next: Cameron Sandoval ›</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Closed. The client goes to win-back after the cooling-off.</span></div>
+<div class="toast"><span class="tk bd">!</span><span>That could not be saved.<small>Shown on the dialog's error line when the dialog is open.</small></span></div></div>
+</div>
+<ul class="notes"><li>After a close, the page moves to the next case in the list (the toast names it) instead of dropping you back on page 1 of Cases.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·5 STATES</b><span>empty, no matches, a closed case, not switched on, read-only</span></div>
+<div class="stage" style="padding:20px">
+<div class="card" style="width:400px"><div class="empty"><b>Nothing needs care</b><span>A policy shows here when an uploaded policy or commission file shows a missed payment, a lapse, a chargeback or paperwork.</span><span class="btn">Open Files in</span></div></div>
+<div class="card" style="width:400px"><div class="empty"><b>No cases match</b><span>Nothing in Pending lapse matches "omaha" and No phone.</span><span class="btn">Clear the filters</span></div></div>
+<div class="card" style="width:400px"><div class="empty"><b>Not switched on yet</b><span>Retention cases need a database update.</span></div></div>
+<div class="card" style="width:400px"><div class="hd"><h3>A closed case</h3></div><div style="padding:0 16px 16px" class="m">Opened from Closed it lands on History; the strip's Stage reads <span class="st g1">Saved: a carrier file proved it</span>, What to do says "Nothing left to do." and the title line keeps only ‹ › and ⋯ › Open the policy.</div></div>
+<div class="card" style="width:400px"><div class="hd"><h3>Read-only</h3></div><div style="padding:0 16px 16px" class="m">New case and Work the next case read <span class="btn off sm">New case</span> with "Paused while the account is read-only." on hover. A case shows its steps without buttons; ⋯ holds only Open the policy.</div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>1·6 PHONE</b><span>tabs scroll; a case is a card; the case page stacks with ‹ › under the title</span></div>
+<div class="phones">
+<div class="phone"><div class="pb"><span>☰ Retention</span><span>9:41</span></div><div class="pm">
+<div class="trail">Retention › <b>Cases</b></div><h1>Cases</h1>
+<div class="ut" style="border-bottom:1px solid var(--border)"><span>Payment problem <span class="n w">668</span></span><span class="on">Pending lapse <span class="n r">401</span></span><span>Lapsed…</span></div>
+<span class="btn p" style="justify-content:center">Work the next case</span>
+<div class="chips"><span class="tc">Mine 214</span><span class="tc on">Past due <span class="n r">319</span></span><span class="tc">Filters</span></div>
+<div class="pc"><div class="row"><b>Stephanie Adams</b><span class="red sm12 bold">Window closed</span></div><span class="m sm12">Americo AM09232886 · $103.20/mo</span><span class="sm12">First payment missed · not called yet</span><span class="nx u">Get the first payment ›</span></div>
+<div class="pc"><div class="row"><b>Ray George</b><span class="red sm12 bold">Window closed</span></div><span class="m sm12">Americo AM09986209 · $105.21/mo</span><span class="nx u">Get the first payment ›</span></div>
+</div></div>
+<div class="phone"><div class="pb"><span>‹ Cases</span><span>9:41</span></div><div class="pm">
+<h1>Ray George</h1>
+<div style="display:flex;gap:8px"><span class="btn sm" style="flex:1">‹ Stephanie Adams</span><span class="btn sm" style="flex:1">Cameron Sandoval ›</span></div>
+<div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">What to do</span><span>Calls 0</span><span>Policy</span><span>History 3</span></div>
+<div class="pc"><div class="row"><span class="red bold">Pending lapse</span><span class="red sm12">Window closed May 15</span></div><span class="m sm12">$105.21/mo · no phone on file · Ruth Alvarez</span></div>
+<div class="pc"><b>1 · Call the client</b><div class="say">"Your first payment hasn't reached the carrier…"</div><span class="btn p" style="justify-content:center">Log the call</span></div>
+<div class="pc"><span class="m">2 · Take the payment, or fix the bank or the date</span></div>
+<p class="m sm12">Dialogs open full screen on a phone, the button at the foot.</p>
+</div></div></div></section>
+</section>
+<!-- ═══════════════════════════════════ 2 · WAITING ON THE CARRIER ═══════════════════════════════════ -->
+<section class="screen" id="s2">
+<h2>2 · Waiting on the carrier</h2>
+<p class="sub">/app/servicing?status=check|send|waiting|failed|proven|cancelled, /app/servicing/[id]?step=, /app/servicing/new · ServicingBoard, ServicingRequestView, ServicingRequestForm, CancelRequestDialog</p>
+
+<section class="board"><div class="cap"><b>2·0 CRITIQUE</b><span>today's list and request page</span></div>
+<div class="card crit"><ol>
+<li><b>Six cards for two requests.</b> The cards (Waiting 0 · Send it 1 · Check it 1 · Failed 0 · Proven 0 · Cancelled 0) are taller than the table they sit over, and the zero cards look as loud as the one that needs you.</li>
+<li><b>Decisions in the row:</b> "Mark Sent", "Try again" and a ⋯ with "Cancel the request" sit inside each row, so the row and its buttons fight over the click.</li>
+<li><b>The page title has nothing beside it</b> but "New Request" floats far right while the ladder of what to do is in the cards; the row's "25 days · waiting" is red with no hint that it is the carrier who is late.</li>
+<li><b>The request page can't step on.</b> Checking "Carrier says done" for one request, then the next, means going back each time.</li>
+</ol></div></section>
+
+<section class="board" id="s2-dir"><div class="cap"><b>2·A WHAT YOU DO NEXT, AS TABS</b><span class="rec">Recommended</span><span>Check it · Send it · Waiting · Not in the file · Proven · Cancelled on the title line; the row opens its request</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="wait"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <b>Waiting on the carrier</b></div>
+<div class="tl"><h1>Waiting on the carrier <i class="ib">i</i></h1><div class="ut"><span class="on">Open<span class="n">2</span></span><span>Check it<span class="n r">1</span></span><span>Send it<span class="n w">1</span></span><span>Waiting<span class="n">0</span></span><span>Not in the file<span class="n">0</span></span><span>Proven<span class="n">0</span></span><span>Cancelled<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">New request</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Client, policy or reference</span><span class="inp sel" style="width:180px">Every change</span><span class="sp"></span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th>Client · policy</th><th>Change asked</th><th>Sent · show by</th><th>What the latest file shows</th><th class="r">Waiting</th><th>Next step</th></tr>
+<tr class="grp"><td colspan="6"><span class="red">● Check it</span> <span class="n">1</span></td></tr>
+<tr class="lk"><td><span class="who">Joshua Anderson</span><a class="pn">American Amicable 0119121669</a><a class="pn" style="color:var(--pink)">From a Retention case</a></td><td>Payment date<span class="pn">Draft day → 3</span></td><td>Phone call · Oct 16, 2026<span class="pn">ref 88412 · no date given</span></td><td><span class="st w">Carrier says done</span><span class="pn amb">American Amicable's file doesn't show the draft day, so this can't be verified from it.</span></td><td class="r"><span class="big red">25 days</span><span class="pn">waiting</span></td><td><span class="nx u">Check it ›</span></td></tr>
+<tr class="grp"><td colspan="6"><span class="amb">● Send it</span> <span class="n">1</span></td></tr>
+<tr class="lk"><td><span class="who">Emma Hobbs</span><a class="pn">American Amicable 0119015880</a></td><td>Address<span class="pn">1180 Pine Ridge Rd · ZIP 80014 · CO</span></td><td class="m">Not sent yet<span class="pn">no date given</span></td><td><span class="st z">Not sent yet</span></td><td class="r"><span class="big red">25 days</span><span class="pn">unsent</span></td><td><span class="nx">Send it ›</span></td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">Grouped by what you do next, the longest wait first · a request closes only when a carrier file shows the change<span class="sp"></span>2 requests</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Open</b> (the default) groups by next step; each other tab is one bucket. Red count: something to check; amber: something to send. The six cards go.</li><li>Mark sent, Try again and Cancel the request leave the row for the request page (2·1), whose title line holds them.</li><li>The client name and policy link to the request and the policy; "From a Retention case" opens that case.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·B BY CARRIER</b><span class="alt">Direction B</span><span>one carrier call clears several requests: grouped by carrier with its phone and the requests to raise</span></div>
+<div class="frame"><div class="app" style="min-height:300px"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="wait"></div>
+<div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Waiting on the carrier <i class="ib">i</i></h1><div class="ut"><span class="on">American Amicable<span class="n r">2</span></span><span>Americo<span class="n">0</span></span><span>Mutual of Omaha<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">New request</span></div></div>
+<div class="card"><table><tr><th>Client</th><th>Change</th><th>Next step</th></tr><tr class="lk"><td><b>Joshua Anderson</b></td><td>Payment date</td><td class="nx u">Check it ›</td></tr><tr class="lk"><td><b>Emma Hobbs</b></td><td>Address</td><td class="nx">Send it ›</td></tr></table></div>
+</div></div></div></section>
+
+<section class="board"><div class="cap"><b>2·C FOUR COLUMNS</b><span class="alt">Direction C</span><span>Send it → Waiting → Check it → Proven as columns of request cards</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Waiting on the carrier <i class="ib">i</i></h1><span class="sp"></span><div class="acts"><span class="btn p">New request</span></div></div>
+<div class="kan"><div class="col"><b>Send it · 1</b><div class="rc"><b>Emma Hobbs</b><span class="m sm12">Address · 25 days unsent</span></div></div><div class="col"><b>Waiting · 0</b></div><div class="col"><b>Check it · 1</b><div class="rc"><b>Joshua Anderson</b><span class="m sm12">Payment date · 25 days</span></div></div><div class="col"><b>Proven · 0</b></div></div>
+</div></div>
+<div class="dirgrid"><div class="pick"><b>A · What you do next ✓</b><br>One bar, one table; the request page does the rest.</div><div><b>B · By carrier</b><br>Good for a batch call; hides urgency across carriers.</div><div><b>C · Four columns</b><br>Shows the flow; poor past 30 requests, no search space.</div></div></section>
+
+<section class="board" id="s2-rec"><div class="cap"><b>2·1 A REQUEST</b><span class="rec">A</span><span>/app/servicing/[id]: title alone; Request · Policy · History; the primary is the next step; ‹ › name the neighbours</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="wait"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <a>Waiting on the carrier</a> › <b>Joshua Anderson</b></div>
+<div class="tl"><h1>Joshua Anderson</h1><div class="ut"><span class="on">Request</span><span>Policy</span><span>History<span class="n">3</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Emma Hobbs ›</span><span class="btn p">Check it</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Change</div><div class="v">Payment date</div><div class="fn">Draft day → 3</div></div><div><div class="l">Sent</div><div class="v">Oct 16, 2026</div><div class="fn">Phone call · ref 88412</div></div><div><div class="l">Carrier says</div><div class="v amb">Done</div><div class="fn">told on Oct 20, 2026</div></div><div><div class="l">Latest file</div><div class="v"><a style="color:var(--text)">Nov 1, 2026</a></div><div class="fn">doesn't carry the draft day</div></div><div><div class="l">From</div><div class="v"><a style="color:var(--text)">Retention case</a></div><div class="fn">Payment problem</div></div></div>
+<div class="fill"><div class="card"><div class="hd"><h3>Where it stands</h3></div>
+<div class="stepl"><span class="dot dn">✓</span><div>Confirm the new date with the client <span class="m sm12">· Oct 16</span></div><span></span></div>
+<div class="stepl"><span class="dot dn">✓</span><div>Send the change to the carrier <span class="m sm12">· Phone call, ref 88412</span></div><span></span></div>
+<div class="stepl"><span class="dot now">3</span><div><b>The next file shows the new date</b><div class="m sm12">American Amicable's file doesn't show the draft day, so this can't be verified from it: check it with the carrier and record what they said.</div></div><span class="btn sm p">Check it</span></div>
+<div class="grow"></div><div class="foot">A request closes only when a carrier file shows the change.</div></div></div>
+</div></div></div>
+<ul class="notes"><li>Title line by state: <b>Send it</b> → "Mark sent"; <b>Check it</b> → "Check it"; <b>Not in the file</b> → "Try again" (opens New request filled in). ⋯: Cancel the request, Open the policy, Open the case.</li><li>‹ › walk the list in its tab's order (here only "Emma Hobbs ›": Joshua is first).</li></ul></section>
+
+<section class="board" id="s2-pop"><div class="cap"><b>2·2 MARK SENT, CHECK IT, CANCEL, TOASTS</b><span class="st i">Dialog · md 440</span><span>the steps of a request</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Mark sent (Send it)</div><div class="dlg"><div class="dh"><h2>Mark Emma Hobbs's request sent</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Address → 1180 Pine Ridge Rd · ZIP 80014 · CO</p><div class="db"><div><div class="lbl">How you asked</div><div class="chips"><span class="tc on">Phone call</span><span class="tc">Form</span><span class="tc">Portal</span><span class="tc">Email</span></div></div><div class="fg2"><div><div class="lbl">Their reference</div><div class="inp ph">Optional</div></div><div><div class="lbl">Takes effect by</div><div class="inp">Nov 24, 2026</div></div></div><div><div class="lbl">Form used</div><div class="inp ph">Optional</div></div></div><div class="df"><span class="sp"></span><span class="btn">Back</span><span class="btn p">Record as sent</span></div></div></div>
+<div><div class="lbltag">Check it</div><div class="dlg"><div class="dh"><h2>What did American Amicable say?</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div class="chips"><span class="tc on">It's done</span><span class="tc">Not done yet</span><span class="tc">They refused it</span></div><div class="fg2"><div><div class="lbl">They said it was done on</div><div class="inp">Oct 20, 2026</div></div><div><div class="lbl">Their reference</div><div class="inp">88412</div></div></div><p class="m sm12">This is what you were told. The request closes only when a carrier file shows the change.</p></div><div class="df"><span class="sp"></span><span class="btn">Back</span><span class="btn p">Save</span></div></div></div>
+<div><div class="lbltag">Cancel the request (⋯) · Confirm</div><div class="dlg cf"><div class="dh"><h2>Cancel the request?</h2></div><p class="dd">Emma Hobbs's address change stops being tracked. Nothing is sent to the carrier.</p><div class="df"><span class="sp"></span><span class="btn">Keep the request</span><span class="btn dp">Cancel the request</span></div></div></div>
+<div style="display:grid;gap:10px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><span>Sent. It stays open until a carrier file shows the change.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Noted. It stays open until a carrier file shows the change.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Cancelled.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Saved as not sent yet. Mark it sent when you have asked the carrier.</span></div></div>
+</div></section>
+
+<section class="board" id="s2-new"><div class="cap"><b>2·3 NEW REQUEST</b><span class="st z">Own page</span><span>/app/servicing/new (and ?case=, ?retry=): a long form by kind; save on the title line</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="wait"></div>
+<div class="main" style="padding-bottom:16px">
+<div class="trail"><a>Retention</a> › <a>Waiting on the carrier</a> › <b>New request</b></div>
+<div class="tl"><h1>New request</h1><span class="sp"></span><div class="acts"><span class="btn">Save, send later</span><span class="btn p">Record as sent</span></div></div>
+<div class="two">
+<div class="card"><div class="hd"><h3>Which policy and what change</h3></div><div class="fg" style="padding:0 16px 16px"><div><div class="lbl">Policy</div><div class="inp">Ray George · Americo AM09986209</div></div><div><div class="lbl">Change</div><div class="chips"><span class="tc on">Payment date</span><span class="tc">Bank or card</span><span class="tc">Mailed bill to bank draft</span><span class="tc">Address</span></div></div><div><div class="lbl">Draft day (optional)</div><div class="chips"><span class="tc">The carrier's default</span><span class="tc on">Choose a day</span></div><div class="inp" style="margin-top:8px;width:120px">3</div><div class="hint">No recommendation: when their money arrives isn't known. Ask the client, and set it in Draft dates.</div></div><div class="errl">This policy already has an open request of this kind. Finish or cancel it on Waiting on the carrier first.</div></div></div>
+<div class="card"><div class="hd"><h3>The call</h3></div><div class="fg" style="padding:0 16px 16px"><div class="fg2"><div><div class="lbl">How you asked</div><div class="inp sel">Phone call</div></div><div><div class="lbl">Their reference</div><div class="inp ph">Optional</div></div></div><div class="fg2"><div><div class="lbl">Form used</div><div class="inp ph">Optional</div></div><div><div class="lbl">Takes effect by</div><div class="inp">Nov 24, 2026</div></div></div><div><div class="lbl">Note</div><div class="inp ta ph">Who you spoke to</div></div><p class="m sm12">The client has to authorise it.</p></div></div>
+</div></div></div></div>
+<ul class="notes"><li>Opened from a case step, Try again or the title line; leaving with changes asks "Leave without saving this request?" (Discard / Save, send later). On save it returns to where it was opened.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·4 STATES and PHONE</b><span>empty tabs, not switched on, read-only</span></div>
+<div class="stage" style="padding:20px">
+<div class="card" style="width:400px"><div class="empty"><b>No servicing requests yet</b><span>Start one from a Retention case, or with New request.</span><span class="btn p">New request</span></div></div>
+<div class="card" style="width:400px"><div class="empty"><b>Nothing to check</b><span>A request lands here when the carrier's file doesn't show the change by its date.</span></div></div>
+<div class="card" style="width:400px"><div class="hd"><h3>Read-only</h3></div><div style="padding:0 16px 16px" class="m">New request reads disabled with "Paused while the account is read-only."; a request page keeps only ‹ › and ⋯ › Open the policy.</div></div>
+<div class="phone" style="min-height:520px"><div class="pb"><span>☰ Retention</span><span>9:41</span></div><div class="pm"><h1>Waiting on the carrier</h1><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Open 2</span><span>Check it <span class="n r">1</span></span><span>Send it <span class="n w">1</span></span></div><span class="btn p" style="justify-content:center">New request</span>
+<div class="pc"><div class="row"><b>Joshua Anderson</b><span class="red sm12 bold">25 days</span></div><span class="m sm12">Payment date · Draft day → 3</span><span class="st w" style="justify-self:start">Carrier says done</span><span class="nx u">Check it ›</span></div>
+<div class="pc"><div class="row"><b>Emma Hobbs</b><span class="red sm12 bold">25 days</span></div><span class="m sm12">Address · not sent yet</span><span class="nx">Send it ›</span></div></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 3 · WIN-BACK ═══════════════════════════════════ -->
+<section class="screen" id="s3">
+<h2>3 · Win-back</h2>
+<p class="sub">/app/reinstatement?view=…, /app/reinstatement/winback/[id] · WinbackBoard, the former-client page</p>
+
+<section class="board"><div class="cap"><b>3·0 CRITIQUE</b><span>today's list and former-client page</span></div>
+<div class="card crit"><ol>
+<li><b>Two notice cards can sit on top</b> ("N policies lapsed after a reported death…", "The Win-back list needs a scrub before anyone is dialled. Run it"), then six stage cards, then the table: the clients start a third of the way down.</li>
+<li><b>Every row ends in a green "Open the Lead"</b> or "Open": a button per row, and the row's name goes somewhere else (the former client) than its button (the lead).</li>
+<li><b>"Fair" for everyone</b> in a Chance column with no explanation, while When to call (the thing that decides your day) is in plain grey.</li>
+<li><b>The address says reinstatement</b> (/app/reinstatement) and a retention rep is silently bounced to Cases.</li>
+</ol></div></section>
+
+<section class="board" id="s3-dir"><div class="cap"><b>3·A WHERE THEY STAND, AS TABS</b><span class="rec">Recommended</span><span>Call now · Stuck · Soon · Cooling off · Never call · Possible claims on the title line; the notices become tab counts</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="wb"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <b>Win-back</b></div>
+<div class="tl"><h1>Win-back <i class="ib">i</i></h1><div class="ut"><span>All<span class="n">6</span></span><span class="on">Call now<span class="n w">3</span></span><span>Stuck<span class="n">0</span></span><span>Soon<span class="n">0</span></span><span>Cooling off<span class="n">3</span></span><span>Never call<span class="n">0</span></span><span>Possible claims<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Open the Win-back list</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Client, policy or phone</span><span class="btn">Filters</span><span class="sp"></span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th>Client</th><th>What they had</th><th>Why it ended</th><th>When to call</th><th>Chance</th><th>Next step</th></tr>
+<tr class="lk"><td><span class="who">James Morgan</span><span class="pn">(533) 555-0155 · 53 · WI</span></td><td><a>American Amicable 0119750842</a><span class="pn">$102.30/mo · $20,000 cover · paid 1 month</span></td><td>Just stopped, no reason given<span class="pn">Nothing on record · lapsed Jul 1, 2026</span></td><td><span class="grn bold">On the list</span><span class="pn">since Oct 16, 2026</span></td><td>Fair<span class="pn">1 month paid</span></td><td><span class="nx">Call from the list ›</span></td></tr>
+<tr class="lk"><td><span class="who">Jason Anderson</span><span class="pn">(909) 555-0121 · 60 · NY</span></td><td><a>American Amicable 0119027412</a><span class="pn">$92.16/mo · $12,000 cover · paid 1 month</span></td><td>Just stopped, no reason given<span class="pn">Nothing on record · lapsed Jul 1, 2026</span></td><td><span class="grn bold">On the list</span><span class="pn">since Oct 16, 2026</span></td><td>Fair<span class="pn">1 month paid</span></td><td><span class="nx">Call from the list ›</span></td></tr>
+<tr class="lk"><td><span class="who">Gary Diaz</span><span class="pn">(854) 555-0193 · 73 · TX</span></td><td><a>American Amicable 0119177703</a><span class="pn">$69.13/mo · $5,000 cover · paid 2 months</span></td><td>Just stopped, no reason given<span class="pn">Nothing on record · lapsed Jul 1, 2026</span></td><td><span class="grn bold">On the list</span><span class="pn">since Oct 16, 2026</span></td><td>Fair<span class="pn">2 months paid</span></td><td><span class="nx">Call from the list ›</span></td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">Stuck and callable first · a client is called again only after the cooling-off for why they left<span class="sp"></span>3 clients</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>The two notices become counts:</b> Possible claims turns red with its count; an unscrubbed list turns Call now amber and the title-line primary reads <b>Scrub the list first</b> (opens the Win-back list on its scrub step) until it is done.</li><li>A row opens the former client's page; the lead is that page's primary. Chance says why ("1 month paid").</li></ul></section>
+
+<section class="board"><div class="cap"><b>3·B BY WHY THEY LEFT</b><span class="alt">Direction B</span><span>the reasons are the tabs, each with its own cooling-off and talk track</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Win-back <i class="ib">i</i></h1><div class="ut"><span class="on">Just stopped<span class="n">3</span></span><span>A payment failed<span class="n">3</span></span><span>Could not afford it<span class="n">0</span></span><span>Card or bank changed<span class="n">0</span></span><span>Never call<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Open the Win-back list</span></div></div>
+<p class="m">Shows the pattern (why clients leave), but "who do I call today" is spread over every tab.</p></div></div></section>
+
+<section class="board"><div class="cap"><b>3·C BY WHEN TO CALL</b><span class="alt">Direction C</span><span>a six-week strip: who becomes callable when</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Win-back <i class="ib">i</i></h1><span class="sp"></span><div class="acts"><span class="btn p">Open the Win-back list</span></div></div>
+<div class="cal"><div><b>Now · 3</b><span>James Morgan</span><span>Jason Anderson</span><span>Gary Diaz</span></div><div><b>Nov 17</b></div><div><b>Nov 24</b></div><div><b>Dec 1</b></div><div><b>Dec 8</b></div><div><b>Dec 30 · 3</b><span>Robert Kennedy</span><span>Anna Montgomery</span><span>Tara Quinn</span></div></div>
+</div></div>
+<div class="dirgrid"><div class="pick"><b>A · Where they stand ✓</b><br>Call now first; no notices; the row opens the client.</div><div><b>B · By why they left</b><br>Good for a campaign review, slow for a day's calls.</div><div><b>C · By when to call</b><br>Nice planning view; no room for the facts.</div></div></section>
+
+<section class="board" id="s3-rec"><div class="cap"><b>3·1 A FORMER CLIENT</b><span class="rec">A</span><span>/app/reinstatement/winback/[id]: title alone; Why it ended · What they had · History; Open the lead is the primary</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="wb"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <a>Win-back</a> › <a>Call now</a> › <b>Jason Anderson</b></div>
+<div class="tl"><h1>Jason Anderson</h1><div class="ut"><span class="on">Why it ended</span><span>What they had</span><span>History<span class="n">4</span></span></div><span class="sp"></span><div class="acts"><span class="btn">‹ James Morgan</span><span class="btn">Gary Diaz ›</span><span class="btn p">Open the lead</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Where they are</div><div class="v grn">On the Win-back list</div><div class="fn">since Oct 16, 2026</div></div><div><div class="l">Phone</div><div class="v">(909) 555-0121</div><div class="fn">60 · NY</div></div><div><div class="l">Lapsed</div><div class="v">Jul 1, 2026</div><div class="fn">past reinstatement</div></div><div><div class="l">Premium</div><div class="v">$92.16/mo</div><div class="fn">$12,000 cover</div></div><div><div class="l">Chance</div><div class="v">Fair</div><div class="fn">paid 1 month</div></div></div>
+<div class="fill"><div class="two" style="flex:1">
+<div class="card"><div class="hd"><h3>Why it ended</h3></div><div style="padding:0 16px 16px" class="m"><b style="color:var(--text)">Just stopped, no reason given.</b> Nothing on record: inferred from payments, never said.</div></div>
+<div class="card"><div class="hd"><h3>What to say</h3></div><div style="padding:0 16px 16px"><div class="say">"I saw your cover with American Amicable ended in July. A lot has changed since; can I take two minutes to see if there's something that suits you now?"</div><p class="m sm12" style="margin-top:12px">The call is made from the Win-back list, where the calling window and do-not-call checks apply.</p></div></div>
+</div></div></div></div></div>
+<ul class="notes"><li>⋯: Open the policy, Never call (confirm). A possible claim's page has <b>Mark handled</b> as its primary (confirm with a note); a stuck client's page leads with why ("Couldn't go on the list: no phone on file") and <b>Add a phone</b>.</li></ul></section>
+
+<section class="board"><div class="cap"><b>3·2 CONFIRMS, STATES, TOASTS, PHONE</b><span>Never call, Mark handled, empty tabs</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Never call (⋯) · Confirm</div><div class="dlg cf"><div class="dh"><h2>Never call Jason Anderson?</h2></div><p class="dd">He leaves the Win-back list and is never released again. Use this when he asked not to be contacted.</p><div class="df"><span class="sp"></span><span class="btn">Keep</span><span class="btn dp">Never call</span></div></div></div>
+<div><div class="lbltag">Possible claim · Mark handled · Confirm</div><div class="dlg"><div class="dh"><h2>Mark handled?</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">A policy that lapsed after a reported death: help the family claim, or mark it handled.</p><div class="db"><div><div class="lbl">What was done</div><div class="inp ta ph">Spoke to the daughter, claim form sent</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Mark handled</span></div></div></div>
+<div class="card" style="width:340px"><div class="empty"><b>No lapsed clients yet</b><span>A client shows here once their policy is past the carrier's reinstatement window.</span></div></div>
+<div class="card" style="width:340px"><div class="empty"><b>No possible claims</b><span>A policy that lapsed after a reported death shows here: help the family claim, or mark it handled.</span></div></div>
+<div style="display:grid;gap:10px"><div class="toast"><span class="tk ok">✓</span><span>Marked handled.</span></div><div class="toast"><span class="tk bd">!</span><span>That could not be saved.</span></div></div>
+<div class="phone" style="min-height:460px"><div class="pb"><span>☰ Retention</span><span>9:41</span></div><div class="pm"><h1>Win-back</h1><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Call now <span class="n w">3</span></span><span>Cooling off 3</span><span>Claims 0</span></div><span class="btn p" style="justify-content:center">Open the Win-back list</span><div class="pc"><div class="row"><b>James Morgan</b><span class="grn sm12 bold">On the list</span></div><span class="m sm12">$102.30/mo · just stopped · lapsed Jul 1</span></div><div class="pc"><div class="row"><b>Jason Anderson</b><span class="grn sm12 bold">On the list</span></div><span class="m sm12">$92.16/mo · just stopped · lapsed Jul 1</span></div></div></div>
+</div></section>
+</section>
+<!-- ═══════════════════════════════════ 4 · LAPSE RISK ═══════════════════════════════════ -->
+<section class="screen" id="s4">
+<h2>4 · Lapse risk</h2>
+<p class="sub">/app/lapse-risk (Call list → redirects to /app/retention), /app/lapse-risk?view=signals · DataInPage step "needs-you", LapseRiskBoard, RecordLapseSignal</p>
+
+<section class="board"><div class="cap"><b>4·0 CRITIQUE</b><span>today's page</span></div>
+<div class="card crit"><ol>
+<li><b>It lives in the wrong area.</b> The trail reads Carrier sync › Needs you › Lapse risk, with the Carrier sync rail beside it, yet its first tab (Call list) jumps to Retention › Cases.</li>
+<li><b>What is left is an empty board.</b> "Recorded signals": "Nothing at risk right now", with "Review Policies" as the only way on. The signals a person records are what Cases' New case now does.</li>
+<li><b>Two names for one idea.</b> A rep hears "lapse risk", "pending lapse", "save queue" and "cases" for the same policies.</li>
+</ol></div></section>
+
+<section class="board" id="s4-dir"><div class="cap"><b>4·A SIGNALS ARE CASES</b><span class="rec">Recommended</span><span>/app/lapse-risk opens Cases; "Record a signal" becomes New case; a person's cases are a chip on Cases</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="cases"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <b>Cases</b></div>
+<div class="tl"><h1>Cases <i class="ib">i</i></h1><div class="ut"><span class="on">Payment problem<span class="n w">668</span></span><span>Pending lapse<span class="n r">401</span></span><span>Can reinstate<span class="n r">5</span></span><span>Lost<span class="n">2</span></span><span>Paperwork<span class="n">21</span></span><span>Closed<span class="n">3</span></span></div><span class="sp"></span><div class="acts"><span class="btn">New case</span><span class="btn p">Work the next case</span></div></div>
+<div class="fill"><div class="card"><div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Client, policy or phone</span><span class="tc">Mine <span class="n">214</span></span><span class="tc">Past due <span class="n r">319</span></span><span class="tc on">Opened by a person <span class="n">1</span></span><span class="btn">Filters</span></div>
+<table class="grow"><tr><th>Client · policy</th><th>Why</th><th class="r">$/mo</th><th class="r">Deadline</th><th>Opened by</th><th>Next step</th></tr>
+<tr class="lk"><td><span class="who">Nadia Brooks</span><a class="pn">Mutual of Omaha MOO-6610438</a></td><td>Asked to cancel<span class="pn">"Moving in with her son, may drop it"</span></td><td class="r">$36.40</td><td class="r m">No carrier window</td><td><a>Dana Whitfield</a> · Nov 9</td><td><span class="nx">Call: find out why they want to cancel ›</span></td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table></div></div>
+</div></div></div>
+<ul class="notes"><li>Lapse risk leaves Carrier sync › Needs you. Its address opens Cases (?view=signals opens Cases with "Opened by a person"). Old recorded signals are copied into cases with their reason and note, so nothing recorded is lost (a one-off, owner to approve).</li><li>The New case dialog (board 1·4) is the one way to record what a person heard.</li></ul></section>
+
+<section class="board"><div class="cap"><b>4·B A "SIGNALS" TAB ON CASES</b><span class="alt">Direction B</span><span>the recorded-signal board kept as a Cases tab</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="tl"><h1>Cases <i class="ib">i</i></h1><div class="ut"><span>Payment problem<span class="n w">668</span></span><span>…</span><span>Closed<span class="n">3</span></span><span class="on">Signals<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Record a signal</span></div></div><p class="m">Keeps LA-4.16's board, but a signal and a case are then two records for one worry, worked in two places.</p></div></div></section>
+
+<section class="board"><div class="cap"><b>4·C ITS OWN RAIL STEP</b><span class="alt">Direction C</span><span>Lapse risk moves to the Retention rail as it is</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="tl"><h1>Lapse risk <i class="ib">i</i></h1><div class="ut"><span class="on">Recorded signals<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Record a signal</span></div></div><p class="m">The least work; a sixth rail entry that is empty most days.</p></div></div>
+<div class="dirgrid"><div class="pick"><b>A · Signals are cases ✓</b><br>One list, one way in; Carrier sync stays about files.</div><div><b>B · Signals tab</b><br>Two records for one worry.</div><div><b>C · Own rail step</b><br>An empty page on the rail.</div></div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 5 · SCORECARD ═══════════════════════════════════ -->
+<section class="screen" id="s5">
+<h2>5 · Scorecard</h2>
+<p class="sub">/app/retention-scorecard?period=90|180|365&amp;view=people|steps&amp;rep= · CaseScorecardBoard (the ladder's), RetentionScorecardBoard (LA-5.8, before the ladder)</p>
+
+<section class="board"><div class="cap"><b>5·0 CRITIQUE</b><span>today's Reports › Retention scorecard</span></div>
+<div class="card crit"><ol>
+<li><b>Out of reach from the work:</b> the ninth entry of the Reports rail, under Sales performance and True CPA.</li>
+<li><b>The two views are hidden.</b> By person · By step render in a slot most screens never show; the page reads as one table with one row.</li>
+<li><b>Figures say themselves twice</b> ("1,097 | 1,097", "3 of 3 saved | 3 of 3 saved") and none link: 1,097 open can't be opened, Ruth Alvarez can't be clicked.</li>
+<li><b>Half the window is empty</b> under a one-row table.</li>
+</ol></div></section>
+
+<section class="board" id="s5-dir"><div class="cap"><b>5·A ON THE RAIL, PEOPLE AND STEPS AS TABS</b><span class="rec">Recommended</span><span>Scorecard on the Retention rail; By person · By step on the title line; a person opens their own page</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="score"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <b>Scorecard</b></div>
+<div class="tl"><h1>Scorecard <i class="ib">i</i></h1><div class="ut"><span class="on">By person<span class="n">3</span></span><span>By step<span class="n">5</span></span></div><span class="sp"></span><div class="acts"><span class="inp sel" style="width:170px">Last 6 months</span></div></div>
+<div class="strip" style="grid-template-columns:repeat(4,1fr)"><div><div class="l">Open</div><div class="v"><a style="color:var(--text)">1,097</a></div><div class="fn">0 unreachable</div></div><div><div class="l">Saved</div><div class="v grn"><a style="color:var(--good)">3</a></div><div class="fn">$184/mo kept</div></div><div><div class="l">Lost</div><div class="v"><a style="color:var(--text)">0</a></div><div class="fn">0 closed without a save</div></div><div><div class="l">Retention rate</div><div class="v">3 of 3 saved</div><div class="fn">saved ÷ (saved + lost)</div></div></div>
+<div class="fill"><div class="card">
+<table class="grow"><tr><th>Person</th><th class="r">Open</th><th class="r">Saved</th><th class="r">Lost</th><th class="r">Closed, no save</th><th class="r">Unreachable</th><th class="r">Save rate</th><th class="r">Premium kept</th></tr>
+<tr class="lk"><td class="bold">Ruth Alvarez</td><td class="r"><a>1,021</a></td><td class="r"><a>3</a></td><td class="r"><a>0</a></td><td class="r"><a>0</a></td><td class="r"><a>0</a></td><td class="r">3 of 3 saved</td><td class="r">$184/mo</td></tr>
+<tr class="lk"><td class="bold">Dana Whitfield</td><td class="r"><a>74</a></td><td class="r"><a>0</a></td><td class="r"><a>0</a></td><td class="r"><a>0</a></td><td class="r"><a>0</a></td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr class="lk"><td class="bold">Nobody yet</td><td class="r"><a>2</a></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr><td colspan="8" style="border:0"></td></tr></table>
+<div class="foot">Saved means a carrier file proved it; closed without a save counts apart from the rate · under 10 decided cases the counts are shown</div></div></div>
+</div></div></div>
+<ul class="notes"><li>Every count opens Cases filtered (Open 1,021 → Cases · owner Ruth Alvarez; Saved 3 → Cases › Closed · saved · Ruth). A person's name opens their page (5·1). The period sits on the title line as the page's one control.</li><li>A producer or rep sees only their own row, and lands on their own page.</li></ul></section>
+
+<section class="board"><div class="cap"><b>5·B STAY IN REPORTS</b><span class="alt">Direction B</span><span>today's place, with the tabs on the title line and links on every figure</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="trail"><a>Reports</a> › <b>Retention scorecard</b></div><div class="tl"><h1>Retention scorecard <i class="ib">i</i></h1><div class="ut"><span class="on">By person</span><span>By step</span></div><span class="sp"></span></div><p class="m">Fine for an owner who reads reports; a rep never finds it.</p></div></div></section>
+
+<section class="board"><div class="cap"><b>5·C ONE PAGE WITH RESULTS</b><span class="alt">Direction C</span><span>Scorecard and Results become one "How we're doing" page with four tabs</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="tl"><h1>How we're doing <i class="ib">i</i></h1><div class="ut"><span class="on">People</span><span>Steps</span><span>Carriers</span><span>Radar check</span></div><span class="sp"></span></div><p class="m">One fewer rail entry, but Results is owner-only, so a rep sees half a page of tabs they can't open.</p></div></div>
+<div class="dirgrid"><div class="pick"><b>A · On the rail ✓</b><br>Next to the work; people and steps as tabs; every number opens its cases.</div><div><b>B · Stay in Reports</b><br>Least change.</div><div><b>C · With Results</b><br>Fewer entries; mixed access.</div></div></section>
+
+<section class="board" id="s5-rec"><div class="cap"><b>5·1 A PERSON</b><span class="rec">A</span><span>/app/retention-scorecard?rep=: title is the name; their cases by outcome as tabs; ‹ › name the next person</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="score"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <a>Scorecard</a> › <b>Ruth Alvarez</b></div>
+<div class="tl"><h1>Ruth Alvarez</h1><div class="ut"><span class="on">By step</span><span>Open<span class="n">1,021</span></span><span>Saved<span class="n">3</span></span><span>Lost<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Dana Whitfield ›</span><span class="inp sel" style="width:170px">Last 6 months</span></div></div>
+<div class="fill"><div class="card">
+<table class="grow"><tr><th>Step</th><th class="r">Open</th><th class="r">Saved</th><th class="r">Lost</th><th class="r">Closed, no save</th><th class="r">Save rate</th><th class="r">Premium kept</th></tr>
+<tr class="lk"><td class="bold">Payment problem</td><td class="r"><a>641</a></td><td class="r"><a>3</a></td><td class="r">0</td><td class="r">0</td><td class="r">3 of 3 saved</td><td class="r">$184/mo</td></tr>
+<tr class="lk"><td class="bold">Pending lapse</td><td class="r"><a>358</a></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr class="lk"><td class="bold">Lapsed, can reinstate</td><td class="r"><a>4</a></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr class="lk"><td class="bold">Lost</td><td class="r"><a>2</a></td><td class="r m">—</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr class="lk"><td class="bold">Paperwork</td><td class="r"><a>16</a></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table></div></div>
+</div></div></div>
+<ul class="notes"><li>Open · Saved · Lost tabs list the person's cases (the Cases table, filtered); a row opens the case. The case page's ‹ › then walk that person's list.</li><li>Empty: "No cases in this period · Cases come from the carrier files; they show here as they are worked and closed."</li></ul></section>
+</section>
+
+<!-- ═══════════════════════════════════ 6 · RESULTS ═══════════════════════════════════ -->
+<section class="screen" id="s6">
+<h2>6 · Results</h2>
+<p class="sub">/app/retention-results?period=&amp;view= · RetentionResultsBoard (LA-5.9). Owner only.</p>
+
+<section class="board"><div class="cap"><b>6·0 CRITIQUE</b><span>today's Reports › Retention results</span></div>
+<div class="card crit"><ol>
+<li><b>It measures a retired idea.</b> "Do the bands come true?", "Does working beat the holdout?", "Predictions checked 230": all about the radar the owner took off the menu on 2026-11-05. Nothing says whether the ladder saves policies.</li>
+<li><b>Views are toggles in the toolbar</b> ("By Band · By Weight Version · By Confidence") while "Were the predictions right? / Does working it help?" are tabs in a hidden slot.</li>
+<li><b>The table stops at four rows</b> and leaves the rest of the window blank.</li>
+</ol></div></section>
+
+<section class="board" id="s6-dir"><div class="cap"><b>6·A WHAT THE LADDER SAVED</b><span class="rec">Recommended</span><span>Saves · By carrier · Time to save · Radar check on the title line; the radar's two views kept as the last tab</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="results"></div>
+<div class="main">
+<div class="trail"><a>Retention</a> › <b>Results</b></div>
+<div class="tl"><h1>Results <i class="ib">i</i></h1><div class="ut"><span class="on">Saves</span><span>By carrier<span class="n">4</span></span><span>Time to save</span><span>Radar check</span></div><span class="sp"></span><div class="acts"><span class="inp sel" style="width:170px">The last quarter</span></div></div>
+<div class="strip" style="grid-template-columns:repeat(4,1fr)"><div><div class="l">Saved</div><div class="v grn"><a style="color:var(--good)">3</a></div><div class="fn">$184/mo kept · proven by a file</div></div><div><div class="l">Lost</div><div class="v"><a style="color:var(--text)">0</a></div><div class="fn">gone to win-back</div></div><div><div class="l">Advance kept</div><div class="v">$2,208</div><div class="fn">not charged back</div></div><div><div class="l">Still open</div><div class="v"><a style="color:var(--text)">1,097</a></div><div class="fn">$63,604/mo at stake</div></div></div>
+<div class="fill"><div class="card">
+<table class="grow"><tr><th>Step it was on</th><th class="r">Opened</th><th class="r">Saved</th><th class="r">Lost</th><th class="r">Closed, no save</th><th class="r">Save rate</th><th class="r">Premium kept</th></tr>
+<tr class="lk"><td class="bold">Payment problem</td><td class="r"><a>671</a></td><td class="r"><a>3</a></td><td class="r">0</td><td class="r">0</td><td class="r">3 saved <span class="m sm12">(too few for a rate)</span></td><td class="r">$184/mo</td></tr>
+<tr class="lk"><td class="bold">Pending lapse</td><td class="r"><a>401</a></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr class="lk"><td class="bold">Lapsed, can reinstate</td><td class="r"><a>5</a></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr class="lk"><td class="bold">Paperwork</td><td class="r"><a>21</a></td><td class="r">0</td><td class="r">0</td><td class="r">0</td><td class="r m">—</td><td class="r m">—</td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">Saved only when a later carrier file proves it · under 20 decided cases a cell shows the count, never a percentage</div></div></div>
+</div></div></div>
+<ul class="notes"><li>Every count opens Cases (or Closed) filtered to that step and period. <b>By carrier</b> is the same table by carrier, which tells an owner which carrier's clients slip most. <b>Time to save</b>: days from opened to proven, by step.</li><li><b>Radar check</b> keeps today's board (bands, holdout) for as long as the radar runs; its toggles become a select in its toolbar.</li></ul></section>
+
+<section class="board"><div class="cap"><b>6·B TODAY'S RADAR CHECK, TIDIED</b><span class="alt">Direction B</span><span>the two questions as tabs; the band toggles in the toolbar</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="tl"><h1>Results <i class="ib">i</i></h1><div class="ut"><span class="on">Were the predictions right?</span><span>Does working it help?</span></div><span class="sp"></span></div>
+<div class="card"><table><tr><th>Band</th><th class="r">Policies</th><th class="r">Lapsed within 90 days</th><th class="r">Rate</th></tr><tr><td>Critical</td><td class="r"><a>44</a></td><td class="r">17</td><td class="r">39%</td></tr><tr><td>High</td><td class="r"><a>62</a></td><td class="r">22</td><td class="r">35%</td></tr><tr><td>Medium</td><td class="r"><a>45</a></td><td class="r">8</td><td class="r">18%</td></tr><tr><td>Low</td><td class="r"><a>79</a></td><td class="r">0</td><td class="r">0%</td></tr></table></div></div></div></section>
+
+<section class="board"><div class="cap"><b>6·C ONE NUMBER PER MONTH</b><span class="alt">Direction C</span><span>a month-by-month table: saved, lost, kept $</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="tl"><h1>Results <i class="ib">i</i></h1><span class="sp"></span></div>
+<div class="card"><table><tr><th>Month</th><th class="r">Opened</th><th class="r">Saved</th><th class="r">Lost</th><th class="r">Kept</th></tr><tr><td>Nov 2026</td><td class="r">12</td><td class="r">3</td><td class="r">0</td><td class="r">$184/mo</td></tr><tr><td>Oct 2026</td><td class="r">1,085</td><td class="r">0</td><td class="r">0</td><td class="r">—</td></tr></table></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · What the ladder saved ✓</b><br>Answers "is Retention worth it?" in the ladder's own words; the radar stays a tab.</div><div><b>B · Radar check tidied</b><br>Measures what was retired.</div><div><b>C · By month</b><br>A trend, no "where".</div></div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 7 · SETTINGS ═══════════════════════════════════ -->
+<section class="screen" id="s7">
+<h2>7 · Retention settings</h2>
+<p class="sub">/app/retention-settings (tabs Start here · Who works it · Campaigns &amp; win-back · Holdout), /ladder, /weights · RetentionSettingsBoard, LadderRulesBoard, RetentionWeightsBoard. Owner only.</p>
+
+<section class="board"><div class="cap"><b>7·0 CRITIQUE</b><span>today's four tabs and two pages</span></div>
+<div class="card crit"><ol>
+<li><b>Start here starts with the retired queue:</b> "The save queue takes · Medium and above / High and above / Critical only", risk bands, then "What puts a policy on the ladder" as one line with a Ladder Rules button. What drives Cases today is the third thing on the page and a page away.</li>
+<li><b>Tabs and pages mixed:</b> four tabs, plus Ladder rules and Scoring weights as pages off buttons, each with its own "All Retention settings" link back.</li>
+<li><b>One long form per tab</b> with a save bar and a leave guard; an "Advanced" fold hides cooldowns, the sample floor and the danger window in one sentence.</li>
+<li><b>Campaigns &amp; win-back mixes three things:</b> the paper-bill campaign, the reinstatement colours and win-back cooling-off; failing a servicing request hides in its "Advanced".</li>
+<li><b>Read-only shows a sentence</b> ("Read only: your plan is paused.") on the page.</li>
+</ol></div></section>
+
+<section class="board" id="s7-dir"><div class="cap"><b>7·A BY WHAT IT DRIVES</b><span class="rec">Recommended</span><span>Ladder · Who works it · Requests · Win-back · Radar on the section's title line; each setting is a row that opens its dialog</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail" data-set="1"></div>
+<div class="main">
+<div class="trail"><a>Settings</a> › <b>Retention</b></div>
+<div class="tl"><h1>Retention <i class="ib">i</i></h1><div class="ut"><span class="on">Ladder<span class="n w">1</span></span><span>Who works it</span><span>Requests</span><span>Win-back</span><span>Radar</span></div><span class="sp"></span><div class="acts"><span class="btn">Open Cases</span><span class="btn ic">⋯</span></div></div>
+<div class="fill"><div class="card">
+<div class="hd"><h3>What the files show, and the step it opens</h3><span class="sp"></span><span class="m sm12">a row opens it</span></div>
+<table class="grow"><tr><th>What the files show</th><th>Puts the policy on</th><th>Counts</th><th class="r">Open now</th><th></th></tr>
+<tr class="lk"><td>First payment missed</td><td class="m">Payment problem</td><td><span class="st g1">On</span></td><td class="r"><a>633</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Payment missed</td><td class="m">Payment problem</td><td><span class="st g1">On</span></td><td class="r"><a>21</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Draft bounced</td><td class="m">Payment problem</td><td><span class="st g1">On</span></td><td class="r"><a>9</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Banking problem</td><td class="m">Payment problem</td><td><span class="st g1">On</span></td><td class="r"><a>5</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Carrier says lapse pending</td><td class="m">Pending lapse</td><td><span class="st g1">On</span></td><td class="r"><a>388</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Lapse notice</td><td class="m">Pending lapse</td><td><span class="st g1">On</span></td><td class="r"><a>13</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Lapsed, inside the reinstatement window</td><td class="m">Lapsed, can reinstate</td><td><span class="st g1">On</span></td><td class="r"><a>5</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Lapsed past the window · Charged back</td><td class="m">Lost</td><td><span class="st g1">On</span></td><td class="r"><a>2</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Paying by mailed bill</td><td class="m">Paperwork</td><td><span class="st w">Off</span></td><td class="r m">—</td><td class="chev">›</td></tr>
+<tr class="lk"><td>Pending manual action · Asked to cancel · Wants a new payment date<span class="pn">a new payment date is opened by a person: no file carries it</span></td><td class="m">Paperwork</td><td><span class="st g1">On</span></td><td class="r"><a>21</a></td><td class="chev">›</td></tr>
+<tr class="grp"><td colspan="5">Thresholds</td></tr>
+<tr class="lk"><td>A deadline is urgent within</td><td>7 days</td><td class="m">Insurvas's</td><td class="r"><a>71 due this week</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Unreachable after</td><td>5 tries</td><td class="m">Insurvas's</td><td class="r"><a>0 unreachable</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td>Carrier words that count<span class="pn">set per carrier by Insurvas as it reads their files</span></td><td>4 words · 3 carriers</td><td class="m">Insurvas's</td><td class="r m">read only</td><td class="chev">›</td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table></div></div>
+</div></div></div>
+<ul class="notes"><li><b>Ladder</b> is first because it is what Cases runs on (today's separate Ladder rules page). The amber 1 on the tab is the switched-off fact. "Open now" links to Cases filtered to that reason.</li><li>Each row opens its dialog (7·2); a save applies from that moment and lands in Settings history. ⋯: Reset this tab to Insurvas values · History · Results.</li><li>"Open Cases" on the title line takes the owner back to the work.</li></ul></section>
+
+<section class="board"><div class="cap"><b>7·B TODAY'S TABS, LADDER FIRST</b><span class="alt">Direction B</span><span>keep the four tabs; Start here becomes the ladder; the radar goes under Holdout</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="tl"><h1>Retention <i class="ib">i</i></h1><div class="ut"><span class="on">Start here</span><span>Who works it</span><span>Campaigns &amp; win-back</span><span>Holdout</span></div><span class="sp"></span><div class="acts"><span class="btn p">Save</span></div></div><p class="m">Familiar, but "Campaigns &amp; win-back" still mixes three things and the long forms keep their save bars.</p></div></div></section>
+
+<section class="board"><div class="cap"><b>7·C ONE PAGE, SECTIONS</b><span class="alt">Direction C</span><span>every setting on one scrolling page with a contents list</span></div>
+<div class="frame"><div class="main" style="padding-bottom:16px"><div class="tl"><h1>Retention <i class="ib">i</i></h1><span class="sp"></span></div><p class="m">Searchable with Ctrl-F; a 60-setting page breaks "no blank half-page" the other way, and sub-pages are no longer tabs.</p></div></div>
+<div class="dirgrid"><div class="pick"><b>A · By what it drives ✓</b><br>Five tabs named after the page they change; every setting a row with its value and its effect.</div><div><b>B · Ladder first</b><br>Least change.</div><div><b>C · One page</b><br>Everything at once.</div></div></section>
+
+<section class="board" id="s7-tabs"><div class="cap"><b>7·1 THE OTHER FOUR TABS</b><span class="rec">A</span><span>Who works it · Requests · Win-back · Radar: the same row-opens-dialog table</span></div>
+<div class="two">
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:420px">
+<div class="tl"><h1>Retention <i class="ib">i</i></h1><div class="ut"><span>Ladder<span class="n w">1</span></span><span class="on">Who works it<span class="n w">1</span></span><span>Requests</span><span>Win-back</span><span>Radar</span></div><span class="sp"></span></div>
+<div class="card"><table><tr><th>Who owns</th><th>Role</th><th>People in it</th><th></th></tr>
+<tr class="lk"><td class="bold">Cases</td><td>Retention rep</td><td><a>Ruth Alvarez</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Waiting on the carrier</td><td>Retention rep</td><td><a>Ruth Alvarez</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Win-back calls</td><td>Producer</td><td><a>4 producers</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Share work between reps</td><td>Round-robin</td><td class="m">1 rep: <span class="amb">nothing to share yet</span></td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Hand a reinstatement to the writing agent</td><td>inside 10 days of the deadline</td><td class="m">—</td><td class="chev">›</td></tr></table>
+<div class="foot">Who holds the retention role is set in <a>Team &amp; access</a></div></div></div></div>
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:420px">
+<div class="tl"><h1>Retention <i class="ib">i</i></h1><div class="ut"><span>Ladder</span><span>Who works it</span><span class="on">Requests</span><span>Win-back</span><span>Radar</span></div><span class="sp"></span></div>
+<div class="card"><table><tr><th>Setting</th><th>Value</th><th>Whose</th><th></th></tr>
+<tr class="lk"><td class="bold">Fail a servicing request</td><td>14 days after its date</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="grp"><td colspan="4">Paper bill to bank draft</td></tr>
+<tr class="lk"><td class="bold">After a client says no, ask again in</td><td>90 days</td><td class="m">yours</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Talk track</td><td class="m">"Most clients find it easier paid straight from the bank…"</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="grp"><td colspan="4">Reinstatement countdown</td></tr>
+<tr class="lk"><td class="bold">Turn a case amber · red · pinned</td><td>14 · 7 · 3 days left</td><td class="m">Insurvas's</td><td class="chev">›</td></tr></table></div></div></div>
+</div>
+<div class="two" style="margin-top:16px">
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:380px">
+<div class="tl"><h1>Retention <i class="ib">i</i></h1><div class="ut"><span>Ladder</span><span>Who works it</span><span>Requests</span><span class="on">Win-back</span><span>Radar</span></div><span class="sp"></span></div>
+<div class="card"><table><tr><th>Why it ended</th><th>Wait before calling</th><th>Whose</th><th></th></tr>
+<tr class="lk"><td>A payment failed; they never said no</td><td>90 days</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td>Card expired, bank closed or moved</td><td>30 days</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td>Just stopped, no reason given</td><td>90 days</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td>Said they could not afford it</td><td>180 days</td><td class="m">yours</td><td class="chev">›</td></tr>
+<tr class="lk"><td>Said they no longer wanted it</td><td>365 days</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td>Asked not to be contacted · Deceased</td><td class="m">Never</td><td class="m">fixed</td><td class="chev f">—</td></tr></table></div></div></div>
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:380px">
+<div class="tl"><h1>Retention <i class="ib">i</i></h1><div class="ut"><span>Ladder</span><span>Who works it</span><span>Requests</span><span>Win-back</span><span class="on">Radar</span></div><span class="sp"></span></div>
+<div class="card"><table><tr><th>Setting</th><th>Value</th><th>Whose</th><th></th></tr>
+<tr class="lk"><td class="bold">The save queue takes</td><td>High and above · would hold 16</td><td class="m">yours</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Risk bands</td><td>25 · 50 · 75</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Scoring weights</td><td>version 1 · 7 signals</td><td class="m">Insurvas's</td><td class="chev"><a>Open ›</a></td></tr>
+<tr class="lk"><td class="bold">Queue: rest, most shown, sort</td><td>30 days · 100 cards · risk × money</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Signals: sample floors, income, danger months</td><td>20 · 20 · 4%–8% · months 2–5</td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Holdout</td><td>On · 10% held back</td><td class="m">yours</td><td class="chev">›</td></tr></table>
+<div class="foot">The predictive save queue is off the Retention menu (2026-11-05); these still score it and <a>Results › Radar check</a> reads them.</div></div></div></div>
+</div>
+<ul class="notes"><li>"Advanced" folds go: each line is its own row. The amber 1 on Who works it: share mode set with only one rep.</li><li><b>Scoring weights</b> stays its own page (seven numbers that must total 100, with a preview against today's book): /app/retention-settings/weights, its tabs ‹ Radar; Save as a new version on its title line; Reset to Insurvas weights asks first.</li></ul></section>
+
+<section class="board" id="s7-pop"><div class="cap"><b>7·2 SETTING DIALOGS, CONFIRMS, TOASTS</b><span class="st i">Dialog · md 440</span><span>one dialog per row; the two that lose something confirm</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Ladder · a fact</div><div class="dlg"><div class="dh"><h2>Paying by mailed bill</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Puts the policy on Paperwork. Off since Nov 3, 2026 (Rinor G.).</p><div class="db"><div style="display:flex;gap:10px;align-items:center"><span class="tg off"></span> Counts</div><p class="m sm12">Switched on, the next sync opens about 140 cases from the latest files.</p></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save</span></div></div></div>
+<div><div class="lbltag">Ladder · a threshold, with its error</div><div class="dlg"><div class="dh"><h2>A deadline is urgent within</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div><div class="lbl">Days</div><div class="inp err">0</div><div class="errl">Enter 1 to 30 days.</div></div></div><div class="df"><span class="btn g">Back to Insurvas's</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Save</span></div></div></div>
+<div><div class="lbltag">Who works it · a queue</div><div class="dlg"><div class="dh"><h2>Who owns Cases</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div class="chips"><span class="tc on">Retention rep</span><span class="tc">Writing agent</span><span class="tc">Owner</span></div><p class="m sm12">A role with nobody in it falls back: the save queue to each policy's writing agent, the others to you.</p></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save</span></div></div></div>
+<div><div class="lbltag">Win-back · a reason</div><div class="dlg"><div class="dh"><h2>Said they could not afford it</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div><div class="lbl">Wait before calling (days)</div><div class="inp">180</div><div class="hint">Insurvas's is 120.</div></div></div><div class="df"><span class="btn g">Back to Insurvas's</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save</span></div></div></div>
+<div><div class="lbltag">Confirm · shorter wait (today's dialog)</div><div class="dlg cf"><div class="dh"><h2>Call people who could not afford it sooner?</h2></div><p class="dd">From today, 2 clients who said they could not afford it become callable on Dec 1 instead of Feb 1.</p><div class="df"><span class="sp"></span><span class="btn">Keep the wait</span><span class="btn p">Call sooner</span></div></div></div>
+<div><div class="lbltag">Radar · Holdout · Confirm</div><div class="dlg"><div class="dh"><h2>Holdout</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">How much of the queue is held back, the advance at risk above which a policy never is, and how long after a prediction the outcome is read on Results.</p><div class="db"><div class="fg3"><div><div class="lbl">Share (%)</div><div class="inp">10</div></div><div><div class="lbl">Never above ($)</div><div class="inp">1,500</div></div><div><div class="lbl">Look after (days)</div><div class="inp">90</div></div></div></div><div class="df"><a class="sm12">How the holdout works ›</a><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save</span></div></div></div>
+<div><div class="lbltag">⋯ Reset this tab · Confirm</div><div class="dlg cf"><div class="dh"><h2>Reset Win-back to Insurvas values?</h2></div><p class="dd">1 value of yours goes back to Insurvas's (Said they could not afford it: 180 → 120 days).</p><div class="df"><span class="sp"></span><span class="btn">Keep my values</span><span class="btn p">Reset to Insurvas values</span></div></div></div>
+<div style="display:grid;gap:10px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><span>Saved. The cases follow the new rules now.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Already on Insurvas's values</span></div>
+<div class="toast"><span class="tk bd">!</span><span>That didn't save<small>On the dialog's error line while it is open.</small></span></div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>7·3 STATES and PHONE</b><span>read-only, not switched on, the phone</span></div>
+<div class="stage" style="padding:20px">
+<div class="card" style="width:420px"><div class="hd"><h3>Read-only</h3></div><div style="padding:0 16px 16px" class="m">No sentence on the page. Rows still open their dialog with the value as text and only Close; ⋯ keeps History. "Paused while the account is read-only." on hover of the dialog's absent Save.</div></div>
+<div class="card" style="width:420px"><div class="empty"><b>Not switched on yet</b><span>Retention settings need a database update.</span></div></div>
+<div class="phone" style="min-height:520px"><div class="pb"><span>‹ Settings</span><span>9:41</span></div><div class="pm"><h1>Retention</h1><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Ladder <span class="n w">1</span></span><span>Who works it</span><span>Requests</span></div>
+<div class="pc"><div class="row"><b>First payment missed</b><span class="st g1">On</span></div><span class="m sm12">Payment problem · 633 open</span></div>
+<div class="pc"><div class="row"><b>Paying by mailed bill</b><span class="st w">Off</span></div><span class="m sm12">Paperwork · off</span></div>
+<div class="pc"><div class="row"><b>Urgent within</b><span>7 days</span></div></div></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ EDIT MAP ═══════════════════════════════════ -->
+<section class="screen" id="map">
+<h2>Edit map</h2>
+<p class="sub">Every change in the recommended directions: where it opens, why there, and what it writes. Nothing opens inside a row or in a side panel.</p>
+<div class="board"><table class="ed"><tr><th>What</th><th>Opens from</th><th>Surface</th><th>Why there</th><th>Writes</th></tr>
+<tr><td colspan="5" class="sh">1 · Cases and a case</td></tr>
+<tr><td>Work the next case</td><td>Cases title line</td><td><span class="st z">Own page</span> the most urgent case</td><td>Starts the walk; ‹ › continue it</td><td>nothing</td></tr>
+<tr><td>New case (policy, why, note)</td><td>Cases title line · Lapse risk's old address</td><td><span class="st i">Dialog md</span> (was /retention/new)</td><td>Three fields; the list stays behind</td><td>retention/cases POST</td></tr>
+<tr><td>Log a call (what happened, what you did, note)</td><td>Case title line · step 1 · Calls tab</td><td><span class="st i">Dialog md</span></td><td>Was an inline form on Calls</td><td>call</td></tr>
+<tr><td>Record the payment (amount, when, how)</td><td>Step 2</td><td><span class="st i">Dialog md</span></td><td>Error line beside the amount</td><td>fix: payment_taken</td></tr>
+<tr><td>New date · new bank · switch to bank payment</td><td>Step 2 (by reason)</td><td><span class="st z">Own page</span> New request, filled in</td><td>A long form by kind; returns to the case</td><td>servicing request</td></tr>
+<tr><td>Add a note</td><td>Step foot · ⋯</td><td><span class="st i">Dialog md</span></td><td>Was a box on the page</td><td>note</td></tr>
+<tr><td>Mark a paperwork step done</td><td>Paperwork case steps</td><td><span class="st i">Dialog md</span>, stepping</td><td>Replaces the ticks + Save the checklist</td><td>fix: checklist</td></tr>
+<tr><td>Assign</td><td>⋯ (owner)</td><td><span class="st i">Dialog md</span></td><td>One choice</td><td>assign</td></tr>
+<tr><td>Close without a save</td><td>⋯</td><td><span class="st w">Confirm</span> with reason</td><td>Leaves Cases unsaved</td><td>resolve: closed_no_save</td></tr>
+<tr><td>Close to win-back</td><td>Lost case title line</td><td><span class="st w">Confirm</span> with why</td><td>Final; hands to Win-back</td><td>resolve: lost</td></tr>
+<tr><td colspan="5" class="sh">2 · Waiting on the carrier</td></tr>
+<tr><td>New request · Try again</td><td>Title line · Not in the file request · case step</td><td><span class="st z">Own page</span> /servicing/new</td><td>Long, kind-dependent form; leave guard</td><td>servicing POST</td></tr>
+<tr><td>Mark sent (how, reference, form, takes effect by)</td><td>Request title line (Send it)</td><td><span class="st i">Dialog md</span></td><td>Was a button in the row</td><td>submit</td></tr>
+<tr><td>Check it (what the carrier said, date, reference)</td><td>Request title line · step 3</td><td><span class="st i">Dialog md</span></td><td>Records what you were told; the file still decides</td><td>carrier_said</td></tr>
+<tr><td>Cancel the request</td><td>Request ⋯</td><td><span class="st w">Confirm</span></td><td>Stops tracking</td><td>cancel</td></tr>
+<tr><td colspan="5" class="sh">3 · Win-back</td></tr>
+<tr><td>Open the lead · Scrub the list first</td><td>Former-client title line · Win-back title line</td><td><span class="st z">Own page</span> the lead / the Win-back list</td><td>Calls go through the list's gates</td><td>nothing here</td></tr>
+<tr><td>Add a phone (stuck client)</td><td>Stuck client title line</td><td><span class="st i">Dialog md</span></td><td>The usual reason a client is stuck</td><td>contact phone</td></tr>
+<tr><td>Never call</td><td>Former-client ⋯</td><td><span class="st w">Confirm</span></td><td>Permanent</td><td>do_not_contact</td></tr>
+<tr><td>Mark handled (possible claim)</td><td>Claim page title line</td><td><span class="st i">Dialog md</span> with note</td><td>Was a button in the row</td><td>claim handled</td></tr>
+<tr><td colspan="5" class="sh">5–6 · Scorecard and Results</td></tr>
+<tr><td>Period</td><td>Title line select</td><td>Select</td><td>The page's one control</td><td>address only</td></tr>
+<tr><td colspan="5" class="sh">7 · Retention settings</td></tr>
+<tr><td>A ladder fact on/off</td><td>Ladder row</td><td><span class="st i">Dialog md</span></td><td>Says how many cases it would open</td><td>ladder rules</td></tr>
+<tr><td>Thresholds · queue owners · share mode · handover · request fail days · paper bill · countdown · win-back waits · radar rows</td><td>Their row</td><td><span class="st i">Dialog md</span> (+ <span class="st w">Confirm</span> for a shorter win-back wait)</td><td>One value each, "Back to Insurvas's" inside; no long forms</td><td>settings PATCH (versioned)</td></tr>
+<tr><td>Scoring weights</td><td>Radar row</td><td><span class="st z">Own page</span> /weights</td><td>Seven numbers + preview</td><td>new weight version</td></tr>
+<tr><td>Holdout</td><td>Radar row</td><td><span class="st i">Dialog md</span></td><td>Three numbers; "How it works" linked</td><td>holdout</td></tr>
+<tr><td>Reset this tab</td><td>⋯</td><td><span class="st w">Confirm</span></td><td>Loses your values</td><td>reset</td></tr>
+</table></div>
+<ul class="notes"><li><b>Picks:</b> the area <b>A · One rail</b>; Cases <b>A · The ladder as tabs</b>; Waiting on the carrier <b>A · What you do next</b>; Win-back <b>A · Where they stand</b>; Lapse risk <b>A · Signals are cases</b>; Scorecard <b>A · On the rail</b>; Results <b>A · What the ladder saved</b>; Settings <b>A · By what it drives</b>.</li>
+<li><b>New behaviour the data needs (none of it is built):</b> "Window closed · ask the carrier" for a passed deadline while the carrier still lists the policy active; the case list order carried into the case page for ‹ ›; Results' Saves / By carrier / Time to save (the ladder already stores opened, step and resolved dates); copying old recorded lapse signals into cases; "Add a phone" on a stuck win-back client; Mark sent / Check it as dialogs (their fields exist on the request page today).</li>
+<li><b>Owner calls before building:</b> whether the radar (Settings › Radar, Results › Radar check, /app/save-queue) keeps running at all; whether Reports keeps the two Retention rows as links.</li></ul>
+</section>
+</div>
+<script>
+// The Retention rail, drawn once for every frame.
+const RAIL=[["cases","Cases",'<small class="r">319</small>'],["wait","Waiting on the carrier",'<small class="w">2</small>'],["wb","Win-back",'<small class="w">3</small>'],["score","Scorecard",""],["results","Results",""]];
+document.querySelectorAll(".rail[data-on]").forEach(function(el){var on=el.getAttribute("data-on");el.innerHTML='<div class="rl">Retention</div>'+RAIL.map(function(r){return '<a class="'+(r[0]===on?"on":"")+'">'+r[1]+r[2]+"</a>";}).join("")+'<div class="foot2"><a>⚙ Retention settings</a></div>';});
+// The Settings menu, Money & compliance group.
+document.querySelectorAll(".rail[data-set]").forEach(function(el){el.innerHTML='<div class="rl">Money &amp; compliance</div><a>Accounting</a><a class="on">Retention</a><a>Compliance</a><div class="rl" style="margin-top:12px">Agency</div><a>Team &amp; access</a><a>Carriers</a>';});
+</script>
+</body>
+</html>

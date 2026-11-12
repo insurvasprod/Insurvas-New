@@ -169,7 +169,7 @@ function CalendarPanel({ el, kind, close }: { el: HTMLInputElement; kind: "date"
     setValue(el, `${value}T${time || "09:00"}`);
   };
   const shift = (by: number) => setMonth(new Date(month.getFullYear(), month.getMonth() + by, 1));
-  const nav = "inline-flex size-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]";
+  const nav = "inline-flex size-8 items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--hover-wash)] hover:text-[var(--ink)]";
   return (
     <div className="flex gap-3 p-3">
       <div className="w-[252px]">
@@ -196,8 +196,8 @@ function CalendarPanel({ el, kind, close }: { el: HTMLInputElement; kind: "date"
                 className={cn(
                   "h-8 rounded-md text-sm tabular-nums outline-none transition-colors duration-100",
                   on ? "bg-[var(--primary)] font-semibold text-[var(--on-primary)]"
-                    : value === today ? "border border-[var(--primary)] text-[var(--ink)] hover:bg-[var(--surface-alt)]"
-                    : "text-[var(--body)] hover:bg-[var(--surface-alt)]",
+                    : value === today ? "border border-[var(--primary)] text-[var(--ink)] hover:bg-[var(--hover-wash)]"
+                    : "text-[var(--body)] hover:bg-[var(--hover-wash)]",
                   !ok && "cursor-not-allowed opacity-35 hover:bg-transparent",
                 )}
               >
@@ -207,8 +207,8 @@ function CalendarPanel({ el, kind, close }: { el: HTMLInputElement; kind: "date"
           })}
         </div>
         <div className="mt-2 flex items-center justify-between border-t border-[var(--border)] pt-2">
-          <button type="button" disabled={!allowed(today)} className="h-8 rounded-md px-2 text-sm font-semibold text-[var(--accent-ink)] hover:bg-[var(--surface-alt)] disabled:opacity-40" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); pick(today); }}>Today</button>
-          {!el.required && el.value && <button type="button" className="h-8 rounded-md px-2 text-sm text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)]" onClick={() => { setValue(el, ""); close(); }}>Clear</button>}
+          <button type="button" disabled={!allowed(today)} className="h-8 rounded-md px-2 text-sm font-semibold text-[var(--accent-ink)] hover:bg-[var(--hover-wash)] disabled:opacity-40" onClick={() => { setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1)); pick(today); }}>Today</button>
+          {!el.required && el.value && <button type="button" className="h-8 rounded-md px-2 text-sm text-[var(--muted)] hover:bg-[var(--hover-wash)] hover:text-[var(--ink)]" onClick={() => { setValue(el, ""); close(); }}>Clear</button>}
         </div>
       </div>
       {kind === "datetime" && (
@@ -221,7 +221,7 @@ function CalendarPanel({ el, kind, close }: { el: HTMLInputElement; kind: "date"
               return (
                 <button key={minutes} type="button" role="option" aria-selected={on} disabled={!day}
                   onClick={() => { setValue(el, `${day}T${value}`); close(); }}
-                  className={cn("h-8 shrink-0 rounded-md px-2 text-left text-sm tabular-nums outline-none", on ? "bg-[var(--primary)] font-semibold text-[var(--on-primary)]" : "text-[var(--body)] hover:bg-[var(--surface-alt)]", !day && "opacity-40")}>
+                  className={cn("h-8 shrink-0 rounded-md px-2 text-left text-sm tabular-nums outline-none", on ? "bg-[var(--primary)] font-semibold text-[var(--on-primary)]" : "text-[var(--body)] hover:bg-[var(--hover-wash)]", !day && "opacity-40")}>
                   {clock(minutes)}
                 </button>
               );

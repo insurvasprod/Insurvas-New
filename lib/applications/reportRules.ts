@@ -82,7 +82,58 @@ export type SalesReport = {
     total: { submittedAnnualCents: number; issuedAnnualCents: number; issuedCount: number; estimatedFycCents: number; ratedCount: number };
   };
   options: { carriers: { id: string; name: string }[]; products: { code: string; label: string }[]; sources: { value: string; label: string }[]; producers: { id: string; name: string }[] };
+  /**
+   * The window's applications over time (Reports round 7, owner pick 1·B, 2026-11-11): one bucket a day (a window
+   * of 31 days or less), a week (Monday to Sunday, up to 210 days) or a month, each clamped to the window. Every
+   * application counts in the bucket it was SUBMITTED in, and so do its outcomes (issued, declined, counteroffered),
+   * so the buckets add up to the totals above.
+   */
+  trend: { grain: TrendGrain; buckets: TrendBucket[] };
 };
+
+export type TrendGrain = "day" | "week" | "month";
+export type TrendBucket = { key: string; label: string; from: string; to: string; submitted: number; issued: number; declined: number; counteroffered: number };
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A calendar day (YYYY-MM-DD) plus n days. */
+function addDay(day: string, n: number): string {
+  const at = new Date(`${day}T00:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + n);
+  return at.toISOString().slice(0, 10);
+}
+
+/** The first day of the bucket a day falls in (unclamped). */
+function bucketStart(day: string, grain: TrendGrain): string {
+  if (grain === "day") return day;
+  if (grain === "month") return `${day.slice(0, 8)}01`;
+  const dow = new Date(`${day}T00:00:00Z`).getUTCDay();
+  return addDay(day, -((dow + 6) % 7));
+}
+
+/** The last day of the bucket that starts on `start`. */
+function bucketEnd(start: string, grain: TrendGrain): string {
+  if (grain === "day") return start;
+  if (grain === "week") return addDay(start, 6);
+  const at = new Date(`${start}T00:00:00Z`);
+  return new Date(Date.UTC(at.getUTCFullYear(), at.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+}
+
+/** The empty buckets of a window, oldest first, each clamped to it. */
+export function trendBuckets(from: string, to: string): { grain: TrendGrain; buckets: TrendBucket[] } {
+  const span = Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000) + 1;
+  const grain: TrendGrain = span <= 31 ? "day" : span <= 210 ? "week" : "month";
+  const buckets: TrendBucket[] = [];
+  if (!(span > 0)) return { grain, buckets };
+  for (let start = bucketStart(from, grain); start <= to && buckets.length < 400; start = addDay(bucketEnd(start, grain), 1)) {
+    const bFrom = start < from ? from : start;
+    const end = bucketEnd(start, grain);
+    const bTo = end > to ? to : end;
+    const label = grain === "month" ? `${MONTH_SHORT[Number(bFrom.slice(5, 7)) - 1]} ${bFrom.slice(0, 4)}` : `${MONTH_SHORT[Number(bFrom.slice(5, 7)) - 1]} ${Number(bFrom.slice(8, 10))}`;
+    buckets.push({ key: bFrom, label, from: bFrom, to: bTo, submitted: 0, issued: 0, declined: 0, counteroffered: 0 });
+  }
+  return { grain, buckets };
+}
 
 // What the carrier decided, and the client's answer to a carrier's offer. A withdrawn attempt is the
 // agency pulling its own application: it is not a decline, and counting it inflated every carrier's rate.
@@ -292,6 +343,22 @@ export function buildSalesReport(input: ReportInput, filters: ReportFilters): Sa
   const premiumRows = carriersInPop.map((id) => ({ carrierId: id, name: carrierLabel(id), ...premiumRow(byCarrier(id)) }))
     .sort((a, b) => b.submittedAnnualCents - a.submittedAnnualCents || a.name.localeCompare(b.name));
 
+  // ── over time: each application in the bucket it was submitted in ────────
+  const trend = trendBuckets(filters.from, filters.to);
+  const bucketOf = new Map(trend.buckets.map((b) => [b.key, b]));
+  const issuedIds = new Set(issued.map((a) => a.id));
+  const declinedIds = new Set(declined.map((a) => a.id));
+  for (const a of population) {
+    const day = dayIn(a.submittedAt as string, tz);
+    const start = bucketStart(day, trend.grain);
+    const bucket = bucketOf.get(start < filters.from ? filters.from : start);
+    if (!bucket) continue;
+    bucket.submitted += 1;
+    if (issuedIds.has(a.id)) bucket.issued += 1;
+    if (declinedIds.has(a.id)) bucket.declined += 1;
+    if ((coByApp.get(a.id)?.length ?? 0) > 0) bucket.counteroffered += 1;
+  }
+
   // ── filter options (from all the tenant's data, not the filtered slice) ──
   const usedCarriers = new Set([...input.attempts.map((a) => a.carrierId), ...input.quotes.map((q) => q.carrierId)].filter((x): x is string => Boolean(x)));
   const usedProducts = new Set([...input.attempts.map((a) => a.productCode), ...input.quotes.map((q) => q.productCode)].filter((x): x is string => Boolean(x)));
@@ -316,7 +383,22 @@ export function buildSalesReport(input: ReportInput, filters: ReportFilters): Sa
       sources: [...sources, ...campaigns],
       producers: input.producers.filter((p) => usedProducers.has(p.id)).sort((a, b) => a.name.localeCompare(b.name)),
     },
+    trend,
   };
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const PRODUCT = /^[a-z][a-z0-9_]{0,63}$/;
+const SOURCE = /^(source:(inbound|outbound|manual)|campaign:[0-9a-f-]{36})$/i;
+
+/**
+ * The report's filters as the address carries them (`?carrier&product&source&producer`, the same names and
+ * checks as the report route), so a chart's bar can open the table filtered to its rows. A malformed value is dropped.
+ */
+export function salesFiltersOf(query: Record<string, string | string[] | undefined>): { carrierId: string; productCode: string; source: string; producerId: string } {
+  const one = (key: string) => { const v = query[key]; return (Array.isArray(v) ? v[0] : v)?.trim() ?? ""; };
+  const ok = (value: string, pattern: RegExp) => (pattern.test(value) ? value : "");
+  return { carrierId: ok(one("carrier"), UUID), productCode: ok(one("product"), PRODUCT), source: ok(one("source"), SOURCE), producerId: ok(one("producer"), UUID) };
 }
 
 /** Default window: the last 90 days up to today, in the tenant's zone. */

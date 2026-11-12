@@ -42,14 +42,18 @@ export async function postActivity(tenantId: string): Promise<PostActivity> {
 
   // key_id arrives with 20260924130000; read without it when the column is missing.
   const recentRead = async (columns: string) => log().select(columns).eq("tenant_id", tenantId).order("received_at", { ascending: false }).limit(RECENT);
-  let recent = await recentRead("received_at, vendor_id, key_id, campaign_id, outcome, reason_code, processing_ms, lead_id");
+  // is_test arrives with 20261112100100 (round 8): test posts are shown, marked, and never counted.
+  let recent = await recentRead("received_at, vendor_id, key_id, campaign_id, outcome, reason_code, processing_ms, lead_id, is_test");
+  const testsKnown = !(recent.error && isMissingSchema(recent.error));
+  if (!testsKnown) recent = await recentRead("received_at, vendor_id, key_id, campaign_id, outcome, reason_code, processing_ms, lead_id");
   if (recent.error && isMissingSchema(recent.error)) recent = await recentRead("received_at, vendor_id, campaign_id, outcome, reason_code, processing_ms, lead_id");
   if (recent.error) throw new Error(`Could not load recent posts: ${recent.error.message}`);
 
   const rejected: Array<Record<string, unknown>> = [];
   let capped = false;
   for (let from = 0; ; from += 1000) {
-    const page = await log().select("vendor_id, reason_code").eq("tenant_id", tenantId).eq("outcome", "rejected").gte("received_at", since).range(from, from + 999);
+    const scoped = log().select("vendor_id, reason_code").eq("tenant_id", tenantId).eq("outcome", "rejected");
+    const page = await (testsKnown ? scoped.eq("is_test", false) : scoped).gte("received_at", since).range(from, from + 999);
     if (page.error) throw new Error(`Could not load rejections: ${page.error.message}`);
     const rows = rowsOf(page);
     rejected.push(...rows);
@@ -78,6 +82,7 @@ export async function postActivity(tenantId: string): Promise<PostActivity> {
       reasonCode: text(row.reason_code),
       processingMs: typeof row.processing_ms === "number" ? row.processing_ms : null,
       leadId: text(row.lead_id) || null,
+      isTest: row.is_test === true,
     })),
     byVendor: [...tally.values()].sort((a, b) => b.count - a.count),
     capped,

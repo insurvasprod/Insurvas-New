@@ -2,7 +2,6 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { useFittingPageSize } from "@/components/app/book-views";
@@ -16,7 +15,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { StatusChip } from "@/components/ui/status-chip";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { formatCentsAsCurrency } from "@/lib/money";
@@ -40,12 +39,15 @@ import {
  * lapse today would charge back. The empty state stays the board's own (lapse-risk-empty.tsx).
  */
 
-const KIND_TONE: Record<LapseSignalKind, { ink: string; dot: string }> = {
-  returned_payment: { ink: "text-[var(--error-ink)]", dot: "bg-[var(--error)]" },
-  missed_draft: { ink: "text-[var(--warning-ink)]", dot: "bg-[var(--warning)]" },
-  service_call: { ink: "text-[var(--info-ink)]", dot: "bg-[var(--info)]" },
-  other: { ink: "text-[var(--body)]", dot: "bg-[var(--muted)]" },
+/** A signal's chip tone (owner 2026-11-11: colour only in a chip): a returned payment is wrong, a missed draft waits. */
+const KIND_TONE: Record<LapseSignalKind, StatusTone> = {
+  returned_payment: "danger",
+  missed_draft: "warning",
+  service_call: "neutral",
+  other: "neutral",
 };
+/** Which signal a row's one chip names: the most serious open one. */
+const KIND_RANK: Record<LapseSignalKind, number> = { returned_payment: 0, missed_draft: 1, service_call: 2, other: 3 };
 
 const RESOLUTION_HELP: Record<LapseResolution, string> = {
   payment_received: "The missed money arrived. Every open signal on this policy is closed and it leaves Lapse risk.",
@@ -60,23 +62,20 @@ function date(value: string) {
   return dayMonthYear(value.slice(0, 10));
 }
 
-/** The amount a lapse today would charge back; its window has its own column (Clawback). */
+/** The amount a lapse today would charge back, plain; its window and the premium are the cell's tooltip. */
 function Exposure({ exposure }: { exposure: CommissionExposed }) {
   if (exposure.state === "exposed") {
-    return <span className="font-semibold tabular-nums text-foreground">{formatCentsAsCurrency(exposure.cents)}</span>;
+    return <span className="tabular-nums">{formatCentsAsCurrency(exposure.cents)}</span>;
   }
-  const copy =
-    exposure.state === "outside_window" ? "Outside the clawback window" : exposure.state === "not_issued" ? "Not issued yet" : "No commission rule on file";
-  return (
-    <span className="text-muted-foreground" title={exposure.state === "no_rule" ? exposure.reason : undefined}>
-      {copy}
-    </span>
-  );
+  return <>{exposure.state === "outside_window" ? "Outside the clawback window" : exposure.state === "not_issued" ? "Not issued yet" : "No commission rule on file"}</>;
 }
 
-function Clawback({ exposure }: { exposure: CommissionExposed }) {
-  if (exposure.state !== "exposed") return <span className="text-muted-foreground">—</span>;
-  return <span className="tabular-nums">{exposure.clawbackType === "prorated" ? "Prorated" : "Full"} to {date(exposure.clawbackEndsOn)}</span>;
+/** What the Premium and Clawback columns said, and why an exposure has no amount. */
+function exposureDetail(policy: AtRiskPolicy) {
+  const exposure = policy.exposure;
+  const premium = `${formatCentsAsCurrency(policy.monthlyPremiumCents)}/mo premium (${formatCentsAsCurrency(policy.annualPremiumCents)} a year)`;
+  if (exposure.state === "exposed") return `${premium} · clawback ${exposure.clawbackType === "prorated" ? "prorated" : "full"} to ${date(exposure.clawbackEndsOn)}`;
+  return exposure.state === "no_rule" ? `${premium} · ${exposure.reason}` : premium;
 }
 
 /** Everything a signal says, for its chip's tooltip. */
@@ -120,11 +119,9 @@ function ResolveAction({ policy, onDone }: { policy: AtRiskPolicy; onDone: () =>
   return (
     <>
       <DropdownMenu modal={false}>
+        {/* The row's next step, a short verb and › (owner 2026-11-11); the choices open under it. */}
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="outline" size="sm" className="border-[var(--border-strong)]">
-            Resolve
-            <ChevronDown aria-hidden="true" />
-          </Button>
+          <button type="button" className="whitespace-nowrap text-sm text-foreground hover:underline">Resolve ›</button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onSelect={() => choose("payment_received")}>{LAPSE_RESOLUTION_LABELS.payment_received}</DropdownMenuItem>
@@ -248,59 +245,48 @@ export function LapseRiskBoard({
         {visible.length === 0 ? (
           <NoMatches noun="policies" onClear={clearFilters} />
         ) : (
-        <Table className="min-w-[1240px]">
+        <Table className="min-w-[980px]">
+          {/*
+            Owner 2026-11-11 (one-line tables): six columns, one line, one colour, one chip. Carrier and product are the
+            policy's tooltip; every signal, its source and note are the chip's; premium and clawback are the exposure's.
+          */}
           <TableHeader>
             <TableRow>
               <TableHead>Policy</TableHead>
               <TableHead>Insured</TableHead>
-              <TableHead>Carrier</TableHead>
-              <TableHead>Product</TableHead>
-              <TableHead>Signals</TableHead>
+              <TableHead>Signal</TableHead>
               <TableHead>Oldest signal</TableHead>
-              <TableHead>Note</TableHead>
-              <TableHead className="text-right">Premium</TableHead>
               <TableHead className="text-right">Commission exposed</TableHead>
-              <TableHead>Clawback</TableHead>
-              {!readOnly && <TableHead className="text-right"><span className="sr-only">Actions</span></TableHead>}
+              {!readOnly && <TableHead>Next step</TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {pageRows.map((policy) => {
               const oldest = policy.signals.reduce((first, signal) => (signal.occurredOn < first.occurredOn ? signal : first), policy.signals[0]);
-              const notes = policy.signals.filter((signal) => signal.note).map((signal) => `${LAPSE_SIGNAL_LABELS[signal.kind]}: ${signal.note}`);
+              const worst = policy.signals.reduce((top, signal) => (KIND_RANK[signal.kind] < KIND_RANK[top.kind] ? signal : top), policy.signals[0]);
+              const more = policy.signals.length - 1;
               return (
                 <TableRow key={policy.policyId}>
+                  <TableCell className="whitespace-nowrap font-medium text-foreground" title={[policy.carrier, policy.product].filter(Boolean).join(" · ")}>
+                    {policy.policyNumber}{policy.status === "pending" ? " (pending)" : ""}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap">{policy.insuredName}</TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="font-semibold text-foreground">{policy.policyNumber}</span>
-                      {policy.status === "pending" && <StatusChip tone="warning">Pending</StatusChip>}
-                    </span>
+                    {worst && (
+                      <StatusChip tone={KIND_TONE[worst.kind]} title={policy.signals.map(signalDetail).join("\n")}>
+                        {LAPSE_SIGNAL_LABELS[worst.kind]}{more > 0 ? ` +${more}` : ""}
+                      </StatusChip>
+                    )}
                   </TableCell>
-                  <TableCell className="max-w-[180px] truncate" title={policy.insuredName}>{policy.insuredName}</TableCell>
-                  <TableCell className="max-w-[150px] truncate" title={policy.carrier}>{policy.carrier}</TableCell>
-                  <TableCell className="max-w-[140px] truncate" title={policy.product}>{policy.product}</TableCell>
-                  <TableCell>
-                    <span className="inline-flex items-center gap-3">
-                      {policy.signals.map((signal) => (
-                        <span key={signal.id} title={signalDetail(signal)} className={`inline-flex items-center gap-1.5 text-xs font-semibold ${KIND_TONE[signal.kind].ink}`}>
-                          <span className={`size-1.5 shrink-0 rounded-full ${KIND_TONE[signal.kind].dot}`} aria-hidden="true" />
-                          {LAPSE_SIGNAL_LABELS[signal.kind]}
-                        </span>
-                      ))}
-                    </span>
+                  <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground" title={oldest ? signalDetail(oldest) : undefined}>
+                    {oldest ? date(oldest.occurredOn) : "—"}
                   </TableCell>
-                  <TableCell className="max-w-[220px] truncate" title={oldest ? signalDetail(oldest) : undefined}>
-                    {oldest ? <><span className="tabular-nums">{date(oldest.occurredOn)}</span><span className="text-muted-foreground"> · {oldest.source === "feed" ? "carrier feed" : oldest.recordedByName ?? "a former user"}</span></> : "—"}
-                  </TableCell>
-                  <TableCell className="max-w-[220px] truncate" title={notes.join("\n") || undefined}>{notes.length ? notes.join(" · ") : <span className="text-muted-foreground">—</span>}</TableCell>
-                  <TableCell className="text-right tabular-nums" title={`${formatCentsAsCurrency(policy.annualPremiumCents)} a year`}>{formatCentsAsCurrency(policy.monthlyPremiumCents)}/mo</TableCell>
-                  <TableCell className="text-right"><Exposure exposure={policy.exposure} /></TableCell>
-                  <TableCell><Clawback exposure={policy.exposure} /></TableCell>
+                  <TableCell className="whitespace-nowrap text-right" title={exposureDetail(policy)}><Exposure exposure={policy.exposure} /></TableCell>
                   {!readOnly && (
-                    <TableCell className="text-right">
-                      <span className="inline-flex items-center justify-end gap-2">
-                        <RecordLapseSignal policy={{ id: policy.policyId, status: policy.status }} label="Add signal" showAtRisk={false} />
+                    <TableCell>
+                      <span className="inline-flex items-center gap-4">
                         <ResolveAction policy={policy} onDone={refresh} />
+                        <RecordLapseSignal policy={{ id: policy.policyId, status: policy.status }} label="Add signal" showAtRisk={false} />
                       </span>
                     </TableCell>
                   )}

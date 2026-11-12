@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouteSheet } from "@/components/app/route-sheet";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -29,6 +30,7 @@ const keyFrom = (text: string, fileType: string) => `${text}_${fileType}`.toLowe
  * memory and dropped; the draft is saved only on Create.
  */
 export function NewLayout() {
+  const sheet = useRouteSheet();
   const router = useRouter();
   const [start, setStart] = useState<"sample" | "empty">("sample");
   const [fileType, setFileType] = useState<CarrierFileType>("policies");
@@ -81,7 +83,8 @@ export function NewLayout() {
 
   return (
     <div className="flex flex-col gap-6">
-      <AdminPageHeader title="New layout" subtitle="Read a carrier's file, check its columns, name it." backHref="/admin/layout-maps" backLabel="Layout maps" />
+      {/* In a route sheet the panel names it (route-sheet.tsx). */}
+      {!sheet && <AdminPageHeader title="New layout" subtitle="Read a carrier's file, check its columns, name it." backHref="/admin/layout-maps" backLabel="Layout maps" />}
 
       {error && <div role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">{error}</div>}
 

@@ -20,7 +20,7 @@ import { MoneyBar } from "./money-bar";
 type Expected = { available: boolean; rows: Array<Record<string, unknown>> };
 
 const pct = (bp: unknown) => (bp === null || bp === undefined || !Number.isFinite(Number(bp)) ? null : `${(Number(bp) / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}%`);
-const LINK = "font-semibold text-[var(--accent-ink)] hover:underline";
+const LINK = "text-foreground hover:underline";
 
 /**
  * Policy › Money (round 5, board 7; it was "Commissions"): how much this policy pays and whether it is safe.
@@ -95,10 +95,10 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
     <>
       <StatStrip label="This policy's first year">
         <StatTile label="Expected" value={figures.expectedCents !== null ? money(figures.expectedCents) : "—"} footnote={!expected.available ? "can't be read yet" : !first ? "nothing expected yet" : noRate ? "no rate on the Rate card" : "first year, from the rate card"} />
-        <StatTile label="Advanced" value={totals ? money(grossAdvance + chargedBack) : "—"} valueTone={takenBack ? "warning" : undefined} footnote={chargedBack < 0 ? [`${money(grossAdvance)} advanced`, `${money(-chargedBack)} charged back${lastChargeback?.transactionDate ?? lastChargeback?.statementDate ? ` ${shortDay(lastChargeback.transactionDate ?? lastChargeback.statementDate)}` : ""}`].join(" · ") : firstAdvance ? [firstAdvance.transactionDate ?? firstAdvance.statementDate ? shortDay(firstAdvance.transactionDate ?? firstAdvance.statementDate) : null, firstAdvance.fileName ?? "the statement"].filter(Boolean).join(" · ") : "no advance on record"} />
-        <StatTile label="Earned" value={figures.earnedCents !== null ? money(figures.earnedCents) : "—"} valueTone={figures.earnedCents ? "good" : undefined} footnote={takenBack ? "the advance was charged back" : figures.earnedCents === null ? "months advanced not known" : advanceMonths && facts.monthsPaid !== null && full.advancedCents > 0 ? `${Math.min(facts.monthsPaid, advanceMonths)} of ${advanceMonths} months paid` : totals ? "from the statements" : "no commission line yet"} />
+        <StatTile label="Advanced" value={totals ? money(grossAdvance + chargedBack) : "—"} footnote={takenBack ? <StatusChip tone="warning">Charged back</StatusChip> : chargedBack < 0 ? [`${money(grossAdvance)} advanced`, `${money(-chargedBack)} charged back${lastChargeback?.transactionDate ?? lastChargeback?.statementDate ? ` ${shortDay(lastChargeback.transactionDate ?? lastChargeback.statementDate)}` : ""}`].join(" · ") : firstAdvance ? [firstAdvance.transactionDate ?? firstAdvance.statementDate ? shortDay(firstAdvance.transactionDate ?? firstAdvance.statementDate) : null, firstAdvance.fileName ?? "the statement"].filter(Boolean).join(" · ") : "no advance on record"} />
+        <StatTile label="Earned" value={figures.earnedCents !== null ? money(figures.earnedCents) : "—"} footnote={takenBack ? "the advance was charged back" : figures.earnedCents === null ? "months advanced not known" : advanceMonths && facts.monthsPaid !== null && full.advancedCents > 0 ? `${Math.min(facts.monthsPaid, advanceMonths)} of ${advanceMonths} months paid` : totals ? "from the statements" : "no commission line yet"} />
         {/* Round 6: "Inside the clawback window…" was a notice on the page (no notices: owner 2026-11-02); it is this footnote now. */}
-        <StatTile label="At risk" value={atRisk !== null ? money(atRisk) : "—"} valueTone={atRisk ? (chargebackLikely ? "danger" : "warning") : undefined} footnote={atRisk === null ? trace?.reason ?? "can't be worked out" : atRisk ? (chargebackLikely ? `likely taken back: inside the clawback window` : "taken back if it lapses") : takenBack ? "nothing left to take back" : full.advancedCents > 0 ? "the advance is earned" : "no advance to take back"} />
+        <StatTile label="At risk" value={atRisk !== null ? money(atRisk) : "—"} footnote={atRisk === null ? trace?.reason ?? "can't be worked out" : atRisk ? <StatusChip tone={chargebackLikely ? "danger" : "warning"}>{chargebackLikely ? `likely taken back: inside the clawback window` : "taken back if it lapses"}</StatusChip> : takenBack ? "nothing left to take back" : full.advancedCents > 0 ? "the advance is earned" : "no advance to take back"} />
       </StatStrip>
 
       {/* Round 6 (board 5): the year and what's next side by side on a wide screen. Cards, not table cards: neither
@@ -192,19 +192,22 @@ export function PolicyCommissionsTab({ ledger, expected, findings, carrierName, 
             <thead><tr><th className="w-[110px]">Date</th><th>Line</th><th className="w-[130px] text-right">Amount</th><th>From</th><th className="w-[110px]"><span className="sr-only">Next step</span></th></tr></thead>
             <PagedBody>
               {rows.map((row) => row.kind === "line" ? (
-                <ClickRow key={row.key} href={rowHref(row.entry.fileId, row.entry.rowNumber)} label={`Open line ${row.entry.rowNumber}`}>
-                  <td className="tabular-nums text-muted-foreground">{shortDay(row.date)}</td>
-                  <td>{row.entry.type === "reversal" && row.entry.correctsType ? `Reversal of ${(ENTRY_LABELS[row.entry.correctsType as EntryType]?.label ?? row.entry.correctsType).toLowerCase()}` : ENTRY_LABELS[row.entry.type as EntryType]?.label ?? row.entry.type.replaceAll("_", " ")}{row.entry.payeeLevel === "upline" ? <span className="text-muted-foreground"> · upline</span> : null}{row.entry.heldByStatement ? <span className="text-muted-foreground"> · held: its statement doesn&rsquo;t add up</span> : null}</td>
-                  <td className={`text-right font-semibold tabular-nums ${row.entry.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`}>{money(row.entry.amountCents)}</td>
-                  <td className="max-w-[320px] truncate text-muted-foreground" title={row.entry.reversalReason ?? row.entry.fileName ?? undefined}>{row.entry.fileName ?? "The file"} · row {row.entry.rowNumber}</td>
+                <ClickRow key={row.key} href={rowHref(row.entry.fileId, row.entry.rowNumber)} label={`Open line ${row.entry.rowNumber}`} chevron={false}>
+                  {/* Owner 2026-11-11: one line, one colour. "Upline" is the line's tooltip; a held line says so in the
+                      From column's one chip (its file and row are that chip's tooltip). */}
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{shortDay(row.date)}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground" title={row.entry.payeeLevel === "upline" ? "Paid to the upline" : undefined}>{row.entry.type === "reversal" && row.entry.correctsType ? `Reversal of ${(ENTRY_LABELS[row.entry.correctsType as EntryType]?.label ?? row.entry.correctsType).toLowerCase()}` : ENTRY_LABELS[row.entry.type as EntryType]?.label ?? row.entry.type.replaceAll("_", " ")}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{money(row.entry.amountCents)}</td>
+                  <td className="whitespace-nowrap" title={[row.entry.heldByStatement ? `${row.entry.fileName ?? "The file"} · row ${row.entry.rowNumber}` : null, row.entry.reversalReason].filter(Boolean).join(" · ") || undefined}>{row.entry.heldByStatement ? <StatusChip tone="warning">Held: its statement doesn&rsquo;t add up</StatusChip> : `${row.entry.fileName ?? "The file"} · row ${row.entry.rowNumber}`}</td>
+                  <td className="whitespace-nowrap text-right"><Link href={rowHref(row.entry.fileId, row.entry.rowNumber)} aria-label={`Open line ${row.entry.rowNumber}`} className="text-foreground hover:underline">Open ›</Link></td>
                 </ClickRow>
               ) : (
                 <tr key={row.key}>
-                  <td className="tabular-nums text-muted-foreground">{shortDay(row.date || null)}</td>
-                  <td><StatusChip tone={row.finding.severity === "action" ? "danger" : "warning"}>{FINDING_WORDS[row.finding.type] ?? row.finding.type.replaceAll("_", " ")}</StatusChip></td>
-                  <td className="text-right tabular-nums text-muted-foreground">{row.finding.differenceCents ? money(Math.abs(row.finding.differenceCents)) : "—"}</td>
-                  <td className="max-w-[320px] truncate text-muted-foreground" title={row.finding.explanation ?? undefined}>{row.finding.explanation ?? "Against your rate card"}</td>
-                  <td className="text-right"><Button asChild size="sm" variant="outline"><Link href={`/app/needs-you/review?kind=money&id=${encodeURIComponent(row.finding.id)}`}>Review</Link></Button></td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{shortDay(row.date || null)}</td>
+                  <td className="whitespace-nowrap"><StatusChip tone={row.finding.severity === "action" ? "danger" : "warning"}>{FINDING_WORDS[row.finding.type] ?? row.finding.type.replaceAll("_", " ")}</StatusChip></td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{row.finding.differenceCents ? money(Math.abs(row.finding.differenceCents)) : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="max-w-[320px] truncate" title={row.finding.explanation ?? undefined}>{row.finding.explanation ?? "Against your rate card"}</td>
+                  <td className="whitespace-nowrap text-right"><Link href={`/app/needs-you/review?kind=money&id=${encodeURIComponent(row.finding.id)}`} className="text-foreground hover:underline">Review ›</Link></td>
                 </tr>
               ))}
             </PagedBody>

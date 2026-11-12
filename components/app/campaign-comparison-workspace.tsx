@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
 import { EmptyState } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
+import { BarSeries, ChartHeading } from "@/components/ui/chart";
+import type { ShowMode } from "@/lib/reports/show";
 import type { CampaignComparison, ComparisonMetricKey, VendorScorecardRow } from "@/lib/vendorScorecard/types";
 import type { CadenceCaveat } from "@/lib/cadence/history";
 import { checkComparisonPeriods, periodDays, periodLabel, type ComparisonPeriod } from "@/lib/vendorScorecard/comparePeriods";
@@ -40,7 +42,12 @@ const label: Record<ComparisonMetricKey, string> = { contact_rate: "Contact rate
 function dollars(cents: number | null) { return cents == null ? "—" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(cents / 100); }
 function metricValue(value: number | null, unit: "percent" | "cents") { return value == null ? "—" : unit === "cents" ? dollars(value) : `${value}%`; }
 
-export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { rows: VendorScorecardRow[]; defaultFrom: string; defaultTo: string }) {
+/**
+ * Compare (True CPA, LA-2.18): two campaigns, or one campaign in two periods, side by side. Round 7 (board 7·6, A):
+ * the chart view is paired bars, a pair a funnel stage, A solid and B quiet beside it (BarSeries `pair`); the
+ * table view keeps the side-by-side table. Both read /api/app/true-cpa/compare.
+ */
+export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo, show = "table" }: { rows: VendorScorecardRow[]; defaultFrom: string; defaultTo: string; show?: ShowMode }) {
   const [campaignA, setCampaignA] = useState("");
   const [campaignB, setCampaignB] = useState("");
   const [fromA, setFromA] = useState(defaultFrom);
@@ -120,7 +127,17 @@ export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { 
         <div><dt className={fact}>Difference B − A</dt><dd className="mt-1 text-sm font-semibold tabular-nums">{metricValue(result.metric.difference, result.metric.unit)} <span className="text-xs font-normal text-muted-foreground">{result.metric.unit === "cents" ? "lower is better" : "higher is better"}</span></dd></div>
         <div><dt className={fact}>Allocated spend</dt><dd className="mt-1 text-sm font-semibold tabular-nums">A {dollars(result.campaign_a.allocated_spend_cents)} · B {dollars(result.campaign_b.allocated_spend_cents)}</dd></div>
       </dl>
-      <table className="portal-lead-table w-full min-w-[720px] border-t border-border text-left">
+      {show === "chart" ? <div className="flex min-w-0 flex-col gap-4 border-t border-border p-4">
+        <ChartHeading title="The two funnels, stage by stage" period={`A ${result.campaign_a.name} · ${periodLabel({ from: result.campaign_a.from, to: result.campaign_a.to })} · B ${result.campaign_b.name} · ${periodLabel({ from: result.campaign_b.from, to: result.campaign_b.to })}`} />
+        <BarSeries
+          bars={result.funnel.map((stage) => ({ key: stage.stage, label: stage.stage.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase()), value: stage.a_count, pair: stage.b_count }))}
+          summary={`Funnel volumes for ${result.campaign_a.name} (A) and ${result.campaign_b.name} (B), stage by stage`}
+          unit="leads"
+          labels="all"
+          names={{ value: `A ${result.campaign_a.name}`, pair: `B ${result.campaign_b.name}` }}
+          legend={[{ key: "a", label: `A · ${result.campaign_a.name}`, tone: "strong", figure: result.campaign_a.leads.toLocaleString() }, { key: "b", label: `B · ${result.campaign_b.name}`, tone: "quiet", figure: result.campaign_b.leads.toLocaleString() }]}
+        />
+      </div> : <table className="portal-lead-table w-full min-w-[720px] border-t border-border text-left">
         <caption className="sr-only">Side-by-side funnel volumes</caption>
         <thead><tr><th scope="col">Stage</th><th scope="col" className="!text-right">A volume</th><th scope="col" className="!text-right">B volume</th><th scope="col" className="!text-right">Difference</th><th scope="col" className="!text-right">A rate</th><th scope="col" className="!text-right">B rate</th></tr></thead>
         <tbody>{result.funnel.map((stage) => <tr key={stage.stage}>
@@ -131,7 +148,7 @@ export function CampaignComparisonWorkspace({ rows, defaultFrom, defaultTo }: { 
           <td className="text-right tabular-nums">{stage.a_rate_percent == null ? "—" : `${stage.a_rate_percent}%`}</td>
           <td className="text-right tabular-nums">{stage.b_rate_percent == null ? "—" : `${stage.b_rate_percent}%`}</td>
         </tr>)}</tbody>
-      </table>
+      </table>}
     </>}
   </TableCard>;
 }

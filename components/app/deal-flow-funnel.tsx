@@ -28,10 +28,9 @@ const ROLE: Record<string, string> = { owner: "owner", producer: "producer", set
 function AgentRow({ agent }: { agent: AgentLine }) {
   return (
     <tr className="border-t border-[var(--border)]">
-      <td className="px-4 py-2.5 text-sm font-semibold text-[var(--ink)]">
-        {agent.name}
-        {agent.role && agent.role !== "owner" && agent.role !== "producer" && <span className="ml-1.5 font-normal text-[var(--muted)]">{ROLE[agent.role] ?? agent.role}</span>}
-      </td>
+      {/* One-line rule (owner 2026-11-11): the role is its own plain column, not a grey word after the name. */}
+      <td className="whitespace-nowrap px-4 py-2.5 text-sm font-medium text-foreground">{agent.name}</td>
+      <td className="whitespace-nowrap px-3 py-2.5 text-sm text-[var(--body)]">{agent.role ? (ROLE[agent.role] ?? agent.role).replace(/^./, (letter) => letter.toUpperCase()) :<span className="text-muted-foreground">—</span>}</td>
       <td className="px-3 py-2.5 text-right text-sm tabular-nums text-[var(--body)]">{agent.dials}</td>
       <td className="px-3 py-2.5 text-right text-sm tabular-nums text-[var(--body)]">{percent(agent.contactRate)}</td>
       {/* A setter cannot open an application, so their column says so rather than showing a zero. */}
@@ -99,17 +98,17 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
         <h2 id="dial-funnel-title" className="sr-only">Dial funnel</h2>
         <StatRow label="Dial funnel, distinct leads at each step">
           <StatCard icon={PhoneOutgoing} label={dialedStep?.label ?? "Dialed"} period={period} value={dialedStep?.count ?? "—"}
-            fact={{ label: `Of ${served} ${served === 1 ? "lead" : "leads"} served`, value: percent(servedStep?.toNext ?? null) }} />
+            fact={{ label: `${percent(servedStep?.toNext ?? null)} of ${served} ${served === 1 ? "lead" : "leads"} served` }} />
           <StatCard icon={PhoneCall} label={reachedStep?.label ?? "Reached"} period={when} value={reachedStep?.count ?? "—"}
-            fact={{ label: "Of dials", value: percent(dialedStep?.toNext ?? null) }} />
+            fact={{ label: `${percent(dialedStep?.toNext ?? null)} of dials` }} />
           <StatCard icon={FileText} label={appsStep?.label ?? "Applications"} period={`opened ${when}`} value={appsStep?.count ?? "—"}
-            fact={quotedStep?.count == null ? { label: "No Quoted stage in your pipelines" } : { label: `${quotedStep.count} quoted`, value: `${percent(quotedStep.toNext)} to an app` }} />
+            fact={quotedStep?.count == null ? { label: "No Quoted stage in your pipelines" } : { label: `${quotedStep.count} quoted · ${percent(quotedStep.toNext)} to an app` }} />
           <StatCard icon={DollarSign} label="Annualised premium" period={`${data.deals} ${data.deals === 1 ? "deal" : "deals"}`} value={formatCentsAsCurrency(data.annualisedCents)}
             labelTitle={data.unpricedDeals > 0 ? `${data.unpricedDeals} ${data.unpricedDeals === 1 ? "deal has" : "deals have"} no premium yet.` : undefined}
-            fact={data.spendCents == null ? { label: "No list cost recorded for the leads served" } : { label: "List spent", value: formatCentsAsCurrency(data.spendCents) }} />
+            fact={data.spendCents == null ? { label: "No list cost recorded for the leads served" } : { label: `${formatCentsAsCurrency(data.spendCents)} list spent` }} />
         </StatRow>
         {data.spendCents != null && data.servedWithCost < served && <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">List spent counts the {data.servedWithCost} {data.servedWithCost === 1 ? "lead" : "leads"} with a cost recorded; {served - data.servedWithCost} served had none.</p>}
-        {data.capped && <p className="m-0 text-xs leading-[1.5] text-[var(--warning-ink)]">Narrow the dates for exact counts — these are a floor.</p>}
+        {data.capped && <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">Narrow the dates for exact counts — these are a floor.</p>}
       </section>
 
       <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -128,6 +127,7 @@ export function DealFlowFunnel({ from, to, agentId, isToday }: { from: string; t
                 <thead>
                   <tr>
                     <th scope="col" className={cn(label12, "px-4 py-2 text-left")}>Agent</th>
+                    <th scope="col" className={cn(label12, "px-3 py-2 text-left")}>Role</th>
                     <th scope="col" className={cn(label12, "px-3 py-2 text-right")}>Dials</th>
                     <th scope="col" className={cn(label12, "px-3 py-2 text-right")}>Contact</th>
                     <th scope="col" className={cn(label12, "px-4 py-2 text-right")}>Apps</th>

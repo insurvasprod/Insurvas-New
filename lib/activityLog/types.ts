@@ -176,3 +176,68 @@ export function blockedForPage(
     return (upper == null || at < upper) && (lower == null || at >= lower);
   });
 }
+
+/* ── The week, for Team activity's line charts and its cards' sparklines (Reports round 7, owner pick 2·A) ── */
+
+/** One agent's figures in one week, read from that week's scorecard line. */
+export type ActivityWeekAgent = { served: number; dials: number; contacts: number; zeroClick: number | null; booked: number; showed: number; callbacks: number; started: number; submitted: number };
+
+/**
+ * One week of the window: the report run over just that week (tenant_activity_report and tenant_recycle_performance,
+ * the same reads, scope and role rules as the page's own). `contacts` is the recycle read's contacts, the measure the
+ * Contact rate card already used; an agent's is their dials × their contact rate. `zeroClick` is null for a role that
+ * does not review outcomes logged without a dial.
+ */
+export type ActivityWeek = {
+  key: string; label: string; from: string; to: string;
+  /** The week's first and last day (YYYY-MM-DD), clipped to the window: a point's link opens the rows of these days. */
+  fromDay: string; toDay: string;
+  served: number; dials: number; contacts: number; zeroClick: number | null; booked: number; showed: number; callbacks: number; started: number; submitted: number;
+  agents: Record<string, ActivityWeekAgent>;
+};
+export type ActivityWeeks = { weeks: ActivityWeek[] };
+
+const WEEK_DAY = 86_400_000;
+const WEEK_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const isoDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+/** "24 Aug": built by hand, as the log's dates are (some ICU versions write "Sept"). */
+export function weekLabel(day: string) {
+  const [, month, date] = day.split("-").map(Number);
+  return `${date} ${WEEK_MONTHS[(month || 1) - 1]}`;
+}
+
+/** The Monday (YYYY-MM-DD, UTC) of the week a day falls in: the key a day's figures are summed under. */
+export function weekKeyOfDay(day: string) {
+  const ms = Date.parse(`${day.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(ms)) return null;
+  return isoDay(ms - ((new Date(ms).getUTCDay() + 6) % 7) * WEEK_DAY);
+}
+
+/** At most this many weeks are read: the period picker reaches 180 days. */
+export const MAX_ACTIVITY_WEEKS = 27;
+
+/**
+ * The weeks (Monday to Sunday, UTC) that cover [from, to), the first and the last clipped to the window, so the
+ * weeks' figures add up to the window's. The latest MAX_ACTIVITY_WEEKS when the window is longer.
+ */
+export function activityWeekBuckets(fromIso: string, toIso: string) {
+  const from = Date.parse(fromIso);
+  const to = Date.parse(toIso);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || !(to > from)) return [];
+  const first = new Date(from);
+  const midnight = Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate());
+  const monday = midnight - ((first.getUTCDay() + 6) % 7) * WEEK_DAY;
+  const out: { key: string; label: string; from: string; to: string; fromDay: string; toDay: string }[] = [];
+  for (let start = monday; start < to; start += 7 * WEEK_DAY) {
+    const a = Math.max(start, from);
+    const b = Math.min(start + 7 * WEEK_DAY, to);
+    if (!(b > a)) continue;
+    out.push({ key: isoDay(start), label: weekLabel(isoDay(start)), from: new Date(a).toISOString(), to: new Date(b).toISOString(), fromDay: isoDay(a), toDay: isoDay(b - 1) });
+  }
+  return out.slice(-MAX_ACTIVITY_WEEKS);
+}
+
+/** An agent's contacts: their dials × their contact rate, as the Agents chart draws them inside the dials. */
+export function contactsOf(row: Pick<ScorecardRow, "clicked" | "contact_rate_percent">) {
+  return Math.round((Number(row.clicked) || 0) * (Number(row.contact_rate_percent) || 0) / 100);
+}

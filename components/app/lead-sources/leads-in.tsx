@@ -70,7 +70,7 @@ export async function LeadsInPage({ step, actions, ownContinue = false, children
           page's own actions only. */}
       <PageHeader
         title={leadsInStepLabel(step)}
-        lead={<div id="leads-in-lead" className="flex min-w-0 flex-wrap items-center gap-2 empty:hidden" />}
+        tabs={<div id="leads-in-lead" className="flex min-w-0 flex-1 flex-wrap items-end gap-2 empty:hidden" />}
         actions={<>{actions}{ownContinue && <span id="leads-in-continue" className="contents" />}</>}
         className="lg:col-span-2 lg:pb-6"
       />

@@ -617,7 +617,7 @@ function LeadersPanel({ leaders }: { leaders: NonNullable<NonNullable<DashboardT
             const rate = pct(leader.contacts, leader.dials);
             return (
               <li key={leader.userId} className="flex items-center gap-3">
-                <span className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${index === 0 ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-foreground"}`} aria-label={`Rank ${index + 1}`}>
+                <span className={`inline-flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${index === 0 ? "bg-[var(--highlight)] text-[var(--on-highlight)]" : "bg-[var(--surface-alt)] text-foreground"}`} aria-label={`Rank ${index + 1}`}>
                   {index === 0 ? <Trophy className="size-3.5" aria-hidden="true" /> : index + 1}
                 </span>
                 <span className="min-w-0 flex-1">

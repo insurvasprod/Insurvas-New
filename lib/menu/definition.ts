@@ -173,13 +173,20 @@ export const AGENT_MENU: MenuSection[] = [
     id: "commissions",
     label: "Commissions",
     items: [
-      // One Commissions link (owner 2026-11-02, as Accounting): groupLink, no dropdown. Two steps since 2026-11-05 (owner):
-      // the Commission ledger went to Book of business and Hierarchy & overrides to Reports. A producer gets My pay.
-      item("Commissions", { key: "book.discrepancies", groupLink: true, label: "Pay issues", path: "/app/discrepancies", icon: "scale", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed.", built: true }),
+      // One Commissions link (owner 2026-11-02, as Accounting): groupLink, no dropdown. Round 7 (owner 2026-11-10,
+      // mockups-r7/commissions.html 0·A): one rail in the order money moves — Statements, Pay issues, Who gets the credit,
+      // then Producer pay, Team payouts, Commission splits, Partner payouts. Same keys, gates and addresses; each stands in
+      // for the one before. A producer gets My pay.
+      item("Commissions", { key: "book.statements", groupLink: true, label: "Statements", path: "/app/statements", icon: "file-text", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Carrier statements imported, matched to policies by a person, and posted to the commission ledger." }),
+      item("Commissions", { key: "book.discrepancies", groupLink: true, sidebar_fallback_for: "book.statements", label: "Pay issues", path: "/app/discrepancies", icon: "scale", required_feature: "discrepancy_report", required_roles: ["owner", "bookkeeper"], blurb: "What the carrier paid against what they owed.", built: true }),
+      item("Commissions", { key: "commissions.attribution", groupLink: true, sidebar_fallback_for: "book.discrepancies", label: "Who gets the credit", path: "/app/attribution", icon: "user-round-search", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Statement rows we could not safely give to one producer." }),
       // AG-1.12 · each producer's three truths.
-      item("Commissions", { key: "commissions.producer_reconciliation", groupLink: true, sidebar_fallback_for: "book.discrepancies", label: "Producer pay", path: "/app/producer-reconciliation", icon: "arrow-left-right", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Expected, reported and received, per producer, never blended." }),
+      item("Commissions", { key: "commissions.producer_reconciliation", groupLink: true, sidebar_fallback_for: "commissions.attribution", label: "Producer pay", path: "/app/producer-reconciliation", icon: "arrow-left-right", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Expected, reported and received, per producer, never blended." }),
+      item("Commissions", { key: "team.payouts", groupLink: true, sidebar_fallback_for: "commissions.producer_reconciliation", label: "Team payouts", navLabel: "Team payouts", path: "/app/producer-payouts", icon: "wallet-cards", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Pay your team for the month by each person's pay plan, with a private statement each." }),
+      item("Commissions", { key: "team.splits", groupLink: true, sidebar_fallback_for: "team.payouts", label: "Commission splits", path: "/app/commission-splits", icon: "hand-coins", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Policies two producers share, split after the override." }),
+      item("Commissions", { key: "partners.payouts", groupLink: true, sidebar_fallback_for: "team.splits", label: "Partner payouts", path: "/app/payouts", icon: "wallet-cards", required_feature: "payout_runs", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Pay publishers from the ledger, not WhatsApp." }),
       // AG-1.5 / AG-1.8 · a producer's own pay: his ledger and his statements, opened without asking anyone.
-      item("Commissions", { key: "commissions.my_pay", groupLink: true, sidebar_fallback_for: "commissions.producer_reconciliation", label: "My pay", path: "/app/my-pay", icon: "briefcase-business", required_feature: "producer_payouts", required_roles: ["producer"], built: true, blurb: "What you earned, what came back, and every statement." }),
+      item("Commissions", { key: "commissions.my_pay", groupLink: true, sidebar_fallback_for: "partners.payouts", label: "My pay", path: "/app/my-pay", icon: "briefcase-business", required_feature: "producer_payouts", required_roles: ["producer"], built: true, blurb: "What you earned, what came back, and every statement." }),
     ],
   },
   {
@@ -195,10 +202,7 @@ export const AGENT_MENU: MenuSection[] = [
       item("Book of business", { key: "book.ledger", groupLink: true, sidebar_fallback_for: "book.policies", label: "Commission ledger", path: "/app/ledger", icon: "receipt", required_feature: "commission_ledger", required_roles: ["owner", "producer", "bookkeeper"], built: true }),
       // The Rate card is Setup's first tab (/app/rate-card redirects there, owner 2026-11-02).
       item("Book of business", { key: "book.rate_card", sidebar: false, label: "Rate card", path: "/app/rate-card", icon: "calculator", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Your contract level and commission rates per carrier, and how much of your book they can check." }),
-      // Statements open from Files; the Attribution queue's rows are Needs you's Credit items (owner 2026-11-02).
-      item("Book of business", { key: "book.statements", sidebar: false, label: "Statements", path: "/app/statements", icon: "file-text", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Carrier statements imported, matched to policies by a person, and posted to the commission ledger." }),
-      item("Book of business", { key: "commissions.attribution", sidebar: false, label: "Attribution queue", path: "/app/attribution", icon: "user-round-search", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Statement rows we could not safely give to one producer." }),
-    ],
+                ],
   },
   {
     // Carrier sync (owner 2026-11-05): one merged page holding Needs you and Setup (Rate card, Carrier rules, Pipeline
@@ -208,36 +212,39 @@ export const AGENT_MENU: MenuSection[] = [
     label: "Carrier sync",
     items: [
       item("Carrier sync", { key: "book.needs_you", groupLink: true, label: "Needs you", path: "/app/needs-you", icon: "circle-alert", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "producer", "bookkeeper"], blurb: "Every decision the carrier files left for a person: a client to pick, a sale no carrier has, money that doesn't match." }),
-      item("Carrier sync", { key: "book.setup", groupLink: true, sidebar_fallback_for: "book.needs_you", label: "Setup", path: "/app/book-setup", icon: "settings", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Rates, carrier terms, card-move rules, agent codes, how your files arrive and your existing book." }),
+      // Owner 2026-11-10: the menu lists the steps the Carrier sync rail shows (lib/dataIn/steps.ts), not "Setup".
+      // book.setup is the Rate card (Setup's first step, same address); each later step stands in for the one before.
+      item("Carrier sync", { key: "book.setup", groupLink: true, sidebar_fallback_for: "book.needs_you", label: "Rate card", path: "/app/book-setup", icon: "calculator", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Your contract level and commission rates per carrier, and how much of your book they can check." }),
+      item("Carrier sync", { key: "book.carrier_terms", groupLink: true, sidebar_fallback_for: "book.setup", label: "Carrier terms", path: "/app/book-setup/carrier-rules", icon: "shield-check", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Each carrier's grace, reinstatement and chargeback windows." }),
+      item("Carrier sync", { key: "book.card_moves", groupLink: true, sidebar_fallback_for: "book.carrier_terms", label: "Card moves", path: "/app/book-setup/pipeline-rules", icon: "split", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "When a carrier file moves a lead's card, and to which stage." }),
+      item("Carrier sync", { key: "book.agent_codes", groupLink: true, sidebar_fallback_for: "book.card_moves", label: "Agent codes", path: "/app/book-setup/agent-codes", icon: "user-round-search", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "Which producer each carrier writing number belongs to." }),
+      item("Carrier sync", { key: "book.files_in", groupLink: true, sidebar_fallback_for: "book.agent_codes", label: "Files in", path: "/app/book-setup/how-files-arrive", icon: "import", built: true, required_feature: "statement_ingestion", required_roles: ["owner", "bookkeeper"], blurb: "How your carrier files arrive, and your existing book." }),
       // Lapse risk (LA-4.16) is a Needs you view (owner 2026-11-02): what the carriers' files already show.
-      item("Carrier sync", { key: "retention.lapse-risk", groupLink: true, sidebar_fallback_for: "book.setup", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"] }),
+      item("Carrier sync", { key: "retention.lapse-risk", groupLink: true, sidebar_fallback_for: "book.files_in", label: "Lapse risk", path: "/app/lapse-risk", icon: "radar", built: true, required_feature: "chargeback_radar", required_roles: ["owner", "producer", "retention"] }),
     ],
   },
   {
     id: "accounting",
     label: "Accounting",
     items: [
+      // Round 7 (owner 2026-11-10, mockups-r7/accounting.html 0·B): Accounting opens on To do, everything waiting on a person;
+      // the other keeper pages stand in for it.
+      item("Accounting", { key: "accounting.todo", groupLink: true, label: "To do", path: "/app/accounting", icon: "list-checks", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Everything in Accounting that waits on you, oldest first." }),
       // LA-7.2 · lead invoices: what the agency paid for leads, per campaign.
       // 2026-10-26: Lead invoices and Vendor returns are one page, Vendor bills (key kept, as above).
       // One Accounting link (owner 2026-11-02, as Data in): groupLink, no dropdown. The owner's and bookkeeper's pages stand
       // in for Profit & loss; a producer gets Vendor returns, or My balance without returns.
-      item("Accounting", { key: "accounting.invoices", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Vendor bills", path: "/app/vendor-bills", icon: "receipt-text", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What you paid for leads, and whether it matches what arrived." }),
-      item("Accounting", { key: "insight.vendor-returns", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Vendor returns", path: "/app/vendor-returns", icon: "undo", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Prepare evidence-backed claims and reconcile vendor credits." }),
+      item("Accounting", { key: "accounting.invoices", groupLink: true, sidebar_fallback_for: "accounting.todo", label: "Vendor bills", path: "/app/vendor-bills", icon: "receipt-text", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What you paid for leads, and whether it matches what arrived." }),
+      item("Accounting", { key: "insight.vendor-returns", groupLink: true, sidebar_fallback_for: "accounting.todo", label: "Vendor returns", path: "/app/vendor-returns", icon: "undo", required_feature: "true_cpa", required_roles: ["owner", "producer", "bookkeeper"], built: true, blurb: "Prepare evidence-backed claims and reconcile vendor credits." }),
       // LA-7.3 · expenses: tools, insurance, fees — acquisition or overhead.
-      item("Accounting", { key: "accounting.expenses", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Expenses", path: "/app/expenses", icon: "credit-card", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Everything you spend that is not a lead." }),
+      item("Accounting", { key: "accounting.expenses", groupLink: true, sidebar_fallback_for: "accounting.todo", label: "Expenses", path: "/app/expenses", icon: "credit-card", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Everything you spend that is not a lead." }),
       // LA-7.5 · producer splits: the agency's side, and each producer's own balance.
-      item("Accounting", { key: "accounting.producer_splits", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Producer splits", path: "/app/producer-splits", icon: "split", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What each producer is owed, and what they owe back." }),
+      item("Accounting", { key: "accounting.producer_splits", groupLink: true, sidebar_fallback_for: "accounting.todo", label: "Producer splits", path: "/app/producer-splits", icon: "split", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What each producer is owed, and what they owe back." }),
       item("Accounting", { key: "accounting.my_balance", groupLink: true, sidebar_fallback_for: "insight.vendor-returns", label: "My balance", path: "/app/my-balance", icon: "wallet", required_feature: "profit_and_loss", required_roles: ["producer"], built: true, blurb: "Your share of the commission, and what has come back." }),
       // LA-7.6 · bank deposits: the third truth about money — what actually arrived.
-      item("Accounting", { key: "accounting.bank", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Bank deposits", path: "/app/bank", icon: "landmark", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What actually landed in the bank, matched to what carriers said they paid." }),
-      item("Accounting", { key: "accounting.pnl", groupLink: true, label: "Profit & loss", path: "/app/pnl", icon: "chart-line", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Did this month make money." }),
-      // LA-7.4 · partner payout runs (owner 2026-11-03): an Accounting step now, moved from Partners; same key and address.
-      item("Accounting", { key: "partners.payouts", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Partner payouts", path: "/app/payouts", icon: "wallet-cards", required_feature: "payout_runs", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Pay publishers from the ledger, not WhatsApp." }),
-      // AG-1.7 / AG-1.6 · paying the agency's producers (owner 2026-11-03): Accounting steps now, out of Team; same keys,
-      // gates and addresses. Each stands in for the one before when its plan has no Profit & loss.
-      item("Accounting", { key: "team.payouts", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Team payouts", navLabel: "Team payouts", path: "/app/producer-payouts", icon: "wallet-cards", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Pay your team for the month by each person's pay plan, with a private statement each." }),
-      item("Accounting", { key: "team.splits", groupLink: true, sidebar_fallback_for: "team.payouts", label: "Commission splits", path: "/app/commission-splits", icon: "hand-coins", required_feature: "producer_payouts", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Policies two producers share, split after the override." }),
-      item("Accounting", { key: "accounting.tax", groupLink: true, sidebar_fallback_for: "accounting.pnl", label: "Tax summaries", path: "/app/tax", icon: "file-chart-column", required_feature: "tax_summaries", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What the accountant asks for." }),
+      item("Accounting", { key: "accounting.bank", groupLink: true, sidebar_fallback_for: "accounting.todo", label: "Bank deposits", path: "/app/bank", icon: "landmark", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What actually landed in the bank, matched to what carriers said they paid." }),
+      item("Accounting", { key: "accounting.pnl", groupLink: true, sidebar_fallback_for: "accounting.todo", label: "Profit & loss", path: "/app/pnl", icon: "chart-line", required_feature: "profit_and_loss", required_roles: ["owner", "bookkeeper"], built: true, blurb: "Did this month make money." }),
+                        item("Accounting", { key: "accounting.tax", groupLink: true, sidebar_fallback_for: "accounting.todo", label: "Tax summaries", path: "/app/tax", icon: "file-chart-column", required_feature: "tax_summaries", required_roles: ["owner", "bookkeeper"], built: true, blurb: "What the accountant asks for." }),
     ],
   },
   {

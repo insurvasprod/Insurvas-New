@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 
 import { PartnerPayouts } from "@/components/partner/partner-payouts";
-import { PageHeader } from "@/components/ui/page-header";
 import { resolvePartnerContext } from "@/lib/partnerAuth/requirePartner";
 
 /**
@@ -14,8 +13,8 @@ export default async function PartnerPayoutsPage() {
   if (context.role !== "partner_admin") redirect("/partner");
   return (
     <div className="m-stagger flex min-h-0 flex-grow flex-col gap-6 md:h-[calc(100dvh-var(--top-bar-h)-3rem)] lg:h-[calc(100dvh-var(--top-bar-h)-3.5rem)]">
-      <PageHeader title="Commissions" description="What the agency owes you, line by line." hideTitle breadcrumbs={[{ label: "Organization" }, { label: "Commissions" }]} />
-      <PartnerPayouts partnerName={context.partnerName} />
+      {/* The header is drawn by PartnerPayouts, so Invoices · Coming up sit on its line (UI-CONSISTENCY §8b). */}
+      <PartnerPayouts partnerName={context.partnerName} header={{ title: "Commissions", description: "What the agency owes you, line by line.", breadcrumbs: [{ label: "Organization" }, { label: "Commissions" }] }} />
     </div>
   );
 }

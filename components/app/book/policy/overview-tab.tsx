@@ -2,7 +2,8 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 
 import { InfoTip } from "@/components/ui/info-tip";
-import { StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
+import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
 import { RISK_LABELS, statusLabel } from "@/lib/ingestion/policyBook";
@@ -20,8 +21,9 @@ const dollars = (cents: number | null | undefined) => (cents === null || cents =
 const LINK = "font-medium text-[var(--accent-ink)] hover:underline";
 /** A date is a figure with digits; wrapped, so the strip shows it as written instead of counting up to it. */
 const asIs = (text: string) => <>{text}</>;
-const STATUS_TONE: Record<string, MeterTone> = { active: "good", at_risk: "danger", approved_unpaid: "warning", lapsed: "danger", cancelled: "danger", terminated: "danger", declined: "danger", not_taken: "danger" };
-const RISK_TONE: Record<string, MeterTone | undefined> = { none: undefined, watch: "warning", at_risk: "warning", critical: "danger" };
+/** Owner 2026-11-11 (plain strips): a problem tile says so in one chip on its footnote; good and neutral tiles get none. */
+const STATUS_TONE: Record<string, "warning" | "danger"> = { at_risk: "danger", approved_unpaid: "warning", lapsed: "danger", cancelled: "danger", terminated: "danger", declined: "danger", not_taken: "danger" };
+const RISK_TONE: Record<string, "warning" | "danger" | undefined> = { none: undefined, watch: "warning", at_risk: "warning", critical: "danger" };
 
 /** Where a value was read, in words: the per-value (i) that replaced "Where each value comes from" (round 6). */
 function provenance(field: SourceField | undefined): string | null {
@@ -88,11 +90,11 @@ export function PolicyOverviewTab({ view, provisional = false }: { view: PolicyV
   return (
     <>
       <StatStrip label="This policy">
-        <StatTile label="Status" labelTitle={provenance(field("Status")) ?? undefined} value={asIs(statusLabel(policy.status))} valueTone={policy.status ? STATUS_TONE[policy.status] : undefined} footnote={policy.statusRaw ? `carrier says “${policy.statusRaw}”` : "no status in the file"} />
-        <StatTile label="Paid to" labelTitle={provenance(field("Paid-to date")) ?? undefined} value={asIs(fileDay(policy.paidTo))} valueTone={behind > 0 ? "danger" : undefined} footnote={[behind > 0 ? behindWords : "up to date", policy.monthsPaid !== null ? `${policy.monthsPaid} ${policy.monthsPaid === 1 ? "month" : "months"} paid` : null].filter(Boolean).join(" · ")} />
-        <StatTile label="Risk" value={asIs(RISK_LABELS[policy.riskBand])} valueTone={RISK_TONE[policy.riskBand]} footnote={riskFootnote(policy) || "nothing past due"} />
+        <StatTile label="Status" labelTitle={provenance(field("Status")) ?? undefined} value={asIs(statusLabel(policy.status))} footnote={policy.status && STATUS_TONE[policy.status] ? <StatusChip tone={STATUS_TONE[policy.status]}>{policy.statusRaw ? `carrier says “${policy.statusRaw}”` : "no status in the file"}</StatusChip> : policy.statusRaw ? `carrier says “${policy.statusRaw}”` : "no status in the file"} />
+        <StatTile label="Paid to" labelTitle={provenance(field("Paid-to date")) ?? undefined} value={asIs(fileDay(policy.paidTo))} footnote={behind > 0 ? <span title={policy.monthsPaid !== null ? `${policy.monthsPaid} ${policy.monthsPaid === 1 ? "month" : "months"} paid` : undefined}><StatusChip tone="danger">{behindWords}</StatusChip></span> : ["up to date", policy.monthsPaid !== null ? `${policy.monthsPaid} ${policy.monthsPaid === 1 ? "month" : "months"} paid` : null].filter(Boolean).join(" · ")} />
+        <StatTile label="Risk" value={asIs(RISK_LABELS[policy.riskBand])} footnote={RISK_TONE[policy.riskBand] ? <StatusChip tone={RISK_TONE[policy.riskBand]}>{riskFootnote(policy) || "nothing past due"}</StatusChip> : riskFootnote(policy) || "nothing past due"} />
         <StatTile label="Premium" labelTitle={provenance(field("Premium")) ?? undefined} value={asIs(policy.premiumCents !== null ? dollars(policy.premiumCents) : monthly !== null ? dollars(monthly) : "—")} unit={policy.premiumCents !== null ? mode : monthly !== null ? "/mo" : undefined} footnote={policy.faceCents !== null ? `face ${dollars(policy.faceCents).replace(/\.00$/, "")}` : "face not in the file"} />
-        <StatTile label={next?.label ?? "Next date"} value={asIs(next ? fileDay(next.date) : "None")} valueTone={next ? "warning" : undefined} footnote={next?.detail ?? (behind > 0 ? "nothing is due while it's behind" : "nothing due")} />
+        <StatTile label={next?.label ?? "Next date"} value={asIs(next ? fileDay(next.date) : "None")} footnote={next?.detail ?? (behind > 0 ? "nothing is due while it's behind" : "nothing due")} />
       </StatStrip>
 
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] items-stretch gap-4 min-[1100px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
@@ -134,14 +136,14 @@ export function PolicyOverviewTab({ view, provisional = false }: { view: PolicyV
       {(others.length > 0 || household) && (
         <TableCard
           title={others.length ? `${client?.name ?? "This client"} has ${others.length + 1} policies` : "Household"}
-          action={household ? <span className="text-sm text-muted-foreground" title={`Household: ${household.people.join(", ")}`}>Household <span className="font-semibold tabular-nums text-foreground">{dollars(household.monthlyCents)}</span> a month · {household.policies} policies</span> : undefined}
+          action={household ? <span className="text-sm text-foreground" title={`Household: ${household.people.join(", ")}`}>Household <span className="tabular-nums">{dollars(household.monthlyCents)}</span> a month · {household.policies} policies</span> : undefined}
         >
           {others.length > 0 && (
             <ul className="m-0 list-none border-t border-border p-0 text-sm">
               {others.map((other) => (
                 <li key={`${other.carrierId}|${other.policyNumber}`} className="flex min-h-[2.75rem] items-center justify-between gap-3 border-b border-border px-4 last:border-b-0">
-                  <Link href={carrierPolicyHref(other.carrierId, other.policyNumber)} className="min-w-0 truncate hover:underline">{other.carrierName} · <span className="font-mono text-xs">{other.policyNumber}</span></Link>
-                  <span className="shrink-0 text-xs text-muted-foreground">{statusLabel(other.status)}{other.annualCents !== null ? ` · ${dollars(Math.round(other.annualCents / 12))}/mo` : ""}</span>
+                  <Link href={carrierPolicyHref(other.carrierId, other.policyNumber)} className="min-w-0 whitespace-nowrap font-medium text-foreground hover:underline">{other.carrierName} · <span className="font-mono">{other.policyNumber}</span></Link>
+                  <span className="shrink-0 whitespace-nowrap tabular-nums text-foreground">{statusLabel(other.status)}{other.annualCents !== null ? ` · ${dollars(Math.round(other.annualCents / 12))}/mo` : ""}</span>
                 </li>
               ))}
             </ul>

@@ -44,12 +44,13 @@ export function PdfBalanceReview({ check }: { check: BalanceCheck }) {
       {rows.length > 0 && (
         <div className="overflow-x-auto border-t border-border">
           <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-            <thead><tr><th className="w-[60px] text-right">Line</th>{header.map((name) => <th key={name}>{name}</th>)}</tr></thead>
+            <thead><tr><th className="text-right">Line</th>{header.map((name) => <th key={name} className="whitespace-nowrap">{name}</th>)}</tr></thead>
             <PagedBody>
               {rows.map((row, index) => (
                 <tr key={index}>
-                  <td className="text-right tabular-nums text-muted-foreground">{index + 1}</td>
-                  {row.map((cell, at) => <td key={at} className="max-w-[220px] truncate font-mono text-xs" title={cell}>{cell}</td>)}
+                  {/* A raw-file table keeps every column; each line is one line, plain (owner 2026-11-11). */}
+                  <td className="text-right font-medium tabular-nums text-foreground">{index + 1}</td>
+                  {row.map((cell, at) => <td key={at} className="whitespace-nowrap">{cell}</td>)}
                 </tr>
               ))}
             </PagedBody>

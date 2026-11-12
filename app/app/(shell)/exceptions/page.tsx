@@ -6,6 +6,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { Callout } from "@/components/app/settings/primitives";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { agencyToday } from "@/lib/ingestion/agencyDay";
 import { ageDays } from "@/lib/ingestion/exceptionQueues";
@@ -52,10 +53,10 @@ export default async function ExceptionsPage({ searchParams }: { searchParams: P
       ) : (
         <>
           <StatStrip label="Exception totals">
-            <StatTile label="Sales no carrier has" value={view.open.filter((i) => i.queueType === "no_policy").length.toLocaleString("en-US")} valueTone={view.open.some((i) => i.queueType === "no_policy") ? "warning" : undefined} footnote="may never have been submitted" />
+            <StatTile label="Sales no carrier has" value={view.open.filter((i) => i.queueType === "no_policy").length.toLocaleString("en-US")} footnote={view.open.some((i) => i.queueType === "no_policy") ? <StatusChip tone="warning">May not be submitted</StatusChip> : "may never have been submitted"} />
             <StatTile label="Policies with no sale" value={view.open.filter((i) => i.queueType === "no_deal_flow").length.toLocaleString("en-US")} footnote="client is provisional until confirmed" />
             <StatTile label="Possibly one client" value={view.open.filter((i) => i.queueType === "multi_policy").length.toLocaleString("en-US")} footnote="only when not certain" />
-            <StatTile label="Oldest open" value={view.open.length ? `${Math.max(...view.open.map((i) => ageDays(i.ageFrom, today)))} d` : "—"} valueTone={view.open.some((i) => i.escalated) ? "warning" : undefined} footnote={`${view.open.filter((i) => i.escalated).length} escalated`} />
+            <StatTile label="Oldest open" value={view.open.length ? `${Math.max(...view.open.map((i) => ageDays(i.ageFrom, today)))} d` : "—"} footnote={view.open.some((i) => i.escalated) ? <StatusChip tone="warning">{view.open.filter((i) => i.escalated).length} escalated</StatusChip> : "0 escalated"} />
           </StatStrip>
           <ExceptionQueues open={view.open} closed={view.closed} rules={view.rules} isOwner={isOwner} today={today} readOnly={guard.entitlement.access === "read_only"} carriers={view.carriers} tab={tab} />
         </>

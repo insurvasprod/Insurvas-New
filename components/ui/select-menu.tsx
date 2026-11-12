@@ -130,7 +130,7 @@ export function SelectMenu<K extends string>({
             "inline-flex h-9 min-w-0 items-center gap-2 rounded-md border px-3 text-left text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-color)]",
             tinted
               ? "border-[color-mix(in_srgb,var(--primary)_55%,var(--border))] bg-[var(--primary-soft)] font-medium text-[var(--ink)]"
-              : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--surface-alt)]",
+              : "border-[var(--border-strong)] bg-[var(--surface)] text-[var(--ink)] hover:bg-[var(--hover-wash)]",
             disabled && "cursor-not-allowed opacity-45",
             className,
           )}

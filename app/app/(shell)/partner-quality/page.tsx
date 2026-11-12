@@ -14,9 +14,12 @@ export default async function PartnerQualityPage({ searchParams }: { searchParam
   if (!actAsPage(guard, ["owner", "producer", "bookkeeper"])) return <RoleGateNotice featureLabel="Partner quality" detail="Owners, producers, and bookkeepers can review partner lead quality." />;
   // AG-0.5: inside an agency this is the agency's business, not a producer's work — its API refuses a narrow session too.
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="Partner quality" detail="In an agency, the owner and admins review partner quality." />;
-  const [query, records] = await Promise.all([searchParams, guardPage("publisher_records")]);
-  // A row opens the partner record's Quality tab for someone who may open partner records.
-  const recordLinks = records.entitled && actAsPage(records, ["owner", "bookkeeper"]);
-  // Partners A (2026-10-25): on the shell's stage (one per page, drawn by the layout).
-  return <ReportsPage view="partner" info="How good each partner's leads are, against the period before. Every figure opens the leads it counted. Quality and conversion only: cost is not included yet."><PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} recordLinks={recordLinks} framed /></ReportsPage>;
+  const query = await searchParams;
+  // Reports round 7 (owner pick 8·A, 2026-11-11): the "Table · Chart" switch on the title line, the chart by default.
+  // A row and a bar open the partner's page (/app/partner-quality/[partnerId]); its ⋯ opens the partner's record.
+  return (
+    <ReportsPage view="partner" show="chart" info="How good each partner's leads are: sent, with what was submitted inside, and the flags. A bar or a row opens the partner; a figure opens the leads it counted. Conversion is submitted ÷ sent. Quality and conversion only: cost is on True CPA.">
+      <PartnerQualityWorkspace initialPeriod={validPartnerQualityPeriod(single(query.from), single(query.to))} framed />
+    </ReportsPage>
+  );
 }

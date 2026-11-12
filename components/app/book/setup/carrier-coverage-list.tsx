@@ -4,151 +4,189 @@ import { useMemo, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
-import { InfoTip } from "@/components/ui/info-tip";
-import { EmptyState, NoMatches } from "@/components/ui/page-states";
+import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { ToggleChip } from "@/components/ui/toggle-chip";
-import { RULE_TYPE_LABELS, RULE_TYPES, type RuleType } from "@/lib/ingestion/carrierRules";
-import { carrierRulesHref, type CoverageFilter, type DotState } from "@/lib/pipelineRules/carrierCoverageModel";
+import { RULE_TYPES, type SettingField } from "@/lib/ingestion/carrierRules";
+import { carrierRulesHref, type CoverageFilter } from "@/lib/pipelineRules/carrierCoverageModel";
 import { cn } from "@/lib/utils";
 
-import { LinkRow, RowChevron } from "./link-row";
+import { FIELD_MAPS, FactDialog, MONEY_FIELDS, SETTINGS_CARRIERS, layoutWords, settingText, type FactsSettings, type FilesFacts } from "./carrier-facts";
+import { WindowDialog, days, sourceWord, whose, windowLabel, type WindowItem, type WindowRow } from "./carrier-terms-window-dialog";
+
+export type TermsTab = "windows" | "money" | "files";
 
 export type CoverageListRow = {
   carrierId: string;
   carrierName: string;
   inForce: number;
-  dots: Record<RuleType, DotState>;
-  /** The biggest gap in words and what it costs; null when every window is set. */
-  gap: { words: string; cost: string } | null;
   missing: number;
   unverified: number;
-  money: string;
-  files: string;
+  /** The five windows in RULE_TYPES order, each what its cell opens. */
+  windows: WindowRow[];
+  settings: FactsSettings;
+  files: FilesFacts;
 };
 
-const DOT: Record<DotState, { className: string; label: string }> = {
-  verified: { className: "bg-[var(--success)]", label: "verified" },
-  unverified: { className: "bg-[var(--muted)]", label: "observed, unverified" },
-  missing: { className: "border-2 border-[var(--error)] bg-transparent", label: "not set" },
-};
+const CHIPS: Array<[CoverageFilter, string]> = [["all", "All"], ["missing", "Missing a rule"], ["unverified", "Unverified"]];
+const FILTER_WORDS: Record<CoverageFilter, string> = { all: "All", missing: "Missing a rule", unverified: "Unverified" };
+const link = "whitespace-nowrap hover:underline";
+/** A cell's button: one plain line, the same weight in every cell (no outline, no colour). */
+const cellButton = "whitespace-nowrap tabular-nums hover:underline";
 
-/** One dot per window, in the order of RULE_TYPES; the colour is never the only telling (each has its name). */
-export function RuleDots({ dots }: { dots: Record<RuleType, DotState> }) {
+/** Policies with this carrier, in force: what the In force figure opens. */
+const policiesHref = (carrierId: string) => `/app/policies?carrier=${carrierId}&show=inforce`;
+const carrierHref = (carrierId: string, tab: TermsTab) => `${carrierRulesHref(carrierId)}${tab === "windows" ? "" : `?tab=${tab}`}`;
+
+/** A window's cell: its days (source and verified on hover), or "Set ›". One click opens that window's dialog. */
+function WindowCell({ row, onOpen }: { row: WindowRow; onOpen: () => void }) {
+  const set = row.state !== "missing" && row.rule;
+  const title = set && row.rule ? `${windowLabel(row.type)}: ${days(row.rule.windowDays)} from paid-to · ${sourceWord(row.rule.source)} · ${row.state === "verified" ? "verified" : "unverified"} · ${whose(row.rule)}` : `${windowLabel(row.type)}: not set · ${row.cost}`;
   return (
-    <span className="inline-flex items-center gap-1" role="img" aria-label={RULE_TYPES.map((type) => `${RULE_TYPE_LABELS[type].label}: ${DOT[dots[type]].label}`).join(", ")}>
-      {RULE_TYPES.map((type) => <span key={type} title={`${RULE_TYPE_LABELS[type].label}: ${DOT[dots[type]].label}`} className={cn("inline-block size-2.5 rounded-full", DOT[dots[type]].className)} />)}
-    </span>
+    <button type="button" title={title} aria-label={title} onClick={onOpen} className={cellButton}>
+      {set && row.rule ? days(row.rule.windowDays) : "Set ›"}
+    </button>
   );
 }
 
-/** A column head with an (i) that says what the column means and what to do about it. */
-function Head({ tip, text, children }: { tip: string; text: string; children: ReactNode }) {
-  return <span className="inline-flex items-center gap-1">{children}<InfoTip label={`About ${tip}`}>{text}</InfoTip></span>;
-}
-
-function Legend() {
+/** A money or file fact's cell: its value, or "+ Set"; it opens the fact's dialog. Read-only: the value as text. */
+function FactCell({ field, settings, readOnly, onOpen }: { field: SettingField; settings: FactsSettings; readOnly: boolean; onOpen: () => void }) {
+  const text = settingText(field, settings[field].value);
+  if (readOnly) return text ? <span className="whitespace-nowrap">{text}</span> : <span className="text-muted-foreground" title="Not set">—</span>;
   return (
-    <span className="inline-flex flex-wrap items-center gap-3">
-      {(["verified", "unverified", "missing"] as const).map((state) => (
-        <span key={state} className="inline-flex items-center gap-1.5"><span className={cn("inline-block size-2.5 rounded-full", DOT[state].className)} aria-hidden="true" />{DOT[state].label}</span>
-      ))}
-    </span>
+    <button type="button" onClick={onOpen} className={cellButton}>
+      {text ?? "Set ›"}
+    </button>
   );
 }
+
+type Column = { key: string; label: string; cell: (row: CoverageListRow) => ReactNode };
 
 /**
- * Setup › Carrier rules, the list (board 9; LA-4.17's coverage screen): every carrier the agency works with, which
- * of the five windows are set, the biggest gap and the policies it leaves without a countdown, and the carrier's
- * money and file facts in short. Sorted by policies affected (the server's order). Nothing is edited here: the
- * whole row opens the carrier's page.
+ * Setup › Carrier terms, the terms grid (board 1·B, the owner's pick 2026-11-10): one row a carrier, one cell a window
+ * with its days or "+ Set". A cell opens that window's dialog (board 1·4); the carrier's name or › opens its page; the
+ * In force figure opens Policies filtered to the carrier. The Money and Files tabs are the same grid for the carrier's
+ * other facts, each cell opening its fact dialog (or, for the portal and the layout, the page that keeps them). Sorted
+ * by policies left without a countdown (the server's order). On a phone each carrier is a card.
  */
-export function CarrierCoverageList({ rows }: { rows: CoverageListRow[] }) {
+export function CarrierCoverageList({ rows, tab, asOf, readOnly }: { rows: CoverageListRow[]; tab: TermsTab; asOf: string; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [filter, setFilter] = useState<CoverageFilter>("all");
   const [query, setQuery] = useState("");
+  const [opened, setOpened] = useState<WindowItem[] | null>(null);
+  const [fact, setFact] = useState<{ row: CoverageListRow; field: SettingField } | null>(null);
   const counts = { all: rows.length, missing: rows.filter((r) => r.missing > 0).length, unverified: rows.filter((r) => r.unverified > 0).length };
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((row) => (filter === "all" || (filter === "missing" ? row.missing > 0 : row.unverified > 0)) && (!q || row.carrierName.toLowerCase().includes(q)));
   }, [rows, filter, query]);
+  const clear = () => { setQuery(""); setFilter("all"); };
+  const openWindow = (row: CoverageListRow, windowRow: WindowRow) => setOpened([{ carrierId: row.carrierId, carrierName: row.carrierName, row: windowRow }]);
+  const openFact = (row: CoverageListRow, field: SettingField) => setFact({ row, field });
 
-  const chips: Array<[CoverageFilter, string]> = [["all", "All"], ["missing", "Missing a rule"], ["unverified", "Unverified"]];
+  const columns: Column[] = tab === "windows"
+    ? RULE_TYPES.map((type, i) => ({ key: type, label: windowLabel(type), cell: (row) => <WindowCell row={row.windows[i]} onOpen={() => openWindow(row, row.windows[i])} /> }))
+    : tab === "money"
+      ? MONEY_FIELDS.map((field) => ({ key: field, label: ({ commissionTrigger: "Pays commission", expectedLagDays: "Payment lag", minimumPayoutCents: "Minimum payout", toleranceCents: "Tolerance" } as const)[field], cell: (row) => <FactCell field={field} settings={row.settings} readOnly={readOnly} onOpen={() => openFact(row, field)} /> }))
+      : [
+        { key: "statementFormat", label: "Statement format", cell: (row) => <FactCell field="statementFormat" settings={row.settings} readOnly={readOnly} onOpen={() => openFact(row, "statementFormat")} /> },
+        { key: "expectedCadence", label: "Files arrive", cell: (row) => <FactCell field="expectedCadence" settings={row.settings} readOnly={readOnly} onOpen={() => openFact(row, "expectedCadence")} /> },
+        { key: "portal", label: "Portal", cell: (row) => row.files.portal.value ? <Link href={SETTINGS_CARRIERS} className={cn(link, "block truncate")} title={`${row.files.portal.value} · kept in Settings › Carriers`}>{row.files.portal.value}</Link> : <Link href={SETTINGS_CARRIERS} className="text-muted-foreground hover:underline" title="Not set · kept in Settings › Carriers">—</Link> },
+        { key: "layout", label: "Layout", cell: (row) => {
+          const layout = row.files.layouts.find((l) => l.fileType === "commissions") ?? row.files.layouts[0];
+          return layout ? <Link href={FIELD_MAPS} className={cn(link, "block truncate")} title={layoutWords(layout)}>{layoutWords(layout)}</Link> : <span className="text-muted-foreground" title="No layout yet">—</span>;
+        } },
+      ];
+
   const toolbar = (
     <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
       <ToolbarSearch value={query} onChange={setQuery} placeholder="Search carriers" />
       <span role="radiogroup" aria-label="Show" className="inline-flex flex-wrap gap-2">
-        {chips.map(([key, label]) => <ToggleChip key={key} role="radio" selected={filter === key} count={counts[key]} countTone={key === "missing" && counts.missing ? "danger" : undefined} onClick={() => setFilter(key)}>{label}</ToggleChip>)}
+        {CHIPS.map(([key, label]) => <ToggleChip key={key} role="radio" selected={filter === key} count={counts[key]} countTone={key === "missing" && counts.missing ? "danger" : undefined} onClick={() => setFilter(key)}>{label}</ToggleChip>)}
       </span>
     </DataToolbar>
+  );
+  const legend = tab === "windows" ? <span>Days from paid-to · a cell names its source and whether it is verified</span> : null;
+  const footer = (
+    <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+      {legend}
+      <span className="flex-1" />
+      <span>{shown.length.toLocaleString("en-US")} {shown.length === 1 ? "carrier" : "carriers"} · sorted by policies left without a countdown</span>
+    </div>
+  );
+
+  const dialogs = (
+    <>
+      {opened && <WindowDialog queue={opened} stepping={false} asOf={asOf} readOnly={readOnly} onClose={() => setOpened(null)} />}
+      {fact && <FactDialog carrierId={fact.row.carrierId} carrierName={fact.row.carrierName} field={fact.field} settings={fact.row.settings} onClose={() => setFact(null)} />}
+    </>
   );
 
   if (!rows.length) {
     return (
       <PagedTableCard total={0} noun="carriers" toolbar={toolbar}>
-        <EmptyState title="No carriers yet" hint="Switch on the carriers you work with in Settings › Carriers; each one then has its rules here." />
+        <EmptyState title="No carriers yet" hint="Switch on the carriers you work with in Settings › Carriers; each one then has its rules here." action={<Link href={SETTINGS_CARRIERS} className={buttonVariants()}>Open Settings › Carriers</Link>} />
       </PagedTableCard>
     );
   }
 
   return (
-    <PagedTableCard total={shown.length} noun="carriers" toolbar={toolbar} footer={<Legend />} suffix={<Legend />}>
-      {shown.length === 0 ? (
-        <NoMatches noun="carriers" onClear={() => { setQuery(""); setFilter("all"); }} />
-      ) : (
-        // Owner 2026-11-06: the columns share the width evenly (table-fixed), each data head carries an (i) saying what it means.
-        <table className="portal-lead-table w-full min-w-[960px] table-fixed text-left text-sm">
-          <thead>
-            <tr>
-              <th>Carrier</th>
-              <th><Head tip="In force" text="Policies with this carrier that are in force today: how many a missing window leaves without a countdown.">In force</Head></th>
-              <th><Head tip="Windows set" text="A carrier has five windows: first payment, a missed payment, reinstatement, conservation and a cancellation request. A filled green dot is verified, grey was seen in the carrier's files but not checked, a red ring is not set yet.">Windows set</Head></th>
-              <th><Head tip="The biggest gap" text="The missing window that leaves the most policies without a countdown. Set it on the carrier's page so we can tell you how long you have to save them.">The biggest gap</Head></th>
-              <th><Head tip="Money · files" text="How the carrier pays (when commission starts and how long after) and how its files arrive (the format and the layout we read them with).">Money · files</Head></th>
-              <th className="w-[150px] text-right">What to do</th>
-            </tr>
-          </thead>
-          <PagedBody>
-            {shown.map((row) => (
-              <LinkRow key={row.carrierId} href={carrierRulesHref(row.carrierId)}>
-                <td><Link href={carrierRulesHref(row.carrierId)} className="font-semibold text-foreground hover:underline">{row.carrierName}</Link></td>
-                <td className="tabular-nums">{row.inForce.toLocaleString("en-US")}</td>
-                <td>
-                  <span className="inline-flex items-center gap-2">
-                    <RuleDots dots={row.dots} />
-                    <span className="text-muted-foreground tabular-nums">{RULE_TYPES.length - row.missing} of {RULE_TYPES.length}</span>
-                  </span>
-                </td>
-                <td className="whitespace-normal">
-                  {/* Owner 2026-11-06: the gap alone, no "N policies in force have…" line under it (In force says it). */}
-                  {row.gap ? (
-                    <span className="block whitespace-normal font-medium leading-snug text-[var(--error-ink)]" title={row.gap.cost}>{row.gap.words}</span>
-                  ) : (
-                    <span className="block leading-snug">
-                      <span className="block text-foreground">Nothing missing</span>
-                      {row.unverified > 0 && <span className="block text-xs text-muted-foreground">{row.unverified} unverified</span>}
-                    </span>
-                  )}
-                </td>
-                {/* Round 6: money and files in one cell, two lines, so the row's next step fits on a 1440 screen. */}
-                <td className="leading-snug text-muted-foreground">
-                  <span className="block truncate" title={row.money}>{row.money}</span>
-                  <span className="block truncate text-xs" title={row.files}>{row.files}</span>
-                </td>
-                {/* Round 6 (owner 2026-11-06): the row's next step as a verb; a carrier with nothing to do keeps the plain ›. */}
-                {row.missing > 0 || row.unverified > 0 ? (
-                  <td className="text-right">
-                    <Link href={carrierRulesHref(row.carrierId)} className={buttonVariants({ variant: row.missing > 0 ? "outline" : "ghost", size: "sm" })}>{row.missing > 0 ? `Set ${row.missing === 1 ? "the window" : `${row.missing} windows`}` : "Verify"}</Link>
-                  </td>
-                ) : <RowChevron />}
-              </LinkRow>
-            ))}
-          </PagedBody>
-        </table>
-      )}
-    </PagedTableCard>
+    <>
+      <PagedTableCard total={shown.length} noun="carriers" toolbar={toolbar} footer={footer} suffix={legend}>
+        {shown.length === 0 ? (
+          <EmptyState
+            title="No carriers match"
+            hint={query.trim() ? `Nothing matches "${query.trim()}"${filter === "all" ? "" : ` in ${FILTER_WORDS[filter]}`}.` : `No carrier is in ${FILTER_WORDS[filter]}.`}
+            action={<Button type="button" variant="outline" onClick={clear}>Clear the filters</Button>}
+          />
+        ) : (
+          <>
+            {/* Owner 2026-11-06: the columns share the width evenly (table-fixed). */}
+            <div className="hidden md:block">
+              <table className="portal-lead-table w-full min-w-[1040px] text-left text-sm">
+                <thead>
+                  <tr>
+                    <th className="min-w-[200px]">Carrier</th>
+                    <th className="w-[90px] text-right">In force</th>
+                    {columns.map((column) => <th key={column.key} className="w-[130px]">{column.label}</th>)}
+                  </tr>
+                </thead>
+                <PagedBody>
+                  {/* The name opens the carrier's page (no ›-only column); each cell keeps its own click (its dialog or link). */}
+                  {shown.map((row) => (
+                    <tr key={row.carrierId} className="hover:bg-[var(--surface-alt)]">
+                      <td className="whitespace-nowrap"><Link href={carrierHref(row.carrierId, tab)} className="font-medium text-foreground hover:underline">{row.carrierName}</Link></td>
+                      <td className="text-right tabular-nums"><Link href={policiesHref(row.carrierId)} className={link} title={`${row.carrierName} policies in force`}>{row.inForce.toLocaleString("en-US")}</Link></td>
+                      {columns.map((column) => <td key={column.key} className="whitespace-nowrap">{column.cell(row)}</td>)}
+                    </tr>
+                  ))}
+                </PagedBody>
+              </table>
+            </div>
+            {/* Board 1·7: on a phone the grid is one card a carrier, its columns as rows. */}
+            <PagedBody as="ul" className="grid gap-3 p-4 md:hidden" label="Carriers">
+              {shown.map((row) => (
+                <li key={row.carrierId} className="grid gap-2 rounded-lg border border-border bg-card p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <Link href={carrierHref(row.carrierId, tab)} className="font-medium text-foreground hover:underline">{row.carrierName}</Link>
+                    <Link href={policiesHref(row.carrierId)} className={cn(link, "text-sm")}>{row.inForce.toLocaleString("en-US")} in force ›</Link>
+                  </div>
+                  {columns.map((column) => (
+                    <div key={column.key} className="flex items-center justify-between gap-2">
+                      <span className="text-sm text-muted-foreground">{column.label}</span>
+                      <span className="min-w-0">{column.cell(row)}</span>
+                    </div>
+                  ))}
+                </li>
+              ))}
+            </PagedBody>
+          </>
+        )}
+      </PagedTableCard>
+      {dialogs}
+    </>
   );
 }

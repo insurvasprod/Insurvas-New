@@ -33,6 +33,9 @@ export type SuppressionEntry = {
   /** Your own list only: the lead the number was suppressed from, when it came off a call. */
   leadId?: string | null;
   leadName?: string | null;
+  /** A number a complaint suppressed: that complaint and who made it, so the row reads words, not an id. */
+  complaintId?: string | null;
+  complaintName?: string | null;
 };
 
 /** Ten digits, the way every store holds them. Anything else is not a US number we can suppress. */

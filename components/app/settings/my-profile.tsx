@@ -96,10 +96,12 @@ export function MyProfileSettings() {
 
   return (
     <SettingsStack className="min-h-0 flex-1 gap-3">
-      <SettingsSectionHeader />
+      <SettingsSectionHeader
+        // The section's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
+        tabs={<ViewTabs label="My profile" tabs={TABS} value={tab} onChange={pick} controls="my-profile-panel" />}
+      />
       {/* The tabs are a fixed header; only the cards below them scroll (owner 2026-11-03), so
           nothing is cut off at the tabs' edge. flex-1: the card reaches the foot of the menu. */}
-      <ViewTabs label="My profile" tabs={TABS} value={tab} onChange={pick} controls="my-profile-panel" />
       <div id="my-profile-panel" role="tabpanel" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1.5">
         {tab === "notifications" ? <div id="notifications"><NotificationPreferences embedded /></div>
           : tab === "changes" ? (

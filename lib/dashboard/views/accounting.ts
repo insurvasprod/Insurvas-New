@@ -245,6 +245,8 @@ export async function loadAccountingView(props: DashViewProps): Promise<Accounti
   const tenantId = props.context.tenantId;
   const db = getSupabaseServiceClient() as Loose;
   const money = !props.noMoney;
+  // The Overview draws the month's statement and the needs: no trend, deposits, balances or recent money.
+  const full = !props.forOverview;
 
   const today = localToday(props.now, props.zone);
   const from = monthStart(today);
@@ -275,7 +277,7 @@ export async function loadAccountingView(props: DashViewProps): Promise<Accounti
       if (!carrier.available && !hand.available) return null;
       return { open: sum.open + (hand.available ? hand.count : 0), owedCents: sum.owedCents + (hand.available ? Math.max(0, hand.totalCents) : 0) };
     }) : null,
-    hrefs.pnl && money ? safe(async () => {
+    hrefs.pnl && money && full ? safe(async () => {
       const { data, error } = await db.rpc("pnl_monthly", { p_tenant_id: tenantId, p_from: months[0], p_to: to, p_basis: basis });
       if (error) throw error;
       return ((data ?? []) as Loose[]).map((r): MonthlyRow => ({ month: String(r.month), section: String(r.section), amountCents: Number(r.amount_cents) }));
@@ -285,27 +287,27 @@ export async function loadAccountingView(props: DashViewProps): Promise<Accounti
       if (error) throw error;
       return pnlCore.statement(((data ?? []) as Loose[]).map((l) => ({ section: l.section, entryType: l.entry_type, sourceType: l.source_type, sourceId: l.source_id, sourceName: l.source_name, amountCents: Number(l.amount_cents), entries: Number(l.entries) })));
     }) : null,
-    hrefs.pnl && hrefs.bank && money ? safe(async () => {
+    hrefs.pnl && hrefs.bank && money && full ? safe(async () => {
       const { data, error } = await db.rpc("pnl_received", { p_tenant_id: tenantId, p_from: from, p_to: to });
       if (error) throw error;
       return { cents: data == null ? null : Number(data) };
     }) : null,
-    hrefs.bank && money ? safe(async () => {
+    hrefs.bank && money && full ? safe(async () => {
       const { data, error } = await db.from("bank_transaction").select("amount_cents").eq("tenant_id", tenantId).gt("amount_cents", 0).gte("posted_on", from).lt("posted_on", to).limit(5000);
       if (error) throw error;
       return ((data ?? []) as Loose[]).reduce((sum: number, r) => sum + Number(r.amount_cents), 0);
     }) : null,
-    hrefs.splits && money ? safe(async () => {
+    hrefs.splits && money && full ? safe(async () => {
       const { data, error } = await db.rpc("producer_balances", { p_tenant_id: tenantId, p_producer: null });
       if (error) throw error;
       return ((data ?? []) as Loose[]).map((b): BalanceRow => ({ producerUserId: String(b.producer_user_id), balanceCents: Number(b.balance_cents) }));
     }) : null,
-    hrefs.splits || hrefs.producerPayouts ? safe(async () => {
+    (hrefs.splits || hrefs.producerPayouts) && full ? safe(async () => {
       const { data, error } = await db.from("tenant_users").select("user_id, users!inner(name, email)").eq("tenant_id", tenantId);
       if (error) throw error;
       return new Map<string, string>(((data ?? []) as Loose[]).map((m) => [String(m.user_id), (m.users?.name as string | null) ?? (m.users?.email as string | null) ?? "Unnamed"]));
     }) : null,
-    hrefs.bank && money ? safe(async () => {
+    hrefs.bank && money && full ? safe(async () => {
       const { data, error } = await db.from("bank_transaction").select("id, posted_on, amount_cents, description_raw, match_status").eq("tenant_id", tenantId).gt("amount_cents", 0).order("posted_on", { ascending: false }).order("id").limit(4);
       if (error) throw error;
       return ((data ?? []) as Loose[]).map((t): DepositRow => ({ id: String(t.id), postedOn: String(t.posted_on), amountCents: Number(t.amount_cents), description: String(t.description_raw ?? ""), status: String(t.match_status) }));

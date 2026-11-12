@@ -1,51 +1,142 @@
 "use client";
 
 import Link from "next/link";
-import { NoteField } from "@/components/ui/note-field";
-import { useState } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { cardSurface } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { control, Field } from "@/components/ui/field";
 import { MoreMenu } from "@/components/ui/more-menu";
-import { CARRIER_METHOD_LABELS, CARRIER_METHODS, REQUEST_LABELS, type CarrierMethod, type RequestStatus, type RequestType } from "@/lib/retention/servicing";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { CARRIER_METHOD_LABELS, CARRIER_METHODS, canStep, type CarrierMethod, type RequestStatus } from "@/lib/retention/servicing";
 import { notify } from "@/lib/notify";
 
-import { STEP_LABEL, localDay, policyHref, tryAgainHref, type FormStep } from "./servicing-shared";
+import { localDay } from "./servicing-shared";
 
 /**
- * LA-5.4 · the client pieces of a servicing request (SvA, 2026-11-05): the cancel confirm (list row and
- * request page), the request page's header actions, and the step form that opens beside the timeline on
- * `?step=`. They were a side panel and a step pop-up; pop-ups are now only to confirm.
+ * LA-5.4 · the client pieces of a servicing request (round 7, owner pick 2·1–2·2, 2026-11-10). The request page is a
+ * server page; this island holds its title line's primary and ⋯, and the steps' dialogs:
+ *   Mark sent   (Send it)    md dialog: how you asked, their reference, takes effect by, form used.
+ *   Check it    (Check it)   md dialog: what the carrier said, the day they said it was done, their reference.
+ *   Cancel the request (⋯)   the shared confirm.
+ * The title line's primary and the step's own button on "Where it stands" open the same dialog (StepButton), and
+ * `?step=` opens one on arrival (the old links). An error the person can fix stays on the dialog's error line,
+ * never a toast; the toasts say what happened, in board 2·2's words.
  */
 
-async function postStep(body: Record<string, unknown>) {
+type DialogKey = "send" | "check" | "cancel";
+
+async function post(body: Record<string, unknown>) {
   const response = await fetch("/api/app/retention/servicing", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action: "step", send: null, reference: null, confirmed_on: null, note: null, ...body }),
+    body: JSON.stringify(body),
   });
   const data = (await response.json().catch(() => ({}))) as { error?: string };
   if (!response.ok) throw new Error(data.error ?? "That could not be saved.");
 }
+const postStep = (body: Record<string, unknown>) => post({ action: "step", send: null, reference: null, confirmed_on: null, note: null, ...body });
+const postNote = (id: string, note: string) => post({ action: "note", id, note });
+const failed = (e: unknown) => (e instanceof Error ? e.message : "That could not be saved.");
 
-/** Cancel a request: asks why (three characters or more), then steps it to cancelled. */
-export function CancelRequestDialog({ id, name, open, onOpenChange, onDone }: { id: string; name: string; open: boolean; onOpenChange: (open: boolean) => void; onDone: () => void }) {
-  const [why, setWhy] = useState("");
+function ErrorLine({ error }: { error: string | null }) {
+  if (!error) return null;
+  return <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>;
+}
+
+/** What a request's dialogs need to know about it. */
+export type RequestFacts = {
+  id: string;
+  /** The client, as the title says it. */
+  name: string;
+  status: RequestStatus;
+  carrierName: string;
+  /** The change in words: "Address → 1180 Pine Ridge Rd · ZIP 80014 · CO". */
+  change: string;
+  /** "address change", for the cancel confirm. */
+  kind: string;
+  carrierMethod: CarrierMethod | null;
+  carrierReference: string | null;
+  formRef: string | null;
+  expectedEffectiveDate: string | null;
+};
+
+const Ctx = createContext<((key: DialogKey) => void) | null>(null);
+
+/**
+ * Wraps the request page so its title line and its body open the same dialogs. `back` is the page's own address
+ * without `?step=`, where a saved step lands.
+ */
+export function ServicingRequestShell({ request: facts, back, initial, children }: { request: RequestFacts; back: string; initial: DialogKey | null; children: ReactNode }) {
+  const router = useRouter();
+  const [open, setOpen] = useState<DialogKey | null>(initial);
+  const close = () => {
+    setOpen(null);
+    if (initial) router.replace(back, { scroll: false });
+  };
+  const done = () => {
+    setOpen(null);
+    router.replace(back, { scroll: false });
+    router.refresh();
+  };
+  return (
+    <Ctx.Provider value={setOpen}>
+      {children}
+      {open === "send" && <MarkSentDialog facts={facts} onClose={close} onDone={done} />}
+      {open === "check" && <CheckItDialog facts={facts} onClose={close} onDone={done} />}
+      <CancelRequestDialog id={facts.id} name={facts.name} kind={facts.kind} open={open === "cancel"} onOpenChange={(next) => { if (!next) close(); }} onDone={done} />
+    </Ctx.Provider>
+  );
+}
+
+/** A button that opens one of the request's dialogs: the title line's primary, or a step's own button. */
+export function StepButton({ step, label, variant = "default", size = "default" }: { step: DialogKey; label: string; variant?: "default" | "outline"; size?: "default" | "sm" }) {
+  const openDialog = useContext(Ctx);
+  return <Button type="button" variant={variant} size={size} onClick={() => openDialog?.(step)}>{label}</Button>;
+}
+
+/**
+ * The title line after ‹ ›: the primary by state (Send it → Mark sent, Check it → Check it, Not in the file → Try
+ * again), then ⋯ with Cancel the request, Open the policy and Open the case. Read-only keeps ⋯ › Open the policy.
+ */
+export function ServicingRequestActions({ primary, tryAgainHref, policyHref, caseHref, cancellable, readOnly }: {
+  primary: "send" | "check" | "failed" | null;
+  tryAgainHref: string;
+  policyHref: string;
+  caseHref: string | null;
+  cancellable: boolean;
+  readOnly: boolean;
+}) {
+  const openDialog = useContext(Ctx);
+  return (
+    <>
+      {!readOnly && primary === "send" && <StepButton step="send" label="Mark sent" />}
+      {!readOnly && primary === "check" && <StepButton step="check" label="Check it" />}
+      {!readOnly && primary === "failed" && <Button asChild><Link href={tryAgainHref}>Try again</Link></Button>}
+      <MoreMenu items={[
+        !readOnly && cancellable && { label: "Cancel the request", onSelect: () => openDialog?.("cancel") },
+        { label: "Open the policy", href: policyHref },
+        !readOnly && caseHref && { label: "Open the case", href: caseHref },
+      ]} />
+    </>
+  );
+}
+
+/** Cancel a request (⋯): the shared confirm, board 2·2's words. Nothing is sent to the carrier. */
+export function CancelRequestDialog({ id, name, kind, open, onOpenChange, onDone }: { id: string; name: string; kind: string; open: boolean; onOpenChange: (open: boolean) => void; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function cancel() {
     setBusy(true);
     setError(null);
     try {
-      await postStep({ id, to: "cancelled", note: why.trim() });
+      await postStep({ id, to: "cancelled", note: "Cancelled by a person." });
       notify.done("Cancelled.");
-      setWhy("");
       onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "That could not be saved.");
+      setError(failed(e));
     } finally {
       setBusy(false);
     }
@@ -53,108 +144,138 @@ export function CancelRequestDialog({ id, name, open, onOpenChange, onDone }: { 
   return (
     <ConfirmDialog
       open={open}
-      onOpenChange={(next) => { if (!next) { setError(null); } onOpenChange(next); }}
+      onOpenChange={(next) => { if (!next) setError(null); onOpenChange(next); }}
       onConfirm={() => void cancel()}
       busy={busy}
       title="Cancel the request?"
-      description={`${name}: nothing more is asked of the carrier, and the request stops waiting on a file.`}
+      description={`${name}'s ${kind} stops being tracked. Nothing is sent to the carrier.`}
       cancelLabel="Keep the request"
       confirmLabel={busy ? "Cancelling…" : "Cancel the request"}
-      confirmDisabled={why.trim().length < 3}
-      fields={<>
-        <Field label="Why" htmlFor={`cancel-why-${id}`} required>
-          <NoteField id={`cancel-why-${id}`}  maxLength={500} value={why} onChange={setWhy} />
-        </Field>
-        {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
-      </>}
+      fields={error ? <ErrorLine error={error} /> : undefined}
     />
   );
 }
 
-/** The request page's header: the next step as the one button, the rest under More. */
-export function ServicingRequestActions({ id, name, next, cancellable, failed, carrierId, policyNumber, type }: {
-  id: string; name: string; next: FormStep | null; cancellable: boolean; failed: boolean; carrierId: string; policyNumber: string; type: RequestType;
-}) {
-  const router = useRouter();
-  const [cancelling, setCancelling] = useState(false);
-  return (
-    <>
-      {next && <Button asChild><Link href={`/app/servicing/${id}?step=${next}`}>{STEP_LABEL[next]}</Link></Button>}
-      <MoreMenu items={[
-        cancellable && { label: "Cancel the request", onSelect: () => setCancelling(true) },
-        failed && { label: "Try again", href: tryAgainHref({ carrierId, policyNumber, type }) },
-        { label: "Open the policy", href: policyHref({ carrierId, policyNumber }) },
-      ]} />
-      {cancellable && <CancelRequestDialog id={id} name={name} open={cancelling} onOpenChange={setCancelling} onDone={() => { setCancelling(false); router.replace(`/app/servicing/${id}`); router.refresh(); }} />}
-    </>
-  );
-}
-
-/** One step's fields, on the page beside the timeline (was StepDialog). */
-export function ServicingStepForm({ id, to, type, carrierMethod, carrierReference, expectedEffectiveDate }: {
-  id: string; to: FormStep; type: RequestType; carrierMethod: CarrierMethod | null; carrierReference: string | null; expectedEffectiveDate: string | null;
-}) {
-  const router = useRouter();
-  const [method, setMethod] = useState<CarrierMethod | "">(carrierMethod ?? "");
-  const [reference, setReference] = useState(carrierReference ?? "");
-  const [formRef, setFormRef] = useState("");
-  const [effective, setEffective] = useState(expectedEffectiveDate ?? "");
-  const [confirmedOn, setConfirmedOn] = useState(() => localDay());
+/** Mark sent (Send it): how you asked the carrier and what they gave you. It stays open until a file shows it. */
+function MarkSentDialog({ facts, onClose, onDone }: { facts: RequestFacts; onClose: () => void; onDone: () => void }) {
+  const [method, setMethod] = useState<CarrierMethod | "">(facts.carrierMethod ?? "");
+  const [reference, setReference] = useState(facts.carrierReference ?? "");
+  const [formRef, setFormRef] = useState(facts.formRef ?? "");
+  const [effective, setEffective] = useState(facts.expectedEffectiveDate ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const ready = to === "submitted" ? method !== "" : to === "confirmed_by_carrier" ? confirmedOn !== "" : true;
-  const back = `/app/servicing/${id}`;
 
   async function save() {
+    if (!method) { setError("Say how you asked the carrier."); return; }
     setBusy(true);
     setError(null);
     try {
-      await postStep({
-        id, to: to as RequestStatus,
-        send: to === "submitted" ? { method, form_ref: formRef.trim() || null, reference: reference.trim() || null, expected_effective_date: effective || null } : null,
-        reference: to !== "submitted" ? reference.trim() || null : null,
-        confirmed_on: to === "confirmed_by_carrier" ? confirmedOn : null,
-      });
-      notify.done(to === "confirmed_by_carrier" ? "Noted. It stays open until a carrier file shows the change." : "Saved.");
-      router.replace(back);
-      router.refresh();
+      await postStep({ id: facts.id, to: "submitted", send: { method, form_ref: formRef.trim() || null, reference: reference.trim() || null, expected_effective_date: effective || null } });
+      notify.done("Sent. It stays open until a carrier file shows the change.");
+      onDone();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "That could not be saved.");
+      setError(failed(e));
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <form className={`${cardSurface} flex flex-col gap-4 p-5`} onSubmit={(e) => { e.preventDefault(); if (ready && !busy) void save(); }}>
-      <h2 className="m-0 text-base font-semibold text-foreground">{STEP_LABEL[to]}: {REQUEST_LABELS[type].toLowerCase()}</h2>
-      {to === "submitted" && (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="How" htmlFor="step-via" required>
-            <select id="step-via" className={control} value={method} onChange={(e) => setMethod(e.target.value as CarrierMethod | "")}>
-              <option value="">Choose…</option>
-              {CARRIER_METHODS.map((m) => <option key={m} value={m}>{CARRIER_METHOD_LABELS[m]}</option>)}
-            </select>
+    <Dialog open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>{`Mark ${facts.name}'s request sent`}</DialogTitle>
+          <DialogDescription>{facts.change}</DialogDescription>
+        </DialogHeader>
+        <form id="servicing-mark-sent" className="grid gap-3" onSubmit={(e) => { e.preventDefault(); if (!busy) void save(); }}>
+          <Field label="How you asked" required>
+            <div role="radiogroup" aria-label="How you asked" className="mt-1.5 flex flex-wrap gap-2">
+              {CARRIER_METHODS.map((m) => <ToggleChip key={m} role="radio" selected={method === m} onClick={() => { setMethod(m); setError(null); }}>{CARRIER_METHOD_LABELS[m]}</ToggleChip>)}
+            </div>
           </Field>
-          <Field label="Their reference" htmlFor="step-ref"><input id="step-ref" autoComplete="off" className={control} value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
-          <Field label="Form used" htmlFor="step-form"><input id="step-form" autoComplete="off" className={control} value={formRef} onChange={(e) => setFormRef(e.target.value)} /></Field>
-          <Field label="Takes effect by" htmlFor="step-effective"><input id="step-effective" type="date" className={control} value={effective} onChange={(e) => setEffective(e.target.value)} /></Field>
-        </div>
-      )}
-      {(to === "awaiting_carrier" || to === "confirmed_by_carrier") && (
-        <Field label="Their reference" htmlFor="step-ref2"><input id="step-ref2" autoComplete="off" className={control} value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
-      )}
-      {to === "confirmed_by_carrier" && (
-        <>
-          <Field label="They said it was done on" htmlFor="step-on" required><input id="step-on" type="date" className={control} value={confirmedOn} onChange={(e) => setConfirmedOn(e.target.value)} /></Field>
-          <p className="m-0 text-sm text-muted-foreground">This is what you were told. The request closes only when a carrier file shows the change.</p>
-        </>
-      )}
-      {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
-      <div className="flex flex-wrap justify-end gap-2">
-        <Button asChild variant="outline"><Link href={back}>Back</Link></Button>
-        <Button type="submit" disabled={!ready || busy}>{busy ? "Saving…" : STEP_LABEL[to]}</Button>
-      </div>
-    </form>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Their reference" htmlFor="sent-ref"><input id="sent-ref" autoComplete="off" placeholder="Optional" className={control} value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
+            <Field label="Takes effect by" htmlFor="sent-effective"><input id="sent-effective" type="date" className={control} value={effective} onChange={(e) => setEffective(e.target.value)} /></Field>
+          </div>
+          <Field label="Form used" htmlFor="sent-form"><input id="sent-form" autoComplete="off" placeholder="Optional" className={control} value={formRef} onChange={(e) => setFormRef(e.target.value)} /></Field>
+          <ErrorLine error={error} />
+        </form>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Back</Button>
+          <Button type="submit" form="servicing-mark-sent" disabled={busy}>{busy ? "Saving…" : "Record as sent"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type Said = "done" | "not_yet" | "refused";
+const SAID: Array<{ key: Said; label: string }> = [{ key: "done", label: "It's done" }, { key: "not_yet", label: "Not done yet" }, { key: "refused", label: "They refused it" }];
+
+/**
+ * Check it: what the carrier said. "It's done" records the day they gave (carrier says done); "Not done yet" marks
+ * the carrier on it; once a step can't take either, what they said is kept as a dated note. "They refused it" stops
+ * the request (cancelled, with the reason). It never closes a request as proven: only a carrier file does that.
+ */
+function CheckItDialog({ facts, onClose, onDone }: { facts: RequestFacts; onClose: () => void; onDone: () => void }) {
+  const [said, setSaid] = useState<Said>("done");
+  const [confirmedOn, setConfirmedOn] = useState(() => localDay());
+  const [reference, setReference] = useState(facts.carrierReference ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save() {
+    if (said === "done" && !confirmedOn) { setError("Say the day they said it was done."); return; }
+    setBusy(true);
+    setError(null);
+    const ref = reference.trim() || null;
+    const refText = ref ? `, ref ${ref}` : "";
+    try {
+      if (said === "refused") {
+        await postStep({ id: facts.id, to: "cancelled", reference: ref, note: `${facts.carrierName} refused it${refText}.` });
+        notify.done("Cancelled.");
+      } else if (said === "done") {
+        if (canStep(facts.status, "confirmed_by_carrier")) await postStep({ id: facts.id, to: "confirmed_by_carrier", reference: ref, confirmed_on: confirmedOn });
+        else await postNote(facts.id, `${facts.carrierName} said it was done on ${confirmedOn}${refText}.`);
+        notify.done("Noted. It stays open until a carrier file shows the change.");
+      } else {
+        if (canStep(facts.status, "awaiting_carrier")) await postStep({ id: facts.id, to: "awaiting_carrier", reference: ref });
+        else await postNote(facts.id, `${facts.carrierName} said it isn't done yet${refText}.`);
+        notify.done("Noted. It stays open until a carrier file shows the change.");
+      }
+      onDone();
+    } catch (e) {
+      setError(failed(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>{`What did ${facts.carrierName} say?`}</DialogTitle>
+          <DialogDescription className="sr-only">{facts.change}</DialogDescription>
+        </DialogHeader>
+        <form id="servicing-check-it" className="grid gap-3" onSubmit={(e) => { e.preventDefault(); if (!busy) void save(); }}>
+          <div role="radiogroup" aria-label="What the carrier said" className="flex flex-wrap gap-2">
+            {SAID.map((s) => <ToggleChip key={s.key} role="radio" selected={said === s.key} onClick={() => { setSaid(s.key); setError(null); }}>{s.label}</ToggleChip>)}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {said === "done" && <Field label="They said it was done on" htmlFor="check-on" required><input id="check-on" type="date" className={control} value={confirmedOn} onChange={(e) => setConfirmedOn(e.target.value)} /></Field>}
+            <Field label="Their reference" htmlFor="check-ref"><input id="check-ref" autoComplete="off" placeholder="Optional" className={control} value={reference} onChange={(e) => setReference(e.target.value)} /></Field>
+          </div>
+          <p className="m-0 text-xs text-muted-foreground">
+            {said === "refused" ? "The request is cancelled: nothing more is asked of the carrier." : "This is what you were told. The request closes only when a carrier file shows the change."}
+          </p>
+          <ErrorLine error={error} />
+        </form>
+        <DialogFooter>
+          <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Back</Button>
+          <Button type="submit" form="servicing-check-it" disabled={busy}>{busy ? "Saving…" : "Save"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

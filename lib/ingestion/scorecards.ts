@@ -556,6 +556,151 @@ export function drillRows(policies: ScorePolicy[], d: Exclude<Drill, { kind: "we
   return { title: `Sales in the period · ${card.name}`, figure: `${card.sales ?? 0} ${card.sales === 1 ? "sale" : "sales"}`, rows: plain(card.salesMembers ?? [], () => "Issued in the period") };
 }
 
+// ─── series for the cards (Reports round 7, owner pick 0·C: each card carries a small chart) ────────
+
+/** The day each point of a card's line stands for: today, and the same day in each month before, oldest first. */
+export function monthSteps(today: string, months: number): string[] {
+  const out: string[] = [];
+  for (let back = months; back >= 0; back--) out.push(back === 0 ? today : addMonths(today, -back));
+  return out;
+}
+
+/**
+ * The in-force premium as the files now tell it on each day: a policy in force today counts from its issue
+ * date; a lapsed one counts until it ended, when that end is known. A lapse with no end date can't be put
+ * on either side of a day, so it is left out of every point. The last point (today) is the headline's own
+ * figure: every policy in force today.
+ */
+export function inForceSeries(policies: ScorePolicy[], days: string[]): number[] {
+  return days.map((day) => {
+    let sum = 0;
+    for (const p of policies) {
+      if (p.annualCents === null) continue;
+      if (inForce(p)) {
+        if (!p.issueDate || p.issueDate <= day) sum += p.annualCents;
+        continue;
+      }
+      if (p.status !== "lapsed" || !p.issueDate || p.issueDate > day || endUnknown(p)) continue;
+      const ended = endedOn(p);
+      if (ended && ended > day) sum += p.annualCents;
+    }
+    return sum;
+  });
+}
+
+/**
+ * A persistency bucket as it read on each day (the same function, with that day as "today"), as a whole
+ * percent by count or by premium. A day the bucket was still building, or had no policy old enough, has no
+ * point: the line is the run of real figures only.
+ */
+export function persistencySeries(policies: ScorePolicy[], month: Bucket, days: string[], start: HistoryStart, by: "count" | "premium" = "count"): number[] {
+  const out: number[] = [];
+  for (const day of days) {
+    const cell = persistency(policies, month, day, start);
+    if (cell.building || !cell.eligible) continue;
+    if (by === "premium") {
+      if (cell.premiumEligibleCents > 0) out.push(percentOf(cell.premiumAliveCents, cell.premiumEligibleCents));
+    } else out.push(percentOf(cell.alive, cell.eligible));
+  }
+  return out;
+}
+
+/** Placement month by month: of the policies issued between one step and the next, the share paid at least once. */
+export function placedSeries(policies: ScorePolicy[], days: string[]): number[] {
+  const out: number[] = [];
+  for (let i = 1; i < days.length; i++) {
+    const rows = policies.filter((p) => p.issueDate !== null && p.issueDate > days[i - 1] && p.issueDate <= days[i] && issued(p));
+    if (rows.length) out.push(percentOf(rows.filter(placed).length, rows.length));
+  }
+  return out;
+}
+
+// ─── the sub-pages' charts (owner 2026-11-12: the Table · Chart switch on Today and on every drill) ─
+
+const shiftDay = (day: string, days: number) => new Date(Date.parse(`${day.slice(0, 10)}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+
+/**
+ * Today's line: a point a day for the last `days` days to `today`, oldest first: the policies issued that day
+ * (by the carrier's issue date) and the policies lapsed that day (by `lapsedOn`, the file that showed the lapse).
+ * Both are dated on the policy itself, so the line is the book's own, not a guess.
+ */
+export function dailyEvents(policies: ScorePolicy[], today: string, days = 14): { days: string[]; issued: number[]; lapsed: number[] } {
+  const list: string[] = [];
+  for (let back = days - 1; back >= 0; back--) list.push(shiftDay(today, -back));
+  const at = new Map(list.map((day, i) => [day, i]));
+  const issuedOn = list.map(() => 0);
+  const lapsedOn = list.map(() => 0);
+  for (const p of policies) {
+    const i = p.issueDate && issued(p) ? at.get(p.issueDate.slice(0, 10)) : undefined;
+    if (i !== undefined) issuedOn[i]++;
+    const j = p.status === "lapsed" && p.lapsedOn ? at.get(p.lapsedOn.slice(0, 10)) : undefined;
+    if (j !== undefined) lapsedOn[j]++;
+  }
+  return { days: list, issued: issuedOn, lapsed: lapsedOn };
+}
+
+/** The issue period a drill can be narrowed to: a month (`2025-03`) or a year (`2025`). */
+export const ISSUE_PERIOD = /^\d{4}(-\d{2})?$/;
+
+/**
+ * A drill's rows by issue period, oldest first, the empty periods between kept: a month a bar when the rows
+ * span three years or less, else a year a bar (a whole-book drill can reach back decades). Rows with no issue
+ * date are counted apart. Each period's key narrows the drill (`?issued=`), matched as a prefix of the date.
+ */
+export function issuePeriods<T extends { issueDate: string | null }>(rows: readonly T[]): { unit: "month" | "year"; periods: Array<{ key: string; rows: T[] }>; undated: number } {
+  const dated = rows.filter((r) => r.issueDate && /^\d{4}-\d{2}/.test(r.issueDate));
+  const undated = rows.length - dated.length;
+  if (!dated.length) return { unit: "month", periods: [], undated };
+  const monthOf = (day: string) => Number(day.slice(0, 4)) * 12 + Number(day.slice(5, 7)) - 1;
+  const months = dated.map((r) => monthOf(r.issueDate as string));
+  const low = Math.min(...months);
+  const high = Math.max(...months);
+  const unit = high - low < 36 ? "month" : "year";
+  const keyOf = (n: number) => (unit === "month" ? `${Math.floor(n / 12)}-${String((n % 12) + 1).padStart(2, "0")}` : String(Math.floor(n / 12)));
+  const periods = new Map<string, T[]>();
+  const step = unit === "month" ? 1 : 12;
+  for (let n = unit === "month" ? low : Math.floor(low / 12) * 12; n <= high; n += step) periods.set(keyOf(n), []);
+  dated.forEach((r, i) => periods.get(keyOf(months[i]))?.push(r));
+  return { unit, periods: [...periods.entries()].map(([key, list]) => ({ key, rows: list })), undated };
+}
+
+// ─── filters and the page's address ───────────────────────────────────────────────────────────
+
+/** The Filters panel's fields (4·6): one key a slicing, each matched on the policy's own key for it. */
+export const FILTER_KEYS = ["carrier", "product", "status", "agent", "agency", "source"] as const;
+export type FilterKey = (typeof FILTER_KEYS)[number];
+export type ScoreFilter = Partial<Record<FilterKey, string>>;
+
+export function readFilter(params: Record<string, string | string[] | undefined>): ScoreFilter {
+  const out: ScoreFilter = {};
+  for (const key of FILTER_KEYS) {
+    const raw = params[key];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    if (value) out[key] = value;
+  }
+  return out;
+}
+
+/** The policies a filter keeps. Persistency's history start is read from the whole book first (it is per carrier). */
+export function filterPolicies(policies: ScorePolicy[], filter: ScoreFilter): ScorePolicy[] {
+  const active = FILTER_KEYS.filter((key) => filter[key]);
+  if (!active.length) return policies;
+  return policies.filter((p) => active.every((key) => keyOf(p, key) === filter[key]));
+}
+
+/** What the page's address carries besides the drill: the tab, the period, the grouping, the measure, the view and the filters. */
+export type ScorecardsQuery = { view: string; months: number; by?: string | null; measure?: string | null; show?: string | null; filter: ScoreFilter };
+
+export function scorecardsHref(q: ScorecardsQuery, patch: Partial<ScorecardsQuery> = {}): string {
+  const next = { ...q, ...patch, filter: patch.filter ?? q.filter };
+  const params = new URLSearchParams({ view: next.view, months: String(next.months) });
+  if (next.by) params.set("by", next.by);
+  if (next.measure && next.measure !== "count") params.set("measure", next.measure);
+  if (next.show) params.set("show", next.show);
+  for (const key of FILTER_KEYS) if (next.filter[key]) params.set(key, next.filter[key] as string);
+  return `/app/book-scorecards?${params.toString()}`;
+}
+
 /** $1,234.56 from whole cents, without floating point. */
 export function centsText(cents: number): string {
   const digits = String(Math.abs(cents)).padStart(3, "0");

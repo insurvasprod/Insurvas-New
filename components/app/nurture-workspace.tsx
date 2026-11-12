@@ -24,6 +24,7 @@ import { canContinue, count, draftOf, draftProblem, MONTHS, plural, ruleSummary,
 import { campaignStatus, PanelSection, RecycleFlow, RecyclePerformance, RulePanel, type Progress } from "@/components/app/nurture/recycle-cards";
 import { BatchList, BatchSheet, BatchTable, FreshVsRecycled, RecycleCadence } from "@/components/app/nurture/recycle-history";
 import { BringBackAllDialog, CampaignTable, ComesBackWhen, wholePercent, type PanelFocus } from "@/components/app/nurture/recycle-table";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 /**
  * Lead sources › 6 Recycle (board C, LirY3, with board A's four figures; owner pick 2026-10-29).
@@ -45,6 +46,8 @@ import { BringBackAllDialog, CampaignTable, ComesBackWhen, wholePercent, type Pa
  */
 
 type Payload = NurtureReport & { readOnly?: boolean };
+/** The page's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws the last answer at once. */
+const NURTURE_KEY = "/api/app/nurture";
 
 const READ_ONLY = "Your plan gives read-only access to lead recycling.";
 const FOCUS_ID: Record<Exclude<PanelFocus, null>, string> = { angle: "recycle-angle", max: "rule-max", wait: "rule-wait" };
@@ -65,8 +68,8 @@ function dayMonth(iso: string) {
 }
 
 export function NurtureWorkspace() {
-  const [data, setData] = useState<Payload | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<Payload | null>(() => seed<Payload>(NURTURE_KEY, true)?.data ?? null);
+  const [loading, setLoading] = useState(() => !seed(NURTURE_KEY, true)?.data);
   const [saving, setSaving] = useState<string | null>(null);
   /** The campaign whose panel is open, or null. */
   const [selected, setSelected] = useState<string | null>(null);
@@ -86,12 +89,11 @@ export function NurtureWorkspace() {
   const ruleScope = useRef<HTMLDivElement>(null);
   const inFrame = useInLeadsFrame();
 
-  const load = useCallback(async () => {
+  // `fresh` after a change and on Refresh, so the answer is never the one from before it.
+  const load = useCallback(async (fresh = false) => {
     setLoading(true);
     try {
-      const response = await fetch("/api/app/nurture", { cache: "no-store" });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error);
+      const body = await (fresh ? loadResource<Payload>(NURTURE_KEY, { persist: true }) : readResource<Payload>(NURTURE_KEY, { persist: true }));
       setData(body);
       // A campaign gone since (deleted elsewhere) closes its panel.
       setSelected((current) => (current && (body as Payload).campaigns.some((campaign) => campaign.campaign_id === current) ? current : null));
@@ -102,8 +104,13 @@ export function NurtureWorkspace() {
     }
   }, []);
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+    const kept = peek<Payload>(NURTURE_KEY, true)?.data;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+    if (kept) setData((current) => current ?? kept);
+    void load();
+  }, [load]);
 
   async function post(payload: Record<string, unknown>) {
     const response = await fetch("/api/app/nurture", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
@@ -126,7 +133,7 @@ export function NurtureWorkspace() {
       await post({ action: "save_rule", campaign_id: opened.campaign_id, wait_days: Number(draft.wait), allowed_dispositions: draft.outcomes, max_recycles: Number(draft.max) });
       notify.done("Recycle rule saved");
       setEdit(null);
-      await load();
+      await load(true);
       return true;
     } catch (error) {
       notify.fail(error instanceof Error ? error.message : "Could not save rule");
@@ -155,7 +162,7 @@ export function NurtureWorkspace() {
       notify.fail(`${message} — the batch keeps its progress; resume it here.`);
     } finally {
       setProgress(null);
-      await load();
+      await load(true);
     }
   }
 
@@ -211,7 +218,7 @@ export function NurtureWorkspace() {
     setSelected(null);
   }
 
-  const refresh = <RefreshButton onClick={() => void load()} refreshing={loading} />;
+  const refresh = <RefreshButton onClick={() => void load(true)} refreshing={loading} />;
   const place = (row: ReactNode) => (inFrame ? <LeadsInSlot slot="lead">{row}</LeadsInSlot> : <div className="flex flex-wrap items-center gap-3">{row}</div>);
 
   if (!data) {
@@ -220,7 +227,7 @@ export function NurtureWorkspace() {
       <div className="flex w-full min-w-0 flex-col gap-4">
         {place(<div className="ml-auto">{refresh}</div>)}
         <Card>
-          <ErrorState detail="Nurture campaigns could not be loaded." action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
+          <ErrorState detail="Nurture campaigns could not be loaded." action={<Button type="button" variant="outline" onClick={() => void load(true)}>Try again</Button>} />
         </Card>
       </div>
     );

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Third Brand Colour</title>
+<style>
+/*
+ * A third main colour (owner 2026-11-12: "more colour contrast … besides green and white, or dark green and green,
+ * one more main colour that is a contrast but suits the whole app"). Light is the live "C · White + olive lines";
+ * dark is the live dark theme. Each accent is one small token set, drawn on the same screens.
+ * Text 12 / 14 / 16, page title and figures 24.
+ */
+*{box-sizing:border-box}
+html,body{margin:0;background:#e9ecea;color:#0d4037;font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+.board{max-width:1500px;margin:0 auto;padding:24px 16px 120px}
+.board h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1060px;margin:8px 0 0;color:#2f3d38}
+.bar{position:sticky;top:0;z-index:50;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:#e9ecea;border-bottom:1px solid #cdd6d1}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:12px}
+.bar .grp span{font-size:12px;color:#51625b;font-weight:600;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid #b9c6bf;background:#fff;color:#0d4037;border-radius:8px;padding:7px 12px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.bar button i{width:12px;height:12px;border-radius:50%;display:inline-block}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;color:#51625b;margin-left:auto}
+.roles{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin:14px 0 0}
+.roles div{background:#fff;border:1px solid #d3ddd8;border-radius:12px;padding:10px 12px;font-size:14px}
+.roles b{display:block;margin-bottom:2px}
+.secttl{display:flex;align-items:baseline;gap:12px;margin:28px 0 10px}
+.secttl h2{font-size:16px;margin:0}
+.secttl span{font-size:12px;color:#51625b}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick div{background:#fff;border:1px solid #d3ddd8;border-radius:12px;padding:14px}
+.pick b{font-size:16px;display:flex;align-items:center;gap:8px}
+.pick b i{width:14px;height:14px;border-radius:4px;display:inline-block}
+.pick p{margin:6px 0 0;font-size:14px;color:#2f3d38}
+.pick .rec{border:2px solid #07d6a0}
+
+/* ── Themes (the live tokens) ── */
+.light{--canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--head:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;--border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;--primary-soft:#dcfaf0;--accent-ink-g:#00735a;--ok-s:#e0f3e7;--ok:#0c6633;--warn-s:#fcefdf;--warn:#8a4600;--bad-s:#fdeaea;--bad:#ab1f1f;--info-s:#e3edfa;--info:#1d4f9a;--track:#e9f2ee;--ring:#008769;--series1:#0a8769;--chip:#fff}
+.dark{--canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--head:rgba(255,255,255,.03);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.05);--hover:rgba(255,255,255,.04);--rule:#1b2a25;--border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;--primary-soft:#0f3a30;--accent-ink-g:#4fe3bb;--ok-s:#11291d;--ok:#45c07d;--warn-s:#2b1e0d;--warn:#e2973a;--bad-s:#2d1412;--bad:#f0837c;--info-s:#10203a;--info:#7fb0ff;--track:#16241f;--ring:#07d6a0;--series1:#2fd6a6;--chip:rgba(255,255,255,.06)}
+[class*="ac-"],.ac-none{--primary:#07d6a0;--on-primary:#0d4037;--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8}
+
+/* ── The accent sets: fill, text on the fill, accent text, soft ground ── */
+.light.ac-gold{--hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12}
+.dark.ac-gold{--hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d}
+.light.ac-coral{--hl:#ff7a59;--on-hl:#0d4037;--hl-ink:#b2401f;--hl-soft:#ffebe4;--hl-mark:#e85d3b}
+.dark.ac-coral{--hl:#ff8a6b;--on-hl:#0d4037;--hl-ink:#ff9f86;--hl-soft:#32170f;--hl-mark:#ff8a6b}
+.light.ac-indigo{--hl:#5b5fe0;--on-hl:#ffffff;--hl-ink:#4447c8;--hl-soft:#ecebff;--hl-mark:#5b5fe0}
+.dark.ac-indigo{--hl:#8a8ef5;--on-hl:#12133a;--hl-ink:#a9acff;--hl-soft:#1c1d3f;--hl-mark:#8a8ef5}
+/* Today: no third colour; the second series is blue info, badges are red. */
+.light.ac-none{--hl:#07d6a0;--on-hl:#0d4037;--hl-ink:#00735a;--hl-soft:#dcfaf0;--hl-mark:#4457c7}
+.dark.ac-none{--hl:#07d6a0;--on-hl:#0d4037;--hl-ink:#4fe3bb;--hl-soft:#0f3a30;--hl-mark:#6a72db}
+/* Each accent moves the status colour it would be confused with. */
+.light.ac-gold{--warn:#9a3d00;--warn-s:#fde8dc}
+.dark.ac-gold{--warn:#f08a4b;--warn-s:#2e180c}
+.light.ac-coral{--bad:#a3123a;--bad-s:#fde7ee}
+.dark.ac-coral{--bad:#f27a9b;--bad-s:#2e1019}
+.light.ac-indigo{--info:#0f6b80;--info-s:#dff2f6}
+.dark.ac-indigo{--info:#5fc6dc;--info-s:#0d2830}
+
+/* ── App ── */
+.app{display:grid;grid-template-columns:56px 1fr;grid-template-rows:52px 1fr;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid #c3cdc8;color:var(--ink);margin-bottom:20px}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .new{background:var(--primary);color:var(--on-primary);border-radius:8px;padding:6px 12px;font-weight:600}
+.top .bell{position:relative;width:28px;height:28px;border-radius:8px;background:rgba(234,246,242,.1)}
+.top .bell b{position:absolute;top:-4px;right:-5px;min-width:16px;height:16px;border-radius:8px;background:var(--hl);color:var(--on-hl);font-size:11px;display:grid;place-items:center;padding:0 3px;box-shadow:0 0 0 2px var(--nav)}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.rail{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.rail i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85;position:relative}
+.rail i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+.rail i b{position:absolute;top:-5px;right:-7px;width:8px;height:8px;border-radius:50%;background:var(--hl);box-shadow:0 0 0 2px var(--nav)}
+.main{padding:20px 24px 24px;min-width:0}
+.title{display:flex;align-items:center;gap:20px;margin:0 0 16px;flex-wrap:wrap}
+.title h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border)}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.acts{margin-left:auto;display:flex;gap:8px}
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;min-width:0}
+.dark .card{background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015)) #0b1513}
+.card-h{display:flex;align-items:center;gap:8px;padding:14px 16px 0}
+.card-h b{font-size:15px;font-weight:600}
+.card-h .r{margin-left:auto;font-size:12px;color:var(--accent-ink-g);font-weight:500}
+.grid{display:grid;gap:12px}
+.strip{display:grid;grid-template-columns:repeat(5,1fr)}
+.strip > div{padding:12px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em;margin:2px 0 2px}
+.strip em{font-style:normal;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.up{color:var(--hl-ink);font-weight:600}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--chip);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.nodot::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.chip.hlf{background:var(--hl);color:var(--on-hl);border-color:transparent;font-weight:700}
+.chip.hlf::before{display:none}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:10px;padding:8px 10px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:14px}
+.hero{background:var(--nav);color:#eaf6f2;border-radius:16px;padding:16px;position:relative;overflow:hidden}
+.hero small{font-size:12px;color:var(--nav-muted);font-weight:600;letter-spacing:.05em}
+.hero b{display:block;font-size:24px;margin:4px 0}
+.hero .hlnum{color:var(--hl)}
+.hero svg{position:absolute;right:-6px;bottom:-6px;width:150px;height:80px}
+.today{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge)}
+.av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink)}
+.today b{font-size:14px;display:block}
+.today small{font-size:12px;color:var(--muted)}
+.today .when{margin-left:auto;font-size:12px;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--head);color:var(--muted);font-weight:500;font-size:13px;text-align:left;padding:9px 16px;border-bottom:1px solid var(--border)}
+tbody td{padding:10px 16px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody td.k{font-family:ui-monospace,Consolas,monospace;color:var(--ink);font-size:13px}
+.toolbar{display:flex;gap:8px;align-items:center;padding:12px 16px;flex-wrap:wrap}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.dark .tog{background:transparent}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink-g);font-weight:500}
+.tog small{font-size:12px;color:var(--muted)}
+.lbl{font-size:12px;color:var(--muted);margin:0 0 6px;font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.where{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#0d4037;color:#fff;font-size:11px;font-weight:700;margin-left:4px;vertical-align:middle}
+@media (max-width:1100px){.strip{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="board">
+  <h1>A third brand colour</h1>
+  <p class="lead">Green does the work: buttons, the chosen tab, the rail. Olive is the frame. The third colour is the <b>highlight</b>: what is new, what went up, the second line on a chart, people. It is never a button colour for everyday actions and never a status, so it can't be confused with "done", "needs action" or "stopped". Each option moves the one status colour it would clash with. The board shows the live light theme (White + olive lines) and the live dark theme.</p>
+
+  <div class="roles">
+    <div><b>① Numbers that went up</b>The change under a figure and the money highlight on the commission card.</div>
+    <div><b>② The second line on a chart</b>"Submitted" next to green "Issued", and last period on Compare.</div>
+    <div><b>③ People</b>Avatars and initials, so a person reads differently from a status.</div>
+    <div><b>④ New and counts</b>A "New" tag, the bell and rail counts (red stays for errors only).</div>
+    <div><b>⑤ One feature button</b>At most one per page, for a feature moment such as "Upgrade" or "Start Calling".</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Colour</span>
+      <button data-ac="ac-gold" aria-pressed="true"><i style="background:#f2b33d"></i>Gold</button>
+      <button data-ac="ac-coral"><i style="background:#ff7a59"></i>Coral</button>
+      <button data-ac="ac-indigo"><i style="background:#5b5fe0"></i>Indigo</button>
+      <button data-ac="ac-none"><i style="background:#07d6a0"></i>Today (none)</button>
+    </div>
+    <div class="grp"><span>Theme</span>
+      <button data-th="light" aria-pressed="true">Light</button>
+      <button data-th="dark">Dark</button>
+    </div>
+    <span class="hint">Keys 1–4 colour · L / D theme</span>
+  </div>
+
+  <div id="stage" class="light ac-gold">
+  <div class="secttl"><h2>Dashboard</h2><span>①②③④⑤ all on one screen</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="new">+ New</span><span class="bell"><b>3</b></span><span class="me">DA</span></div>
+    <div class="rail"><i></i><i class="on"></i><i><b></b></i><i></i><i></i><i><b></b></i><i></i><i></i></div>
+    <div class="main">
+      <div class="title"><h3>Good evening, Demo</h3><nav class="tabs"><a class="on">Overview</a><a>Leads</a><a>Retention</a><a>Book of Business</a></nav><div class="acts"><span class="btn o">Team Scorecard</span><span class="btn hl">Start Calling</span><span class="btn p">Open the Team</span></div></div>
+      <div class="card strip">
+        <div><small>Issued premium</small><b>$218,654</b><em><span class="up">▲ 24%</span> on October</em></div>
+        <div><small>Policies issued</small><b>178</b><em><span class="up">▲ 12</span> this week</em></div>
+        <div><small>Leads not called</small><b>157</b><em><span class="dot" style="background:var(--warn)"></span>routed over 2h ago</em></div>
+        <div><small>Files that failed</small><b>7</b><em><span class="dot" style="background:var(--bad)"></span>nothing posted</em></div>
+        <div><small>Placement rate</small><b>82%</b><em><span class="up">▲ 3 pts</span> on October</em></div>
+      </div>
+      <div class="grid" style="grid-template-columns:1.6fr 1fr 1fr;margin-top:12px">
+        <div class="card">
+          <div class="card-h"><b>Premium</b><span style="display:flex;gap:10px;margin-left:8px;font-size:12px;color:var(--muted)"><span><span class="dot" style="background:var(--series1)"></span> Issued</span><span><span class="dot" style="background:var(--hl-mark)"></span> Submitted</span></span><span class="r">Policies ›</span></div>
+          <div style="padding:6px 16px 0;font-size:24px;font-weight:600">$1,987,036 <span class="chip hl nodot" style="vertical-align:middle">▲ 18% on last year</span></div>
+          <svg viewBox="0 0 400 120" style="width:100%;height:120px;display:block" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0 105 C60 98 100 80 150 82 S230 48 280 36 S350 62 400 56 L400 120 L0 120Z" fill="var(--series1)" opacity=".12"/>
+            <path d="M0 105 C60 98 100 80 150 82 S230 48 280 36 S350 62 400 56" fill="none" stroke="var(--series1)" stroke-width="2.5"/>
+            <path d="M0 90 C70 86 120 70 180 66 S300 40 400 30" fill="none" stroke="var(--hl-mark)" stroke-width="2.5"/>
+            <circle cx="280" cy="36" r="4.5" fill="var(--card)" stroke="var(--series1)" stroke-width="2.5"/>
+          </svg>
+          <div class="grid" style="grid-template-columns:1fr 1fr;padding:10px 16px 16px;gap:8px">
+            <div class="tile"><small>Average policy</small><b>$798/yr</b></div>
+            <div class="tile"><small>Best month · Aug</small><b>$369,627</b> <span class="chip hlf" style="height:18px;font-size:11px">Record</span></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-h"><b>November goal</b><span class="r">Policies ›</span></div>
+          <svg viewBox="0 0 120 120" style="width:140px;height:140px;display:block;margin:10px auto" aria-hidden="true"><circle cx="60" cy="60" r="48" fill="none" stroke="var(--track)" stroke-width="12"/><circle cx="60" cy="60" r="48" fill="none" stroke="var(--primary)" stroke-width="12" stroke-dasharray="226 302" stroke-linecap="round" transform="rotate(-90 60 60)"/><circle cx="60" cy="60" r="34" fill="none" stroke="var(--hl)" stroke-width="6" stroke-dasharray="150 214" stroke-linecap="round" transform="rotate(-90 60 60)"/><text x="60" y="66" text-anchor="middle" font-size="20" font-weight="600" fill="var(--ink)">75%</text></svg>
+          <div class="grid" style="padding:0 16px 16px;gap:6px">
+            <div class="tile" style="display:flex;justify-content:space-between"><small><span class="dot" style="background:var(--primary)"></span> Issued</small><b>$131,490 / $175,317</b></div>
+            <div class="tile" style="display:flex;justify-content:space-between"><small><span class="dot" style="background:var(--hl)"></span> Days used</small><b>12 of 30</b></div>
+          </div>
+        </div>
+        <div class="grid" style="align-content:start">
+          <div class="hero"><small>COMMISSION · NOVEMBER</small><b>$962 <span class="hlnum" style="font-size:14px">▲ $214</span></b><span style="font-size:12px;color:var(--nav-muted)">in from carriers</span>
+            <svg viewBox="0 0 150 80" aria-hidden="true"><path d="M0 70 C40 66 60 40 90 38 S130 10 150 6" fill="none" stroke="var(--hl)" stroke-width="3"/></svg></div>
+          <div class="card" style="padding-bottom:10px">
+            <div class="card-h"><b>Today</b><span style="font-size:12px;color:var(--muted)">54 things</span><span class="r">Calendar ›</span></div>
+            <div class="grid" style="gap:6px;padding:10px 12px 0">
+              <div class="today"><span class="av">MH</span><div><b>Minnie Hargrove</b><small>Callback · overdue</small></div><span class="when" style="color:var(--bad)">Now</span></div>
+              <div class="today"><span class="av">AA</span><div><b>Armando Arellano</b><small>Callback · 3:00 PM</small></div><span class="when" style="color:var(--muted)">3:00</span></div>
+              <div class="today"><span class="av">PP</span><div><b>Patrice Pendleton</b><small>New lead <span class="chip hl nodot" style="height:18px;font-size:11px">New</span></small></div><span class="when" style="color:var(--muted)">4:30</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="secttl"><h2>A table page</h2><span>People, new rows and counts in the third colour; status keeps its own colours</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="new">+ New</span><span class="bell"><b>3</b></span><span class="me">DA</span></div>
+    <div class="rail"><i></i><i></i><i><b></b></i><i></i><i class="on"></i><i></i><i></i></div>
+    <div class="main">
+      <div class="title"><h3>Policies</h3><nav class="tabs"><a class="on">Book</a><a>Recent Changes <span class="chip hlf" style="height:18px;font-size:11px;margin-left:4px">4</span></a></nav><div class="acts"><span class="btn o">Add Policy</span><span class="btn p">Import Policies</span></div></div>
+      <div class="card" style="overflow:hidden">
+        <div class="toolbar"><span class="tog on">All <small>2,863</small></span><span class="tog">Behind on Payment <small>1,044</small></span><span class="tog">Paid Short <small>148</small></span><span class="tog">New this week <span class="chip hlf" style="height:18px;font-size:11px">32</span></span></div>
+        <table>
+          <thead><tr><th>Policy</th><th>Client</th><th>Agent</th><th>Health</th><th style="text-align:right">Premium</th></tr></thead>
+          <tbody>
+            <tr><td class="k">AMH6900131</td><td>Laura Lopez <span class="chip hl nodot" style="height:18px;font-size:11px">New</span></td><td><span class="av" style="display:inline-grid;width:22px;height:22px;font-size:10px;vertical-align:middle">DA</span> Demo Agent</td><td><span class="chip ok">Paid</span></td><td style="text-align:right">$83.62/mo</td></tr>
+            <tr><td class="k">TER6901999</td><td>Robert Oconnor</td><td><span class="av" style="display:inline-grid;width:22px;height:22px;font-size:10px;vertical-align:middle">MV</span> Marisol Vance</td><td><span class="chip warn">2 payments behind</span></td><td style="text-align:right">$63.26/mo</td></tr>
+            <tr><td class="k">AMH6930342</td><td>Kyle Berger</td><td><span class="av" style="display:inline-grid;width:22px;height:22px;font-size:10px;vertical-align:middle">DO</span> Devin Okafor</td><td><span class="chip bad">Lapsed</span></td><td style="text-align:right">$32.53/mo</td></tr>
+            <tr><td class="k">ACC7940408</td><td>Tamara Huffman</td><td><span class="av" style="display:inline-grid;width:22px;height:22px;font-size:10px;vertical-align:middle">DA</span> Demo Agent</td><td><span class="chip info">Waiting on carrier</span></td><td style="text-align:right">$91.90/mo</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="secttl"><h2>Every piece in the third colour, next to status</h2><span>So you can see nothing gets confused</span></div>
+  <div class="card" style="padding:16px;margin-bottom:20px">
+    <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px">
+      <div><p class="lbl">Buttons: green for actions, one feature button</p><div class="row"><span class="btn p">Save</span><span class="btn hl">Upgrade</span><span class="btn o">Cancel</span></div></div>
+      <div><p class="lbl">Highlight chips</p><div class="row"><span class="chip hl nodot">New</span><span class="chip hl nodot">▲ 24%</span><span class="chip hlf">Record</span><span class="chip hlf">12</span></div></div>
+      <div><p class="lbl">Status chips (unchanged meaning)</p><div class="row"><span class="chip ok">Issued</span><span class="chip info">In progress</span><span class="chip warn">Needs action</span><span class="chip bad">Charged back</span><span class="chip">Draft</span></div></div>
+      <div><p class="lbl">People</p><div class="row"><span class="av">DA</span><span class="av">MV</span><span class="av">DO</span><span class="av" style="background:var(--hl);color:var(--on-hl)">You</span></div></div>
+      <div><p class="lbl">Text in the third colour</p><div style="color:var(--hl-ink);font-weight:600">▲ $214 more than October</div><div style="color:var(--body)">Body text stays olive-grey</div></div>
+      <div><p class="lbl">Chart pair</p><div class="row"><span class="tog"><span class="dot" style="background:var(--series1)"></span>Issued</span><span class="tog"><span class="dot" style="background:var(--hl-mark)"></span>Submitted</span></div></div>
+    </div>
+  </div>
+  </div>
+
+  <div class="secttl"><h2>Pick one</h2><span>Nothing is built until you choose</span></div>
+  <div class="pick">
+    <div class="rec"><b><i style="background:#f2b33d"></i>Gold (recommended)</b><p>Green, olive and gold is a classic money-and-trust palette: warm, premium, and the clearest contrast with green in both themes. "Needs action" moves from amber to burnt orange so it never reads as gold.</p></div>
+    <div><b><i style="background:#ff7a59"></i>Coral</b><p>The true opposite of the green: energetic and friendly, the most "app-like". "Stopped" moves from red to a raspberry so the two never meet. Busier on a dense table page.</p></div>
+    <div><b><i style="background:#5b5fe0"></i>Indigo</b><p>A cool, techy contrast, calm on both themes. "In progress" moves from blue to teal-blue. The least warm; reads more "software" than "insurance".</p></div>
+  </div>
+</div>
+<script>
+(function(){
+  var stage=document.getElementById('stage'), ac='ac-gold', th='light';
+  var acB=[].slice.call(document.querySelectorAll('[data-ac]')), thB=[].slice.call(document.querySelectorAll('[data-th]'));
+  function draw(){stage.className=th+' '+ac;acB.forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.ac===ac));});thB.forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.th===th));});}
+  acB.forEach(function(b){b.onclick=function(){ac=b.dataset.ac;draw();};});
+  thB.forEach(function(b){b.onclick=function(){th=b.dataset.th;draw();};});
+  document.addEventListener('keydown',function(e){var i=+e.key;if(i>=1&&i<=acB.length){ac=acB[i-1].dataset.ac;draw();}if(e.key==='l'||e.key==='L'){th='light';draw();}if(e.key==='d'||e.key==='D'){th='dark';draw();}});
+})();
+</script>
+</body>
+</html>

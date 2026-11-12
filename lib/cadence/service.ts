@@ -160,7 +160,17 @@ export type CadenceView = {
   schemaReady: boolean;
   /** Max attempts for this scope (20260929201100). See `MaxAttemptsView`. */
   maxAttempts: MaxAttemptsView;
+  /**
+   * Settings round 8: which campaigns run a cadence of their own, and how many calls each makes —
+   * so the scope picker can say "Agency cadence" or "Own · 5 calls" beside every name. A campaign
+   * absent from this list runs the agency (tenant default) cadence.
+   */
+  campaignCadences: CampaignCadence[];
+  /** The agency (tenant default) scope: whether it has rules of its own, and its max calls. */
+  agency: { ownRules: boolean; maxAttempts: number };
 };
+
+export type CampaignCadence = { campaignId: string; ruleCount: number; maxAttempts: number };
 
 /**
  * LA-2.7-8 · max attempts, per tenant with a per-campaign override. `own` is this scope's stored
@@ -233,7 +243,7 @@ export async function getCadence(tenantId: string, scope: CadenceScope): Promise
     .eq("tenant_id", tenantId);
   query = scope.campaignId ? query.eq("campaign_id", scope.campaignId) : query.is("campaign_id", null);
 
-  const [rules, campaigns, fallback, schemaReady, maxAttempts] = await Promise.all([
+  const [rules, campaigns, fallback, schemaReady, maxAttempts, scopes] = await Promise.all([
     query.order("attempt_number", { ascending: true }),
     db().from("tenant_campaigns").select("id, name").eq("tenant_id", tenantId).order("name", { ascending: true }),
     scope.campaignId
@@ -246,6 +256,7 @@ export async function getCadence(tenantId: string, scope: CadenceScope): Promise
       : Promise.resolve({ data: [], error: null } as Result<Row[]>),
     cadenceSchemaReady().catch(() => false),
     getMaxAttempts(tenantId, scope.campaignId),
+    cadenceScopes(tenantId),
   ]);
 
   if (rules.error) throw new Error(`Could not load the cadence: ${rules.error.message}`);
@@ -261,6 +272,36 @@ export async function getCadence(tenantId: string, scope: CadenceScope): Promise
     fallbackRows: (fallback.data ?? []).map(toRow),
     schemaReady,
     maxAttempts,
+    campaignCadences: scopes.campaigns,
+    agency: scopes.agency,
+  };
+}
+
+/**
+ * Every scope's rule count and max calls, in two reads (rules' scope column, the limits table).
+ * The limits read tolerates 20260929201100 not being applied: then every scope stops at seven.
+ */
+async function cadenceScopes(tenantId: string): Promise<{ campaigns: CampaignCadence[]; agency: { ownRules: boolean; maxAttempts: number } }> {
+  const [rules, limits] = await Promise.all([
+    db().from("tenant_cadence_rules").select("campaign_id").eq("tenant_id", tenantId) as unknown as Promise<Result<{ campaign_id: string | null }[]>>,
+    db().from("tenant_cadence_limits").select("campaign_id, max_attempts").eq("tenant_id", tenantId) as unknown as Promise<Result<LimitRow[]>>,
+  ]);
+  if (rules.error) throw new Error(`Could not load which campaigns run their own cadence: ${rules.error.message}`);
+  const limitRows = limits.error ? [] : limits.data ?? [];
+  const tenantMax = limitRows.find((row) => row.campaign_id === null)?.max_attempts ?? DEFAULT_CEILING;
+  const counts = new Map<string, number>();
+  let agencyRules = 0;
+  for (const row of rules.data ?? []) {
+    if (row.campaign_id) counts.set(row.campaign_id, (counts.get(row.campaign_id) ?? 0) + 1);
+    else agencyRules += 1;
+  }
+  return {
+    agency: { ownRules: agencyRules > 0, maxAttempts: tenantMax },
+    campaigns: [...counts.entries()].map(([campaignId, ruleCount]) => ({
+      campaignId,
+      ruleCount,
+      maxAttempts: limitRows.find((row) => row.campaign_id === campaignId)?.max_attempts ?? tenantMax,
+    })),
   };
 }
 

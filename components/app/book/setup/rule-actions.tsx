@@ -12,14 +12,19 @@ import { checkboxControl } from "@/components/ui/field";
 import type { RuleMode } from "@/lib/pipelineRules/rules";
 import { notify } from "@/lib/notify";
 
+import { PreviewTodayButton } from "./preview-table";
+
 const ENDPOINT = "/api/app/pipeline-rules";
 
 /**
  * A rule's header actions (boards BobE7, BobE8): Duplicate, Turn off / Turn on, and the mode — Start the
  * forecast (a draft), Switch to live (asks first; past would-moves are not replayed unless ticked), Back
  * to forecast (a live rule). On/off and the mode are not a new version.
+ *
+ * Round 7 (mockup r7 2·5): a live rule's primary, Preview today, opens the preview dialog; Turn off's toast offers
+ * Undo; `primary={false}` leaves only ⋯ (the Check it and Rule tabs carry their own buttons).
  */
-export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, previewHref, renameHref }: { ruleId: string; name: string; mode: RuleMode; enabled: boolean; forecast: { days: number; wouldMoves: number; right: number; wrong: number }; readOnly: boolean; previewHref?: string; renameHref?: string }) {
+export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, previewHref, renameHref, primary: withPrimary = true, graceEvent = true }: { ruleId: string; name: string; mode: RuleMode; enabled: boolean; forecast: { days: number; wouldMoves: number; right: number; wrong: number }; readOnly: boolean; previewHref?: string; renameHref?: string; primary?: boolean; graceEvent?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [asking, setAsking] = useState(false);
@@ -33,11 +38,12 @@ export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, p
     return data;
   }
 
-  async function act(body: Record<string, unknown>, done: string, after?: (data: Record<string, unknown>) => void) {
+  async function act(body: Record<string, unknown>, done: string | { title: string; detail?: string; undo?: () => void }, after?: (data: Record<string, unknown>) => void) {
     setBusy(true);
     try {
       const data = await call(body);
-      notify.done(done);
+      if (typeof done === "string") notify.done(done);
+      else notify.done(done.title, { detail: done.detail, action: done.undo ? { label: "Undo", onClick: done.undo } : undefined });
       if (after) after(data);
       else router.refresh();
     } catch (error) {
@@ -59,7 +65,7 @@ export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, p
     }
   }
 
-  const turn = (on: boolean) => act({ action: "set_enabled", rule_id: ruleId, enabled: on }, on ? `“${name}” is on again.` : `“${name}” is off. It records nothing until it is on again.`);
+  const turn = (on: boolean): Promise<void> => act({ action: "set_enabled", rule_id: ruleId, enabled: on }, on ? `“${name}” is on again.` : { title: `“${name}” is off. It records nothing until it is on again.`, undo: () => void turn(true) });
   // A loss asks first (UI-CONSISTENCY §11): off stops it moving and recording.
   async function askOff() {
     const ok = await confirmAction({ title: `Turn off “${name}”?`, description: "It stops moving cards and recording what it would do. Turn it on again any time; nothing is lost.", confirmLabel: "Turn off", cancelLabel: "Keep it on" });
@@ -72,10 +78,10 @@ export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, p
     ? <Button type="button" disabled={busy} onClick={() => void turn(true)}>Turn on</Button>
     : mode === "draft" ? <Button type="button" disabled={busy} onClick={() => void act({ action: "set_mode", rule_id: ruleId, mode: "forecast" }, `“${name}” is in forecast: it records what it would do.`)}>Start the forecast</Button>
     : mode === "forecast" ? <Button type="button" disabled={busy} onClick={() => void askLive()}>Switch to live</Button>
-    : previewHref ? <Button asChild variant="outline"><Link href={previewHref}>Preview today</Link></Button> : null;
+    : previewHref ? <PreviewTodayButton ruleId={ruleId} readOnly={readOnly} href={previewHref} graceEvent={graceEvent} /> : null;
   return (
     <>
-      {primary}
+      {withPrimary && primary}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button type="button" variant="outline" size="icon" aria-label="More" title="More" disabled={busy}><MoreHorizontal aria-hidden="true" /></Button>
@@ -97,7 +103,20 @@ export function RuleActions({ ruleId, name, mode, enabled, forecast, readOnly, p
         description="From now on it moves cards and adds notes. Past would-moves are not replayed unless you tick below."
         confirmLabel="Switch to live"
         cancelLabel="Not yet"
-        onConfirm={() => void act({ action: "set_mode", rule_id: ruleId, mode: "live", replay }, `“${name}” is live.`, (data) => { setAsking(false); if (replay) notify.done(`${Number(data.moved ?? 0)} ${Number(data.moved ?? 0) === 1 ? "card" : "cards"} moved now.`); router.refresh(); })}
+        onConfirm={() => void (async () => {
+          setBusy(true);
+          try {
+            const data = await call({ action: "set_mode", rule_id: ruleId, mode: "live", replay });
+            const moved = Number(data.moved ?? 0);
+            notify.done(`“${name}” is live.`, replay ? { detail: `${moved} ${moved === 1 ? "card" : "cards"} moved now.` } : undefined);
+            setAsking(false);
+            router.refresh();
+          } catch (error) {
+            notify.block(error instanceof Error ? error.message : "That did not work.");
+          } finally {
+            setBusy(false);
+          }
+        })()}
       >
         <dl className="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
           <dt className="text-muted-foreground">Forecast</dt><dd className="m-0">{forecast.days} days · {forecast.wouldMoves} would-moves</dd>

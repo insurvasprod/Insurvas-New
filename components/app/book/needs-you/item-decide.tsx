@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, cardInset } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 import { Field, textareaControl } from "@/components/ui/field";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { TableCard } from "@/components/ui/table-card";
@@ -33,7 +34,7 @@ type Nav = { nextHref: string | null; listHref: string; readOnly: boolean; inlin
 /** In place the parts drop their cards: the row it opens under is the container (fewer containers). */
 const Flat = createContext(false);
 
-const OUTCOME_CLASS: Record<FieldOutcome, string> = { match: "text-[var(--success-ink)]", partial: "text-[var(--warning-ink)]", mismatch: "text-[var(--error-ink)]", missing: "text-muted-foreground" };
+// Owner 2026-11-11 (one text colour in a table): a field's outcome is its mark, not a green, amber or red value.
 const OUTCOME_MARK: Record<FieldOutcome, string> = { match: " ✓", partial: " ~", mismatch: " ✕", missing: "" };
 
 /** Sends a decision to the API its own screen uses, then opens the next item (or the list). */
@@ -73,9 +74,10 @@ function DecideButtons({ kind, nav, busy, ready, onSave }: { kind: NeedsYouKind;
     // In place: Skip, then one primary that saves and opens the next waiting row.
     const next = nav.inline.hasNext;
     return (
-      <div className="flex flex-wrap justify-end gap-2">
-        {next && nav.inline.onSkip && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={nav.inline.onSkip}>Skip</Button>}
-        <Button type="button" size="sm" disabled={!ready || busy !== null} onClick={() => onSave(next ? "next" : "save")}>{busy ? "Saving" : next ? `${verb} and next` : verb}</Button>
+      // Right under the choices, the primary first (owner 2026-11-10: the next step sits where the eye already is).
+      <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] pt-4">
+        <Button type="button" disabled={!ready || busy !== null} onClick={() => onSave(next ? "next" : "save")}>{busy ? "Saving" : next ? `${verb} and next` : verb}</Button>
+        {next && nav.inline.onSkip && <Button type="button" variant="ghost" disabled={busy !== null} onClick={nav.inline.onSkip}>Skip</Button>}
       </div>
     );
   }
@@ -128,16 +130,23 @@ function Facts({ title, facts }: { title: string; facts: Array<[string, ReactNod
   );
 }
 
+/**
+ * The facts on the Review page (owner 2026-11-10: "visibly more easy to understand"): one inset panel with its
+ * title, each fact a small label over its value, in a grid that reads across.
+ */
 function FactList({ facts, label }: { facts: Array<[string, ReactNode]>; label: string }) {
   return (
-    <dl aria-label={label} className="m-0 grid grid-cols-[minmax(0,9rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
-      {facts.map(([name, value]) => (
-        <div key={name} className="contents">
-          <dt className="text-muted-foreground">{name}</dt>
-          <dd className="m-0 text-foreground">{value}</dd>
-        </div>
-      ))}
-    </dl>
+    <section className={cn(cardInset, "flex flex-col gap-3 p-4")}>
+      <h3 className="m-0 text-label text-muted-foreground">{label}</h3>
+      <dl aria-label={label} className="m-0 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 xl:grid-cols-5">
+        {facts.map(([name, value]) => (
+          <div key={name} className="min-w-0">
+            <dt className="text-xs text-muted-foreground">{name}</dt>
+            <dd className="m-0 mt-0.5 truncate text-sm font-medium text-foreground">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </section>
   );
 }
 
@@ -147,7 +156,15 @@ function Evidence({ title, description, children }: { title: string; description
   return <TableCard title={title} description={description}>{children}</TableCard>;
 }
 
-const Grid = ({ children }: { children: ReactNode }) => <div className="grid gap-4 lg:grid-cols-2">{children}</div>;
+/**
+ * The choices and what saving does. On the item page, side by side; in place on the Review page, one column
+ * (owner 2026-11-10): the choices, then "when you save" under them, then the buttons — never a helper line
+ * floating at the far edge of a wide pane.
+ */
+function Grid({ children }: { children: ReactNode }) {
+  if (useContext(Flat)) return <div className="flex flex-col gap-3">{children}</div>;
+  return <div className="grid gap-4 lg:grid-cols-2">{children}</div>;
+}
 const Reason = ({ id, label, value, onChange, required, placeholder, disabled }: { id: string; label: string; value: string; onChange: (v: string) => void; required?: boolean; placeholder?: string; disabled?: boolean }) => (
   <Field label={label} htmlFor={id} required={required}>
     <textarea id={id} className={textareaControl} value={value} maxLength={2000} placeholder={placeholder} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
@@ -170,7 +187,7 @@ function PickClient({ detail, nav }: { detail: Extract<ItemDetail, { kind: "pick
   const matches = (fields: Record<string, FieldOutcome>) => MATCH_FIELDS.filter((f) => fields[f] === "match").length;
   const picked = choice === null || choice === "none" ? null : detail.candidates[Number(choice)];
   const row = detail.carrierRow;
-  const cell = (outcome: FieldOutcome | undefined, value: ReactNode) => <span className={OUTCOME_CLASS[outcome ?? "missing"]}>{value}{OUTCOME_MARK[outcome ?? "missing"]}</span>;
+  const cell = (outcome: FieldOutcome | undefined, value: ReactNode) => <span className="whitespace-nowrap">{value}{OUTCOME_MARK[outcome ?? "missing"]}</span>;
 
   const choices: Choice<string>[] = [
     ...detail.candidates.map((c) => ({ key: String(c.index), label: c.name, hint: `${matches(c.fields)} of ${MATCH_FIELDS.length} match · ${saleWord(c.type)} of ${fileDay(c.date)}${c.likely ? " · likely" : ""}` })),
@@ -184,15 +201,15 @@ function PickClient({ detail, nav }: { detail: Extract<ItemDetail, { kind: "pick
           <p className="m-0 px-4 pb-4 text-sm text-muted-foreground">No sale or application for this carrier in the 14 days before the file looks like this policy.</p>
         ) : (
           <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
-            <thead><tr><th className="w-[150px]" /><th>The carrier’s file</th>{detail.candidates.map((c) => <th key={c.index}>{c.name} · {saleWord(c.type)} {fileDay(c.date)}</th>)}</tr></thead>
+            <thead><tr><th className="w-[150px]" /><th>The carrier’s file</th>{detail.candidates.map((c) => <th key={c.index} className="whitespace-nowrap">{c.name} · {saleWord(c.type)} {fileDay(c.date)}</th>)}</tr></thead>
             <tbody>
-              <tr><td>Name</td><td>{row.name}</td>{detail.candidates.map((c) => <td key={c.index}>{cell(c.fields.surname === "match" && c.fields.givenName === "match" ? "match" : c.fields.surname === "mismatch" ? "mismatch" : "partial", c.name)}</td>)}</tr>
-              <tr><td>Born</td><td>{row.dob ? fileDay(row.dob) : "—"}</td>{detail.candidates.map((c) => <td key={c.index}>{cell(c.fields.dob, c.dob ? fileDay(c.dob) : "—")}</td>)}</tr>
-              <tr><td>Phone</td><td className="tabular-nums">{row.phone ?? "—"}</td>{detail.candidates.map((c) => <td key={c.index} className="tabular-nums">{cell(c.fields.phone, c.phone ?? "—")}</td>)}</tr>
-              <tr><td>Monthly premium</td><td className="tabular-nums">{dollars(row.premiumCents)}</td>{detail.candidates.map((c) => <td key={c.index} className="tabular-nums">{cell(c.fields.premium, dollars(c.premiumCents))}</td>)}</tr>
-              <tr><td>Face amount</td><td className="tabular-nums">{dollars(row.faceCents)}</td>{detail.candidates.map((c) => <td key={c.index} className="tabular-nums">{cell(c.fields.face, dollars(c.faceCents))}</td>)}</tr>
-              <tr><td>Agent code</td><td className="font-mono text-xs">{row.agentIdentifier ?? "—"}</td>{detail.candidates.map((c) => <td key={c.index} className="text-muted-foreground">—</td>)}</tr>
-              <tr><td className="font-semibold">Score</td><td />{detail.candidates.map((c) => <td key={c.index} className="font-semibold tabular-nums">{c.score}{c.likely ? " · likely" : ""}</td>)}</tr>
+              <tr><td className="whitespace-nowrap font-medium text-foreground">Name</td><td className="whitespace-nowrap">{row.name}</td>{detail.candidates.map((c) => <td key={c.index}>{cell(c.fields.surname === "match" && c.fields.givenName === "match" ? "match" : c.fields.surname === "mismatch" ? "mismatch" : "partial", c.name)}</td>)}</tr>
+              <tr><td className="whitespace-nowrap font-medium text-foreground">Born</td><td className="whitespace-nowrap">{row.dob ? fileDay(row.dob) : "—"}</td>{detail.candidates.map((c) => <td key={c.index}>{cell(c.fields.dob, c.dob ? fileDay(c.dob) : "—")}</td>)}</tr>
+              <tr><td className="whitespace-nowrap font-medium text-foreground">Phone</td><td className="whitespace-nowrap tabular-nums">{row.phone ?? "—"}</td>{detail.candidates.map((c) => <td key={c.index} className="tabular-nums">{cell(c.fields.phone, c.phone ?? "—")}</td>)}</tr>
+              <tr><td className="whitespace-nowrap font-medium text-foreground">Monthly premium</td><td className="whitespace-nowrap tabular-nums">{dollars(row.premiumCents)}</td>{detail.candidates.map((c) => <td key={c.index} className="tabular-nums">{cell(c.fields.premium, dollars(c.premiumCents))}</td>)}</tr>
+              <tr><td className="whitespace-nowrap font-medium text-foreground">Face amount</td><td className="whitespace-nowrap tabular-nums">{dollars(row.faceCents)}</td>{detail.candidates.map((c) => <td key={c.index} className="tabular-nums">{cell(c.fields.face, dollars(c.faceCents))}</td>)}</tr>
+              <tr><td className="whitespace-nowrap font-medium text-foreground">Agent code</td><td className="whitespace-nowrap font-mono">{row.agentIdentifier ?? "—"}</td>{detail.candidates.map((c) => <td key={c.index} className="text-muted-foreground">—</td>)}</tr>
+              <tr><td className="whitespace-nowrap font-medium text-foreground">Score</td><td />{detail.candidates.map((c) => <td key={c.index} className="whitespace-nowrap tabular-nums">{c.score}{c.likely ? " · likely" : ""}</td>)}</tr>
             </tbody>
           </table>
         )}
@@ -339,17 +356,18 @@ function MoneyDecide({ detail, nav }: { detail: Extract<ItemDetail, { kind: "mon
         <thead><tr><th className="w-[160px]" /><th className="text-right">Expected</th><th className="text-right">Reported</th><th className="text-right">Difference</th></tr></thead>
         <tbody>
           <tr>
-            <td>{f.policyNumber ? <span className="font-mono">{f.policyNumber}</span> : "Carrier account"}</td>
-            <td className="text-right tabular-nums">{dollars(f.expectedCents)}</td>
-            <td className="text-right tabular-nums">{dollars(f.reportedCents)}</td>
-            <td className="text-right font-semibold tabular-nums text-[var(--error-ink)]">{dollars(f.differenceCents)}</td>
+            <td className="whitespace-nowrap font-medium text-foreground">{f.policyNumber ? <span className="font-mono">{f.policyNumber}</span> : "Carrier account"}</td>
+            <td className="whitespace-nowrap text-right tabular-nums">{dollars(f.expectedCents)}</td>
+            <td className="whitespace-nowrap text-right tabular-nums">{dollars(f.reportedCents)}</td>
+            {/* Owner 2026-11-11: the difference is plain; the item's chip already says the money doesn't match. */}
+            <td className="whitespace-nowrap text-right tabular-nums">{dollars(f.differenceCents)}</td>
           </tr>
-          <tr><td className="text-muted-foreground">Tolerance</td><td colSpan={3} className="text-right tabular-nums text-muted-foreground">{dollars(f.toleranceCents)}</td></tr>
+          <tr><td className="whitespace-nowrap font-medium text-foreground">Tolerance</td><td colSpan={3} className="whitespace-nowrap text-right tabular-nums">{dollars(f.toleranceCents)}</td></tr>
           {f.reportedLines.map((line) => (
             <tr key={line.id}>
-              <td className="text-muted-foreground">{line.type.replaceAll("_", " ")}</td>
-              <td colSpan={2} className="text-right">{line.rowNumber !== null ? <Link href={rowHref(line.fileId, line.rowNumber)} className="text-[var(--accent-ink)] hover:underline">{line.fileName ?? "File"} · row {line.rowNumber}</Link> : line.fileName ?? "—"}</td>
-              <td className="text-right tabular-nums">{dollars(line.amountCents)}</td>
+              <td className="whitespace-nowrap font-medium text-foreground">{line.type.replaceAll("_", " ")}</td>
+              <td colSpan={2} className="whitespace-nowrap text-right">{line.rowNumber !== null ? <Link href={rowHref(line.fileId, line.rowNumber)} className="hover:underline">{line.fileName ?? "File"} · row {line.rowNumber}</Link> : line.fileName ?? "—"}</td>
+              <td className="whitespace-nowrap text-right tabular-nums">{dollars(line.amountCents)}</td>
             </tr>
           ))}
         </tbody>
@@ -590,10 +608,10 @@ function UnknownPolicyDecide({ detail, nav }: { detail: Extract<ItemDetail, { ki
           <tbody>
             {detail.lines.map((line) => (
               <tr key={line.id}>
-                <td className="capitalize">{line.type.replaceAll("_", " ")}</td>
-                <td>{line.rowNumber !== null ? <Link href={rowHref(line.fileId, line.rowNumber)} className="text-[var(--accent-ink)] hover:underline">{line.fileName} · row {line.rowNumber}</Link> : line.fileName}</td>
-                <td className="tabular-nums">{fileDay(line.seenOn)}</td>
-                <td className="text-right tabular-nums">{dollars(line.amountCents)}</td>
+                <td className="whitespace-nowrap font-medium capitalize text-foreground">{line.type.replaceAll("_", " ")}</td>
+                <td className="whitespace-nowrap">{line.rowNumber !== null ? <Link href={rowHref(line.fileId, line.rowNumber)} className="hover:underline">{line.fileName} · row {line.rowNumber}</Link> : line.fileName}</td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(line.seenOn)}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{dollars(line.amountCents)}</td>
               </tr>
             ))}
           </tbody>

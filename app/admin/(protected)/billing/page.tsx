@@ -25,8 +25,7 @@ export default async function BillingWorkspacePage() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Billing" />
-      <BillingTabs />
+      <PageHeader title="Billing" tabs={<BillingTabs />} />
       <div className="grid gap-6 sm:grid-cols-2">
         {destinations.map(([title, description, href]) => (
           // The whole card is the link, so its accessible name carries the title and "Open" alone

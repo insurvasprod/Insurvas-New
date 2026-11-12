@@ -16,7 +16,7 @@ type QueueExtra = { buffer_user_id: string | null; buffer_ended_at: string | nul
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
-type LeadRow = { id: string; tenant_id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; definition_version: number; pipeline_id: string; stage_id: string; screening_outcome: string | null; screening_warning: string | null; screening_checked_at: string | null; screening_version: number | null; preflight_status: string; preflight_checked_at: string | null; preflight_result: unknown };
+type LeadRow = { id: string; tenant_id: string; values: unknown; created_by: string | null; created_at: string; updated_at: string; product_line: string; definition_version: number; pipeline_id: string; stage_id: string; stage_entered_at: string | null; screening_outcome: string | null; screening_warning: string | null; screening_checked_at: string | null; screening_version: number | null; preflight_status: string; preflight_checked_at: string | null; preflight_result: unknown };
 type QueueRow = { id: string; lead_id: string; partner_id: string | null; status: string; claimed_by: string | null; owner_user_id: string | null; owner_role: string | null; claimed_at: string | null; queued_at: string; disposition: string | null; disposition_at: string | null; disposition_by: string | null; pipeline_id: string; stage_id: string; updated_at: string };
 type VerificationSession = { id: string; work_item_id: string; user_id: string; agent_role: string; status: string; started_at: string; completed_at: string | null; progress_percentage: number; last_actor_id: string | null };
 type VerificationField = { session_id: string; field_key: string; state: string; is_required: boolean; is_visible: boolean; old_value: unknown; new_value: unknown; confirmed_at: string | null; actor_id: string | null };
@@ -48,7 +48,7 @@ export async function getLeadWorkspace(tenantId: string, userId: string, role: T
   // Both reads are keyed only by tenant + lead id, so they share one round trip. Nothing is returned
   // until the setter check below has passed.
   const [leadResult, queueResult] = await Promise.all([
-    db.from("agent_leads").select("id, tenant_id, values, created_by, created_at, updated_at, product_line, definition_version, pipeline_id, stage_id, screening_outcome, screening_warning, screening_checked_at, screening_version, preflight_status, preflight_checked_at, preflight_result").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<LeadRow>(),
+    db.from("agent_leads").select("id, tenant_id, values, created_by, created_at, updated_at, product_line, definition_version, pipeline_id, stage_id, stage_entered_at, screening_outcome, screening_warning, screening_checked_at, screening_version, preflight_status, preflight_checked_at, preflight_result").eq("tenant_id", tenantId).eq("id", leadId).maybeSingle<LeadRow>(),
     db.from("lead_queue").select("id, lead_id, partner_id, status, claimed_by, owner_user_id, owner_role, claimed_at, queued_at, disposition, disposition_at, disposition_by, pipeline_id, stage_id, updated_at").eq("tenant_id", tenantId).eq("lead_id", leadId).order("queued_at", { ascending: false }).limit(1).maybeSingle<QueueRow>(),
   ]);
   if (leadResult.error) throw new Error(`Could not load lead: ${leadResult.error.message}`);

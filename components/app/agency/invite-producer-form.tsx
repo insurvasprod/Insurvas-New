@@ -1,5 +1,6 @@
 "use client";
 
+import { DismissButton } from "@/components/app/route-sheet";
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -70,7 +71,7 @@ export function InviteProducerForm({ isAccountOwner }: { isAccountOwner: boolean
   return (
     <form onSubmit={submit} className="contents">
       <TableCard title="Who to invite" description="They get a single-use link that expires in 7 days. Their row appears in the roster at once, as invited."
-        footer={<div className="flex w-full justify-end gap-2"><Button asChild variant="outline"><Link href="/app/producers">Cancel</Link></Button><Button type="submit" disabled={busy || !name.trim() || !email.trim()}>{busy ? "Sending…" : "Send invite"}</Button></div>}>
+        footer={<div className="flex w-full justify-end gap-2"><DismissButton href="/app/producers">Cancel</DismissButton><Button type="submit" disabled={busy || !name.trim() || !email.trim()}>{busy ? "Sending…" : "Send invite"}</Button></div>}>
         <div className="grid max-w-3xl gap-4 p-4 md:grid-cols-2">
           <label className="grid gap-1 text-sm font-medium">Name<input className={field} value={name} onChange={(e) => setName(e.target.value)} required maxLength={120} autoComplete="off" /></label>
           <label className="grid gap-1 text-sm font-medium">Email<input className={field} type="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={254} autoComplete="off" /></label>

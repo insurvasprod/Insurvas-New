@@ -3,68 +3,72 @@ import Link from "next/link";
 import { InfoTip } from "@/components/ui/info-tip";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { RulesList } from "@/components/app/book/setup/rules-list";
+import { BUCKET_LABEL, bucketOf, RULES_HREF, isBucket, RULE_BUCKETS, type RuleBucket } from "@/components/app/book/setup/card-moves-shared";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { actAsPage, actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
-import { Callout } from "@/components/app/settings/primitives";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/page-states";
+import { TableCard } from "@/components/ui/table-card";
+import { ViewTabs, type ViewTab } from "@/components/ui/view-tabs";
 import { PIPELINE_RULES_PENDING_MESSAGE } from "@/lib/pipelineRules/rules";
-import { loadBoard, loadCarrierChoices, loadRulesList } from "@/lib/pipelineRules/store";
+import { loadBoard, loadCarrierChoices, loadRule, loadRulesList } from "@/lib/pipelineRules/store";
 
 /**
- * Book of business › Setup › Pipeline rules (owner 2026-11-02; docs/la4/SIMPLIFY-PROPOSAL.md §4, §7):
- * when something happens to a policy, move its card and add a note. No AI. Forecast first (owner decision
- * 3): a rule records what it would do until it is switched to live, rule by rule. Opening it writes nothing.
+ * Carrier sync › Card moves (owner 2026-11-02; docs/la4/SIMPLIFY-PROPOSAL.md §4, §7): when something happens to a
+ * policy, move its card and add a note. No AI. Forecast first (owner decision 3): a rule records what it would do until
+ * it is switched to live, rule by rule. Opening it writes nothing.
+ *
+ * Round 7 (docs/la4/mockups-r7/carrier-sync-setup.html §2, direction A "By mode", owner 2026-11-10: "Build all four"):
+ * the modes are the sub-page bar (?mode=), opening on Forecast while a rule waits for a check. The warning callout is
+ * gone: its parts became counts where they belong — forecast → the Forecast tab and the "To check" column; held →
+ * "1 held" on its rule; capped → a red count on Live and the line on its tab; engine off or read-only → New rule
+ * disabled with the reason on hover; none on → the Live tab's empty state.
  */
-export default async function SetupPipelineRulesPage() {
+export default async function SetupPipelineRulesPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Card moves" description="Rates, carrier terms and card-move rules for your book." />;
   // Owner and bookkeeper, like every Setup tab and its API.
   if (!actAsPagePermission(guard, "statements.view") || !actAsPage(guard, ["owner", "bookkeeper"])) return <RoleGateNotice featureLabel="Card moves" detail="Setup is for the account owner and bookkeepers." />;
   const tenantId = guard.context.tenantId;
   const readOnly = guard.entitlement.access === "read_only";
-  const [view, board, carriers] = await Promise.all([loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
-  const on = view.rules.filter((r) => r.enabled && r.mode !== "draft");
-  const forecast = on.filter((r) => r.mode === "forecast");
-  const live = on.filter((r) => r.mode === "live");
-  const capped = view.lastRun && view.lastRun.cappedLive > 0 ? view.lastRun : null;
-  const newRule = !view.available || readOnly
-    ? <Button type="button" disabled title={readOnly ? "Book of business is read-only while the account is suspended." : PIPELINE_RULES_PENDING_MESSAGE}>New rule</Button>
-    : <Link href="/app/book-setup/pipeline-rules/new" className={buttonVariants()}>New rule</Link>;
+  const [{ mode: asked }, view, board, carriers] = await Promise.all([searchParams, loadRulesList(tenantId), loadBoard(tenantId), loadCarrierChoices(tenantId)]);
 
-  // Round 3 (docs/la4/POLISH-ROUND3.md): what used to be up to five stacked callouts, as one summary line,
-  // most urgent first — capped, held, switched off, read-only, in forecast, none on — each part a link
-  // where there is a page to open.
-  const rulePage = (id: string, tab?: string) => `/app/book-setup/pipeline-rules/${id}${tab ? `?tab=${tab}` : ""}`;
-  const parts: Array<{ key: string; text: string; href?: string }> = [
-    ...(capped ? [{ key: "capped", text: `${capped.moved + capped.cappedLive} moves in one run stopped at ${view.settings.capPerRun}: look before the rest move`, href: live[0] ? rulePage(live[0].id) : undefined }] : []),
-    ...(view.openHolds > 0 ? [{ key: "held", text: `${view.openHolds} ${view.openHolds === 1 ? "card" : "cards"} held: two rules disagree`, href: "/app/needs-you?view=agency" }] : []),
-    ...(!view.settings.engineOn ? [{ key: "off", text: "Card moves are switched off for this agency" }] : []),
-    ...(readOnly ? [{ key: "read-only", text: "Read-only while the account is suspended" }] : []),
-    ...(forecast.length > 0 ? [{ key: "forecast", text: `${forecast.length} ${forecast.length === 1 ? "rule" : "rules"} in forecast, moving nothing until switched to live`, href: rulePage(forecast[0].id, "forecast") }] : []),
-    ...(view.rules.length > 0 && live.length === 0 && forecast.length === 0 ? [{ key: "none-on", text: "No rule is on, so no card moves", href: rulePage(view.rules[0].id) }] : []),
-  ];
-  const summary = parts.length > 0 && (
-    <Callout
-      tone={capped ? "error" : "warning"}
-      title={parts.map((part, index) => (
-        <span key={part.key}>
-          {index > 0 && " · "}
-          {part.href ? <Link href={part.href} className="underline underline-offset-2">{part.text}</Link> : part.text}
-        </span>
-      ))}
-    />
-  );
+  // "To check": a forecast rule's would-moves nobody has marked yet, read from the rule's own page loader.
+  const forecastRules = view.rules.filter((r) => bucketOf(r) === "forecast" && r.last7.wouldMove > 0);
+  const checks = await Promise.all(forecastRules.map((r) => loadRule(tenantId, r.id).then((one) => [r.id, one.forecast.filter((l) => !l.checked).length] as const).catch(() => [r.id, 0] as const)));
+  const toCheck = Object.fromEntries(checks);
+  const waiting = checks.some(([, n]) => n > 0);
+  const bucket: RuleBucket = isBucket(asked) ? asked : waiting ? "forecast" : "all";
+
+  const counts = Object.fromEntries(RULE_BUCKETS.map((b) => [b, b === "all" ? view.rules.length : view.rules.filter((r) => bucketOf(r) === b).length])) as Record<RuleBucket, number>;
+  const capped = view.lastRun && view.lastRun.cappedLive > 0 ? view.settings.capPerRun : null;
+  const tabs: Array<ViewTab<RuleBucket>> = RULE_BUCKETS.map((b) => ({
+    key: b,
+    label: BUCKET_LABEL[b],
+    count: counts[b],
+    tone: (b === "live" && capped !== null) || (b === "forecast" && waiting) ? "danger" : undefined,
+    href: b === "all" ? `${RULES_HREF}?mode=all` : `${RULES_HREF}?mode=${b}`,
+  }));
+
+  const blocked = !view.available ? PIPELINE_RULES_PENDING_MESSAGE
+    : readOnly ? "Book of business is read-only while the account is suspended."
+    : !view.settings.engineOn ? "Card moves are switched off for this agency."
+    : null;
+  const newRule = blocked
+    ? <Button type="button" disabled title={blocked}>New rule</Button>
+    : <Link href={`${RULES_HREF}/new`} className={buttonVariants()}>New rule</Link>;
 
   return (
-    <DataInPage step="pipeline-rules" chip={<InfoTip label="About card-move rules" side="right">What moves a lead&apos;s card when a carrier file says something happened to its policy: issued, paid, lapsed, charged back. A new rule starts in <b>Forecast</b>: it records what it would move and moves nothing. When its forecast looks right, open it and switch it to <b>Live</b>. Rules marked Forecast are the ones to check.</InfoTip>} actions={newRule}>
+    <DataInPage step="pipeline-rules"
+      chip={<InfoTip label="About card-move rules" side="right">What moves a lead&apos;s card when a carrier file says something happened to its policy: issued, paid, lapsed, charged back. A new rule starts in <b>Forecast</b>: it records what it would move and moves nothing. When its forecast looks right, open it and switch it to <b>Live</b>. Rules marked Forecast are the ones to check.</InfoTip>}
+      tabs={view.available ? <ViewTabs label="Rules by mode" tabs={tabs} value={bucket} /> : undefined}
+      actions={newRule}
+    >
       {!view.available ? (
-        <Callout tone="warning" title={`${PIPELINE_RULES_PENDING_MESSAGE} Nothing moves before then.`} />
+        <TableCard><EmptyState title="Card moves are not ready yet" hint={`${PIPELINE_RULES_PENDING_MESSAGE} Nothing moves before then.`} /></TableCard>
       ) : (
-        <>
-          {summary}
-          <RulesList rules={view.rules} board={board} carriers={carriers} />
-        </>
+        <RulesList rules={view.rules} bucket={bucket} toCheck={toCheck} board={board} carriers={carriers} capped={capped} canCreate={!blocked} />
       )}
     </DataInPage>
   );

@@ -84,8 +84,8 @@ export function InboundCall({ workItemId, phase, readOnly, canHandoff, canFinish
   if (shown.phase !== phase) setShown({ phase, enter: phaseIndex(phase) < phaseIndex(shown.phase) ? "back" : "forward" });
   return (
     <div className={cn("flex w-full min-w-0 flex-col gap-4", fill && "lg:h-[calc(100dvh-var(--top-bar-h)-56px)]")}>
-      <PageHeader title="Call" hideTitle />
-      <InboundStepBar current={phaseIndex(phase) as 1 | 2 | 3 | 4} onPick={(index) => go(CALL_PHASES[index - 1])} />
+      {/* The step bar on the trail's line, as on Incoming calls (owner 2026-11-09), so it never moves. */}
+      <PageHeader title="Call" hideTitle lead={<InboundStepBar current={phaseIndex(phase) as 1 | 2 | 3 | 4} onPick={(index) => go(CALL_PHASES[index - 1])} />} />
       <div key={phase} data-enter={shown.phase === phase ? shown.enter : "forward"} className={cn("flex min-w-0 flex-col", fill && "lg:min-h-0 lg:flex-1")}>
         {body}
       </div>

@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board Name</title>
+<link rel="stylesheet" href="kit.css">
+<style>/* board-only extras go here, built from the kit tokens (var(--…)), never raw hex */</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Page name</h1>
+  <p class="lead">One paragraph: what this page is for, in plain words, and what is wrong with it today.</p>
+  <div class="notes"><div><b>Critique 1</b>…</div><div><b>Critique 2</b>…</div></div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · Name</button><button data-opt-btn="B">B · Name</button><button data-opt-btn="C">C · Name</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <div class="opt A">
+    <div class="sec"><h2>A · Main screen</h2><span>what this shows</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail">
+        <div class="find">Search settings</div>
+        <h5>Leads &amp; calling</h5><a class="on">Lead posting <small>3</small></a><a>Dialing cadence</a>
+      </nav>
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Page title</h3><nav class="tabs"><a class="on">Tab one</a><a>Tab two</a></nav><div class="acts"><span class="btn o">Secondary</span><span class="btn p">Primary</span></div></div>
+        <div class="status"><span class="dot"></span>Saved · changed by Demo Agent 2 days ago</div>
+        <div class="body">
+          <div class="card flex1"><div class="card-h"><b>Card</b></div><div class="scroll"><div class="card-b">Content that scrolls inside the card, never the page.</div></div></div>
+        </div>
+      </div>
+      <!-- overlays: <div class="scrim"></div><aside class="sheet">…</aside> or <div class="dialog">…</div> -->
+    </div>
+  </div>
+  <div class="opt B">…</div>
+  <div class="opt C">…</div>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose</span></div>
+  <div class="pick"><div class="rec"><b>A · Name (recommended)</b>…<ul><li>New vs today…</li></ul></div><div><b>B · Name</b>…</div><div><b>C · Name</b>…</div></div>
+</div>
+<script src="kit.js"></script>
+</body>
+</html>

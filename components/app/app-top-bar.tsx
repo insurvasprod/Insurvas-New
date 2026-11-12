@@ -25,6 +25,7 @@ import { ViewTabs } from "@/components/ui/view-tabs";
 import { usePageNotices } from "@/components/ui/page-notices";
 import type { MenuSection } from "@/lib/menu/definition";
 import { TopBarNew } from "@/components/app/nav/top-bar-nav";
+import { clearResources } from "@/lib/client/resource-cache";
 
 /**
  * The top bar.
@@ -531,6 +532,8 @@ export function TopBarShell({
       });
       const body = (await response.json().catch(() => null)) as { redirectTo?: string; error?: string } | null;
       if (!response.ok || !body?.redirectTo) throw new Error(body?.error ?? "That workspace could not be opened.");
+      // The kept answers belong to the workspace being left (lib/client/resource-cache.ts).
+      clearResources();
       window.location.assign(body.redirectTo);
     } catch (cause) {
       notify.block(cause instanceof Error ? cause.message : "That workspace could not be opened.");
@@ -725,7 +728,7 @@ export function TopBarShell({
           className="portal-top-icon portal-top-icon-alert"
         >
           <TriangleAlert className="size-4" aria-hidden="true" />
-          {alertCount > 0 && <span className="portal-top-badge">{alertCount}</span>}
+          {alertCount > 0 && <span className="portal-top-badge is-alert">{alertCount}</span>}
         </button>}
 
         {feed && <span className="portal-top-divider" aria-hidden="true" />}
@@ -991,6 +994,8 @@ function TopBarSignOut({ endpoint, redirect }: { endpoint: string; redirect: str
       if (!response.ok) throw new Error("Sign out could not be completed");
       // The workspace dims and settles back while the sign-in page comes (§ Motion, Wave 8; globals.css shell-leave).
       document.documentElement.classList.add("shell-leave");
+      // Nothing this person read stays in the tab for whoever signs in next (lib/client/resource-cache.ts).
+      clearResources();
       router.push(redirect);
       router.refresh();
     } catch (cause) {

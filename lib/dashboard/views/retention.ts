@@ -205,7 +205,8 @@ export async function loadRetentionView(props: DashViewProps): Promise<Retention
     links.persistency ? safe("persistency", () => readPersistency(context)) : null,
   ]);
   const cases = rawCases ? shapeCases(rawCases, today, zone) : null;
-  const advanceKept = !noMoney && rawCases ? await safe("advance kept", () => readAdvanceKept(context.tenantId, rawCases.filter((c) => c.status === "saved"))) : null;
+  // Chargebacks avoided is a figure of the Retention view only; the Overview does not read it.
+  const advanceKept = !noMoney && !props.forOverview && rawCases ? await safe("advance kept", () => readAdvanceKept(context.tenantId, rawCases.filter((c) => c.status === "saved"))) : null;
   return { today, links, cases, servicing, winback, advanceKept, persistency13 };
 }
 

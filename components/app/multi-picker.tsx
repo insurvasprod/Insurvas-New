@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
  * and one soft shadow (owner, 2026-10-27: the earlier shadow was heavy on the light canvas).
  */
 export const pickerPanel =
-  "z-50 flex flex-col overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--color-card)] shadow-[0_10px_28px_-10px_rgba(0,0,0,.22),0_1px_2px_rgba(0,0,0,.06)]";
+  "z-50 flex flex-col overflow-hidden rounded-lg border border-[var(--border-strong)] bg-[var(--color-card)] shadow-[var(--shadow-overlay)]";
 
 /** The scrolling list inside the panel. */
 export const pickerList = "m-0 min-h-0 flex-1 list-none overflow-y-auto p-1 outline-none";

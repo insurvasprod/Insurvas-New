@@ -6,7 +6,7 @@ import { StepFrame } from "@/components/app/step-frame/step-frame";
 import type { RailStep } from "@/components/app/step-frame/step-rail";
 import type { Crumb } from "@/components/ui/breadcrumbs";
 import { InfoTip } from "@/components/ui/info-tip";
-import { RETENTION_RAIL_COOKIE, RETENTION_STEPS, retentionStepLabel, stepItem, type RetentionStep } from "@/lib/retention/steps";
+import { RETENTION_RAIL_COOKIE, RETENTION_SETTINGS_FOOT, RETENTION_STEPS, RETENTION_WAITING, retentionStepLabel, stepItem, type RetentionStep } from "@/lib/retention/steps";
 
 /**
  * Retention, one page (owner 2026-11-02, as Commissions and Reports): Save queue, Servicing and Reinstatement
@@ -16,7 +16,7 @@ import { RETENTION_RAIL_COOKIE, RETENTION_STEPS, retentionStepLabel, stepItem, t
  * `/app/reinstatement`), so every old link still lands
  * on the right screen. The rail offers only the steps this person may open, by the same rules those routes apply.
  */
-async function openSteps(): Promise<RailStep[]> {
+async function openSteps(): Promise<{ steps: RailStep[]; owner: boolean }> {
   const [radar, servicing, winback] = await Promise.all([guardPage("chargeback_radar"), guardPage("payment_repair"), guardPage("winback")]);
   const open = new Set<RetentionStep>();
   const worker = ["owner", "producer", "retention"] as const;
@@ -24,7 +24,11 @@ async function openSteps(): Promise<RailStep[]> {
   if (servicing.entitled && actAsPage(servicing, worker)) open.add("servicing");
   // Win-back calls are not a retention rep's (LA-5.8); their lapses are on Cases.
   if (winback.entitled && actAsPage(winback, ["owner", "producer"])) open.add("reinstatement");
-  return RETENTION_STEPS.filter((item) => open.has(item.key));
+  // Round 7 (0·A): the scorecard for everyone who works retention (their own card), Results for the owner only.
+  if (radar.entitled && actAsPage(radar, worker)) open.add("scorecard");
+  const owner = radar.entitled && actAsPage(radar, ["owner"]);
+  if (owner) open.add("results");
+  return { steps: RETENTION_STEPS.filter((item) => open.has(item.key)), owner };
 }
 
 /**
@@ -45,7 +49,7 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
   actions?: ReactNode;
   children: ReactNode;
 }) {
-  const [steps, jar] = await Promise.all([openSteps(), cookies()]);
+  const [{ steps, owner }, jar] = await Promise.all([openSteps(), cookies()]);
   // The step on screen is always offered: its route already let this person in.
   // A retired step (the predictive Save queue) still answers at its address, at the rail's end.
   if (!steps.some((item) => item.key === step)) {
@@ -63,7 +67,8 @@ export async function RetentionPage({ step, title, info, chip, facts, breadcrumb
       breadcrumbs={breadcrumbs}
       tabs={tabs}
       actions={actions}
-      rail={{ label: "Retention", cookie: RETENTION_RAIL_COOKIE, steps, step, collapsed: jar.get(RETENTION_RAIL_COOKIE)?.value === "collapsed" }}
+      // Each step's one warning rides on the rail (round 7, 0·A); the owner's settings sit at its foot.
+      rail={{ label: "Retention", cookie: RETENTION_RAIL_COOKIE, countsUrl: "/api/app/retention/steps", waiting: RETENTION_WAITING, steps, step, collapsed: jar.get(RETENTION_RAIL_COOKIE)?.value === "collapsed", foot: owner ? RETENTION_SETTINGS_FOOT : null }}
     >
       {children}
     </StepFrame>

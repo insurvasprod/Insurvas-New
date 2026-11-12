@@ -1,0 +1,974 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Commissions R7</title>
+<style>
+/* Foundation v3 dark tokens (docs/design/foundation-v3/mockup.html). Text sizes: 12 / 14 / 16 only; buttons 14. */
+:root{--canvas:#101715;--surface:#18211E;--raised:#202B26;--hi:#26332E;--text:#F2F6F4;--muted:#9FB0A7;--faint:#6F8079;--border:#2A3631;--input:#55665F;--primary:#35D6AA;--pfg:#0B2119;--psoft:#173A30;--pink:#6BE3C1;--good:#6BE3C1;--goodbg:#173A30;--info:#A4C0F8;--infobg:#172A4A;--warn:#F3C266;--warnbg:#3A2B0C;--bad:#F7A1A1;--badbg:#3F1A1A;--scrim:rgba(0,0,0,.6);--r:16px;--rc:8px}
+*{box-sizing:border-box}
+html,body{margin:0;background:#080d0b;color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--pink);text-decoration:none}
+h1{font-size:16px;margin:0;font-weight:700;letter-spacing:-.005em}
+h2{font-size:16px;margin:0;font-weight:700}
+h3{font-size:14px;margin:0;font-weight:700}
+p{margin:0}
+.wrap{max-width:1560px;margin:0 auto;padding:24px 16px 96px}
+.lead{color:var(--muted);max-width:1100px;margin:8px 0 0}
+.toc{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;margin:12px 0 8px;background:#080d0b;border-bottom:1px solid var(--border)}
+.toc a{border:1px solid var(--border);border-radius:var(--rc);padding:6px 12px;font-size:14px;color:var(--muted);font-weight:600}
+.toc a.big{color:var(--text);border-color:#1f5a49;background:var(--psoft)}
+.screen{margin:56px 0 0;padding-top:8px;border-top:2px solid var(--border)}
+.screen>h2{font-size:16px;margin:16px 0 4px}
+.sub{color:var(--muted);font-size:14px}
+.board{margin:32px 0}
+.cap{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin:0 0 10px}
+.cap b{font-size:12px;letter-spacing:.06em;color:var(--primary)}
+.cap span{color:var(--muted);font-size:14px}
+.rec{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--pfg);background:var(--primary);border-radius:6px;padding:2px 8px}
+.alt{display:inline-flex;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 8px}
+.notes{max-width:1200px;color:var(--muted);font-size:14px;margin:10px 4px 0;padding-left:18px}
+.notes li{margin:3px 0}.notes b{color:var(--text)}
+/* the app frame */
+.frame{background:var(--canvas);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.app{display:grid;grid-template-columns:56px 208px minmax(0,1fr);min-height:640px}
+.app.tall{min-height:720px}
+.side{border-right:1px solid var(--border);background:#0a110f}
+.side i{display:block;width:30px;height:30px;border-radius:8px;background:var(--raised);margin:14px auto}
+.side i.on{background:var(--psoft);box-shadow:inset 0 0 0 1px #1f5a49}
+.rail{border-right:1px solid var(--border);padding:16px 10px;display:flex;flex-direction:column;gap:2px}
+.rail .rl{font-size:12px;color:var(--faint);font-weight:600;padding:0 10px 8px}
+.rail a{padding:9px 10px;border-radius:var(--rc);color:var(--muted);font-weight:600;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.rail a.on{background:var(--psoft);color:var(--text);font-weight:700}
+.rail small{font-size:12px;border-radius:6px;padding:0 6px;font-weight:700}
+.rail small.w{background:var(--warnbg);color:var(--warn)}.rail small.r{background:var(--badbg);color:var(--bad)}
+.main{padding:16px 20px 0;display:flex;flex-direction:column;gap:16px;min-width:0}
+.trail{font-size:12px;color:var(--muted)}.trail b{color:var(--text);font-weight:600}.trail a{color:var(--muted)}
+/* title line: title, (i), sub-page bar, buttons; one hairline to the end */
+.tl{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:0}
+.tl h1{padding-bottom:10px;display:flex;align-items:center;gap:8px}
+.ib{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--faint);color:var(--faint);font-size:12px;font-weight:700;font-style:normal}
+.ut{display:flex;gap:2px}
+.ut span{padding:8px 10px 9px;font-size:14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.ut span.on{color:var(--text);border-bottom-color:var(--primary)}
+.n{font-size:12px;background:var(--raised);border-radius:6px;padding:0 6px;margin-left:6px;color:var(--muted);font-weight:600}
+.n.r{color:var(--bad);background:var(--badbg)}.n.w{color:var(--warn);background:var(--warnbg)}
+.tl .sp{flex:1}
+.tl .acts{display:flex;gap:8px;padding-bottom:6px;flex-wrap:wrap}
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--rc);border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:14px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--pfg);border-color:var(--primary)}
+.btn.g{background:none;border-color:transparent;color:var(--muted)}
+.btn.d{color:var(--bad);border-color:#5a2a2a;background:none}
+.btn.dp{background:#d65a5a;border-color:#d65a5a;color:#1a0707}
+.btn.sm{height:32px;padding:0 10px}
+.btn.ic{width:36px;padding:0;justify-content:center}
+.btn.off{opacity:.45}
+.tc{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:var(--rc);border:1px solid var(--border);font-weight:600;font-size:14px;color:var(--muted)}
+.tc.on{border-color:var(--primary);background:var(--psoft);color:var(--text)}
+.inp{height:36px;border:1px solid var(--input);background:var(--canvas);border-radius:var(--rc);padding:0 12px;color:var(--text);display:flex;align-items:center;gap:8px;font-size:14px;min-width:0}
+.inp.ph{color:var(--faint)}.inp.sel:after{content:"▾";margin-left:auto;color:var(--faint);font-size:12px}
+.inp.err{border-color:var(--bad)}.inp.focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(53,214,170,.25)}
+.inp.ta{height:72px;align-items:flex-start;padding-top:8px;line-height:1.45}
+.lbl{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;display:flex;gap:6px;align-items:center}
+.hint{font-size:12px;color:var(--faint);margin-top:4px}
+.errl{font-size:12px;color:var(--bad);font-weight:600;margin-top:4px}
+.fg{display:grid;gap:14px}.fg2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.fg3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.fg4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.box{width:16px;height:16px;border:1.5px solid var(--faint);border-radius:4px;display:inline-block;vertical-align:middle}.box.x{background:var(--primary);border-color:var(--primary)}
+/* cards and tables */
+.card{background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.09);border-radius:var(--r);min-width:0}
+.hd{display:flex;align-items:center;gap:10px;padding:12px 16px}.hd .sp{flex:1}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border)}.toolbar .sp{flex:1}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;height:40px;padding:0 14px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:6px 14px;height:44px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr.lk td{cursor:pointer}tr.lk:hover td{background:rgba(255,255,255,.025)}
+tr.sel td{background:var(--psoft)}
+td.r,th.r{text-align:right}
+.chev{color:var(--faint);text-align:right;width:36px}
+.foot{display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:12px;color:var(--muted)}.foot .sp{flex:1}
+.pager{display:inline-flex;gap:4px}.pager span{min-width:30px;height:30px;border:1px solid var(--border);border-radius:var(--rc);display:inline-grid;place-items:center;font-size:12px}
+.pager span.on{border-color:var(--primary);color:var(--text)}
+.fill{flex:1;min-height:0;display:flex;flex-direction:column}
+.fill .card{flex:1;display:flex;flex-direction:column;border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom:0}
+.fill .card .grow{flex:1}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.st:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.w{color:var(--warn);background:var(--warnbg)}.g1{color:var(--good);background:var(--goodbg)}.i{color:var(--info);background:var(--infobg)}.b{color:var(--bad);background:var(--badbg)}.z{color:var(--muted);background:var(--raised)}
+.m{color:var(--muted)}.f{color:var(--faint)}.sm12{font-size:12px}.bold{font-weight:700}
+.red{color:var(--bad)}.amb{color:var(--warn)}.grn{color:var(--good)}
+.mono{font-family:ui-monospace,"Geist Mono",Consolas,monospace;font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid rgba(255,255,255,.09);border-radius:var(--r);background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015))}
+.strip>div{padding:12px 16px;border-right:1px solid var(--border)}.strip>div:last-child{border-right:0}
+.strip .l{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.strip .v{font-size:16px;font-weight:700;margin-top:4px}.strip .fn{font-size:12px;color:var(--muted)}
+/* window dots and matrix cells */
+.dots{display:inline-flex;gap:4px;vertical-align:middle}.dots i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dv{background:var(--good)}.du{background:var(--muted)}.dm{border:2px solid var(--bad)}
+.wc{display:inline-flex;align-items:center;gap:6px;min-width:96px;height:30px;padding:0 10px;border-radius:var(--rc);border:1px solid var(--border);font-weight:600;font-size:14px}
+.wc i{width:8px;height:8px;border-radius:50%}
+.wc.ms{border:1px dashed #7a3a3a;color:var(--bad);background:rgba(63,26,26,.4)}
+.wc.un{color:var(--text)}
+.wc.hov{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+/* overlays */
+.stage{position:relative;background:var(--canvas);border:1px solid var(--border);border-radius:16px;padding:28px;display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;overflow:hidden}
+.stage.scr{background:repeating-linear-gradient(135deg,#0c1210 0 12px,#0e1513 12px 24px)}
+.dlg{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.6);width:440px;display:flex;flex-direction:column}
+.dlg.lg{width:560px}.dlg.xl{width:720px}.dlg.x2{width:960px}.dlg.cf{width:400px}
+.dlg .dh{padding:18px 20px 0;display:flex;gap:10px;align-items:flex-start}.dlg .dh .sp{flex:1}
+.dlg .dh .x{color:var(--faint);font-size:16px}
+.dlg .dd{color:var(--muted);font-size:14px;padding:6px 20px 0}
+.dlg .db{padding:16px 20px;display:grid;gap:14px}
+.dlg .df{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}.dlg .df .sp{flex:1}
+.lbltag{font-size:12px;color:var(--faint);margin-bottom:8px}
+.menu{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:6px;width:224px}
+.menu div{padding:8px 10px;border-radius:7px;font-size:14px}.menu div.on{background:var(--raised)}.menu hr{border:0;border-top:1px solid var(--border);margin:4px 0}
+.pop{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:12px;width:520px}
+.toast{display:flex;gap:10px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-weight:600;width:350px;font-size:14px}
+.toast .tk{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none}
+.toast .ok{background:var(--goodbg);color:var(--good)}.toast .bd{background:var(--badbg);color:var(--bad)}.toast .wn{background:var(--warnbg);color:var(--warn)}
+.toast small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.toast .u{margin-left:auto;color:var(--pink);font-size:14px}
+.kv{display:grid;grid-template-columns:150px 1fr;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.kv div{padding:8px 12px;border-bottom:1px solid var(--border);font-size:14px}.kv div:nth-last-child(-n+2){border-bottom:0}.kv .k{color:var(--muted);font-size:12px;font-weight:600;background:rgba(255,255,255,.02)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:48px 24px;color:var(--muted)}
+.empty b{color:var(--text);font-size:16px}
+.drop{border:1.5px dashed var(--input);border-radius:12px;padding:20px;text-align:center;color:var(--muted)}
+.drop b{color:var(--text)}
+.track{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.track div .bar{height:4px;border-radius:4px;background:var(--border)}.track div.on .bar,.track div.dn .bar{background:var(--primary)}
+.track div .lb{font-size:12px;font-weight:700;margin-top:6px}.track div .sb{font-size:12px;color:var(--muted)}
+.todo{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid var(--border);min-height:44px}
+.ring{width:18px;height:18px;border-radius:50%;border:2px solid var(--input)}.ring.x{background:var(--primary);border-color:var(--primary)}
+.sent{padding:14px 16px;border-top:1px solid var(--border);color:#cfdad5;line-height:1.6}.sent b{color:var(--text)}
+.col{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.rc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface);display:grid;gap:4px}
+.grp td{background:rgba(255,255,255,.025);font-weight:700;height:36px}
+/* phones */
+.phones{display:flex;gap:28px;flex-wrap:wrap}
+.phone{width:375px;border:1px solid var(--border);border-radius:28px;background:var(--canvas);overflow:hidden;display:flex;flex-direction:column;min-height:720px}
+.phone .pb{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.phone .pm{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.phone .ut{overflow:hidden}
+.pc{border:1px solid rgba(255,255,255,.09);border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));padding:12px;display:grid;gap:8px}
+.pc .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+/* edit map */
+.ed{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.ed th{background:var(--raised);border-top:0}.ed td{vertical-align:top;padding:10px 14px;height:auto}
+.ed td:first-child{font-weight:600;white-space:nowrap}
+.sh{background:var(--psoft)!important;color:var(--text)!important;font-weight:700}
+.crit{padding:16px 20px}.crit ol{margin:0;padding-left:20px;color:var(--muted)}.crit li{margin:4px 0}.crit b{color:var(--text)}
+.dirgrid{display:grid;gap:8px;grid-template-columns:repeat(3,1fr);margin-top:12px}
+.dirgrid div{border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--muted)}.dirgrid div.pick{border-color:var(--primary)}
+.dirgrid b{color:var(--text)}
+
+/* One-line tables (owner 2026-11-11): every table row below is drawn one line, one text colour; colour lives only in a chip. */
+td .pn{display:none}
+td .who{display:inline;font-weight:600}
+td.amb,td.red,td.grn,td .amb,td .red,td .grn{color:var(--text)}
+td.bold,td .bold{font-weight:400}
+td .nx,td .nx.u{color:var(--text);font-weight:500}
+</style>
+<style>
+/* Commissions additions */
+.rail .grpl{font-size:12px;color:var(--faint);font-weight:600;padding:10px 10px 4px}
+.nx{color:var(--pink);font-weight:600;white-space:nowrap}
+.nx.u{color:var(--bad)}
+.who{display:block;font-weight:700;color:var(--text)}
+.pn{display:block;font-size:12px;color:var(--muted)}
+.big{font-size:16px;font-weight:700}
+.stepl{display:grid;grid-template-columns:28px 1fr auto;gap:12px;align-items:start;padding:12px 16px;border-top:1px solid var(--border)}
+.stepl .dot{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;border:1px solid var(--border);color:var(--muted)}
+.stepl .dot.now{border:2px solid var(--primary);color:var(--primary)}
+.stepl .dot.dn{background:var(--primary);color:var(--pfg);border-color:var(--primary)}
+.letter{background:#f4f1ea;color:#1d1d1b;border-radius:8px;padding:20px 24px;font-size:12px;line-height:1.6}
+.letter b{color:#000}.letter table td,.letter table th{color:#1d1d1b;border-color:#d8d2c4;height:28px;padding:2px 8px;font-size:12px}
+.wiz{display:flex;gap:4px;align-items:center}.wiz span{font-size:12px;font-weight:600;color:var(--muted);padding:2px 8px;border-radius:6px;border:1px solid var(--border)}
+.wiz span.on{color:var(--pfg);background:var(--primary);border-color:var(--primary)}.wiz span.dn{color:var(--good)}
+.tg{display:inline-block;width:32px;height:18px;border-radius:9px;background:var(--primary);position:relative;vertical-align:middle}.tg:after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--pfg)}
+.tg.off{background:var(--raised)}.tg.off:after{left:2px;right:auto;background:var(--faint)}
+.rcard{border:1px solid var(--border);border-radius:12px;padding:12px;display:grid;gap:4px}.rcard.on{border-color:var(--primary);background:var(--psoft)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Commissions · round 7</h1>
+<p class="lead">Owner 2026-11-10: "rearrange the Commissions area so it's easy for the user to navigate and always obvious what to do next." Every Commissions page: <b>Statements</b>, <b>Pay issues</b> with its dispute letters, <b>the Attribution queue</b>, <b>Producer pay</b>, <b>My pay</b>, <b>Producer payouts</b>, <b>Producer statements</b>, <b>Commission splits</b> and <b>Payouts</b>, with their record pages (a statement, a pay issue, a letter, a credit item, a producer, a payout run, a partner invoice). For each: a short critique of today's screen (walked live on Ellery &amp; Fields, 2026-11-10, plus a read of the code), two or three directions with one marked, then everything the marked direction opens: tabs, tables, every button and its pop-up, confirm, toast, error line, empty state, read-only and the phone view. The edit map closes the file. Copy is taken from the code (carrier-discrepancies, statement-review, statement-import, reconciliation-board, payouts-board, pay-plans, splits-board, partner-ledger-board, item-decide); carriers, files, letters and counts are the demo agency's; producer and partner money is illustrative.</p>
+<ul class="notes">
+<li><b>Rules applied on every board:</b> the title alone on its line, with only its (i) beside it; tabs and buttons on the title line over one hairline (the 2026-11-09 sub-page bar); a record page's ‹ › buttons name the neighbour; full width; tables fill to the window foot with search, filters and column headers fixed and the rows scrolling inside; no notice cards: a warning is a count on its tab, chip or row; money in dollars; text 12 / 14 / 16 only.</li>
+<li><b>Nothing is decided inside a table row, and nothing opens in a side panel.</b> A row is a link to its own page or its dialog. Each edit names its surface: <span class="st i">Dialog</span> for a short edit that keeps context, <span class="st z">Own page</span> for a long form, <span class="st w">Confirm</span> for a step that loses something. Every figure and name is a link to its filtered page.</li>
+<li><b>Fit:</b> every title line (title, bar, ‹ › and buttons) fits one line from 1,600px with the Commissions rail open; below that the rail collapses to its icons (the foundation rule: the tabs then follow the title), so nothing wraps at 1,440.</li>
+</ul>
+<nav class="toc"><a class="big" href="#one">Tables, one line</a><a class="big" href="#s0">0 · The area</a><a class="big" href="#s1">1 · Statements</a><a href="#s1-rec">1 a statement</a><a class="big" href="#s2">2 · Pay issues</a><a href="#s2-rec">2 an issue</a><a href="#s2-let">2 a letter</a><a class="big" href="#s3">3 · Attribution</a><a class="big" href="#s4">4 · Producer pay</a><a href="#s4-rec">4 a producer</a><a class="big" href="#s5">5 · My pay</a><a class="big" href="#s6">6 · Producer payouts</a><a class="big" href="#s7">7 · Producer statements</a><a class="big" href="#s8">8 · Commission splits</a><a class="big" href="#s9">9 · Payouts</a><a href="#s9-rec">9 an invoice</a><a class="big" href="#map">Edit map</a></nav>
+
+<!-- ═══════════════════════════════════ TABLES, ONE LINE ═══════════════════════════════════ -->
+<section class="screen" id="one">
+<h2>Tables, one line (owner 2026-11-11)</h2>
+<p class="sub">Owner: two or three lines a row and many font colours, and people don't know where to focus. Every table in Commissions takes the Vendor bills B look: a row is one line, the text is one colour, colour lives only in one chip. The A boards below are drawn this way (the sub-lines and coloured amounts in their source are switched off by this page's style).</p>
+<section class="board"><div class="cap"><b>RULES</b><span>for every table, list and record page</span></div>
+<div class="card crit"><ol>
+<li><b>One line per row.</b> No grey line under a name. What it said gets its own column when a reader chooses rows by it, else it waits on the record page.</li>
+<li><b>One text colour.</b> First column semibold, everything else regular in the body colour; muted only for "—" and dates. Amounts tabular, never green, amber or red, never bold.</li>
+<li><b>Colour only in a chip.</b> One status chip a row (dot + a few words). Its tone is the meaning: waiting, wrong, done. A problem amount is said in the chip ("$270.00 short"), not by tinting the number.</li>
+<li><b>The next step is a short verb</b> the same weight in every row (Review ›, Send letter ›, Pay ›); the whole row opens the record.</li>
+<li><b>Five or six columns.</b> 14px cells, 12px headers, 44px rows, tables fill the window.</li>
+</ol></div></section>
+<section class="board"><div class="cap"><b>PAY ISSUES · BEFORE / AFTER</b><span>the group list</span></div>
+<div class="card" style="padding:0">
+<div class="lbltag" style="padding:12px 16px 0">Before: two lines, three text colours, bold amber amounts, a pink sentence</div>
+<table><tr><th>Carrier · issue</th><th class="r">How many</th><th class="r">Owed to you</th><th>Oldest</th><th>What to do</th></tr>
+<tr><td><b style="display:block">Aflac</b><span style="display:block;font-size:12px;color:var(--muted)"><span style="color:var(--warn)">●</span> Missing commission</span></td><td class="r">46</td><td class="r" style="color:var(--warn);font-weight:700">$15,223.65</td><td>Aug 14<span style="display:block;font-size:12px;color:var(--muted)">88 days</span></td><td><span style="color:var(--pink);font-weight:600">Check the pay lag, then a letter ›</span></td></tr>
+<tr><td><b style="display:block">Aflac</b><span style="display:block;font-size:12px;color:var(--muted)"><span style="color:var(--bad)">●</span> Paid over</span></td><td class="r">3</td><td class="r" style="color:var(--bad);font-weight:700">$1,566.13</td><td>Oct 1<span style="display:block;font-size:12px;color:var(--muted)">40 days</span></td><td><span style="color:var(--pink);font-weight:600">Hold it: may be taken back ›</span></td></tr>
+</table>
+<div class="lbltag" style="padding:12px 16px 0">After: one line, one colour, one chip</div>
+<table><tr><th>Carrier</th><th>Issue</th><th class="r">Issues</th><th class="r">Amount</th><th>Oldest</th><th>Next step</th></tr>
+<tr class="lk"><td><b>Aflac</b></td><td><span class="st w">Missing</span></td><td class="r">46</td><td class="r">$15,223.65</td><td class="m">14 Aug</td><td>Send letter ›</td></tr>
+<tr class="lk"><td><b>American Home Life</b></td><td><span class="st w">Missing</span></td><td class="r">41</td><td class="r">$12,664.38</td><td class="m">20 Aug</td><td>Send letter ›</td></tr>
+<tr class="lk"><td><b>American Amicable</b></td><td><span class="st b">No rate</span></td><td class="r">585</td><td class="r">$6,184.80</td><td class="m">30 Jun</td><td>Add the rate ›</td></tr>
+<tr class="lk"><td><b>Aflac</b></td><td><span class="st b">Paid over</span></td><td class="r">3</td><td class="r">$1,566.13</td><td class="m">1 Oct</td><td>Hold it ›</td></tr>
+</table></div></section>
+<section class="board"><div class="cap"><b>STATEMENTS · PRODUCER PAY · AFTER</b><span>same rule</span></div>
+<div class="card" style="padding:0">
+<table><tr><th>Carrier</th><th>Period</th><th class="r">Lines</th><th class="r">Amount</th><th>Status</th><th>Next step</th></tr>
+<tr class="lk"><td><b>American Amicable</b></td><td>Oct 2026</td><td class="r">13</td><td class="r">−$1,596.58</td><td><span class="st w">13 to match</span></td><td>Review ›</td></tr>
+<tr class="lk"><td><b>Aflac</b></td><td>Oct 2026</td><td class="r">42</td><td class="r">$9,804.12</td><td><span class="st g1">Reviewed</span></td><td>Open ›</td></tr>
+</table>
+<table><tr><th>Producer</th><th class="r">Carrier paid</th><th class="r">You owe</th><th class="r">Paid out</th><th>Status</th><th>Next step</th></tr>
+<tr class="lk"><td><b>Marisol Vance</b></td><td class="r">$4,210.00</td><td class="r">$2,526.00</td><td class="r">$2,256.00</td><td><span class="st b">$270.00 short</span></td><td>Review ›</td></tr>
+<tr class="lk"><td><b>Devon Price</b></td><td class="r">$3,180.00</td><td class="r">$1,908.00</td><td class="r">$1,908.00</td><td><span class="st g1">Matches</span></td><td>Open ›</td></tr>
+</table></div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 0 · THE AREA ═══════════════════════════════════ -->
+<section class="screen" id="s0">
+<h2>0 · The area: where each Commissions page lives</h2>
+<p class="sub">Today: Commissions rail (Pay issues · Producer pay / My pay), Book of business rail (Statements, hidden from the sidebar, under "Carrier files"), Accounting rail (Partner payouts · Team payouts · Producer splits · Commission splits), Carrier sync › Needs you › Credit (the Attribution queue's old address redirects there)</p>
+
+<section class="board"><div class="cap"><b>0·0 CRITIQUE</b><span>the area as a whole</span></div>
+<div class="card crit"><ol>
+<li><b>Commissions is two pages wide.</b> The rail holds Pay issues and Producer pay; the rest of the money's path lives in three other areas. Statements is under Book of business › Carrier files and not in the sidebar at all; Team payouts, Commission splits and Partner payouts are on the Accounting rail among Profit &amp; loss and Tax; /app/attribution redirects into Carrier sync › Needs you. A bookkeeper doing the month crosses four rails.</li>
+<li><b>One job, four names.</b> Producer pay's button says "Run payouts", the page it opens says "Team payouts", its tab says "Run payroll", the menu key says producer payouts and My pay's gate says "Payout runs". Pay issues is still "Discrepancies" in the Statements (i), the letter page, Needs you and two empty states.</li>
+<li><b>Nothing says what comes next.</b> Only Pay issues has a rail count. 13 statement lines waiting, 80 credit items, a draft partner invoice and an unpaid month are each found only by opening the page.</li>
+<li><b>Decisions in rows everywhere.</b> Statement lines carry Accept · Reject · Other… · Match… · Leave unmatched · Source row; payroll rows carry radio groups, % inputs, method selects and dates; pay issues expand inline with Dismiss; letters carry four buttons each.</li>
+</ol></div></section>
+
+<section class="board" id="s0-dir"><div class="cap"><b>0·A ONE RAIL, IN THE ORDER MONEY MOVES</b><span class="rec">Recommended</span><span>Money in: Statements · Pay issues · Who gets the credit. Money out: Producer pay · Team payouts · Commission splits · Partner payouts. Each with its count.</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="on">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px">
+<div class="trail"><a>Commissions</a> › <b>Statements</b></div>
+<div class="tl"><h1>Statements <i class="ib">i</i></h1><div class="ut"><span class="on">To review<span class="n w">2</span></span><span>Lines to match<span class="n w">13</span></span><span>Reviewed<span class="n">0</span></span><span>Voided<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Import a statement</span></div></div>
+<div class="card" style="padding:16px 20px"><table><tr><th>Rail entry</th><th>Address (kept)</th><th>Count on the rail</th><th>Who sees it</th><th>Was</th></tr>
+<tr class="grp"><td colspan="5">Money in</td></tr>
+<tr><td class="bold">Statements</td><td class="mono">/app/statements</td><td><span class="n w">13</span> lines waiting for a person</td><td class="m">owner, bookkeeper</td><td class="m">Book of business › Carrier files (not in the sidebar)</td></tr>
+<tr><td class="bold">Pay issues</td><td class="mono">/app/discrepancies</td><td><span class="n w">747</span> open</td><td class="m">owner, bookkeeper</td><td class="m">same</td></tr>
+<tr><td class="bold">Who gets the credit</td><td class="mono">/app/attribution</td><td><span class="n w">80</span> to decide</td><td class="m">owner, bookkeeper</td><td class="m">redirect to Carrier sync › Needs you › Credit</td></tr>
+<tr class="grp"><td colspan="5">Money out</td></tr>
+<tr><td class="bold">Producer pay</td><td class="mono">/app/producer-reconciliation</td><td><span class="n w">3</span> to review</td><td class="m">owner, bookkeeper</td><td class="m">same</td></tr>
+<tr><td class="bold">Team payouts</td><td class="mono">/app/producer-payouts</td><td><span class="n w">1</span> month unpaid</td><td class="m">owner, bookkeeper</td><td class="m">Accounting › Team payouts</td></tr>
+<tr><td class="bold">Commission splits</td><td class="mono">/app/commission-splits</td><td class="m">—</td><td class="m">owner (bookkeeper reads)</td><td class="m">Accounting › Commission splits</td></tr>
+<tr><td class="bold">Partner payouts</td><td class="mono">/app/payouts</td><td><span class="n w">2</span> to review or pay</td><td class="m">owner, bookkeeper</td><td class="m">Accounting › Partner payouts</td></tr>
+<tr class="grp"><td colspan="5">A producer</td></tr>
+<tr><td class="bold">My pay</td><td class="mono">/app/my-pay</td><td class="m">—</td><td class="m">producer (their own)</td><td class="m">Commissions › My pay; its statements opened with no frame</td></tr>
+</table></div>
+</div></div></div>
+<ul class="notes"><li><b>One rail, read top to bottom:</b> the carrier's statement comes in, what it paid wrong becomes a pay issue, each line is credited to a producer, then producers and partners are paid. The rail's two small labels say so; the counts say where the work is.</li><li><b>Accounting keeps two rows</b> ("Team payouts", "Partner payouts") that open these pages (<span class="mono">elsewhere: true</span>, as Reports did for Retention), so the P&amp;L flow still lands. Book of business › Carrier files keeps a "Commission statements ›" link.</li><li><b>One name per job:</b> "Team payouts" everywhere (the button, the page, the gate, the toast); "Pay issues" everywhere ("Discrepancies" removed from every string); "Who gets the credit" for the Attribution queue, the words its rows already use.</li><li><b>Producer splits and My balance</b> (LA-7.5, shown only to tenants that are neither individual nor agency) stay on the Accounting rail, outside this round; Commission splits' (i) no longer has to explain the difference.</li></ul></section>
+
+<section class="board"><div class="cap"><b>0·B TWO RAILS, TIDIED</b><span class="alt">Direction B</span><span>Commissions = money in (Statements · Pay issues · Credit); Accounting keeps money out, renamed and counted</span></div>
+<div class="frame"><div class="app" style="min-height:220px"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><a class="on">Statements<small class="w">13</small></a><a>Pay issues<small class="w">747</small></a><a>Who gets the credit<small class="w">80</small></a><a>Producer pay<small class="w">3</small></a></div>
+<div class="main" style="padding-bottom:16px"><p class="m">Smaller move: payouts stay in Accounting beside Profit &amp; loss. The bookkeeper still checks producer pay on one rail and pays it on another, and partner payouts stay 5th of 9 in Accounting.</p></div></div></div></section>
+
+<section class="board"><div class="cap"><b>0·C ONE PAGE, NO RAIL</b><span class="alt">Direction C</span><span>Commissions is one page with a "this month" checklist; each page is a tab</span></div>
+<div class="frame"><div class="app" style="grid-template-columns:56px minmax(0,1fr);min-height:220px"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Commissions <i class="ib">i</i></h1><div class="ut"><span class="on">This month</span><span>Statements<span class="n w">13</span></span><span>Pay issues<span class="n w">747</span></span><span>Credit<span class="n w">80</span></span><span>Producer pay</span><span>Team payouts</span><span>Splits</span><span>Partners</span></div></div>
+<p class="m">Eight tabs fill the bar, and each page's own tabs (To review · Lines to match …) need a second bar, which the foundation forbids.</p>
+</div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · One rail, money in then out ✓</b><br>Every Commissions page in one place, in the order the month runs; each count says where to go.</div><div><b>B · Two rails, tidied</b><br>Least movement; checking and paying stay apart.</div><div><b>C · One page</b><br>A checklist view, but two bars of tabs.</div></div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 1 · STATEMENTS ═══════════════════════════════════ -->
+<section class="screen" id="s1">
+<h2>1 · Statements</h2>
+<p class="sub">/app/statements (?view=unmatched, ?import=1), /app/statements/[id] · StatementsTable, UnmatchedLinesTable, StatementImport, StatementReview, StatementManualEntry</p>
+
+<section class="board"><div class="cap"><b>1·0 CRITIQUE</b><span>today's list and statement page</span></div>
+<div class="card crit"><ol>
+<li><b>Lost in the wrong area.</b> The trail reads Book of business › Carrier files › Statements and the rail lights "Carrier files"; the sidebar has no Statements entry. The (i) still sends you to "Discrepancies".</li>
+<li><b>Twelve columns and one button.</b> Carrier · Period · File · Imported · Imported by · Lines · Accepted · Waiting · Unreadable · Accepted amount · Status · button; the row itself doesn't open, and the button changes its word (Review / Enter lines / Open). The LA14 Market statement shows 19 lines, 0 accepted, 19 unreadable as "Reviewed".</li>
+<li><b>The statement page decides in the rows.</b> Each line has Match… · Leave unmatched · Source row (or Accept · Reject · Other…) in a 300px column; the toolbar holds five chips, a checkbox, Re-match 13, Accept all and Refresh. Policy numbers read <span class="mono">="D674578782"</span> (the Excel text guard, shown raw), and no policy links.</li>
+<li><b>Re-process and Void sit beside Original file</b> as three equal buttons; the strip's four cards repeat the chip counts under them.</li>
+</ol></div></section>
+
+<section class="board" id="s1-dir"><div class="cap"><b>1·A WHAT IS LEFT TO DO, AS TABS</b><span class="rec">Recommended</span><span>To review · Lines to match · Reviewed · Voided on the title line; a row opens its statement; seven columns</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="on">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Statements</b></div>
+<div class="tl"><h1>Statements <i class="ib">i</i></h1><div class="ut"><span class="on">To review<span class="n w">2</span></span><span>Lines to match<span class="n w">13</span></span><span>Reviewed<span class="n">0</span></span><span>Voided<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Import a statement</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Search statements</span><span class="inp sel" style="width:170px">All carriers</span><span class="tc">Typed from a PDF <span class="n">0</span></span><span class="tc">Has unreadable lines <span class="n w">1</span></span><span class="sp"></span><span class="m sm12"><a>−$1,596.58</a> net waiting</span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th>Carrier · period</th><th>File</th><th class="r">Lines</th><th class="r">Waiting</th><th class="r">Accepted</th><th>Imported</th><th>Next step</th></tr>
+<tr class="lk"><td><span class="who">American Amicable</span><span class="pn">Oct 2026</span></td><td><a>safeharbor_amam_commission_2026-10-01.csv</a></td><td class="r"><a>13</a></td><td class="r"><a class="amb bold">13</a><span class="pn">0 proposed · 13 no match</span></td><td class="r"><a>$0.00</a><span class="pn">0 lines</span></td><td>3 Nov 2026<span class="pn"><a>Demo Agent</a></span></td><td><span class="nx">Match 13 lines ›</span></td></tr>
+<tr class="lk"><td><span class="who">LA14 Market 1790707977690</span><span class="pn">Sep 2026</span></td><td><a>Commission-Detail (1).xlsx</a></td><td class="r"><a>19</a></td><td class="r"><a class="red bold">19</a><span class="pn">19 could not be read</span></td><td class="r"><a>$0.00</a><span class="pn">0 lines</span></td><td>23 Oct 2026<span class="pn"><a>Demo Agent</a></span></td><td><span class="nx u">Re-process with other columns ›</span></td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">Oldest first · a statement leaves this tab when no line waits for a person<span class="sp"></span>Showing 1–2 of 2 statements</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>The tabs are the work:</b> To review (a line waits for a person, a line could not be read, or a PDF's lines wait to be typed in), Lines to match (every unmatched line across statements, today's second tab), Reviewed, Voided. The strip's four figures become the counts and the toolbar's right-hand net.</li><li><b>A row is a link</b> to the statement. The file name opens the original; Lines / Waiting / Accepted open the statement on that tab; the importer opens the team member. "Next step" is words, not a button: "Match 13 lines ›", "Type in 24 lines ›", "Accept 6 proposed ›", "Re-process with other columns ›".</li><li><b>Unreadable is a reason to review, not "Reviewed":</b> LA14 Market's 19 unreadable lines keep it on To review (today it reads "Reviewed" with nothing accepted).</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·B CARRIER × MONTH GRID</b><span class="alt">Direction B</span><span>one row per carrier, one column per month; a cell is that statement, or a gap</span></div>
+<div class="frame"><div class="app" style="min-height:260px"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="on">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Statements <i class="ib">i</i></h1><div class="ut"><span class="on">By month</span><span>Lines to match<span class="n w">13</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Import a statement</span></div></div>
+<div class="card"><table><tr><th>Carrier</th><th>Aug</th><th>Sep</th><th>Oct</th><th>Nov</th></tr>
+<tr><td class="bold">American Amicable</td><td><span class="wc ms">missing</span></td><td><span class="wc ms">missing</span></td><td><span class="wc un"><i style="background:var(--warn)"></i>13 waiting</span></td><td class="f">due Dec 1</td></tr>
+<tr><td class="bold">LA14 Market</td><td class="f">—</td><td><span class="wc un"><i style="background:var(--bad)"></i>19 unreadable</span></td><td><span class="wc ms">missing</span></td><td class="f">—</td></tr></table></div>
+<p class="m">Shows a missing month at a glance, but pay timing isn't set for every carrier, so "missing" would be a guess for most of them.</p>
+</div></div></div></section>
+
+<section class="board"><div class="cap"><b>1·C ONE LINE QUEUE</b><span class="alt">Direction C</span><span>Statements opens on the next unmatched line across every statement, Review-page style</span></div>
+<div class="frame"><div class="app" style="min-height:220px"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="on">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><div class="tl"><h1>Statements <i class="ib">i</i></h1><div class="ut"><span class="on">Next line<span class="n w">13</span></span><span>All statements<span class="n">2</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Skip</span><span class="btn p">Match row 1</span></div></div>
+<p class="m">Fast for matching, but voiding, re-processing and checking a whole file's net move behind a tab.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · What is left, as tabs ✓</b><br>The list says what each statement needs; seven columns; a row opens it.</div><div><b>B · Carrier × month</b><br>Good for gaps; needs pay timing set per carrier.</div><div><b>C · One line queue</b><br>Fast matching, weaker overview.</div></div></section>
+
+<!-- 1 · statement page -->
+<section class="board" id="s1-rec"><div class="cap"><b>1·1 A STATEMENT</b><span class="rec">A</span><span>/app/statements/[id]: title alone; Waiting · Accepted · Set aside · The file on the title line; ‹ › name the next and previous statement in the list</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="on">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Statements</a> › <a>To review</a> › <b>American Amicable · Oct 2026</b></div>
+<div class="tl"><h1>American Amicable · Oct 2026</h1><div class="ut"><span class="on">Waiting<span class="n w">13</span></span><span>Accepted<span class="n">0</span></span><span>Set aside<span class="n">0</span></span><span>The file</span></div><span class="sp"></span><div class="acts"><span class="btn off">‹ None before</span><span class="btn">LA14 Market · Sep 2026 ›</span><span class="btn p">Match row 1</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Net on the statement</div><div class="v red">−$1,596.58</div><div class="fn"><a>13 lines</a></div></div><div><div class="l">Waiting</div><div class="v amb">13</div><div class="fn">0 proposed · 13 no match</div></div><div><div class="l">Posted to the ledger</div><div class="v">$0.00</div><div class="fn"><a>Commission ledger ›</a></div></div><div><div class="l">File</div><div class="v" style="font-size:14px"><a style="color:var(--text)">safeharbor_amam_commission…csv</a></div><div class="fn">CSV · 3 Nov 2026 · <a>Demo Agent</a></div></div><div><div class="l">Period</div><div class="v">1–31 Oct 2026</div><div class="fn"><a>American Amicable's statements ›</a></div></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Search policy or insured</span><span class="tc on">No match yet <span class="n w">13</span></span><span class="tc">Proposed <span class="n">0</span></span><span class="tc">Chargebacks <span class="n">10</span></span><span class="sp"></span><span class="btn">Re-match 13</span><span class="btn off">Accept all 0 proposed</span></div>
+<table class="grow"><tr><th class="r">Row</th><th>Policy number · insured</th><th>Kind</th><th>Date</th><th class="r">Amount</th><th>Match</th></tr>
+<tr class="lk sel"><td class="r m">1</td><td><a class="who">D674578782</a><span class="pn">Alex Lake</span></td><td><span class="st g1">Commission</span></td><td>1 Oct 2026</td><td class="r">$626.37</td><td><span class="nx">No match yet · match it ›</span></td></tr>
+<tr class="lk"><td class="r m">2</td><td><a class="who">7115463837</a><span class="pn">Hill, Morgan</span></td><td><span class="st b">Chargeback</span></td><td>1 Oct 2026</td><td class="r red">−$531.52</td><td><span class="nx">No match yet · match it ›</span></td></tr>
+<tr class="lk"><td class="r m">3</td><td><a class="who">7116196757</a><span class="pn">Ford, Morgan</span></td><td><span class="st g1">Commission</span></td><td>1 Oct 2026</td><td class="r">$632.82</td><td><span class="nx">No match yet · match it ›</span></td></tr>
+<tr class="lk"><td class="r m">4</td><td><a class="who">7113707347</a><span class="pn">Hill, Avery</span></td><td><span class="st b">Chargeback</span></td><td>1 Oct 2026</td><td class="r red">−$272.00</td><td><span class="nx">No match yet · match it ›</span></td></tr>
+<tr class="lk"><td class="r m">5</td><td><a class="who">7113579387</a><span class="pn">Bell, Jordan</span></td><td><span class="st b">Chargeback</span></td><td>1 Oct 2026</td><td class="r red">−$175.73</td><td><span class="nx">No match yet · match it ›</span></td></tr>
+<tr class="lk"><td class="r m">6</td><td><a class="who">7113638187</a><span class="pn">Shaw, Casey</span></td><td><span class="st b">Chargeback</span></td><td>1 Oct 2026</td><td class="r red">−$670.78</td><td><span class="nx">No match yet · match it ›</span></td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">In file order<span class="sp"></span>Showing 1–13 of 13 lines</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>‹ None before · LA14 Market · Sep 2026 ›</b> follow the list the statement was opened from; at the ends the button reads "None before" / "None after", disabled.</li><li><b>A line row opens its line dialog</b> (1·2); the decision column, the Source row toggle and Other… leave the table. The policy number is shown without the <span class="mono">="…"</span> guard and links to the policy once matched (unmatched: it searches the book).</li><li><b>Primary = the next undecided line</b> ("Match row 1", or "Accept 6 proposed" when proposals wait). <b>⋯</b>: Original file · Re-process · Void statement.</li><li><b>The file</b> tab: the raw rows as the carrier sent them, with the column mapping used, so the source row is one place, not a toggle on every line.</li></ul></section>
+
+<section class="board" id="s1-pop"><div class="cap"><b>1·2 THE LINE DIALOGS</b><span class="st i">Dialog · md 440 / lg 560</span><span>the line, its match, accept, reject, leave unmatched</span></div>
+<div class="stage scr">
+<div><div class="lbltag">A line with no match (row click) · lg</div><div class="dlg lg"><div class="dh"><h2>Row 1 · Alex Lake · $626.37</h2><span class="sp"></span><span class="m sm12">1 of 13</span><span class="x">✕</span></div><p class="dd">Commission · 1 Oct 2026 · policy D674578782 on the statement</p><div class="db"><div><div class="lbl">Policy number or insured name</div><div class="inp focus">⌕ D674578782</div><div class="menu" style="width:100%;margin-top:4px"><div class="on">D674578782 · Alex Lake · American Amicable</div><div>D674578712 · Alexis Lake · American Amicable</div></div></div><div class="kv"><div class="k">On the statement</div><div>D674578782 · Alex Lake</div><div class="k">Kind</div><div>Commission</div><div class="k">Amount</div><div>$626.37</div></div></div><div class="df"><span class="btn g">Leave unmatched</span><span class="sp"></span><span class="btn">Skip</span><span class="btn p">Match and accept</span></div></div></div>
+<div><div class="lbltag">A proposed match · md</div><div class="dlg"><div class="dh"><h2>Row 7 · Pike, Avery · −$1,208.69</h2><span class="sp"></span><span class="m sm12">7 of 13</span><span class="x">✕</span></div><p class="dd">Chargeback · 1 Oct 2026</p><div class="db"><div class="kv"><div class="k">Proposed</div><div><a>7113262837 · Avery Pike</a></div><div class="k">Why</div><div class="amb">By insured name: check it</div></div></div><div class="df"><span class="btn g">Choose another</span><span class="sp"></span><span class="btn">Reject</span><span class="btn p">Accept</span></div></div></div>
+<div><div class="lbltag">Leave unmatched · Confirm</div><div class="dlg cf"><div class="dh"><h2>Leave row 1 unmatched?</h2></div><p class="dd">It stays on the statement and does not post. Re-match with "Include left unmatched" can propose it again.</p><div class="db"><div><div class="lbl">Why</div><div class="inp ph">Optional, e.g. not our policy</div></div></div><div class="df"><span class="sp"></span><span class="btn">Back</span><span class="btn p">Leave unmatched</span></div></div></div>
+<div><div class="lbltag">Carrier differs · error line</div><div class="dlg"><div class="dh"><h2>Row 3 · Ford, Morgan · $632.82</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div><div class="inp">⌕ 7116196757 · Morgan Ford · Americo</div><div class="errl">Recorded with Americo, not American Amicable. Check before matching.</div></div></div><div class="df"><span class="sp"></span><span class="btn">Back</span><span class="btn p">Match and accept</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><div>Row 1 matched to D674578782 and posted to the ledger.<small>Row 2 is open next.</small></div></div>
+<div class="toast"><span class="tk ok">✓</span><div>6 proposed matches accepted and posted to the ledger.</div></div>
+<div class="toast"><span class="tk ok">✓</span><div>Row 1 left unmatched.<small>It stays on the statement and does not post.</small></div></div>
+<div class="toast"><span class="tk wn">!</span><div>Still no policy in your book matches these lines.</div></div>
+<div class="toast"><span class="tk bd">✕</span><div>The decision was not recorded.<small>Nothing was changed.</small></div></div></div>
+</div>
+<ul class="notes"><li><b>After a decision the dialog steps to the next waiting line</b> ("2 of 13"); Skip moves on without deciding; ✕ closes back to the list.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·3 IMPORT, RE-PROCESS, VOID, PDF ENTRY</b><span>from the title line and ⋯</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Import a statement · step 1 of 3 · lg, with its error line</div><div class="dlg lg"><div class="dh"><h2>Import a carrier statement</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Step 1 of 3 · The file, the carrier and the period it covers.</p><div class="db"><div class="drop"><b>safeharbor_amam_commission_2026-11-01.csv</b><br><span class="sm12">sheet “Sheet1” · 9 columns</span></div><div><div class="lbl">Carrier</div><div class="inp sel">American Amicable</div></div><div class="fg2"><div><div class="lbl">Period from</div><div class="inp">Nov 1, 2026</div></div><div><div class="lbl">Period to</div><div class="inp err">Oct 31, 2026</div></div></div><div class="errl">The period ends before it starts.</div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Next: columns</span></div></div></div>
+<div><div class="lbltag">Step 2 of 3 · columns</div><div class="dlg lg"><div class="dh"><h2>Import a carrier statement</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Step 2 of 3 · Which column holds what. Remembered for this carrier after the import.</p><div class="db"><p class="m sm12">Using the columns from your last American Amicable statement. Change any that moved.</p><div class="fg2"><div><div class="lbl">Policy number</div><div class="inp sel">PolicyNo</div><div class="hint">Matched to your book, with the carrier</div></div><div><div class="lbl">Amount</div><div class="inp sel">CommAmt</div><div class="hint">Paid, advanced or charged back on this line</div></div><div><div class="lbl">Kind (optional)</div><div class="inp sel">TxnType</div></div><div><div class="lbl">Insured (optional)</div><div class="inp sel">InsuredName</div></div></div></div><div class="df"><span class="btn">Back</span><span class="sp"></span><span class="btn p">Preview</span></div></div></div>
+<div><div class="lbltag">Step 3 of 3 · preview, a duplicate</div><div class="dlg lg"><div class="dh"><h2>Import a carrier statement</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Step 3 of 3 · What will be recorded. Nothing posts to the ledger until a person accepts a match.</p><div class="db"><div class="kv"><div class="k">Lines</div><div>13 · −$1,596.58 net on statement</div><div class="k">Proposed matches</div><div>0</div><div class="k">No match yet</div><div>13</div><div class="k">Could not read</div><div>0</div></div><div class="errl">This statement is already imported: the same file for American Amicable and this period was imported on 3 Nov 2026 by Demo Agent. Void it on the statement first.</div></div><div class="df"><span class="btn">Back</span><span class="sp"></span><span class="btn p off">Import 13 lines for review</span></div></div></div>
+<div><div class="lbltag">⋯ Void statement · Confirm</div><div class="dlg cf"><div class="dh"><h2>Void this statement?</h2></div><p class="dd">Its accepted lines leave the commission ledger. The statement, every line, every match and your reason are kept. This cannot be undone.</p><div class="db"><div><div class="lbl">Reason</div><div class="inp ta ph">Wrong period chosen, carrier re-issued the statement…</div></div></div><div class="df"><span class="sp"></span><span class="btn">Keep it</span><span class="btn dp">Void statement</span></div></div></div>
+<div><div class="lbltag">⋯ Re-process · lg</div><div class="dlg lg"><div class="dh"><h2>Re-process this statement</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">The stored original is read again with these columns. A new statement replaces this one; this one is voided and kept. Accepted lines need accepting again.</p><div class="db"><div class="fg2"><div><div class="lbl">Policy number</div><div class="inp sel">Policy #</div></div><div><div class="lbl">Amount</div><div class="inp sel">Comm Paid</div></div></div></div><div class="df"><span class="sp"></span><span class="btn">Keep it</span><span class="btn p">Re-process statement</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><div>Statement imported: 13 lines<small>Nothing posts until a match is accepted.</small></div></div>
+<div class="toast"><span class="tk ok">✓</span><div>Statement voided.<small>Its lines no longer post; the statement and the reason are kept.</small></div></div></div>
+</div>
+<ul class="notes"><li><b>A PDF statement</b> lands on To review with "Type in its lines ›". Its page has one tab, <b>Type the lines</b>: the PDF on the left, the entry grid on the right. It is an <span class="st z">Own page</span> form, so its inputs are allowed; "Record 24 lines for review" is the title-line primary; Clear asks first ("Clear every line typed so far?").</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·4 STATES and PHONE</b><span>empty tabs, voided, read-only, the phone</span></div>
+<div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start">
+<div style="display:grid;gap:16px">
+<div class="card" style="width:400px"><div class="empty"><b>Nothing to review</b>Every line on every statement is decided. Import the next carrier statement when it arrives.<span class="btn p">Import a statement</span></div></div>
+<div class="card" style="width:400px"><div class="hd"><h3>A voided statement</h3></div><div style="padding:0 16px 16px" class="m">The title line keeps ‹ › and ⋯ › Original file; the strip's first cell reads <span class="st b">Voided 4 Nov 2026</span> with who and the reason under it; a line dialog shows the line and only Close.</div></div>
+<div class="card" style="width:400px"><div class="hd"><h3>Read-only</h3></div><div style="padding:0 16px 16px" class="m">Import a statement reads <span class="btn off sm">Import a statement</span> with "Importing is paused while the account is read-only." on hover; a line dialog shows the match as text and only Close.</div></div>
+</div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Statements</span><span>●●●</span></div><div class="pm"><div class="tl" style="border:0"><h1>Statements <i class="ib">i</i></h1></div><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">To review<span class="n w">2</span></span><span>Lines to match<span class="n w">13</span></span><span>Reviewed</span></div><span class="inp ph">⌕ Search statements</span><div class="pc"><div class="row"><b>American Amicable</b><span class="m sm12">Oct 2026</span></div><div class="row"><span class="m sm12">13 lines · −$1,596.58</span><span class="nx">Match 13 lines ›</span></div></div><div class="pc"><div class="row"><b>LA14 Market</b><span class="m sm12">Sep 2026</span></div><div class="row"><span class="m sm12 red">19 could not be read</span><span class="nx u">Re-process ›</span></div></div><span class="btn p" style="justify-content:center">Import a statement</span></div></div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Statement</span><span>●●●</span></div><div class="pm"><div class="trail"><a>Statements</a> › To review</div><h1>American Amicable · Oct 2026</h1><div style="display:flex;gap:8px"><span class="btn sm off">‹ None before</span><span class="btn sm">LA14 Market ›</span></div><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Waiting<span class="n w">13</span></span><span>Accepted</span><span>Set aside</span></div><div class="pc"><div class="row"><b>Row 1 · Alex Lake</b><span>$626.37</span></div><div class="row"><span class="m sm12">D674578782 · Commission</span><span class="nx">Match ›</span></div></div><div class="pc"><div class="row"><b>Row 2 · Hill, Morgan</b><span class="red">−$531.52</span></div><div class="row"><span class="m sm12">7115463837 · Chargeback</span><span class="nx">Match ›</span></div></div><span class="btn p" style="justify-content:center">Match row 1</span></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 2 · PAY ISSUES ═══════════════════════════════════ -->
+<section class="screen" id="s2">
+<h2>2 · Pay issues, with its dispute letters</h2>
+<p class="sub">/app/discrepancies (?view=letters|closed, ?source=hand), /app/discrepancies/letter (hand statements, a new tab with no frame), today's decisions on /app/needs-you/review?kind=money · CarrierDiscrepancies, DisputeLetters, payIssueGroups, item-decide (money)</p>
+
+<section class="board"><div class="cap"><b>2·0 CRITIQUE</b><span>today's list, letters and the decide flow</span></div>
+<div class="card crit"><ol>
+<li><b>Clicking a group does something hidden.</b> A group row (Aflac · Missing commission · 46 · $15,223.65) silently sets two filters and turns Group alike off; its "Review" button leaves for Carrier sync › Needs you › Review, another rail, whose way back is "Done for now".</li>
+<li><b>A pay issue has no page.</b> Its evidence, history and Dismiss / Open again live in an inline "Why" expansion; hand rows add Resolved / Write off / Reopen there; the Needs you form offers a different five choices. Three vocabularies: "In a letter", "Disputed", "letter drafted".</li>
+<li><b>Letters are two systems.</b> Carrier-file letters are a dialog and listed; hand-statement letters open in a new tab with no frame, are never listed, and Print marks them disputed. Letters out lists settled letters too, and each row carries up to four buttons (Read · PDF · I sent it by… · Record outcome); the carrier and its items don't link.</li>
+<li><b>Warnings pile up</b> above the strip (up to four Callouts, two citing migration ids); the strip's Coming back and Held tiles read $0.00 here. Checkboxes appear only on rows that may share a letter, with no word why the others can't.</li>
+</ol></div></section>
+
+<section class="board" id="s2-dir"><div class="cap"><b>2·A GROUPS THAT OPEN, ISSUES THAT HAVE A PAGE</b><span class="rec">Recommended</span><span>Open · Letters out · Settled · Closed on the title line; a group opens its own page; an issue opens its own page; the letter is drafted from the group</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="on">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Pay issues</b></div>
+<div class="tl"><h1>Pay issues <i class="ib">i</i></h1><div class="ut"><span class="on">Open<span class="n w">747</span></span><span>Letters out<span class="n w">1</span></span><span>Settled<span class="n">2</span></span><span>Closed<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Check now</span><span class="btn p">Work the largest</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:220px">⌕ Policy, client or carrier</span><span class="tc on">By carrier and kind <span class="n">14</span></span><span class="tc">One by one <span class="n">747</span></span><span class="tc">Not checked <span class="n w">2</span></span><span class="tc">Imported by hand <span class="n">0</span></span><span class="btn">Filters</span><span class="sp"></span><span class="m sm12">You appear to be owed <a class="amb bold">$49,783.32</a> · <a>581 without a rate</a></span></div>
+<table class="grow"><tr><th>Carrier · issue</th><th class="r">How many</th><th class="r">Owed to you</th><th class="r">Owed to the carrier</th><th>Oldest</th><th>What to do</th></tr>
+<tr class="lk"><td><span class="who">Aflac</span><span class="pn"><span class="amb">●</span> Missing commission</span></td><td class="r"><a>46</a></td><td class="r amb bold">$15,223.65</td><td class="r m">—</td><td>Aug 14<span class="pn">88 days</span></td><td><span class="nx">Check the pay lag, then a letter ›</span></td></tr>
+<tr class="lk"><td><span class="who">American Home Life</span><span class="pn"><span class="amb">●</span> Missing commission</span></td><td class="r"><a>41</a></td><td class="r amb bold">$12,664.38</td><td class="r m">—</td><td>Aug 20<span class="pn">82 days</span></td><td><span class="nx">Check the pay lag, then a letter ›</span></td></tr>
+<tr class="lk"><td><span class="who">Aetna / CVS</span><span class="pn"><span class="amb">●</span> Missing commission</span></td><td class="r"><a>32</a></td><td class="r amb bold">$10,966.84</td><td class="r m">—</td><td>Sep 2<span class="pn">69 days</span></td><td><span class="nx">Check the pay lag, then a letter ›</span></td></tr>
+<tr class="lk"><td><span class="who">American Amicable</span><span class="pn"><span class="amb">●</span> Missing commission · <a>581 without a rate</a></span></td><td class="r"><a>585</a></td><td class="r amb bold">$6,184.80</td><td class="r m">—</td><td>Jun 30<span class="pn">133 days</span></td><td><span class="nx u">Add the rate first ›</span></td></tr>
+<tr class="lk"><td><span class="who">Corebridge Financial</span><span class="pn"><span class="amb">●</span> Missing commission</span></td><td class="r"><a>25</a></td><td class="r amb bold">$4,467.80</td><td class="r m">—</td><td>Sep 9<span class="pn">62 days</span></td><td><span class="nx">Check the pay lag, then a letter ›</span></td></tr>
+<tr class="lk"><td><span class="who">Aflac</span><span class="pn"><span class="red">●</span> Wrong rate or premium</span></td><td class="r"><a>3</a></td><td class="r m">—</td><td class="r red bold">$1,566.13</td><td>Oct 1<span class="pn">40 days</span></td><td><span class="nx">Fix the rate first ›</span></td></tr>
+<tr class="lk"><td><span class="who">Aflac</span><span class="pn"><span class="red">●</span> Paid over</span></td><td class="r"><a>3</a></td><td class="r m">—</td><td class="r red bold">$1,566.13</td><td>Oct 1<span class="pn">40 days</span></td><td><span class="nx">Hold it: may be taken back ›</span></td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">Largest first<span class="sp"></span>Showing 1–7 of 14 groups · 747 issues <span class="pager"><span>‹</span><span class="on">1</span><span>2</span><span>›</span></span></div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Two money columns, never netted:</b> "Owed to you" and "Owed to the carrier" replace the signed Difference, which today adds +$ and −$ inside one group.</li><li><b>A group row opens the group's page</b> (2·1), not a hidden filter; "One by one" is the flat list as a chip, its rows opening each issue's page (2·2). "What to do" is today's "Usually" hint as the next step, in words.</li><li><b>Warnings become counts:</b> "Not checked 2" (carriers with no pay trigger or lag, today a Callout) is a chip that lists them; "581 without a rate" links to Setup › Rate card filtered to American Amicable. Database-update notices leave the page (they are an Insurvas matter, shown in the admin console).</li><li><b>Work the largest</b> opens the largest group's first issue; its ‹ › walk the group. Coming back and Held, $0.00 here, show in the toolbar's right only when not zero.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·B BY CARRIER</b><span class="alt">Direction B</span><span>one row per carrier; a letter goes to one carrier, so the carrier is the unit</span></div>
+<div class="frame"><div class="app" style="min-height:280px"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="on">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px">
+<div class="tl"><h1>Pay issues <i class="ib">i</i></h1><div class="ut"><span class="on">Open<span class="n w">747</span></span><span>Letters out<span class="n w">1</span></span><span>Settled<span class="n">2</span></span></div></div>
+<div class="card"><table><tr><th>Carrier</th><th class="r">Issues</th><th>Kinds</th><th class="r">Owed to you</th><th class="r">Owed to the carrier</th><th>Letter</th></tr>
+<tr class="lk"><td class="bold">Aflac</td><td class="r">52</td><td class="m">Missing 46 · Wrong rate 3 · Paid over 3</td><td class="r amb">$15,223.65</td><td class="r red">$3,132.26</td><td class="m">none yet</td></tr>
+<tr class="lk"><td class="bold">American Home Life</td><td class="r">41</td><td class="m">Missing 41</td><td class="r amb">$12,664.38</td><td class="r">—</td><td><span class="st i">2 settled</span></td></tr></table></div>
+<p class="m">Short list and one letter per row, but the next step differs by kind (fix the rate, hold, write), so a carrier row can't say what to do.</p>
+</div></div></div></section>
+
+<section class="board"><div class="cap"><b>2·C KINDS AS TABS</b><span class="alt">Direction C</span><span>Missing · Paid short · Chargebacks · Held · Paid over as the bar</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="on">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><div class="tl"><h1>Pay issues <i class="ib">i</i></h1><div class="ut"><span class="on">Missing<span class="n w">729</span></span><span>Wrong rate<span class="n">3</span></span><span>Paid over<span class="n">3</span></span><span>Chargebacks<span class="n">12</span></span><span>Letters<span class="n w">1</span></span></div></div>
+<p class="m">Each kind gets its own advice, but ten kinds don't fit one bar, and Closed and Letters compete with them for it.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · Groups that open ✓</b><br>Today's groups the owner knows, each with a page, each issue with a page; the letter starts from the group.</div><div><b>B · By carrier</b><br>The letter's unit, but no single next step.</div><div><b>C · Kinds as tabs</b><br>Too many kinds for one bar.</div></div></section>
+
+<!-- 2 · group page -->
+<section class="board" id="s2-grp"><div class="cap"><b>2·1 A GROUP</b><span class="rec">A</span><span>/app/discrepancies/group?carrier=…&amp;kind=missing: title is the group; Open · In a letter · Closed; ‹ › name the next group; the primary drafts the letter</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="on">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Pay issues</a> › <a>Open</a> › <b>Aflac · Missing commission</b></div>
+<div class="tl"><h1>Aflac · Missing commission</h1><div class="ut"><span class="on">Open<span class="n w">46</span></span><span>In a letter<span class="n">0</span></span><span>Closed<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn off">‹ None before</span><span class="btn">American Home Life · Missing ›</span><span class="btn p">Draft a letter for 46</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Owed to you</div><div class="v amb">$15,223.65</div><div class="fn">46 policies</div></div><div><div class="l">Usually</div><div class="v" style="font-size:14px">Not paid yet, or no rate to price it</div><div class="fn">check the pay lag, then a letter</div></div><div><div class="l">Aflac pays</div><div class="v">45 days after issue</div><div class="fn"><a>Carrier terms ›</a></div></div><div><div class="l">Last Aflac file</div><div class="v">Oct 1, 2026</div><div class="fn"><a>Statements ›</a></div></div><div><div class="l">Letters to Aflac</div><div class="v">None yet</div><div class="fn"><a>Dispute record ›</a></div></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:220px">⌕ Policy or client</span><span class="tc">Past the pay lag <span class="n w">39</span></span><span class="tc">Within the lag <span class="n">7</span></span><span class="sp"></span><span class="m sm12">Largest first</span></div>
+<table class="grow"><tr><th>Policy · client</th><th>Issued</th><th class="r">Expected</th><th class="r">Paid</th><th class="r">Owed to you</th><th>Found</th><th>Status</th></tr>
+<tr class="lk"><td><a class="who">A2K3391047</a><span class="pn"><a>Linda Moreno</a> · Final Expense Whole Life</span></td><td>Jul 28, 2026</td><td class="r">$918.40<span class="pn">from your rate card: 85%</span></td><td class="r">$0.00</td><td class="r amb bold">$918.40</td><td>Sep 12<span class="pn">59 days</span></td><td><span class="st w">Open</span></td></tr>
+<tr class="lk"><td><a class="who">A2K3388702</a><span class="pn"><a>Harold Pruitt</a> · Final Expense Whole Life</span></td><td>Jul 30, 2026</td><td class="r">$802.12</td><td class="r">$0.00</td><td class="r amb bold">$802.12</td><td>Sep 14<span class="pn">57 days</span></td><td><span class="st w">Open</span></td></tr>
+<tr class="lk"><td><a class="who">A2K3402215</a><span class="pn"><a>Gloria Benson</a> · Final Expense Whole Life</span></td><td>Aug 4, 2026</td><td class="r">$655.20</td><td class="r"><a>$327.60</a></td><td class="r amb bold">$327.60</td><td>Sep 19<span class="pn">52 days</span></td><td><span class="st w">Open</span></td></tr>
+<tr class="lk"><td><a class="who">A2K3410078</a><span class="pn"><a>Terrence Ward</a> · Final Expense Whole Life</span></td><td>Oct 2, 2026</td><td class="r">$540.00</td><td class="r">$0.00</td><td class="r amb bold">$540.00</td><td>Nov 1<span class="pn">9 days</span></td><td><span class="st z">Within the lag</span></td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">Every policy links to its page; Paid links to the statement lines<span class="sp"></span>Showing 1–25 of 46 <span class="pager"><span>‹</span><span class="on">1</span><span>2</span><span>›</span></span></div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>The group's next step is the primary.</b> "Draft a letter for 46" here; "Add the rate" for American Amicable's 581 unpriced; "Fix the rate" for Wrong rate (opens Setup › Rate card at Aflac); a Paid over group has no primary, its ⋯ holds "Hold all 3". The letter dialog lists the 46 with ticks, so choosing happens in the dialog, not the table.</li><li><b>Within the lag</b> issues are kept off the letter by default (the dialog says so), the reason today's checkboxes vanished silently.</li><li><b>⋯</b>: Check Aflac now · Dismiss the group… · Open the Aflac files.</li></ul></section>
+
+<!-- 2 · issue page -->
+<section class="board" id="s2-rec"><div class="cap"><b>2·2 A PAY ISSUE</b><span class="rec">A</span><span>/app/discrepancies/[id]: title is the policy and client; What's wrong · The lines · History; ‹ › name the next issue in its group</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="on">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Pay issues</a> › <a>Aflac · Missing commission</a> › <b>Linda Moreno</b></div>
+<div class="tl"><h1>Linda Moreno · A2K3391047</h1><div class="ut"><span class="on">What's wrong</span><span>The lines<span class="n">0</span></span><span>History<span class="n">2</span></span></div><span class="sp"></span><div class="acts"><span class="btn off">‹ None before</span><span class="btn">Harold Pruitt ›</span><span class="btn p">Decide</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Issue</div><div class="v amb">Missing commission</div><div class="fn"><a>46 in this group</a></div></div><div><div class="l">Expected</div><div class="v">$918.40</div><div class="fn">rate card 85% · eff. Jan 1, 2026</div></div><div><div class="l">Paid</div><div class="v">$0.00</div><div class="fn">no Aflac line yet</div></div><div><div class="l">Owed to you</div><div class="v amb">$918.40</div><div class="fn">tolerance $5.00</div></div><div><div class="l">Status</div><div class="v">Open</div><div class="fn">found Sep 12 · checked Nov 10</div></div></div>
+<div class="fill"><div class="two" style="flex:1;align-items:stretch">
+<div class="card"><div class="hd"><h3>Why it's flagged</h3></div><div style="padding:0 16px 16px;display:grid;gap:10px" class="m"><p><b style="color:var(--text)">Aflac has paid nothing on this policy</b> 105 days after it was issued; Aflac usually pays 45 days after issue.</p><ul style="margin:0;padding-left:18px"><li>The commission hasn't been paid yet, or</li><li>the policy was paid under another writing number, or</li><li>the rate card has no rate for this product.</li></ul><p>Check <a>Aflac's Oct 1 statement</a> for the client's name, then put it on a letter.</p></div></div>
+<div class="card"><div class="hd"><h3>The policy</h3><span class="sp"></span><a class="sm12">Open the policy ›</a></div><table><tr><td class="m sm12" style="width:140px">Client</td><td><a>Linda Moreno</a></td></tr><tr><td class="m sm12">Carrier · product</td><td>Aflac · Final Expense Whole Life</td></tr><tr><td class="m sm12">Annual premium</td><td>$1,080.48</td></tr><tr><td class="m sm12">Issued</td><td>Jul 28, 2026</td></tr><tr><td class="m sm12">Written by</td><td><a>Dana Whitfield</a> · writing no. AF-20931</td></tr><tr><td class="m sm12">Carrier says</td><td>In force (Oct 1 file)</td></tr></table></div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>One "Decide" dialog for every source</b> (2·3): today's Dismiss, the Needs you five choices and the hand-row Resolved / Write off merge into one list, worded the same everywhere. The issue page replaces the Review page for money; Needs you › Money links here.</li><li><b>The lines</b>: every ledger line behind "Paid", each linking to its statement row. <b>History</b>: Found · checked · decided, by whom, with notes.</li><li><b>⋯</b>: Put it on a letter · Open the policy · Open again (closed issues).</li></ul></section>
+
+<section class="board" id="s2-pop"><div class="cap"><b>2·3 DECIDE, THE LETTER, DISMISS, TOASTS</b><span class="st i">Dialog · md 440 / xl 720</span><span>from an issue's title line and a group's title line</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Decide (issue title line) · md</div><div class="dlg"><div class="dh"><h2>What do you want to do?</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Linda Moreno · A2K3391047 · $918.40 owed to you</p><div class="db"><div class="rcard on"><b>Put it on a letter to Aflac</b><span class="m sm12">with the figures; you send it</span></div><div class="rcard"><b>The rate is wrong</b><span class="m sm12">opens Setup › Rate card at Aflac</span></div><div class="rcard"><b>It was paid outside the statement</b><span class="m sm12">say when and how</span></div><div class="rcard"><b>Write it off</b><span class="m sm12">say why; it stays on record</span></div><div class="rcard"><b>Dismiss</b><span class="m sm12">stays dismissed even if the files keep showing it</span></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn">Save</span><span class="btn p">Save and open Harold Pruitt</span></div></div></div>
+<div><div class="lbltag">Write it off · with its error line</div><div class="dlg"><div class="dh"><h2>What do you want to do?</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div class="rcard on"><b>Write it off</b></div><div><div class="lbl">Why it is written off</div><div class="inp ta err"></div><div class="errl">Say why, for whoever looks next.</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Save</span></div></div></div>
+<div><div class="lbltag">Draft a letter (group title line) · xl</div><div class="dlg xl"><div class="dh"><h2>Dispute letter to Aflac: $14,683.65</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Drafted from the records, figure for figure. Insurvas never sends it: save it, download the PDF and send it yourself, then record what happened.</p><div class="db"><div class="fg2"><div><div class="lbl">To (Aflac's commissions department)</div><div class="inp ta">Aflac Commissions Department<br>1932 Wynnton Rd, Columbus, GA 31999</div><div class="hint"><span class="box x"></span> Save as Aflac's address</div></div><div><div class="lbl">On this letter</div><div style="border:1px solid var(--border);border-radius:8px;max-height:150px;overflow:hidden"><table><tr><td style="height:32px"><span class="box x"></span></td><td>A2K3391047 · Linda Moreno</td><td class="r">$918.40</td></tr><tr><td style="height:32px"><span class="box x"></span></td><td>A2K3388702 · Harold Pruitt</td><td class="r">$802.12</td></tr><tr><td style="height:32px"><span class="box"></span></td><td class="m">A2K3410078 · within the lag</td><td class="r m">$540.00</td></tr></table></div><div class="hint">39 past the pay lag ticked · 7 within it left off</div></div></div><div class="letter"><b>Re: Commission discrepancies · writing number AF-20931</b><br>To the Commissions Department,<br>Comparing your commission statements with my contract level and your commission schedule, the 39 payments below differ from what is owed. The total is $14,683.65. Please review them and pay the difference, or tell me where my figures are wrong.</div></div><div class="df"><span class="m sm12">Also marks the 39 issues "In a letter"</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save letter</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts and errors</div>
+<div class="toast"><span class="tk ok">✓</span><div>Letter saved.<small>Download it on Letters out, send it, then mark it sent.</small></div><span class="u">Open it</span></div>
+<div class="toast"><span class="tk ok">✓</span><div>Dismissed.<small>Harold Pruitt is open next.</small></div><span class="u">Undo</span></div>
+<div class="toast"><span class="tk ok">✓</span><div>Written off.</div></div>
+<div class="toast"><span class="tk ok">✓</span><div>Checked against the latest files.<small>2 new · 0 settled</small></div></div>
+<div class="toast"><span class="tk bd">✕</span><div>The letter could not be drafted.<small>One of these items can't be traced to its source rows right now.</small></div></div></div>
+</div>
+<ul class="notes"><li><b>Hand-statement issues use the same letter dialog</b>: the letter is saved and listed on Letters out like any other, and the PDF downloads from there; the separate new-tab letter page and its Print-marks-disputed side effect go.</li></ul></section>
+
+<!-- 2 · letters -->
+<section class="board" id="s2-let"><div class="cap"><b>2·4 LETTERS OUT and A LETTER</b><span class="rec">A</span><span>Letters out lists only letters waiting on you or the carrier; a row opens the letter's page; Settled holds the rest</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="on">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Pay issues</b></div>
+<div class="tl"><h1>Pay issues <i class="ib">i</i></h1><div class="ut"><span>Open<span class="n w">747</span></span><span class="on">Letters out<span class="n w">1</span></span><span>Settled<span class="n">2</span></span><span>Closed<span class="n">0</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Work the largest</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:220px">⌕ Carrier or policy</span><span class="tc">Not sent yet <span class="n w">1</span></span><span class="tc">Sent, no answer <span class="n">0</span></span><span class="sp"></span><span class="m sm12">Oldest first</span></div>
+<table class="grow"><tr><th>Carrier</th><th>Drafted</th><th class="r">Items</th><th class="r">Claimed</th><th>Where it stands</th><th>What to do</th></tr>
+<tr class="lk"><td><a class="who">American Amicable</a></td><td>Nov 3, 2026</td><td class="r"><a>1</a></td><td class="r">$0.00</td><td><span class="st w">Saved, not sent</span></td><td><span class="nx">Send it, then mark it sent ›</span></td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">Settled letters (accepted, partly credited, rejected) are on Settled, with each carrier's record<span class="sp"></span>Showing 1 of 1 letter</div>
+</div></div></div></div></div>
+<div class="frame" style="margin-top:20px"><div class="app"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="on">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Pay issues</a> › <a>Settled</a> › <b>American Home Life · Nov 3</b></div>
+<div class="tl"><h1>Letter to American Home Life · Nov 3, 2026</h1><div class="ut"><span class="on">The letter</span><span>Items<span class="n">2</span></span><span>History<span class="n">3</span></span></div><span class="sp"></span><div class="acts"><span class="btn off">‹ None before</span><span class="btn">American Home Life · Nov 3 (2) ›</span><span class="btn">Download PDF</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Claimed</div><div class="v">$518.50</div><div class="fn"><a>2 items</a></div></div><div><div class="l">Sent</div><div class="v">By email</div><div class="fn">Nov 3, 2026</div></div><div><div class="l">Outcome</div><div class="v amb">Partly credited</div><div class="fn">recorded Nov 9</div></div><div><div class="l">Credited</div><div class="v grn">$129.60</div><div class="fn"><a>the statement line ›</a></div></div><div><div class="l">American Home Life record</div><div class="v">2 of 2</div><div class="fn">credited $530.98 of $1,275.46 claimed</div></div></div>
+<div class="fill"><div class="card" style="padding:16px"><div class="letter"><b>Ellery &amp; Fields Insurance</b> · NPN 20918834 · November 3, 2026<br><br>American Home Life · Commissions Department<br><br><b>Re: Commission discrepancies · writing number AMW5029736</b><br>To the Commissions Department,<br>Comparing your commission statements with my contract level and your commission schedule, the 2 payments below differ from what is owed. The total is $518.50. Please review them and pay the difference, or tell me where my figures are wrong.<br><br>Thank you,<br>Ellery Fields</div></div></div>
+</div></div></div>
+<ul class="notes"><li><b>The letter's page:</b> the letter exactly as drafted ("A sent letter never changes"); Items lists the issues on it, each linking to its pay issue page; History is drafted · sent · acknowledged · outcome. The primary follows the state: a saved letter shows <b>Mark sent</b>, a sent one <b>Record the outcome</b>, a settled one none (Download PDF stays).</li><li><b>⋯</b>: Mark acknowledged (sent letters) · Download PDF · Open the carrier's statements.</li><li>Settled is the same table with Outcome and Credited columns and the per-carrier record ("2 of 2 · credited $530.98 of $1,275.46 claimed") as the toolbar's right.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·5 LETTER DIALOGS, STATES, PHONE</b><span class="st i">Dialog · md 440</span><span>Mark sent, Record the outcome, empty tabs, read-only</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Mark sent (letter title line)</div><div class="dlg"><div class="dh"><h2>How did you send it?</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Letter to American Amicable · Nov 3, 2026 · $0.00 claimed</p><div class="db"><div class="chips"><span class="tc on">Email</span><span class="tc">The carrier's portal</span><span class="tc">Post</span></div><div><div class="lbl">Sent on</div><div class="inp">Nov 10, 2026</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Mark sent</span></div></div></div>
+<div><div class="lbltag">Record the outcome · with its error line</div><div class="dlg"><div class="dh"><h2>How did it end?</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Recorded for this carrier's dispute record.</p><div class="db"><div class="chips"><span class="tc">Accepted in full</span><span class="tc on">Partly credited</span><span class="tc">Rejected</span></div><div><div class="lbl">Amount credited ($)</div><div class="inp err">412.5.0</div><div class="errl">Enter the amount, like 412.50.</div></div><div><div class="lbl">Notes (optional)</div><div class="inp ph">What the carrier said</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><div>Marked sent by email.</div></div>
+<div class="toast"><span class="tk ok">✓</span><div>Outcome recorded.<small>The letter moved to Settled.</small></div></div></div>
+<div style="display:grid;gap:16px">
+<div class="card" style="width:380px"><div class="empty"><b>No open pay issues</b>Every finding is decided. New ones appear when the next files are read.</div></div>
+<div class="card" style="width:380px"><div class="empty"><b>No letters out</b>Open a group on Open and draft a letter for it. You send it; record here what happened.</div></div>
+<div class="card" style="width:380px"><div class="hd"><h3>Read-only</h3></div><div style="padding:0 16px 16px" class="m">Decide, Draft a letter, Mark sent and Check now read disabled with "Paused while the account is read-only." on hover; Download PDF stays.</div></div></div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Pay issues</span><span>●●●</span></div><div class="pm"><div class="tl" style="border:0"><h1>Pay issues <i class="ib">i</i></h1></div><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Open<span class="n w">747</span></span><span>Letters out<span class="n w">1</span></span><span>Settled</span></div><div class="m sm12">You appear to be owed <span class="amb bold">$49,783.32</span></div><div class="pc"><div class="row"><b>Aflac</b><span class="amb bold">$15,223.65</span></div><div class="row"><span class="m sm12">Missing commission · 46</span><span class="nx">Open ›</span></div></div><div class="pc"><div class="row"><b>American Home Life</b><span class="amb bold">$12,664.38</span></div><div class="row"><span class="m sm12">Missing commission · 41</span><span class="nx">Open ›</span></div></div><div class="pc"><div class="row"><b>Aflac</b><span class="red bold">$1,566.13 to the carrier</span></div><div class="row"><span class="m sm12">Paid over · 3</span><span class="nx">Open ›</span></div></div><span class="btn p" style="justify-content:center">Work the largest</span></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 3 · ATTRIBUTION ═══════════════════════════════════ -->
+<section class="screen" id="s3">
+<h2>3 · The Attribution queue: who gets the credit</h2>
+<p class="sub">/app/attribution (today a redirect to /app/needs-you?view=agency&amp;group=credit), decided on /app/needs-you/review?kind=credit · needs-you-list, item-decide (credit)</p>
+
+<section class="board"><div class="cap"><b>3·0 CRITIQUE</b><span>today's Needs you › Credit</span></div>
+<div class="card crit"><ol>
+<li><b>The queue isn't there any more.</b> /app/attribution lands on Carrier sync › Needs you with the Credit chip on, among 4,100 items; the rail says Needs you, the title says Needs you, and "Review the oldest →" ignores the Credit chip and can open a client match.</li>
+<li><b>Two different jobs share one chip.</b> "Who gets the credit" (a $ line two producers could own) and "Who's the agent" (an agent code nobody owns, "11 policies · no one in the agency has this code") are both Credit; the 80 rows shown are almost all agent codes.</li>
+<li><b>The row hides what matters.</b> About reads "{policy} · $X" with no carrier and no producer names; Owner is "Owner or bookkeeper" on every row; "Group alike" does nothing here.</li>
+</ol></div></section>
+
+<section class="board" id="s3-dir"><div class="cap"><b>3·A ITS OWN PAGE ON THE COMMISSIONS RAIL</b><span class="rec">Recommended</span><span>Who gets the credit · Agent codes · Decided on the title line; the row names both producers; a row opens the item's page</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="on">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Who gets the credit</b></div>
+<div class="tl"><h1>Who gets the credit <i class="ib">i</i></h1><div class="ut"><span class="on">To decide<span class="n w">38</span></span><span>Agent codes<span class="n w">42</span></span><span>Decided<span class="n">11</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">Decide the oldest</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Policy, client or producer</span><span class="tc">Two producers named <span class="n">24</span></span><span class="tc">Code isn't anyone yet <span class="n">9</span></span><span class="tc">No writing number <span class="n">5</span></span><span class="inp sel" style="width:160px">All carriers</span><span class="sp"></span><span class="m sm12"><a>$9,412.70</a> waiting to be credited</span></div>
+<table class="grow"><tr><th>Policy · client</th><th>Carrier</th><th class="r">Amount</th><th>Why</th><th>Named</th><th>Waiting</th><th>What to do</th></tr>
+<tr class="lk"><td><a class="who">0119384420</a><span class="pn"><a>Marisol Vega</a></span></td><td>American Amicable</td><td class="r"><a>$704.40</a></td><td>The writing number and the application name different producers</td><td><a>Dana Whitfield</a> <span class="m sm12">writing no.</span><span class="pn"><a>Marcus Bell</a> · application</span></td><td class="amb">41 d</td><td><span class="nx">Give the credit ›</span></td></tr>
+<tr class="lk"><td><a class="who">AM09986209</a><span class="pn"><a>Ray George</a></span></td><td>Americo</td><td class="r"><a>$1,262.52</a></td><td>Agent code AMW5029736 isn't anyone yet</td><td class="m">—<span class="pn"><a>Ruth Alvarez</a> · application</span></td><td class="amb">38 d</td><td><span class="nx">Give the credit ›</span></td></tr>
+<tr class="lk"><td><a class="who">MOO-5521907</a><span class="pn"><a>Owen Testbrook</a></span></td><td>Mutual of Omaha</td><td class="r"><a>$493.44</a></td><td>No writing number on the row</td><td class="m">—<span class="pn"><a>Marisol Vance</a> · application</span></td><td>12 d</td><td><span class="nx">Give the credit ›</span></td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">Oldest first; amber after 30 days, red after 90<span class="sp"></span>Showing 1–25 of 38</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Two tabs, two jobs:</b> To decide (a $ line to credit) and Agent codes (a code to map, which then credits every line on it). Agent codes rows open Carrier sync's "Map the code" dialog (built 2026-11-10), so the code is mapped in one place.</li><li><b>The row names who could get it</b>, from the writing number and from the application, so most items are decided by reading the row and pressing one choice on the next page. Carrier and amount are columns; the amount links to the statement line.</li><li><b>Needs you keeps a Credit chip</b> that links here, so Carrier sync's count still adds up.</li></ul></section>
+
+<section class="board"><div class="cap"><b>3·B STAY IN NEEDS YOU, FIXED</b><span class="alt">Direction B</span><span>Credit stays a Needs you chip; Review the oldest follows the chip; the row names both producers</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="main" style="padding-bottom:16px;grid-column:2/4"><div class="tl"><h1>Needs you <i class="ib">i</i></h1><div class="ut"><span>Mine<span class="n">1,829</span></span><span class="on">Agency<span class="n w">4,100</span></span><span>Closed</span></div></div><p class="m">Least change, but a bookkeeper paying producers keeps leaving Commissions for Carrier sync, and the credit decisions sit among 3,035 client matches.</p></div></div></div></section>
+
+<section class="board"><div class="cap"><b>3·C A TAB ON PRODUCER PAY</b><span class="alt">Direction C</span><span>"Credit to decide" as Producer pay's last tab</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="on">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><div class="tl"><h1>Producer pay <i class="ib">i</i></h1><div class="ut"><span>Pay</span><span>Three truths</span><span class="on">Credit to decide<span class="n w">38</span></span></div></div><p class="m">Close to where the money lands, but agent codes have no home there, and the bar gets crowded.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · Its own page ✓</b><br>The queue returns at its own address, between Pay issues and Producer pay, in money order.</div><div><b>B · Needs you, fixed</b><br>Least change; wrong area for pay work.</div><div><b>C · Producer pay tab</b><br>Close to pay, crowds the bar.</div></div></section>
+
+<section class="board" id="s3-rec"><div class="cap"><b>3·1 AN ITEM</b><span class="rec">A</span><span>/app/attribution/[id]: title is the policy and client; Decide · The row as sent; ‹ › name the neighbours</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="on">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Who gets the credit</a> › <a>To decide</a> › <b>Marisol Vega</b></div>
+<div class="tl"><h1>Marisol Vega · 0119384420</h1><div class="ut"><span class="on">Decide</span><span>The row as sent</span></div><span class="sp"></span><div class="acts"><span class="btn off">‹ None before</span><span class="btn">Ray George ›</span><span class="btn">Skip</span><span class="btn p">Give the credit and next</span></div></div>
+<div class="strip"><div><div class="l">Amount</div><div class="v">$704.40</div><div class="fn">reported · <a>Oct statement row 14</a></div></div><div><div class="l">Carrier</div><div class="v">American Amicable</div><div class="fn"><a>0119384420 policy ›</a></div></div><div><div class="l">Writing number</div><div class="v">0000569319</div><div class="fn">→ <a>Dana Whitfield</a></div></div><div><div class="l">Submitted by</div><div class="v"><a style="color:var(--text)">Marcus Bell</a></div><div class="fn">application Jun 2, 2026</div></div><div><div class="l">Waiting</div><div class="v amb">41 days</div><div class="fn">since Sep 30</div></div></div>
+<div class="fill"><div class="two" style="flex:1;align-items:stretch">
+<div class="card"><div class="hd"><h3>Who gets the credit?</h3></div><div style="padding:0 16px 16px;display:grid;gap:10px"><div class="rcard on"><b>Dana Whitfield</b><span class="m sm12">named by the writing number</span></div><div class="rcard"><b>Marcus Bell</b><span class="m sm12">submitted the application</span></div><div class="rcard"><b>Someone else</b><span class="m sm12">any producer in the agency</span></div><div><div class="lbl">Why (kept with the decision)</div><div class="inp ta ph">e.g. Dana wrote it; Marcus only keyed the app</div></div></div></div>
+<div class="card"><div class="hd"><h3>When you save</h3></div><div style="padding:0 16px 16px" class="m">This $704.40 row counts for <b style="color:var(--text)">Dana Whitfield</b>: it posts to their ledger and shows in their totals, with your reason. <a>Dana's pay ›</a><br><br>If the two agreed to share this policy, record a <a>commission split</a> instead; every later line then divides by it.</div></div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Choosing is on the page, not in a row:</b> this is the item's own page (the old Review page's right side, given an address). The form here is the decision, so its inputs are allowed; the list stays a list.</li><li>Errors: "Choose who gets the credit." under the choices; "Say why, for whoever looks next." under Why. Toast: "Credit given." with "Ray George is open next". Item gone: "This item is closed · Someone decided it, a newer file answered it, or it isn't yours to see." with "Back to Who gets the credit".</li><li><b>Read-only</b>: the choices show as text; the title line keeps ‹ › only. <b>Phone</b>: the strip stacks, the choices are full-width cards, the primary sits at the foot.</li></ul></section>
+</section>
+
+<!-- ═══════════════════════════════════ 4 · PRODUCER PAY ═══════════════════════════════════ -->
+<section class="screen" id="s4">
+<h2>4 · Producer pay</h2>
+<p class="sub">/app/producer-reconciliation (period and view in client state only) → /app/producers/[id]?tab=money · reconciliation-board, ProducerMoneyTab</p>
+
+<section class="board"><div class="cap"><b>4·0 CRITIQUE</b><span>today's board and the producer's Money tab</span></div>
+<div class="card crit"><ol>
+<li><b>The page can't be linked.</b> Pay / Three truths and Last month / This month are two Segmented controls in the toolbar, held in memory; Back loses them. No search across producers.</li>
+<li><b>Three truths packs eight columns</b> with chips as headers and unlabelled variances; the threshold that opens a review lives only in an (i) ("A difference over $25 opens a review item").</li>
+<li><b>Review is a button inside the row,</b> and a reviewed item vanishes with no history. The title-line button "Run payouts" opens a page called Team payouts whose tab is "Run payroll".</li>
+<li><b>The producer's Money tab is My pay, unchanged:</b> "Paid to you" in the owner's view, raw "2026-10-01 – 2026-10-31" periods, a ledger that says "oldest first" but lists newest first, and only "Open statement" links.</li>
+</ol></div></section>
+
+<section class="board" id="s4-dir"><div class="cap"><b>4·A THE MONTH, THEN THE PERSON</b><span class="rec">Recommended</span><span>Pay · Three truths · To review on the title line; the month is a select beside the buttons, in the address; a row opens the producer's pay</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="on">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Producer pay</b></div>
+<div class="tl"><h1>Producer pay <i class="ib">i</i></h1><div class="ut"><span class="on">Pay</span><span>Three truths</span><span>To review<span class="n w">3</span></span></div><span class="sp"></span><div class="acts"><span class="inp sel" style="width:160px">October 2026</span><span class="btn p">Pay October</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:220px">⌕ Producer</span><span class="tc">Owes the agency <span class="n w">1</span></span><span class="tc">No level on a policy <span class="n w">2</span></span><span class="sp"></span><span class="m sm12">Reported basis · <a>$16,211.67 owed</a> to 5 producers</span></div>
+<table class="grow"><tr><th>Producer</th><th class="r">Earned</th><th class="r">Advanced</th><th class="r">Charged back</th><th class="r">Paid out</th><th class="r">Owed at month end</th><th>Review</th></tr>
+<tr class="lk"><td><span class="who">Dana Whitfield</span><span class="pn">Big split · 70%</span></td><td class="r"><a>$7,842.10</a></td><td class="r"><a>$5,120.00</a></td><td class="r red"><a class="red">−$612.40</a></td><td class="r"><a>$0.00</a></td><td class="r bold">$7,229.70</td><td><span class="st g1">Within $25</span></td></tr>
+<tr class="lk"><td><span class="who">Marcus Bell</span><span class="pn">Salary + bonus</span></td><td class="r"><a>$3,215.88</a></td><td class="r"><a>$2,400.00</a></td><td class="r red"><a class="red">−$180.22</a></td><td class="r">$0.00</td><td class="r bold">$3,035.66</td><td><span class="st w">Expected vs reported · $212.40</span></td></tr>
+<tr class="lk"><td><span class="who">Marisol Vance</span><span class="pn">Big split · 65%</span><span class="pn amb">2 policies with no level</span></td><td class="r"><a>$4,904.35</a></td><td class="r"><a>$3,300.00</a></td><td class="r">$0.00</td><td class="r">$0.00</td><td class="r bold">$4,904.35</td><td><span class="st w">Reported vs received · $96.00</span></td></tr>
+<tr class="lk"><td><span class="who">Ruth Alvarez</span><span class="pn">Sidekick · $40 per save</span></td><td class="r"><a>$1,240.00</a></td><td class="r">—</td><td class="r">$0.00</td><td class="r">$0.00</td><td class="r bold">$1,240.00</td><td><span class="st g1">Within $25</span></td></tr>
+<tr class="lk"><td><span class="who">Owen Price</span><span class="pn">Contract level</span></td><td class="r"><a>$2,618.44</a></td><td class="r"><a>$1,950.00</a></td><td class="r red"><a class="red">−$2,422.00</a></td><td class="r">$0.00</td><td class="r bold red">−$198.04<span class="pn">owes the agency</span></td><td><span class="st w">Expected vs reported · $64.10</span></td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">From the carrier statements: the basis payouts are made on<span class="sp"></span>Showing 1–5 of 5 producers</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Pay · Three truths · To review</b> are the bar (<span class="mono">?view=</span>), the month is <span class="mono">?period=2026-10</span>; both survive Back and can be sent as a link. To review lists the open review items, one row each, opening the review dialog (4·2); reviewed ones stay on it under a "Reviewed" chip.</li><li><b>Pay October</b> opens Team payouts' Run payroll for the same month (one name for the job). Every figure links to the producer's ledger filtered to that kind and month.</li><li><b>Three truths</b>: Producer · Expected · Reported · Received · Expected → reported · Reported → received, each header a word, each variance amber when over the $25 threshold, stated in the toolbar ("Differences over $25 open a review").</li></ul></section>
+
+<section class="board"><div class="cap"><b>4·B ONE "TEAM PAY" PAGE</b><span class="alt">Direction B</span><span>Producer pay and Team payouts merge: Check · Pay · Runs · Pay plans</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="on">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><div class="tl"><h1>Team pay <i class="ib">i</i></h1><div class="ut"><span class="on">Check<span class="n w">3</span></span><span>Pay October</span><span>Runs</span><span>Pay plans<span class="n w">1</span></span></div><span class="sp"></span><div class="acts"><span class="inp sel" style="width:160px">October 2026</span></div></div>
+<p class="m">One page for the month's pay, start to finish. Three truths then has no tab of its own, and the rail loses an entry the owner named.</p></div></div></div></section>
+
+<section class="board"><div class="cap"><b>4·C ONE CARD PER PRODUCER</b><span class="alt">Direction C</span><span>a card each: owed, the three truths as a bar, the review in words</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="on">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"><div class="pc"><b>Dana Whitfield</b><span class="big">$7,229.70</span><span class="m sm12">Within $25</span></div><div class="pc"><b>Marcus Bell</b><span class="big">$3,035.66</span><span class="amb sm12">Expected vs reported $212.40</span></div><div class="pc"><b>Marisol Vance</b><span class="big">$4,904.35</span><span class="amb sm12">Reported vs received $96.00</span></div></div><p class="m" style="margin-top:12px">Friendly at six producers, slow at forty; no column to compare.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · The month, then the person ✓</b><br>Linkable views and month, a review tab with history, Pay October as the next step.</div><div><b>B · One Team pay page</b><br>Fewest pages; folds two rail entries.</div><div><b>C · Cards</b><br>Readable, doesn't scale.</div></div></section>
+
+<section class="board" id="s4-rec"><div class="cap"><b>4·1 A PRODUCER'S PAY</b><span class="rec">A</span><span>/app/producers/[id]?tab=money: the producer's title; Overview · Carriers · Onboarding · Money; ‹ › name the next producer in Producer pay's order</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="on">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Producer pay</a> › <a>October 2026</a> › <b>Marcus Bell</b></div>
+<div class="tl"><h1>Marcus Bell</h1><div class="ut"><span>Overview</span><span>Carriers</span><span>Onboarding</span><span class="on">Money</span></div><span class="sp"></span><div class="acts"><span class="btn">‹ Dana Whitfield</span><span class="btn">Marisol Vance ›</span><span class="btn p">Review $212.40</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Owed · reported</div><div class="v">$3,035.66</div><div class="fn">at Oct 31, after payouts</div></div><div><div class="l">Earned · October</div><div class="v"><a style="color:var(--text)">$3,215.88</a></div><div class="fn">14 policies</div></div><div><div class="l">Charged back</div><div class="v red">−$180.22</div><div class="fn"><a>2 chargebacks</a></div></div><div><div class="l">Paid out · 2026</div><div class="v">$21,470.00</div><div class="fn"><a>9 statements</a></div></div><div><div class="l">Pay plan</div><div class="v" style="font-size:14px"><a style="color:var(--text)">Salary + bonus</a></div><div class="fn">$2,400 base · 12% · $25 per app</div></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="tc on">Ledger <span class="n">48</span></span><span class="tc">Statements <span class="n">9</span></span><span class="tc">Chargebacks <span class="n">2</span></span><span class="inp sel" style="width:150px">October 2026</span><span class="sp"></span><span class="m sm12">Newest first</span><span class="btn sm">Download CSV</span></div>
+<table class="grow"><tr><th>Date</th><th>Entry</th><th>Client · policy</th><th>Carrier</th><th class="r">Amount</th></tr>
+<tr class="lk"><td>Oct 28, 2026</td><td>Share of earned commission<span class="pn">reported · 12% of $1,040.00</span></td><td><a>Linda Moreno</a><span class="pn"><a>A2K3391047</a></span></td><td>Aflac</td><td class="r">$124.80</td></tr>
+<tr class="lk"><td>Oct 21, 2026</td><td>Chargeback<span class="pn">reported · policy lapsed Sep 30</span></td><td><a>Jordan Bell</a><span class="pn"><a>7113579387</a></span></td><td>American Amicable</td><td class="r red">−$21.09</td></tr>
+<tr class="lk"><td>Oct 1, 2026</td><td>Base pay<span class="pn">salary + bonus plan</span></td><td class="m">—</td><td class="m">—</td><td class="r">$2,400.00</td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table>
+<div class="foot">A correction is a new entry, never an edit<span class="sp"></span>Showing 1–25 of 48 entries</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>‹ Dana Whitfield · Marisol Vance ›</b> walk Producer pay's list for the same month; from the producer roster they walk the roster. The primary is the open review ("Review $212.40"); with none, it is gone.</li><li><b>Ledger · Statements · Chargebacks</b> are chips over one table (the tab is Money; a second bar isn't allowed). A ledger row opens the statement line it came from; a statement row opens the producer statement (7·1). Wording is the owner's view: "Paid to Marcus", never "Paid to you".</li><li><b>⋯</b>: Open the pay plan · Write off what they owe (when below zero; Confirm, 6·3) · Download October's statement.</li></ul></section>
+
+<section class="board" id="s4-pop"><div class="cap"><b>4·2 REVIEW, STATES, PHONE</b><span class="st i">Dialog · md 440</span><span>a review item, empty tabs, read-only</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Review (To review row · producer title line)</div><div class="dlg"><div class="dh"><h2>Review Marcus Bell</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Expected vs reported: $212.40. Marking it reviewed changes no number.</p><div class="db"><div class="kv"><div class="k">Expected</div><div><a>$3,428.28</a> from the rate card</div><div class="k">Reported</div><div><a>$3,215.88</a> on the statements</div><div class="k">Biggest gap</div><div><a>AM09986209 · Ray George</a> · $126.25</div></div><div><div class="lbl">What you found</div><div class="inp ta ph">For example: the carrier pays this level next cycle.</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Mark reviewed</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><div>Marked reviewed.<small>The numbers are unchanged; a correction is an adjustment on the ledger.</small></div></div>
+<div class="toast"><span class="tk bd">✕</span><div>That didn't save.<small>Try again; nothing was changed.</small></div></div></div>
+<div style="display:grid;gap:16px">
+<div class="card" style="width:380px"><div class="empty"><b>Nothing needs a review</b>Differences over $25 open a review here. Reviewed items stay under "Reviewed".</div></div>
+<div class="card" style="width:380px"><div class="empty"><b>No producers yet</b>Each producer's three numbers appear once statements are posted.<span class="btn">Open Statements</span></div></div>
+<div class="card" style="width:380px"><div class="hd"><h3>Read-only</h3></div><div style="padding:0 16px 16px" class="m">Pay October and Mark reviewed read disabled with "Paused while the account is read-only."; the review dialog shows the note as text.</div></div></div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Producer pay</span><span>●●●</span></div><div class="pm"><div class="tl" style="border:0"><h1>Producer pay <i class="ib">i</i></h1></div><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Pay</span><span>Three truths</span><span>To review<span class="n w">3</span></span></div><span class="inp sel">October 2026</span><div class="pc"><div class="row"><b>Dana Whitfield</b><span class="bold">$7,229.70</span></div><div class="row"><span class="m sm12">Earned $7,842.10</span><span class="st g1">Within $25</span></div></div><div class="pc"><div class="row"><b>Marcus Bell</b><span class="bold">$3,035.66</span></div><div class="row"><span class="m sm12">Earned $3,215.88</span><span class="st w">$212.40</span></div></div><div class="pc"><div class="row"><b>Owen Price</b><span class="bold red">−$198.04</span></div><div class="row"><span class="m sm12">owes the agency</span><span class="st w">$64.10</span></div></div><span class="btn p" style="justify-content:center">Pay October</span></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 5 · MY PAY ═══════════════════════════════════ -->
+<section class="screen" id="s5">
+<h2>5 · My pay (a producer)</h2>
+<p class="sub">/app/my-pay · ProducerMoneyTab with url /api/app/agency/my-pay; its statements open /app/producer-statements/[runId] with no frame</p>
+
+<section class="board"><div class="cap"><b>5·0 CRITIQUE</b><span>today's page</span></div>
+<div class="card crit"><ol>
+<li><b>Two cards, no time.</b> A strip, a Statements card and a Ledger card stacked; no month picker, so the ledger is every entry ever, and the strip mixes "Balance · reported" (all time) with nothing for this month.</li>
+<li><b>Periods read as code:</b> "2026-10-01 – 2026-10-31", "Paid 2026-11-03". The only link is "Open statement"; client and policy don't link.</li>
+<li><b>A statement leaves the app's frame:</b> it opens as a bare page titled "Your pay · October 2026", with no rail and no way to the next month.</li>
+</ol></div></section>
+
+<section class="board" id="s5-dir"><div class="cap"><b>5·A STATEMENTS FIRST, THE MONTH IN THE ADDRESS</b><span class="rec">Recommended</span><span>Statements · Ledger · Chargebacks on the title line; the month select beside them; a statement opens inside the frame</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><a class="on">My pay</a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>My pay</b></div>
+<div class="tl"><h1>My pay <i class="ib">i</i></h1><div class="ut"><span class="on">Statements<span class="n">9</span></span><span>Ledger<span class="n">48</span></span><span>Chargebacks<span class="n">2</span></span></div><span class="sp"></span><div class="acts"><span class="inp sel" style="width:130px">2026</span></div></div>
+<div class="strip"><div><div class="l">Owed to you</div><div class="v">$3,035.66</div><div class="fn">reported · at Oct 31</div></div><div><div class="l">Earned in 2026</div><div class="v">$24,718.30</div><div class="fn"><a>148 policies</a></div></div><div><div class="l">Charged back in 2026</div><div class="v red">−$1,206.44</div><div class="fn"><a>9 chargebacks</a></div></div><div><div class="l">Paid to you in 2026</div><div class="v">$21,470.00</div><div class="fn"><a>9 statements</a></div></div><div><div class="l">Your pay plan</div><div class="v" style="font-size:14px">Salary + bonus</div><div class="fn">$2,400 base · 12% · $25 per app</div></div></div>
+<div class="fill"><div class="card">
+<table class="grow"><tr><th>Month</th><th>Status</th><th class="r">Earned</th><th class="r">Taken back</th><th class="r">Paid to you</th><th>How</th></tr>
+<tr class="lk"><td class="bold">October 2026</td><td><span class="st i">Not paid yet</span></td><td class="r">$3,215.88</td><td class="r red">−$180.22</td><td class="r m">—</td><td class="m">the agency pays in early November</td></tr>
+<tr class="lk"><td class="bold">September 2026</td><td><span class="st g1">Paid Oct 6, 2026</span></td><td class="r">$2,980.10</td><td class="r red">−$64.00</td><td class="r bold">$2,916.10</td><td>Bank transfer · ref 88124</td></tr>
+<tr class="lk"><td class="bold">August 2026</td><td><span class="st g1">Paid Sep 5, 2026</span></td><td class="r">$2,744.92</td><td class="r">$0.00</td><td class="r bold">$2,744.92</td><td>Bank transfer · ref 87410</td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">Each month opens its statement, line by line<span class="sp"></span>Showing 1–9 of 9 months</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>A month row opens its statement</b> inside the Commissions frame (7·1, producer view). This month's row shows what's earned so far, "Not paid yet".</li><li><b>Ledger</b> is newest first (as it is today; the copy changes to match), each line opening the statement it was paid on; <b>Chargebacks</b> lists what came back, each linking to its policy.</li></ul></section>
+
+<section class="board"><div class="cap"><b>5·B ONE TIMELINE</b><span class="alt">Direction B</span><span>every entry and payout in one dated list, grouped by month</span></div>
+<div class="frame"><div class="app" style="min-height:180px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><a class="on">My pay</a></div>
+<div class="main" style="padding-bottom:16px"><p class="m">Honest and simple, but the month's total and its statement are buried among 48 lines.</p></div></div></div></section>
+
+<section class="board"><div class="cap"><b>5·C THIS MONTH ONLY</b><span class="alt">Direction C</span><span>the page is this month's running statement; past months are a select</span></div>
+<div class="frame"><div class="app" style="min-height:180px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><a class="on">My pay</a></div>
+<div class="main" style="padding-bottom:16px"><p class="m">Motivating ("$3,215.88 so far in October"), but checking last month's payment takes a select and a reload.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · Statements first ✓</b><br>Months as rows, a statement page per month in the frame.</div><div><b>B · Timeline</b><br>Every line; totals buried.</div><div><b>C · This month</b><br>Motivating; history harder.</div></div>
+<ul class="notes"><li><b>States:</b> "No statements yet · A statement appears here each time the agency pays the month." A producer never sees read-only controls (there are none). <b>Phone:</b> the strip becomes two rows of two; months are cards with Paid / Not paid yet and the amount.</li></ul></section>
+</section>
+
+<!-- ═══════════════════════════════════ 6 · PRODUCER PAYOUTS ═══════════════════════════════════ -->
+<section class="screen" id="s6">
+<h2>6 · Producer payouts ("Team payouts")</h2>
+<p class="sub">/app/producer-payouts (tabs: Run payroll · ?tab=runs · ?tab=plans), /app/producer-payouts/plans/[userId] · payouts-board (agency), pay-plans</p>
+
+<section class="board"><div class="cap"><b>6·0 CRITIQUE</b><span>today's run, runs and pay plans</span></div>
+<div class="card crit"><ol>
+<li><b>The wizard edits in its rows.</b> Step 2 puts a radio group (Take it all back · Take a share · Let it go), a % input and a More menu in the row of anyone below zero; step 3 puts a method select, a reference input and a date in every row. Confirm then sends the first person's method for everyone.</li>
+<li><b>Nothing says what to do now.</b> The code promises "one line under it saying what to do now"; none is drawn. The step chips are clickable, so Confirm is reachable before the draft is checked. Three words for one choice: "Carry it" (the (i)), "Take it all back" (the radio), "Carried" (the reason).</li>
+<li><b>The title line is empty</b> on this page (an empty slot), the tabs sit on a row of their own, and the (i) is a 70-word paragraph.</li>
+<li><b>Pay plans rows don't open</b> (an Edit button in the row does); Runs rows open a statement that has no Void and no way back to Runs.</li>
+</ol></div></section>
+
+<section class="board" id="s6-dir"><div class="cap"><b>6·A A DRAFT YOU READ, A PERSON YOU OPEN</b><span class="rec">Recommended</span><span>Run payroll · Runs · Pay plans on the title line; the draft is a plain table; a person's row opens their draft dialog; one confirm records how you paid</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="on">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Team payouts</b></div>
+<div class="tl"><h1>Team payouts <i class="ib">i</i></h1><div class="ut"><span class="on">Pay October<span class="n w">5</span></span><span>Runs<span class="n">54</span></span><span>Pay plans<span class="n w">1</span></span></div><span class="sp"></span><div class="acts"><span class="inp sel" style="width:160px">October 2026</span><span class="btn p">Confirm and mark paid</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:220px">⌕ Team member</span><span class="tc">Owes from before <span class="n w">1</span></span><span class="tc">Left out <span class="n">0</span></span><span class="sp"></span><span class="m sm12">5 of 5 chosen · <b style="color:var(--text)">$16,409.71</b> to pay · <span class="red">$198.04</span> taken back</span></div>
+<table class="grow"><tr><th>Team member</th><th>Pay plan</th><th class="r">Earned in October</th><th class="r">Owes from before</th><th>What happens to it</th><th class="r">Pay</th></tr>
+<tr class="lk"><td><span class="who">Dana Whitfield</span></td><td>Big split · 70%</td><td class="r"><a>$7,229.70</a><span class="pn">$7,842.10 commission · −$612.40 chargebacks</span></td><td class="r m">—</td><td class="m">Owes nothing</td><td class="r bold">$7,229.70</td></tr>
+<tr class="lk"><td><span class="who">Marcus Bell</span></td><td>Salary + bonus</td><td class="r"><a>$3,035.66</a><span class="pn">$2,400 base · $385.88 commission · $250 bonuses</span></td><td class="r m">—</td><td class="m">Owes nothing</td><td class="r bold">$3,035.66</td></tr>
+<tr class="lk"><td><span class="who">Marisol Vance</span></td><td>Big split · 65%</td><td class="r"><a>$4,904.35</a></td><td class="r m">—</td><td class="m">Owes nothing</td><td class="r bold">$4,904.35</td></tr>
+<tr class="lk"><td><span class="who">Ruth Alvarez</span></td><td>Sidekick · $40 per save</td><td class="r"><a>$1,240.00</a><span class="pn">31 saved deals</span></td><td class="r m">—</td><td class="m">Owes nothing</td><td class="r bold">$1,240.00</td></tr>
+<tr class="lk"><td><span class="who">Owen Price</span><span class="pn amb">below zero</span></td><td>Contract level</td><td class="r red"><a class="red">−$198.04</a></td><td class="r red">$420.00</td><td><span class="nx">Take a share: 20% ›</span><span class="pn">still owes $574.04 after this</span></td><td class="r bold">$0.00</td></tr>
+<tr class="lk"><td><span class="who">Elena Ruiz</span><span class="pn">Owner</span></td><td>Owner · not on payroll</td><td class="r m">—</td><td class="r m">—</td><td class="m">Not on payroll</td><td class="r m">—</td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">Nothing is saved until you confirm · nothing here moves money<span class="sp"></span>6 team members</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>The first tab is the month's job</b> ("Pay October", with how many to pay), so the next step is always the tab you land on; once October is paid it reads "Pay November" and its rows read "Already paid".</li><li><b>The draft is read, not edited.</b> Today's three steps become: read this table → open anyone who needs a choice (6·2) → <b>Confirm and mark paid</b> (one dialog: how you paid, reference, date, per person only where it differs).</li><li><b>One wording:</b> "Take it all back · Take a share · Let it go" everywhere, and Runs says "Took it all back · Took a share · Let it go".</li><li><b>The (i) shrinks</b> to: "Pay your team for a month by each person's pay plan. Nothing is saved until you confirm, and nothing here moves money."</li></ul></section>
+
+<section class="board"><div class="cap"><b>6·B TODAY'S THREE STEPS, KEPT</b><span class="alt">Direction B</span><span>the stepper stays; each step's per-person choices move into a dialog</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="on">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><div class="tl"><h1>Team payouts <i class="ib">i</i></h1><div class="ut"><span class="on">Run payroll</span><span>Runs</span><span>Pay plans</span></div><span class="sp"></span><div class="acts"><span class="wiz"><span class="dn">1 People ✓</span><span class="on">2 Check the draft</span><span>3 How you paid</span></span><span class="btn p">Next: record how you paid</span></div></div><p class="m">Familiar, but three screens for a job that is mostly reading one table, and the stepper competes with the bar on the title line.</p></div></div></div></section>
+
+<section class="board"><div class="cap"><b>6·C ONE PERSON AT A TIME</b><span class="alt">Direction C</span><span>Pay October walks each person's statement draft, Confirm on each</span></div>
+<div class="frame"><div class="app" style="min-height:200px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="on">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><p class="m">Each statement is seen before it's stamped, but six confirms for a month, and no total until the end.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · A draft you read ✓</b><br>One table, choices in a dialog, one confirm.</div><div><b>B · Three steps kept</b><br>Familiar, slower.</div><div><b>C · One person at a time</b><br>Careful, repetitive.</div></div></section>
+
+<section class="board" id="s6-pop"><div class="cap"><b>6·1 RUNS and PAY PLANS</b><span class="rec">A</span><span>a run row opens its statement; a plan row opens the plan page</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="on">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Team payouts</b></div>
+<div class="tl"><h1>Team payouts <i class="ib">i</i></h1><div class="ut"><span>Pay October<span class="n w">5</span></span><span class="on">Runs<span class="n">54</span></span><span>Pay plans<span class="n w">1</span></span></div><span class="sp"></span><div class="acts"><span class="inp sel" style="width:160px">All months</span><span class="btn p">Pay October</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:220px">⌕ Search team member</span><span class="tc on">All <span class="n">54</span></span><span class="tc">Paid <span class="n">47</span></span><span class="tc">Still owes <span class="n w">2</span></span><span class="tc">Nothing to pay <span class="n">4</span></span><span class="tc">Void <span class="n">1</span></span></div>
+<table class="grow"><tr><th>Team member</th><th>Month</th><th class="r">Paid</th><th>How</th><th>Status</th></tr>
+<tr class="lk"><td><span class="who">Dana Whitfield</span><span class="pn">Stated amount</span></td><td>September 2026</td><td class="r bold">$6,880.12</td><td>Bank transfer · 88120<span class="pn">Oct 6, 2026</span></td><td><span class="st g1">Paid</span></td></tr>
+<tr class="lk"><td><span class="who">Owen Price</span><span class="pn">Took a share</span></td><td>September 2026</td><td class="r bold">$0.00</td><td class="m">—</td><td><span class="st b">Still owes $420.00</span></td></tr>
+<tr class="lk"><td><span class="who">Marcus Bell</span><span class="pn">Stated amount</span></td><td>September 2026</td><td class="r bold">$2,916.10</td><td>Bank transfer · 88124<span class="pn">Oct 6, 2026</span></td><td><span class="st g1">Paid</span></td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table>
+<div class="foot">Newest month first<span class="sp"></span>Showing 1–25 of 54 runs</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Runs:</b> today's More menu (Open the statement · Void this run) leaves the row; the row opens the statement, where Void lives in ⋯ (7·1).</li><li><b>Pay plans:</b> Team member · Pay plan · How they are paid · When a policy cancels · Since; the row opens <span class="mono">/plans/[userId]</span>, the existing long form (an <span class="st z">Own page</span>, its Discard · Save plan on the title line, ‹ › naming the next team member). "No plan yet 1" is the tab count and a chip.</li></ul></section>
+
+<section class="board" id="s6-dlg"><div class="cap"><b>6·2 A PERSON'S DRAFT, CONFIRM, WRITE OFF, TOASTS</b><span class="st i">Dialog · md 440 / lg 560</span><span>opened from a draft row and the title line</span></div>
+<div class="stage scr">
+<div><div class="lbltag">A draft row (Owen Price) · md</div><div class="dlg"><div class="dh"><h2>Owen Price · October 2026</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Earned −$198.04 · owes $420.00 from before · contract level</p><div class="db"><div style="display:flex;gap:10px;align-items:center"><span class="tg"></span> Pay Owen this month</div><div><div class="lbl">What happens to what Owen owes</div><div class="chips"><span class="tc">Take it all back</span><span class="tc on">Take a share</span><span class="tc">Let it go</span></div></div><div><div class="lbl">Share to take back (%)</div><div class="inp" style="width:120px">20</div><div class="hint">Your default is 20%. $84.00 taken back. Still owes $574.04 after this.</div></div></div><div class="df"><a class="sm12">Owen's ledger ›</a><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save to the draft</span></div></div></div>
+<div><div class="lbltag">Confirm and mark paid (title line) · lg</div><div class="dlg lg"><div class="dh"><h2>Mark October paid?</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">5 people, $16,409.71. Each gets a private statement; the month is stamped paid. Nothing here moves money.</p><div class="db"><div class="fg3"><div><div class="lbl">How did you pay them?</div><div class="inp sel">Bank transfer</div></div><div><div class="lbl">Paid on</div><div class="inp">Nov 6, 2026</div></div><div><div class="lbl">Reference</div><div class="inp ph">Optional</div></div></div><div style="border:1px solid var(--border);border-radius:8px"><table><tr><td style="height:36px">Dana Whitfield</td><td class="r">$7,229.70</td><td class="m sm12">same as above</td></tr><tr><td style="height:36px">Ruth Alvarez</td><td class="r">$1,240.00</td><td><span class="inp sel" style="height:30px;width:120px">Zelle</span></td></tr><tr><td style="height:36px" class="m">Owen Price</td><td class="r m">$0.00</td><td class="m sm12">Nothing to pay this month. The month still closes for him.</td></tr></table></div><a class="sm12">Change for one person</a></div><div class="df"><span class="sp"></span><span class="btn">Back</span><span class="btn p">Confirm and mark paid</span></div></div></div>
+<div><div class="lbltag">Write off (draft dialog ⋯, a producer's ⋯) · Confirm</div><div class="dlg cf"><div class="dh"><h2>Write off Owen Price's balance of $574.04?</h2></div><p class="dd">Use this when you will never get the money back. Their balance goes to zero and the agency carries the loss. It cannot be undone.</p><div class="db"><div><div class="lbl">Why? (kept on the record)</div><div class="inp ph">e.g. Left the agency, not recoverable</div></div></div><div class="df"><span class="sp"></span><span class="btn">Keep it</span><span class="btn dp">Write it off</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts and errors</div>
+<div class="toast"><span class="tk ok">✓</span><div>October 2026 is paid: 5 people, $16,409.71.<small>Each has a private statement.</small></div><span class="u">Runs</span></div>
+<div class="toast"><span class="tk ok">✓</span><div>Owen Price's negative balance is written off.<small>The agency carries it.</small></div></div>
+<div class="toast"><span class="tk bd">✕</span><div>That didn't save.<small>October is not marked paid; try again.</small></div></div>
+<div class="errl" style="width:350px">Enter the share as a percent, like 70 or 12.5.</div></div>
+</div>
+<ul class="notes"><li><b>Read-only:</b> Pay October shows the draft; Confirm reads disabled ("Paused while the account is read-only."); a row's dialog shows the choice as text. <b>Empty:</b> "No one to pay · Team members appear here once they have joined the agency."; Runs: "No payroll run yet · Each month you confirm appears here, one row per person, with their private statement." <b>Not switched on:</b> Pay plans reads "Pay plans are not switched on yet" as its empty state, never a card above it.</li><li><b>Phone:</b> each person is a card (name, Pay, the owes line); Confirm and mark paid sits at the foot; the dialogs become bottom sheets.</li></ul></section>
+</section>
+
+<!-- ═══════════════════════════════════ 7 · PRODUCER STATEMENTS ═══════════════════════════════════ -->
+<section class="screen" id="s7">
+<h2>7 · Producer statements</h2>
+<p class="sub">/app/producer-statements/[runId] · StatementView; the owner's view in the Accounting frame, the producer's with no frame</p>
+
+<section class="board"><div class="cap"><b>7·0 CRITIQUE</b><span>today's statement</span></div>
+<div class="card crit"><ol>
+<li><b>Two looks for one page:</b> the owner gets the Accounting rail, the producer a bare header "Your pay · October 2026"; neither has a way to the next person or month.</li>
+<li><b>Void lives elsewhere</b> (Runs › More), and a voided statement looks like any other: the header shows no void state.</li>
+<li><b>The policies table doesn't link</b> (client and policy are plain text), and "Adjustments and payouts" is a headerless second card that reads "Paid to you" in the owner's view too.</li>
+</ol></div></section>
+
+<section class="board" id="s7-rec"><div class="cap"><b>7·1 A STATEMENT</b><span class="rec">Recommended · A</span><span>title is the person and month; Policies · Adjustments · How it was paid; ‹ › name the next person in the same month (owner) or the next month (producer)</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="on">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Team payouts</a> › <a>Runs · September 2026</a> › <b>Dana Whitfield</b></div>
+<div class="tl"><h1>Dana Whitfield · September 2026</h1><div class="ut"><span class="on">Policies<span class="n">22</span></span><span>Adjustments<span class="n">2</span></span><span>How it was paid</span></div><span class="sp"></span><div class="acts"><span class="btn">‹ Ruth Alvarez</span><span class="btn">Marcus Bell ›</span><span class="btn">Download PDF</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Opening · reported</div><div class="v">$0.00</div><div class="fn">Sep 1</div></div><div><div class="l">This period</div><div class="v">$6,880.12</div><div class="fn"><a>22 policies</a></div></div><div><div class="l">Withheld</div><div class="v">$0.00</div><div class="fn">nothing owed from before</div></div><div><div class="l">Paid</div><div class="v grn">$6,880.12</div><div class="fn">Oct 6 · bank transfer · 88120</div></div><div><div class="l">Carried forward</div><div class="v">$0.00</div><div class="fn">to October</div></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:220px">⌕ Client or policy</span><span class="tc">Chargebacks <span class="n">3</span></span><span class="sp"></span><span class="m sm12">Reported basis</span></div>
+<table class="grow"><tr><th>Client</th><th>Carrier · policy</th><th class="r">Premium</th><th class="r">Level</th><th class="r">Gross</th><th class="r">Chargeback</th><th class="r">Net</th></tr>
+<tr class="lk"><td><a class="who">Linda Moreno</a></td><td>Aflac · <a>A2K3391047</a></td><td class="r">$1,080.48</td><td class="r">85%</td><td class="r">$918.40</td><td class="r m">—</td><td class="r bold">$642.88</td></tr>
+<tr class="lk"><td><a class="who">Marisol Vega</a></td><td>American Amicable · <a>0119384420</a></td><td class="r">$704.40</td><td class="r">100%</td><td class="r">$704.40</td><td class="r m">—</td><td class="r bold">$493.08</td></tr>
+<tr class="lk"><td><a class="who">Jordan Bell</a></td><td>American Amicable · <a>7113579387</a></td><td class="r">$351.46</td><td class="r">100%</td><td class="r m">—</td><td class="r red">−$175.73</td><td class="r bold red">−$123.01</td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">A row opens the statement line it came from<span class="sp"></span>Showing 1–22 of 22 policies</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>The same page for both,</b> in the Commissions frame: the owner arrives from Runs or a producer's Money tab, the producer from My pay (their trail: Commissions › My pay › September 2026, title "September 2026", ‹ August 2026 · October 2026 ›, no Level column).</li><li><b>⋯ (owner)</b>: Void this run (Confirm: "Void Dana Whitfield's run for September 2026? Use this when the month was paid wrong. The pay goes back on their balance, their statement shows the run as void, and you can run the month again. It cannot be undone." with a required "Why? (kept on the record)") · Open Dana's pay · Open the pay plan.</li><li><b>A void statement</b>: the strip's Paid cell reads <span class="st b">Void Oct 9 · paid the wrong month</span>; ⋯ keeps Download PDF only. Toast: "The run is void. Its amount is back on their balance."</li><li><b>Phone:</b> title, ‹ › under it, the strip as two rows, policies as cards (client, policy, Net).</li></ul></section>
+</section>
+
+<!-- ═══════════════════════════════════ 8 · COMMISSION SPLITS ═══════════════════════════════════ -->
+<section class="screen" id="s8">
+<h2>8 · Commission splits</h2>
+<p class="sub">/app/commission-splits, /app/commission-splits/new (?carrier&amp;policy&amp;writer&amp;other&amp;share for Change) · splits-board, SplitForm</p>
+
+<section class="board"><div class="cap"><b>8·0 CRITIQUE</b><span>today's list and form</span></div>
+<div class="card crit"><ol>
+<li><b>Nothing links and nothing ends.</b> Policy, writer and partner are plain text; the row doesn't open; "Change" is a button in the row and only for two-way splits; a split can't be ended at all.</li>
+<li><b>"60 / 40" names nobody.</b> The Split column has no % and no names; Since is "2026-09-14".</li>
+<li><b>The form is a separate page for six fields,</b> with a free-text policy number (no lookup), Save in the card foot (the plan form puts it on the title line), and an empty state that sends you to the hierarchy.</li>
+</ol></div></section>
+
+<section class="board" id="s8-dir"><div class="cap"><b>8·A A LIST THAT OPENS A DIALOG</b><span class="rec">Recommended</span><span>Active · Ended on the title line; a row opens the split's dialog; New split is a dialog with a policy lookup</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="on">Commission splits</a><a class="">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Commission splits</b></div>
+<div class="tl"><h1>Commission splits <i class="ib">i</i></h1><div class="ut"><span class="on">Active<span class="n">4</span></span><span>Ended<span class="n">1</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">New split</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Search policy or producer</span><span class="inp sel" style="width:170px">Every producer</span><span class="sp"></span><span class="m sm12">4 shared policies · 5 producers sharing</span></div>
+<table class="grow"><tr><th>Policy · client</th><th>Carrier</th><th>Writer</th><th>Shared with</th><th>Split</th><th>Since</th></tr>
+<tr class="lk"><td><a class="who">0119384420</a><span class="pn"><a>Marisol Vega</a></span></td><td>American Amicable</td><td><a>Dana Whitfield</a></td><td><a>Marcus Bell</a></td><td>Dana 60% · Marcus 40%</td><td>Sep 14, 2026</td></tr>
+<tr class="lk"><td><a class="who">AM09986209</a><span class="pn"><a>Ray George</a></span></td><td>Americo</td><td><a>Marisol Vance</a></td><td><a>Ruth Alvarez</a></td><td>Marisol 70% · Ruth 30%</td><td>Oct 2, 2026</td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">The writer's pool, at the writer's level; the override comes off first<span class="sp"></span>Showing 1–4 of 4</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>The (i)</b> keeps its first two sentences; "Not the same as Producer splits" goes (Producer splits stays in Accounting, off this rail).</li><li><b>A row opens the split dialog</b> (8·1) with Change and End this split; New split opens the same dialog empty. The /new page redirects to <span class="mono">?new=1</span>.</li><li><b>B</b> (splits shown only on each policy's page) and <b>C</b> (grouped by producer pair) were weighed: B hides the list a bookkeeper checks at month end; C repeats a pair that shares only one or two policies.</li></ul></section>
+
+<section class="board" id="s8-pop"><div class="cap"><b>8·1 THE SPLIT DIALOG, END, STATES</b><span class="st i">Dialog · lg 560</span><span>New split · a split · End this split</span></div>
+<div class="stage scr">
+<div><div class="lbltag">A split (row click) · lg</div><div class="dlg lg"><div class="dh"><h2>Split on 0119384420 · Marisol Vega</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">American Amicable · since Sep 14, 2026. The pool uses the writer's level; the other producer's own level is not applied.</p><div class="db"><div class="fg2"><div><div class="lbl">Writer</div><div class="inp sel">Dana Whitfield</div></div><div><div class="lbl">Shared with</div><div class="inp sel">Marcus Bell</div></div><div><div class="lbl">Writer's share (%)</div><div class="inp">60</div></div><div><div class="lbl">Marcus Bell gets</div><div class="inp" style="border-style:dashed">40%</div></div></div><div><div class="lbl">Annual premium, to preview ($)</div><div class="inp">704.40</div></div><div class="kv"><div class="k">1 · Agency commission</div><div>$774.84</div><div class="k">2 · Writer's pool</div><div>$704.40</div><div class="k">3 · Override</div><div>−$70.44</div><div class="k">4 · Split of the pool</div><div>Dana Whitfield $380.38 · Marcus Bell $253.58</div></div></div><div class="df"><span class="btn d">End this split</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save split</span></div></div></div>
+<div><div class="lbltag">New split (title line) · lg, policy lookup</div><div class="dlg lg"><div class="dh"><h2>New split</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">For a policy two producers agreed to share. Statements from now on divide its pool.</p><div class="db"><div><div class="lbl">Policy</div><div class="inp focus">⌕ 01193</div><div class="menu" style="width:100%;margin-top:4px"><div class="on">0119384420 · Marisol Vega · American Amicable · written by Dana Whitfield</div><div>0119381176 · Nora Diaz · American Amicable · written by Owen Price</div></div></div><div><div class="lbl">Shared with</div><div class="inp sel ph">Choose a producer</div><div class="errl">Marcus Bell has no contract level with American Amicable. Set it on his Carriers tab first.</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Save split</span></div></div></div>
+<div><div class="lbltag">End this split · Confirm</div><div class="dlg cf"><div class="dh"><h2>End the split on 0119384420?</h2></div><p class="dd">From Nov 10, 2026, Dana Whitfield's statements get the whole pool. Months already paid keep the split.</p><div class="df"><span class="sp"></span><span class="btn">Keep the split</span><span class="btn dp">End the split</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts, states</div>
+<div class="toast"><span class="tk ok">✓</span><div>Split saved for 0119384420.<small>Statements from now on divide its pool 60% / 40%.</small></div></div>
+<div class="toast"><span class="tk ok">✓</span><div>Split ended.<small>Dana Whitfield gets the whole pool from today.</small></div></div>
+<div class="card" style="width:350px"><div class="empty"><b>No shared policies</b>When two producers agree to share a policy, record the split here so both statements show it.<span class="btn p">New split</span></div></div>
+<div class="card" style="width:350px"><div class="hd"><h3>Bookkeeper (read only)</h3></div><div style="padding:0 16px 16px" class="m">No New split; a row opens the dialog with the values as text and only Close.</div></div></div>
+</div>
+<ul class="notes"><li><b>Ending a split is new</b> (the API has no end date today). Splits of three or more producers open the same dialog with one row per producer; today's form refuses to change them.</li><li><b>Phone:</b> rows become cards ("0119384420 · Dana 60% · Marcus 40%"); the dialog is a bottom sheet.</li></ul></section>
+</section>
+
+<!-- ═══════════════════════════════════ 9 · PAYOUTS ═══════════════════════════════════ -->
+<section class="screen" id="s9">
+<h2>9 · Payouts (partners)</h2>
+<p class="sub">/app/payouts (?view=invoices|ledger|rulebooks, ?status=, ?state=, ?partner=), /app/payouts/[id] (?tab=statement|items|disputes|terms), /app/payouts/rulebook/[partnerId] · payouts-board, partner-ledger-board</p>
+
+<section class="board"><div class="cap"><b>9·0 CRITIQUE</b><span>today's invoices, ledger, rulebooks and a run</span></div>
+<div class="card crit"><ol>
+<li><b>Buttons that only navigate.</b> "Review" and "Mark paid" in an invoice row just open the run page, where the real Publish / Mark paid wait. The words drift: Draft a payout run · Run payouts · Void the invoice · Void run.</li>
+<li><b>Tabs without counts, a strip that filters.</b> Invoices · Ledger · Rulebooks carry no counts, while three strip tiles (To review, To pay, Paid this month) act as filters; the status control has no Void though void rows show.</li>
+<li><b>Three date styles and a raw key:</b> "Nov 3, 2026", "3 Nov 2026", "Paid 2026-11-03"; Rulebooks shows <span class="mono">bank_transfer</span>. The (i) is 95 words; the not-switched-on state names a .sql file.</li>
+<li><b>A run page with no way out:</b> no trail, the partner's name doesn't link, the Items tab's Dispute is a button in the row, and the "add your business details" Callout lands among the title-line buttons.</li>
+</ol></div></section>
+
+<section class="board" id="s9-dir"><div class="cap"><b>9·A INVOICES BY WHAT YOU DO NEXT</b><span class="rec">Recommended</span><span>To review · To pay · Paid · Ledger · Rulebooks on the title line; a row opens its invoice; the next step is words</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="on">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <b>Partner payouts</b></div>
+<div class="tl"><h1>Partner payouts <i class="ib">i</i></h1><div class="ut"><span class="on">To review<span class="n w">1</span></span><span>To pay<span class="n w">1</span></span><span>Paid<span class="n">6</span></span><span>Ledger<span class="n">142</span></span><span>Rulebooks<span class="n w">1</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Draft one partner</span><span class="btn p">Run payouts</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:240px">⌕ Search partner or invoice</span><span class="inp sel" style="width:150px">Last 12 months</span><span class="sp"></span><span class="m sm12"><a class="bold">$2,860.00</a> waiting for your review</span></div>
+<table class="grow"><tr><th>Partner · invoice</th><th>Pay period</th><th class="r">Items</th><th class="r">Net payable</th><th>Model</th><th>What to do</th></tr>
+<tr class="lk"><td><a class="who">Bright Path Media</a><span class="pn mono">INV-2026-0014</span></td><td>Oct 1 – Oct 31, 2026</td><td class="r"><a>286</a></td><td class="r bold">$2,860.00</td><td>Model A · $10.00 per submitted application</td><td><span class="nx">Check, then publish ›</span></td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table>
+<div class="foot">Drafts: the partner can't see these until you publish<span class="sp"></span>Showing 1 of 1</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>The statuses are the tabs</b> (today's Segmented and strip tiles): To review (drafts), To pay (published, unpaid), Paid; Nothing owed and Void are chips on Paid. Ledger and Rulebooks keep their places after them, with counts (Rulebooks: partners with no rulebook).</li><li><b>A row opens the invoice</b> (9·1); "What to do" is words. The partner's name opens the partner (Partners › terms); Items opens the invoice's Items tab.</li><li><b>Words:</b> "invoice" everywhere (Draft one partner, Run payouts, Void the invoice); dates "Nov 3, 2026"; payment methods by label ("Bank transfer"). The (i): "Each partner is paid by its rulebook. Run payouts drafts an invoice for each partner whose pay period has ended; publish shares it, mark paid stamps its items. Nothing here moves money."</li></ul></section>
+
+<section class="board"><div class="cap"><b>9·B BY PARTNER</b><span class="alt">Direction B</span><span>one row per partner with this period's invoice and balance; a partner opens all its invoices</span></div>
+<div class="frame"><div class="app" style="min-height:220px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="on">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><div class="card"><table><tr><th>Partner</th><th>This period</th><th class="r">Unpaid</th><th>Rulebook</th></tr><tr class="lk"><td class="bold">Bright Path Media</td><td><span class="st w">To review</span></td><td class="r">$2,860.00</td><td>Model A</td></tr><tr class="lk"><td class="bold">Summit Leads Co.</td><td><span class="st i">To pay</span></td><td class="r">$1,416.50</td><td>Model B · 50%</td></tr></table></div><p class="m" style="margin-top:12px">Good with three partners; the month's run is spread across rows instead of one queue.</p></div></div></div></section>
+
+<section class="board"><div class="cap"><b>9·C THE LEDGER FIRST</b><span class="alt">Direction C</span><span>the page opens on the ledger; invoices are a tab</span></div>
+<div class="frame"><div class="app" style="min-height:180px"><div class="side"><i></i><i></i><i class="on"></i></div><div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="on">Partner payouts<small class="w">2</small></a></div>
+<div class="main" style="padding-bottom:16px"><p class="m">Shows what each partner earned item by item, but the job (review, publish, pay) is a tab away.</p></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · By what you do next ✓</b><br>The statuses are the bar; the row opens the invoice.</div><div><b>B · By partner</b><br>Clear at three partners.</div><div><b>C · Ledger first</b><br>Detail first, job second.</div></div></section>
+
+<section class="board" id="s9-rec"><div class="cap"><b>9·1 AN INVOICE</b><span class="rec">A</span><span>/app/payouts/[id]: title is the partner and period; Statement · Items · Disputes · Terms used; ‹ › name the next invoice's partner; the primary follows the state</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i></i><i class="on"></i></div>
+<div class="rail"><div class="rl">Commissions</div><div class="grpl">Money in</div><a class="">Statements<small class="w">13</small></a><a class="">Pay issues<small class="w">747</small></a><a class="">Who gets the credit<small class="w">80</small></a><div class="grpl">Money out</div><a class="">Producer pay<small class="w">3</small></a><a class="">Team payouts<small class="w">1</small></a><a class="">Commission splits</a><a class="on">Partner payouts<small class="w">2</small></a></div>
+<div class="main">
+<div class="trail"><a>Commissions</a> › <a>Partner payouts</a> › <a>To review</a> › <b>Bright Path Media · October 2026</b></div>
+<div class="tl"><h1>Bright Path Media · October 2026</h1><div class="ut"><span class="on">Statement</span><span>Items<span class="n">286</span></span><span>Disputes<span class="n">0</span></span><span>Terms used<span class="n">1</span></span></div><span class="sp"></span><div class="acts"><span class="btn off">‹ None before</span><span class="btn">Summit Leads Co. ›</span><span class="btn p">Publish &amp; share</span><span class="btn ic">⋯</span></div></div>
+<div class="strip"><div><div class="l">Status</div><div class="v amb">Draft</div><div class="fn">only you can see it</div></div><div><div class="l">Gross</div><div class="v">$2,920.00</div><div class="fn">priced from the terms</div></div><div><div class="l">Deductions</div><div class="v red">−$60.00</div><div class="fn"><a>6 rejections · 0 credits</a></div></div><div><div class="l">Net payable</div><div class="v">$2,860.00</div><div class="fn">not paid from here</div></div><div><div class="l">Invoice</div><div class="v mono" style="font-size:14px">INV-2026-0014</div><div class="fn">Oct 1 – Oct 31 · <a>Bright Path Media</a></div></div></div>
+<div class="fill"><div class="card">
+<table class="grow"><tr><th>Activity</th><th class="r">Count</th><th class="r">Rate</th><th class="r">Amount</th></tr>
+<tr class="lk"><td>Application submitted</td><td class="r"><a>292</a></td><td class="r">@ $10.00</td><td class="r">$2,920.00</td></tr>
+<tr class="lk"><td>Rejected — compliance</td><td class="r"><a>6</a></td><td class="r">@ $10.00</td><td class="r red">−$60.00</td></tr>
+<tr><td class="bold">Net payable</td><td></td><td></td><td class="r bold">$2,860.00</td></tr>
+<tr><td colspan="4" style="border:0"></td></tr></table>
+<div class="foot">This is what the partner sees in their portal and on the PDF<span class="sp"></span></div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Primary by state:</b> Draft → <b>Publish &amp; share</b>; Published (net above 0) → <b>Mark paid</b>; Paid and Void → none. Missing business details make Publish open a dialog that asks for them (trading name, business address) instead of a Callout among the buttons; the To review tab counts it.</li><li><b>Items:</b> Date · Item · Client · policy · How · Amount, each row opening the item's dialog, where <b>Dispute this item</b> lives (drafts only). <b>Disputes:</b> a row opens its Resolve dialog (published or paid invoices). <b>Terms used:</b> read only.</li><li><b>⋯</b>: Download the invoice (PDF) · Download the statement (CSV) · Void the invoice.</li></ul></section>
+
+<section class="board" id="s9-pop"><div class="cap"><b>9·2 RUN PAYOUTS, PUBLISH, MARK PAID, DISPUTE, VOID, TOASTS</b><span class="st i">Dialog · md 440 / lg 560</span><span>from the title lines and an item row</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Run payouts (list title line) · lg</div><div class="dlg lg"><div class="dh"><h2>Create invoices for 2 partners?</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Each partner whose pay schedule has ended gets a draft invoice with every unpaid item. The items are locked to it, so they are never paid twice. Only you see a draft; nothing is paid from here.</p><div class="db"><table><tr><th>Partner</th><th>Pay period</th><th class="r">Items</th><th class="r">Net</th></tr><tr><td>Bright Path Media</td><td>Nov 1 – Nov 30 · monthly</td><td class="r">301</td><td class="r">$3,010.00</td></tr><tr><td>Summit Leads Co.</td><td>Nov 1 – Nov 15 · every 15 days</td><td class="r">18</td><td class="r">$1,122.40</td></tr></table></div><div class="df"><span class="sp"></span><span class="btn">Not now</span><span class="btn p">Create 2 invoices</span></div></div></div>
+<div><div class="lbltag">Publish &amp; share · business details missing</div><div class="dlg"><div class="dh"><h2>Add your business details first</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">The partner statement shows who sent it.</p><div class="db"><div><div class="lbl">Trading name</div><div class="inp">Ellery &amp; Fields Insurance</div></div><div><div class="lbl">Business address</div><div class="inp err"></div><div class="errl">Add the business address.</div></div></div><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save and publish</span></div></div></div>
+<div><div class="lbltag">Mark paid (published invoice title line)</div><div class="dlg"><div class="dh"><h2>Mark $1,416.50 to Summit Leads Co. paid?</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Records when the money moved and stamps every item on it paid, so none is paid again. Nothing is paid from here.</p><div class="db"><div class="fg2"><div><div class="lbl">Paid on</div><div class="inp">Nov 10, 2026</div></div><div><div class="lbl">Method</div><div class="inp sel">ACH</div></div></div><div><div class="lbl">Reference</div><div class="inp ph">Optional</div></div></div><div class="df"><span class="sp"></span><span class="btn">Keep it</span><span class="btn p">Record payment</span></div></div></div>
+<div><div class="lbltag">An item (Items row) · Dispute</div><div class="dlg"><div class="dh"><h2>Application submitted · Oct 14, 2026</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd"><a>Harold Pruitt</a> · Aflac <a>A2K3388702</a> · $10.00</p><div class="db"><div><div class="lbl">Reason to dispute it</div><div class="inp ph">e.g. wrong number</div><div class="hint">It is withheld from this invoice, and the partner sees why once it is published.</div></div></div><div class="df"><span class="sp"></span><span class="btn">Close</span><span class="btn p">Dispute this item</span></div></div></div>
+<div><div class="lbltag">Void the invoice (⋯) · Confirm</div><div class="dlg cf"><div class="dh"><h2>Void Bright Path Media's October invoice?</h2></div><p class="dd">Its cost is reversed, its open disputes are closed and its items go back to waiting for the next invoice; the invoice stays on record.</p><div class="db"><div><div class="lbl">Why is it void?</div><div class="inp ph">Required</div></div></div><div class="df"><span class="sp"></span><span class="btn">Keep it</span><span class="btn dp">Void the invoice</span></div></div></div>
+<div style="display:grid;gap:12px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><div>2 draft invoices created.<small>Check, then publish each one.</small></div></div>
+<div class="toast"><span class="tk ok">✓</span><div>Published.<small>The partner can see the invoice and its PDF; the cost is booked.</small></div></div>
+<div class="toast"><span class="tk ok">✓</span><div>Marked paid.</div></div>
+<div class="toast"><span class="tk wn">!</span><div>No partner is due.<small>Every finished pay period already has an invoice, or nothing is owed.</small></div></div></div>
+</div>
+<ul class="notes"><li><b>Rulebooks:</b> a row opens <span class="mono">/payouts/rulebook/[partnerId]</span>, the existing four-part form (an <span class="st z">Own page</span>; Discard · Save rulebook on the title line; ‹ › name the next partner; the leave guard stays). <b>Ledger:</b> every row opens its invoice (or, unpaid, the partner's ledger); the "Chargebacks to take back" figure links to a Chargebacks chip.</li><li><b>States:</b> "No invoices yet · Run payouts makes one for every partner whose pay period has ended, priced from their rulebook." with Run payouts; not switched on: "Partner payouts aren't switched on for this agency yet." (no file name); read-only: Publish, Mark paid and Run payouts disabled with the usual hover. <b>Phone:</b> invoices as cards (partner, period, net, what to do); the invoice page stacks the strip; dialogs become bottom sheets.</li></ul></section>
+</section>
+
+<!-- ═══════════════════════════════════ EDIT MAP ═══════════════════════════════════ -->
+<section class="screen" id="map">
+<h2>Edit map</h2>
+<p class="sub">Every change in the recommended directions: where it opens, why there, and what it writes. Nothing opens inside a row or in a side panel.</p>
+<div class="board"><table class="ed"><tr><th>What</th><th>Opens from</th><th>Surface</th><th>Why there</th><th>Writes</th></tr>
+<tr><td colspan="5" class="sh">1 · Statements and a statement</td></tr>
+<tr><td>Import a statement (file, carrier, period → columns → preview)</td><td>Statements title line · empty state</td><td><span class="st i">Dialog lg</span>, 3 steps</td><td>Short and stepwise; the list stays behind</td><td>statements POST</td></tr>
+<tr><td>Match, accept, reject, leave unmatched a line</td><td>A line row · the statement's primary</td><td><span class="st i">Dialog lg</span>, stepping line to line (+ <span class="st w">Confirm</span> to leave unmatched)</td><td>Was four buttons in every row</td><td>statements/[id]/lines</td></tr>
+<tr><td>Accept all proposed · Re-match</td><td>Statement toolbar</td><td>Button (toast)</td><td>Acts on the whole tab</td><td>lines: accept / rematch</td></tr>
+<tr><td>Type a PDF's lines</td><td>"Type in its lines ›" row · statement tab</td><td><span class="st z">Own page</span> tab, PDF beside the grid</td><td>A long typing form</td><td>add_manual_lines</td></tr>
+<tr><td>Re-process</td><td>Statement ⋯</td><td><span class="st i">Dialog lg</span></td><td>The column mapping only</td><td>reprocess</td></tr>
+<tr><td>Void statement</td><td>Statement ⋯</td><td><span class="st w">Confirm</span> with reason</td><td>Removes lines from the ledger</td><td>void</td></tr>
+<tr><td colspan="5" class="sh">2 · Pay issues, a group, an issue, a letter</td></tr>
+<tr><td>Decide an issue (letter · rate wrong · paid outside · write off · dismiss)</td><td>Issue title line</td><td><span class="st i">Dialog md</span>, "Save and open the next"</td><td>One list for every source; replaces Why/Dismiss in the row and the Review page</td><td>set_status / discrepancies PATCH</td></tr>
+<tr><td>Draft a letter (choose the issues inside)</td><td>Group title line · issue ⋯</td><td><span class="st i">Dialog xl</span> with the letter</td><td>Choosing happens in the dialog, not by ticking rows</td><td>draft_dispute</td></tr>
+<tr><td>Add the rate · Fix the rate</td><td>Group primary · "without a rate" link</td><td><span class="st z">Own page</span> Setup › Rate card at the carrier</td><td>The rate card is its own page</td><td>rate card</td></tr>
+<tr><td>Mark sent</td><td>Letter title line</td><td><span class="st i">Dialog md</span></td><td>Was a menu in the row</td><td>letter sent</td></tr>
+<tr><td>Mark acknowledged</td><td>Letter ⋯</td><td>Menu item (toast)</td><td>One click, no fields</td><td>letter acknowledged</td></tr>
+<tr><td>Record the outcome</td><td>Letter title line</td><td><span class="st i">Dialog md</span></td><td>Error line beside the amount</td><td>letter outcome</td></tr>
+<tr><td>Check now</td><td>Pay issues title line · group ⋯</td><td>Button (toast)</td><td>Re-runs the check</td><td>run</td></tr>
+<tr><td colspan="5" class="sh">3 · Who gets the credit</td></tr>
+<tr><td>Give the credit (who, why)</td><td>An item's page</td><td><span class="st z">Own page</span> /attribution/[id], "and next"</td><td>The item is the decision; the list stays a list</td><td>agency/attribution POST</td></tr>
+<tr><td>Map an agent code</td><td>Agent codes row</td><td><span class="st i">Dialog md</span> (Carrier sync's)</td><td>One place to map codes</td><td>agent code map</td></tr>
+<tr><td colspan="5" class="sh">4–5 · Producer pay, a producer, My pay</td></tr>
+<tr><td>Month · view</td><td>Title line select · bar</td><td>Select · tabs, in the address</td><td>Linkable; survives Back</td><td>address only</td></tr>
+<tr><td>Review a difference</td><td>To review row · producer title line</td><td><span class="st i">Dialog md</span></td><td>Was a button in the row; now kept under Reviewed</td><td>reconciliation POST</td></tr>
+<tr><td>Pay October</td><td>Producer pay title line</td><td><span class="st z">Own page</span> Team payouts</td><td>One name for the job</td><td>nothing here</td></tr>
+<tr><td colspan="5" class="sh">6–7 · Team payouts and a statement</td></tr>
+<tr><td>A person's draft (pay or not, what happens to what they owe)</td><td>A draft row</td><td><span class="st i">Dialog md</span></td><td>Was radios and a % input in the row</td><td>draft only</td></tr>
+<tr><td>Confirm and mark paid (how, date, reference; per person only if it differs)</td><td>Team payouts title line</td><td><span class="st i">Dialog lg</span></td><td>Was a select, input and date in every row</td><td>agency/payouts POST</td></tr>
+<tr><td>Write off a balance</td><td>Draft dialog ⋯ · producer ⋯</td><td><span class="st w">Confirm</span> with reason</td><td>Cannot be undone</td><td>producers write_off</td></tr>
+<tr><td>Void a run</td><td>Statement ⋯</td><td><span class="st w">Confirm</span> with reason</td><td>Was in Runs' More menu</td><td>producer-runs void</td></tr>
+<tr><td>Pay plan</td><td>Pay plans row</td><td><span class="st z">Own page</span> /plans/[userId]</td><td>Long form with a worked example</td><td>pay-plans POST</td></tr>
+<tr><td colspan="5" class="sh">8 · Commission splits</td></tr>
+<tr><td>New split · change a split</td><td>Title line · a row</td><td><span class="st i">Dialog lg</span> with the preview</td><td>Six fields; was its own page</td><td>agency/splits PUT</td></tr>
+<tr><td>End a split</td><td>Split dialog</td><td><span class="st w">Confirm</span></td><td>Changes every later statement</td><td>new: split end date</td></tr>
+<tr><td colspan="5" class="sh">9 · Partner payouts and an invoice</td></tr>
+<tr><td>Run payouts · Draft one partner</td><td>Title line</td><td><span class="st i">Dialog lg / md</span></td><td>Shows who is due first</td><td>payouts/run · payouts POST</td></tr>
+<tr><td>Publish &amp; share (business details if missing)</td><td>Invoice title line</td><td>Button, or <span class="st i">Dialog md</span></td><td>Replaces the Callout among the buttons</td><td>publish · business identity</td></tr>
+<tr><td>Mark paid</td><td>Invoice title line</td><td><span class="st i">Dialog md</span></td><td>Was a row button that only navigated</td><td>paid</td></tr>
+<tr><td>Dispute an item · resolve a dispute</td><td>Items row · Disputes row</td><td><span class="st i">Dialog md</span></td><td>Was a button in the row</td><td>dispute · resolve</td></tr>
+<tr><td>Void the invoice</td><td>Invoice ⋯</td><td><span class="st w">Confirm</span> with reason</td><td>Reverses the cost</td><td>void</td></tr>
+<tr><td>Rulebook</td><td>Rulebooks row</td><td><span class="st z">Own page</span></td><td>Four-part form, leave guard</td><td>partners/[id]/rulebook</td></tr>
+</table></div>
+<ul class="notes"><li><b>Picks:</b> the area <b>A · One rail</b>; Statements <b>A · What is left, as tabs</b>; Pay issues <b>A · Groups that open</b>; Attribution <b>A · Its own page</b>; Producer pay <b>A · The month, then the person</b>; My pay <b>A · Statements first</b>; Team payouts <b>A · A draft you read</b>; Producer statements <b>A</b>; Commission splits <b>A · A list that opens a dialog</b>; Partner payouts <b>A · By what you do next</b>.</li>
+<li><b>New behaviour the data needs (none of it is built):</b> a group page and an issue page for pay issues (today: inline Why and the Needs you Review page); hand-statement letters saved and listed like carrier letters; Statements' To review including unreadable lines; producer pay period and view in the address and reviewed items kept; "Pay October" as the payroll tab with per-person dialogs and per-person methods on confirm; ending a commission split; a policy lookup for splits; the credit queue at /app/attribution again, with both producers on the row.</li>
+<li><b>Owner calls before building:</b> whether Team payouts and Partner payouts move off the Accounting rail (A) or stay there with a link; whether "Who gets the credit" is the right name for the Attribution queue.</li></ul>
+</section>
+</div>
+</body>
+</html>

@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { HomePanel } from "@/components/app/home/home-panel";
 import { CountUp } from "@/components/ui/count-up";
 import { GaugeRing, Ring } from "@/components/ui/ring";
-import { StatStrip, StatTile, type MeterTone } from "@/components/ui/stat";
+import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { cn } from "@/lib/utils";
 
@@ -96,12 +96,19 @@ export function DashNeeds({ items, max = 6 }: { items: readonly DashNeed[]; note
   return (
     <StatStrip label="Needs you">
       {shown.map((item) => (
-        <StatTile key={item.key} label={item.label} value={item.count.toLocaleString("en-US")} valueTone={TILE_TONE[item.tone]} footnote={item.detail} reserveFootnote href={item.href} />
+        // Light theme v1 (owner 2026-11-12, one-colour rule): the figure is ink; the tone is one dot on its line.
+        <StatTile key={item.key} label={item.label} value={item.count.toLocaleString("en-US")} href={item.href} footnote={item.detail && (
+          <span className="flex min-w-0 items-center gap-1.5">
+            {FLAGGED.has(item.tone) && <span aria-hidden="true" className={cn("size-1.5 shrink-0 rounded-full", DOT[item.tone])} />}
+            <span className="truncate">{item.detail}</span>
+          </span>
+        )} reserveFootnote />
       ))}
     </StatStrip>
   );
 }
-const TILE_TONE: Record<DashTone, MeterTone | undefined> = { danger: "danger", warning: "warning", info: undefined, good: undefined, neutral: undefined };
+const FLAGGED = new Set<DashTone>(["danger", "warning"]);
+const DOT: Partial<Record<DashTone, string>> = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]" };
 
 /* ── Cards ──────────────────────────────────────────────────────────────────────────────────── */
 
@@ -121,7 +128,7 @@ export function DashChart({ title, link, total, totalLine, change, legend, legen
     <span className={cn("flex items-center gap-3", !legendTop && "ml-auto")}>
       {legend.map((item) => (
         <span key={item.label} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span aria-hidden="true" className={cn("size-2 rounded-full", item.tone === "primary" ? "bg-[var(--primary)]" : "bg-[var(--info)]")} />
+          <span aria-hidden="true" className={cn("size-2 rounded-full", item.tone === "primary" ? "bg-[var(--primary)]" : "bg-[var(--highlight-mark)]")} />
           {item.label}
         </span>
       ))}
@@ -151,7 +158,7 @@ export function DashRing({ title, link, value, max = 100, center, label, lines, 
   center: string;
   label: string;
   lines: readonly DashLine[];
-  tone?: "primary" | "warning" | "danger";
+  tone?: "primary" | "warning" | "danger" | "highlight";
   /** The ring's diameter: 104 by default; a card whose ring is the point (a goal) draws it larger. */
   size?: number;
 }) {
@@ -177,7 +184,7 @@ export function DashPhone({ title, link, badge, gauge, bars, facts }: {
   facts: readonly DashLine[];
 }) {
   const top = Math.max(1, ...bars.map((bar) => bar.value));
-  const fill: Record<DashTone, string> = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]", good: "bg-[var(--primary)]", info: "bg-[var(--info)]", neutral: "bg-[var(--muted)]" };
+  const fill: Record<DashTone, string> = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]", good: "bg-[var(--primary)]", info: "bg-[var(--highlight-mark)]", neutral: "bg-[var(--muted)]" };
   const ring = <GaugeRing value={gauge.value} max={gauge.max} size={132} label={gauge.label} caption={gauge.caption} />;
   return (
     // Whole blocks only: on a short screen the facts wrap out of sight rather than being cut.
@@ -214,7 +221,7 @@ export function DashPhone({ title, link, badge, gauge, bars, facts }: {
             );
             const cls = "flex min-w-0 flex-col gap-0.5 rounded-xl border border-border px-3 py-2 no-underline";
             return fact.href
-              ? <Link key={fact.label} href={fact.href} className={cn(cls, "transition-colors hover:bg-[var(--surface-alt)]")}>{body}</Link>
+              ? <Link key={fact.label} href={fact.href} className={cn(cls, "transition-colors hover:bg-[var(--hover-wash)]")}>{body}</Link>
               : <div key={fact.label} className={cls}>{body}</div>;
           })}
         </div>
@@ -271,7 +278,7 @@ export function DashGoals({ title, sub, link, rows, empty = "Nothing yet." }: { 
           {rows.map((row) => {
             const body = (
               <>
-                <Ring value={Math.round(row.share * 100)} max={100} size={46} label={`${row.name}: ${Math.round(row.share * 100)}% of goal`} />
+                <Ring value={Math.round(row.share * 100)} max={100} size={46} tone={row.share >= 1 ? "highlight" : "primary"} label={`${row.name}: ${Math.round(row.share * 100)}% of goal`} />
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-sm font-semibold">{row.name}</span>
                   <span className="truncate text-xs text-muted-foreground">{row.note}</span>
@@ -295,7 +302,7 @@ export function DashGoals({ title, sub, link, rows, empty = "Nothing yet." }: { 
 export type DashStateRow = { key: string; label: string; policies: string; trend: "up" | "down" | "flat"; value: string; href?: string };
 
 const TREND_MARK = {
-  up: <span className="font-bold text-[var(--success-ink)]" aria-label="up on last month">↑</span>,
+  up: <span className="font-bold text-[var(--highlight-ink)]" aria-label="up on last month">↑</span>,
   down: <span className="font-bold text-[var(--error-ink)]" aria-label="down on last month">↓</span>,
   flat: null,
 };
@@ -391,9 +398,9 @@ function LineRow({ line }: { line: DashLine }) {
       <span className="font-semibold tabular-nums text-foreground">{line.value}</span>
     </>
   );
-  const cls = "flex w-full items-center justify-between gap-3 rounded-xl bg-[var(--surface-alt)] px-3 py-2 text-xs no-underline";
+  const cls = "flex w-full items-center justify-between gap-3 rounded-xl bg-[var(--surface-tile)] shadow-[inset_0_0_0_1px_var(--tile-edge)] px-3 py-2 text-xs no-underline";
   return line.href
-    ? <Link href={line.href} className={cn(cls, "transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-alt))]")}>{body}</Link>
+    ? <Link href={line.href} className={cn(cls, "transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-tile))]")}>{body}</Link>
     : <div className={cls}>{body}</div>;
 }
 
@@ -402,7 +409,7 @@ export type DashBar = { key: string; label: string; value: number; shown: string
 /** A list of labelled bars on one scale (why policies are at risk, where the money went). */
 export function DashBars({ title, period, sub, link, rows, max }: { title: string; period?: string; /** A muted line under the title: what the bars mean. */ sub?: string; link?: { label: string; href: string }; rows: readonly DashBar[]; max?: number }) {
   const top = max ?? Math.max(1, ...rows.map((row) => row.value));
-  const fill: Record<DashTone, string> = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]", good: "bg-[var(--primary)]", info: "bg-[var(--info)]", neutral: "bg-[var(--muted)]" };
+  const fill: Record<DashTone, string> = { danger: "bg-[var(--error)]", warning: "bg-[var(--warning)]", good: "bg-[var(--primary)]", info: "bg-[var(--highlight-mark)]", neutral: "bg-[var(--muted)]" };
   return (
     <HomePanel title={title} period={period} sub={sub} link={link}>
       <ul className="m-0 flex list-none flex-col gap-3 p-0">
@@ -486,7 +493,7 @@ export function DashHero({ kicker, value, line, facts, href }: { kicker: string;
       href={href}
       className="relative flex min-h-40 flex-col gap-1.5 overflow-hidden rounded-[18px] bg-[var(--brand-700)] p-[18px] text-[var(--on-dark)] no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
-      <svg aria-hidden="true" viewBox="0 0 260 140" className="m-reveal-x pointer-events-none absolute -bottom-6 -right-8 h-[130px] w-[240px] opacity-55" fill="none" stroke="var(--primary)" strokeWidth="10" strokeLinecap="round"><path d="M10 110 C 60 20, 90 140, 140 60 S 220 40, 250 90" /></svg>
+      <svg aria-hidden="true" viewBox="0 0 260 140" className="m-reveal-x pointer-events-none absolute -bottom-6 -right-8 h-[130px] w-[240px] opacity-70" fill="none" stroke="var(--highlight)" strokeWidth="10" strokeLinecap="round"><path d="M10 110 C 60 20, 90 140, 140 60 S 220 40, 250 90" /></svg>
       <span className="text-xs font-semibold tracking-[0.04em] opacity-80">{kicker}</span>
       <span className="font-[family-name:var(--font-display)] text-[1.75rem] font-semibold leading-tight tabular-nums"><CountUp text={value} fromZero /></span>
       {line && <span className="text-xs opacity-85">{line}</span>}
@@ -509,7 +516,7 @@ export function DashList({ title, period, link, items, empty = "Nothing yet." }:
         <ul className="m-0 flex min-h-0 flex-1 list-none flex-col flex-wrap content-start gap-2 overflow-hidden p-0 [&>li]:w-full">
           {items.map((item) => (
             <li key={item.key}>
-              <Link href={item.href} className="flex items-center gap-2.5 rounded-xl bg-[var(--surface-alt)] p-2 text-foreground no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-alt))]">
+              <Link href={item.href} className="flex items-center gap-2.5 rounded-xl bg-[var(--surface-tile)] shadow-[inset_0_0_0_1px_var(--tile-edge)] p-2 text-foreground no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-tile))]">
                 <span aria-hidden="true" className={cn("grid size-9 shrink-0 place-items-center rounded-xl text-sm font-semibold", GROUND[item.tone], INK[item.tone])}>{item.mark}</span>
                 <span className="flex min-w-0 flex-col">
                   <span className="truncate text-[0.8125rem] font-semibold">{item.title}</span>
@@ -541,7 +548,7 @@ export function DashModules({ modules }: { modules: ReadonlyArray<{ key: string;
       <ul className="m-0 grid min-h-0 list-none auto-rows-min grid-cols-2 gap-1.5 overflow-hidden p-0 @[22rem]:gap-2">
         {modules.map((module) => (
           <li key={module.key} className="min-w-0">
-            <Link href={module.href} className="flex min-w-0 items-center gap-2.5 overflow-hidden rounded-xl bg-[var(--surface-alt)] px-2.5 py-1.5 text-foreground no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-alt))] @[22rem]:px-3 @[22rem]:py-2">
+            <Link href={module.href} className="flex min-w-0 items-center gap-2.5 overflow-hidden rounded-xl bg-[var(--surface-tile)] shadow-[inset_0_0_0_1px_var(--tile-edge)] px-2.5 py-1.5 text-foreground no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-tile))] @[22rem]:px-3 @[22rem]:py-2">
               <span aria-hidden="true" className="hidden size-8 shrink-0 place-items-center rounded-[10px] bg-[color-mix(in_srgb,var(--primary)_14%,transparent)] text-[var(--accent-ink)] @[22rem]:grid">{module.icon}</span>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate text-xs text-muted-foreground">{module.label}</span>

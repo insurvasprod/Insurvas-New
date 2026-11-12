@@ -5,9 +5,10 @@ import { InviteProducerForm } from "@/components/app/agency/invite-producer-form
 import { AgencyPage } from "@/components/app/agency/agency-page";
 
 /**
- * AG-0.6 · Agency › Producers › Invite producer, a page of its own (2026-11-03; it was a pop-up on the roster). The
- * owner and admins invite; only the account owner may invite an admin or upgrade a full band. `?invite=1` on the
- * roster (older links) is this page now.
+ * AG-0.6 · Agency › Producers › Invite producer. Opened from inside the app it is a panel from the right over the page
+ * it was opened from (owner 2026-11-12; app/app/(shell)/@sheet/(.)producers/invite); this full page is what a refresh
+ * or a shared link opens. The owner and admins invite; only the account owner may invite an admin or upgrade a full
+ * band. `?invite=1` on the roster (older links) is this page.
  */
 export default async function InviteProducerPage() {
   const guard = await guardPage("team_hierarchy");

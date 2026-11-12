@@ -1,22 +1,15 @@
-import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
-import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
-import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { AccountingPage } from "@/components/app/accounting/accounting-page";
-import { SplitForm } from "@/components/app/agency/splits-board";
+import { redirect } from "next/navigation";
 
 /**
- * AG-1.6 · New split (or Change, prefilled from a row: `?carrier&policy&writer&other&share`), a page of its own
- * (foundation pass 2026-11-03; it was a side panel beside the list). Saving the same carrier and policy replaces the
- * split from now on. Owner and admin only.
+ * AG-1.6 · New split is a dialog on the list now (round 7, owner pick 8·A, 2026-11-10): this address lands there,
+ * `?new=1`, keeping a Change link's prefill (`?carrier&policy&writer&other&share`).
  */
-export default async function NewSplitPage({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const guard = await guardPage("producer_payouts");
-  if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Commission splits" description="Policies two producers share." />;
-  if (!actAsPage(guard, ["owner"]) || guard.entitlement.access === "read_only") return <RoleGateNotice featureLabel="Commission splits" detail="The owner and admins record commission splits; the bookkeeper reads them." />;
-  const { carrier, policy, writer, other, share } = await searchParams;
-  return (
-    <AccountingPage step="commissionSplits" title={policy ? `Change split · ${policy}` : "New split"} facts="The pool is the writer's, at the writer's level; the override comes off before it is split.">
-      <SplitForm initial={{ carrier, policy, writer, other, share }} />
-    </AccountingPage>
-  );
+export default async function NewSplitPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const asked = await searchParams;
+  const q = new URLSearchParams({ new: "1" });
+  for (const key of ["carrier", "policy", "writer", "other", "share"]) {
+    const value = asked[key];
+    if (typeof value === "string" && value) q.set(key, value.slice(0, 120));
+  }
+  redirect(`/app/commission-splits?${q}`);
 }

@@ -11,6 +11,9 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
 import { StepSlot } from "@/components/app/step-frame/step-slot";
+import { DataToolbar } from "@/components/ui/data-toolbar";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { usDate } from "@/components/app/commissions/team-payouts/shared";
 import { bpShare, cardOf, chargebackSummary, MODEL_STARTERS, normalizePlan, PAY_MODEL_CARDS, PAY_MODEL_LABELS, parsePctToBp, pctOf, planProblem, planSummary, type PayModel, type PayPlan } from "@/lib/agency/payPlanCore";
 import { dollars, dollarsToCents } from "@/lib/agency/constants";
 import { CheckBox } from "@/components/ui/check-box";
@@ -19,25 +22,36 @@ import { PRODUCER_PAYOUTS_SLOT } from "./slots";
 
 type Member = { userId: string; name: string; status: string; plan: (PayPlan & { id: string }) | null; next: (PayPlan & { id: string }) | null };
 
-const TONE: Record<PayModel, "info" | "good" | "warning" | "neutral"> = { solo_owner: "info", sidekick: "info", salary_bonus: "good", big_split: "warning", contract_level: "neutral" };
-
-/** Team payouts › Pay plans (round 1 board T1): who is paid how. A row opens the plan form. */
-export function PayPlansTable({ team, pending, canEdit }: { team: Member[]; pending: boolean; canEdit: boolean }) {
-  if (pending) return <TableCard><EmptyState title="Pay plans are not switched on yet" hint="They need the Team payouts database update. Until then everyone is paid by their contract level, as before." /></TableCard>;
+/**
+ * Team payouts › Pay plans (round 7, 6·1, owner 2026-11-10): who is paid how. The whole row opens the plan page
+ * (/app/producer-payouts/plans/<person>); no button in the row. "No plan yet" is the tab's count and a chip here.
+ */
+export function PayPlansTable({ team, pending }: { team: Member[]; pending: boolean }) {
+  const router = useRouter();
+  const [onlyMissing, setOnlyMissing] = useState(false);
+  if (pending) return <TableCard><EmptyState title="Pay plans are not switched on yet" hint="Until then everyone is paid by their contract level, as before." /></TableCard>;
+  const missing = team.filter((m) => !m.plan).length;
+  const rows = onlyMissing ? team.filter((m) => !m.plan) : team;
+  const href = (m: Member) => `/app/producer-payouts/plans/${m.userId}`;
   return (
-    <TableCard>
+    <TableCard toolbar={team.length === 0 ? undefined : (
+      <DataToolbar>
+        <ToggleChip selected={onlyMissing} onClick={() => setOnlyMissing(!onlyMissing)} count={missing} countTone={missing ? "danger" : undefined}>No plan yet</ToggleChip>
+      </DataToolbar>
+    )}>
       {team.length === 0 ? <EmptyState title="No team members yet" hint="People appear here once they have joined the agency." /> : (
         <Table>
-          <TableHeader><TableRow><TableHead>Team member</TableHead><TableHead>Pay plan</TableHead><TableHead>How they are paid</TableHead><TableHead>When a policy cancels</TableHead><TableHead>Since</TableHead><TableHead className="text-right"><span className="sr-only">Edit</span></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead className="w-[20%]">Team member</TableHead><TableHead className="w-[14%]">Pay plan</TableHead><TableHead>How they are paid</TableHead><TableHead className="w-[16%]">When a policy cancels</TableHead><TableHead className="w-[12%]">Since</TableHead><TableHead className="w-[16%]">Status</TableHead></TableRow></TableHeader>
           <TableBody>
-            {team.map((m) => (
-              <TableRow key={m.userId}>
-                <TableCell className="font-medium"><Link className="hover:underline" href={`/app/producer-payouts/plans/${m.userId}`}>{m.name}</Link>{m.status !== "active" ? <StatusChip tone="neutral" className="ml-2">{m.status}</StatusChip> : null}</TableCell>
-                <TableCell>{m.plan ? <StatusChip tone={TONE[m.plan.model]}>{PAY_MODEL_LABELS[m.plan.model]}</StatusChip> : <StatusChip tone="neutral">Contract level</StatusChip>}</TableCell>
-                <TableCell>{m.plan ? planSummary(m.plan) : <span className="text-muted-foreground">Paid by contract level, as before</span>}{m.next ? <div className="text-xs text-muted-foreground">From {m.next.effectiveFrom}: {PAY_MODEL_LABELS[m.next.model]}, {planSummary(m.next)}</div> : null}</TableCell>
-                <TableCell>{m.plan ? chargebackSummary(m.plan) : <span className="text-muted-foreground">At their level</span>}</TableCell>
-                <TableCell className="tabular-nums">{m.plan?.effectiveFrom ?? "—"}</TableCell>
-                <TableCell className="text-right">{canEdit ? <Button asChild size="sm" variant="outline"><Link href={`/app/producer-payouts/plans/${m.userId}`}>{m.plan ? "Edit" : "Set plan"}</Link></Button> : null}</TableCell>
+            {rows.map((m) => (
+              <TableRow key={m.userId} className="cursor-pointer" onClick={() => router.push(href(m))}>
+                <TableCell className="whitespace-nowrap font-medium"><Link className="hover:underline" href={href(m)} onClick={(e) => e.stopPropagation()}>{m.name}</Link></TableCell>
+                <TableCell className="whitespace-nowrap">{m.plan ? PAY_MODEL_LABELS[m.plan.model] : <span className="text-muted-foreground">—</span>}</TableCell>
+                <TableCell>{m.plan ? planSummary(m.plan) : "Paid by contract level, as before"}</TableCell>
+                <TableCell>{m.plan ? chargebackSummary(m.plan) : "At their level"}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">{m.plan ? usDate(m.plan.effectiveFrom) : "—"}</TableCell>
+                {/* The row's one chip: no plan, then not active, then a plan that changes later (its detail is on the plan page). */}
+                <TableCell>{!m.plan ? <StatusChip tone="warning">No plan yet</StatusChip> : m.status !== "active" ? <StatusChip tone="neutral">{m.status}</StatusChip> : m.next ? <StatusChip tone="neutral">Changes {usDate(m.next.effectiveFrom)}</StatusChip> : null}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -108,7 +122,7 @@ export function PayPlanForm({ member, readOnly }: { member: Member; readOnly: bo
     const json = await res.json().catch(() => null);
     setBusy(false);
     if (!res.ok) { setError(json?.error ?? "That didn't save"); return; }
-    notify.done(`${member.name}'s pay plan is saved from ${from}.`);
+    notify.done(`${member.name}'s pay plan is saved from ${usDate(from)}.`);
     router.push("/app/producer-payouts?tab=plans");
     router.refresh();
   }
@@ -197,7 +211,7 @@ export function PayPlanForm({ member, readOnly }: { member: Member; readOnly: bo
           </div>
           <dl className="m-0 grid gap-2 text-sm">
             {lines.map(([k, v]) => <div key={k} className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">{k}</dt><dd className="m-0 text-right font-medium tabular-nums">{v}</dd></div>)}
-            <div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">Starts</dt><dd className="m-0 font-medium tabular-nums">{from}</dd></div>
+            <div className="flex items-baseline justify-between gap-3"><dt className="text-muted-foreground">Starts</dt><dd className="m-0 font-medium tabular-nums">{usDate(from)}</dd></div>
           </dl>
           {exampleCents !== null && example ? (
             <div className="border-t border-border pt-4">

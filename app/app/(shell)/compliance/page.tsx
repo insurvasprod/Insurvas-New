@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
 
 import { actAsPage, guardPage } from "@/lib/entitlements/guardPage";
 import { loadComplianceDashboard } from "@/lib/compliance/dashboard";
@@ -7,25 +6,27 @@ import type { AlertSeverity } from "@/lib/compliance/dashboardCore";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { Button } from "@/components/ui/button";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { EmptyState } from "@/components/ui/page-states";
 import { ComplianceFlowPage } from "@/components/app/compliance/compliance-flow";
+import { LinkRow } from "@/components/app/book/setup/link-row";
 
 /**
  * Compliance › Overview (LA-6.7, Notion sprint), the first step of the one Compliance page. Am I exposed
- * right now — in about five seconds. Standing coverage on top (owner 2026-10-30), then deadlines and active
- * problems in severity order, each with the button that opens its fix (LA-6.7: "everything clicks through"). Every
- * figure opens the rows behind it: the tile is the link (foundation pass 2026-11-03). Owner and producer only.
- * Compliance settings open from the rail's foot.
+ * right now — in about five seconds.
+ *
+ * Round 7 (owner 2026-11-11, docs/la4/mockups-r7/compliance.html 1·A): deadlines and active problems as one table,
+ * one line a problem, its colour only in the Status chip and its fix a short verb. The owner then put the standing
+ * figures back on top (2026-11-11: "the card should be on top and the table at the bottom", filling the page like
+ * every other step); they are plain, a problem tile saying so in one chip. Every row and tile opens the rows behind
+ * it. Owner and producer only. Compliance settings open from the rail's foot.
  */
-const MARK: Record<AlertSeverity, { tone: StatusTone; label: string }> = {
-  incident: { tone: "danger", label: "Incident" },
-  critical: { tone: "danger", label: "Fix today" },
-  warning: { tone: "warning", label: "Soon" },
-};
+const TONE: Record<AlertSeverity, StatusTone> = { incident: "danger", critical: "danger", warning: "warning" };
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "2026-11-02" → "2 Nov", built by hand so the server and the browser print the same thing. */
+const day = (iso: string) => `${Number(iso.slice(8, 10))} ${MONTHS[Number(iso.slice(5, 7)) - 1] ?? ""}`;
 
 export default async function CompliancePage() {
   const guard = await guardPage("tcpa_checker");
@@ -40,6 +41,7 @@ export default async function CompliancePage() {
   const { alerts, tiles } = await loadComplianceDashboard({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
   return (
     <ComplianceFlowPage step="overview">
+      {/* The standing figures, plain (round 7): a tile that is a problem says it in one chip; each tile opens its rows. */}
       <StatStrip label="Standing coverage">
         {tiles.map((t) => (
           <StatTile
@@ -48,30 +50,43 @@ export default async function CompliancePage() {
             labelTitle={t.notConfigured}
             value={t.value ?? "Not configured"}
             valueSize={t.value && /\d/.test(t.value) ? "figure" : "text"}
-            valueTone={t.tone}
-            footnote={t.footnote}
+            footnote={t.tone && t.chip ? <StatusChip tone={t.tone}>{t.chip}</StatusChip> : t.footnote}
             href={t.href}
           />
         ))}
       </StatStrip>
-      {/* Needs you, under the figures (owner 2026-10-30): the next step is its first row, so there is no separate "next up" line. */}
-      {/* Paged to the rail's foot like every list (foundation pass 2026-11-03): a long day never scrolls the column. */}
+      {/* Needs you under the figures (owner 2026-11-11: "the card should be on top and the table at the bottom"), worst
+          first; the table fills the page to the rail's foot and pages there, like every other step. */}
       <PagedTableCard title={alerts.length ? `Needs you · ${alerts.length}` : "Needs you"} total={alerts.length} noun={alerts.length === 1 ? "item" : "items"}>
         {alerts.length ? (
-          <PagedBody as="ul" className="m-0 list-none divide-y divide-border p-0" label="Deadlines and active problems">
-            {alerts.map((a) => {
-              const mark = MARK[a.severity];
-              return (
-                <li key={a.key} role={a.severity === "warning" ? undefined : "alert"} className="m-row flex min-h-[2.75rem] flex-wrap items-center gap-3 px-4 py-2">
-                  <span className="w-24 shrink-0"><StatusChip tone={mark.tone}>{mark.label}</StatusChip></span>
-                  <span className={a.severity === "incident" ? "min-w-0 flex-1 text-sm font-semibold text-[var(--ink)]" : "min-w-0 flex-1 text-sm text-[var(--ink)]"}>{a.text}</span>
-                  <Button asChild variant="outline" size="sm"><Link href={a.href}>{a.action}<ArrowRight aria-hidden="true" /></Link></Button>
-                </li>
-              );
-            })}
-          </PagedBody>
+          <table className="w-full min-w-[760px] border-collapse text-sm">
+            <thead>
+              <tr className="m-glass-head text-left text-xs text-muted-foreground">
+                <th scope="col" className="h-[40px] px-4 font-medium">Problem</th>
+                <th scope="col" className="h-[40px] px-3 font-medium">Who or what</th>
+                <th scope="col" className="h-[40px] whitespace-nowrap px-3 text-right font-medium">How many</th>
+                <th scope="col" className="h-[40px] px-3 font-medium">Date</th>
+                <th scope="col" className="h-[40px] px-3 font-medium">Status</th>
+                <th scope="col" className="h-[40px] px-4 font-medium">Next step</th>
+              </tr>
+            </thead>
+            <PagedBody label="Deadlines and active problems">
+              {alerts.map((a) => (
+                <LinkRow key={a.key} href={a.href} className="h-[44px] border-t border-border">
+                  <td className="whitespace-nowrap px-4 font-medium text-foreground" title={a.text}>
+                    <Link href={a.href} className="hover:underline">{a.title}</Link>
+                  </td>
+                  <td className="whitespace-nowrap px-3">{a.who}</td>
+                  <td className="whitespace-nowrap px-3 text-right tabular-nums">{a.count == null ? <span className="text-muted-foreground">—</span> : a.count.toLocaleString("en-US")}</td>
+                  <td className="whitespace-nowrap px-3 tabular-nums text-muted-foreground">{a.since ? day(a.since) : "—"}</td>
+                  <td className="whitespace-nowrap px-3"><StatusChip tone={TONE[a.severity]}>{a.chip}</StatusChip></td>
+                  <td className="whitespace-nowrap px-4" title={a.text}>{a.step} ›</td>
+                </LinkRow>
+              ))}
+            </PagedBody>
+          </table>
         ) : (
-          <EmptyState title="Nothing needs you today" hint="No deadline is close, no number was called after it should have stopped, and no licence is about to lapse." />
+          <EmptyState title="Nothing needs you" hint="No deadline is near, no call broke a rule, every licence is current. The figures above are the standing picture." />
         )}
       </PagedTableCard>
     </ComplianceFlowPage>
