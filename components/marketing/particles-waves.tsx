@@ -160,6 +160,11 @@ export function ParticlesWaves({ side }: { side: Side }) {
     if (!gl) return;
     const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const glowy = side === "now";
+    /* Phones and tablets: a touch screen's pixels are small enough that 1.5x looks the same as 2x or 3x
+       for soft points of light, at about half the pixels to fill — the main cost on a phone's GPU, and
+       its battery. A data saver also starts on every other row. */
+    const touch = window.matchMedia("(pointer: coarse)").matches;
+    const saveData = Boolean((navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData);
 
     const vs = compile(gl, gl.VERTEX_SHADER, VERTEX);
     const fs = compile(gl, gl.FRAGMENT_SHADER, FRAGMENT);
@@ -236,7 +241,7 @@ export function ParticlesWaves({ side }: { side: Side }) {
     const fitTo = () => {
       const box = canvas.getBoundingClientRect();
       if (!box.width || !box.height) return false;
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = Math.min(window.devicePixelRatio || 1, touch ? 1.5 : 2);
       w = Math.round(box.width * dpr);
       h = Math.round(box.height * dpr);
       canvas.width = w;
@@ -262,7 +267,7 @@ export function ParticlesWaves({ side }: { side: Side }) {
     };
 
     /** How many rows to draw: all of them, or every other one on a machine that cannot keep up. */
-    let rows = ROWS;
+    let rows = saveData ? Math.ceil(ROWS / 2) : ROWS;
 
     const draw = (time: number) => {
       gl.clearColor(0, 0, 0, 0);
@@ -315,7 +320,7 @@ export function ParticlesWaves({ side }: { side: Side }) {
         if (counted >= 20 && elapsed >= 350) {
           const per = elapsed / counted;
           if (per > 24 && rows === ROWS) rows = Math.ceil(ROWS / 2);
-          else if (per < 12 && rows !== ROWS) rows = ROWS;
+          else if (per < 12 && rows !== ROWS && !saveData) rows = ROWS;
           counted = 0;
           elapsed = 0;
         }
