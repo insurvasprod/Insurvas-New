@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { fileDay } from "@/lib/ingestion/constants";
 import { changeClientHref, LINK_TARGET_WORDS, linkMethodWord } from "@/lib/ingestion/policyPage";
 import type { PolicyLink } from "@/lib/ingestion/policyPageStore";
@@ -49,7 +50,7 @@ export function PolicyClientTab({ link, carrierId, policyNumber, clientName, can
   return (
     <>
       <StatStrip label="This policy's client">
-        <StatTile label="Linked to" valueSize="text" value={current ? current.clientName ?? clientName ?? "No client yet" : "No client yet"} valueTone={current ? undefined : "warning"} footnote={current ? (current.dob ? `born ${fileDay(current.dob)}` : current.type === "provisional" ? "made from the carrier's file" : "date of birth not known") : canEdit ? "link one, or decide it in Needs you" : "the owner or a bookkeeper links it"} />
+        <StatTile label="Linked to" valueSize="text" value={current ? current.clientName ?? clientName ?? "No client yet" : "No client yet"} footnote={current ? (current.dob ? `born ${fileDay(current.dob)}` : current.type === "provisional" ? "made from the carrier's file" : "date of birth not known") : <span title={canEdit ? "Link one, or decide it in Needs you" : "The owner or a bookkeeper links it"}><StatusChip tone="warning">Not linked</StatusChip></span>} />
         <StatTile label="How" labelTitle={[current?.reason ? `Why: ${current.reason}` : null, beforeText ? `Before: ${beforeText}` : null].filter(Boolean).join("\n") || undefined} valueSize="text" value={current ? linkMethodWord(current.method) : "—"} footnote={current ? [current.type && LINK_TARGET_WORDS[current.type] ? `to ${LINK_TARGET_WORDS[current.type]}` : null, fileDay(current.at), beforeText ? "replaced an earlier link" : null].filter(Boolean).join(" · ") : "not linked"} />
         <StatTile label="Sale" valueSize="text" value={sale ? (sale.kind === "deal_flow" ? "Daily deal flow" : "Application") : "None"} footnote={sold} />
         <StatTile label="Policy number" valueSize="text" value={<span className="font-mono">{policyNumber}</span>} footnote={link.submittedNumber ? (link.submittedNumber === policyNumber ? "submitted as the same" : `submitted as ${link.submittedNumber}`) : "submitted number not recorded"} />
@@ -60,14 +61,16 @@ export function PolicyClientTab({ link, carrierId, policyNumber, clientName, can
           <EmptyState title="No links yet" hint="Each time this policy is linked to a client, by Insurvas or a person, it shows here." />
         ) : (
           <table className="portal-lead-table w-full min-w-[600px] text-left text-sm">
-            <thead><tr><th className="w-[120px]">When</th><th>What</th><th>Why</th><th className="w-[160px]">By</th></tr></thead>
+            <thead><tr><th className="w-[120px]">When</th><th>What</th><th>How</th><th>Why</th><th className="w-[160px]">By</th><th className="w-[80px]"><span className="sr-only">Now</span></th></tr></thead>
             <PagedBody>
               {link.history.map((entry) => (
                 <tr key={entry.id}>
-                  <td className="tabular-nums text-muted-foreground">{fileDay(entry.at)}</td>
-                  <td>{entry.clientName ? `Linked to ${entry.clientName}` : entry.type === "provisional" ? "Linked to a client made from the carrier's file" : `Linked to ${LINK_TARGET_WORDS[entry.type] ?? "a sale"}`} <span className="text-muted-foreground">· {linkMethodWord(entry.method).toLowerCase()}{entry.current ? " · now" : ""}</span></td>
-                  <td className="max-w-[320px] truncate text-muted-foreground" title={entry.reason ?? undefined}>{entry.reason ?? "—"}</td>
-                  <td className="text-muted-foreground">{entry.by}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(entry.at)}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{entry.clientName ? `Linked to ${entry.clientName}` : entry.type === "provisional" ? "Linked to a client made from the carrier's file" : `Linked to ${LINK_TARGET_WORDS[entry.type] ?? "a sale"}`}</td>
+                  <td className="whitespace-nowrap">{linkMethodWord(entry.method)}</td>
+                  <td className="max-w-[320px] truncate" title={entry.reason ?? undefined}>{entry.reason ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap">{entry.by}</td>
+                  <td className="whitespace-nowrap">{entry.current ? <StatusChip tone="good">Now</StatusChip> : null}</td>
                 </tr>
               ))}
             </PagedBody>

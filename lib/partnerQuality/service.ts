@@ -34,7 +34,7 @@ function metric(value: unknown): PartnerQualityMetric {
 function normalizeReport(value: unknown, readOnly: boolean): PartnerQualityReport {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The partner quality report was invalid");
   const report = value as Omit<PartnerQualityReport, "readOnly">;
-  return { ...report, rows: Array.isArray(report.rows) ? report.rows : [], dispositions: Array.isArray(report.dispositions) ? report.dispositions : [], team: Array.isArray(report.team) ? report.team : [], readOnly };
+  return { ...report, weeks: Array.isArray(report.weeks) ? report.weeks : [], rows: Array.isArray(report.rows) ? report.rows : [], dispositions: Array.isArray(report.dispositions) ? report.dispositions : [], team: Array.isArray(report.team) ? report.team : [], readOnly };
 }
 
 type QualityEvidence = {

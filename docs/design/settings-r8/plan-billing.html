@@ -1,0 +1,887 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plan and Billing</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Board-only extras, built from kit tokens only. */
+.sp{flex:1}
+.lnk{color:var(--accent-ink);font-weight:500;text-decoration:none}
+.body.col{flex-direction:column}
+.cardrow{flex-direction:row}
+.colwrap{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;flex:1;min-height:0}
+.split > .card{min-height:0}
+td.r,th.r{text-align:right}
+.sheet tbody td,.card tbody td{max-width:260px;overflow:hidden;text-overflow:ellipsis}
+/* plan hero */
+.hero{display:flex;gap:18px;padding:16px;align-items:flex-start;flex-wrap:wrap}
+.hero .who{display:flex;gap:12px;align-items:flex-start;min-width:260px}
+.hero .who b{display:block;font-size:16px;color:var(--ink)}
+.hero .who small{display:block;font-size:12px;color:var(--muted)}
+.price{font-size:24px;font-weight:600;letter-spacing:-.02em;color:var(--ink)}
+.price small{font-size:14px;font-weight:400;color:var(--muted);letter-spacing:0}
+.feat{font-size:12px;color:var(--body);margin-top:6px}
+/* usage meters */
+.meters{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;padding:0 16px 16px}
+.mtr{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.mtr .t{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600}
+.mtr .t .chip{margin-left:auto}
+.mtr b{font-size:16px;color:var(--ink);font-weight:600}
+.mtr b small{font-size:12px;color:var(--muted);font-weight:400}
+.mtr .foot{font-size:12px;color:var(--muted)}
+.meter{height:6px;border-radius:999px;background:var(--band);overflow:hidden;box-shadow:inset 0 0 0 1px var(--tile-edge)}
+.meter i{display:block;height:100%;background:var(--border-strong);border-radius:inherit}
+.meter.warn i{background:var(--warn)}
+.meter.bad i{background:var(--bad)}
+.meter.big{height:10px}
+.meter .tick{position:relative}
+/* big tiles (B) */
+.bigm{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.bigm .mtr{padding:16px;gap:10px}
+.bigm .mtr b{font-size:24px;letter-spacing:-.02em}
+.bars{display:flex;align-items:flex-end;gap:3px;height:36px}
+.bars i{flex:1;background:var(--border-strong);opacity:.45;border-radius:2px}
+/* plan comparison */
+.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.plan{border:1px solid var(--card-border);border-radius:12px;padding:12px 14px;background:var(--card)}
+.plan.cur{box-shadow:inset 0 0 0 1px var(--border-strong)}
+.plan.on{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary);background:var(--primary-soft)}
+.plan b{display:block;font-size:16px;color:var(--ink)}
+.plan .p{font-size:16px;font-weight:600;color:var(--ink);margin:4px 0}
+.plan small{display:block;font-size:12px;color:var(--muted)}
+/* key / value */
+.kv{display:grid;grid-template-columns:170px 1fr;gap:10px 16px;align-items:center;font-size:14px;margin:0}
+.kv dt{font-size:12px;color:var(--muted);margin:0}
+.kv dd{margin:0;color:var(--ink);min-width:0;display:flex;align-items:center;gap:8px}
+.kv dd.tot{font-weight:600}
+.line{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.line:last-child{border-bottom:0}
+.line b{color:var(--ink);font-weight:500}
+.line small{font-size:12px;color:var(--muted)}
+.line .end{margin-left:auto;display:flex;gap:8px;align-items:center}
+.hr{border-top:1px solid var(--rule);margin:14px 0}
+.card-b h4{font-size:16px;margin:0 0 2px;color:var(--ink)}
+.card-b > p{font-size:12px;color:var(--muted);margin:0 0 10px}
+.cardline{font-size:14px;color:var(--ink);display:flex;align-items:center;gap:10px}
+.cc{width:40px;height:26px;border-radius:5px;background:var(--band);box-shadow:inset 0 0 0 1px var(--tile-edge);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--ink)}
+/* choice rows */
+.choice{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;background:var(--card)}
+.choice.on{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary);background:var(--primary-soft)}
+.choice b{display:block;font-size:14px;color:var(--ink)}
+.choice small{display:block;font-size:12px;color:var(--muted)}
+.choice .end{margin-left:auto}
+.ul{margin:0;padding-left:18px;font-size:14px;color:var(--body)}
+.ul li{margin:4px 0}
+/* cancel flow strip */
+.flow{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:20px}
+.flow > .card{min-height:330px}
+.flow .card-h small{margin-left:auto;font-size:12px;color:var(--muted)}
+/* section index (C) */
+.index{width:196px;flex:none;padding:12px 0 12px 12px;border-right:1px solid var(--rule);display:flex;flex-direction:column;gap:2px}
+.index a{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted);padding:7px 10px;border-radius:8px;text-decoration:none;margin-right:12px}
+.index a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.index a .mk{margin-left:auto;font-size:12px;font-weight:600}
+.mk.warn{color:var(--warn)}
+.stmt{padding:18px 22px}
+.stmt section{padding:18px 0;border-top:1px solid var(--rule)}
+.stmt section:first-child{border-top:0;padding-top:0}
+.stmt h4{font-size:16px;margin:0 0 2px;color:var(--ink)}
+.stmt .sub{font-size:12px;color:var(--muted);margin:0 0 12px}
+.mlist .mrow{display:grid;grid-template-columns:180px 1fr 160px 120px;gap:14px;align-items:center;padding:8px 0;font-size:14px;color:var(--body);border-bottom:1px solid var(--rule)}
+.mlist .mrow:last-child{border-bottom:0}
+.mlist .mrow b{color:var(--ink);font-weight:500}
+.mlist .mrow span.r{text-align:right;font-size:12px;color:var(--muted)}
+/* invoice paper */
+.paper{background:var(--card);border:1px solid var(--card-border);border-radius:10px;padding:20px 22px;font-size:12px;color:var(--body)}
+.paper .hd{display:flex;align-items:flex-start;gap:12px;padding-bottom:12px;margin-bottom:12px;border-bottom:2px solid var(--ink)}
+.paper .hd b{display:block;font-size:16px;color:var(--ink)}
+.paper .hd .r{margin-left:auto;text-align:right}
+.paper table{font-size:12px}
+.paper thead th{padding:6px 8px}
+.paper tbody td{padding:7px 8px}
+.paper .tot{display:grid;grid-template-columns:1fr 110px;gap:4px 12px;justify-items:end;margin-top:10px;font-size:12px}
+.paper .tot b{font-size:14px;color:var(--ink)}
+.ro{opacity:.6}
+.dialog .row.end{justify-content:flex-end;margin-top:14px}
+.seg.sm span{font-size:12px;padding:4px 10px}
+.input.sm{height:30px;font-size:12px}
+.states.two{grid-template-columns:repeat(2,1fr)}
+@media (max-width:1100px){.meters,.bigm,.plans,.flow{grid-template-columns:1fr 1fr}.split{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Plan &amp; billing</h1>
+  <p class="lead">Plan &amp; billing tells the owner what they pay, how close they are to the plan's limits, and lets them change plan, update the card, pay an invoice, or pause or cancel. Today it is three tabs (Overview, Change plan, Invoices &amp; payment). The most important facts, a failed payment, a paused or cancelling workspace, arrive as notice cards and in the bell, and cancelling expands inline under the plan card.</p>
+  <div class="notes">
+    <div><b>1 · The state of the account is a notice</b>Dunning, read-only, paused, cancelling and cancelled draw cards above the plan, and also go to the bell. They belong on the status line, with the one action that fixes them.</div>
+    <div><b>2 · Limits are found late</b>Meters sit under the plan card on Overview; the 80% and 95% warnings are a hover hint. Text messages at 96% look the same as seats at 68%.</div>
+    <div><b>3 · Changing plan is its own tab</b>Plan cards, add-ons and the impact card stack down a separate tab; the "what you lose" and "you're over its limits" warnings are notices again.</div>
+    <div><b>4 · Cancel unfolds inside the page</b>Reason, export links and a one-time "pause instead?" open under the plan card and push everything down. A calm, stepped sheet would read better and keep pause first.</div>
+    <div><b>5 · Money in two places</b>Next charge sits on Invoices &amp; payment, the price on Overview, add-ons on Change plan. One look should answer "what will I pay on Dec 3, and why".</div>
+    <div><b>6 · Gold must not mean "warning"</b>Limits use the warning tone. Gold stays for one feature button (Upgrade), people and new counts.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · Plan hero + sheets</button><button data-opt-btn="B">B · Usage first</button><button data-opt-btn="C">C · One statement</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION A ═══════════════════════════════ -->
+  <div class="opt A">
+    <div class="sec"><h2>A1 · One page: plan hero with meters, invoices, payment</h2><span>no tabs · one gold Upgrade · limits in warning tone with the reset date · pause or cancel is a quiet link</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Compare plans</span><span class="btn hl">Upgrade</span></div></div>
+        <div class="status warn"><span class="dot"></span>Active · next charge $278.00 on Dec 3 · text messages at 96% of your limit, resets Dec 3</div>
+        <div class="body col">
+          <div class="card">
+            <div class="hero">
+              <div class="who"><span class="ic">AP</span><div><b>Agency Pro <span class="chip ok" style="margin-left:6px">Active</span></b><small>Monthly · renews Dec 3 · since March 14, 2026</small><div class="feat">Dialer, leads, applications, commissions, retention + 6 more · <a class="lnk">See everything included</a></div></div></div>
+              <span class="sp"></span>
+              <div style="text-align:right"><div class="price">$249.00 <small>a month</small></div><div class="small muted">+ Local presence numbers $29.00 a month</div></div>
+            </div>
+            <div class="meters">
+              <div class="mtr"><div class="t">Seats</div><b>17 <small>of 25</small></b><span class="meter"><i style="width:68%"></i></span><span class="foot">Plan limit</span></div>
+              <div class="mtr"><div class="t">Dialer minutes <span class="chip warn">82%</span></div><b>8,240 <small>of 10,000</small></b><span class="meter warn"><i style="width:82%"></i></span><span class="foot">Resets Dec 3</span></div>
+              <div class="mtr"><div class="t">Text messages <span class="chip warn">96%</span></div><b>1,910 <small>of 2,000</small></b><span class="meter warn"><i style="width:96%"></i></span><span class="foot">Resets Dec 3 · texts stop at 2,000</span></div>
+              <div class="mtr"><div class="t">Lead imports</div><b>12,400 <small>of 50,000</small></b><span class="meter"><i style="width:25%"></i></span><span class="foot">Resets Dec 3</span></div>
+              <div class="mtr"><div class="t">AI call summaries</div><b>640 <small>of 1,500</small></b><span class="meter"><i style="width:43%"></i></span><span class="foot">Resets Dec 3</span></div>
+            </div>
+            <div class="card-f small"><span class="muted">Warnings come at 80% and 95%. Nothing is cut off without a warning first.</span><span class="sp"></span><a class="lnk" style="color:var(--muted)">Pause or cancel…</a></div>
+          </div>
+          <div class="split">
+            <div class="card">
+              <div class="card-h"><b>Invoices</b><div class="r"><span class="small muted">6 invoices</span></div></div>
+              <div class="scroll"><table>
+                <thead><tr><th>Invoice</th><th>Date</th><th>For</th><th class="r">Amount</th><th>Status</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td>INV-0011</td><td>Nov 3, 2026</td><td>Nov 3 – Dec 3</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                  <tr><td>INV-0010</td><td>Oct 3, 2026</td><td>Oct 3 – Nov 3</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                  <tr><td>INV-0009</td><td>Sep 3, 2026</td><td>Sep 3 – Oct 3</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                  <tr><td>INV-0008</td><td>Aug 3, 2026</td><td>Aug 3 – Sep 3</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                  <tr><td>INV-0007</td><td>Jul 3, 2026</td><td>Jul 3 – Aug 3</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                  <tr><td>INV-0006</td><td>Jun 3, 2026</td><td>Jun 3 – Jul 3</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                </tbody>
+              </table></div>
+            </div>
+            <div class="card">
+              <div class="card-h"><b>Payment</b></div>
+              <div class="scroll"><div class="card-b">
+                <dl class="kv" style="grid-template-columns:110px 1fr">
+                  <dt>Next charge</dt><dd class="tot">$278.00 on Dec 3</dd>
+                  <dt></dt><dd class="small muted" style="font-size:12px">Agency Pro $249.00 + local presence $29.00</dd>
+                  <dt>Card</dt><dd><span class="cc">VISA</span>ending 4417 · 08/28</dd>
+                  <dt>Receipts to</dt><dd>billing@elleryfields.com</dd>
+                </dl>
+                <div class="row" style="margin-top:14px"><span class="btn o sm">Update card ↗</span><span class="btn g sm">Change receipt email</span></div>
+                <div class="help" style="margin-top:10px">Your card is held by our payment provider, Whop. It never passes through Insurvas.</div>
+              </div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A2 · Compare plans (right sheet)</h2><span>opened by Compare plans or Upgrade · your use against each plan's limits · pick one to see what changes</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Compare plans</span><span class="btn hl">Upgrade</span></div></div>
+        <div class="status warn"><span class="dot"></span>Active · next charge $278.00 on Dec 3 · text messages at 96% of your limit, resets Dec 3</div>
+        <div class="body"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Compare plans</b><span class="seg sm" style="margin-left:12px"><span class="on">Monthly</span><span>Yearly</span></span><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="plans">
+            <div class="plan"><b>Agency Starter</b><div class="p">$129.00 <span class="small muted">a month</span></div><small>For a small team getting going</small></div>
+            <div class="plan cur"><b>Agency Pro</b><div class="p">$249.00 <span class="small muted">a month</span></div><small>Your plan</small></div>
+            <div class="plan on"><b>Agency Scale</b><div class="p">$449.00 <span class="small muted">a month</span></div><small>More room for a growing floor</small></div>
+          </div>
+          <table style="margin-top:14px">
+            <thead><tr><th></th><th>Your use</th><th>Starter</th><th>Pro</th><th>Scale</th></tr></thead>
+            <tbody>
+              <tr><td>Seats</td><td>17</td><td>10</td><td>25</td><td>60</td></tr>
+              <tr><td>Dialer minutes</td><td>8,240</td><td>4,000</td><td>10,000</td><td>30,000</td></tr>
+              <tr><td>Text messages</td><td>1,910</td><td>500</td><td>2,000</td><td>6,000</td></tr>
+              <tr><td>Lead imports</td><td>12,400</td><td>10,000</td><td>50,000</td><td>Unlimited</td></tr>
+              <tr><td>AI call summaries</td><td>640</td><td>300</td><td>1,500</td><td>5,000</td></tr>
+              <tr><td>Retention ladder</td><td>In use</td><td>—</td><td>Included</td><td>Included</td></tr>
+              <tr><td>Carrier sync</td><td>In use</td><td>—</td><td>Included</td><td>Included</td></tr>
+              <tr><td>Priority support</td><td>—</td><td>—</td><td>—</td><td>Included</td></tr>
+            </tbody>
+          </table>
+          <div class="help" style="margin-top:10px">Monthly limits reset on your renewal date. Add-ons stay with you on any plan.</div>
+        </div>
+        <div class="sheet-f"><span class="small muted" style="margin-right:auto;align-self:center">Agency Scale picked</span><span class="btn g">Close</span><span class="btn p">See what changes</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A3 · Change-plan impact sheet (a smaller plan)</h2><span>what you'd pay, when, what you'd lose, which limits you're over · the move waits for the renewal date</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Compare plans</span><span class="btn hl">Upgrade</span></div></div>
+        <div class="status warn"><span class="dot"></span>Active · next charge $278.00 on Dec 3</div>
+        <div class="body"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <div class="sheet-h"><div><b>Move to Agency Starter</b><div class="small muted">from Agency Pro</div></div><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <dl class="kv" style="grid-template-columns:140px 1fr">
+            <dt>New price</dt><dd>$129.00 a month</dd>
+            <dt>Starts</dt><dd>Dec 3, at your renewal</dd>
+            <dt>Next charge</dt><dd class="tot">$158.00 on Dec 3</dd>
+            <dt></dt><dd class="small muted" style="font-size:12px">Starter $129.00 + local presence $29.00</dd>
+          </dl>
+          <div class="hr"></div>
+          <h4 style="font-size:14px;margin:0 0 4px">You'd lose 2 things you use now</h4>
+          <div class="line"><b>Retention ladder</b><small>34 policies on it today</small><span class="end"><span class="chip warn">Stops Dec 3</span></span></div>
+          <div class="line"><b>Carrier sync</b><small>3 carriers connected</small><span class="end"><span class="chip warn">Stops Dec 3</span></span></div>
+          <div class="hr"></div>
+          <h4 style="font-size:14px;margin:0 0 4px">You're over 2 of its limits</h4>
+          <div class="line"><b>Seats</b><small>17 in use · Starter allows 10</small><span class="end"><a class="lnk small">Team &amp; access ›</a></span></div>
+          <div class="line"><b>Dialer minutes</b><small>8,240 this period · Starter allows 4,000</small><span class="end"><span class="small muted">calls stop at 4,000</span></span></div>
+          <div class="help" style="margin-top:8px">The move waits until seats are 10 or fewer. Nothing is deleted.</div>
+        </div>
+        <div class="sheet-f"><span class="btn g">Keep my plan</span><span class="btn p d">Move on Dec 3</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A4 · Confirm a plan change (upgrade)</h2><span>dialog after "See what changes" on a bigger plan · the money in dollars, today and on the next invoice</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Compare plans</span><span class="btn hl">Upgrade</span></div></div>
+        <div class="status warn"><span class="dot"></span>Active · next charge $278.00 on Dec 3</div>
+        <div class="body"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog">
+        <h4>Upgrade to Agency Scale now?</h4>
+        <p>The new limits start straight away. You pay the difference for the days left in this period on your next invoice.</p>
+        <dl class="kv" style="grid-template-columns:150px 1fr">
+          <dt>New price</dt><dd>$449.00 a month</dd>
+          <dt>For the 21 days left</dt><dd>$140.00</dd>
+          <dt>Next charge</dt><dd class="tot">$618.00 on Dec 3</dd>
+          <dt>Paid with</dt><dd>Visa ending 4417</dd>
+        </dl>
+        <div class="row end"><span class="btn g">Not now</span><span class="btn p">Upgrade now</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A5 · Pause (right sheet)</h2><span>plain list of what happens · nothing deleted · resume any time</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Compare plans</span><span class="btn hl">Upgrade</span></div></div>
+        <div class="status"><span class="dot"></span>Active · next charge $278.00 on Dec 3</div>
+        <div class="body"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <div class="sheet-h"><b>Pause or cancel</b><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="choice on"><span class="radio on"></span><div><b>Pause</b><small>No charges, your book stays readable, resume when you're ready</small></div></div>
+          <div class="choice"><span class="radio"></span><div><b>Cancel</b><small>Ends Dec 3; records stay readable and exportable for 90 days</small></div></div>
+          <div class="hr"></div>
+          <h4 style="font-size:14px;margin:0 0 6px">While paused</h4>
+          <ul class="ul"><li>No charges from today. Your Dec 3 charge doesn't happen.</li><li>Your book, policies and commissions stay readable, and exports work.</li><li>Dialing, new applications and lead posting stop.</li><li>Partners see the portal as read-only.</li><li>Resume any time; billing restarts that day.</li></ul>
+        </div>
+        <div class="sheet-f"><span class="btn g">Keep it running</span><span class="btn p">Pause subscription</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A6 · Cancel, step 2 of 4: pause instead?</h2><span>reason → offer pause → take your records → confirm · same sheet, calm, one step at a time</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3></div>
+        <div class="status"><span class="dot"></span>Active · next charge $278.00 on Dec 3</div>
+        <div class="body"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <div class="sheet-h"><b>Cancel your subscription</b><span class="x">✕</span></div>
+        <div style="padding:12px 18px;border-bottom:1px solid var(--rule)"><div class="steps"><span class="done"><i>✓</i>Why</span><em></em><span class="on"><i>2</i>Pause?</span><em></em><span><i>3</i>Records</span><em></em><span><i>4</i>Confirm</span></div></div>
+        <div class="sheet-b">
+          <h4 style="font-size:16px;margin:0 0 4px">Would a pause do?</h4>
+          <p class="small muted" style="margin:0 0 12px">You said "slow season, fewer agents until March". A pause keeps everything as it is and costs nothing.</p>
+          <dl class="kv" style="grid-template-columns:150px 1fr">
+            <dt>Pause</dt><dd>$0.00 while paused · resume in one click</dd>
+            <dt>Cancel</dt><dd>Ends Dec 3 · records kept 90 days, then deleted</dd>
+          </dl>
+          <div class="hr"></div>
+          <div class="small muted">We only ask once. Choosing "Continue to cancel" goes on to your records.</div>
+        </div>
+        <div class="sheet-f"><span class="btn g" style="margin-right:auto">Back</span><span class="btn o">Continue to cancel</span><span class="btn p">Pause instead</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>Cancel flow · the other three steps</h2><span>each is the same sheet's body</span></div>
+    <div class="flow">
+      <div class="card"><div class="card-h"><b>1 · Why</b><small>required</small></div><div class="card-b">
+        <div class="small muted" style="margin-bottom:8px">Pick what fits best.</div>
+        <div class="row"><span class="tog">Too expensive</span><span class="tog">Missing something</span><span class="tog">Switching tools</span><span class="tog on">Slow season</span><span class="tog">Closing the agency</span><span class="tog">Other</span></div>
+        <label class="l" style="margin-top:12px">Anything we should know?</label><div class="input textarea">Slow season, fewer agents until March</div>
+        <div class="row" style="justify-content:flex-end;margin-top:12px"><span class="btn g sm">Keep my subscription</span><span class="btn p sm">Next</span></div>
+      </div></div>
+      <div class="card"><div class="card-h"><b>2 · Pause?</b><small>shown above</small></div><div class="card-b small muted">Offered once, with pause as the green action and cancel as the plain one.</div></div>
+      <div class="card"><div class="card-h"><b>3 · Take your records</b><small>optional</small></div><div class="card-b">
+        <div class="small muted" style="margin-bottom:8px">Readable and exportable for 90 days after Dec 3.</div>
+        <div class="line"><b>Your book</b><small>policies · CSV</small><span class="end"><span class="btn o sm">Export</span></span></div>
+        <div class="line"><b>Commission history</b><small>CSV</small><span class="end"><span class="btn o sm">Export</span></span></div>
+        <div class="line"><b>Invoices</b><small>6 PDFs</small><span class="end"><span class="btn o sm">Download</span></span></div>
+        <div class="row" style="justify-content:flex-end;margin-top:12px"><span class="btn g sm">Back</span><span class="btn p sm">Next</span></div>
+      </div></div>
+      <div class="card"><div class="card-h"><b>4 · Confirm</b></div><div class="card-b">
+        <dl class="kv" style="grid-template-columns:96px 1fr"><dt>Ends</dt><dd>Dec 3, 2026</dd><dt>Charges</dt><dd>None after today</dd><dt>Read-only</dt><dd>Until Mar 3, 2027</dd></dl>
+        <div class="help" style="margin-top:10px">You can change your mind until Dec 3 from this page.</div>
+        <div class="row" style="justify-content:flex-end;margin-top:14px"><span class="btn g sm">Keep my subscription</span><span class="btn danger sm">Cancel on Dec 3</span></div>
+      </div></div>
+    </div>
+
+    <div class="sec"><h2>A7 · Invoice view (right sheet)</h2><span>View on any invoice row · download as PDF</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Compare plans</span><span class="btn hl">Upgrade</span></div></div>
+        <div class="status"><span class="dot"></span>Active · next charge $278.00 on Dec 3</div>
+        <div class="body"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Invoice INV-0011</b><span class="chip ok">Paid</span><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="paper">
+            <div class="hd"><div><b>Insurvas</b>support@insurvas.com</div><div class="r">Issued Nov 3, 2026<br>Paid Nov 3, 2026</div></div>
+            <div style="margin-bottom:12px"><b style="color:var(--ink)">Billed to</b><br>Ellery &amp; Fields Insurance Group LLC<br>2200 Ross Ave, Suite 4100, Dallas, TX 75201</div>
+            <table><thead><tr><th>Item</th><th>Period</th><th class="r">Amount</th></tr></thead><tbody>
+              <tr><td>Agency Pro</td><td>Nov 3 – Dec 3</td><td class="r">$249.00</td></tr>
+              <tr><td>Local presence numbers</td><td>Nov 3 – Dec 3</td><td class="r">$29.00</td></tr>
+            </tbody></table>
+            <div class="tot"><span>Subtotal</span><span>$278.00</span><span>Tax</span><span>$0.00</span><b>Total</b><b>$278.00</b></div>
+            <div style="margin-top:12px" class="muted">Paid with Visa ending 4417</div>
+          </div>
+        </div>
+        <div class="sheet-f"><span class="btn o">Download PDF</span><span class="btn p">Done</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A8 · Failed payment</h2><span>the status line carries the dates and the fix · Upgrade hides · the overdue row gets Pay</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Compare plans</span><span class="btn p">Update card ↗</span></div></div>
+        <div class="status bad"><span class="dot"></span>Your Dec 3 payment of $278.00 didn't go through · we retry Dec 5 · if no retry works, dialing and applications pause on Dec 8</div>
+        <div class="body col">
+          <div class="card">
+            <div class="hero">
+              <div class="who"><span class="ic">AP</span><div><b>Agency Pro <span class="chip bad" style="margin-left:6px">Payment failed</span></b><small>Monthly · Visa ending 4417 was declined on Dec 3</small></div></div>
+              <span class="sp"></span>
+              <div style="text-align:right"><div class="price">$278.00 <small>due</small></div><div class="small muted">Retried automatically over 5 days</div></div>
+            </div>
+          </div>
+          <div class="card flex1">
+            <div class="card-h"><b>Invoices</b></div>
+            <div class="scroll"><table>
+              <thead><tr><th>Invoice</th><th>Date</th><th>For</th><th class="r">Amount</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                <tr class="h"><td>INV-0012</td><td>Dec 3, 2026</td><td>Dec 3 – Jan 3</td><td class="r">$278.00</td><td><span class="chip bad">Overdue</span></td><td><span class="btn p sm">Pay $278.00</span></td></tr>
+                <tr><td>INV-0011</td><td>Nov 3, 2026</td><td>Nov 3 – Dec 3</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                <tr><td>INV-0010</td><td>Oct 3, 2026</td><td>Oct 3 – Nov 3</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+              </tbody>
+            </table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A9 · Paused: the book is read-only</h2><span>status line says what's stopped · Resume is the one action · meters rest</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn o">Cancel instead</span><span class="btn p">Resume subscription</span></div></div>
+        <div class="status warn"><span class="dot"></span>Paused since Nov 12 · your book is read-only · no charges until you resume · exports still work</div>
+        <div class="body col">
+          <div class="card">
+            <div class="hero">
+              <div class="who"><span class="ic">AP</span><div><b>Agency Pro <span class="chip warn" style="margin-left:6px">Paused</span></b><small>Resuming bills $249.00 + $29.00 that day and starts a new month</small></div></div>
+              <span class="sp"></span>
+              <div style="text-align:right"><div class="price">$0.00 <small>while paused</small></div></div>
+            </div>
+            <div class="meters ro">
+              <div class="mtr"><div class="t">Seats</div><b>17 <small>of 25</small></b><span class="meter"><i style="width:68%"></i></span><span class="foot">Sign-in still works</span></div>
+              <div class="mtr"><div class="t">Dialer minutes</div><b>— </b><span class="meter"><i style="width:0"></i></span><span class="foot">Stopped while paused</span></div>
+              <div class="mtr"><div class="t">Text messages</div><b>—</b><span class="meter"><i style="width:0"></i></span><span class="foot">Stopped while paused</span></div>
+              <div class="mtr"><div class="t">Lead imports</div><b>—</b><span class="meter"><i style="width:0"></i></span><span class="foot">Stopped while paused</span></div>
+              <div class="mtr"><div class="t">AI call summaries</div><b>—</b><span class="meter"><i style="width:0"></i></span><span class="foot">Stopped while paused</span></div>
+            </div>
+          </div>
+          <div class="card flex1"><div class="card-h"><b>What still works</b></div><div class="scroll"><div class="card-b">
+            <div class="line"><b>Your book, policies and commissions</b><span class="end"><span class="chip ok">Readable</span></span></div>
+            <div class="line"><b>Exports and invoices</b><span class="end"><span class="chip ok">Working</span></span></div>
+            <div class="line"><b>Dialing, applications, lead posting</b><span class="end"><span class="chip">Stopped</span></span></div>
+            <div class="line"><b>Partner portal</b><span class="end"><span class="chip">Read-only</span></span></div>
+          </div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION B ═══════════════════════════════ -->
+  <div class="opt B">
+    <div class="sec"><h2>B1 · Usage first: big meters, plan to the side</h2><span>sub-pages Usage · Invoices &amp; payment in the header bar · trend per meter</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><nav class="tabs"><a class="on">Usage</a><a>Invoices &amp; payment <span class="c">6</span></a></nav><div class="acts"><span class="btn o">Pause or cancel</span></div></div>
+        <div class="status warn"><span class="dot"></span>Active · text messages at 96% of your limit, resets Dec 3 · dialer minutes at 82%</div>
+        <div class="body">
+          <div class="card flex1"><div class="card-h"><b>This period · Nov 3 – Dec 3</b><div class="r"><span class="small muted">21 days left</span></div></div>
+            <div class="scroll"><div class="card-b">
+              <div class="bigm">
+                <div class="mtr"><div class="t">Text messages <span class="chip warn">96%</span></div><b>1,910 <small>of 2,000</small></b><span class="meter big warn"><i style="width:96%"></i></span><div class="bars"><i style="height:30%"></i><i style="height:42%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:82%"></i><i style="height:95%"></i></div><span class="foot">At this pace you reach 2,000 on Nov 14 · resets Dec 3</span></div>
+                <div class="mtr"><div class="t">Dialer minutes <span class="chip warn">82%</span></div><b>8,240 <small>of 10,000</small></b><span class="meter big warn"><i style="width:82%"></i></span><div class="bars"><i style="height:50%"></i><i style="height:58%"></i><i style="height:61%"></i><i style="height:66%"></i><i style="height:60%"></i><i style="height:72%"></i><i style="height:80%"></i></div><span class="foot">On pace for 10,000 by Nov 28 · resets Dec 3</span></div>
+                <div class="mtr"><div class="t">Seats</div><b>17 <small>of 25</small></b><span class="meter big"><i style="width:68%"></i></span><div class="bars"><i style="height:60%"></i><i style="height:60%"></i><i style="height:62%"></i><i style="height:64%"></i><i style="height:64%"></i><i style="height:66%"></i><i style="height:68%"></i></div><span class="foot">8 seats free · plan limit</span></div>
+                <div class="mtr"><div class="t">Lead imports</div><b>12,400 <small>of 50,000</small></b><span class="meter big"><i style="width:25%"></i></span><span class="foot">Resets Dec 3</span></div>
+                <div class="mtr"><div class="t">AI call summaries</div><b>640 <small>of 1,500</small></b><span class="meter big"><i style="width:43%"></i></span><span class="foot">Resets Dec 3</span></div>
+                <div class="mtr"><div class="t">Storage</div><b>18 GB <small>of 100 GB</small></b><span class="meter big"><i style="width:18%"></i></span><span class="foot">Plan limit</span></div>
+              </div>
+            </div></div>
+          </div>
+          <div class="card" style="width:300px;flex:none">
+            <div class="card-h"><b>Your plan</b></div>
+            <div class="scroll"><div class="card-b">
+              <div class="row"><span class="ic">AP</span><div><b style="font-size:16px;color:var(--ink)">Agency Pro</b><div class="small muted">Monthly · renews Dec 3</div></div></div>
+              <div class="price" style="margin-top:10px">$249.00 <small>a month</small></div>
+              <div class="small muted">+ Local presence numbers $29.00</div>
+              <div class="row" style="margin-top:12px"><span class="btn hl">Upgrade</span><span class="btn o">Compare plans</span></div>
+              <div class="hr"></div>
+              <dl class="kv" style="grid-template-columns:90px 1fr"><dt>Next charge</dt><dd>$278.00 · Dec 3</dd><dt>Card</dt><dd>Visa 4417</dd><dt>Last invoice</dt><dd>Paid Nov 3</dd></dl>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B2 · Invoices &amp; payment sub-page</h2><span>the second header tab · the same edit sheets as A open from here</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><nav class="tabs"><a>Usage</a><a class="on">Invoices &amp; payment <span class="c">6</span></a></nav><div class="acts"><span class="btn o">Update card ↗</span></div></div>
+        <div class="status"><span class="dot"></span>Next charge $278.00 on Dec 3 · Visa ending 4417</div>
+        <div class="body">
+          <div class="card flex1"><div class="scroll"><table>
+            <thead><tr><th>Invoice</th><th>Date</th><th>For</th><th class="r">Amount</th><th>Status</th><th></th></tr></thead>
+            <tbody>
+              <tr><td>INV-0011</td><td>Nov 3, 2026</td><td>Agency Pro + local presence</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+              <tr><td>INV-0010</td><td>Oct 3, 2026</td><td>Agency Pro + local presence</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+              <tr><td>INV-0009</td><td>Sep 3, 2026</td><td>Agency Pro</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+              <tr><td>INV-0008</td><td>Aug 3, 2026</td><td>Agency Pro</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+              <tr><td>INV-0007</td><td>Jul 3, 2026</td><td>Agency Pro</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+              <tr><td>INV-0006</td><td>Jun 3, 2026</td><td>Agency Pro</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+            </tbody>
+          </table></div><div class="card-f small muted">Your card is held by Whop. Receipts go to billing@elleryfields.com.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION C ═══════════════════════════════ -->
+  <div class="opt C">
+    <div class="sec"><h2>C1 · One statement that scrolls: plan → usage → invoices → payment → pause or cancel</h2><span>section index on the left · reads like a bank statement</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers <span class="cnt">1</span></a><h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a><h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a><h5>Records</h5><a>Settings history</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn hl">Upgrade</span></div></div>
+        <div class="status warn"><span class="dot"></span>Active · next charge $278.00 on Dec 3 · text messages at 96% of your limit</div>
+        <div class="body">
+          <div class="card flex1 cardrow">
+            <nav class="index"><a class="on">Plan</a><a>Usage <span class="mk warn">2 high</span></a><a>Invoices</a><a>Payment</a><a>Pause or cancel</a></nav>
+            <div class="colwrap"><div class="scroll"><div class="stmt">
+              <section><h4>Plan</h4><p class="sub">What you pay and when.</p>
+                <div class="mlist">
+                  <div class="mrow"><b>Agency Pro</b><span>Monthly, renews Dec 3</span><span></span><span class="r" style="font-size:14px;color:var(--ink)">$249.00</span></div>
+                  <div class="mrow"><b>Local presence numbers</b><span>Add-on</span><span></span><span class="r" style="font-size:14px;color:var(--ink)">$29.00</span></div>
+                  <div class="mrow"><b>Next charge, Dec 3</b><span></span><span></span><span class="r" style="font-size:16px;color:var(--ink);font-weight:600">$278.00</span></div>
+                </div>
+                <div class="row" style="margin-top:10px"><a class="lnk small">Compare plans ›</a><a class="lnk small">See everything included ›</a></div>
+              </section>
+              <section><h4>Usage · Nov 3 – Dec 3</h4><p class="sub">Warnings at 80% and 95%. Monthly limits reset Dec 3.</p>
+                <div class="mlist">
+                  <div class="mrow"><b>Text messages</b><span class="meter warn"><i style="width:96%"></i></span><span>1,910 of 2,000</span><span class="r"><span class="chip warn">96%</span></span></div>
+                  <div class="mrow"><b>Dialer minutes</b><span class="meter warn"><i style="width:82%"></i></span><span>8,240 of 10,000</span><span class="r"><span class="chip warn">82%</span></span></div>
+                  <div class="mrow"><b>Seats</b><span class="meter"><i style="width:68%"></i></span><span>17 of 25</span><span class="r">Plan limit</span></div>
+                  <div class="mrow"><b>Lead imports</b><span class="meter"><i style="width:25%"></i></span><span>12,400 of 50,000</span><span class="r">Resets Dec 3</span></div>
+                  <div class="mrow"><b>AI call summaries</b><span class="meter"><i style="width:43%"></i></span><span>640 of 1,500</span><span class="r">Resets Dec 3</span></div>
+                </div>
+              </section>
+            </div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C2 · Same statement, scrolled to invoices, payment and pause or cancel</h2><span>cancel sits last, in plain words, opening the same sheet as A</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Your account</h5><a>My profile</a><a class="on">Plan &amp; billing</a><h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Your account</div>
+        <div class="head"><h3>Plan &amp; billing</h3><div class="acts"><span class="btn hl">Upgrade</span></div></div>
+        <div class="status warn"><span class="dot"></span>Active · next charge $278.00 on Dec 3 · text messages at 96% of your limit</div>
+        <div class="body">
+          <div class="card flex1 cardrow">
+            <nav class="index"><a>Plan</a><a>Usage <span class="mk warn">2 high</span></a><a class="on">Invoices</a><a>Payment</a><a>Pause or cancel</a></nav>
+            <div class="colwrap"><div class="scroll"><div class="stmt">
+              <section><h4>Invoices</h4><p class="sub">6 invoices · all paid</p>
+                <table>
+                  <thead><tr><th>Invoice</th><th>Date</th><th class="r">Amount</th><th>Status</th><th></th></tr></thead>
+                  <tbody>
+                    <tr><td>INV-0011</td><td>Nov 3, 2026</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                    <tr><td>INV-0010</td><td>Oct 3, 2026</td><td class="r">$278.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                    <tr><td>INV-0009</td><td>Sep 3, 2026</td><td class="r">$249.00</td><td><span class="chip ok">Paid</span></td><td><a class="lnk small">View</a></td></tr>
+                  </tbody>
+                </table>
+                <a class="lnk small" style="display:inline-block;margin-top:8px">Show 3 older</a>
+              </section>
+              <section><h4>Payment</h4><p class="sub">Held by Whop; it never passes through Insurvas.</p>
+                <div class="line"><span class="cc">VISA</span><b>Visa ending 4417</b><small>expires 08/28</small><span class="end"><span class="btn o sm">Update card ↗</span></span></div>
+                <div class="line"><b>Receipts to</b><small>billing@elleryfields.com</small><span class="end"><span class="btn g sm">Change</span></span></div>
+              </section>
+              <section><h4>Pause or cancel</h4><p class="sub">Pausing stops charges and keeps your book readable. Cancelling ends on Dec 3; records stay readable for 90 days.</p>
+                <div class="row"><span class="btn o">Pause subscription</span><span class="btn g" style="color:var(--bad)">Cancel subscription</span></div>
+              </section>
+            </div></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ STATES ═══════════════════════════════ -->
+  <div class="sec"><h2>States · every option</h2><span>loading keeps the title · empty · error · the status line for each account state (no notice cards, no bell-only)</span></div>
+  <div class="states">
+    <div class="card"><div class="card-h"><b>Loading</b></div><div class="card-b"><div class="skel" style="width:35%"></div><div class="skel" style="width:20%;height:22px"></div><div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px"><div><div class="skel"></div><div class="skel" style="height:6px"></div></div><div><div class="skel"></div><div class="skel" style="height:6px"></div></div><div><div class="skel"></div><div class="skel" style="height:6px"></div></div></div><div class="skel" style="margin-top:14px"></div><div class="skel" style="width:80%"></div></div></div>
+    <div class="card"><div class="card-h"><b>Empty · no invoices yet</b></div><div class="empty"><span class="ic">$</span><b>No invoices yet</b><p>Your first invoice arrives on Dec 3, when your trial ends.</p><span class="btn o">Compare plans</span></div></div>
+    <div class="card"><div class="card-h"><b>Error</b></div><div class="card-b"><div class="status bad" style="margin:0 0 10px"><span class="dot"></span>Couldn't load your plan and billing. <a class="lnk">Retry</a></div><div class="small muted">Shown in the card; the title stays. Nothing goes to the bell.</div></div></div>
+  </div>
+  <div class="states two">
+    <div class="card"><div class="card-h"><b>Status line, each account state</b></div><div class="card-b">
+      <div class="status"><span class="dot"></span>Active · next charge $278.00 on Dec 3</div>
+      <div class="status warn"><span class="dot"></span>Trial · ends Dec 3 · then $249.00 a month — <a class="lnk">add a card</a></div>
+      <div class="status warn"><span class="dot"></span>Dialer minutes at 82% · resets Dec 3 — <a class="lnk">compare plans</a></div>
+      <div class="status bad"><span class="dot"></span>Text messages at the limit · texts stop until Dec 3 — <a class="lnk">upgrade</a></div>
+      <div class="status bad"><span class="dot"></span>Payment didn't go through · retry Dec 5 · read-only on Dec 8 — <a class="lnk">update card</a></div>
+      <div class="status bad"><span class="dot"></span>Read-only: payment stopped on Dec 8 · your book is readable — <a class="lnk">pay $278.00</a></div>
+      <div class="status warn"><span class="dot"></span>Paused since Nov 12 · book read-only · no charges — <a class="lnk">resume</a></div>
+      <div class="status warn"><span class="dot"></span>Ends Dec 3 · no more charges — <a class="lnk">keep my subscription</a></div>
+      <div class="status bad"><span class="dot"></span>Ended Dec 3 · records readable and exportable until Mar 3, 2027 — <a class="lnk">export</a></div>
+      <div class="status"><span class="dot"></span>No subscription · this workspace runs on default access — <a class="lnk">contact support</a></div>
+    </div></div>
+    <div class="card"><div class="card-h"><b>Toasts and the "needs an update" case</b></div><div class="card-b">
+      <div class="row" style="flex-direction:column;align-items:flex-start;gap:8px">
+        <span class="toast"><i></i>You're on Agency Scale now</span>
+        <span class="toast"><i></i>Your subscription is paused</span>
+        <span class="toast"><i></i>Your subscription will end on Dec 3</span>
+      </div>
+      <div class="hr"></div>
+      <div class="status warn"><span class="dot"></span>Changing your plan here needs a database update. Billing still works.</div>
+      <div class="small muted">Shown on the status line, never as a card above the plan.</div>
+    </div></div>
+  </div>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose · sheets, dialogs and states come with every option</span></div>
+  <div class="pick">
+    <div class="rec"><b>A · Plan hero + sheets (recommended)</b>One page, no tabs: the plan and its meters on top, invoices and payment side by side below. Everything you edit opens as a sheet.
+      <ul><li>Three tabs become one page; "what do I pay on Dec 3, and why" is answered in one look</li><li>Meters turn warning-toned at 80% and 95% with the reset date; one gold Upgrade</li><li>Compare plans and the change impact move to right sheets; confirm in a dialog with dollars</li><li>Pause and cancel become a calm, stepped sheet with pause first, offered once</li><li>Dunning, paused, cancelling and cancelled ride the status line with their one fix, not notices or the bell</li></ul></div>
+    <div><b>B · Usage first</b>Big meters with a 7-day trend and a "you'll reach it on…" forecast; the plan is a side card. Invoices &amp; payment is a second header tab.
+      <ul><li>Best for agencies that run close to limits</li><li>Forecast per meter is new (needs daily usage)</li><li>Price and invoices are one click further away</li></ul></div>
+    <div><b>C · One statement</b>A single inner-scroll card read top to bottom: plan, usage, invoices, payment, pause or cancel, with a section index.
+      <ul><li>Calmest, most like a bank statement</li><li>Cancel last, in plain words</li><li>Problems lower down need the status line and index marks to be seen</li></ul></div>
+  </div>
+</div>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

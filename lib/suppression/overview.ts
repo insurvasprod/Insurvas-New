@@ -2,7 +2,7 @@ import "server-only";
 
 import { demoScreeningEnabled } from "@/lib/compliance/demo";
 import { COMPLIANCE_VENDOR_TYPE_LABELS, type ComplianceVendorType } from "@/lib/compliance/constants";
-import { listComplianceVendors } from "@/lib/compliance/service";
+import { enabledFeedHealth } from "@/lib/compliance/service";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 import { LIST_TYPES, normalizeDigits, type SuppressionListType } from "./constants";
@@ -42,11 +42,10 @@ export async function suppressionOverview(tenantId: string): Promise<Suppression
   const db = getSupabaseServiceClient() as unknown as Loose;
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [vendors, refused] = await Promise.all([
-    listComplianceVendors().catch(() => null),
+    enabledFeedHealth(SCRUB_TYPES).catch(() => null),
     db.from("audit_log").select("id", { count: "exact", head: true }).eq("action", "tenant.dial_refused").eq("metadata->>tenantId", tenantId).gte("ts", since),
   ]);
   const feeds: SuppressionFeed[] = (vendors ?? [])
-    .filter((vendor) => vendor.is_enabled && SCRUB_TYPES.includes(vendor.vendor_type))
     .map((vendor) => ({
       name: vendor.name,
       type: vendor.vendor_type,

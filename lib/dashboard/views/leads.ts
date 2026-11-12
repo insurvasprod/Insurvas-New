@@ -241,13 +241,18 @@ type Db = any;
 type Rows<T> = { rows: T[]; capped: boolean };
 
 async function paged<T>(build: () => Db, cap = MAX_ROWS): Promise<Rows<T>> {
+  // The first page, then three at a time (perf pass 2026-11-09): the same rows, in order, as one page after another.
   const rows: T[] = [];
-  for (let from = 0; from < cap; from += 1000) {
-    const { data, error } = await build().range(from, from + 999);
-    if (error) throw new Error(error.message);
-    const page = (data ?? []) as T[];
-    rows.push(...page);
-    if (page.length < 1000) return { rows, capped: false };
+  for (let from = 0; from < cap; ) {
+    const starts = (from === 0 ? [0] : [from, from + 1000, from + 2000]).filter((at) => at < cap);
+    const batch = await Promise.all(starts.map((at) => build().range(at, at + 999)));
+    for (const { data, error } of batch) {
+      if (error) throw new Error(error.message);
+      const page = (data ?? []) as T[];
+      rows.push(...page);
+      if (page.length < 1000) return { rows, capped: false };
+    }
+    from += starts.length * 1000;
   }
   return { rows, capped: true };
 }
@@ -255,7 +260,7 @@ async function paged<T>(build: () => Db, cap = MAX_ROWS): Promise<Rows<T>> {
 const settle = <T,>(work: () => Promise<T>): Promise<T | null> => work().catch(() => null);
 
 export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData> {
-  const { context, available, scope, solo, zone, now, noMoney } = props;
+  const { context, available, scope, solo, zone, now, noMoney, forOverview } = props;
   const tenantId = context.tenantId;
   const roles: TenantRole[] = context.roles?.length ? context.roles : [context.role];
   const hidden = context.hiddenPages ?? [];
@@ -297,13 +302,16 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
       const cutoff = new Date(now - NOT_CALLED_AFTER_MS).toISOString();
       const queued = await paged<{ lead_id: string }>(() => scoped(db().from("lead_queue").select("lead_id").eq("tenant_id", tenantId).in("status", ["unclaimed", "claimed"]).not("owner_user_id", "is", null).lt("queued_at", cutoff).order("queued_at", { ascending: true }), "owner_user_id"), 5000);
       const ids = [...new Set(queued.rows.map((row) => row.lead_id))];
-      let count = 0;
-      for (let index = 0; index < ids.length; index += 300) {
-        const chunk = ids.slice(index, index + 300);
+      // The 300-id pieces a few at a time (lib/retention/batch's bound), not one after another.
+      const { mapLimit, READ_CONCURRENCY } = await import("@/lib/retention/batch");
+      const pieces: string[][] = [];
+      for (let index = 0; index < ids.length; index += 300) pieces.push(ids.slice(index, index + 300));
+      const counted = await mapLimit(pieces, READ_CONCURRENCY, async (chunk) => {
         const result = await db().from("agent_leads").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).in("id", chunk).is("first_dial_at", null);
         if (result.error) throw new Error(result.error.message);
-        count += result.count ?? 0;
-      }
+        return result.count ?? 0;
+      });
+      const count = counted.reduce((sum, n) => sum + n, 0);
       counts.notCalled = { count, capped: queued.capped, href: notCalledHref };
     }).then(() => undefined));
     if (duplicatesPage && typeof steps.clean === "number") counts.duplicates = { count: steps.clean, href: `${duplicatesPage}?tab=duplication` };
@@ -346,7 +354,8 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
   }) : Promise.resolve(null);
 
   /* Speed to lead: the newest leads (a narrow session's own, from the newest 300) */
-  const speedRead = workspace ? settle(async () => {
+  // The Overview draws no speed-to-lead list.
+  const speedRead = workspace && !forOverview ? settle(async () => {
     const visible = await visibleRead;
     if (scope !== null && visible === null) throw new Error("scope unavailable");
     const { data, error } = await db().from("agent_leads").select("id, created_at, posted_at, first_dial_at, values").eq("tenant_id", tenantId).is("values->>_erased", null).order("created_at", { ascending: false }).limit(visible ? 300 : 8);
@@ -367,7 +376,8 @@ export async function loadLeadsView(props: DashViewProps): Promise<LeadsViewData
   const [needs, monthData, scorecard, speed, ready] = await Promise.all([needsRead, monthRead, scorecardRead, speedRead, readyRead]);
 
   /* Names behind the donut (vendor, else campaign) */
-  const names = monthData && monthData.leads.some((lead) => lead.campaign_id) ? await settle(async () => {
+  // The Overview draws no source donut or vendor table, so it reads no names.
+  const names = !forOverview && monthData && monthData.leads.some((lead) => lead.campaign_id) ? await settle(async () => {
     const [campaigns, vendors] = await Promise.all([
       db().from("tenant_campaigns").select("id, name, vendor_id").eq("tenant_id", tenantId),
       db().from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId),

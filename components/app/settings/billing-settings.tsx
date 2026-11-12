@@ -213,7 +213,19 @@ export function BillingSettings() {
 
   return (
     <SettingsStack className="min-h-0 flex-1 gap-3">
-      <SettingsSectionHeader />
+      <SettingsSectionHeader
+        // The section's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
+        tabs={<ViewTabs
+              label="Plan and billing"
+              value={tab}
+              onChange={setTab}
+              tabs={[
+                { key: "overview", label: "Overview" },
+                ...(sub && actions?.canChangePlan ? [{ key: "plan" as const, label: "Change plan" }] : []),
+                { key: "invoices", label: "Invoices & payment" },
+              ]}
+            />}
+      />
       {!view.schemaReady ? <Callout tone="warning" title="Changing your plan here needs a database update." /> : null}
 
       {/* The state that needs the owner, first, above the tabs. */}
@@ -251,16 +263,6 @@ export function BillingSettings() {
       ) : null}
       {!sub ? <Callout tone="info" title="This workspace has no subscription">It runs on the platform&apos;s default access. To choose a plan, contact support@insurvas.com.</Callout> : null}
 
-      <ViewTabs
-        label="Plan and billing"
-        value={tab}
-        onChange={setTab}
-        tabs={[
-          { key: "overview", label: "Overview" },
-          ...(sub && actions?.canChangePlan ? [{ key: "plan" as const, label: "Change plan" }] : []),
-          { key: "invoices", label: "Invoices & payment" },
-        ]}
-      />
 
       {/* The tabs stay put; only what is under them scrolls (owner 2026-11-03). */}
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1.5 @container">
@@ -329,7 +331,7 @@ export function BillingSettings() {
               {warned.length && actions?.canChangePlan && (view.options.length || view.planChangeBySupport) ? (
                 <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--body)]">
                   {warned.length === 1 ? `${warned[0].label} is running out.` : `${warned.length} limits are running out.`}
-                  <Button type="button" variant="outline" size="sm" onClick={toPlan}>Upgrade</Button>
+                  <Button type="button" variant="highlight" size="sm" onClick={toPlan}>Upgrade</Button>
                 </div>
               ) : null}
             </div>

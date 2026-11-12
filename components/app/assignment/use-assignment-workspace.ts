@@ -3,17 +3,35 @@ import { LICENCE_WARNING_DAYS, MATCH_LABEL, SKIP_REASON_LABEL, daysUntil, shortN
 import { notify } from "@/lib/notify";
 import { weekdayDayMonth } from "@/lib/format/dates";
 import { type ConditionDraft, type PreviewState, type RuleDraft, draftFromRule, draftProblem, fetchPreview, matchValuesOf, pinFallbacks, readJson, splitList, conditionsOf, serialise, titleCase } from "./model";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
+
+/**
+ * The workspace's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws the last
+ * answer at once and the fresh one replaces it (speed pass 2026-11-09).
+ */
+export const ASSIGNMENTS_KEY = "/api/app/assignments";
+
+/** The published chain as the draft shows it (fallbacks pinned last), and its baseline. */
+function chainOf(next: Workspace) {
+  const active = next.rules.filter((rule) => rule.is_active).map(draftFromRule);
+  return { pinned: pinFallbacks(active), baseline: serialise(active) };
+}
 
 /** The state and handlers of AssignmentWorkspace (UX-6), moved verbatim; the component renders. */
 export function useAssignmentWorkspace(canManage: boolean) {
-  const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [loading, setLoading] = useState(true);
+  // The kept answer on a client navigation (nothing while hydrating a fresh document).
+  const [kept] = useState(() => {
+    const data = seed<Workspace>(ASSIGNMENTS_KEY, true)?.data ?? null;
+    return data ? { data, ...chainOf(data) } : null;
+  });
+  const [workspace, setWorkspace] = useState<Workspace | null>(() => kept?.data ?? null);
+  const [loading, setLoading] = useState(() => !kept);
   const [busy, setBusy] = useState<string | null>(null);
   const [preview, setPreview] = useState<PreviewState>({ rows: null, pending: false, loading: canManage, error: null });
 
   // The rule chain as a draft: edited here, published whole.
-  const [drafts, setDrafts] = useState<RuleDraft[]>([]);
-  const [baseline, setBaseline] = useState("[]");
+  const [drafts, setDrafts] = useState<RuleDraft[]>(() => kept?.pinned ?? []);
+  const [baseline, setBaseline] = useState(() => kept?.baseline ?? "[]");
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [dragKey, setDragKey] = useState<string | null>(null);
   const [publishError, setPublishError] = useState<string | null>(null);
@@ -40,7 +58,7 @@ export function useAssignmentWorkspace(canManage: boolean) {
 
   // A reload after a capacity or settings save must not throw away a half-edited rule chain, so an
   // unpublished draft survives it; publishing and Discard take the server's chain whole.
-  const baselineRef = useRef("[]");
+  const baselineRef = useRef(kept?.baseline ?? "[]");
   const adopt = useCallback((next: Workspace, keepDraft = false) => {
     setWorkspace(next);
     const active = next.rules.filter((rule) => rule.is_active).map(draftFromRule);
@@ -54,11 +72,10 @@ export function useAssignmentWorkspace(canManage: boolean) {
     if (!keepDraft) setPublishError(null);
   }, []);
 
-  const load = useCallback(async (keepDraft = true) => {
-    const response = await fetch("/api/app/assignments", { cache: "no-store" });
-    const body = await readJson(response);
-    if (!response.ok) throw new Error(typeof body?.error === "string" ? body.error : "Could not load assignment workspace");
-    adopt(body as unknown as Workspace, keepDraft);
+  // `fresh` after a change, so the answer is never the one from before it.
+  const load = useCallback(async (keepDraft = true, fresh = false) => {
+    const body = await (fresh ? loadResource<Workspace>(ASSIGNMENTS_KEY, { persist: true }) : readResource<Workspace>(ASSIGNMENTS_KEY, { persist: true }));
+    adopt(body, keepDraft);
   }, [adopt]);
 
   const loadPreview = useCallback(async () => {
@@ -69,15 +86,22 @@ export function useAssignmentWorkspace(canManage: boolean) {
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/app/assignments", { cache: "no-store" })
-      .then(async (response) => { const body = await readJson(response); if (!response.ok) throw new Error(typeof body?.error === "string" ? body.error : "Could not load assignment workspace"); if (active) adopt(body as unknown as Workspace); })
+    // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+    const keptAnswer = peek<Workspace>(ASSIGNMENTS_KEY, true)?.data;
+    if (!kept && keptAnswer) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+      adopt(keptAnswer);
+      setLoading(false);
+    }
+    void readResource<Workspace>(ASSIGNMENTS_KEY, { persist: true })
+      .then((body) => { if (active) adopt(body); })
       .catch((error) => { if (active) notify.block(error instanceof Error ? error.message : "Could not load assignment workspace"); })
       .finally(() => { if (active) setLoading(false); });
     if (canManage) void fetchPreview().then((next) => { if (active) setPreview(next); });
     return () => { active = false; };
-  }, [adopt, canManage]);
+  }, [adopt, canManage, kept]);
 
-  const refresh = useCallback(async (keepDraft = true) => { await load(keepDraft); void loadPreview(); }, [load, loadPreview]);
+  const refresh = useCallback(async (keepDraft = true) => { await load(keepDraft, true); void loadPreview(); }, [load, loadPreview]);
 
   const members = useMemo(() => workspace?.members ?? [], [workspace]);
   const memberById = useMemo(() => new Map(members.map((member) => [member.id, member])), [members]);
@@ -162,7 +186,7 @@ export function useAssignmentWorkspace(canManage: boolean) {
       await refresh();
     } catch (error) {
       setMemberError(error instanceof Error ? error.message : "Could not save");
-      await load().catch(() => undefined);
+      await load(true, true).catch(() => undefined);
     } finally { setBusy(null); }
   }
 
@@ -182,7 +206,7 @@ export function useAssignmentWorkspace(canManage: boolean) {
       await refresh();
     } catch (error) {
       setRestError(error instanceof Error ? error.message : "Could not save");
-      await load().catch(() => undefined);
+      await load(true, true).catch(() => undefined);
     } finally { setBusy(null); }
   }
 

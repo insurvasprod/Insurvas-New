@@ -118,7 +118,7 @@ export function DisputeLetterPrint({ carrierId, ids, openIds, canMarkDisputed }:
       if (!recorded.ok) problems.push(((await recorded.json().catch(() => ({}))) as { error?: string }).error ?? "The letter could not be recorded.");
       if (markDisputed && openIds.length) {
         const marked = await fetch("/api/app/discrepancies", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: openIds, status: "disputed", note: "Dispute letter printed" }) });
-        if (!marked.ok) problems.push(((await marked.json().catch(() => ({}))) as { error?: string }).error ?? "The discrepancies were not marked disputed.");
+        if (!marked.ok) problems.push(((await marked.json().catch(() => ({}))) as { error?: string }).error ?? "The pay issues were not marked as in a letter.");
         else router.refresh();
       }
     } catch {
@@ -138,8 +138,8 @@ export function DisputeLetterPrint({ carrierId, ids, openIds, canMarkDisputed }:
           checked={markDisputed}
           disabled={busy}
           onChange={setMarkDisputed}
-          label={`Mark ${openIds.length === 1 ? "the open finding" : `the ${openIds.length} open findings`} as disputed`}
-          title="Disputed means a letter went to the carrier. Findings already disputed, resolved or written off are left as they are."
+          label={`Mark ${openIds.length === 1 ? "the open issue" : `the ${openIds.length} open issues`} "In a letter"`}
+          title="In a letter means a letter went to the carrier. Issues already in a letter, resolved or written off are left as they are."
         />
       )}
       <Button type="button" variant="outline" disabled={busy || downloading} onClick={() => void download()}>

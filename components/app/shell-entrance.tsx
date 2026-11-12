@@ -2,6 +2,8 @@
 
 import { useLayoutEffect } from "react";
 
+import { clearResources } from "@/lib/client/resource-cache";
+
 /**
  * The first screen after signing in builds itself in (§ Motion, "shell-enter", owner pick 2026-11-09): the sidebar
  * slides in from the left, the top bar drops in, then the page rises — about 0.8s, once per sign-in, never on a
@@ -13,6 +15,9 @@ const LENGTH_MS = 900;
 
 /** Called by the sign-in form right before it opens the app. */
 export function markShellEntrance() {
+  // A session that ended without the sign-out button (it expired) leaves its kept answers behind: a new sign-in
+  // starts with none (lib/client/resource-cache.ts).
+  clearResources();
   try { sessionStorage.setItem(KEY, "1"); } catch { /* the entrance is a courtesy */ }
 }
 

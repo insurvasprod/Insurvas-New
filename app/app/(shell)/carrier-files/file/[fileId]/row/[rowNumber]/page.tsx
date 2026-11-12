@@ -19,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
-import { cn } from "@/lib/utils";
 
 /**
  * Book of business › Files › a file › a row (LA-4.20, Notion sprint; round 2, owner 2026-11-02 — was a
@@ -36,7 +35,7 @@ import { cn } from "@/lib/utils";
  */
 const cents = (n: number) => `${n < 0 ? "−" : ""}$${(Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 /** A stage's action read as a link in the folded "Nothing to do" line (in a stage row it is a row button). */
-const linkWrap = "[&>a]:font-semibold [&>a]:text-[var(--accent-ink)] [&>a:hover]:underline";
+const linkWrap = "[&>a]:text-foreground [&>a:hover]:underline";
 const words = (value: string | null) => (value ? value.replaceAll("_", " ").replace(/^./, (c) => c.toUpperCase()) : "");
 
 /** A field's full name, from the layout's own list ("Paid-to date"). */
@@ -212,7 +211,7 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
       facts={
         <p className="m-0 mt-1 flex min-w-0 flex-wrap gap-x-1.5 text-sm leading-normal text-muted-foreground">
           <span title={`Line ${row.rowNumber} of the file as sent (line 1 is the header)`}>{rowWord} in</span>
-          <Link href={fileHref(row.file.id)} className="text-[var(--accent-ink)] hover:underline" title="Back to the file">{row.file.name}</Link>
+          <Link href={fileHref(row.file.id)} className="text-foreground hover:underline" title="Back to the file">{row.file.name}</Link>
           <span>· {row.file.carrierName ?? "Carrier not known"} · file of {fileDay(row.file.fileDate)}</span>
         </p>
       }
@@ -229,11 +228,14 @@ export default async function RawRowPage({ params }: { params: Promise<{ fileId:
         <TableCard title="What happened" description={`${acted.length} of ${steps.length} steps did something for this row`}>
           <ol className="m-0 list-none border-t border-border p-0">
             {acted.map((step, index) => (
-              <li key={step.stage} className="grid min-h-[2.75rem] grid-cols-[24px_112px_minmax(0,1fr)_auto] items-center gap-x-3 border-b border-border px-4 py-2 text-sm">
-                <span aria-hidden="true" className={cn("flex size-6 items-center justify-center rounded-full text-xs font-semibold", step.state === "needs" ? "bg-[var(--warning-surface)] text-[var(--warning-ink)]" : "bg-[var(--success-surface)] text-[var(--success-ink)]")}>{index + 1}</span>
-                <span className="font-semibold text-foreground">{step.stage}<span className="sr-only"> · {DOT_SAID[step.state]}</span></span>
-                <span className="min-w-0 whitespace-normal break-words leading-snug text-foreground">{step.text}</span>
-                <span className="text-right">{step.action ? <Button asChild size="sm" variant={step.state === "needs" ? "default" : "outline"}>{step.action}</Button> : null}</span>
+              // One line per step (owner 2026-11-11): the stage, what it did (the whole sentence is the tooltip), one chip
+              // for its state and a short next step.
+              <li key={step.stage} className="grid min-h-[2.75rem] grid-cols-[24px_112px_minmax(0,1fr)_auto_auto] items-center gap-x-3 border-b border-border px-4 py-2 text-sm">
+                <span aria-hidden="true" className="tabular-nums text-muted-foreground">{index + 1}</span>
+                <span className="whitespace-nowrap font-medium text-foreground">{step.stage}</span>
+                <span className="min-w-0 truncate text-foreground" title={typeof step.text === "string" ? step.text : undefined}>{step.text}</span>
+                <StatusChip tone={step.state === "needs" ? "warning" : "good"}>{DOT_SAID[step.state]}</StatusChip>
+                <span className="whitespace-nowrap text-right [&>a:hover]:underline">{step.action ? <>{step.action} ›</> : null}</span>
               </li>
             ))}
           </ol>

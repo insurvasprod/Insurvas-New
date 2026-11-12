@@ -11,12 +11,15 @@ import { costPerLeadLabel, formatUsPhone, selectionReasonParts, shortDate, slots
 import { APPLICATION_OUTCOME, FALLBACK_DIALER_OUTCOMES, INBOUND_RETURN_CALL, outcomeIndexForKey, outcomesForRole, type DialerOutcome } from "@/lib/dialerScripts/outcomes";
 import { callbackQuickOptions } from "@/lib/dialerScripts/callbackQuick";
 import { searchRebuttals } from "@/lib/dialerScripts/rebuttals";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 import { type Attempt, CALLBACK_OUTCOME, DNC_OUTCOME, type Lead, type Panel, type Queue, type QueueFilter, type QueueRow, RETURNABLE, type Served, announceDisposition, errorText, instantInZone, keyWords, scriptSections } from "@/components/app/dialer/model";
 
 /** The state and handlers of DialerWorkspace (UX-6), moved verbatim; the component renders. */
 
 /** Where the auto-next switch is remembered in this browser. */
 const AUTO_NEXT_KEY = "insurvas:dialer-auto-next";
+/** The queue's read, as the app's cache keys it (lib/client/resource-cache.ts); the unfiltered one is kept across a reload. */
+const queueKey = (filter: QueueFilter) => `/api/app/dialer/queue?priority=${filter}`;
 export function useDialer({ readOnly = false, role = "producer", requestedLeadId = null }: { readOnly?: boolean; role?: string; canCheckNumber?: boolean; requestedLeadId?: string | null }) {
   // LA-2.12. A setter works this queue but may not sell, quote or submit an application, and may
   // not "see other setters' leads" — so identity search is not theirs either. Both controls are
@@ -71,7 +74,7 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   // The Priority queue list (user decision 2026-09-24): a bounded, read-only preview of what is
   // servable to this agent now. Picking a row is a serve of that lead, refused with a reason when
   // any gate says no.
-  const [queue, setQueue] = useState<Queue | null>(null);
+  const [queue, setQueue] = useState<Queue | null>(() => seed<Queue>(queueKey("all"), true)?.data ?? null);
   const [queueError, setQueueError] = useState<string | null>(null);
   const [queueFilter, setQueueFilter] = useState<QueueFilter>("all");
   const [queueReload, setQueueReload] = useState(0);
@@ -155,15 +158,23 @@ export function useDialer({ readOnly = false, role = "producer", requestedLeadId
   }, [readOnly, requestedLeadId]);
 
   // The list. Read-only on the server, so it loads for read-only accounts too.
+  // Through the app's cache (speed pass 2026-11-09): the first read may draw the last answer at once; every reload
+  // after a serve, pick or outcome asks the server afresh.
   useEffect(() => {
     let active = true;
-    void fetch(`/api/app/dialer/queue?priority=${queueFilter}`, { cache: "no-store" }).then(async (response) => {
-      const body = await response.json().catch(() => null);
+    const key = queueKey(queueFilter);
+    const persist = queueFilter === "all";
+    if (queueReload === 0 && persist) {
+      // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+      const kept = peek<Queue>(key, true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+      if (kept?.data) setQueue((current) => current ?? kept.data ?? null);
+    }
+    void (queueReload > 0 ? loadResource<Queue>(key, { persist }) : readResource<Queue>(key, { persist })).then((body) => {
       if (!active) return;
-      if (!response.ok) { setQueueError(errorText(body, "Could not load the queue")); return; }
-      setQueue(body as Queue);
+      setQueue(body);
       setQueueError(null);
-    }).catch(() => { if (active) setQueueError("Could not load the queue"); });
+    }).catch((error: unknown) => { if (active) setQueueError(error instanceof Error && "status" in error ? error.message || "Could not load the queue" : "Could not load the queue"); });
     return () => { active = false; };
   }, [queueFilter, queueReload]);
 

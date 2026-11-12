@@ -222,10 +222,12 @@ export function BusinessIdentitySettings({ team = null, workspace = null }: Part
 
   return (
     <SettingsStack className="min-h-0 flex-1 gap-3">
-      <SettingsSectionHeader />
+      <SettingsSectionHeader
+        // The section's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
+        tabs={<ViewTabs label="Business identity" tabs={tabs} value={tab} onChange={setTab} idPrefix="identity-tab" controls="identity-panel" />}
+      />
       {!response.schemaReady && <Callout tone="warning" title="Saving the business identity needs a database update." />}
 
-      <ViewTabs label="Business identity" tabs={tabs} value={tab} onChange={setTab} idPrefix="identity-tab" controls="identity-panel" />
 
       {/* Only the cards scroll; the tabs above stay put. */}
       <div id="identity-panel" role="tabpanel" aria-labelledby={`identity-tab-${tab}`} className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1.5 @container">

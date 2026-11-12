@@ -4,6 +4,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ActivityLogWorkspace } from "@/components/app/activity-log-workspace";
 import { ReportsPage } from "@/components/app/reports/reports-page";
 import { sharedPeriod } from "@/lib/reports/views";
+import { mayReviewZeroClick } from "@/lib/activityLog/types";
 
 /**
  * Enforcement point 2 of 3.
@@ -45,5 +46,9 @@ export default async function ActivityPage({ searchParams }: { searchParams: Pro
   // The role decides only what the page offers (the zero-click review is owners' and producers');
   // /api/app/activity enforces the same rule on its own.
   // Inside the Reports page, on the Reports views' shared period when another view set one.
-  return <ReportsPage view="activity" info="What each agent did, and how it turned out. Served, dialled and logged are separate counts; nothing here is talk time, because click-to-call hands the call to the handset."><ActivityLogWorkspace initialView={initialView} role={guard.role} framed initialPeriod={sharedPeriod(query)} initialAgent={agent && /^[0-9a-f-]{36}$/i.test(agent) ? agent : ""} /></ReportsPage>;
+  // Reports round 7 (owner pick 2·A): the report tabs open on their chart, with the Table · Chart switch on the title
+  // line. To review and Close out are work: the switch is there too (owner 2026-11-12, every Reports sub-page), but they
+  // open on their table, where the work is done. Only owners and producers have those two tabs.
+  const work = (initialView === "review" || initialView === "closeout") && mayReviewZeroClick(guard.role);
+  return <ReportsPage view="activity" show={work ? "table" : "chart"} info="What each agent did, and how it turned out. Served, dialled and logged are separate counts; nothing here is talk time, because click-to-call hands the call to the handset."><ActivityLogWorkspace initialView={initialView} role={guard.role} framed initialPeriod={sharedPeriod(query)} initialAgent={agent && /^[0-9a-f-]{36}$/i.test(agent) ? agent : ""} /></ReportsPage>;
 }

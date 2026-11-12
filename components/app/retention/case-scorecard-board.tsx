@@ -1,94 +1,64 @@
-"use client";
-
-import { useTransition } from "react";
-import { usePathname, useRouter } from "next/navigation";
-
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
-import { TableCard } from "@/components/ui/table-card";
-import { ViewTabs } from "@/components/ui/view-tabs";
-import { ReportsSlot, useUrlTab } from "@/components/app/reports/reports-slot";
-import { STEP_LABELS, type Step } from "@/lib/retention/cases/ladder";
 import { MIN_DECIDED, rateText, type ScoreLine } from "@/lib/retention/cases/scorecard";
-import { SCORECARD_PERIOD_LABELS, SCORECARD_PERIODS, type ScorecardPeriod } from "@/lib/retention/scorecard";
+import type { CaseTrend } from "@/lib/retention/cases/trend";
+import { SCORECARD_PERIOD_LABELS, type ScorecardPeriod } from "@/lib/retention/scorecard";
+import { showHref, type ShowMode } from "@/lib/reports/show";
 
-const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
+import { ScorecardPeopleChart, ScorecardStepChart } from "./retention-charts";
+import { spark } from "./results-tables";
+
+import { ScorecardPeopleTable, ScorecardStepTable, casesHref, money } from "./scorecard-tables";
+
+export const SCORECARD_PATH = "/app/retention-scorecard";
+export type ScorecardView = "people" | "steps";
+
+/** The scorecard's address: the period (180 days left out), the view, a person, the table (the chart left out). */
+export function scorecardHref({ period, view, rep, show }: { period: ScorecardPeriod; view?: ScorecardView | null; rep?: string | null; show?: ShowMode }): string {
+  const q = new URLSearchParams();
+  if (period !== "180") q.set("period", period);
+  if (view && view !== "people") q.set("view", view);
+  if (rep) q.set("rep", rep);
+  if (show === "table") q.set("show", "table");
+  return q.size ? `${SCORECARD_PATH}?${q}` : SCORECARD_PATH;
+}
 
 /**
- * Reports › Retention scorecard on the ladder (owner 2026-11-05; docs/retention/SPEC.md). Per person, and per
- * step: open, saved (a carrier file proved it), lost, closed without a save, unreachable, the save rate (saved ÷
- * saved + lost, counts under 10 decided) and the premium kept. The tabs sit on the title line (`?tab=`).
+ * Retention › Scorecard on the ladder (round 7, owner pick 5·A, 2026-11-10; Reports round 7 9·2, 2026-11-11). The
+ * page's title line carries By person · By step, the Table · Chart switch (`?show=`, the chart by default) and the
+ * period; here the four cards, each said once, opening Cases filtered and carrying a small chart of the same figure a
+ * week at a time, then the chart or the six-column table. A person's row or bar opens their page (board 5·1).
  */
-export function CaseScorecardBoard({ people, steps, total, names, period }: { people: ScoreLine[]; steps: ScoreLine[]; total: ScoreLine; names: Record<string, string>; period: ScorecardPeriod }) {
-  const router = useRouter();
-  const pathname = usePathname();
-  const [refreshing, startRefresh] = useTransition();
-  const { tab, setTab, href } = useUrlTab(["people", "steps"] as const, "people");
-  const toolbar = (
-    <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
-      <select aria-label="Period" className={toolbarControl} value={period} onChange={(e) => router.push(e.target.value === "180" ? pathname : `${pathname}?period=${e.target.value}`)}>
-        {(Object.keys(SCORECARD_PERIODS) as ScorecardPeriod[]).map((p) => <option key={p} value={p}>{SCORECARD_PERIOD_LABELS[p]}</option>)}
-      </select>
-    </DataToolbar>
-  );
-  const row = (l: ScoreLine, label: string, strong = false) => (
-    <tr key={l.key} className={strong ? "font-semibold" : undefined}>
-      <td className="text-foreground">{label}</td>
-      <td className="text-right tabular-nums">{l.open.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.saved.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.lost.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.closedNoSave.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.unreachable.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{rateText(l)}</td>
-      <td className="text-right tabular-nums">{money(l.keptCents)}/mo</td>
-    </tr>
-  );
-  const head = (first: string) => (
-    <thead>
-      <tr>
-        <th>{first}</th>
-        <th className="text-right">Open</th>
-        <th className="text-right">Saved</th>
-        <th className="text-right">Lost</th>
-        <th className="text-right">Closed, no save</th>
-        <th className="text-right">Unreachable</th>
-        <th className="text-right" title={`Saved of saved and lost; under ${MIN_DECIDED} decided cases the counts are shown.`}>Save rate</th>
-        <th className="text-right">Premium kept</th>
-      </tr>
-    </thead>
-  );
-
+export function CaseScorecardBoard({ people, steps, total, names, view, period, viewerId, show, trend }: { people: ScoreLine[]; steps: ScoreLine[]; total: ScoreLine; names: Record<string, string>; view: ScorecardView; period: ScorecardPeriod; viewerId: string; show: ShowMode; trend: CaseTrend }) {
+  const personHref = (rep: string) => scorecardHref({ period, rep, show });
+  const tableHref = showHref(scorecardHref({ period, view }), "table");
+  const periodLabel = SCORECARD_PERIOD_LABELS[period];
   return (
     <>
-      <ReportsSlot slot="lead"><ViewTabs label="Retention scorecard views" value={tab} onChange={setTab} tabs={[{ key: "people", label: "By person", count: people.length }, { key: "steps", label: "By step" }]} /></ReportsSlot>
       <StatStrip label="Retention, on the ladder">
-        <StatTile label="Open" href="/app/retention" value={total.open.toLocaleString("en-US")} footnote={`${total.unreachable} unreachable`} />
-        <StatTile label="Saved" href={href("steps")} value={total.saved.toLocaleString("en-US")} valueTone={total.saved ? "good" : undefined} footnote={`${money(total.keptCents)}/mo kept`} />
-        <StatTile label="Lost" href={href("steps")} value={total.lost.toLocaleString("en-US")} footnote={`${total.closedNoSave} closed without a save`} />
-        <StatTile label="Retention rate" href={href("people")} value={rateText(total)} labelTitle={`Saved of saved and lost. Under ${MIN_DECIDED} decided cases the counts are shown.`} footnote="saved ÷ saved + lost" />
+        <StatTile label="Open" href={casesHref({})} value={total.open.toLocaleString("en-US")} footnote={`${total.unreachable.toLocaleString("en-US")} unreachable`} trend={spark(trend.open)} />
+        <StatTile label="Saved" href={casesHref({ step: "closed" })} value={total.saved.toLocaleString("en-US")} footnote={`${money(total.keptCents)}/mo kept`} trend={spark(trend.saved)} />
+        <StatTile label="Lost" href={casesHref({ step: "closed" })} value={total.lost.toLocaleString("en-US")} footnote={`${total.closedNoSave.toLocaleString("en-US")} closed without a save`} trend={spark(trend.lost)} />
+        <StatTile label="Retention rate" href={casesHref({ step: "closed" })} value={rateText(total)} labelTitle={`Saved of saved and lost. Under ${MIN_DECIDED} decided cases the counts are shown. The small chart is the rate so far, week by week.`} footnote="saved ÷ (saved + lost)" trend={spark(trend.rate)} />
       </StatStrip>
-      <TableCard toolbar={toolbar} footer={<span>Saved means a carrier file proved it; closed without a save counts apart from the rate</span>}>
-        {total.open + total.saved + total.lost + total.closedNoSave === 0 ? (
-          <EmptyState title="No cases in this period" hint="Cases come from the carrier files; they show here as they are worked and closed." />
-        ) : tab === "steps" ? (
-          <table className="portal-lead-table w-full text-left text-sm">
-            {head("Step")}
-            <tbody>
-              {steps.map((l) => row(l, STEP_LABELS[l.key as Step] ?? l.key))}
-              {row(total, "All steps", true)}
-            </tbody>
-          </table>
-        ) : (
-          <table className="portal-lead-table w-full text-left text-sm">
-            {head("Person")}
-            <tbody>
-              {people.map((l) => row(l, l.key === "nobody" ? "Nobody yet" : names[l.key] ?? "Someone no longer here"))}
-              {people.length > 1 && row(total, "Everyone", true)}
-            </tbody>
-          </table>
-        )}
-      </TableCard>
+      {show === "chart"
+        ? view === "steps"
+          ? <ScorecardStepChart steps={steps} total={total} owner={null} title="Where the open cases sit" periodLabel={periodLabel} tableHref={tableHref} />
+          : <ScorecardPeopleChart people={people} total={total} names={names} viewerId={viewerId} personHref={personHref} periodLabel={periodLabel} tableHref={tableHref} />
+        : view === "steps"
+          ? <ScorecardStepTable steps={steps} total={total} owner={null} unreachable />
+          : <ScorecardPeopleTable people={people} total={total} names={names} viewerId={viewerId} personHref={personHref} />}
     </>
   );
+}
+
+/**
+ * Board 5·1 / 9·4, a person: their cases by the step they are on, as bars (the chart) or the six-column table. The
+ * title (their name), By step · Open · Saved · Lost, the switch and ‹ › naming the people either side are the page's.
+ */
+export function CasePersonBoard({ steps, total, owner, name, period, rep, show }: { steps: ScoreLine[]; total: ScoreLine; owner: string | null; name: string; period: ScorecardPeriod; rep: string | null; show: ShowMode }) {
+  if (show === "chart") {
+    const title = name === "You" ? "Your open cases by step" : `${name}'s open cases by step`;
+    return <ScorecardStepChart steps={steps} total={total} owner={owner} title={title} periodLabel={SCORECARD_PERIOD_LABELS[period]} tableHref={showHref(scorecardHref({ period, rep }), "table")} />;
+  }
+  return <ScorecardStepTable steps={steps} total={total} owner={owner} unreachable />;
 }

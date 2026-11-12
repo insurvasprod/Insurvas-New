@@ -5,7 +5,7 @@ import { gateStatsByPartner } from "@/lib/compliance/partnerCompliance";
 import { complaintsByPartner } from "@/lib/compliance/complaintStore";
 import { assertPartnerQualityDate, assertPartnerQualityUuid } from "./service";
 import { partnerQualityEvidence } from "./evidence";
-import { dailyVolume, defaultPartnerQualityPeriod, dispositionBreakdown, percentOf, periodMetrics, previousPartnerQualityPeriod, screeningLabel } from "./metrics";
+import { dailyVolume, weeklyVolume, defaultPartnerQualityPeriod, dispositionBreakdown, percentOf, periodMetrics, previousPartnerQualityPeriod, screeningLabel } from "./metrics";
 import type { PartnerQualityAgentRow, PartnerQualityDetail, PartnerQualityDetailLead, PartnerQualityEvidence, PartnerQualityMember, PartnerQualityPeriod, PartnerQualityPeriodMetrics } from "./types";
 
 // One partner, every figure: the /app/partner-quality/[partnerId] page. Everything is counted from
@@ -210,6 +210,8 @@ export async function getPartnerQualityDetail(tenantId: string, partnerIdValue: 
     dispositions: dispositionBreakdown(current),
     disposition_labels: labels,
     daily: dailyVolume(current, from, to),
+    weeks: weeklyVolume(current, from, to),
+    previous_weeks: weeklyVolume(previous, previousPeriod.from, previousPeriod.to),
     team,
     unattributed,
     agents,

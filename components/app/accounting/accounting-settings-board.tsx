@@ -1,281 +1,211 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { ChevronRight } from "lucide-react";
+import { useCallback, useState, type ReactNode } from "react";
 
-import { Advanced, FormSection, FormSections } from "@/components/app/settings/patterns";
-import { DraftActions } from "@/components/app/settings/primitives";
-import { LockedNote, SectionTabs, SettingRow, useAnchorTab } from "@/components/app/settings/setting-row";
-import { inputControl, Switch } from "@/components/ui/field";
-import { InfoTip } from "@/components/ui/info-tip";
-import { LeaveGuard } from "@/components/ui/leave-guard";
+import { AccountingSettingDialog, BASIS_WORDS, CADENCE_WORDS, dollars, MONTHS, SPLIT_OF_WORDS, type Which } from "@/components/app/accounting/accounting-settings-dialogs";
+import { GroupLine, LockLine, PageLine, SettingHead, SettingLine, useAccountingSave } from "@/components/app/accounting/accounting-settings-rows";
+import { SectionTabs, useAnchorTab } from "@/components/app/settings/setting-row";
 import { MoreMenu } from "@/components/ui/more-menu";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { Segmented } from "@/components/ui/view-tabs";
-import { ACQUISITION_CONSEQUENCE, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/accounting/expensesCore";
+import { TableCard } from "@/components/ui/table-card";
+import { EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/accounting/expensesCore";
 import { percent } from "@/lib/accounting/producersCore";
-import type { AccountingSettings } from "@/lib/accounting/settingsCore";
+import { ACCOUNTING_DEFAULTS, COLUMNS, type AccountingSettings } from "@/lib/accounting/settingsCore";
 import { TAX_NOTICE } from "@/lib/accounting/taxCore";
-import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
-import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
 
 /**
- * LA-7.9 · one place for everything LA-7 reads. It links to the screens that own commission
- * schedules, partner terms, carrier lags and vendors, and never edits them. Safety limits are shown
- * locked with their reason, beside the setting they guard. Every change is recorded with who, what,
- * from and to (the header's History).
+ * LA-7.9 · one place for everything LA-7 reads. It links to the screens that own commission schedules, partner
+ * terms, carrier lags and vendors, and never edits them. Safety limits are rows that never open, their reason behind
+ * the (i). Every change is recorded with who, what, from and to (More › History).
  *
- * Money & compliance redesign A (owner pick 2026-11-03, docs/settings/MONEY-COMPLIANCE-SETTINGS.md):
- * the tabs sit on the title line and the first one, Start here, holds what decides the most. Every
- * setting says what it changes. Rarely changed values fold under Advanced. One save bar for the page.
+ * Round 7 (owner pick 7·A "A tab per page, rows open a dialog", 2026-11-10; docs/la4/mockups-r7/accounting.html §7):
+ * six tabs on the title line, one per Accounting page that has settings, held in the address (?tab=bank). Each tab
+ * is a table: Setting · Now (the value in words) · Used by (linked) · Changed · Edit ›. A row opens its dialog, which
+ * saves that setting on its own, so there is no page-wide save bar or leave guard. Read-only: the rows read the same,
+ * the last column says only the owner changes these, and a dialog shows the value with Close only.
  */
 type Locked = { key: string; label: string; reason: string };
-type Change = { field: string; from: unknown; to: unknown; at: string };
-type Account = { id: string; nickname: string; lastFour: string | null; columnMap: { date: string; description: string; amount?: string | null; credit?: string | null; debit?: string | null } | null };
-type Tab = "start" | "payouts" | "producers" | "bank";
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const plain = (c: number) => formatCentsAsCurrency(c).replace(/[$,]/g, "");
+/** One recorded change (accounting_setting_change), newest first; `name` is the person who made it, when known. */
+type Change = { field: string; from?: unknown; to?: unknown; by?: string; at: string; name?: string | null };
+type Account = { id: string; nickname: string; lastFour: string | null; columnMap?: unknown };
+export type Tab = "books" | "bank" | "bills" | "payouts" | "producers" | "tax";
+export const TAB_KEYS: readonly Tab[] = ["books", "bank", "bills", "payouts", "producers", "tax"];
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "start", label: "Start here" },
+  { key: "books", label: "Books" },
+  { key: "bank", label: "Bank" },
+  { key: "bills", label: "Bills & expenses" },
   { key: "payouts", label: "Partner payouts" },
   { key: "producers", label: "Producer pay" },
-  { key: "bank", label: "Bills, bank & tax" },
+  { key: "tax", label: "Tax" },
 ];
 /** Every anchor Settings search links to (#tax), and the tab that holds it. */
 export const SECTION_TAB = {
-  reporting: "start",
-  "acquisition-or-overhead": "start",
+  reporting: "books",
+  "acquisition-or-overhead": "bills",
   "partner-payouts": "payouts",
   "producer-splits": "producers",
-  "vendor-bills": "bank",
+  "vendor-bills": "bills",
   "bank-matching": "bank",
-  tax: "bank",
+  tax: "tax",
 } as const satisfies Record<string, Tab>;
 
-/** Each safety limit (settingsCore LOCKED) said where it sits, beside the setting it guards; its reason is behind the (i). */
-const LOCK_WORDS = {
-  recurring_confirmation: "Recurring expenses always wait for you to confirm them before they book.",
-  no_outbound_payments: "Insurvas never sends money. Runs are calculated and recorded; you pay the way you do today.",
-  bank_auto_apply: "Matches are never applied for you. A person confirms each one.",
-} as const;
+const HISTORY = "/app/settings?history=accounting#settings-history";
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+const day = (at: string) => { const d = new Date(at); return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }); };
+/** "Rinor Gllareva" as "Rinor G.". */
+const shortName = (name: string) => { const [first, ...rest] = name.trim().split(/\s+/); const last = rest.pop(); return last ? `${first} ${last[0]}.` : first; };
+/** A link in a cell: the normal colour, underlined on hover (owner 2026-11-11, one colour per table). */
+const A = ({ href, children }: { href: string; children: ReactNode }) => <Link href={href} className="text-foreground hover:underline">{children}</Link>;
 
-const money = "w-36 tabular-nums";
-const narrow = "w-28 tabular-nums";
-
-export function AccountingSettingsBoard({ initial, locked, accounts, canEdit }: { initial: AccountingSettings; locked: readonly Locked[]; /** Still sent by the page; the header's History shows changes now. */ changes?: Change[]; accounts: Account[]; canEdit: boolean }) {
-  const [tab, setTab] = useState<Tab>("start");
+export function AccountingSettingsBoard({ initial, locked, changes = [], accounts, canEdit, canSeeHistory = canEdit, initialTab = "books" }: {
+  initial: AccountingSettings;
+  locked: readonly Locked[];
+  changes?: Change[];
+  accounts: Account[];
+  canEdit: boolean;
+  /** The owner: More › History. */
+  canSeeHistory?: boolean;
+  initialTab?: Tab;
+}) {
+  const [tab, setTabState] = useState<Tab>(initialTab);
+  // The tab is kept in the address (?tab=), without a round trip to the server.
+  const setTab = useCallback((next: Tab) => {
+    setTabState(next);
+    try { window.history.replaceState(window.history.state, "", `${window.location.pathname}?tab=${next}${window.location.hash}`); } catch { /* the tab still shows */ }
+  }, []);
   useAnchorTab(SECTION_TAB, setTab);
   const [s, setS] = useState(initial);
-  const [saved, setSaved] = useState(initial);
-  const [busy, setBusy] = useState(false);
-  const moneyOf = (from: AccountingSettings) => ({ tolerance: plain(from.invoiceToleranceCents), disputeTol: plain(from.payoutDisputeToleranceCents), bankTol: plain(from.bankAmountToleranceCents), threshold: plain(from.tax1099ThresholdCents), split: from.producerDefaultSplitBp == null ? "" : percent(from.producerDefaultSplitBp).replace("%", ""), cap: percent(from.producerRecoveryCapBp).replace("%", "") });
-  const [text, setText] = useState(() => moneyOf(initial));
-  const [errors, setErrors] = useState<Partial<Record<keyof ReturnType<typeof moneyOf>, string>>>({});
-  const set = <K extends keyof AccountingSettings>(k: K, v: AccountingSettings[K]) => setS((cur) => ({ ...cur, [k]: v }));
-  const bp = (value: string) => { const m = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(value.trim()); return m ? Number(m[1]) * 100 + Number(((m[2] ?? "") + "00").slice(0, 2)) : null; };
+  const [open, setOpen] = useState<Which | null>(null);
+  const { busy, save } = useAccountingSave(s, setS);
   const lock = (key: string) => locked.find((l) => l.key === key);
 
-  /** True when it saved; the leave guard keeps the owner on the page otherwise. */
-  const save = async (): Promise<boolean> => {
-    const tolerance = parseDollarsToCents(text.tolerance), disputeTol = parseDollarsToCents(text.disputeTol), bankTol = parseDollarsToCents(text.bankTol), threshold = parseDollarsToCents(text.threshold);
-    const split = text.split.trim() ? bp(text.split) : null, cap = bp(text.cap);
-    const dollars = "Enter an amount in dollars, like 50.00.", pct = "Enter a percentage, like 50.";
-    const found = {
-      ...(tolerance === null && { tolerance: dollars }), ...(disputeTol === null && { disputeTol: dollars }), ...(bankTol === null && { bankTol: dollars }), ...(threshold === null && { threshold: dollars }),
-      ...(cap === null && { cap: pct }), ...(text.split.trim() && split === null && { split: pct }),
-    };
-    setErrors(found);
-    if (Object.keys(found).length) { notify.fail("Check the highlighted amounts."); return false; }
-    const next = { ...s, invoiceToleranceCents: tolerance!, payoutDisputeToleranceCents: disputeTol!, bankAmountToleranceCents: bankTol!, tax1099ThresholdCents: threshold!, producerDefaultSplitBp: split, producerRecoveryCapBp: cap! };
-    const body = {
-      default_basis: next.defaultBasis, fy_start_month: next.fyStartMonth, persistency_month: next.persistencyMonth, sample_threshold: next.sampleThreshold, acquisition_defaults: next.acquisitionDefaults,
-      invoice_tolerance_cents: next.invoiceToleranceCents, payout_cadence: next.payoutCadence, payout_draft_days: next.payoutDraftDays, payout_auto_publish: next.payoutAutoPublish, payout_dispute_tolerance_cents: next.payoutDisputeToleranceCents,
-      payout_statement_footer: next.payoutStatementFooter, producer_default_split_bp: next.producerDefaultSplitBp, producer_default_basis: next.producerDefaultBasis,
-      producer_negative_policy: next.producerNegativePolicy, producer_recovery_cap_bp: next.producerRecoveryCapBp, producers_see_balance: next.producersSeeBalance, producer_share_fees: next.producerShareFees,
-      bank_amount_tolerance_cents: next.bankAmountToleranceCents, bank_window_days: next.bankWindowDays, tax_1099_threshold_cents: next.tax1099ThresholdCents, tax_id_viewer_roles: next.taxIdViewerRoles,
-    };
-    setBusy(true);
-    try {
-      const res = await fetch("/api/app/accounting/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const json = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(json?.error ?? "That didn't save");
-      setS(json.settings);
-      setSaved(json.settings);
-      setText(moneyOf(json.settings));
-      notify.done(json.changes.length ? `Saved ${json.changes.length} change${json.changes.length === 1 ? "" : "s"}. Recorded figures are unchanged.` : "Nothing changed");
-      return true;
-    } catch (err) {
-      notify.fail(err instanceof Error ? err.message : "That didn't save");
-      return false;
-    } finally {
-      setBusy(false);
-    }
+  /** Who changed the row last and when, if the record has it; else whose the value is. */
+  const changed = (keys: (keyof AccountingSettings)[]) => {
+    const columns = keys.map((k) => COLUMNS[k]);
+    const last = changes.find((c) => columns.includes(c.field));
+    if (last) return `${last.name ? shortName(last.name) : "yours"} · ${day(last.at)}`;
+    return keys.some((k) => !same(s[k], ACCOUNTING_DEFAULTS[k])) ? "yours" : "Insurvas's";
   };
-
-  const savedText = moneyOf(saved);
-  const changedText = (Object.keys(savedText) as (keyof typeof savedText)[]).filter((k) => text[k] !== savedText[k]);
-  const changedFields = (Object.keys(s) as (keyof AccountingSettings)[]).filter((k) => JSON.stringify(s[k]) !== JSON.stringify(saved[k]));
-  const pending = changedFields.length + changedText.length;
-  const dirty = pending > 0;
-  const dis = !canEdit;
-  const discard = () => { setS(saved); setText(moneyOf(saved)); setErrors({}); };
-  const amount = (key: keyof typeof text, cls: string, label: string, placeholder?: string) => (
+  /** What every setting row takes besides its words. */
+  const line = (which: Which, keys: (keyof AccountingSettings)[]) => ({ changed: changed(keys), canEdit, onOpen: () => setOpen(which) });
+  const row = (which: Which, keys: (keyof AccountingSettings)[], label: string, now: ReactNode, usedBy: ReactNode) => (
+    <SettingLine key={which} label={label} now={now} usedBy={usedBy} {...line(which, keys)} />
+  );
+  const lockRow = (key: string, label: string, now: string, extra?: ReactNode) => {
+    const l = lock(key);
+    return l ? <LockLine label={label} now={now} why={`Why: ${label}`} reason={<>{extra}{l.reason}</>} /> : null;
+  };
+  const foot = (left: ReactNode) => (
     <>
-      <input aria-label={label} className={cn(inputControl, cls, errors[key] && "border-[var(--error)]")} disabled={dis} inputMode="decimal" placeholder={placeholder} value={text[key]} onChange={(e) => { setText({ ...text, [key]: e.target.value }); setErrors({ ...errors, [key]: undefined }); }} />
-      {errors[key] && <span role="alert" className="text-xs text-[var(--error-ink)]">{errors[key]}</span>}
+      <span>{left}</span>
+      {canSeeHistory && <Link className="font-medium hover:underline" href={HISTORY}>History of these settings ›</Link>}
     </>
   );
-  const dollarField = (key: keyof typeof text, label: string) => <span className="flex items-center gap-2"><span className="text-sm text-[var(--muted)]">$</span>{amount(key, money, label)}</span>;
-  const lockLine = (key: keyof typeof LOCK_WORDS) => { const l = lock(key); return l ? <LockedNote>{LOCK_WORDS[key]} <InfoTip label={`Why: ${l.label}`}>{l.reason}</InfoTip></LockedNote> : null; };
-  const readOnlyValue = (value: string) => <p className="m-0 text-sm text-[var(--ink)]">{value}</p>;
+  const table = "portal-lead-table w-full text-left text-sm";
+  const acquisition = EXPENSE_CATEGORIES.filter((c) => s.acquisitionDefaults[c]);
+  const overhead = EXPENSE_CATEGORIES.filter((c) => !s.acquisitionDefaults[c]);
+  const categoryNames = (list: readonly (typeof EXPENSE_CATEGORIES)[number][]) => list.map((c) => EXPENSE_CATEGORY_LABELS[c]).join(" · ");
+  /** Up to three categories by name, else how many: one line; the full list is the tooltip. */
+  const categoryCount = (list: readonly (typeof EXPENSE_CATEGORIES)[number][]) => (list.length <= 3 ? categoryNames(list) : `${list.length} categories`);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex min-h-0 flex-grow flex-col gap-4">
       <SectionTabs label="Accounting settings" tabs={TABS} value={tab} onChange={setTab}
-        actions={canEdit ? <MoreMenu items={[{ label: "History", href: "/app/settings?history=accounting#settings-history" }, { label: "Expenses", href: "/app/expenses" }, { label: "Tax summaries", href: "/app/tax" }]} /> : <span className="text-sm text-[var(--muted)]">Only the owner changes these</span>} />
-      <LeaveGuard dirty={dirty} onSave={save} onDiscard={discard} what="the accounting settings" />
+        actions={canSeeHistory ? <MoreMenu items={[{ label: "History", href: HISTORY }]} /> : undefined} />
 
-      {tab === "start" && (
-        <FormSections>
-          <FormSection id="reporting" title="How your P&L counts money" info="The basis and year every P&L, tax and producer view opens on.">
-            <SettingRow label="Count money when" sub="P&L basis" change="Accrual books commission when the carrier reports it and costs when they are owed. Cash books both when money reaches or leaves the bank. Every P&L view, tax summary and producer statement opens on this.">
-              {dis ? readOnlyValue(s.defaultBasis === "cash" ? "It moves (cash)" : "It is earned (accrual)") : <Segmented label="P&L basis" value={s.defaultBasis} onChange={(v) => set("defaultBasis", v)} options={[{ key: "accrual", label: "It is earned (accrual)" }, { key: "cash", label: "It moves (cash)" }]} />}
-            </SettingRow>
-            <SettingRow label="Your financial year starts" change="Year-to-date figures start here.">
-              <select aria-label="Financial year starts" className={cn(inputControl, "w-48")} disabled={dis} value={s.fyStartMonth} onChange={(e) => set("fyStartMonth", Number(e.target.value))}>{MONTHS.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}</select>
-            </SettingRow>
-            <Advanced summary="Advanced" hint={`Cost per persisting policy at month ${s.persistencyMonth} · counts below ${s.sampleThreshold} policies`}>
-              <SettingRow label="Count a policy as persisting at month" change="Cost per persisting policy on the P&L counts policies still in force at this month.">
-                <select aria-label="Persisting at month" className={cn(inputControl, "w-28")} disabled={dis} value={s.persistencyMonth} onChange={(e) => set("persistencyMonth", Number(e.target.value) as AccountingSettings["persistencyMonth"])}>{[3, 6, 9, 13].map((m) => <option key={m} value={m}>{m}</option>)}</select>
-              </SettingRow>
-              <SettingRow label="Show counts instead of a rate below" change="With fewer policies than this, cost per policy shows the two counts instead of a rate.">
-                <span className="flex items-center gap-2"><input aria-label="Sample threshold" className={cn(inputControl, narrow)} disabled={dis} type="number" min={1} max={1000} value={s.sampleThreshold} onChange={(e) => set("sampleThreshold", Number(e.target.value) || 1)} /><span className="text-sm text-[var(--muted)]">policies</span></span>
-              </SettingRow>
-            </Advanced>
-          </FormSection>
-
-          <FormSection id="acquisition-or-overhead" title="Acquisition or overhead" info="Which expense categories count toward the cost of winning a policy.">
-            <p className="m-0 text-sm font-medium text-[var(--ink)]">{ACQUISITION_CONSEQUENCE}</p>
-            <div className="grid gap-x-8 gap-y-3 @3xl:grid-cols-2">
-              {EXPENSE_CATEGORIES.map((c) => (
-                <div key={c} className="flex flex-wrap items-center justify-between gap-3 text-sm text-[var(--ink)]">{EXPENSE_CATEGORY_LABELS[c]}
-                  {dis
-                    ? <span className="text-[var(--muted)]">{s.acquisitionDefaults[c] ? "Acquisition" : "Overhead"}</span>
-                    : <Segmented label={`${EXPENSE_CATEGORY_LABELS[c]}: acquisition or overhead`} value={s.acquisitionDefaults[c] ? "yes" : "no"} onChange={(value) => set("acquisitionDefaults", { ...s.acquisitionDefaults, [c]: value === "yes" })} options={[{ key: "yes", label: "Acquisition" }, { key: "no", label: "Overhead" }]} />}
-                </div>
-              ))}
-            </div>
-            <p className="m-0 text-sm text-[var(--muted)]">Applies to new expenses in that category. Ones already booked keep their choice; change those one by one on <Link className="underline" href="/app/expenses">Expenses</Link>.</p>
-            {lockLine("recurring_confirmation")}
-          </FormSection>
-        </FormSections>
-      )}
-
-      {tab === "payouts" && (
-        <FormSections>
-          <FormSection id="partner-payouts" title="Partner payouts" info="When Insurvas drafts what you owe each partner, and what the partner sees.">
-            <SettingRow label="When a payout run is ready" change="A published run is visible to the partner at once. A wrong number they have already read is far harder to correct than one caught in draft.">
-              {dis ? readOnlyValue(s.payoutAutoPublish ? "Publish to the partner" : "Wait for my review") : <Segmented label="When a payout run is ready" value={s.payoutAutoPublish ? "publish" : "wait"} onChange={(v) => set("payoutAutoPublish", v === "publish")} options={[{ key: "wait", label: "Wait for my review" }, { key: "publish", label: "Publish to the partner" }]} />}
-            </SettingRow>
-            <SettingRow label="Pay partners" change="When the next draft run appears on Partner payouts.">
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-                {dis ? readOnlyValue({ monthly: "Monthly", semi_monthly: "Twice a month", weekly: "Weekly" }[s.payoutCadence]) : <Segmented label="Payout cadence" value={s.payoutCadence} onChange={(v) => set("payoutCadence", v)} options={[{ key: "monthly", label: "Monthly" }, { key: "semi_monthly", label: "Twice a month" }, { key: "weekly", label: "Weekly" }]} />}
-                <span className="flex items-center gap-2 text-sm text-[var(--body)]">Draft the run <input aria-label="Draft after (days)" className={cn(inputControl, "w-20 tabular-nums")} disabled={dis} type="number" min={0} max={28} value={s.payoutDraftDays} onChange={(e) => set("payoutDraftDays", Number(e.target.value) || 0)} /> days after the period ends</span>
-              </div>
-            </SettingRow>
-            <SettingRow label="Statement footer" sub="Optional" change="Printed at the foot of every statement a partner reads.">
-              <input aria-label="Statement footer" className={cn(inputControl, "max-w-[560px]")} disabled={dis} maxLength={1000} placeholder="e.g. Questions? Reply to payouts@youragency.com" value={s.payoutStatementFooter ?? ""} onChange={(e) => set("payoutStatementFooter", e.target.value || null)} />
-            </SettingRow>
-            <Advanced summary="Advanced" hint={`Ignore partner disputes under $${text.disputeTol}`}>
-              <SettingRow label="Ignore partner disputes under" change="A disputed difference below this is accepted without review. $0.00 means every dispute is reviewed.">
-                {dollarField("disputeTol", "Ignore partner disputes under")}
-              </SettingRow>
-            </Advanced>
-            {lockLine("no_outbound_payments")}
-            <p className="m-0 text-sm text-[var(--muted)]">Payout terms are kept on each <Link className="underline" href="/app/publishers">partner</Link>.</p>
-          </FormSection>
-        </FormSections>
-      )}
-
-      {tab === "producers" && (
-        <FormSections>
-          <FormSection id="producer-splits" title="Producer pay" info="How a producer's share is worked out, and what happens when chargebacks take it below zero.">
-            <SettingRow label="Producers see their own balance" change="A producer sees what they are owed, chargebacks included, on My balance. A producer who finds a negative balance only when a payment does not arrive is the one who leaves.">
-              <span className="flex items-center gap-3 text-sm text-[var(--ink)]"><Switch label="Producers see their own balance" checked={s.producersSeeBalance} disabled={dis} onChange={(v) => set("producersSeeBalance", v)} />{s.producersSeeBalance ? "Yes" : "No"}</span>
-            </SettingRow>
-            <SettingRow label="When someone's balance goes below zero" change="The choice Run payroll starts with for anyone below zero; you can change it per person in the draft. Carry it: what they owe comes off their next pay in full. Take a share: that share of what they owe comes off each month. Let it go: the agency forgives it.">
-              {dis ? readOnlyValue({ carry_forward: "Carry it", cap: "Take a share each month", write_off: "Let it go" }[s.producerNegativePolicy]) : <Segmented label="Negative balance" value={s.producerNegativePolicy} onChange={(v) => set("producerNegativePolicy", v)} options={[{ key: "carry_forward", label: "Carry it" }, { key: "cap", label: "Take a share each month" }, { key: "write_off", label: "Let it go" }]} />}
-              {s.producerNegativePolicy === "cap" && <span className="flex items-center gap-2 text-sm text-[var(--body)]">Take {amount("cap", narrow, "Share of the debt (%)")} % of what they owe each month</span>}
-            </SettingRow>
-            <SettingRow label="Default split for a new producer" sub="Leave empty for none" change="Filled in when you add a producer. Each producer's own split wins.">
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-                <span className="flex items-center gap-2 text-sm text-[var(--muted)]">{amount("split", narrow, "Default split (%)", "None")} %</span>
-                {dis ? readOnlyValue({ advance: "of the advance", earned: "of earned commission", both: "of both" }[s.producerDefaultBasis]) : <Segmented label="Split of" value={s.producerDefaultBasis} onChange={(v) => set("producerDefaultBasis", v)} options={[{ key: "advance", label: "Of the advance" }, { key: "earned", label: "Of earned commission" }, { key: "both", label: "Of both" }]} />}
-              </div>
-            </SettingRow>
-            <Advanced summary="Advanced" hint={s.producerShareFees ? "Carrier fees are shared with producers" : "Carrier fees are not shared with producers"}>
-              <SettingRow label="Share carrier fees with producers" change="A carrier fee on a policy is split with its producer the way the commission is.">
-                <span className="flex items-center gap-3 text-sm text-[var(--ink)]"><Switch label="Share carrier fees" checked={s.producerShareFees} disabled={dis} onChange={(v) => set("producerShareFees", v)} />{s.producerShareFees ? "Yes" : "No"}</span>
-              </SettingRow>
-            </Advanced>
-            <p className="m-0 text-sm text-[var(--muted)]">Commission schedules and contract levels are on the <Link className="underline" href="/app/rate-card">Rate card</Link>.</p>
-          </FormSection>
-        </FormSections>
+      {tab === "books" && (
+        <TableCard footer={foot("Changes apply from now on. Recorded figures are unchanged.")}>
+          <table className={table} data-even="off">
+            <SettingHead />
+            <tbody>
+              <SettingLine id="reporting" label="Count money when" now={BASIS_WORDS[s.defaultBasis]} usedBy={<span title="Producer statements open on it too"><A href="/app/pnl">Profit &amp; loss</A> · <A href="/app/tax">Tax summaries</A></span>} {...line("basis", ["defaultBasis"])} />
+              {row("fy", ["fyStartMonth"], "Your financial year starts", MONTHS[s.fyStartMonth - 1], "Year-to-date figures")}
+              {row("persist", ["persistencyMonth"], "Count a policy as persisting at month", String(s.persistencyMonth), <A href="/app/pnl">Profit &amp; loss › Persisting cost</A>)}
+              {row("sample", ["sampleThreshold"], "Show counts instead of a rate below", plural(s.sampleThreshold, "policy", "policies"), "Cost per policy on the P&L")}
+            </tbody>
+          </table>
+        </TableCard>
       )}
 
       {tab === "bank" && (
-        <FormSections>
-          <FormSection id="vendor-bills" title="Vendor bills" info="How far a lead vendor's bill may differ from what you recorded before Insurvas flags it.">
-            <SettingRow label="Flag a bill that differs from what you recorded by more than" change="Bills outside this show as a difference on Lead invoices.">
-              {dollarField("tolerance", "Invoice tolerance")}
-            </SettingRow>
-            <p className="m-0 text-sm text-[var(--muted)]">Vendors and campaigns are set on <Link className="underline" href="/app/campaigns">Campaigns</Link>.</p>
-          </FormSection>
-
-          <FormSection id="bank-matching" title="Bank accounts" info="The accounts you import statements from. Insurvas suggests which deposit pays which commission." aside={<Link className="text-sm font-semibold text-[var(--accent-ink)] hover:underline" href="/app/bank">Bank deposits</Link>}>
-            {accounts.length === 0 ? <p className="m-0 text-sm text-[var(--muted)]">No accounts yet. Add one on <Link className="underline" href="/app/bank?view=accounts">Bank deposits</Link>.</p> : (
-              <ul className="m-0 flex list-none flex-col p-0">
-                {accounts.map((a) => (
-                  <li key={a.id} className="border-t border-[var(--border)] first:border-t-0">
-                    <Link href="/app/bank" className="flex items-center gap-4 py-3 text-sm text-[var(--ink)] no-underline hover:text-[var(--accent-ink)]">
-                      <span className="min-w-40 font-medium">{a.nickname}{a.lastFour ? <span className="ml-2 tabular-nums text-[var(--muted)]">••{a.lastFour}</span> : null}</span>
-                      <span className="flex-1 text-[var(--muted)]">{a.columnMap ? `Reads ${a.columnMap.date}, ${a.columnMap.description}, ${a.columnMap.amount ? a.columnMap.amount : `${a.columnMap.credit} / ${a.columnMap.debit}`}` : "Columns are set on the first import"}</span>
-                      <ChevronRight aria-hidden="true" className="size-4 text-[var(--muted)]" />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-            {lockLine("bank_auto_apply")}
-            <Advanced summary="Advanced" hint={`Deposit within ${s.bankWindowDays} day${s.bankWindowDays === 1 ? "" : "s"} of the carrier's date · amounts within $${text.bankTol}`}>
-              <SettingRow label="Suggest a match when the amounts differ by up to" change="A deposit this close to an expected payment is suggested as its match. $0.00 means the amounts must agree exactly.">
-                {dollarField("bankTol", "Bank amount tolerance")}
-              </SettingRow>
-              <SettingRow label="Look for the deposit up to" change="Days after the carrier's payment date. Past this with nothing in the bank, Bank deposits › Results flags it as missing money, once your bank file reaches that date.">
-                <span className="flex items-center gap-2"><input aria-label="Days after the carrier's date" className={cn(inputControl, narrow)} disabled={dis} type="number" min={1} max={120} value={s.bankWindowDays} onChange={(e) => set("bankWindowDays", Number(e.target.value) || 1)} /><span className="text-sm text-[var(--muted)]">days after</span></span>
-              </SettingRow>
-            </Advanced>
-          </FormSection>
-
-          <FormSection id="tax" title="Tax" info="The 1099 threshold and who may read payee tax IDs.">
-            <SettingRow label="1099 threshold" sub="Check the year's IRS figure; it moves" change="Payees paid this much or more in the year appear in the 1099 summary.">
-              {dollarField("threshold", "1099 threshold")}
-            </SettingRow>
-            <SettingRow label="Who may see payee tax IDs" change="Every reveal is recorded with who and when.">
-              {dis ? readOnlyValue(s.taxIdViewerRoles.includes("bookkeeper") ? "The owner and bookkeepers" : "The owner only") : <Segmented label="Who may see payee tax IDs" value={s.taxIdViewerRoles.includes("bookkeeper") ? "both" : "owner"} onChange={(v) => set("taxIdViewerRoles", v === "both" ? ["owner", "bookkeeper"] : ["owner"])} options={[{ key: "owner", label: "Owner only" }, { key: "both", label: "Owner and bookkeepers" }]} />}
-            </SettingRow>
-            <p className="m-0 text-xs text-[var(--muted)]">{TAX_NOTICE} This notice is shown on every tax screen and export, and cannot be edited.</p>
-            <p className="m-0 text-sm text-[var(--muted)]">Tax categories are mapped on <Link className="underline" href="/app/tax">Tax summaries</Link>.</p>
-          </FormSection>
-        </FormSections>
+        <TableCard footer={foot("Changes apply from now on. Recorded figures are unchanged.")}>
+          <table className={table} data-even="off">
+            <SettingHead />
+            <tbody id="bank-matching" className="scroll-mt-24">
+              {row("bankWindow", ["bankWindowDays"], "Look for the deposit up to", `${plural(s.bankWindowDays, "day")} after the carrier's date`, <span title="Missing money"><A href="/app/bank">Bank deposits › Payments</A></span>)}
+              {row("bankTol", ["bankAmountToleranceCents"], "Suggest a match when the amounts differ by up to", s.bankAmountToleranceCents === 0 ? <span title="Amounts must agree">$0.00</span> : dollars(s.bankAmountToleranceCents), "Deposits › suggestions")}
+              <PageLine label="Bank accounts" href="/app/bank?view=accounts" usedBy={<A href="/app/bank?view=accounts">Bank deposits › Accounts</A>}
+                now={accounts.length ? <span title={accounts.map((a) => `${a.nickname}${a.lastFour ? ` ••${a.lastFour}` : ""}`).join(", ")}>{accounts.length === 1 ? `${accounts[0].nickname}${accounts[0].lastFour ? ` ••${accounts[0].lastFour}` : ""}` : plural(accounts.length, "account")}</span> : "None yet"} />
+              {lockRow("bank_auto_apply", "Matches are never applied for you", "A person confirms each one")}
+            </tbody>
+          </table>
+        </TableCard>
       )}
 
-      <SettingsSaveBar visible={canEdit && dirty} note={`${pending} unsaved change${pending === 1 ? "" : "s"} to the accounting settings`}>
-        <DraftActions dirty={dirty} saving={busy} onDiscard={discard} onSave={() => void save()} />
-      </SettingsSaveBar>
+      {tab === "bills" && (
+        <TableCard footer={foot(<>Vendors and campaigns are set on <Link className="underline" href="/app/campaigns">Campaigns</Link>.</>)}>
+          <table className={table} data-even="off">
+            <SettingHead />
+            <tbody>
+              <SettingLine id="vendor-bills" label="Flag a bill that differs from your count by more than" now={dollars(s.invoiceToleranceCents)} usedBy={<span title="Billed more than you got"><A href="/app/invoices">Vendor bills</A></span>} {...line("invoiceTol", ["invoiceToleranceCents"])} />
+            </tbody>
+            <tbody id="acquisition-or-overhead" className="scroll-mt-24">
+              <GroupLine>Each expense category counts as</GroupLine>
+              {acquisition.length > 0 && <SettingLine label={<span title={categoryNames(acquisition)}>{categoryCount(acquisition)}</span>} now="Acquisition" usedBy="Cost per policy" changed={changed(["acquisitionDefaults"])} canEdit={canEdit} onOpen={() => setOpen("categories")} />}
+              {overhead.length > 0 && <SettingLine label={<span title={categoryNames(overhead)}>{categoryCount(overhead)}</span>} now="Overhead" usedBy="Net profit only" changed={changed(["acquisitionDefaults"])} canEdit={canEdit} onOpen={() => setOpen("categories")} />}
+              {lockRow("recurring_confirmation", "Monthly bills wait for your OK", "Always, before they book")}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
+
+      {tab === "payouts" && (
+        <TableCard footer={foot(<>Payout terms are kept on each partner. <Link className="underline" href="/app/publishers">Partners ›</Link></>)}>
+          <table className={table} data-even="off">
+            <SettingHead />
+            <tbody>
+              <SettingLine id="partner-payouts" label="When a payout run is ready" now={s.payoutAutoPublish ? "Publish to the partner" : "Wait for my review"} usedBy={<A href="/app/payouts">Partner payouts</A>} {...line("autoPublish", ["payoutAutoPublish"])} />
+              {row("cadence", ["payoutCadence", "payoutDraftDays"], "Pay partners", `${CADENCE_WORDS[s.payoutCadence]} · draft ${plural(s.payoutDraftDays, "day")} after the period ends`, "The next draft run")}
+              {row("footer", ["payoutStatementFooter"], "Statement footer", s.payoutStatementFooter ? <span title={s.payoutStatementFooter}>{s.payoutStatementFooter.length > 48 ? "Set" : s.payoutStatementFooter}</span> : "None", "Every partner statement")}
+              {row("disputeTol", ["payoutDisputeToleranceCents"], "Ignore partner disputes under", s.payoutDisputeToleranceCents === 0 ? <span title="Every dispute is reviewed">$0.00</span> : dollars(s.payoutDisputeToleranceCents), "Disputes on a run")}
+              {lockRow("no_outbound_payments", "Insurvas never sends money", "Runs are calculated and recorded")}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
+
+      {tab === "producers" && (
+        <TableCard footer={foot(<>Commission schedules and contract levels are on the <Link className="underline" href="/app/rate-card">Rate card</Link>.</>)}>
+          <table className={table} data-even="off">
+            <SettingHead />
+            <tbody>
+              <SettingLine id="producer-splits" label="Producers see their own balance" now={s.producersSeeBalance ? "Yes" : "No"} usedBy={<A href="/app/my-balance">My balance</A>} {...line("seeBalance", ["producersSeeBalance"])} />
+              {row("negative", ["producerNegativePolicy", "producerRecoveryCapBp"], "When someone's balance goes below zero",
+                s.producerNegativePolicy === "carry_forward" ? "Carry it to their next pay" : s.producerNegativePolicy === "cap" ? `Take ${percent(s.producerRecoveryCapBp)} of what they owe each month` : "Let it go",
+                <>Run payroll · <A href="/app/producer-splits">Producer splits</A></>)}
+              {row("split", ["producerDefaultSplitBp", "producerDefaultBasis"], "Default split for a new producer", s.producerDefaultSplitBp == null ? "None" : `${percent(s.producerDefaultSplitBp)} ${SPLIT_OF_WORDS[s.producerDefaultBasis]}`, "Adding a producer")}
+              {row("shareFees", ["producerShareFees"], "Share carrier fees with producers", s.producerShareFees ? "Yes" : "No", "Producer splits")}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
+
+      {tab === "tax" && (
+        <TableCard footer={foot(<>Tax categories are mapped on <Link className="underline" href="/app/tax">Tax summaries</Link>.</>)}>
+          <table className={table} data-even="off">
+            <SettingHead />
+            <tbody>
+              <SettingLine id="tax" label="1099 threshold" now={<span title="Check the year's IRS figure; it moves">{dollars(s.tax1099ThresholdCents)}</span>} usedBy={<A href="/app/tax">Tax summaries › Contractors</A>} {...line("threshold", ["tax1099ThresholdCents"])} />
+              {row("taxIds", ["taxIdViewerRoles"], "Who may see payee tax IDs", s.taxIdViewerRoles.includes("bookkeeper") ? "Owner and bookkeepers" : "Owner only", "Reveal tax ID on a payee")}
+              {lockRow("tax_notice", "The tax notice", "Shown on every tax screen and export; can't be edited", <span className="mb-1.5 block italic">{TAX_NOTICE}</span>)}
+            </tbody>
+          </table>
+        </TableCard>
+      )}
+
+      {open && <AccountingSettingDialog key={open} which={open} settings={s} canEdit={canEdit} busy={busy} onSave={save} onClose={() => setOpen(null)} />}
     </div>
   );
 }

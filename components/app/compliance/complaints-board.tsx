@@ -1,5 +1,6 @@
 "use client";
 
+import { DismissButton } from "@/components/app/route-sheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
@@ -35,12 +36,11 @@ import {
   type Thresholds,
 } from "@/lib/compliance/complaints";
 import type { ComplaintRow, Respondent } from "@/lib/compliance/complaintStore";
-import { COMPLAINT_TONE } from "@/lib/compliance/complaintView";
+import { complaintChannel, complaintChip, complaintName } from "@/lib/compliance/complaintView";
 import { formatPhone } from "@/lib/compliance/evidenceGaps";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { dayMonthYear } from "@/lib/format/dates";
-import { Callout } from "@/components/app/settings/primitives";
 import { ViewTabs } from "@/components/app/view-tabs";
 import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
 
@@ -65,7 +65,6 @@ export type ComplaintView = "open" | "due" | "all";
 const day = (iso: string | null) => (iso ? dayMonthYear(iso) : "—");
 const STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
 const DUE = new Set<CountdownTone>(["overdue", "red", "amber", "no_deadline"]);
-const channelName = (c: Pick<ComplaintRow, "channel" | "regulatorState">) => c.channel === "ftc" ? "FTC" : c.channel === "doi" ? `${c.regulatorState ?? "State"} DOI` : CHANNEL_LABELS[c.channel as ComplaintChannel] ?? c.channel;
 
 async function send(url: string, init: RequestInit) {
   const res = await fetch(url, init);
@@ -89,13 +88,13 @@ export function ComplaintsBoard({ complaints, coverage, thresholds, search, view
   const pageSize = useFittingPageSize(480, 45);
   const shown = paginate(visible, page, pageSize);
   const pinned = complaints.filter((c) => c.countdown.pinned).length;
+  const overdue = complaints.filter((c) => c.countdown.tone === "overdue").length;
   const regulator = openRows.filter((c) => c.channel === "doi" || c.channel === "ftc").length;
   const noDeadline = complaints.filter((c) => c.countdown.tone === "no_deadline").length;
   const href = (next: ComplaintView) => { const p = new URLSearchParams(); if (next !== "open") p.set("view", next); if (q.trim()) p.set("q", q.trim()); return p.size ? `/app/complaints?${p}` : "/app/complaints"; };
-  // The one thing to act on goes to the bell (owner 2026-11-02): the most urgent open complaint (the list is
-  // already in deadline order), then a regulator with no deadline set, then licensed states with no days.
-  const urgent = openRows.find((c) => c.countdown.tone === "overdue" || c.countdown.tone === "red");
-  const unset = openRows.find((c) => c.countdown.tone === "no_deadline");
+  // No notice on the page (owner 2026-11-02, r7 2026-11-11): the overdue complaint is the shell's banner and a
+  // chip on its row; a regulator with no days, or licensed states with none, is the No deadline set tile's chip.
+  const unsetStates = isOwner ? coverage.missing.length : 0;
 
   useEffect(() => {
     const t = setTimeout(() => { if (q !== search) router.replace(href(view)); }, 350);
@@ -113,16 +112,12 @@ export function ComplaintsBoard({ complaints, coverage, thresholds, search, view
           ]} />
       </ComplianceSlot>
       {!readOnly ? <ComplianceSlot slot="corner"><Button asChild><Link href="/app/complaints/new"><Plus aria-hidden="true" />Record a complaint</Link></Button></ComplianceSlot> : null}
-      {urgent
-        ? <Callout tone="error" title={`The ${channelName(urgent)} complaint${urgent.complainantName ? ` from ${urgent.complainantName}` : ""}: ${urgent.countdown.label.toLowerCase()}`}>Open it on Complaints › Due soon.</Callout>
-        : unset
-          ? <Callout tone="warning" title={`The ${channelName(unset)} complaint has no response deadline`}>Set the statutory days — no default is assumed.</Callout>
-          : coverage.missing.length && isOwner ? <Callout tone="warning" title={coverage.sentence}>Set them in Compliance settings › Deadlines.</Callout> : null}
       <StatStrip label="Complaint totals">
         <StatTile label="Open" value={String(openRows.length)} footnote={`${complaints.length} on record`} href={href("open")} />
         <StatTile label="Regulator" value={String(regulator)} footnote="DOI and FTC, open" href={href("open")} />
-        <StatTile label={`Due within ${thresholds.redDays} days`} value={String(pinned)} valueTone={pinned ? "danger" : undefined} footnote="or overdue" href={href("due")} />
-        <StatTile label="No deadline set" value={String(noDeadline)} valueTone={noDeadline ? "warning" : undefined} footnote="regulator complaints"
+        <StatTile label={`Due within ${thresholds.redDays} days`} value={String(pinned)} footnote={overdue ? <StatusChip tone="danger">{overdue} overdue</StatusChip> : "or overdue"} href={href("due")} />
+        <StatTile label="No deadline set" value={String(noDeadline)}
+          footnote={noDeadline ? <StatusChip tone="warning">Set the days</StatusChip> : unsetStates ? <span title={coverage.sentence}><StatusChip tone="warning">{unsetStates} {unsetStates === 1 ? "state" : "states"} without days</StatusChip></span> : "regulator complaints"}
           href={isOwner && (noDeadline || coverage.missing.length) ? "/app/compliance/settings#deadlines" : href("due")} />
       </StatStrip>
       <TableCard
@@ -138,19 +133,26 @@ export function ComplaintsBoard({ complaints, coverage, thresholds, search, view
         ) : visible.length === 0 ? (
           search ? <NoMatches noun="complaints" onClear={() => setQ("")} /> : <EmptyState title={view === "due" ? "Nothing is due soon" : "Every complaint is resolved"} hint="Resolved complaints stay under All." />
         ) : (
-          <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
-            <thead><tr><th>Deadline</th><th>Received</th><th>Complaint</th><th>Owner</th><th>Status</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
+          // One line a complaint, one text colour, one chip (r7 4·A): the chip carries the countdown. The whole
+          // row opens the record; the name is its link for the keyboard. Phone and "via firm" are the name's tooltip.
+          <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
+            <thead><tr><th>Complainant</th><th>About</th><th>Made to</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead>
             <tbody>
-              {shown.rows.map((c) => (
-                <tr key={c.id}>
-                  <td><StatusChip tone={COMPLAINT_TONE[c.countdown.tone]}>{c.countdown.label}</StatusChip>{c.responseDueAt ? <div className="text-xs text-muted-foreground">by {day(c.responseDueAt)}</div> : null}</td>
-                  <td className="whitespace-nowrap tabular-nums">{day(c.receivedAt)}</td>
-                  <td className="max-w-[280px]"><div className="truncate font-medium">{CATEGORY_LABELS[c.category as ComplaintCategory] ?? c.category} · {channelName(c)}</div><div className="truncate text-xs text-muted-foreground">{[c.complainantName, c.phoneDigits ? formatPhone(c.phoneDigits) : null, c.partner ? `via ${c.partner.name}` : null].filter(Boolean).join(" · ") || "—"}</div></td>
-                  <td className="max-w-[180px] truncate" title={c.owner.name}>{c.owner.name}</td>
-                  <td className="whitespace-nowrap">{STATUS_LABELS[c.status as keyof typeof STATUS_LABELS] ?? c.status}</td>
-                  <td className="text-right"><Button size="sm" variant="outline" asChild><Link href={`/app/complaints/${c.id}`}>Open</Link></Button></td>
-                </tr>
-              ))}
+              {shown.rows.map((c) => {
+                const chip = complaintChip(c);
+                const name = complaintName(c);
+                const tip = [name, c.phoneDigits ? formatPhone(c.phoneDigits) : null, c.partner ? `via ${c.partner.name}` : null].filter(Boolean).join(" · ");
+                return (
+                  <tr key={c.id} className="cursor-pointer" onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) router.push(`/app/complaints/${c.id}`); }}>
+                    <td className="max-w-[240px] truncate whitespace-nowrap font-medium text-foreground" title={tip}><Link href={`/app/complaints/${c.id}`} className="hover:underline">{name}</Link></td>
+                    <td className="max-w-[200px] truncate whitespace-nowrap">{CATEGORY_LABELS[c.category as ComplaintCategory] ?? c.category}</td>
+                    <td className="max-w-[200px] truncate whitespace-nowrap">{complaintChannel(c)}</td>
+                    <td className="max-w-[180px] truncate whitespace-nowrap" title={c.owner.name}>{c.owner.name}</td>
+                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{day(c.responseDueAt)}</td>
+                    <td className="whitespace-nowrap" title={c.countdown.tone === "none" ? undefined : c.countdown.label}><StatusChip tone={chip.tone}>{chip.label}</StatusChip></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -166,16 +168,15 @@ export function NewComplaintForm({ team, partners }: { team: Person[]; partners:
   const blank = { channel: "agent" as ComplaintChannel, regulator_state: "", received_at: new Date().toISOString().slice(0, 10), received_via: "phone", complainant_name: "", phone: "", policy_number: "", category: "unwanted_calls" as ComplaintCategory, summary: "", owner_user_id: "", about_agent_user_id: "", partner_id: "" };
   const [f, setF] = useState(blank);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const scope = useRef<HTMLFormElement>(null);
   const set = (k: keyof typeof f, v: string) => setF((cur) => ({ ...cur, [k]: v }));
   const dirty = Boolean(f.summary || f.phone || f.complainant_name || f.policy_number);
   const save = async (): Promise<boolean> => {
-    if (!f.summary.trim()) { setError("Write what the complaint says."); return false; }
-    if (f.category === "unwanted_calls" && !f.phone.trim()) { setError("A complaint about unwanted calls needs the number."); return false; }
-    if (f.channel === "doi" && !f.regulator_state) { setError("Choose which state's department it was made to."); return false; }
+    // A problem is a toast, never a notice on the page (r7 2026-11-11).
+    if (!f.summary.trim()) { notify.block("Write what the complaint says."); return false; }
+    if (f.category === "unwanted_calls" && !f.phone.trim()) { notify.block("A complaint about unwanted calls needs the number."); return false; }
+    if (f.channel === "doi" && !f.regulator_state) { notify.block("Choose which state's department it was made to."); return false; }
     setBusy(true);
-    setError(null);
     try {
       const body = await send("/api/app/compliance/complaints", {
         method: "POST",
@@ -193,7 +194,7 @@ export function NewComplaintForm({ team, partners }: { team: Person[]; partners:
       router.push(`/app/complaints/${body.id}`);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That didn't save");
+      notify.block(err instanceof Error ? err.message : "That didn't save", { detail: "Nothing was changed." });
       return false;
     } finally {
       setBusy(false);
@@ -218,9 +219,8 @@ export function NewComplaintForm({ team, partners }: { team: Person[]; partners:
         <Field label="Partner who sent the lead" htmlFor="cmp-partner"><select id="cmp-partner" className={control} value={f.partner_id} onChange={(e) => set("partner_id", e.target.value)}><option value="">Find it from the number</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
       </div>
       <Field label="What the complaint says" htmlFor="cmp-summary" required><textarea id="cmp-summary" className={cn(textareaControl, "min-h-28")} required maxLength={4000} value={f.summary} onChange={(e) => set("summary", e.target.value)} /></Field>
-      {error ? <Callout tone="error" title={error} /> : null}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" asChild><Link href="/app/complaints">Discard</Link></Button>
+        <DismissButton href="/app/complaints">Discard</DismissButton>
         <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Record complaint"}</Button>
       </div>
       <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setF(blank)} what="this complaint" />
@@ -233,8 +233,10 @@ export function NewComplaintForm({ team, partners }: { team: Person[]; partners:
 export type ComplaintTab = "complaint" | "response" | "files";
 
 /**
- * The record's body and its header buttons (portalled to the title line): Save while the response or the
- * workflow has unsaved changes, and More (the number's evidence report, setting a regulator's response days).
+ * The record's body and its header buttons (portalled to the title line, after the page's ‹ ›): the next thing
+ * to do as the primary ("Write the response" until one is sent, then "Record the outcome", both on the Response
+ * tab) and More (the number's evidence report, setting a regulator's response days). Save is the Response tab's
+ * own form foot (r7 4·1, 2026-11-11), not the title line.
  */
 export function ComplaintRecord({ complaint, checklist, respondent, team, tab, isOwner, readOnly }: { complaint: ComplaintRow; checklist: { key: string; item: string }[]; respondent: Respondent | null; team: Person[]; tab: ComplaintTab; isOwner: boolean; readOnly: boolean }) {
   const router = useRouter();
@@ -243,7 +245,6 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
   const [saved, setSaved] = useState(() => initial(complaint));
   const [draft, setDraft] = useState(saved);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [settingDays, setSettingDays] = useState(false);
   const [days, setDays] = useState("");
   const scope = useRef<HTMLDivElement>(null);
@@ -251,7 +252,6 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
 
   const run = async (fn: () => Promise<{ complaint: ComplaintRow }>, done: string): Promise<boolean> => {
     setBusy(true);
-    setError(null);
     try {
       const next = (await fn()).complaint;
       setC(next);
@@ -259,7 +259,7 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
       router.refresh();
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That didn't save");
+      notify.block(err instanceof Error ? err.message : "That didn't save", { detail: "Nothing was changed." });
       return false;
     } finally {
       setBusy(false);
@@ -282,6 +282,9 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
     if (ok) setSettingDays(false);
   };
   const regulatorName = c.channel === "ftc" ? "the FTC" : `the ${c.regulatorState ?? "state"} insurance department`;
+  // The next thing, on the Response tab: write it until one is sent, then record how it ended.
+  const responseHref = `/app/complaints/${c.id}?tab=response`;
+  const next = readOnly || tab === "response" || c.status === "resolved" ? null : c.respondedAt ? "Record the outcome" : "Write the response";
 
   const files = (list: ComplaintRow["attachments"], side: "complaint" | "response", title: string) => (
     <TableCard title={title} action={!readOnly ? (
@@ -313,17 +316,15 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
   return (
     <div ref={scope} className="contents">
       <ComplianceSlot slot="corner">
+        {next ? <Button asChild><Link href={responseHref}>{next}</Link></Button> : null}
         <MoreMenu items={[
           c.phoneDigits ? { label: "Evidence report for this number", href: `/app/evidence-report?phone=${c.phoneDigits}` } : null,
           c.countdown.tone === "no_deadline" && isOwner && !readOnly ? { label: "Set the response days", onSelect: () => setSettingDays(true) } : null,
           isOwner ? { label: "Deadlines in Compliance settings", href: "/app/compliance/settings#deadlines" } : null,
         ]} />
-        {!readOnly ? <Button disabled={busy || !dirty} onClick={() => void save()}>{busy ? "Saving…" : "Save"}</Button> : null}
       </ComplianceSlot>
-      {/* A regulator with no days set is acted on now, from the bell; the days are set from More. */}
-      {c.countdown.tone === "no_deadline" ? <Callout tone="warning" title={`No response deadline is set for ${regulatorName}`}>{isOwner ? "Look up the statutory days and set them from More — no default is assumed." : "Ask the agency owner to set it."}</Callout> : null}
-      {respondent?.missing ? <Callout tone="warning" title={respondent.missing} /> : null}
-      {error ? <Callout tone="error" title={error} /> : null}
+      {/* No notice on the page (r7): a regulator with no days is the Deadline tile's chip and More's "Set the
+          response days"; what the response still needs is a line on the Response tab; a failure is a toast. */}
 
       {tab === "complaint" ? (
         <>
@@ -349,7 +350,9 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
         <div className={cn(cardSurface, "flex flex-col gap-4 p-5")}>
           {respondent && !respondent.missing ? (
             <p className="m-0 text-sm text-muted-foreground">Responding as <span className="text-[var(--ink)]">{respondent.legalName}</span> · NPN {respondent.npn} · {respondent.licence ? `${respondent.licence.state} licence ${respondent.licence.number}` : `no ${c.regulatorState ?? "state"} licence on file`}</p>
-          ) : respondent?.fixHref ? <p className="m-0 text-sm"><Link className="text-[var(--accent-ink)] hover:underline" href={respondent.fixHref}>Open Business identity</Link> to add what the response needs.</p> : null}
+          ) : respondent?.missing ? (
+            <p className="m-0 text-sm text-[var(--ink)]">{respondent.missing}{respondent.fixHref ? <> <Link className="text-[var(--accent-ink)] hover:underline" href={respondent.fixHref}>Open Business identity ›</Link></> : null}</p>
+          ) : null}
           <Field label="Your response" htmlFor="cmp-response" hint={<>Written and signed by you; nothing here drafts it.{c.respondedAt ? ` Sent ${day(c.respondedAt)}.` : ""}</>}>
             <textarea id="cmp-response" className={cn(textareaControl, "min-h-48")} disabled={readOnly} maxLength={20000} value={draft.response} onChange={(e) => setDraft((d) => ({ ...d, response: e.target.value }))} />
           </Field>
@@ -359,6 +362,12 @@ export function ComplaintRecord({ complaint, checklist, respondent, team, tab, i
             <Field label="Owner" htmlFor="cmp-owner-edit"><select id="cmp-owner-edit" className={control} disabled={readOnly} value={draft.owner} onChange={(e) => setDraft((d) => ({ ...d, owner: e.target.value }))}>{team.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select></Field>
           </div>
           <Field label="Notes" htmlFor="cmp-notes"><textarea id="cmp-notes" className={textareaControl} disabled={readOnly} maxLength={4000} value={draft.notes} onChange={(e) => setDraft((d) => ({ ...d, notes: e.target.value }))} /></Field>
+          {!readOnly ? (
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" disabled={busy || !dirty} onClick={() => setDraft(saved)}>Discard</Button>
+              <Button type="button" disabled={busy || !dirty} onClick={() => void save()}>{busy ? "Saving…" : "Save response"}</Button>
+            </div>
+          ) : null}
         </div>
       ) : (
         <>

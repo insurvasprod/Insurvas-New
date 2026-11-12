@@ -17,17 +17,17 @@ export function PolicyFilesTab({ files }: { files: PolicyFile[] }) {
         <EmptyState title="No file has mentioned this policy yet" hint="Each carrier policy file and commission statement that names it shows here." />
       ) : (
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-          <thead><tr><th className="w-[120px]">File date</th><th>File</th><th className="w-[140px]">Kind</th><th>Rows</th><th className="w-8"><span className="sr-only">Open</span></th></tr></thead>
+          <thead><tr><th className="w-[120px]">File date</th><th>File</th><th className="w-[140px]">Kind</th><th>Rows</th></tr></thead>
           <PagedBody>
             {files.map((file) => (
-              <ClickRow key={file.fileId} href={fileHref(file.fileId)} label={`Open ${file.name}`}>
-                <td className="tabular-nums text-muted-foreground">{fileDay(file.date)}</td>
-                <td className="max-w-[360px] truncate font-medium text-foreground" title={file.name}>{file.name}</td>
+              <ClickRow key={file.fileId} href={fileHref(file.fileId)} label={`Open ${file.name}`} chevron={false}>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(file.date)}</td>
+                <td className="whitespace-nowrap font-medium text-foreground"><Link href={fileHref(file.fileId)} className="hover:underline">{file.name}</Link></td>
                 {/* Round 6 (board 6): the kind as a chip, so policy files and statements part at a glance. */}
-                <td><StatusChip tone={file.kind === "commissions" ? "info" : "neutral"}>{file.kind === "commissions" ? "Commission statement" : "Policy file"}</StatusChip></td>
-                <td className="text-muted-foreground">
-                  {file.rowNumbers.length === 0 ? "—" : file.rowNumbers.slice(0, 4).map((n, index) => (
-                    <span key={n}>{index > 0 ? ", " : ""}<Link href={rowHref(file.fileId, n)} className="text-[var(--accent-ink)] hover:underline">{file.kind === "commissions" ? "line" : "row"} {n}</Link></span>
+                <td className="whitespace-nowrap"><StatusChip tone={file.kind === "commissions" ? "info" : "neutral"}>{file.kind === "commissions" ? "Commission statement" : "Policy file"}</StatusChip></td>
+                <td className="whitespace-nowrap">
+                  {file.rowNumbers.length === 0 ? <span className="text-muted-foreground">—</span> : file.rowNumbers.slice(0, 4).map((n, index) => (
+                    <span key={n}>{index > 0 ? ", " : ""}<Link href={rowHref(file.fileId, n)} className="hover:underline">{file.kind === "commissions" ? "line" : "row"} {n}</Link></span>
                   ))}
                   {file.rowNumbers.length > 4 ? ` and ${file.rowNumbers.length - 4} more` : ""}
                 </td>

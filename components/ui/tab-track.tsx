@@ -14,7 +14,12 @@ import { cn } from "@/lib/utils";
  *
  * A client island inside ViewTabs, so ViewTabs itself stays usable from server pages.
  */
-export function TabTrack({ className, children, ...rest }: { className: string; children: ReactNode } & React.HTMLAttributes<HTMLDivElement>) {
+export function TabTrack({ className, children, indicator = "underline", ...rest }: {
+  className: string;
+  children: ReactNode;
+  /** What slides to the chosen tab: the sub-page bar's 2px green line (the one look, owner 2026-11-09), or a pill. */
+  indicator?: "underline" | "pill";
+} & React.HTMLAttributes<HTMLDivElement>) {
   const ref = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState({ start: false, end: false });
 
@@ -84,7 +89,7 @@ export function TabTrack({ className, children, ...rest }: { className: string; 
     <div
       ref={ref}
       {...rest}
-      data-tab-track={pill ? "pill" : ""}
+      data-tab-track={pill ? indicator : ""}
       className={cn(className, "relative isolate [scrollbar-width:none] [&::-webkit-scrollbar]:hidden")}
       style={fade ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
     >
@@ -92,7 +97,10 @@ export function TabTrack({ className, children, ...rest }: { className: string; 
         <span
           aria-hidden="true"
           data-tab-pill={pill.glide ? "glide" : ""}
-          style={{ transform: `translate(${pill.left}px, ${pill.top}px)`, width: pill.width, height: pill.height }}
+          data-tab-indicator={indicator}
+          style={indicator === "underline"
+            ? { transform: `translate(${pill.left}px, ${pill.top + pill.height - 2}px)`, width: pill.width, height: 2 }
+            : { transform: `translate(${pill.left}px, ${pill.top}px)`, width: pill.width, height: pill.height }}
         />
       )}
       {children}

@@ -1,9 +1,10 @@
 import "server-only";
 
+import { cache } from "react";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { agencyRpc } from "./rpc";
 import { producerScores, type ProducerScore } from "./scorecardStore";
-import { scopeFor } from "./visibility";
+import { scopeFor, type ProducerScope } from "./visibility";
 
 /**
  * AG-0.11 · the agency dashboard: "which of my producers is actually making me money?". Four panels, every
@@ -34,38 +35,68 @@ export type AgencyDashboard = {
 
 const days = (from: string, to: string) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / 86_400_000);
 
-export async function readDashboard(context: { tenantId: string; userId: string; role: string }, period: { from: string; to: string }): Promise<AgencyDashboard> {
-  const scope = await scopeFor(context);
+// Panel 3 — the payable ledger (reported basis). Empty state, not zero, until AG-1.5 is live. The sync must land
+// before the balances are read, so the two stay a chain; the chain itself runs beside the other panels. Once per
+// request (React cache): the agency view reads two months, and two syncs at once would race each other.
+const ledgerBalances = cache(async (tenantId: string, asOf: string) => {
+  try {
+    await agencyRpc<number>("agency_ledger_sync", { p_tenant_id: tenantId });
+    const rows = await agencyRpc<Array<{ producer_user_id: string; basis: string; balance_cents: number }>>("agency_producer_balances", { p_tenant_id: tenantId, p_as_of: asOf });
+    return { ok: true as const, rows };
+  } catch {
+    return { ok: false as const, rows: null };
+  }
+});
+
+// Period-free reads, once per request (the agency view reads two months).
+const seats = cache((tenantId: string) => Promise.all([
+  agencyRpc<number>("tenant_seats_used", { p_tenant_id: tenantId }).catch(() => 0),
+  agencyRpc<number | null>("tenant_seat_limit", { p_tenant_id: tenantId }).catch(() => null),
+]));
+const activeProducers = cache(async (tenantId: string) => {
+  const { data } = await db().from("producer").select("id, user_id, display_name").eq("tenant_id", tenantId).neq("status", "offboarded");
+  return (data ?? []) as Array<{ id: string; user_id: string; display_name: string }>;
+});
+
+/**
+ * `options.scope`: the session's scope (or its read in flight) when the caller already asked for it — a route's
+ * context copy misses scopeFor's per-request memo. Nothing waits on the scope but what it filters.
+ */
+export async function readDashboard(context: { tenantId: string; userId: string; role: string }, period: { from: string; to: string }, options: { scope?: ProducerScope | Promise<ProducerScope> } = {}): Promise<AgencyDashboard> {
+  const scopeRead = Promise.resolve(options.scope !== undefined ? options.scope : scopeFor(context));
   const today = new Date().toISOString().slice(0, 10);
   const horizon = new Date(Date.now() + 60 * 86_400_000).toISOString().slice(0, 10);
 
-  // Panel 3 — the payable ledger (reported basis). Empty state, not zero, until AG-1.5 is live. The sync must
-  // land before the balances are read, so the two stay a chain; the chain itself runs beside the other panels.
-  const ledger = (async () => {
-    await agencyRpc<number>("agency_ledger_sync", { p_tenant_id: context.tenantId });
-    return agencyRpc<Array<{ producer_user_id: string; basis: string; balance_cents: number }>>("agency_producer_balances", { p_tenant_id: context.tenantId, p_as_of: today });
-  })().then((rows) => ({ ok: true as const, rows }), () => ({ ok: false as const, rows: null }));
+  const ledger = ledgerBalances(context.tenantId, today);
 
   // The owner's override for the period: what the carriers paid the agency on producers' business, less the
   // producers' reported share of it. Both sides are reported basis. Read alongside the ledger and used only
   // when the ledger turned out ready, exactly as when it was read after it.
-  const overrideReads = scope === null
+  const overrideReads = scopeRead.then((scope) => scope === null
     ? Promise.all([
       db().from("commission_entry").select("amount_cents, id").eq("tenant_id", context.tenantId).in("entry_type", ["advance", "earned", "chargeback"]).gte("transaction_date", period.from).lte("transaction_date", period.to),
       db().from("producer_ledger_entry").select("amount_cents, commission_entry_id").eq("tenant_id", context.tenantId).eq("basis", "reported").in("entry_type", ["earned", "chargeback"]).gte("occurred_on", period.from).lte("occurred_on", period.to),
     ])
-    : null;
+    : null);
 
-  const [scores, seatsUsed, seatLimit, producers, ledgerResult, overrideResult] = await Promise.all([
-    producerScores(context, period),
-    agencyRpc<number>("tenant_seats_used", { p_tenant_id: context.tenantId }).catch(() => 0),
-    agencyRpc<number | null>("tenant_seat_limit", { p_tenant_id: context.tenantId }).catch(() => null),
-    db().from("producer").select("id, user_id, display_name").eq("tenant_id", context.tenantId).neq("status", "offboarded"),
+  // Panel 4 — licences and appointments expiring inside 60 days (the gate's own records), read as soon as the
+  // producers are known rather than after every other panel.
+  const visibleRead = Promise.all([activeProducers(context.tenantId), scopeRead]).then(([producers, scope]) => producers.filter((p) => scope === null || scope.includes(p.user_id)));
+  const expiringRead = visibleRead.then((visible) => visible.length
+    ? Promise.all([
+      db().from("producer_appointment").select("producer_id, state, expires_on, carriers(name)").eq("tenant_id", context.tenantId).in("producer_id", visible.map((p) => p.id)).eq("status", "appointed").gte("expires_on", today).lte("expires_on", horizon),
+      db().from("tenant_user_licensed_states").select("user_id, state, expires_on").eq("tenant_id", context.tenantId).in("user_id", visible.map((p) => p.user_id)).gte("expires_on", today).lte("expires_on", horizon),
+    ])
+    : null);
+
+  const [scores, [seatsUsed, seatLimit], visible, expiring, ledgerResult, overrideResult] = await Promise.all([
+    producerScores(context, period, undefined, { scope: scopeRead }),
+    seats(context.tenantId),
+    visibleRead,
+    expiringRead,
     ledger,
     overrideReads,
   ]);
-  const visible = ((producers.data ?? []) as Array<{ id: string; user_id: string; display_name: string }>).filter((p) => scope === null || scope.includes(p.user_id));
-  const producerIds = visible.map((p) => p.id);
   const nameOfProducerId = new Map(visible.map((p) => [p.id, { name: p.display_name, user: p.user_id }]));
 
   const ledgerReady = ledgerResult.ok;
@@ -81,13 +112,9 @@ export async function readDashboard(context: { tenantId: string; userId: string;
     overrideCents = agencySide - producerSide;
   }
 
-  // Panel 4 — licences and appointments expiring inside 60 days (the gate's own records).
   const alerts: HealthAlert[] = [];
-  if (producerIds.length) {
-    const [appts, lic] = await Promise.all([
-      db().from("producer_appointment").select("producer_id, state, expires_on, carriers(name)").eq("tenant_id", context.tenantId).in("producer_id", producerIds).eq("status", "appointed").gte("expires_on", today).lte("expires_on", horizon),
-      db().from("tenant_user_licensed_states").select("user_id, state, expires_on").eq("tenant_id", context.tenantId).in("user_id", visible.map((p) => p.user_id)).gte("expires_on", today).lte("expires_on", horizon),
-    ]);
+  if (expiring) {
+    const [appts, lic] = expiring;
     for (const a of (appts.data ?? []) as Array<{ producer_id: string; state: string; expires_on: string; carriers: { name?: string } | null }>) {
       const who = nameOfProducerId.get(a.producer_id);
       if (who) alerts.push({ producerUserId: who.user, name: who.name, item: "Appointment", detail: `${a.carriers?.name ?? "Carrier"} · ${a.state}`, expiresOn: a.expires_on, daysLeft: days(today, a.expires_on) });

@@ -50,6 +50,7 @@ Every v3 rule has a heading marked **(v3)** and a status line:
 | One kit for cards, chips, dialogs, menus, popovers, fields and the leave guard | §5b | Live; ratchets count the old copies down |
 | Trail and title on every page, actions on the title's line, no title in the top bar | §2 | Live (owner 2026-10-30; replaces the hidden title of 2026-10-28). **Settings is the exception (owner 2026-11-03):** the trail is the title, with the alerts, the (i) and the actions on its line; `PageHeader hideTitle` keeps the h1 for screen readers |
 | Tables: 40px sentence-case head, 44px rows | §6 | Live |
+| One sub-page bar: every page's sub-pages and views are the Appointments & setters underline tabs, on the title's line between the title and the buttons | §8b | Live (owner 2026-11-09; zero-tolerance test in `lib/design/uiConsistency.test.mjs`) |
 | Motion: one catalogue of tokens and patterns, calm premium (owner 2026-11-09) | §18 | Live for the shared kit; pages adopt it area by area |
 
 **The rules are enforced.** `lib/design/uiConsistency.test.mjs` counts each mechanically checkable
@@ -67,8 +68,7 @@ top of the test). The numbers only go down.
 
 ## 2. One header per page — `components/ui/page-header.tsx`
 ```tsx
-<PageHeader title="Partners" actions={<>…buttons…</>} />
-<ViewTabs …/>
+<PageHeader title="Partners" actions={<>…buttons…</>} tabs={<ViewTabs …/>} />
 ```
 - **Trail and title on every page (owner 2026-10-30, the Partner Chat header everywhere).** This
   replaces the hidden title of 2026-10-28. Every page a person lands on (agent app, admin console,
@@ -86,7 +86,7 @@ top of the test). The numbers only go down.
   title, no hand-made title row in a workspace.
 - **The top bar does not name the page.** Where you are is the trail, on the page.
 - **Actions** sit on the title's line, on the right, `<Button>` at the default size only (see §5),
-  primary action last. Tabs and step bars come under the header, on their own row.
+  primary action last. A page's sub-page bar (§8b) sits on the same line, between the title and the actions.
 - **Detail pages** (a record under a list, an `[id]` route) draw no back link. They pass the way back
   as the trail, the last crumb the page itself:
   `breadcrumbs={[{ label: "Partners" }, { label: "Lead sources", href: "/app/publishers" }, { label: name }]}`
@@ -248,7 +248,7 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
   13/500 (`text-label`), body 14, meta 12.
 - **Chips.** A state is `StatusChip`; a choice someone presses or removes is `ToggleChip`
   (`components/ui/toggle-chip.tsx`, 36px since 2026-10-30, §16). No local `Chip`/`Pill` (`local-chip`).
-- **Charts.** New and polished pages draw shares as a wheel (`DonutChart`) and change over time as a line (`LineSeries`), never as rows of horizontal bars (owner, 2026-11-04). `BarSeries`, `ShareBar` and `Sparkline` stay in the kit for existing screens. All from `components/ui/chart.tsx`, drawn in the
+- **Charts.** Change over time is a line (`LineSeries`, up to four lines with a linked key) or bars a period (`BarSeries`, with bars below a zero line for a loss); a comparison or a ranking is rows of horizontal bars (`BarList`: two layers, segments, a link a row); where a total went is `ShareBar` or `BarList`. **No new donuts** (owner, Reports round 7, 2026-11-11: "seems just a waste of space"): `DonutChart` stays only where it already is and on Book scorecards. This replaces the 2026-11-04 rule (wheels and lines, never horizontal bars). Every chart animates in once on load, from the kit (600ms ease-out, 30ms a row; still under reduced motion), and every bar, point and key row opens the rows behind it. A tile's small chart is `StatTile trend`. All from `components/ui/chart.tsx`, drawn in the
   ramp that file sets (`CHART_TONES`). Tokens only, both themes, and every shape carries its
   figures in text behind the picture. There is no charting dependency: the kit is one file with a
   narrow surface so one could be swapped in later without touching a page. A chart's own series
@@ -264,7 +264,7 @@ pop-ups, edits, drop-down menus" on every page. The ratchets in
   (`components/ui/date-time-picker.tsx`). A form that holds a draft has Discard and Save
   (`DraftActions` or `SettingsSaveBar`) and a `LeaveGuard` (`components/ui/leave-guard.tsx`), so a
   click away asks Save changes / Discard changes / Stay (`unguarded-dirty`).
-- **Tabs.** `ViewTabs` or `Segmented`; never a hand-made `role="tablist"` (`hand-tablist`).
+- **Tabs.** A page's sub-pages or views are the sub-page bar (`ViewTabs` / `UnderlineTabs`, §8b); a pick-one filter is `Segmented`; never a hand-made `role="tablist"` (`hand-tablist`).
 - **Dropdowns.** `SelectMenu` (`components/ui/select-menu.tsx`): a 36px trigger that takes the
   brand tint while it holds anything but its default, and a panel with a search box at the top,
   titled groups, optional dots and counts, and a tick on the chosen option. Set by the owner on
@@ -407,8 +407,8 @@ Same pattern as the INSURVAS-CRM `DataGrid` (`components/ui/DataGrid.tsx` in tha
   `mode="overlay"` slides over it from the right. It owns the header, the "Close" button, Escape,
   focus return and the slide-in — never hand-build an `<aside>` for this. A short confirmation or a
   small form is a `Dialog` instead.
-- **A page with several lists shows one at a time** with `ViewTabs` (`components/ui/view-tabs.tsx`),
-  page actions on the right of the same row; size the pager with `useFittingPageSize`
+- **A page with several lists shows one at a time** with the sub-page bar (§8b, `ViewTabs` in
+  `PageHeader tabs`); size the pager with `useFittingPageSize`
   (`components/ui/use-fitting-page-size.ts`).
 - **Say it in a few words; explain behind an `InfoTip`** (`components/ui/info-tip.tsx`) beside the term.
   Compliance and legal wording is never moved into a tip: it stays on the screen, in full.
@@ -422,10 +422,54 @@ A page with a rail of steps (StepFrame, Compliance, Reports, Leads in) puts ever
 the title line, so the step's first card starts level with the rail's top (owner 2026-11-02):
 
 - The title, with its (i) right beside it; never out by the actions.
-- The step's tabs (`PageHeader lead`). From lg up the title sits in a column as wide as the rail
-  (`--frame-rail-w`, set on `[data-step-frame]`), so the tabs start on the cards' left edge. A collapsed
-  rail is narrower than any title: the tabs then follow it, set off by a hairline.
 - The step's buttons, on the right.
+- The step's tabs: the sub-page bar (§8b), passed as the frame's `tabs`. It sits 16px after the title, the
+  same whether the rail is open or collapsed, and never under the title (owner 2026-11-09).
+
+### 8b. The sub-page bar (v3)
+**Status:** Live. Owner 2026-11-09: "the foundation of every single design". Enforced with zero tolerance by
+"sub-page tabs are the sub-page bar…" in `lib/design/uiConsistency.test.mjs`.
+
+Every page's sub-pages or views are **one** component: the underline tab bar Appointments & setters drew first
+(Overview · Calendar · Setup, 2026-11-05). The pill tabs on the title's line were "a bit hidden and hard for
+the eyes to catch", so people missed that the sub-pages existed.
+
+```tsx
+<PageHeader title="Compare" tabs={<ViewTabs label="Compare by" value={tab} tabs={[…]} />} actions={…} />
+<StepFrame … tabs={<ViewTabs … />} />          // DataInPage, AccountingPage, CommissionsPage, RetentionPage,
+                                                // ComplianceFlowPage, AgencyPage pass `tabs` the same way
+```
+
+- **The look.** A row of plain text tabs (14/500). The chosen tab is in bright foreground text over a 2px
+  `--primary` line; the others are muted and brighten on hover. A full-width hairline (`--border`) runs under
+  the whole row. A count sits after its label, red when the tab holds something to act on (`tone: "danger"`).
+  The green line slides to the chosen tab (§18, indicator).
+- **The place (owner 2026-11-09, second pass: "everything in line").** On the title's line, between the title
+  and the buttons (`PageHeader tabs`, never `lead`). The bar starts 16px after the title on every page, rail
+  open or collapsed. From lg up one hairline runs from the first tab to the line's end, under the buttons too,
+  and the buttons stand above it with a 6px gap (owner 2026-11-09, third pass: "continue the line till the end,
+  the buttons on top of the line, a gap between"; `SubpageLine` in page-header.tsx, `[data-subpage-line]` in
+  app/globals.css; `SettingsSectionHeader` draws the same). The line never wraps from lg up (a bar with more tabs
+  than room scrolls sideways); under lg the bar takes a line of its own. A client screen inside a frame portals
+  its tabs into that row (`ReportsSlot` / `ComplianceSlot` / `LeadsInSlot slot="lead"`, `SectionTabs` in
+  Settings); an empty slot takes no room.
+- **One component, two doors.** `ViewTabs` (server-safe; `href` tabs are links that keep the view in the URL)
+  and `UnderlineTabs` (client state, arrow keys). Both draw the same bar; `ViewTabs` inside a card or a
+  toolbar row is the same bar, content-wide. Never the old pill track, never a hand-made `role="tablist"`.
+- **Every page of the service (owner 2026-11-09):** the agent app, the admin console (`AdminPageHeader tabs`, `BillingTabs`,
+  the tenant record) and the partner portal. A Settings section passes `SettingsSectionHeader tabs` (or `SalesPanelTop
+  tabs`); framed, it lands on the Settings title line, and opened outside the frame (Get set up, embedded) it is drawn on
+  the section's own line with the same layout. A client screen that owns its header (Alert centre, partner payouts)
+  draws the `PageHeader` itself so its views can sit on it.
+- **Enforced:** "a page's sub-page tabs are on the title line…" in `lib/design/uiConsistency.test.mjs` fails any tab bar
+  drawn as a row of its own in a page's body. In-content switches are listed in its `SUBPAGE_TAB_EXEMPT`, each with
+  its reason.
+- **`lead` is for what belongs on the title's line:** a record's status, a call's step bar. Tabs never.
+- **Not a sub-page switch:** a pick-one filter (`Segmented` / `ToggleChip`s), the list/board icon switch
+  (`IconViewSwitch`), a wizard's step bar.
+- **Step rails** (Accounting, Commissions, Compliance, Data in, Retention, Reports, Leads in, Settings' menu)
+  list a module's steps; they are kept as they are until the owner decides whether each stays or becomes the
+  bar (asked 2026-11-09). The bar sits over the step a rail opens.
 
 ## 9. CSS
 - New screens use Tailwind and the shared components; do not add page-specific `.portal-*` rules to
@@ -454,6 +498,7 @@ the title line, so the step's first card starts level with the rail's top (owner
 | Review a detailed record with a statement or item table | `Dialog`, `size="2xl"` | 960px |
 | A step that loses something (cancel, delete) | `ConfirmDialog`, or `await confirmAction({…})` in a handler (`components/ui/confirm-dialog.tsx`) | 400px |
 | Read or work on a record beside a list | `DetailPanel` (§8); over the page, `Sheet` (`components/ui/sheet.tsx`) | 420px |
+| Create or invite something that has its own address ("New…", "Invite…") | `RouteSheet` (`components/app/route-sheet.tsx`): the route's `@sheet` intercept, so Back closes it and a refresh opens the full page; `DismissButton` for the form's Discard | 420px, `wide` 640px |
 | A picker or a short form anchored to a control | `Popover` (`components/ui/popover.tsx`) | — |
 | Row and record actions | `DropdownMenu` (`components/ui/dropdown-menu.tsx`) | 224px |
 | Confirm that something happened | Toast via `notify` (`lib/notify`, drawn by Sileo in `components/ui/toaster.tsx`), with Undo when reversible | 350px |
@@ -598,7 +643,11 @@ rule only with the owner's yes, in this section and the test together.
   in `PageHeader`). Never a banner above the trail: it pushed every page into a scroll. A page with
   no header shows them above it.
 - **One card.** The mockups' card (canvas board LirS1's `.g`): 16px corners; in dark, a white wash
-  from 6% to 1.5% at 160° and a 9% white hairline, blurred 14px. It is `.m-glass`, so `Card`,
+  from 6% to 1.5% at 160° and a 9% white hairline, blurred 14px; in light (light theme v1, owner
+  pick "C · White + olive lines" 2026-11-12, `docs/design/light-v1/mockup.html`), solid white with a
+  green-tinted edge on a near-white page, its head and every table head the olive band
+  (`--surface-alt`). A tile inside a card is white with a `--tile-edge` outline, a hover is
+  `--hover-wash`, a row line is `--rule`; `--surface-alt` is the band, never a slab inside a card. It is `.m-glass`, so `Card`,
   `TableCard`, `StatStrip`, the home panels and every `cardSurface` draw it. No glossy card.
 - **One figure strip.** `StatStrip` + `StatTile`: label 12/700 uppercase at 0.06em, figure 24/700,
   one 12px line under it, cells split by hairlines, no lit edge and no halo.
@@ -644,7 +693,7 @@ its own timing. See them all side by side on `/app/motion-lab`.
 
 | Pattern | Where it comes from | Motion |
 |---|---|---|
-| page-area | an `IntentLink` without a type (the sidebar) | the arriving page rises 6px from .72 (a page with its own `m-stagger` keeps just that) |
+| page-area | an `IntentLink` without a type (the sidebar) | the calm cascade (2026-11-12): each section of the arriving page (title line, strip, each card; on a merged page, the step column's sections) rises 6px from .72, 50ms apart, capped at five steps so all is in by about 0.4s. When the real page or a card replaces its loading state, its blocks settle in place (`data-settle`, `m-content-in`) in the same rhythm and never slide a second time. A page with its own `m-stagger` or `m-dash` keeps just that. Never hand-roll a page entrance: `PageEntrance` (`components/portal/portal-page-transition.tsx`) does it for every page |
 | page-forward / page-back | `transitionTypes={["nav-forward"]}` / `["nav-back"]` on an `IntentLink` (the step rails set it); the browser's back is `back` | 12px slide in from the right / left; on a merged page only the step's column moves, the title row and rail hold still |
 | content-in | a URL tab, a merged page's step (`m-content-in`) | 4px rise from .72, 150ms |
 | rows-page | `PagedBody` when the page turns | rows come in 8px from the side the pager moved, 16ms apart, eight at most |
@@ -652,7 +701,7 @@ its own timing. See them all side by side on `/app/motion-lab`.
 | float | popover, menu, select, date picker, hover card | scales from .95 from the side it opens on |
 | hint | `InfoTip` | fades in |
 | panel | `DetailPanel`, `Sheet` | slides 16px from its edge; X, Esc or the backdrop slide it back out |
-| indicator | segmented `ViewTabs` | one pill slides from tab to tab, to the clicked tab at once |
+| indicator | the sub-page bar (`ViewTabs`, `UnderlineTabs`) | the 2px green line slides from tab to tab, to the clicked tab at once |
 | figure | `CountUp` | counts from the old value to the new one |
 | chart | `BarSeries`, `LineSeries`, `SparkLine`, `DonutChart` | bars rise, lines reveal left to right, the donut sweeps; new figures move the marks |
 | controls | `Switch`, `CheckBox`, `<details>` | the thumb slides, the tick pops in, a fold opens by height |

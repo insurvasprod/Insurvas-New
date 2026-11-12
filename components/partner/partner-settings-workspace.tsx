@@ -139,7 +139,7 @@ export function PartnerSettingsWorkspace({ role, partnerStatus, partnerId, partn
       {activeSettings === "account" && <Card className="h-full min-h-0">
         <CardContent className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-4">
-            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--primary-soft)] text-base font-semibold text-[var(--accent-ink)]" aria-hidden="true">{initials}</span>
+            <span className="flex size-12 shrink-0 items-center justify-center rounded-full bg-[var(--highlight-soft)] text-base font-semibold text-[var(--highlight-ink)]" aria-hidden="true">{initials}</span>
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-1.5 truncate text-lg font-semibold tracking-[-0.02em] text-foreground">{name}<InfoTip label="About the partner account">Your organisation as your agency has it on file. Ask them to change anything here.</InfoTip></p>
               <p className="mt-0.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">{partnerRoleLabel(role)}<StatusChip tone={status === "active" ? "good" : "neutral"}>{status[0].toUpperCase() + status.slice(1)}</StatusChip></p>

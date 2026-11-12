@@ -43,7 +43,7 @@ import {
  */
 
 export const DISCREPANCY_SCHEMA_PENDING_MESSAGE =
-  "Discrepancies need a database update. Until it is applied, the ledger and statements work as before and nothing is flagged as owed.";
+  "Pay issues from imported statements are not switched on for this account yet. The ledger and statements work as before, and nothing is flagged as owed.";
 
 export const DISCREPANCY_STATUSES = ["open", "disputed", "resolved", "written_off", "cleared"] as const;
 export type DiscrepancyStatus = (typeof DISCREPANCY_STATUSES)[number];
@@ -245,7 +245,7 @@ export async function listDiscrepancies(tenantId: string, options: { ids?: strin
   if (rows.error && isSchemaGap(rows.error)) rows = await read(COLUMNS);
   if (rows.error) {
     if (isSchemaGap(rows.error)) return { available: false, items: [] };
-    throw new Error(`Could not load discrepancies: ${rows.error.message}`);
+    throw new Error(`Could not load the pay issues: ${rows.error.message}`);
   }
   const policyIds = [...new Set(rows.rows.map((row) => row.policy_id))];
   const carrierIds = [...new Set(rows.rows.map((row) => row.carrier_id).filter((id): id is string => Boolean(id)))];
@@ -324,8 +324,8 @@ export async function setDiscrepancyStatus(tenantId: string, actorUserId: string
     if (isSchemaGap(before.error)) throw new DiscrepancyError(DISCREPANCY_SCHEMA_PENDING_MESSAGE, 503, "schema_pending");
     throw new Error(`Could not load the discrepancy: ${before.error.message}`);
   }
-  if (!before.data) throw new DiscrepancyError("That discrepancy is not in this workspace.", 404, "not_found");
-  if (before.data.status === "cleared") throw new DiscrepancyError("This discrepancy no longer applies — the facts behind it changed — so there is nothing to decide.", 409, "cleared");
+  if (!before.data) throw new DiscrepancyError("That pay issue is not in this workspace.", 404, "not_found");
+  if (before.data.status === "cleared") throw new DiscrepancyError("This pay issue no longer applies — the facts behind it changed — so there is nothing to decide.", 409, "cleared");
   const update = await db().from("tenant_commission_discrepancies")
     .update({ status, note: note?.trim() || before.data.note, status_changed_by: actorUserId, status_changed_at: new Date().toISOString() })
     .eq("tenant_id", tenantId).eq("id", id);

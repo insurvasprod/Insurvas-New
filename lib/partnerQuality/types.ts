@@ -57,11 +57,20 @@ export type PartnerQualitySummary = Omit<PartnerQualityPeriod, "conversion_rate"
   duplicates: number;
 };
 
+/**
+ * One reporting week (Monday to Sunday, fixed EST) of a period, oldest first: the charts' and the tiles' series
+ * (Reports round 7, 2026-11-11). `from`/`to` are the week clipped to the period, so a point opens exactly the
+ * leads it counted; `partial` marks a week the period only partly covers.
+ */
+export type PartnerQualityWeek = { key: string; label: string; from: string; to: string; partial: boolean; sent: number; submitted: number; flagged: number; disqualified: number; duplicates: number };
+
 export type PartnerQualityReport = {
   from: string;
   to: string;
   previous_from: string;
   previous_to: string;
+  /** Every partner's leads by week, this period (the list's tiles). */
+  weeks: PartnerQualityWeek[];
   rows: PartnerQualityRow[];
   dispositions: PartnerQualityDispositionBreakdown[];
   summary: PartnerQualitySummary;
@@ -168,6 +177,9 @@ export type PartnerQualityDetail = {
   dispositions: PartnerQualityDisposition[];
   disposition_labels: Record<string, string>;
   daily: PartnerQualityDailyRow[];
+  /** The partner's leads by week, this period and the one before (week n of each lines up). */
+  weeks: PartnerQualityWeek[];
+  previous_weeks: PartnerQualityWeek[];
   team: PartnerQualityMember[];
   /** Sent in the period by no partner account (API posts, agency imports). */
   unattributed: PartnerQualityPeriodMetrics;

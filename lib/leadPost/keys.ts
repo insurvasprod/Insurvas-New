@@ -193,7 +193,8 @@ async function postStats(tenantId: string, keys: PostKey[]): Promise<{ stats: Po
   return { stats, rejections };
 }
 
-export async function listPostKeys(tenantId: string): Promise<PostKeysLoaded> {
+/** `stats: false` skips the 30-day counts (round 8's board reads its own 7 days instead). */
+export async function listPostKeys(tenantId: string, options: { stats?: boolean } = {}): Promise<PostKeysLoaded> {
   const client = db();
   const [keysRead, vendors, campaigns] = await Promise.all([
     // `key_hash` is deliberately not selected. It is not a secret that can be reversed, but a
@@ -213,7 +214,7 @@ export async function listPostKeys(tenantId: string): Promise<PostKeysLoaded> {
 
   const vendorName = new Map((vendors.data ?? []).map((row) => [text(row.id), text(row.name)]));
   const list = (keys.data ?? []).map((row) => toKey(row, vendorName.get(text(row.vendor_id)) || "Vendor no longer on your list"));
-  const { stats, rejections } = await postStats(tenantId, list);
+  const { stats, rejections } = options.stats === false ? { stats: [], rejections: [] } : await postStats(tenantId, list);
 
   return {
     keys: list,

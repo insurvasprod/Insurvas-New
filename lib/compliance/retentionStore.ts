@@ -31,7 +31,10 @@ function check(error: { code?: string; message: string } | null) {
   if (error) throw new Error(error.message);
 }
 
-export type Hold = { id: string; scope: HoldScope; scopeValue: string | null; reason: HoldReason; sourceId: string | null; note: string | null; placedBy: string | null; placedAt: string; releasedAt: string | null; releaseNote: string | null; automatic: boolean };
+export type Hold = { id: string; scope: HoldScope; scopeValue: string | null; reason: HoldReason; sourceId: string | null; note: string | null; placedBy: string | null; placedAt: string; releasedAt: string | null; releaseNote: string | null; automatic: boolean;
+  /** An automatic hold whose complaint or dispute is still open: the database refuses its release (legal_hold guard,
+   * 20261015150000), so the page offers no Release button (round 7, Notion LA-6.6). Same test as the guard. */
+  sourceOpen: boolean };
 export type Run = {
   id: string; mode: "dry_run" | "live"; startedAt: string; finishedAt: string | null;
   results: { record_type: string; table: string | null; rows_matched: number; rows_held: number; rows_purged: number; oldest?: string | null; newest?: string | null; note?: string }[];
@@ -54,7 +57,23 @@ export async function listRules(tenantId: string): Promise<RuleRow[]> {
 export async function listHolds(tenantId: string): Promise<Hold[]> {
   const { data, error } = await db().from("legal_hold").select("id, scope, scope_value, reason, source_id, note, placed_by, placed_at, released_at, release_note").eq("tenant_id", tenantId).order("placed_at", { ascending: false }).limit(500);
   check(error);
-  return ((data ?? []) as Loose[]).map((h) => ({ id: h.id, scope: h.scope, scopeValue: h.scope_value ?? null, reason: h.reason, sourceId: h.source_id ?? null, note: h.note ?? null, placedBy: h.placed_by ?? null, placedAt: h.placed_at, releasedAt: h.released_at ?? null, releaseNote: h.release_note ?? null, automatic: AUTOMATIC_REASONS.includes(h.reason) }));
+  const rows = (data ?? []) as Loose[];
+  // Which sources are still open, read the way the release guard reads them; a read that fails reads as open (no button).
+  const live = rows.filter((h) => !h.released_at && h.source_id);
+  const ids = (reason: string) => live.filter((h) => h.reason === reason).map((h) => h.source_id as string);
+  const openIds = new Set<string>();
+  let unknown = false;
+  const complaintIds = ids("complaint");
+  const disputeIds = ids("commission_dispute");
+  await Promise.all([
+    complaintIds.length ? db().from("complaint").select("id").in("id", complaintIds).neq("status", "resolved").then((r: Loose) => { if (r.error) unknown = true; else for (const row of r.data ?? []) openIds.add(row.id); }) : null,
+    disputeIds.length ? db().from("commission_dispute").select("id").in("id", disputeIds).in("status", ["draft", "sent", "acknowledged"]).then((r: Loose) => { if (r.error) unknown = true; else for (const row of r.data ?? []) openIds.add(row.id); }) : null,
+  ]);
+  return rows.map((h) => {
+    const automatic = AUTOMATIC_REASONS.includes(h.reason);
+    return { id: h.id, scope: h.scope, scopeValue: h.scope_value ?? null, reason: h.reason, sourceId: h.source_id ?? null, note: h.note ?? null, placedBy: h.placed_by ?? null, placedAt: h.placed_at, releasedAt: h.released_at ?? null, releaseNote: h.release_note ?? null, automatic,
+      sourceOpen: automatic && !h.released_at && !!h.source_id && (unknown || openIds.has(h.source_id)) };
+  });
 }
 
 export async function listRuns(tenantId: string, limit = 20): Promise<Run[]> {

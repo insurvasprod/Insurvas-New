@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { createAgentLead, getAgentTemplate, listAgentLeads } from "@/lib/agentTemplates/service";
+import { createAgentLead, filterAgentLeads, getAgentTemplate, visibleLeadIds, withSubmitterNames } from "@/lib/agentTemplates/service";
 import { listPipelines } from "@/lib/pipelines/service";
 import { audit } from "@/lib/audit/log";
 import { leadWorkFacts } from "@/lib/agentTemplates/leadWorkFacts";
@@ -22,14 +22,19 @@ export async function GET(request: NextRequest) {
     // Pipelines are tenant-scoped and don't depend on the template, so they load alongside it.
     // AG-0.5: a narrowed agency session (producer, manager, assistant) gets its producers' leads only.
     // The scope comes from the session; null (solo tenant, owner, bookkeeper) reads the book as before.
-    const [template, pipelines, scope] = await Promise.all([
+    // The scope was read in the auth round trip (prefetchScope), so a narrowed session's visible lead ids
+    // (which need no template) are read beside the template rather than after it.
+    const scope = await scopeFor(auth.context);
+    const visible = scope === null ? undefined : visibleLeadIds(auth.context.tenantId, scope);
+    // Awaited inside filterAgentLeads; this only keeps a template failure from leaving it unobserved.
+    visible?.catch(() => undefined);
+    const [template, pipelines] = await Promise.all([
       getAgentTemplate(auth.context.tenantId, auth.context.userId),
       listPipelines(auth.context.tenantId),
-      scopeFor(auth.context),
     ]);
     const params = request.nextUrl.searchParams;
     const direction = params.get("direction") === "desc" ? "desc" : "asc";
-    const leads = await listAgentLeads(
+    const found = await filterAgentLeads(
       auth.context.tenantId,
       template,
       params.get("q")?.trim() ?? "",
@@ -38,11 +43,16 @@ export async function GET(request: NextRequest) {
       params.get("sort") ?? "",
       direction,
       scope,
+      visible,
     );
     // Who holds each lead, and — for roles that may see money — what it was quoted at. The board's
-    // Unassigned and annualised figures are counted from these, not stored.
+    // Unassigned and annualised figures are counted from these, not stored. Read beside the submitter
+    // names: both need only the lead ids.
     const money = anyRoleHasPermission(contextRoles(auth.context), "money.view");
-    const facts = await leadWorkFacts(auth.context.tenantId, leads.map((lead) => lead.id), money);
+    const [leads, facts] = await Promise.all([
+      withSubmitterNames(found),
+      leadWorkFacts(auth.context.tenantId, found.map((lead) => lead.id), money),
+    ]);
     const enriched = leads.map((lead) => {
       const fact = facts.get(lead.id);
       return { ...lead, owner_user_id: fact?.ownerUserId ?? null, owner_name: fact?.ownerName ?? null, disposition: fact?.disposition ?? null, disposition_at: fact?.dispositionAt ?? null, stage_entered_at: fact?.stageEnteredAt ?? null, monthly_premium_cents: money ? fact?.monthlyPremiumCents ?? null : null };

@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition, type FormEvent, type ReactNode } from "react";
 
-import { Callout } from "@/components/app/settings/primitives";
+import { StepSlot } from "@/components/app/step-frame/step-slot";
+import { RULEBOOK_SLOT } from "@/components/app/commissions/splits/slots";
 import { Button } from "@/components/ui/button";
 import { cardSurface } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -13,14 +14,13 @@ import { Field, control } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { Segmented } from "@/components/ui/view-tabs";
 import {
   CHARGEBACK_POLICIES, CHARGEBACK_POLICY_LABELS, LEDGER_SOURCE_LABELS, PARTNER_PAYMENT_METHODS, PARTNER_PAYMENT_METHOD_LABELS, PAYOUT_CADENCES,
-  PAYOUT_CADENCE_LABELS, PAYOUT_CADENCE_SHORT, RULEBOOK_MODEL_COPY, RULEBOOK_MODELS, entryMath, parsePctToBp, pctLabel, rulebookRateLabel,
+  PAYOUT_CADENCE_LABELS, PAYOUT_CADENCE_SHORT, RULEBOOK_MODEL_COPY, RULEBOOK_MODELS, parsePctToBp, pctLabel, rulebookRateLabel,
   type ChargebackPolicy, type PartnerPaymentMethod, type PayoutCadence, type RulebookModel,
 } from "@/lib/accounting/partnerPayoutCore";
 import type { InvoicePreview, LedgerRow, RulebookRow, RulebookView } from "@/lib/accounting/payoutStore";
@@ -61,14 +61,14 @@ export function RunPayouts({ readOnly }: { readOnly: boolean }) {
       const body = await send("/api/app/accounting/payouts/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dry_run: dryRun }) });
       const partners = body.partners as InvoicePreview[];
       if (dryRun) {
-        if (!partners.length) notify.done("No partner is due: every finished pay period already has an invoice, or nothing is owed.");
+        if (!partners.length) notify.warn("No partner is due. Every finished pay period already has an invoice, or nothing is owed.");
         else setPreview(partners);
         return;
       }
       const built = partners.filter((p) => p.runId);
       const problems = partners.filter((p) => p.problem);
       setPreview(null);
-      if (built.length) notify.done(`${built.length} draft invoice${built.length === 1 ? "" : "s"} created. Review, then publish each one.`);
+      if (built.length) notify.done(`${built.length} draft invoice${built.length === 1 ? "" : "s"} created. Check, then publish each one.`);
       for (const p of problems) notify.fail(`${p.partnerName}: ${p.problem}`);
       if (built.length === 1) router.push(`/app/payouts/${built[0].runId}`);
       else router.refresh();
@@ -91,14 +91,15 @@ export function RunPayouts({ readOnly }: { readOnly: boolean }) {
           fields={(
             <TableCard>
               <table className="portal-lead-table w-full text-left text-sm">
-                <thead><tr><th>Partner</th><th>Pay period</th><th className="text-right">Items</th><th className="text-right">Net</th></tr></thead>
+                <thead><tr><th>Partner</th><th>Pay period</th><th>Schedule</th><th className="text-right">Items</th><th className="text-right">Net</th></tr></thead>
                 <tbody>
                   {preview.map((p) => (
                     <tr key={p.partnerId}>
-                      <td className="font-medium">{p.partnerName}</td>
-                      <td className="tabular-nums">{dateLabel(p.periodStart)} – {dateLabel(p.periodEnd)}<span className="text-xs text-muted-foreground"> · {PAYOUT_CADENCE_SHORT[p.cadence] ?? p.cadence}</span></td>
+                      <td className="whitespace-nowrap font-medium">{p.partnerName}</td>
+                      <td className="whitespace-nowrap tabular-nums text-muted-foreground">{dateLabel(p.periodStart)} – {dateLabel(p.periodEnd)}</td>
+                      <td className="whitespace-nowrap">{PAYOUT_CADENCE_SHORT[p.cadence] ?? p.cadence}</td>
                       <td className="text-right tabular-nums">{p.items}</td>
-                      <td className={`text-right tabular-nums ${p.netCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{money(p.netCents)}</td>
+                      <td className="whitespace-nowrap text-right tabular-nums">{money(p.netCents)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -112,42 +113,35 @@ export function RunPayouts({ readOnly }: { readOnly: boolean }) {
 }
 
 // ─── the ledger ───────────────────────────────────────────────────────────────────────────────
-type LedgerFilter = "" | "unpaid" | "invoiced" | "paid";
-const STATE_TONE: Record<Exclude<LedgerFilter, "">, StatusTone> = { unpaid: "warning", invoiced: "info", paid: "good" };
-const STATE_WORD: Record<Exclude<LedgerFilter, "">, string> = { unpaid: "Unpaid", invoiced: "On invoice", paid: "PAID" };
+type LedgerFilter = "" | "unpaid" | "invoiced" | "paid" | "chargebacks";
+const STATE_TONE: Record<Exclude<LedgerFilter, "" | "chargebacks">, StatusTone> = { unpaid: "warning", invoiced: "info", paid: "good" };
+const STATE_WORD: Record<Exclude<LedgerFilter, "" | "chargebacks">, string> = { unpaid: "Unpaid", invoiced: "On invoice", paid: "PAID" };
 
 export function LedgerBoard({ rows, partners, initialState, initialPartner }: { rows: LedgerRow[]; partners: { id: string; name: string }[]; initialState?: string; initialPartner?: string }) {
   const router = useRouter();
-  const [state, setState] = useState<LedgerFilter>(initialState === "unpaid" || initialState === "invoiced" || initialState === "paid" ? initialState : "");
+  const [state, setState] = useState<LedgerFilter>(initialState === "unpaid" || initialState === "invoiced" || initialState === "paid" || initialState === "chargebacks" ? initialState : "");
   const [partner, setPartner] = useState(initialPartner && partners.some((p) => p.id === initialPartner) ? initialPartner : "");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [refreshing, startRefresh] = useTransition();
   const term = search.trim().toLowerCase();
-  const visible = useMemo(() => rows.filter((r) => (!state || r.state === state) && (!partner || r.partnerId === partner)
+  const visible = useMemo(() => rows.filter((r) => (!state || (state === "chargebacks" ? r.state === "unpaid" && r.sourceType === "chargeback_clawback" : r.state === state)) && (!partner || r.partnerId === partner)
     && (!term || [r.partnerName, r.clientName ?? "", r.policyNumber ?? "", r.invoiceNumber ?? "", LEDGER_SOURCE_LABELS[r.sourceType] ?? ""].some((v) => v.toLowerCase().includes(term)))), [rows, state, partner, term]);
   const pageSize = useFittingPageSize(500, 45);
   const shown = paginate(visible, page, pageSize);
-  const month = today().slice(0, 7);
   const unpaid = rows.filter((r) => r.state === "unpaid");
   const invoiced = rows.filter((r) => r.state === "invoiced");
-  const paidThisMonth = rows.filter((r) => r.state === "paid" && (r.paidAt ?? "").startsWith(month));
   const clawbacks = unpaid.filter((r) => r.sourceType === "chargeback_clawback");
   const sum = (list: LedgerRow[]) => list.reduce((s, r) => s + r.amountCents, 0);
   const pick = (next: LedgerFilter) => { setState(next); setPage(1); };
   return (
     <>
-      <StatStrip label="Ledger totals">
-        <StatTile label="Unpaid, not invoiced" value={money(sum(unpaid))} footnote={`${unpaid.length} item${unpaid.length === 1 ? "" : "s"} waiting`} href="/app/payouts?view=ledger&state=unpaid" />
-        <StatTile label="On invoices, unpaid" value={money(sum(invoiced))} footnote="locked: never invoiced twice" href="/app/payouts?view=ledger&state=invoiced" />
-        <StatTile label="Paid this month" value={money(sum(paidThisMonth))} footnote="stamped PAID" href="/app/payouts?view=ledger&state=paid" />
-        <StatTile label="Chargebacks to take back" value={money(sum(clawbacks))} valueTone={clawbacks.length ? "warning" : undefined} footnote={`${clawbacks.length} on the next invoices`} href="/app/payouts?view=ledger&state=unpaid" />
-      </StatStrip>
       <TableCard
         toolbar={rows.length === 0 ? undefined : (
           <DataToolbar actions={<>
             <select aria-label="Partner" className={toolbarControl} value={partner} onChange={(e) => { setPartner(e.target.value); setPage(1); }}><option value="">All partners</option>{partners.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
             <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
+            <span className="text-sm"><span className="font-semibold tabular-nums">{money(sum(unpaid))}</span> not invoiced yet</span>
           </>}>
             <ToolbarSearch value={search} onChange={(v) => { setSearch(v); setPage(1); }} placeholder="Search client, policy or invoice" />
             <Segmented label="Ledger status" value={state || "all"} onChange={(k) => pick(k === "all" ? "" : k)} options={[
@@ -155,6 +149,7 @@ export function LedgerBoard({ rows, partners, initialState, initialPartner }: { 
               { key: "unpaid", label: "Unpaid", count: unpaid.length || null },
               { key: "invoiced", label: "On an invoice", count: invoiced.length || null },
               { key: "paid", label: "PAID", count: rows.filter((r) => r.state === "paid").length || null },
+              { key: "chargebacks", label: "Chargebacks", count: clawbacks.length || null, tone: "danger" },
             ]} />
           </DataToolbar>
         )}
@@ -166,19 +161,25 @@ export function LedgerBoard({ rows, partners, initialState, initialPartner }: { 
           <NoMatches noun="entries" onClear={() => { setState(""); setPartner(""); setSearch(""); }} />
         ) : (
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-            <thead><tr><th>Earned</th><th>Partner</th><th>Client · policy</th><th>What</th><th className="text-right">Amount</th><th>Expected</th><th>Status</th></tr></thead>
+            <thead><tr><th>Partner</th><th>Client</th><th>What</th><th>Earned</th><th className="text-right">Amount</th><th>Status</th></tr></thead>
             <tbody>
               {shown.rows.map((r) => {
-                const math = entryMath(r, money);
+                // A row opens its invoice; one not on an invoice yet opens that partner's ledger.
+                const to = r.runId ? `/app/payouts/${r.runId}` : `/app/payouts?view=ledger&partner=${r.partnerId}`;
+                // The row's one chip says where it stands and, unpaid, when it is expected; an unpaid chargeback is the danger.
+                const chip = r.state === "paid" ? (r.paidAt ? `Paid ${dateLabel(r.paidAt.slice(0, 10))}` : STATE_WORD.paid)
+                  : r.state === "invoiced" ? r.invoiceNumber ?? STATE_WORD.invoiced
+                  : r.sourceType === "chargeback_clawback" ? "Chargeback · unpaid"
+                  : r.expectedOn ? `Due ${dateLabel(r.expectedOn)}` : STATE_WORD.unpaid;
+                const tone: StatusTone = r.state === "unpaid" && r.sourceType === "chargeback_clawback" ? "danger" : STATE_TONE[r.state];
                 return (
-                  <tr key={r.id}>
-                    <td className="whitespace-nowrap tabular-nums">{dateLabel(r.earnedOn)}</td>
-                    <td className="font-medium">{r.partnerName}</td>
-                    <td>{r.clientName ?? <span className="text-muted-foreground">—</span>}{r.policyNumber ? <span className="block text-xs text-muted-foreground">{r.carrier ? `${r.carrier} · ` : ""}{r.policyNumber}</span> : null}</td>
-                    <td>{LEDGER_SOURCE_LABELS[r.sourceType] ?? r.sourceType}{math ? <span className="block text-xs text-muted-foreground">{math}</span> : r.note ? <span className="block text-xs text-muted-foreground">{r.note}</span> : null}</td>
-                    <td className={`text-right tabular-nums ${r.amountCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{money(r.amountCents)}</td>
-                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{r.paidAt ? `Paid ${dateLabel(r.paidAt.slice(0, 10))}` : r.expectedOn ? dateLabel(r.expectedOn) : "With its invoice"}</td>
-                    <td>{r.state === "invoiced" && r.runId ? <Link href={`/app/payouts/${r.runId}`} className="underline-offset-4 hover:underline"><StatusChip tone={STATE_TONE.invoiced}>{r.invoiceNumber ?? STATE_WORD.invoiced}</StatusChip></Link> : <StatusChip tone={STATE_TONE[r.state]}>{STATE_WORD[r.state]}</StatusChip>}</td>
+                  <tr key={r.id} className="cursor-pointer" onClick={() => router.push(to)}>
+                    <td className="whitespace-nowrap font-medium">{r.partnerName}</td>
+                    <td className="whitespace-nowrap">{r.clientName ?? <span className="text-muted-foreground">—</span>}</td>
+                    <td className="whitespace-nowrap">{LEDGER_SOURCE_LABELS[r.sourceType] ?? r.sourceType}</td>
+                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{dateLabel(r.earnedOn)}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums">{money(r.amountCents)}</td>
+                    <td><StatusChip tone={tone}>{chip}</StatusChip></td>
                   </tr>
                 );
               })}
@@ -191,22 +192,23 @@ export function LedgerBoard({ rows, partners, initialState, initialPartner }: { 
 }
 
 // ─── every partner's rulebook ─────────────────────────────────────────────────────────────────
-export function RulebooksBoard({ rows, readOnly }: { rows: RulebookRow[]; readOnly: boolean }) {
+export function RulebooksBoard({ rows }: { rows: RulebookRow[] }) {
+  const router = useRouter();
   return (
     <TableCard footer={<p className="text-xs text-muted-foreground">Older prices (per transfer, per lead, per sale, per issued policy) keep paying until a rulebook replaces them.</p>}>
       {rows.length === 0 ? <EmptyState title="No partners yet" hint="Add a partner under Partners, then set its payout rulebook here." /> : (
         <table className="portal-lead-table w-full min-w-[880px] text-left text-sm">
-          <thead><tr><th>Partner</th><th>How they win</th><th>How much</th><th>Paid</th><th>Chargebacks</th><th>Who gets the money</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
+          <thead><tr><th>Partner</th><th>How they win</th><th>How much</th><th>Paid</th><th>Chargebacks</th><th>Who gets the money</th></tr></thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.partnerId}>
-                <td className="font-medium">{r.partnerName}{r.status !== "active" ? <span className="text-xs text-muted-foreground"> · {r.status}</span> : null}</td>
-                <td>{r.model === "per_submitted_application" ? "Model A · quick win" : r.model === "revenue_share" ? "Model B · long game" : r.model ? <span className="text-muted-foreground">Older terms</span> : <span className="text-[var(--warning-ink)]">Not set</span>}</td>
-                <td className="tabular-nums">{rulebookRateLabel(r.model, r.rateCents, r.ratePctBp, money) ?? "—"}</td>
-                <td>{PAYOUT_CADENCE_SHORT[r.cadence]}{r.cadenceOwn ? "" : <span className="text-xs text-muted-foreground"> · agency default</span>}</td>
-                <td>{r.chargebackPolicy === "partner_shares" ? "Partner shares" : "Agency absorbs"}</td>
-                <td>{r.payee ?? <span className="text-muted-foreground">—</span>}{r.paymentMethod ? <span className="block text-xs text-muted-foreground">{r.paymentMethod}</span> : null}</td>
-                <td className="text-right"><Button size="sm" variant="outline" asChild><Link href={`/app/payouts/rulebook/${r.partnerId}`}>{readOnly ? "Open" : r.model ? "Edit" : "Set up"}</Link></Button></td>
+              <tr key={r.partnerId} className="cursor-pointer" onClick={() => router.push(`/app/payouts/rulebook/${r.partnerId}`)}>
+                {/* One chip per row: No rulebook yet, else a partner that is not active. */}
+                <td className="whitespace-nowrap font-medium"><Link className="hover:underline" href={`/app/payouts/rulebook/${r.partnerId}`} onClick={(e) => e.stopPropagation()}>{r.partnerName}</Link>{r.model && r.status !== "active" ? <StatusChip tone="neutral" className="ml-2">{r.status}</StatusChip> : null}</td>
+                <td className="whitespace-nowrap">{r.model === "per_submitted_application" ? "Model A · quick win" : r.model === "revenue_share" ? "Model B · long game" : r.model ? "Older terms" : <StatusChip tone="warning">No rulebook yet</StatusChip>}</td>
+                <td className="whitespace-nowrap tabular-nums">{rulebookRateLabel(r.model, r.rateCents, r.ratePctBp, money) ?? <span className="text-muted-foreground">—</span>}</td>
+                <td className="whitespace-nowrap">{PAYOUT_CADENCE_SHORT[r.cadence]}</td>
+                <td className="whitespace-nowrap">{r.chargebackPolicy === "partner_shares" ? "Partner shares" : "Agency absorbs"}</td>
+                <td className="whitespace-nowrap">{r.payee ?? <span className="text-muted-foreground">—</span>}</td>
               </tr>
             ))}
           </tbody>
@@ -326,12 +328,13 @@ export function RulebookForm({ rulebook, readOnly }: { rulebook: RulebookView; r
           <Field label="Note for whoever pays (optional)" htmlFor="rb-note" className="sm:col-span-2 xl:col-span-3" hint="No account or routing numbers here: keep those with your bank or payment app."><input id="rb-note" className={control} maxLength={500} disabled={disabled} value={f.note} onChange={(e) => set("note", e.target.value)} /></Field>
         </div>
       </Step>
-      {error ? <Callout tone="error" title={error} /> : null}
+      {error ? <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p> : null}
+      {/* Discard and Save rulebook sit on the title line (round 7, 9·2). */}
       {disabled ? null : (
-        <div className="flex justify-end gap-2">
+        <StepSlot id={RULEBOOK_SLOT}>
           <Button type="button" variant="outline" asChild><Link href="/app/payouts?view=rulebooks">Discard</Link></Button>
-          <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Save rulebook"}</Button>
-        </div>
+          <Button type="button" disabled={busy} onClick={() => void save()}>{busy ? "Saving…" : "Save rulebook"}</Button>
+        </StepSlot>
       )}
       <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setF(initial)} what="this rulebook" />
     </form>

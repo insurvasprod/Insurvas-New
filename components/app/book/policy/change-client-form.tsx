@@ -82,17 +82,18 @@ export function ChangeClientForm({ matches, query, carrierId, policyNumber, back
           <EmptyState title={query ? "No client matches that" : "Search for the client"} hint={query ? "Try the last name alone, the phone number, the date of birth (1958-03-03) or another policy number." : "Search by name, phone, date of birth or policy number."} />
         ) : (
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-            <thead><tr><th>Client</th><th>Born · phone</th><th className="w-[130px]">Match</th><th className="w-[80px]"><span className="sr-only">Choose</span></th></tr></thead>
+            <thead><tr><th>Client</th><th>Born</th><th>Phone</th><th>Sale</th><th className="w-[130px]">Match</th><th className="w-[80px]"><span className="sr-only">Choose</span></th></tr></thead>
             <tbody>
               {matches.map((match) => (
                 <tr key={match.contactId} aria-selected={chosen === match.contactId}>
-                  <td>
-                    <label htmlFor={`client-${match.contactId}`} className="block cursor-pointer">
-                      <span className="font-medium text-foreground">{match.name}{match.provisional ? " (provisional)" : ""}</span>
-                      <span className="block text-xs text-muted-foreground">{match.linkedNow ? "linked now" : match.sale ? `sale ${fileDay(match.sale.date)}${match.sale.agentName ? ` · ${match.sale.agentName}` : ""}${match.sale.carrierMatches ? "" : " · another carrier"}` : match.provisional ? "made from a carrier's file" : "no sale on record"}</span>
-                    </label>
+                  {/* Owner 2026-11-11: one line per row. What was the grey line under the name is the Sale column (the
+                      agent is its tooltip); born and phone are a column each. */}
+                  <td className="whitespace-nowrap font-medium text-foreground">
+                    <label htmlFor={`client-${match.contactId}`} className="cursor-pointer">{match.name}{match.provisional ? " (provisional)" : ""}</label>
                   </td>
-                  <td className="tabular-nums text-muted-foreground">{[match.dob ? fileDay(match.dob) : null, match.phone].filter(Boolean).join(" · ") || "—"}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{match.dob ? fileDay(match.dob) : "—"}</td>
+                  <td className="whitespace-nowrap tabular-nums">{match.phone || <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap" title={match.sale?.agentName ? `Sold by ${match.sale.agentName}` : undefined}>{match.linkedNow ? "Linked now" : match.sale ? `${fileDay(match.sale.date)}${match.sale.carrierMatches ? "" : " · another carrier"}` : match.provisional ? "From a carrier's file" : <span className="text-muted-foreground">—</span>}</td>
                   <td title={match.facts.length ? `Same ${match.facts.join(", ")}` : "Nothing in common with the carrier's row"}><StatusChip tone={match.matched >= 4 ? "good" : "neutral"}>{`${match.matched} of ${match.of}`}</StatusChip></td>
                   <td className="text-right">
                     <input id={`client-${match.contactId}`} type="radio" name="client" value={match.contactId} checked={chosen === match.contactId} disabled={match.linkedNow || !canEdit} onChange={() => setChosen(match.contactId)} className="size-4 accent-[var(--primary)]" aria-label={`Choose ${match.name}`} />

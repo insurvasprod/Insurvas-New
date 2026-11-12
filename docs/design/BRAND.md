@@ -61,8 +61,31 @@ and proportions are untouched.
    rail, so the "V" vanished on it. The on-dark file remaps the gradient from `#07d6a0` to
    `#09af85`: the same sweep, ending in a green that stays visible. The supplied white PNG keeps the
    olive end.
-2. **Canvas.** The guide's `#FCFCFD` canvas is 1.03:1 behind a white card, so cards disappear. The
-   product keeps its grey canvas ramp (`#f1f3f7`, bands `#e4e8ee`), which was tuned for depth.
+2. **Canvas (light theme v1, owner pick "C · White + olive lines", 2026-11-12).** A near-white page
+   (`#fbfcfb`) whose structure comes from green-tinted lines and olive-tinted bands, not grey fills or
+   shadows. Every neutral takes the brand's green hue, the same family as the dark theme's olive:
+   band `--surface-alt` `#e9f2ee` (table and card heads, chip grounds), white tiles outlined by
+   `--tile-edge` `#d9e5df`, hover `--hover-wash` `#f1f7f4`, row line `--rule` `#dbe6e1`, border
+   `#cbd8d2`, body `#26332e`, muted `#4d5f58`. Cards are solid white; a card's edge, not a shadow,
+   separates it. Shadows are olive, never black. The old blue-grey ramp (`#f1f3f7` / `#e4e8ee`, ~220°)
+   fought the green brand and is gone. "A · Sage" was built first and dropped the same day as too
+   close to the old look. Board: `docs/design/light-v1/mockup.html`.
+2a. **Gold, the third brand colour (owner pick 2026-11-12, `docs/design/accent-v1/mockup.html`).**
+   Green acts, olive frames, gold **highlights**. Use it only for:
+   - a rise (`DeltaChip` when the change is good);
+   - the second line on a chart (`LineSeries` `compare`, `--cat-2` / `--data-2`);
+   - people (avatars and initials);
+   - counts of new things (the bell, the rail counts, "New");
+   - at most one feature button a page (`Button variant="highlight"`, e.g. the dashboard's Start Calling).
+   
+   It is never a status and never an everyday button. Tokens:
+   - `--highlight` `#f2b33d` is a fill (1.9:1 on white, so never text) carrying `--on-highlight` (ink, 6.2:1).
+   - Gold text is `--highlight-ink`: `#8a5a00` in light, `#f5c562` in dark.
+   - `--highlight-soft` is a gold chip's ground. `--highlight-mark` (`#c98a12` in light) is gold as a chart line.
+   
+   To keep "needs action" from reading as gold, warning moved from amber to burnt orange: `--warning`
+   `#b04400`, `--warning-ink` `#9a3d00`, and `#f08a4b` in dark. The categorical palette swapped its 2nd
+   and 5th hues (gold is 2nd, indigo 5th). The alert badge on the bell stays red (`.is-alert`).
 3. **Brand text.** Text in the brand colour uses `--accent-ink` `#00735a`. The guide's mid green is
    4.6:1 on white but 3.6:1 on the grey bands, under the 4.5:1 text bar.
 4. **Pressed button.** The guide's pressed `#008769` under ink text is 2.5:1. The product uses
@@ -85,9 +108,8 @@ and proportions are untouched.
    `.landing-type` in `app/globals.css`.
 10. **Public-site ground (owner decision 2026-11-03).** The public pages run on **two** grounds:
     white, and the deep olive already under the hero, the features band and the footer. There is no
-    grey canvas. The app's neutrals are blue (`--canvas` `#f1f3f7` is ~220°) while the brand is green
-    (~165°), so the public pages re-tint `--canvas`, `--surface-alt`, `--surface-sunken`, `--border`,
-    `--border-strong`, `--body`, `--muted` and `--info-*` to the brand's hue. These live in the
+    grey canvas. Since light theme v1 (2026-11-12) the app's own neutrals are green-tinted too (rule 2);
+    the public pages still set `--canvas` and `--surface` to white and `--info-*` to teal. These live in the
     `:root:not(.dark) .landing-type` block in `app/globals.css` and are **light-only and
     landing-scoped**: `--muted` alone is read by 220 files, so `:root` must never be edited for a
     marketing change. Separation inside a white section comes from hairlines, spacing and

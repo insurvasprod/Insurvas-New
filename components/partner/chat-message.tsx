@@ -122,9 +122,9 @@ function DaySeparator({ label }: { label: string }) {
 function UnreadLine() {
   return (
     <div className="flex items-center gap-3 py-1" role="separator" aria-label="New messages">
-      <span className="h-px flex-1 bg-[var(--primary)]" aria-hidden="true" />
-      <span className="text-xs font-semibold text-[var(--accent-ink)]">New messages</span>
-      <span className="h-px flex-1 bg-[var(--primary)]" aria-hidden="true" />
+      <span className="h-px flex-1 bg-[var(--highlight)]" aria-hidden="true" />
+      <span className="text-xs font-semibold text-[var(--highlight-ink)]">New messages</span>
+      <span className="h-px flex-1 bg-[var(--highlight)]" aria-hidden="true" />
     </div>
   );
 }

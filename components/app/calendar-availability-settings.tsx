@@ -360,7 +360,8 @@ export function CalendarAvailabilitySettings() {
   return (
     <div ref={rootRef} className="contents">
     <SettingsStack>
-      {header}
+      {/* The calendar's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b). */}
+      <SettingsSectionHeader tabs={<ViewTabs label="Calendar settings" tabs={tabs} value={view} onChange={setTab} idPrefix="calendar-tab" controls="calendar-panel" />} />
 
       {saveError && <Callout tone="error" title={saveError} />}
 
@@ -386,8 +387,6 @@ export function CalendarAvailabilitySettings() {
           Only an owner can edit somebody else&rsquo;s calendar.
         </Callout>
       )}
-
-      <ViewTabs label="Calendar settings" tabs={tabs} value={view} onChange={setTab} idPrefix="calendar-tab" controls="calendar-panel" />
 
       <div id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-tab-${view}`}>
         {view === "hours" && (

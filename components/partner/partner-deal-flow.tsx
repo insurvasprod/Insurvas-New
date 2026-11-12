@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowUpRight, BadgeCheck, Handshake, Hourglass, XCircle } from "lucide-react";
+import { BadgeCheck, Handshake, Hourglass, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { ActiveFilters, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
@@ -10,7 +10,6 @@ import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
 import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
-import { PremiumBar } from "@/components/ui/premium-bar";
 import { KpiRow, KpiTile } from "@/components/ui/kpi-tile";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -161,7 +160,6 @@ export function PartnerDealFlow({
   const counts = data?.stageCounts;
   const ceiling = data?.today ?? today;
   const isToday = range.from === ceiling && range.to === ceiling;
-  const premiumMax = Math.max(0, ...rows.map((row) => (row.monthlyPremiumCents ?? 0) * 12));
 
   const setDate = (key: "from" | "to", value: string) => { setRange((current) => ({ ...current, [key]: value || ceiling })); setPage(1); };
   const applyFilter = (patch: Partial<Filters>) => { setFilters((current) => ({ ...current, ...patch })); setPage(1); };
@@ -190,7 +188,7 @@ export function PartnerDealFlow({
 
   if (firstLoad) return <PageLoading />;
 
-  const columns = isAdmin ? 7 : 6;
+  const columns = isAdmin ? 6 : 5;
 
   // The period: a few quick ranges, or two dates. The default is today, where the partner is.
   const presets = [
@@ -269,9 +267,9 @@ export function PartnerDealFlow({
           icon={Hourglass}
           label="In progress"
           value={figures ? figures.inProgress : "—"}
-          tone={oldest != null && oldest >= 2 ? "warn" : "default"}
           series={perDay((row) => row.stageType === "open")}
-          note={figures ? (figures.inProgress === 0 ? "None open" : oldest == null ? "Age not recorded" : `Oldest ${oldest < 1 ? "under a day" : `${oldest} ${oldest === 1 ? "day" : "days"}`}`) : undefined}
+          // One-line rule (owner 2026-11-11): a plain figure; a deal two or more days old is said in one chip.
+          note={figures ? (figures.inProgress > 0 && oldest != null && oldest >= 2 ? <StatusChip tone="warning">Oldest {oldest} days</StatusChip> : figures.inProgress === 0 ? "None open" : oldest == null ? "Age not recorded" : `Oldest ${oldest < 1 ? "under a day" : `${oldest} ${oldest === 1 ? "day" : "days"}`}`) : undefined}
         />
         <KpiTile
           icon={XCircle}
@@ -396,20 +394,21 @@ export function PartnerDealFlow({
               <Table>
                 <TableHeader>
                   <TableRow>
+                    {/* One-line rule (owner 2026-11-11): one line, one colour, the status the only chip. The
+                        customer's name opens the lead (the arrow column is gone); the carrier rides on the
+                        Product tooltip so the table stays at six columns with Submitted by. */}
                     <TableHead>Customer</TableHead>
                     <TableHead>Product</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Carrier</TableHead>
-                    <TableHead className="w-[170px]">Annualised premium</TableHead>
+                    <TableHead className="text-right">Annualised premium</TableHead>
                     <TableHead>Draft date</TableHead>
                     {isAdmin && <TableHead>Submitted by</TableHead>}
-                    <TableHead className="w-[60px] text-right"><span className="sr-only">Actions</span></TableHead>
+                    <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {rows.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={columns + 1} className="h-64 text-center align-middle">
+                      <TableCell colSpan={columns} className="h-64 text-center align-middle">
                         {hasNarrowing ? (
                           <NoMatches noun="deals" onClear={clearFilters} by={search.trim() ? "search" : "filters"} />
                         ) : (
@@ -424,18 +423,12 @@ export function PartnerDealFlow({
                     </TableRow>
                   ) : tablePage.rows.map((row) => (
                     <TableRow key={row.leadId} data-lead-id={row.leadId}>
-                      <TableCell className="max-w-[220px]"><span className="block max-w-full truncate font-semibold text-foreground" title={row.customer}>{row.customer}</span></TableCell>
-                      <TableCell>{productLineLabel(row.productLine)}</TableCell>
-                      <TableCell><StatusChip tone={STAGE_TONE[row.stageType]} dot>{row.stageName}</StatusChip></TableCell>
-                      <TableCell className="max-w-[150px] truncate" title={row.carrier ?? undefined}>{row.carrier ?? "—"}</TableCell>
-                      <TableCell><PremiumBar monthlyCents={row.monthlyPremiumCents} max={premiumMax} /></TableCell>
-                      <TableCell className="whitespace-nowrap tabular-nums">{dateOnly(row.draftDate)}</TableCell>
+                      <TableCell className="whitespace-nowrap font-medium text-foreground"><Link href={`/partner/pipeline/${row.leadId}`} className="hover:underline" title={`Open the lead for ${row.customer}`}>{row.customer}</Link></TableCell>
+                      <TableCell className="whitespace-nowrap" title={`Carrier · ${row.carrier ?? "none yet"}`}>{productLineLabel(row.productLine)}</TableCell>
+                      <TableCell className="whitespace-nowrap text-right tabular-nums">{row.monthlyPremiumCents == null ? <span className="text-muted-foreground" title="No premium quoted yet">—</span> : formatCentsAsCurrency(row.monthlyPremiumCents * 12)}</TableCell>
+                      <TableCell className="whitespace-nowrap tabular-nums text-muted-foreground">{dateOnly(row.draftDate)}</TableCell>
                       {isAdmin && <TableCell className="whitespace-nowrap">{row.submittedBy.name}</TableCell>}
-                      <TableCell className="text-right">
-                        <Button asChild variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                          <Link href={`/partner/pipeline/${row.leadId}`} title="Open the lead" aria-label={`Open the lead for ${row.customer}`}><ArrowUpRight aria-hidden="true" /></Link>
-                        </Button>
-                      </TableCell>
+                      <TableCell className="whitespace-nowrap"><StatusChip tone={STAGE_TONE[row.stageType]} dot>{row.stageName}</StatusChip></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

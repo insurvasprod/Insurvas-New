@@ -28,6 +28,7 @@ import { MISSING_BLOCKS, MISSING_FIX_ORDER, firstMissing, missingFilterOf, type 
 import { cn } from "@/lib/utils";
 import { dobConflict, matchedOnLabel } from "@/lib/contacts/matchPolicy";
 import type { ContactDirectory, ContactRow, ContactWorkspace as Workspace, DuplicateMatch, FieldSchemaRow, RecentMerge, ReviewPair, ReviewQueue } from "@/lib/contacts/types";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 /**
  * /app/duplicates, step 3 · Clean of the one Leads page (board LinB3, owner pick B 2026-10-28).
@@ -48,6 +49,13 @@ type Side = "existing" | "incoming";
 
 const emptyForm = { first_name: "", last_name: "", dob: "", primary_phone: "", email: "", state: "", address_line1: "", city: "", postal_code: "", custom_fields: {} as Record<string, unknown> };
 const PAGE_SIZE = 10;
+/**
+ * The page's reads, as the app's cache keys them (lib/client/resource-cache.ts): a repeat visit draws the last answer
+ * at once and the fresh one replaces it. The first page with no search is the one kept across a reload.
+ */
+const contactsKey = (q: string, page: number) => `/api/app/contacts?q=${encodeURIComponent(q)}&page=${page}&pageSize=${PAGE_SIZE}`;
+const CONTACTS_KEY = contactsKey("", 0);
+const LEAD_LISTS_KEY = "/api/app/lead-lists";
 /** A list tab fills the step and scrolls its table inside (no page scroll, 2026-10-29); the pager stays at the foot. */
 const fillCard = "flex min-w-0 flex-col lg:min-h-0 lg:flex-1 [&>.overflow-x-auto]:flex-1 lg:[&>.overflow-x-auto]:min-h-0 lg:[&>.overflow-x-auto]:overflow-y-auto";
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -247,13 +255,13 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
   /** From the address: ?tab= opens a tab; Missing data's ?missing= and ?campaign= pre-filter it. */
   initial?: { tab: string | null; missing: string | null; campaign: string | null } | null;
 }) {
-  const [workspace, setWorkspace] = useState<WorkspacePayload | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspacePayload | null>(() => seed<WorkspacePayload>(CONTACTS_KEY, true)?.data ?? null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [directory, setDirectory] = useState<ContactDirectory | null>(null);
+  const [directory, setDirectory] = useState<ContactDirectory | null>(() => seed<WorkspacePayload>(CONTACTS_KEY, true)?.data?.directory ?? null);
   const [directoryLoading, setDirectoryLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [queue, setQueue] = useState<ReviewQueue>({ ready: true, total: 0, index: 0, pair: null });
+  const [queue, setQueue] = useState<ReviewQueue>(() => seed<WorkspacePayload>(CONTACTS_KEY, true)?.data?.queue ?? { ready: true, total: 0, index: 0, pair: null });
   const [localPairs, setLocalPairs] = useState<ReviewPair[]>([]);
   const [localIndex, setLocalIndex] = useState(0);
   const [selection, setSelection] = useState<Record<string, Side>>({});
@@ -291,12 +299,14 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
   // Search fires as the reader types; only the newest request may paint the table.
   const directoryTicket = useRef(0);
 
-  const load = useCallback(async (options: { queueIndex?: number | "last" } = {}) => {
+  // `fresh` after a change (a merge, a dismiss, a new contact), so the answer is never the one from before it.
+  const load = useCallback(async (options: { queueIndex?: number | "last"; fresh?: boolean } = {}) => {
     const { q, page } = directoryState.current;
-    const response = await fetch(`/api/app/contacts?q=${encodeURIComponent(q)}&page=${page}&pageSize=${PAGE_SIZE}`, { cache: "no-store" });
-    const body = await readJson(response);
-    if (!response.ok || !body) throw new Error(errorOf(body, "Could not load contacts"));
-    const payload = body as unknown as WorkspacePayload;
+    const key = contactsKey(q, page);
+    const persist = key === CONTACTS_KEY;
+    const body = await (options.fresh ? loadResource<WorkspacePayload>(key, { persist }) : readResource<WorkspacePayload>(key, { persist }));
+    if (!body) throw new Error("Could not load contacts");
+    const payload = body;
     setWorkspace(payload);
     setDirectory(payload.directory);
     setLoadError(null);
@@ -309,18 +319,27 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
   }, []);
 
   // This effect hydrates the client view from current server state.
-  useEffect(() => { void load().catch((error: Error) => { setLoadError(error.message); notify.fail("Could not load contacts", { detail: error.message }); }); }, [load]);
+  useEffect(() => {
+    // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+    const kept = peek<WorkspacePayload>(CONTACTS_KEY, true)?.data;
+    if (kept) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+      setWorkspace((current) => current ?? kept);
+      setDirectory((current) => current ?? kept.directory);
+      setQueue((current) => (current.total === 0 && !current.pair ? kept.queue : current));
+    }
+    void load().catch((error: Error) => { setLoadError(error.message); notify.fail("Could not load contacts", { detail: error.message }); });
+  }, [load]);
 
   // List problems: the Lists step's own report (GET /api/app/lead-lists), read only for people it admits.
   const hasListProblems = listProblems !== null;
-  const loadProblems = useCallback(async () => {
+  const loadProblems = useCallback(async (fresh = false) => {
     if (!hasListProblems) return;
     setProblemsLoading(true);
     try {
-      const response = await fetch("/api/app/lead-lists", { cache: "no-store" });
-      const body = await readJson(response);
-      if (!response.ok || !body) throw new Error(errorOf(body, "Could not load your lists"));
-      setProblemLists((body.lists ?? []) as ListProblemRow[]);
+      const body = await (fresh ? loadResource<{ lists?: ListProblemRow[] }>(LEAD_LISTS_KEY) : readResource<{ lists?: ListProblemRow[] }>(LEAD_LISTS_KEY));
+      if (!body) throw new Error("Could not load your lists");
+      setProblemLists(body.lists ?? []);
       setProblemsError(null);
     } catch (error) {
       setProblemsError(error instanceof Error ? error.message : "Could not load your lists");
@@ -424,7 +443,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
       const body = await readJson(response);
       if (!response.ok) { notify.block("Could not undo merge", { detail: errorOf(body, "Try again.") }); return; }
       notify.done("Merge undone; both original contacts are restored");
-      await load({ queueIndex: current.index });
+      await load({ queueIndex: current.index, fresh: true });
     } catch (error) {
       notify.fail("Could not undo merge", { detail: error instanceof Error ? error.message : undefined });
     } finally { setBusy(null); }
@@ -438,11 +457,11 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
     try {
       const response = await fetch("/api/app/contacts/merge", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kept_id: keptContact.id, merged_id: mergedContact.id, field_choices: choicesFor(kept), review_id: pair.review.id }) });
       const body = await readJson(response);
-      if (!response.ok) { notify.block("Could not merge contacts", { detail: errorOf(body, "Try again.") }); if (response.status === 409) await load({ queueIndex: current.index }); return; }
+      if (!response.ok) { notify.block("Could not merge contacts", { detail: errorOf(body, "Try again.") }); if (response.status === 409) await load({ queueIndex: current.index, fresh: true }); return; }
       const mergeId = typeof body?.mergeId === "string" ? body.mergeId : null;
       notify.done("Contacts merged; the original records remain recoverable", mergeId ? { action: { label: "Undo", onClick: () => void undo(mergeId) } } : undefined);
       if (!queue.ready) setLocalPairs((pairs) => pairs.filter((item) => item.existing.id !== mergedContact.id && item.incoming.id !== mergedContact.id));
-      await load({ queueIndex: current.index });
+      await load({ queueIndex: current.index, fresh: true });
     } catch (error) {
       notify.fail("Could not merge contacts", { detail: error instanceof Error ? error.message : undefined });
     } finally { setBusy(null); }
@@ -455,9 +474,9 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
     try {
       const response = await fetch("/api/app/contacts/reviews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ review_id: pair.review.id, action: "dismiss" }) });
       const body = await readJson(response);
-      if (!response.ok) { notify.block("Could not dismiss this match", { detail: errorOf(body, "Try again.") }); if (response.status === 409) await load({ queueIndex: current.index }); return; }
+      if (!response.ok) { notify.block("Could not dismiss this match", { detail: errorOf(body, "Try again.") }); if (response.status === 409) await load({ queueIndex: current.index, fresh: true }); return; }
       notify.done("Marked as not the same person", { detail: "Both contacts are kept as they are." });
-      await load({ queueIndex: current.index });
+      await load({ queueIndex: current.index, fresh: true });
     } catch (error) {
       notify.fail("Could not dismiss this match", { detail: error instanceof Error ? error.message : undefined });
     } finally { setBusy(null); }
@@ -482,7 +501,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
         const pairs = ((body.duplicates as DuplicateMatch[]) ?? []).filter((match) => match.confidence !== "low").map((match): ReviewPair => ({ review: { id: null, score: match.score, confidence: match.confidence, matched_on: match.matched_on, created_at: null }, existing: matchAsContact(match), incoming: created }));
         setLocalPairs(pairs); setLocalIndex(0);
       }
-      await load({ queueIndex: outcome === "review" ? "last" : current.index });
+      await load({ queueIndex: outcome === "review" ? "last" : current.index, fresh: true });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not create contact");
     } finally { setBusy(null); }
@@ -502,7 +521,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
       const title = `${imported} contact${imported === 1 ? "" : "s"} imported`;
       if (failedCount) notify.warn(title, { detail: parts.join(" · ") });
       else notify.done(title, parts.length ? { detail: parts.join(" · ") } : undefined);
-      await load({ queueIndex: current.index });
+      await load({ queueIndex: current.index, fresh: true });
     } catch (error) {
       notify.fail("Could not import contacts", { detail: error instanceof Error ? error.message : undefined });
     } finally { event.target.value = ""; setBusy(null); }
@@ -514,7 +533,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
       const response = await fetch("/api/app/contacts/field-schema", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...field, options: [], is_required: false, sort_order: schema.length }) });
       const body = await readJson(response);
       if (!response.ok) { setFieldError(errorOf(body, "Could not save field")); return; }
-      setField({ field_key: "", label: "", type: "text" }); notify.done("Custom field saved"); await load({ queueIndex: current.index });
+      setField({ field_key: "", label: "", type: "text" }); notify.done("Custom field saved"); await load({ queueIndex: current.index, fresh: true });
     } catch (error) {
       setFieldError(error instanceof Error ? error.message : "Could not save field");
     } finally { setBusy(null); }
@@ -524,7 +543,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
     if (!loadError) return <PageLoading />;
     return (
       <div className="flex w-full min-w-0 flex-col gap-6">
-        <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">Contacts could not be loaded: {loadError}<Button type="button" variant="outline" onClick={() => void load().catch((error: Error) => setLoadError(error.message))}>Try again</Button></span>} />
+        <Callout tone="error" title={<span className="flex flex-wrap items-center gap-3">Contacts could not be loaded: {loadError}<Button type="button" variant="outline" onClick={() => void load({ fresh: true }).catch((error: Error) => setLoadError(error.message))}>Try again</Button></span>} />
       </div>
     );
   }
@@ -890,7 +909,7 @@ export function ContactWorkspace({ readOnly = false, listProblems = null, initia
 
       {tab === "problems" && listProblems && (
         <section id="list-problems" aria-label="List problems" className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
-          <CleanListProblems lists={problemLists} error={problemsError} loading={problemsLoading} access={listProblems} onReload={() => void loadProblems()} />
+          <CleanListProblems lists={problemLists} error={problemsError} loading={problemsLoading} access={listProblems} onReload={() => void loadProblems(true)} />
         </section>
       )}
       </div>

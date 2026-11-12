@@ -74,7 +74,7 @@ export default async function ComparePage({ searchParams }: { searchParams: Prom
     <AgencyPage
       step="compare"
       info="Any two periods side by side: the whole agency or one person on Periods, up to four people on People. Every figure opens the rows behind it."
-      lead={<ViewTabs label="Compare by" value={tab} tabs={[{ key: "periods", label: "Periods", href: tabHref("periods") }, { key: "people", label: "People", href: tabHref("people") }]} />}
+      tabs={<ViewTabs label="Compare by" value={tab} tabs={[{ key: "periods", label: "Periods", href: tabHref("periods") }, { key: "people", label: "People", href: tabHref("people") }]} />}
       actions={<PeriodWords pair={pair} />}
     >
       {/* Only new periods (or the other tab) re-read the figures behind a skeleton. A person and the people compared keep

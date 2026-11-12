@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { listPostKeys, mintPostKey, PostKeyConflictError } from "@/lib/leadPost/keys";
 import { SchemaPendingError } from "@/lib/leadPost/schemaGap";
+import { createRealtimeVendor, updateVendorSettings } from "@/lib/leadPost/boardStore";
 
 /**
  * LA-2.5 · the keys a vendor posts leads with.
@@ -23,13 +24,19 @@ const fieldNotesSchema = z.record(z.string().trim().min(1).max(120), z.string().
 
 const mintSchema = z
   .object({
-    vendorId: z.string().uuid(),
+    // A vendor from the list, or (round 8 "type a new name") a new real-time vendor by name.
+    vendorId: z.string().uuid().optional(),
+    vendorName: z.string().trim().min(1).max(160).optional(),
+    // Round 8 (20261112100100): start in test mode, and the price per accepted lead in cents.
+    testMode: z.boolean().optional(),
+    priceCents: z.number().int().min(0).max(10_000_000).nullable().optional(),
     fieldMap: fieldMapSchema.default({}),
     fieldNotes: fieldNotesSchema.optional(),
     // Optional: an unbound key posts to the vendor's accepting campaign, as keys always have.
     campaignId: z.string().uuid().nullable().optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => Boolean(value.vendorId || value.vendorName), "Choose a vendor or type a new name");
 
 export async function GET() {
   const auth = await requireFeatureRole("lead_import", ROLES);
@@ -55,10 +62,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Enter a valid key" }, { status: 400 });
 
   try {
+    const vendorId = parsed.data.vendorId ?? (await createRealtimeVendor(auth.context.tenantId, auth.context.userId, parsed.data.vendorName ?? ""));
     const minted = await mintPostKey({
       tenantId: auth.context.tenantId,
       userId: auth.context.userId,
-      vendorId: parsed.data.vendorId,
+      vendorId,
       fieldMap: parsed.data.fieldMap,
       fieldNotes: parsed.data.fieldNotes,
       campaignId: parsed.data.campaignId ?? null,
@@ -72,15 +80,26 @@ export async function POST(request: NextRequest) {
       // The prefix, never the key. An audit row holding the secret would undo the reason the table
       // stores only a hash.
       metadata: {
-        vendorId: parsed.data.vendorId,
+        vendorId,
+        newVendor: !parsed.data.vendorId,
         keyPrefix: minted.record.keyPrefix,
         mappedFields: Object.keys(parsed.data.fieldMap).length,
         campaignId: parsed.data.campaignId ?? null,
       },
       request,
     });
+    // Round 8: nothing is live until the first test passes, once test mode exists; a price if given.
+    let settingsSaved = false;
+    if (parsed.data.testMode !== undefined || parsed.data.priceCents !== undefined) {
+      try {
+        await updateVendorSettings(auth.context.tenantId, minted.record.id, { testMode: parsed.data.testMode, priceCents: parsed.data.priceCents });
+        settingsSaved = true;
+      } catch (error) {
+        if (!(error instanceof SchemaPendingError)) throw error;
+      }
+    }
     // The one response that ever contains the key itself.
-    return NextResponse.json({ key: minted.key, record: minted.record }, { status: 201 });
+    return NextResponse.json({ key: minted.key, record: minted.record, settingsSaved }, { status: 201 });
   } catch (error) {
     if (error instanceof SchemaPendingError) return NextResponse.json({ error: error.message }, { status: 503 });
     // One active key per vendor (LA-2.5-2): a second is refused, and the message says to rotate.

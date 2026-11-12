@@ -1,48 +1,34 @@
 import { NextResponse } from "next/server";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
-import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { getEntitlement } from "@/lib/entitlements/get";
 import type { AccountingStepCounts } from "@/lib/accounting/steps";
-import { EDITABLE } from "@/lib/accounting/invoicesCore";
+import { loadTodo } from "@/lib/accounting/todoStore";
+import { todoCounts } from "@/lib/accounting/todoCore";
 
 /**
- * The live counts on the one Accounting page's rail (owner 2026-11-02): what waits on a person, per step.
- * Head counts only — never an amount — under the gate its steps share (profit_and_loss, owner and
- * bookkeeper). Each read stands alone: one that fails leaves its step out, and the rail shows no badge.
+ * The live counts on the Accounting rail (round 7, owner 2026-11-10): what waits on a person, per step, read from
+ * the same list Accounting › To do shows, so a badge and the page never disagree. Never an amount. Under the gate
+ * its steps share (profit_and_loss, owner and bookkeeper). A source that fails is left out of its step's count.
  *
- *   bank      deposits not yet matched to a carrier payment (the Bank deposits match queue)
- *   bills     vendor invoices still to approve: draft, received or disputed (Vendor bills' "To approve")
- *   expenses  recurring expenses that arrived and wait to be confirmed
- *   payouts   partner payout runs still drafts, waiting to be reviewed and published (LA-7.4, 2026-11-03)
+ *   todo      everything below together (partner payout drafts count once: one job)
+ *   bank      carrier payments with bad math or missing money, and deposits to match
+ *   bills     vendor bills to finish, approve, close a dispute on, or pay
+ *   expenses  monthly bills that came back and wait for an OK
+ *   tax       payees over the 1099 threshold missing a W-9, tax ID or legal name
  */
 const ROLES = ["owner", "bookkeeper"] as const;
-
-type Count = PromiseLike<{ count: number | null; error: { message: string } | null }>;
-type Q = Count & { eq(c: string, v: unknown): Q; in(c: string, v: readonly unknown[]): Q; gt(c: string, v: unknown): Q };
-type Db = { from(table: string): { select(columns: string, options: { count: "exact"; head: true }): Q } };
-
-const head = async (query: Count): Promise<number | null> => {
-  const { count, error } = await query;
-  return error ? null : (count ?? 0);
-};
 
 export async function GET() {
   const auth = await requireFeatureRole("profit_and_loss", ROLES);
   if (auth instanceof NextResponse) return auth;
-  const db = getSupabaseServiceClient() as unknown as Db;
-  const count = (table: string) => db.from(table).select("id", { count: "exact", head: true }).eq("tenant_id", auth.context.tenantId);
-
-  const [bank, bills, expenses, payouts] = await Promise.all([
-    head(count("bank_transaction").gt("amount_cents", 0).in("match_status", ["unmatched", "suggested", "partially_matched"])).catch(() => null),
-    // The same invoices Vendor bills' "To approve" figure counts (EDITABLE in lib/accounting/invoicesCore.ts).
-    head(count("vendor_invoice").in("status", EDITABLE)).catch(() => null),
-    head(count("expense").eq("status", "unconfirmed")).catch(() => null),
-    head(count("payout_run").eq("status", "draft")).catch(() => null),
-  ]);
-  const counts: AccountingStepCounts = {};
-  if (bank !== null) counts.bank = bank;
-  if (bills !== null) counts.bills = bills;
-  if (expenses !== null) counts.expenses = expenses;
-  if (payouts !== null) counts.payouts = payouts;
+  const tenantId = auth.context.tenantId;
+  const features = await getEntitlement(tenantId).then((e) => e.features, () => [] as string[]);
+  const payouts = features.includes("payout_runs");
+  const tax = features.includes("tax_summaries");
+  const { items, failed } = await loadTodo(tenantId, { bank: true, bills: true, expenses: true, payouts, tax });
+  const n = todoCounts(items);
+  const counts: AccountingStepCounts = { todo: n.all };
+  for (const key of ["bank", "bills", "expenses", "tax"] as const) if (!failed.includes(key)) counts[key] = n[key];
   return NextResponse.json({ counts }, { headers: { "Cache-Control": "no-store" } });
 }

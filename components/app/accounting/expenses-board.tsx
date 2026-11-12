@@ -2,14 +2,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useTransition, type FormEvent } from "react";
+import { createContext, useContext, useMemo, useRef, useState, useTransition, type FormEvent, type ReactNode } from "react";
 
-import { Callout } from "@/components/app/settings/primitives";
+import { ClickRow } from "@/components/app/book/policy/click-row";
+import { FactDialog, OkDialog, sendExpense, type OkItem } from "@/components/app/accounting/expense-record";
 import { Button } from "@/components/ui/button";
-import { cardSurface } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { Field, control } from "@/components/ui/field";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { Field, checkboxControl, control, textareaControl } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
@@ -17,73 +18,121 @@ import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import {
   ACQUISITION_CONSEQUENCE,
   EXPENSE_BUCKET_COPY,
   EXPENSE_BUCKETS,
   EXPENSE_CATEGORY_LABELS,
-  RECURRENCE_LABELS,
   bucketOf,
   categoriesIn,
   defaultCategoryFor,
+  expenseFor,
+  expenseHref,
+  expenseState,
+  inExpenseList,
+  isMonthly,
+  monthName,
+  nextStepFor,
+  shortDate,
   type ExpenseBucket,
   type ExpenseCategory,
+  type ExpenseList,
 } from "@/lib/accounting/expensesCore";
-import type { ExpenseRow } from "@/lib/accounting/expenseStore";
-import { PAID_METHOD_LABELS, PAID_METHODS } from "@/lib/accounting/invoicesCore";
+import type { ExpenseRow, MonthScoreboard } from "@/lib/accounting/expenseStore";
+import { PAID_METHOD_LABELS, PAID_METHODS, type PaidMethod } from "@/lib/accounting/invoicesCore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { notify } from "@/lib/notify";
 
 /**
- * LA-7.3 · everything spent that is not a lead. Recurring ones arrive each month unconfirmed and
- * book nothing until confirmed here — a cancelled subscription must not keep costing money in the
- * P&L because nobody said so. Each expense is acquisition or overhead, and the choice is shown.
+ * LA-7.3 · everything spent that is not a lead invoice. Recurring ones arrive each month unconfirmed and
+ * book nothing until OK'd — a cancelled subscription must not keep costing money in the P&L because nobody
+ * said so. Each expense is acquisition or overhead, and the choice is shown.
  *
- * Foundation pass (2026-11-03): To confirm · Booked · Recurring are the step's tabs on the title line
- * (`?view=`); adding an expense is its own page (/app/expenses/new); a row has one primary action and a
- * menu, and every step that needs a reason or a date is a confirm pop-up.
- *
- * Expenses tracker (owner, 2026-11-06): three buckets (leads, subscriptions, daily & random) on a short
- * form; a monthly bill comes back as a to-do and its OK books it and marks it paid in one step; and a
- * Scoreboard tab says where the month's money went.
+ * Round 7 (owner 2026-11-10, docs/la4/mockups-r7/accounting.html §3, direction 3·A "One strip, rows open the
+ * expense"): Scoreboard · To OK · All expenses · Monthly bills, the Scoreboard's strip on every tab, and rows
+ * that carry no controls: a row opens the expense's own page (/app/expenses/[id]), where Counts as, OK, Mark
+ * paid, the amount, Skip / Void and the receipt live. Adding an expense is a page of four numbered questions.
  */
 export type ExpenseView = "scoreboard" | "confirm" | "booked" | "recurring";
 const money = (cents: number) => formatCentsAsCurrency(cents);
 const today = () => new Date().toISOString().slice(0, 10);
 const plain = (cents: number) => formatCentsAsCurrency(cents).replace(/[$,]/g, "");
+const READ_ONLY = "This plan is read-only here: expenses can be seen, not changed.";
+const HISTORY = "A booked expense is history: void it and enter it again.";
 
-async function send(url: string, init: RequestInit) {
-  const res = await fetch(url, init);
-  const body = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(body?.error ?? "That didn't save");
-  return body;
+/** A button that is off, with its reason on hover (a disabled button takes no pointer events itself). */
+function Off({ reason, children }: { reason: string; children: ReactNode }) {
+  return <span title={reason} className="inline-flex">{children}</span>;
+}
+
+const okItemOf = (e: ExpenseRow): OkItem => ({ id: e.id, vendorName: e.vendorName, amountCents: e.amountCents, category: e.category, isAcquisitionCost: e.isAcquisitionCost, incurredOn: e.incurredOn });
+
+function StateChip({ e }: { e: Pick<ExpenseRow, "status" | "paidOn"> }) {
+  const state = expenseState(e);
+  if (state === "waiting") return <StatusChip tone="warning">Waiting for OK</StatusChip>;
+  if (state === "unpaid") return <StatusChip tone="warning">Booked, unpaid</StatusChip>;
+  if (state === "paid") return <StatusChip tone="good">Paid {shortDate(e.paidOn!)}</StatusChip>;
+  if (state === "void") return <StatusChip tone="neutral">Void</StatusChip>;
+  return <StatusChip tone="neutral">Monthly bill</StatusChip>;
+}
+
+// ─── Add an expense (board 3·3) ─────────────────────────────────────────────────────────────────
+
+type Draft = { bucket: ExpenseBucket; what: string; amount: string; monthly: boolean; category: ExpenseCategory; on: string; end: string; acq: string; paidOn: string; method: string; note: string };
+const blankDraft = (): Draft => ({ bucket: "subscriptions", what: "", amount: "", monthly: true, category: defaultCategoryFor("subscriptions"), on: today(), end: "", acq: "default", paidOn: today(), method: "card", note: "" });
+const DraftContext = createContext<{ f: Draft; setF: (next: Draft | ((cur: Draft) => Draft)) => void; busy: boolean; setBusy: (busy: boolean) => void } | null>(null);
+
+/** Holds the add form's draft, so its Save and Discard can sit on the title line (the frame's `actions`). */
+export function ExpenseDraftProvider({ children }: { children: ReactNode }) {
+  const [f, setF] = useState<Draft>(blankDraft);
+  const [busy, setBusy] = useState(false);
+  return <DraftContext.Provider value={{ f, setF, busy, setBusy }}>{children}</DraftContext.Provider>;
+}
+const useDraft = () => {
+  const draft = useContext(DraftContext);
+  if (!draft) throw new Error("ExpenseForm needs an ExpenseDraftProvider");
+  return draft;
+};
+
+/** The add page's title-line buttons: Discard, and Save named for what it does. */
+export function ExpenseFormActions() {
+  const router = useRouter();
+  const { f, setF, busy } = useDraft();
+  return (
+    <>
+      <Button type="button" variant="ghost" disabled={busy} onClick={() => { setF(blankDraft()); router.push("/app/expenses"); }}>Discard</Button>
+      <Button type="submit" form="expense-form" disabled={busy}>{f.monthly ? "Set up monthly bill" : "Add expense"}</Button>
+    </>
+  );
 }
 
 /**
- * /app/expenses/new (owner, 2026-11-06): the four questions first — what is it, how much, which bucket, and
- * does it come back every month — then More details for the rest (the date, the detailed category, counts
- * as, when it was paid, a note). Discard and Save, and a leave guard.
+ * /app/expenses/new (round 7, board 3·3): four numbered questions, nothing hidden in "More details". 1 · Which
+ * bucket? 2 · What is it, and how much? 3 · When? 4 · How it counts. Save and Discard on the title line, and a
+ * leave guard.
  */
 export function ExpenseForm({ defaults }: { defaults: Record<ExpenseCategory, boolean> }) {
   const router = useRouter();
-  const blank = { bucket: "subscriptions" as ExpenseBucket, what: "", amount: "", monthly: true, category: defaultCategoryFor("subscriptions"), on: today(), end: "", acq: "default", paidOn: today(), method: "card", note: "" };
-  const [f, setF] = useState(blank);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { f, setF, busy, setBusy } = useDraft();
+  const [errors, setErrors] = useState<{ what?: string; amount?: string }>({});
   const scope = useRef<HTMLFormElement>(null);
-  const set = <K extends keyof typeof f>(k: K, v: (typeof f)[K]) => setF((cur) => ({ ...cur, [k]: v }));
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setF((cur) => ({ ...cur, [k]: v }));
   const pickBucket = (bucket: ExpenseBucket) => setF((cur) => ({ ...cur, bucket, category: defaultCategoryFor(bucket), monthly: bucket === "subscriptions" }));
   const fallback = defaults[f.category];
   const dirty = Boolean(f.what || f.amount || f.note);
   const save = async (): Promise<boolean> => {
     const cents = parseDollarsToCents(f.amount);
-    if (!f.what.trim()) { setError("Say what it is, for example \"Dialer\" or \"100 leads from XYZ\"."); return false; }
-    if (cents === null || cents <= 0) { setError("Enter how much, in dollars and cents."); return false; }
+    const found = {
+      what: f.what.trim() ? undefined : "Say what it is, for example \"Dialer\" or \"100 leads from XYZ\".",
+      amount: cents !== null && cents > 0 ? undefined : "Enter how much, in dollars and cents.",
+    };
+    setErrors(found);
+    if (found.what || found.amount || cents === null) return false;
     setBusy(true);
-    setError(null);
     try {
-      const body = await send("/api/app/accounting/expenses", {
+      const body = await sendExpense("/api/app/accounting/expenses", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           category: f.category, vendor_name: f.what.trim(), description: f.note.trim() || null, amount_cents: cents, incurred_on: f.on, recurrence: f.monthly ? "monthly" : "one_off",
@@ -92,12 +141,13 @@ export function ExpenseForm({ defaults }: { defaults: Record<ExpenseCategory, bo
         }),
       });
       notify.done(f.monthly ? `Monthly bill set up${body.generated ? `: ${body.generated} month${body.generated === 1 ? "" : "s"} to OK` : ". It comes back each month for you to OK."}` : f.paidOn ? "Expense added and marked paid" : "Expense added");
-      setF(blank);
-      router.push(f.monthly ? (body.generated ? "/app/expenses?view=confirm" : "/app/expenses?view=recurring") : "/app/expenses?view=booked");
+      const monthly = f.monthly;
+      setF(blankDraft());
+      router.push(monthly && body.generated ? "/app/expenses?view=confirm" : body.id ? expenseHref(body.id) : "/app/expenses?view=booked");
       router.refresh();
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That didn't save");
+      notify.fail(err instanceof Error ? err.message : "That didn't save");
       return false;
     } finally {
       setBusy(false);
@@ -105,251 +155,456 @@ export function ExpenseForm({ defaults }: { defaults: Record<ExpenseCategory, bo
   };
   const submit = (e: FormEvent) => { e.preventDefault(); void save(); };
   return (
-    <form ref={scope} onSubmit={submit} className={`${cardSurface} flex flex-col gap-5 p-5`}>
-      <fieldset className="m-0 min-w-0 border-0 p-0">
-        <legend className="mb-2 text-sm font-medium">Which bucket?</legend>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {EXPENSE_BUCKETS.map((b) => (
-            <label key={b} className={`flex cursor-pointer gap-3 rounded-lg border p-3 ${f.bucket === b ? "border-[var(--accent)] bg-[var(--primary-soft)]" : "border-border"}`}>
-              <input type="radio" name="expense-bucket" className="mt-1" checked={f.bucket === b} onChange={() => pickBucket(b)} />
-              <span className="min-w-0"><span className="block font-medium">{EXPENSE_BUCKET_COPY[b].label}</span><span className="block text-xs text-muted-foreground">{EXPENSE_BUCKET_COPY[b].hint}</span></span>
-            </label>
-          ))}
-        </div>
-        {f.bucket === "leads" ? <p className="mb-0 mt-2 text-xs text-muted-foreground">Got an invoice from the lead vendor? <Link className="underline" href="/app/vendor-bills/new">Enter it in Vendor bills</Link> instead, so it is checked against the leads you received.</p> : null}
-      </fieldset>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <Field label="What is it?" htmlFor="exp-what" required><input id="exp-what" className={control} required maxLength={120} value={f.what} onChange={(e) => set("what", e.target.value)} placeholder={f.bucket === "leads" ? "e.g. 100 leads from XYZ" : f.bucket === "subscriptions" ? "e.g. Dialer" : "e.g. Office supplies"} /></Field>
-        <Field label="How much? ($)" htmlFor="exp-amount" required><input id="exp-amount" className={control} required inputMode="decimal" value={f.amount} onChange={(e) => set("amount", e.target.value)} /></Field>
-        <div className="flex items-end pb-2">
-          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={f.monthly} onChange={(e) => set("monthly", e.target.checked)} />Comes back every month</label>
-        </div>
-      </div>
-      <p className="m-0 text-xs text-muted-foreground">{f.monthly ? "Each month it comes back as a to-do for you to OK. OK books it and marks it paid; nothing is paid without you." : "Added for the day below and marked paid on the date in More details."}</p>
-      <details className="rounded-lg border border-border px-4 py-3">
-        <summary className="cursor-pointer text-sm font-medium">More details</summary>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          <Field label={f.monthly ? "First month" : "For the day"} htmlFor="exp-on" required><input id="exp-on" type="date" className={control} required value={f.on} onChange={(e) => set("on", e.target.value)} /></Field>
-          {f.monthly
-            ? <Field label="Ends (optional)" htmlFor="exp-end"><input id="exp-end" type="date" className={control} value={f.end} onChange={(e) => set("end", e.target.value)} /></Field>
-            : <Field label="Paid on (empty if not paid yet)" htmlFor="exp-paid"><input id="exp-paid" type="date" className={control} value={f.paidOn} onChange={(e) => set("paidOn", e.target.value)} /></Field>}
-          {!f.monthly && f.paidOn ? <Field label="Paid by" htmlFor="exp-method"><select id="exp-method" className={control} value={f.method} onChange={(e) => set("method", e.target.value)}>{PAID_METHODS.map((m) => <option key={m} value={m}>{PAID_METHOD_LABELS[m]}</option>)}</select></Field> : null}
+    <form id="expense-form" ref={scope} onSubmit={submit} noValidate className="grid gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader><CardTitle>1 · Which bucket?</CardTitle></CardHeader>
+        <CardContent className="grid gap-2">
+          <div role="radiogroup" aria-label="Which bucket?" className="flex flex-wrap gap-2">
+            {EXPENSE_BUCKETS.map((b) => <ToggleChip key={b} role="radio" selected={f.bucket === b} onClick={() => pickBucket(b)}>{EXPENSE_BUCKET_COPY[b].label}</ToggleChip>)}
+          </div>
+          <p className="m-0 text-xs text-muted-foreground">{EXPENSE_BUCKET_COPY[f.bucket].hint}</p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>2 · What is it, and how much?</CardTitle></CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="What is it?" htmlFor="exp-what" required error={errors.what}><input id="exp-what" className={control} maxLength={120} value={f.what} aria-invalid={errors.what ? true : undefined} onChange={(e) => set("what", e.target.value)} placeholder={f.bucket === "leads" ? "e.g. 100 leads from XYZ" : f.bucket === "subscriptions" ? "e.g. Dialer seats" : "e.g. Office supplies"} /></Field>
+            <Field label="How much? ($)" htmlFor="exp-amount" required error={errors.amount}><input id="exp-amount" className={control} inputMode="decimal" value={f.amount} aria-invalid={errors.amount ? true : undefined} onChange={(e) => set("amount", e.target.value)} /></Field>
+          </div>
+          {f.bucket === "leads" ? <p className="m-0 text-xs text-muted-foreground">Got a bill from the lead vendor? <Link className="text-[var(--accent-ink)] underline" href="/app/vendor-bills/new">Enter it in Vendor bills</Link> instead.</p> : null}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>3 · When?</CardTitle></CardHeader>
+        <CardContent className="grid gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={f.monthly ? "First month" : "For the day"} htmlFor="exp-on" required><input id="exp-on" type="date" className={control} required value={f.on} onChange={(e) => set("on", e.target.value)} /></Field>
+            {f.monthly
+              ? <Field label="Ends (optional)" htmlFor="exp-end"><input id="exp-end" type="date" className={control} value={f.end} placeholder="No end" onChange={(e) => set("end", e.target.value)} /></Field>
+              : <Field label="Paid on (empty if not paid yet)" htmlFor="exp-paid"><input id="exp-paid" type="date" className={control} value={f.paidOn} onChange={(e) => set("paidOn", e.target.value)} /></Field>}
+            {!f.monthly && f.paidOn ? <Field label="Paid by" htmlFor="exp-method"><select id="exp-method" className={control} value={f.method} onChange={(e) => set("method", e.target.value)}>{PAID_METHODS.map((m) => <option key={m} value={m}>{PAID_METHOD_LABELS[m]}</option>)}</select></Field> : null}
+          </div>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" className={checkboxControl} checked={f.monthly} onChange={(e) => set("monthly", e.target.checked)} />Comes back every month</label>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader><CardTitle>4 · How it counts</CardTitle></CardHeader>
+        <CardContent className="grid gap-3 sm:grid-cols-2">
           <Field label="Detail" htmlFor="exp-category" hint="Used by the P&L and the tax export."><select id="exp-category" className={control} value={f.category} onChange={(e) => set("category", e.target.value as ExpenseCategory)}>{categoriesIn(f.bucket).map((c) => <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>)}</select></Field>
           <Field label="Counts as" htmlFor="exp-acq" hint={ACQUISITION_CONSEQUENCE}>
             <select id="exp-acq" className={control} value={f.acq} onChange={(e) => set("acq", e.target.value)}>
-              <option value="default">{fallback ? "Acquisition" : "Overhead"} — the default for {EXPENSE_CATEGORY_LABELS[f.category].toLowerCase()}</option>
+              <option value="default">{fallback ? "Acquisition" : "Overhead"} — the default for {EXPENSE_CATEGORY_LABELS[f.category]}</option>
               <option value={fallback ? "no" : "yes"}>{fallback ? "Overhead" : "Acquisition"} — your choice for this one</option>
             </select>
           </Field>
-          <Field label="Note" htmlFor="exp-note"><input id="exp-note" className={control} maxLength={500} value={f.note} onChange={(e) => set("note", e.target.value)} /></Field>
-        </div>
-      </details>
-      {error ? <Callout tone="error" title={error} /> : null}
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" asChild><Link href="/app/expenses">Discard</Link></Button>
-        <Button type="submit" disabled={busy}>{busy ? "Saving…" : f.monthly ? "Set up monthly bill" : "Add expense"}</Button>
-      </div>
-      <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setF(blank)} what="this expense" />
+          <Field label="Note" htmlFor="exp-note" className="sm:col-span-2"><input id="exp-note" className={control} maxLength={500} placeholder="Only you see this" value={f.note} onChange={(e) => set("note", e.target.value)} /></Field>
+        </CardContent>
+      </Card>
+      <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setF(blankDraft())} what="this expense" />
     </form>
   );
 }
 
-/** The step's header: Add an expense, and OK all on the To OK tab (each booked and marked paid today). */
-export function ExpenseActions({ unconfirmedIds, view, readOnly }: { unconfirmedIds: string[]; view: ExpenseView; readOnly: boolean }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  if (readOnly) return null;
-  const confirmAll = async () => {
-    setBusy(true);
-    let n = 0;
-    try {
-      for (const id of unconfirmedIds) {
-        await send(`/api/app/accounting/expenses/${id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "ok" }) });
-        n += 1;
-      }
-      notify.done(`${n} bill${n === 1 ? "" : "s"} OK'd and marked paid`);
-    } catch (err) {
-      notify.fail(err instanceof Error ? `${n} OK'd, then: ${err.message}` : "That didn't save");
-    } finally {
-      setBusy(false);
-      router.refresh();
-    }
-  };
+// ─── The list's title line and strip (board 3·A, 3·1) ───────────────────────────────────────────
+
+/**
+ * The step's title-line buttons. On To OK with bills waiting: Add an expense and OK N one by one (the OK dialog,
+ * stepping); on the Scoreboard with bills waiting, OK N one by one; otherwise Add an expense.
+ */
+export function ExpenseActions({ toOk, view, readOnly }: { toOk: OkItem[]; view: ExpenseView; readOnly: boolean }) {
+  const [stepping, setStepping] = useState(false);
+  const add = (primary: boolean) => readOnly
+    ? <Off reason={READ_ONLY}><Button variant={primary ? "default" : "outline"} disabled>Add an expense</Button></Off>
+    : <Button variant={primary ? "default" : "outline"} asChild><Link href="/app/expenses/new">Add an expense</Link></Button>;
+  const okLabel = toOk.length === 1 ? "OK it" : `OK ${toOk.length} one by one`;
+  const ok = readOnly
+    ? <Off reason={READ_ONLY}><Button disabled>{okLabel}</Button></Off>
+    : <Button onClick={() => setStepping(true)}>{okLabel}</Button>;
+  const stepsOk = toOk.length > 0 && (view === "confirm" || view === "scoreboard");
   return (
     <>
-      {view === "confirm" && unconfirmedIds.length ? <Button variant="outline" disabled={busy} onClick={() => void confirmAll()}>OK all {unconfirmedIds.length}</Button> : null}
-      <Button asChild><Link href="/app/expenses/new">Add an expense</Link></Button>
+      {stepsOk ? <>{view === "confirm" ? add(false) : null}{ok}</> : add(true)}
+      {stepping ? <OkDialog queue={toOk} open onOpenChange={setStepping} /> : null}
     </>
   );
 }
 
-type Asking = { kind: "void" | "paid" | "edit"; row: ExpenseRow; reason: string; on: string; method: string; reference: string; amount: string; end: string };
+/**
+ * One strip, the Scoreboard's, on every tab (board 3·A): the month's total and its three buckets. Each tile is
+ * the link to its rows.
+ */
+export function ExpenseMonthStrip({ board, subscriptionsToOkCents }: { board: MonthScoreboard; subscriptionsToOkCents: number }) {
+  const { month } = board;
+  const current = month === today().slice(0, 7);
+  const short = `${monthName(month).slice(0, 3)} ${month.slice(0, 4)}`;
+  const share = (cents: number) => (board.totalCents > 0 ? `${String(Math.trunc((cents * 1000 + board.totalCents * 5) / (board.totalCents * 10)))}% of the month` : "nothing yet");
+  return (
+    <StatStrip label={`Spent in ${monthName(month)}`}>
+      <StatTile label={`Total spent · ${short}`} value={money(board.totalCents)} footnote={current ? "so far this month" : monthName(month)} href={`/app/expenses?view=scoreboard&month=${month}`} />
+      <StatTile label="Leads" value={money(board.byBucket.leads)} footnote={`${share(board.byBucket.leads)} · from Vendor bills`} href="/app/vendor-bills" />
+      <StatTile label="Subscriptions" value={money(board.byBucket.subscriptions)} footnote={`${share(board.byBucket.subscriptions)}${subscriptionsToOkCents ? ` · ${money(subscriptionsToOkCents)} to OK` : ""}`} href="/app/expenses?view=recurring" />
+      <StatTile label="Daily & random" value={money(board.byBucket.daily)} footnote={share(board.byBucket.daily)} href="/app/expenses?view=booked" />
+    </StatStrip>
+  );
+}
 
-export function ExpensesBoard({ expenses, view, readOnly, openId = null }: { expenses: ExpenseRow[]; view: ExpenseView; readOnly: boolean; openId?: string | null }) {
+// ─── The lists (boards 3·A, 3·1) ───────────────────────────────────────────────────────────────
+
+type StatusFilter = "all" | "paid" | "unpaid" | "void";
+const STATUS_FILTERS: { key: StatusFilter; label: string }[] = [{ key: "all", label: "All" }, { key: "paid", label: "Paid" }, { key: "unpaid", label: "Booked, unpaid" }, { key: "void", label: "Void" }];
+
+/** "Acquisition", one line; the override is said on hover. The row reads it, the expense's page changes it. */
+function CountsAs({ e }: { e: ExpenseRow }) {
+  return <td className="whitespace-nowrap" title={e.acquisitionOverridden ? "Overrides the category default" : undefined}>{e.isAcquisitionCost ? "Acquisition" : "Overhead"}</td>;
+}
+
+/** The first cell: the name, one line; its detail (category, how often, a missing receipt) on hover. */
+function WhatCell({ e, extra = [] }: { e: ExpenseRow; extra?: (string | null | false)[] }) {
+  return <td className="whitespace-nowrap font-medium text-foreground" title={[EXPENSE_CATEGORY_LABELS[e.category], ...extra].filter(Boolean).join(" · ")}>{e.vendorName}</td>;
+}
+
+export function ExpensesBoard({ expenses, view, readOnly, initialQuery = "", initialStatus = "all" }: { expenses: ExpenseRow[]; view: Exclude<ExpenseView, "scoreboard">; readOnly: boolean; initialQuery?: string; initialStatus?: string }) {
   const router = useRouter();
-  const unconfirmed = expenses.filter((e) => e.status === "unconfirmed");
-  // ?open={id} (a P&L drill-through) opens the view and page holding that expense, and marks its row.
-  const target = openId ? expenses.find((e) => e.id === openId) ?? null : null;
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQuery);
+  const [status, setStatus] = useState<StatusFilter>(STATUS_FILTERS.some((s) => s.key === initialStatus) ? (initialStatus as StatusFilter) : "all");
+  const [page, setPage] = useState(1);
   const pageSize = useFittingPageSize(480, 45);
-  const templates = expenses.filter((e) => e.status === "template");
-  const rows = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    const base = view === "confirm" ? expenses.filter((e) => e.status === "unconfirmed") : view === "recurring" ? expenses.filter((e) => e.status === "template") : expenses.filter((e) => e.status === "confirmed" || e.status === "void");
-    return base.filter((e) => !needle || e.vendorName.toLowerCase().includes(needle) || (e.description ?? "").toLowerCase().includes(needle));
-  }, [expenses, view, q]);
-  // Until someone pages, the page follows the target row, so a re-fitted page size still shows it.
-  const [picked, setPage] = useState<number | null>(null);
-  const targetIndex = target ? Math.max(rows.findIndex((e) => e.id === target.id), 0) : 0;
-  const page = picked ?? Math.floor(targetIndex / pageSize) + 1;
-  useEffect(() => {
-    if (target) document.getElementById(`expense-${target.id}`)?.scrollIntoView({ block: "center" });
-  }, [target]);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [asking, setAsking] = useState<Asking | null>(null);
   const [refreshing, startRefresh] = useTransition();
   const refresh = () => startRefresh(() => router.refresh());
-  const fileFor = useRef<string | null>(null);
-  const picker = useRef<HTMLInputElement>(null);
+  const thisMonth = today().slice(0, 7);
+  const list: ExpenseList = view === "confirm" ? "confirm" : view === "recurring" ? "recurring" : status;
+  const base = useMemo(() => expenses.filter((e) => inExpenseList(e, view === "booked" ? "all" : list)), [expenses, view, list]);
+  const counts = useMemo(() => Object.fromEntries(STATUS_FILTERS.map((s) => [s.key, base.filter((e) => inExpenseList(e, s.key)).length])) as Record<StatusFilter, number>, [base]);
+  const rows = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    return base.filter((e) => (view !== "booked" || inExpenseList(e, status)) && (!needle || e.vendorName.toLowerCase().includes(needle) || (e.description ?? "").toLowerCase().includes(needle)));
+  }, [base, view, status, q]);
+  // This month's copy of each monthly bill, for the Monthly bills tab's "This month".
+  const thisMonthCopy = useMemo(() => new Map(expenses.filter((e) => e.parentExpenseId && e.incurredOn.startsWith(thisMonth)).map((e) => [e.parentExpenseId!, e])), [expenses, thisMonth]);
+  const shown = paginate(rows, page, pageSize);
+  const addLink = (primary: boolean) => readOnly ? undefined : <Button asChild variant={primary ? "default" : "outline"}><Link href="/app/expenses/new">Add an expense</Link></Button>;
+  const waitingTotal = rows.reduce((s, e) => s + e.amountCents, 0);
 
-  const act = async (id: string, payload: Record<string, unknown>, done: string, method = "POST") => {
-    setBusy(id);
+  return (
+    <TableCard
+      toolbar={
+        <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
+          <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search what it was" />
+          {view === "booked" ? (
+            <div role="radiogroup" aria-label="Status" className="flex flex-wrap gap-2">
+              {STATUS_FILTERS.map((s) => <ToggleChip key={s.key} role="radio" selected={status === s.key} count={counts[s.key]} countTone={s.key === "unpaid" && counts.unpaid ? "warning" : undefined} onClick={() => { setStatus(s.key); setPage(1); }}>{s.label}</ToggleChip>)}
+            </div>
+          ) : null}
+        </DataToolbar>
+      }
+      footer={rows.length ? <>
+        <span>{view === "confirm" ? `${rows.length} monthly bill${rows.length === 1 ? "" : "s"} came back · ${money(waitingTotal)}` : `${rows.length} ${view === "recurring" ? `monthly bill${rows.length === 1 ? "" : "s"}` : `expense${rows.length === 1 ? "" : "s"}`}`}</span>
+        {rows.length > pageSize ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="expenses" onPage={setPage} /> : null}
+      </> : undefined}
+    >
+      {expenses.length === 0 ? (
+        <EmptyState title="No expenses yet" hint="Add the dialer, the CRM, the lead spend: without them cost per policy is too low." action={addLink(true)} />
+      ) : rows.length === 0 ? (
+        q ? <NoMatches noun="expenses" by="search" onClear={() => setQ("")} />
+          : view === "confirm" ? <EmptyState title="Nothing to OK" hint="Every monthly bill that came back is booked and paid." action={addLink(false)} />
+          : view === "recurring" ? <EmptyState title="No monthly bills" hint="Tick “Comes back every month” when you add one, and each month it comes back here to OK." action={addLink(false)} />
+          : status !== "all" ? <NoMatches noun="expenses" onClear={() => setStatus("all")} />
+          : <EmptyState title="Nothing booked yet" hint="Expenses you add, and monthly bills you OK, are listed here." action={addLink(false)} />
+      ) : view === "confirm" ? (
+        <table className="portal-lead-table w-full min-w-190 text-left text-sm">
+          <thead><tr><th>What</th><th>Bucket</th><th>For</th><th className="text-right">Amount</th><th>Counts as</th><th>Next step</th><th><span className="sr-only">Open</span></th></tr></thead>
+          <tbody>
+            {shown.rows.map((e) => (
+              <ClickRow key={e.id} href={expenseHref(e.id, "confirm")} label={`Open ${e.vendorName}`}>
+                <WhatCell e={e} extra={[isMonthly(e) ? "monthly" : "one-off", !e.hasReceipt && "no receipt"]} />
+                <td className="whitespace-nowrap">{EXPENSE_BUCKET_COPY[bucketOf(e.category)].short}</td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{expenseFor(e)}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{money(e.amountCents)}</td>
+                <CountsAs e={e} />
+                <td className="whitespace-nowrap" title="Waiting for OK: OK it, or skip this month, on the expense's page">{nextStepFor(e)} ›</td>
+              </ClickRow>
+            ))}
+          </tbody>
+        </table>
+      ) : view === "recurring" ? (
+        <table className="portal-lead-table w-full min-w-190 text-left text-sm">
+          <thead><tr><th>What</th><th className="text-right">Each month</th><th>Since</th><th>Ends</th><th>Counts as</th><th>This month</th><th><span className="sr-only">Open</span></th></tr></thead>
+          <tbody>
+            {shown.rows.map((e) => {
+              const copy = thisMonthCopy.get(e.id);
+              return (
+                <ClickRow key={e.id} href={expenseHref(e.id, "recurring")} label={`Open ${e.vendorName}`}>
+                  <WhatCell e={e} extra={[EXPENSE_BUCKET_COPY[bucketOf(e.category)].short]} />
+                  <td className="whitespace-nowrap text-right tabular-nums">{money(e.amountCents)}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{expenseFor(e)}</td>
+                  <td className="whitespace-nowrap tabular-nums">{e.recurrenceEndOn ? <span className="text-muted-foreground">{shortDate(e.recurrenceEndOn)}</span> : "No end"}</td>
+                  <CountsAs e={e} />
+                  <td>{copy ? <Link href={expenseHref(copy.id, "months")} className="inline-flex"><StateChip e={copy} /></Link> : <StatusChip tone="neutral">Not back yet</StatusChip>}</td>
+                </ClickRow>
+              );
+            })}
+          </tbody>
+        </table>
+      ) : (
+        <table className="portal-lead-table w-full min-w-160 text-left text-sm">
+          <thead><tr><th>What</th><th>Bucket</th><th>For</th><th className="text-right">Amount</th><th>Status</th><th><span className="sr-only">Open</span></th></tr></thead>
+          <tbody>
+            {shown.rows.map((e) => (
+              <ClickRow key={e.id} href={expenseHref(e.id, status)} label={`Open ${e.vendorName}`}>
+                <WhatCell e={e} />
+                <td className="whitespace-nowrap">{EXPENSE_BUCKET_COPY[bucketOf(e.category)].short}</td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{expenseFor(e)}</td>
+                <td className="whitespace-nowrap text-right tabular-nums">{money(e.amountCents)}</td>
+                <td><StateChip e={e} /></td>
+              </ClickRow>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </TableCard>
+  );
+}
+
+// ─── The expense page (boards 3·2, 3·4) ─────────────────────────────────────────────────────────
+
+type Asking = { kind: "void" | "paid" | "skip"; row: ExpenseRow; reason: string; on: string; method: string; reference: string };
+
+/** Mark paid, Void and Skip this month: the confirms the expense page asks, from its title line or a Details row. */
+function useAsk() {
+  const router = useRouter();
+  const [asking, setAsking] = useState<Asking | null>(null);
+  const [busy, setBusy] = useState(false);
+  const ask = (kind: Asking["kind"], row: ExpenseRow) => setAsking({ kind, row, reason: "", on: today(), method: "card", reference: "" });
+  const act = async (payload: Record<string, unknown>, done: string) => {
+    if (!asking) return;
+    setBusy(true);
     try {
-      await send(`/api/app/accounting/expenses/${id}`, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      await sendExpense(`/api/app/accounting/expenses/${asking.row.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       notify.done(done);
       setAsking(null);
-      refresh();
+      router.refresh();
     } catch (err) {
       notify.fail(err instanceof Error ? err.message : "That didn't save");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
-  const upload = async (id: string, file: File) => {
-    const form = new FormData();
-    form.set("file", file);
-    setBusy(id);
-    try {
-      await send(`/api/app/accounting/expenses/${id}`, { method: "PATCH", body: form });
-      notify.done("Receipt attached");
-      refresh();
-    } catch (err) {
-      notify.fail(err instanceof Error ? err.message : "The file didn't upload");
-    } finally {
-      setBusy(null);
-    }
-  };
-  const ask = (kind: Asking["kind"], row: ExpenseRow) => setAsking({ kind, row, reason: "", on: today(), method: "card", reference: "", amount: plain(row.amountCents), end: row.recurrenceEndOn ?? "" });
   const confirmAsked = () => {
     if (!asking) return;
-    const { row } = asking;
-    if (asking.kind === "void") void act(row.id, { action: "void", reason: asking.reason }, row.status === "confirmed" ? "Voided: the cost is reversed" : "Skipped");
-    else if (asking.kind === "paid") void act(row.id, { action: "paid", paid_on: asking.on, method: asking.method, reference: asking.reference.trim() || null }, "Marked paid");
-    else void act(row.id, { amount_cents: parseDollarsToCents(asking.amount), ...(row.status === "template" ? { recurrence_end_on: asking.end || null } : {}) }, row.status === "template" ? "Saved: future months only" : "Saved", "PATCH");
+    const month = monthName(asking.row.incurredOn).split(" ")[0];
+    if (asking.kind === "void") void act({ action: "void", reason: asking.reason }, "Voided: the cost is reversed");
+    else if (asking.kind === "skip") void act({ action: "void", reason: "Skipped this month" }, `Skipped: nothing is booked for ${month}`);
+    else void act({ action: "paid", paid_on: asking.on, method: asking.method, reference: asking.reference.trim() || null }, "Marked paid");
   };
+  const node = asking ? (
+    <ConfirmDialog
+      open
+      onOpenChange={(next) => { if (!next) setAsking(null); }}
+      busy={busy}
+      destructive={asking.kind === "void"}
+      title={asking.kind === "void" ? `Void ${asking.row.vendorName}?` : asking.kind === "skip" ? `Skip ${asking.row.vendorName} this month?` : `Mark ${asking.row.vendorName} paid?`}
+      description={asking.kind === "void" ? "The cost is reversed; the original entry stays on record." : asking.kind === "skip" ? `Nothing is booked for ${monthName(asking.row.incurredOn).split(" ")[0]}. It comes back next month.` : "Records when the money moved. Nothing is paid from here."}
+      confirmLabel={asking.kind === "void" ? "Void expense" : asking.kind === "skip" ? "Skip" : "Mark paid"}
+      cancelLabel="Keep it"
+      confirmDisabled={asking.kind === "void" ? !asking.reason.trim() : asking.kind === "paid" ? !asking.on : false}
+      onConfirm={confirmAsked}
+      fields={asking.kind === "void" ? (
+        <Field label="Why?" htmlFor="exp-why"><input id="exp-why" className={control} autoFocus maxLength={500} placeholder="Entered twice" value={asking.reason} onChange={(ev) => setAsking({ ...asking, reason: ev.target.value })} /></Field>
+      ) : asking.kind === "paid" ? (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Paid on" htmlFor="exp-paid-on"><input id="exp-paid-on" type="date" className={control} value={asking.on} onChange={(ev) => setAsking({ ...asking, on: ev.target.value })} /></Field>
+          <Field label="Paid by" htmlFor="exp-method"><select id="exp-method" className={control} value={asking.method} onChange={(ev) => setAsking({ ...asking, method: ev.target.value })}>{PAID_METHODS.map((m) => <option key={m} value={m}>{PAID_METHOD_LABELS[m]}</option>)}</select></Field>
+          <Field label="Reference (optional)" htmlFor="exp-ref" className="col-span-2"><input id="exp-ref" className={control} maxLength={200} value={asking.reference} onChange={(ev) => setAsking({ ...asking, reference: ev.target.value })} /></Field>
+        </div>
+      ) : undefined}
+    />
+  ) : null;
+  return { ask, node };
+}
 
-  const month = today().slice(0, 7);
-  const bookedThisMonth = expenses.filter((e) => e.status === "confirmed" && e.incurredOn.startsWith(month));
-  const acq = bookedThisMonth.filter((e) => e.isAcquisitionCost).reduce((s, e) => s + e.amountCents, 0);
-  const over = bookedThisMonth.filter((e) => !e.isAcquisitionCost).reduce((s, e) => s + e.amountCents, 0);
-  const shown = paginate(rows, page, pageSize);
+/**
+ * The expense page's title-line buttons after its ‹ ›: More (Skip this month while it waits, Void once booked, the
+ * receipt), then the one primary its status asks for: OK it (waiting), Mark paid (booked, unpaid), none (paid,
+ * void, a monthly bill).
+ */
+export function ExpenseRecordActions({ row, readOnly, receiptHref }: { row: ExpenseRow; readOnly: boolean; receiptHref: string }) {
+  const { ask, node } = useAsk();
+  const [oking, setOking] = useState(false);
+  const state = expenseState(row);
+  const primary = state === "waiting" ? "OK it" : state === "unpaid" ? "Mark paid" : null;
+  return (
+    <>
+      <MoreMenu items={[
+        !readOnly && state === "waiting" && { label: "Skip this month", onSelect: () => ask("skip", row) },
+        !readOnly && (state === "unpaid" || state === "paid") && { label: "Void", onSelect: () => ask("void", row) },
+        row.hasReceipt && { label: "Open the receipt", href: `/api/app/accounting/expenses/${row.id}` },
+        !readOnly && state !== "template" && state !== "void" && { label: row.hasReceipt ? "Replace the receipt" : "Attach the receipt", href: receiptHref },
+      ]} />
+      {primary ? (readOnly
+        ? <Off reason={READ_ONLY}><Button disabled>{primary}</Button></Off>
+        : <Button onClick={() => (state === "waiting" ? setOking(true) : ask("paid", row))}>{primary}</Button>) : null}
+      {oking ? <OkDialog queue={[okItemOf(row)]} open onOpenChange={setOking} /> : null}
+      {node}
+    </>
+  );
+}
+
+type FactKind = "amount" | "counts" | "detail" | "repeats" | "note";
+type Fact = { key: string; label: string; value: ReactNode; usedBy: ReactNode; action?: { label: string; run: () => void } | { label: string; href: string }; off?: string };
+
+/**
+ * Details (board 3·2): a table of the expense's facts — Amount, Counts as, Detail, Repeats, Paid, Note — each row
+ * opening its pop-up. A fact that cannot change says why on hover.
+ */
+export function ExpenseFacts({ row, defaults, readOnly, template, pnlHref }: { row: ExpenseRow; defaults: Record<ExpenseCategory, boolean>; readOnly: boolean; template: { href: string; name: string } | null; pnlHref: string | null }) {
+  const router = useRouter();
+  const { ask, node } = useAsk();
+  const [oking, setOking] = useState(false);
+  const [open, setOpen] = useState<FactKind | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [amount, setAmount] = useState(plain(row.amountCents));
+  const [end, setEnd] = useState(row.recurrenceEndOn ?? "");
+  const [acq, setAcq] = useState(row.isAcquisitionCost);
+  const [category, setCategory] = useState<ExpenseCategory>(row.category);
+  const [note, setNote] = useState(row.description ?? "");
+  const state = expenseState(row);
+  const detail = EXPENSE_CATEGORY_LABELS[row.category];
+  const fallback = defaults[row.category];
+  const editable = state === "template" || state === "waiting";
+  const editOff = readOnly ? READ_ONLY : state === "void" ? "A void expense can't change." : editable ? undefined : HISTORY;
+  const classifyOff = readOnly ? READ_ONLY : state === "void" ? "A void expense can't change." : undefined;
+  const begin = (kind: FactKind) => {
+    setAmount(plain(row.amountCents)); setEnd(row.recurrenceEndOn ?? ""); setAcq(row.isAcquisitionCost); setCategory(row.category); setNote(row.description ?? "");
+    setOpen(kind);
+  };
+  const save = async (url: string, init: RequestInit, done: string) => {
+    setBusy(true);
+    try {
+      await sendExpense(url, init);
+      notify.done(done);
+      setOpen(null);
+      router.refresh();
+    } catch (err) {
+      notify.fail(err instanceof Error ? err.message : "That didn't save");
+    } finally {
+      setBusy(false);
+    }
+  };
+  const patch = (body: Record<string, unknown>, done = state === "template" ? "Saved: future months only" : "Saved") =>
+    void save(`/api/app/accounting/expenses/${row.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }, done);
+  const classify = (value: boolean) =>
+    void save(`/api/app/accounting/expenses/${row.id}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "classify", is_acquisition_cost: value }) }, "Saved");
+  const cents = parseDollarsToCents(amount);
+  const amountError = cents === null || cents <= 0 ? "Enter an amount above $0.00." : undefined;
+  const paidMethod = row.paidMethod ? PAID_METHOD_LABELS[row.paidMethod as PaidMethod] ?? row.paidMethod : null;
+
+  const facts: Fact[] = [
+    {
+      key: "amount", label: "Amount", value: <>{money(row.amountCents)}{state === "template" ? " a month" : ""}</>,
+      usedBy: <>Scoreboard{pnlHref ? <> · <Link className="hover:underline" href={pnlHref}>P&L › {detail}</Link></> : null}</>,
+      action: { label: "Edit", run: () => begin("amount") }, off: editOff,
+    },
+    {
+      key: "counts", label: "Counts as",
+      value: `${row.isAcquisitionCost ? "Acquisition" : "Overhead"} · ${row.acquisitionOverridden ? "your choice for this one" : `the default for ${detail}`}`,
+      usedBy: "Cost per policy on the P&L", action: { label: "Edit", run: () => begin("counts") }, off: classifyOff,
+    },
+    {
+      key: "detail", label: "Detail", value: detail,
+      usedBy: <>P&L line · <Link className="hover:underline" href="/app/tax">the tax export</Link></>,
+      action: { label: "Edit", run: () => begin("detail") }, off: editOff,
+    },
+    state === "template"
+      ? { key: "repeats", label: "Repeats", value: `Every month since ${monthName(row.incurredOn)} · ${row.recurrenceEndOn ? `until ${shortDate(row.recurrenceEndOn)}` : "no end"}`, usedBy: "Comes back each month to OK", action: { label: "Edit", run: () => begin("repeats") }, off: readOnly ? READ_ONLY : undefined }
+      : template
+        ? { key: "repeats", label: "Repeats", value: <>Monthly · this is the {monthName(row.incurredOn)} copy</>, usedBy: "The monthly bill sets later months", action: { label: "Open the bill", href: template.href } }
+        : { key: "repeats", label: "Repeats", value: "Once", usedBy: "—" },
+    state === "waiting"
+      ? { key: "paid", label: "Paid", value: "Not yet", usedBy: "Cash-basis P&L", action: { label: "OK it", run: () => setOking(true) }, off: readOnly ? READ_ONLY : undefined }
+      : state === "unpaid"
+        ? { key: "paid", label: "Paid", value: "Not yet", usedBy: "Cash-basis P&L", action: { label: "Mark paid", run: () => ask("paid", row) }, off: readOnly ? READ_ONLY : undefined }
+        : state === "paid"
+          ? { key: "paid", label: "Paid", value: [`${shortDate(row.paidOn!)}`, paidMethod && `by ${paidMethod.toLowerCase()}`, row.paymentReference && `ref ${row.paymentReference}`].filter(Boolean).join(" · "), usedBy: "Cash-basis P&L" }
+          : state === "template"
+            ? { key: "paid", label: "Paid", value: "Each month, when you OK it", usedBy: "Cash-basis P&L" }
+            : { key: "paid", label: "Voided", value: row.voidReason ?? <span className="text-muted-foreground">—</span>, usedBy: "Reversed in the P&L" },
+    {
+      key: "note", label: "Note", value: row.description ? row.description : <span className="text-muted-foreground">—</span>, usedBy: "Only you see it",
+      action: { label: row.description ? "Edit" : "Add", run: () => begin("note") }, off: editOff,
+    },
+  ];
 
   return (
     <>
-      <StatStrip label="Expense totals">
-        <StatTile label="To OK" value={String(unconfirmed.length)} valueTone={unconfirmed.length ? "warning" : undefined} footnote={money(unconfirmed.reduce((s, e) => s + e.amountCents, 0))} href="/app/expenses" />
-        <StatTile label="Acquisition this month" value={money(acq)} footnote="in cost per policy" href="/app/expenses?view=booked" />
-        <StatTile label="Overhead this month" value={money(over)} footnote="net profit only" href="/app/expenses?view=booked" />
-        <StatTile label="Monthly bills" value={String(templates.length)} footnote="come back each month" href="/app/expenses?view=recurring" />
-      </StatStrip>
-      <TableCard
-        toolbar={
-          <DataToolbar actions={<RefreshButton onClick={refresh} refreshing={refreshing} />}>
-            <ToolbarSearch value={q} onChange={(v) => { setQ(v); setPage(1); }} placeholder="Search what it was" />
-          </DataToolbar>
-        }
-        footer={rows.length > pageSize ? <Pager page={shown.current} pageSize={pageSize} total={rows.length} noun="expenses" onPage={setPage} /> : undefined}
-      >
-        {expenses.length === 0 ? (
-          <EmptyState title="No expenses yet" hint="Add the dialer, the CRM, the lead spend: without them cost per policy is too low." action={!readOnly ? <Button asChild><Link href="/app/expenses/new">Add an expense</Link></Button> : undefined} />
-        ) : rows.length === 0 ? (
-          q ? <NoMatches noun="expenses" onClear={() => setQ("")} />
-            : view === "confirm" ? <EmptyState title="Nothing to OK" hint="Every monthly bill that came back is booked and paid." />
-            : view === "recurring" ? <EmptyState title="No monthly bills" hint="Tick “Comes back every month” when you add one, and each month it comes back here to OK." action={!readOnly ? <Button asChild variant="outline"><Link href="/app/expenses/new">Add an expense</Link></Button> : undefined} />
-            : <EmptyState title="Nothing paid yet" hint="Expenses you add, and monthly bills you OK, are listed here." />
-        ) : (
-          <table className="portal-lead-table w-full min-w-190 text-left text-sm">
-            <thead><tr><th>What</th><th className="w-26">{view === "recurring" ? "From" : "Period"}</th><th className="w-26 text-right">Amount</th><th className="w-36">Counts as</th><th className="w-36">{view === "recurring" ? "Repeats" : "Status"}</th><th className="w-32 text-right"><span className="sr-only">Actions</span></th></tr></thead>
-            <tbody>
-              {shown.rows.map((e) => {
-                const primary = e.status === "unconfirmed" ? <Button size="sm" disabled={busy === e.id} onClick={() => void act(e.id, { action: "ok" }, "OK'd: booked and marked paid")}>OK</Button>
-                  : e.status === "confirmed" && !e.paidOn ? <Button size="sm" variant="outline" onClick={() => ask("paid", e)}>Mark paid</Button>
-                  : null;
-                return (
-                  <tr key={e.id} id={`expense-${e.id}`} aria-current={e.id === target?.id ? "true" : undefined} className={e.id === target?.id ? "bg-[var(--surface-alt)]" : undefined}>
-                    <td className="min-w-[180px]"><div className="max-w-52 truncate font-medium">{e.vendorName}</div><div className="max-w-52 truncate text-xs text-muted-foreground" title={[EXPENSE_BUCKET_COPY[bucketOf(e.category)].short, EXPENSE_CATEGORY_LABELS[e.category], e.description].filter(Boolean).join(" · ")}>{EXPENSE_BUCKET_COPY[bucketOf(e.category)].short} · {EXPENSE_CATEGORY_LABELS[e.category]}{e.description ? ` · ${e.description}` : ""}{e.hasReceipt ? "" : e.status === "confirmed" ? " · no receipt" : ""}</div></td>
-                    <td>{e.incurredOn}{e.status === "template" && e.recurrenceEndOn ? <div className="text-xs text-muted-foreground">until {e.recurrenceEndOn}</div> : null}</td>
-                    <td className="text-right tabular-nums">{money(e.amountCents)}</td>
-                    <td>
-                      <select aria-label="Acquisition or overhead" className={toolbarControl} disabled={readOnly || e.status === "void" || busy === e.id} value={e.isAcquisitionCost ? "yes" : "no"}
-                        onChange={(ev) => void act(e.id, { action: "classify", is_acquisition_cost: ev.target.value === "yes" }, "Saved")}>
-                        <option value="yes">Acquisition</option><option value="no">Overhead</option>
-                      </select>
-                      {e.acquisitionOverridden ? <div className="text-xs text-muted-foreground">Overrides the category default</div> : null}
-                    </td>
-                    <td>
-                      {e.status === "template" ? RECURRENCE_LABELS[e.recurrence]
-                        : e.status === "unconfirmed" ? <StatusChip tone="warning">Waiting for OK</StatusChip>
-                        : e.status === "void" ? <StatusChip tone="neutral">Void</StatusChip>
-                        : <StatusChip tone={e.paidOn ? "good" : "info"}>{e.paidOn ? `Paid ${e.paidOn}` : "Booked, unpaid"}</StatusChip>}
-                    </td>
-                    <td className="text-right">
-                      <span className="inline-flex items-center justify-end gap-1">
-                        {readOnly ? null : primary}
-                        <MoreMenu row label={`More for ${e.vendorName}`} items={[
-                          !readOnly && (e.status === "template" || e.status === "unconfirmed") && { label: "Edit the amount", onSelect: () => ask("edit", e) },
-                          !readOnly && (e.status === "confirmed" || e.status === "unconfirmed") && { label: e.status === "unconfirmed" ? "Skip this period" : "Void", onSelect: () => ask("void", e) },
-                          e.status === "confirmed" && e.hasReceipt && { label: "Open the receipt", href: `/api/app/accounting/expenses/${e.id}` },
-                          !readOnly && e.status === "confirmed" && { label: e.hasReceipt ? "Replace the receipt" : "Attach the receipt", onSelect: () => { fileFor.current = e.id; picker.current?.click(); } },
-                        ]} />
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
+      <TableCard footer={isMonthly(row) ? <span>Changing a monthly bill changes future months only; what is booked keeps its amount.</span> : undefined}>
+        <table className="portal-lead-table w-full min-w-160 text-left text-sm">
+          <thead><tr><th className="w-[200px]">Fact</th><th>Value</th><th>Used by</th><th className="text-right"><span className="sr-only">Change</span></th></tr></thead>
+          <tbody>
+            {facts.map((fact) => {
+              const action = fact.action;
+              const live = action && !fact.off;
+              const run = live && "run" in action ? action.run : null;
+              return (
+                <tr key={fact.key} className={live ? "group cursor-pointer" : undefined} onClick={(ev) => { if ((ev.target as HTMLElement).closest("a, button")) return; if (run) run(); else if (live && "href" in action) router.push(action.href); }}>
+                  <td className="whitespace-nowrap font-medium text-foreground">{fact.label}</td>
+                  <td className="whitespace-nowrap">{fact.value}</td>
+                  <td className="whitespace-nowrap">{fact.usedBy === "—" ? <span className="text-muted-foreground">—</span> : fact.usedBy}</td>
+                  <td className="whitespace-nowrap text-right">
+                    {!action ? null
+                      : fact.off ? <span title={fact.off} className="cursor-not-allowed">{action.label}</span>
+                      : "href" in action ? <Link href={action.href} className="group-hover:underline">{action.label} ›</Link>
+                      : <button type="button" onClick={action.run} className="group-hover:underline">{action.label} ›</button>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </TableCard>
-      <input ref={picker} type="file" className="sr-only" tabIndex={-1} aria-hidden="true" accept=".pdf,.png,.jpg,.jpeg" onChange={(ev) => { const file = ev.target.files?.[0]; if (file && fileFor.current) void upload(fileFor.current, file); ev.target.value = ""; }} />
-      {asking ? (
-        <ConfirmDialog
-          open
-          onOpenChange={(next) => { if (!next) setAsking(null); }}
-          busy={busy === asking.row.id}
-          destructive={asking.kind === "void"}
-          title={asking.kind === "void" ? (asking.row.status === "unconfirmed" ? `Skip ${asking.row.vendorName} this period?` : `Void ${asking.row.vendorName}?`) : asking.kind === "paid" ? `Mark ${asking.row.vendorName} paid?` : `Change ${asking.row.vendorName}'s amount?`}
-          description={asking.kind === "void" ? (asking.row.status === "confirmed" ? "The cost is reversed; the original entry stays on record." : "Nothing is booked for this period.") : asking.kind === "paid" ? "Records when the money moved. Nothing is paid from here." : asking.row.status === "template" ? "Future periods only; what is already booked keeps its amount." : undefined}
-          confirmLabel={asking.kind === "void" ? (asking.row.status === "unconfirmed" ? "Skip" : "Void expense") : asking.kind === "paid" ? "Mark paid" : "Save"}
-          cancelLabel="Keep it"
-          confirmDisabled={asking.kind === "void" ? !asking.reason.trim() : asking.kind === "edit" ? parseDollarsToCents(asking.amount) === null : !asking.on}
-          onConfirm={confirmAsked}
-          fields={asking.kind === "void" ? (
-            <Field label="Why?" htmlFor="exp-why"><input id="exp-why" className={control} autoFocus maxLength={500} value={asking.reason} onChange={(ev) => setAsking({ ...asking, reason: ev.target.value })} /></Field>
-          ) : asking.kind === "paid" ? (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Paid on" htmlFor="exp-paid-on"><input id="exp-paid-on" type="date" className={control} value={asking.on} onChange={(ev) => setAsking({ ...asking, on: ev.target.value })} /></Field>
-              <Field label="Method" htmlFor="exp-method"><select id="exp-method" className={control} value={asking.method} onChange={(ev) => setAsking({ ...asking, method: ev.target.value })}>{PAID_METHODS.map((m) => <option key={m} value={m}>{PAID_METHOD_LABELS[m]}</option>)}</select></Field>
-              <Field label="Reference (optional)" htmlFor="exp-ref" className="col-span-2"><input id="exp-ref" className={control} maxLength={200} value={asking.reference} onChange={(ev) => setAsking({ ...asking, reference: ev.target.value })} /></Field>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Amount ($)" htmlFor="exp-edit-amount"><input id="exp-edit-amount" className={control} inputMode="decimal" autoFocus value={asking.amount} onChange={(ev) => setAsking({ ...asking, amount: ev.target.value })} /></Field>
-              {asking.row.status === "template" ? <Field label="Ends" htmlFor="exp-edit-end"><input id="exp-edit-end" type="date" className={control} value={asking.end} onChange={(ev) => setAsking({ ...asking, end: ev.target.value })} /></Field> : null}
-            </div>
-          )}
-        />
-      ) : null}
+
+      <FactDialog open={open === "amount"} onOpenChange={(o) => setOpen(o ? "amount" : null)} busy={busy} cancelLabel="Keep it" saveDisabled={Boolean(amountError)}
+        title={`Change ${row.vendorName}'s amount?`}
+        description={state === "template" ? "Future months only; what is already booked keeps its amount." : row.parentExpenseId ? `This month's copy only; the monthly bill keeps its amount.` : undefined}
+        onSave={() => patch({ amount_cents: cents, ...(state === "template" ? { recurrence_end_on: end || null } : {}) })}>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Amount ($)" htmlFor="fact-amount" error={amountError}><input id="fact-amount" className={control} inputMode="decimal" autoFocus value={amount} aria-invalid={amountError ? true : undefined} onChange={(ev) => setAmount(ev.target.value)} /></Field>
+          {state === "template" ? <Field label="Ends" htmlFor="fact-end"><input id="fact-end" type="date" className={control} placeholder="No end" value={end} onChange={(ev) => setEnd(ev.target.value)} /></Field> : null}
+        </div>
+      </FactDialog>
+
+      <FactDialog open={open === "counts"} onOpenChange={(o) => setOpen(o ? "counts" : null)} busy={busy} saveDisabled={acq === row.isAcquisitionCost}
+        title={`${row.vendorName} · Counts as`}
+        description={<>The default for {detail} is {fallback ? "Acquisition" : "Overhead"} (<Link className="text-[var(--accent-ink)] hover:underline" href="/app/accounting-settings">Settings › Accounting</Link>).</>}
+        left={row.acquisitionOverridden ? <Button type="button" variant="ghost" disabled={busy} onClick={() => classify(fallback)}>Back to the default</Button> : undefined}
+        onSave={() => classify(acq)}>
+        <div role="radiogroup" aria-label="Counts as" className="flex flex-wrap gap-2">
+          <ToggleChip role="radio" selected={acq} onClick={() => setAcq(true)}>Acquisition</ToggleChip>
+          <ToggleChip role="radio" selected={!acq} onClick={() => setAcq(false)}>Overhead</ToggleChip>
+        </div>
+        <p className="m-0 text-xs text-muted-foreground">{ACQUISITION_CONSEQUENCE}</p>
+      </FactDialog>
+
+      <FactDialog open={open === "detail"} onOpenChange={(o) => setOpen(o ? "detail" : null)} busy={busy} saveDisabled={category === row.category}
+        title={`${row.vendorName} · Detail`} description="Used by the P&L line and the tax export."
+        onSave={() => patch({ category })}>
+        <Field label="Detail" htmlFor="fact-category"><select id="fact-category" className={control} value={category} onChange={(ev) => setCategory(ev.target.value as ExpenseCategory)}>{categoriesIn(bucketOf(row.category)).map((c) => <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>)}</select></Field>
+      </FactDialog>
+
+      <FactDialog open={open === "repeats"} onOpenChange={(o) => setOpen(o ? "repeats" : null)} busy={busy} saveDisabled={(end || null) === (row.recurrenceEndOn ?? null)}
+        title={`When does ${row.vendorName} end?`} description="No copy comes back after this day. Empty: no end."
+        onSave={() => patch({ recurrence_end_on: end || null })}>
+        <Field label="Ends" htmlFor="fact-repeats-end"><input id="fact-repeats-end" type="date" className={control} value={end} onChange={(ev) => setEnd(ev.target.value)} /></Field>
+      </FactDialog>
+
+      <FactDialog open={open === "note"} onOpenChange={(o) => setOpen(o ? "note" : null)} busy={busy} saveDisabled={note.trim() === (row.description ?? "")}
+        title={`${row.vendorName} · Note`} description="Only you see it."
+        onSave={() => patch({ description: note.trim() || null }, "Saved")}>
+        <Field label="Note" htmlFor="fact-note"><textarea id="fact-note" className={textareaControl} maxLength={500} autoFocus value={note} onChange={(ev) => setNote(ev.target.value)} /></Field>
+      </FactDialog>
+
+      {oking ? <OkDialog queue={[okItemOf(row)]} open onOpenChange={setOking} /> : null}
+      {node}
     </>
   );
 }

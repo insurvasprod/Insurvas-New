@@ -5,6 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { listComplaints, deadlineSetup } from "./complaintStore";
 import { dashboardAlerts, dashboardTiles, type Figures, type GapLine, type Expiry } from "./dashboardCore";
 import { bookGapScan } from "./evidenceReport";
+import { latestReconciliation } from "./recordIndex";
 
 /**
  * LA-6.7 (Notion sprint, Module 6 — Compliance) · the dashboard's figures, each read from the module
@@ -24,7 +25,7 @@ const FAILED = Symbol("failed");
 const attempt = <T,>(p: Promise<T>): Promise<T | typeof FAILED> => p.catch((e) => { console.error("[compliance-dashboard]", e instanceof Error ? e.message : e); return FAILED; });
 
 export async function loadComplianceDashboard(viewer: Viewer, now = new Date()) {
-  const [figures, scanResult, complaintsResult, licences, coverage, settings] = await Promise.all([
+  const [figures, scanResult, complaintsResult, licences, coverage, settings, reconciliation] = await Promise.all([
     quiet(db().rpc("compliance_dashboard_figures", { p_tenant_id: viewer.tenantId }).then((r: Loose) => { if (r.error) throw new Error(r.error.message); return r.data as Figures; })),
     // Counts only, no personal data on this screen: the scan is not logged as a report here.
     attempt(bookGapScan(viewer, {}, { log: false, numbers: false })),
@@ -32,19 +33,22 @@ export async function loadComplianceDashboard(viewer: Viewer, now = new Date()) 
     quiet(db().from("licenses").select("state, expires_at").eq("tenant_id", viewer.tenantId).then((r: Loose) => r.data ?? [])),
     quiet(deadlineSetup(viewer.tenantId)),
     quiet(db().from("compliance_settings").select("dashboard_hidden_tiles").eq("tenant_id", viewer.tenantId).maybeSingle().then((r: Loose) => r.data ?? null)),
+    // LA-6.1: the nightly reconciliation; a non-zero missing count is a bug and leads Needs you (round 7).
+    quiet(latestReconciliation(viewer.tenantId)),
   ]);
   const scan = scanResult === FAILED ? null : scanResult;
   const complaints = complaintsResult === FAILED ? null : complaintsResult;
   const gaps: GapLine[] | null = scan ? scan.lines.map((l) => ({ category: l.category, numbers: l.numbers, count: l.count, undeterminedCount: l.undeterminedCount, undeterminedReason: l.undeterminedReason })) : null;
   const expiries: Expiry[] = ((licences ?? []) as Loose[]).map((l) => ({ kind: "licence" as const, name: l.state as string, expiresAt: l.expires_at as string }));
   const alerts = dashboardAlerts({
-    complaints: complaints ? complaints.map((c) => ({ id: c.id, channel: c.channel, regulatorState: c.regulatorState, tone: c.countdown.tone, daysLeft: c.countdown.daysLeft, label: c.countdown.label })) : null,
+    complaints: complaints ? complaints.map((c) => ({ id: c.id, channel: c.channel, regulatorState: c.regulatorState, tone: c.countdown.tone, daysLeft: c.countdown.daysLeft, label: c.countdown.label, complainant: c.complainantName, dueAt: c.responseDueAt })) : null,
     gaps,
     expiries,
     deadlineCoverage: coverage?.available ? coverage.coverage : null,
     now,
     failed: { gaps: scanResult === FAILED, complaints: complaintsResult === FAILED },
     purgeSkipped: (figures as Figures | null)?.purge_live_skipped ?? null,
+    reconciliation: reconciliation ? { ranAt: reconciliation.ranAt, missing: reconciliation.missing } : null,
   });
   const hidden = (settings as Loose)?.dashboard_hidden_tiles;
   const tiles = dashboardTiles({ figures: (figures as Figures | null) ?? null, gaps, hidden: Array.isArray(hidden) ? hidden : [] });

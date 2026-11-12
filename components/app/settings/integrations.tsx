@@ -133,17 +133,19 @@ export function IntegrationsSettings() {
 
   return (
     <SettingsStack>
-      <SettingsSectionHeader />
-
-      <ViewTabs
-        label="Integrations"
-        value={view}
-        onChange={setView}
-        tabs={[
-          // A number only when something needs you (settings audit P4): keys about to end, failing webhooks.
-          { key: "keys", label: "API keys", count: endingSoon || null, tone: "danger" },
-          { key: "webhooks", label: "Webhooks", count: failingHooks || null, tone: "danger" },
-        ]}
+      <SettingsSectionHeader
+        // The section's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b).
+        tabs={<ViewTabs
+              label="Integrations"
+              value={view}
+              onChange={setView}
+              tabs={[
+                // A number only when something needs you (settings audit P4): keys about to end, failing webhooks.
+                { key: "keys", label: "API keys", count: endingSoon || null, tone: "danger" },
+                { key: "webhooks", label: "Webhooks", count: failingHooks || null, tone: "danger" },
+              ]}
+            />}
+        // The view's buttons sit at the end of the line, over the tabs' hairline, as on every page.
         actions={
           <div className="flex flex-wrap items-center justify-end gap-2">
             {view === "keys" && idle.length > 0 && <StatusChip tone="neutral">{idle.length} unused for {IDLE_DAYS}+ days</StatusChip>}

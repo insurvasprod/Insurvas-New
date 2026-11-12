@@ -74,7 +74,7 @@ export function DialerWorkspace({ readOnly = false, role = "producer", canCheckN
   ) : null;
 
   // Serve next lead sits in the lead card, under the call step (owner 2026-11-05).
-  const serveButton = readOnly ? null : <Button data-guide="dialer-next" type="button" variant={panel ? "outline" : "default"} onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
+  const serveButton = readOnly ? null : <Button data-guide="dialer-next" type="button" variant={panel ? "outline" : "highlight"} onClick={() => void serveNext()} disabled={serving || Boolean(attempt)} title={attempt ? "Finish this call first" : undefined}>
             {serving ? "Serving…" : "Serve next lead"}
           </Button>;
 

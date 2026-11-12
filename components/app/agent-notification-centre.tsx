@@ -242,7 +242,7 @@ export function NotificationCentrePanel({
                 >
                   <span aria-hidden="true" className="relative grid size-8 shrink-0 place-items-center rounded-lg" style={{ background: `color-mix(in srgb, ${look.tone} 16%, transparent)`, color: look.tone }}>
                     <Icon className="size-4" />
-                    {unread && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-[var(--color-card)] bg-[var(--primary)]" />}
+                    {unread && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-[var(--color-card)] bg-[var(--highlight)]" />}
                   </span>
 
                   <div className="min-w-0 flex-1">

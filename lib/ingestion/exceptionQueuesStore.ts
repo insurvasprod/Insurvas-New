@@ -463,14 +463,9 @@ export async function loadQueues(scope: QueueScope) {
   // refuses outright ("fetch failed" after ~9 s, 2026-10-20) — every contact name on the page was then blank.
   const byIds = async (ids: string[], read: (part: string[]) => PromiseLike<{ data: unknown }>) =>
     ({ data: (await mapLimit(chunk(ids, 150), CHOICE_READS, async (part) => ((await read(part)).data ?? []) as Loose[])).flat() });
-  const [users, contacts, deals] = await Promise.all([
-    userIds.length ? byIds(userIds, (part) => db().from("users").select("id, name, email").in("id", part)) : { data: [] },
-    contactIds.length ? byIds(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, provisional").eq("tenant_id", scope.tenantId).in("id", part)) : { data: [] },
-    dealIds.length ? byIds(dealIds, (part) => db().from("deal_flow").select("id, lead_id, insured_name, local_date, monthly_premium_cents, carrier").eq("tenant_id", scope.tenantId).in("id", part)) : { data: [] },
-  ]);
-  const userName = new Map<string, string>((users.data ?? []).map((u: Loose) => [u.id, u.name || u.email || u.id]));
-  const contact = new Map<string, Loose>((contacts.data ?? []).map((c: Loose) => [c.id, { id: c.id, name: `${c.first_name} ${c.last_name}`, provisional: Boolean(c.provisional) }]));
-  const deal = new Map<string, Loose>((deals.data ?? []).map((d: Loose) => [d.id, { id: d.id, insuredName: d.insured_name, date: d.local_date, premiumCents: d.monthly_premium_cents, carrier: d.carrier, leadId: d.lead_id }]));
+  // The deals are read first of the names: the attempts below wait on their lead ids, and nothing else does.
+  const dealsRead = (dealIds.length ? byIds(dealIds, (part) => db().from("deal_flow").select("id, lead_id, insured_name, local_date, monthly_premium_cents, carrier").eq("tenant_id", scope.tenantId).in("id", part)) : Promise.resolve({ data: [] as Loose[] }))
+    .then((deals) => new Map<string, Loose>((deals.data ?? []).map((d: Loose) => [d.id, { id: d.id, insuredName: d.insured_name, date: d.local_date, premiumCents: d.monthly_premium_cents, carrier: d.carrier, leadId: d.lead_id }])));
 
   // The choices each open item's actions need, kept small.
   //
@@ -478,13 +473,13 @@ export async function loadQueues(scope: QueueScope) {
   // every no-sale item, the policies for every item of one carrier, the contacts for every item with one
   // last name, and the attempts come back for all the leads in one paged read. The same rows as when each
   // item asked for its own, one after another — which was two round trips per open item (up to 500 items).
+  // Perf pass 2026-11-09: started beside the names below, not after them (only the attempts wait, on the deals).
   const openItems = (openRes.data ?? []) as Loose[];
   const noDeal = openItems.filter((item) => item.queue_type === "no_deal_flow");
   const noPolicy = openItems.filter((item) => item.queue_type === "no_policy");
   const lastNames = [...new Set(noDeal.map((item) => item.payload?.insured?.last_name ?? "").filter(Boolean))] as unknown[];
   const carrierKeys = [...new Set(noPolicy.map((item) => item.carrier_id))] as unknown[];
-  const leadIds = [...new Set(noPolicy.map((item) => deal.get(item.deal_id)?.leadId).filter(Boolean))] as string[];
-  const [recentDeals, contactsByName, policiesByCarrier, attempts] = await Promise.all([
+  const choiceReads = Promise.all([
     noDeal.length
       ? db().from("deal_flow").select("id, insured_name, local_date").eq("tenant_id", scope.tenantId).eq("call_result", "application_submitted").gte("local_date", new Date(Date.now() - 120 * 86_400_000).toISOString().slice(0, 10)).order("local_date", { ascending: false }).limit(25).then((r: { data: Loose[] | null }) => r.data ?? [])
       : Promise.resolve([] as Loose[]),
@@ -493,11 +488,24 @@ export async function loadQueues(scope: QueueScope) {
       const { data } = await db().from("policy_current").select("carrier_id, policy_number, status_normalized").eq("tenant_id", scope.tenantId).eq("carrier_id", carrierId).limit(200);
       return [carrierId, (data ?? []) as Loose[]] as const;
     }).then((pairs) => new Map<unknown, Loose[]>(pairs)),
-    mapLimit(chunk(leadIds, 150), CHOICE_READS, async (ids) => {
-      const { data } = await db().from("tenant_applications").select("id, lead_id, carrier_id, attempt_no, status").eq("tenant_id", scope.tenantId).in("lead_id", ids).order("attempt_no");
-      return (data ?? []) as Loose[];
-    }).then((pages) => pages.flat()),
+    dealsRead.then((deal) => {
+      const leadIds = [...new Set(noPolicy.map((item) => deal.get(item.deal_id)?.leadId).filter(Boolean))] as string[];
+      return mapLimit(chunk(leadIds, 150), CHOICE_READS, async (ids) => {
+        const { data } = await db().from("tenant_applications").select("id, lead_id, carrier_id, attempt_no, status").eq("tenant_id", scope.tenantId).in("lead_id", ids).order("attempt_no");
+        return (data ?? []) as Loose[];
+      }).then((pages) => pages.flat());
+    }),
   ]);
+  // Awaited after the names; a failure still surfaces there, not as an unhandled rejection meanwhile.
+  choiceReads.catch(() => undefined);
+  const [users, contacts, deal] = await Promise.all([
+    userIds.length ? byIds(userIds, (part) => db().from("users").select("id, name, email").in("id", part)) : { data: [] },
+    contactIds.length ? byIds(contactIds, (part) => db().from("contacts").select("id, first_name, last_name, provisional").eq("tenant_id", scope.tenantId).in("id", part)) : { data: [] },
+    dealsRead,
+  ]);
+  const userName = new Map<string, string>((users.data ?? []).map((u: Loose) => [u.id, u.name || u.email || u.id]));
+  const contact = new Map<string, Loose>((contacts.data ?? []).map((c: Loose) => [c.id, { id: c.id, name: `${c.first_name} ${c.last_name}`, provisional: Boolean(c.provisional) }]));
+  const [recentDeals, contactsByName, policiesByCarrier, attempts] = await choiceReads;
   const attemptsByLead = new Map<string, Loose[]>();
   for (const a of [...attempts].sort((x, y) => Number(x.attempt_no) - Number(y.attempt_no))) attemptsByLead.set(a.lead_id, [...(attemptsByLead.get(a.lead_id) ?? []), a]);
 

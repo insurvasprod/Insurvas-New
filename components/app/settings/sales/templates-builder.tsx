@@ -8,7 +8,8 @@
  */
 
 import { StatusChip } from "@/components/ui/status-chip";
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type DragEvent, type HTMLAttributes, type ReactNode } from "react";
+import { Sheet } from "@/components/ui/sheet";
 import { ArrowDown, ArrowLeft, ArrowUp, GripVertical, Plus, Trash2 } from "lucide-react";
 
 import { Field, SettingsCard, ToggleRow, control } from "@/components/app/settings/primitives";
@@ -74,13 +75,19 @@ type Props = {
    * one carrier the template is for, or null for a template every carrier uses (the knockout wording).
    */
   bank?: { templateName: string; carrierName?: string | null };
+  /**
+   * Settings round 8 (Sales process › Health questions, 2026-11-12): the questions as one list in the order the
+   * Interview asks them, one line each, and the question picked in a right sheet (Cancel puts back what it was
+   * when the sheet opened; Save to draft keeps it). The page draws the bank in a sheet of its own.
+   */
+  layout?: "sheet";
 };
 
 /**
  * Two cards, one after the other in the stack: the template's sections and questions, then the
  * question picked. Neither sits inside the other (UI-CONSISTENCY §8).
  */
-export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSelect, title, sub, children, bank }: Props) {
+export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSelect, title, sub, children, bank, layout }: Props) {
   const ordered = orderBySection(draft);
   const qs = ordered.questions;
   const selected = qs.find((q) => q.key === selectedKey) ?? null;
@@ -307,6 +314,48 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
     />
   );
 
+  if (layout === "sheet") {
+    return (
+      <SheetLayout
+        draft={draft}
+        qs={qs}
+        ordered={ordered}
+        readOnly={readOnly}
+        selectedKey={selectedKey}
+        onSelect={onSelect}
+        onChange={onChange}
+        numberOf={numberOf}
+        dragKey={dragKey}
+        overKey={overKey}
+        setDragKey={setDragKey}
+        endDrag={endDrag}
+        dropProps={dropProps}
+        addQuestion={addQuestion}
+        addSection={addSection}
+        renameSection={renameSection}
+        removeSection={removeSection}
+        remove={remove}
+        move={move}
+        editor={selected ? (
+          <QuestionCard
+            bare
+            q={selected}
+            index={qs.findIndex((q) => q.key === selected.key) + 1}
+            total={qs.length}
+            all={qs}
+            sections={draft.sections}
+            readOnly={readOnly}
+            onPatch={(p) => patch(selected.key, p)}
+            onQuestions={(list) => set(list)}
+            onRekey={(to) => rekey(selected.key, to)}
+            knockoutFor={bank?.carrierName ?? null}
+          />
+        ) : null}
+        knockoutFor={bank?.carrierName ?? null}
+      />
+    );
+  }
+
   // Owner 2026-10-28 (after pick C): the template's own questions are the page — wide, on the left;
   // the question bank is the side tool on the right. A question clicked in the list opens its editor
   // in the bank's place, with the way back to the bank.
@@ -346,8 +395,10 @@ export function QuestionBuilder({ draft, onChange, readOnly, selectedKey, onSele
   );
 }
 
-function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQuestions, onRekey, knockoutFor = null }: {
+function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQuestions, onRekey, knockoutFor = null, bare = false }: {
   q: UwQuestion; index: number; total: number; all: UwQuestion[]; sections: UwDraft["sections"]; readOnly: boolean;
+  /** Inside a sheet: the fields alone, without a card around them (the sheet is the card). */
+  bare?: boolean;
   onPatch: (p: Partial<UwQuestion>) => void; onQuestions: (list: UwQuestion[]) => void; onRekey: (to: string) => void;
   /** The one carrier the template is for; null when every carrier uses it. */
   knockoutFor?: string | null;
@@ -395,17 +446,7 @@ function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQue
     onRekey(feedOfQuestionKey(plain) ? freshKey(`${q.label} question`, taken) : plain);
   };
 
-  return (
-    <SettingsCard
-      title={`Question ${index} of ${total}`}
-      className={cn(q.knockout && "border-l-[3px] border-l-[var(--error)]")}
-      action={(q.persistency || q.knockout) ? (
-        <span className="flex flex-wrap items-center gap-2">
-          {q.persistency && <StatusChip dot={false} tone="good">{PERSISTENCY_LABEL}</StatusChip>}
-          {q.knockout && <StatusChip dot={false} tone="danger">Knockout</StatusChip>}
-        </span>
-      ) : undefined}
-    >
+  const fields = (
       <div className="flex flex-col gap-4">
         <Field label="Question text" htmlFor={id("label")} required hint="The agent reads this aloud. Write it the way it should sound, not the way a form would.">
           <textarea id={id("label")} rows={2} className={cn(control, "h-auto py-2")} value={q.label} disabled={readOnly} onChange={(e) => onPatch({ label: e.target.value })} />
@@ -556,6 +597,161 @@ function QuestionCard({ q, index, total, all, sections, readOnly, onPatch, onQue
           </Field>
         </div>
       </div>
+  );
+  if (bare) return fields;
+  return (
+    <SettingsCard
+      title={`Question ${index} of ${total}`}
+      className={cn(q.knockout && "border-l-[3px] border-l-[var(--error)]")}
+      action={(q.persistency || q.knockout) ? (
+        <span className="flex flex-wrap items-center gap-2">
+          {q.persistency && <StatusChip dot={false} tone="good">{PERSISTENCY_LABEL}</StatusChip>}
+          {q.knockout && <StatusChip dot={false} tone="danger">Knockout</StatusChip>}
+        </span>
+      ) : undefined}
+    >
+      {fields}
     </SettingsCard>
+  );
+}
+
+/* ── round 8: one list, the question in a sheet ─────────────────────────── */
+
+type SheetLayoutProps = {
+  draft: UwDraft;
+  qs: UwQuestion[];
+  ordered: UwDraft;
+  readOnly: boolean;
+  selectedKey: string | null;
+  onSelect: (key: string | null) => void;
+  onChange: (next: UwDraft) => void;
+  numberOf: Map<string, number>;
+  dragKey: string | null;
+  overKey: string | null;
+  setDragKey: (key: string | null) => void;
+  endDrag: () => void;
+  dropProps: (before: string | null, section: string, marker: string) => HTMLAttributes<HTMLElement>;
+  addQuestion: (section: string) => void;
+  addSection: () => void;
+  renameSection: (key: string, label: string) => void;
+  removeSection: (key: string) => void;
+  remove: (key: string) => void;
+  move: (key: string, by: -1 | 1) => void;
+  editor: ReactNode;
+  knockoutFor: string | null;
+};
+
+/** What a question does, in one chip: the board's Knockout, else what it is for. */
+function outcomeOf(q: UwQuestion): { tone: "danger" | "good" | "neutral"; label: string } {
+  if (q.knockout) return { tone: "danger", label: "Knockout" };
+  if (q.persistency) return { tone: "good", label: "Persistency" };
+  return { tone: "neutral", label: "Info only" };
+}
+
+function SheetLayout(props: SheetLayoutProps) {
+  const { draft, qs, ordered, readOnly, selectedKey, onSelect, onChange, numberOf, dragKey, overKey, setDragKey, endDrag, dropProps, addQuestion, addSection, renameSection, removeSection, remove, move, editor, knockoutFor } = props;
+  const selected = qs.find((q) => q.key === selectedKey) ?? null;
+  // Cancel puts the draft back as it was when the sheet opened.
+  const [opened, setOpened] = useState<{ key: string; draft: UwDraft } | null>(null);
+  const openQuestion = (key: string) => { setOpened({ key, draft }); onSelect(key); };
+  const closeSheet = () => { setOpened(null); onSelect(null); };
+  const cancel = () => { if (opened) onChange(opened.draft); closeSheet(); };
+  const many = ordered.sections.length > 1;
+  const lastSection = ordered.sections.at(-1)?.key ?? draft.sections[0]?.key ?? "";
+  const locked = selected ? isLockedPersistency(selected) : false;
+  const hasChildren = selected ? qs.some((x) => x.showWhen?.key === selected.key) : false;
+
+  return (
+    <div className="flex flex-col">
+      {!readOnly && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border)] px-4 py-2">
+          <Button type="button" variant="outline" size="sm" disabled={!lastSection} onClick={() => { setOpened({ key: "", draft }); addQuestion(lastSection); }}><Plus aria-hidden="true" />New question</Button>
+          <Button type="button" variant="ghost" size="sm" onClick={addSection}><Plus aria-hidden="true" />Add a section</Button>
+        </div>
+      )}
+      {qs.length === 0 && <p className="m-0 px-4 py-6 text-center text-sm text-[var(--muted)]">No questions yet. Add one, or tick some in the question bank.</p>}
+      {ordered.sections.map((s) => {
+        const inSection = qs.filter((q) => q.section === s.key);
+        if (!many && inSection.length === 0) return null;
+        return (
+          <div key={s.key} className={cn(overKey === `section:${s.key}` && "bg-[var(--primary-soft)]")} {...dropProps(null, s.key, `section:${s.key}`)}>
+            {many && (
+              <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-1.5">
+                {readOnly ? (
+                  <h4 className="m-0 flex-1 text-xs font-semibold text-[var(--body)]">{s.label}</h4>
+                ) : (
+                  <input aria-label={`Section name: ${s.label}`} className="min-w-0 flex-1 border-0 bg-transparent text-xs font-semibold text-[var(--body)] outline-none focus-visible:underline" value={s.label} onChange={(e) => renameSection(s.key, e.target.value)} />
+                )}
+                {!readOnly && inSection.length === 0 && (
+                  <Button type="button" variant="ghost" size="icon-sm" aria-label={`Remove the empty section ${s.label}`} onClick={() => removeSection(s.key)}><Trash2 aria-hidden="true" /></Button>
+                )}
+              </div>
+            )}
+            <ol className="m-0 list-none p-0">
+              {inSection.map((q, i) => {
+                const on = q.key === selectedKey;
+                const parent = q.showWhen ? qs.find((x) => x.key === q.showWhen?.key) : undefined;
+                const outcome = outcomeOf(q);
+                const sub = [isYnu(q) ? "Yes / No / Unsure" : TYPE_SHORT[q.type], q.required ? "required" : null, q.showWhen ? `when “${parent?.label ?? q.showWhen.key}” is ${answerText(parent, q.showWhen.equals)}` : null, q.knockout?.note ? q.knockout.note : null].filter(Boolean).join(" · ");
+                return (
+                  <li
+                    key={q.key}
+                    draggable={!readOnly}
+                    onDragStart={(e) => { setDragKey(q.key); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", q.key); }}
+                    onDragEnd={endDrag}
+                    {...dropProps(q.key, s.key, q.key)}
+                    className={cn(
+                      "group flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 transition-[box-shadow,opacity,background-color] duration-150",
+                      on ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]",
+                      q.showWhen && "pl-8",
+                      overKey === q.key && dragKey !== q.key && "shadow-[inset_0_2px_0_var(--primary)]",
+                      dragKey === q.key && "opacity-50",
+                    )}
+                  >
+                    {!readOnly && <GripVertical aria-hidden="true" className="size-4 shrink-0 cursor-grab text-[var(--muted)]" />}
+                    <span className="w-6 shrink-0 text-right text-xs tabular-nums text-[var(--muted)]">{numberOf.get(q.key)}</span>
+                    <button type="button" onClick={() => openQuestion(q.key)} className="min-w-0 flex-1 rounded-[6px] text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+                      <span className="block truncate text-sm text-[var(--ink)]">{q.label || <span className="text-[var(--muted)]">No question text</span>}</span>
+                      <span className="block truncate text-xs text-[var(--muted)]">{sub}</span>
+                    </button>
+                    {!readOnly && (
+                      <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move “${q.label}” up`} disabled={i === 0} onClick={() => move(q.key, -1)}><ArrowUp aria-hidden="true" /></Button>
+                        <Button type="button" variant="ghost" size="icon-sm" aria-label={`Move “${q.label}” down`} disabled={i === inSection.length - 1} onClick={() => move(q.key, 1)}><ArrowDown aria-hidden="true" /></Button>
+                      </span>
+                    )}
+                    <StatusChip dot={false} tone={outcome.tone}>{outcome.label}</StatusChip>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        );
+      })}
+
+      {selected && (
+        <Sheet
+          title={`Question ${numberOf.get(selected.key) ?? ""} · ${selected.label || "New question"}`}
+          subtitle={knockoutFor ? `Only ${knockoutFor}` : "Every carrier on this set"}
+          onClose={opened ? cancel : closeSheet}
+          className="lg:w-[640px]"
+          footer={readOnly ? (
+            <Button type="button" variant="outline" className="ml-auto" onClick={closeSheet}>Close</Button>
+          ) : (
+            <>
+              <WithReason reason={locked ? LOCKED_TITLE : hasChildren ? "Remove its follow-ups first." : null}>
+                <Button type="button" variant="ghost" className="text-[var(--error-ink)]" disabled={locked || hasChildren} onClick={() => { remove(selected.key); setOpened(null); }}><Trash2 aria-hidden="true" />Remove question</Button>
+              </WithReason>
+              <span className="ml-auto flex gap-2">
+                <Button type="button" variant="outline" onClick={cancel}>Cancel</Button>
+                <Button type="button" onClick={closeSheet}>Save to draft</Button>
+              </span>
+            </>
+          )}
+        >
+          {editor}
+        </Sheet>
+      )}
+    </div>
   );
 }

@@ -26,7 +26,7 @@ function initials(name: string) { return name.split(/\s+/).filter((part) => /^[\
 
 export function PersonFace({ name, partner = false, scale = "md" }: { name: string; partner?: boolean; scale?: "sm" | "md" }) {
   return (
-    <span aria-hidden="true" className={cn("inline-flex shrink-0 items-center justify-center rounded-full font-semibold", scale === "sm" ? "size-7 text-xs" : "size-8 text-xs", partner ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>
+    <span aria-hidden="true" className={cn("inline-flex shrink-0 items-center justify-center rounded-full font-semibold", scale === "sm" ? "size-7 text-xs" : "size-8 text-xs", partner ? "bg-[var(--highlight)] text-[var(--on-highlight)]" : "bg-[var(--highlight-soft)] text-[var(--highlight-ink)]")}>
       {initials(name) || "?"}
     </span>
   );

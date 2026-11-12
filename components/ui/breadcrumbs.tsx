@@ -31,7 +31,7 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
       <ol className="m-0 hidden list-none flex-wrap items-center gap-x-1.5 gap-y-1 p-0 sm:flex">
         {trail.map((entry, index) => (
           <li key={entry.kind === "crumb" ? `${index}-${entry.label}` : `more-${index}`} className="inline-flex min-h-6 items-center gap-1.5">
-            {index > 0 && <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60" aria-hidden="true" />}
+            {index > 0 && <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />}
             {entry.kind === "more" ? (
               // The folded crumbs, still reachable: a native disclosure, no script needed.
               <details className="relative">
@@ -40,7 +40,7 @@ export function Breadcrumbs({ crumbs, className }: { crumbs: Crumb[]; className?
                   {entry.hidden.map((crumb) => (
                     <li key={crumb.label}>
                       {crumb.href
-                        ? <Link href={crumb.href} className="block rounded-md px-2.5 py-1.5 text-sm text-foreground no-underline hover:bg-[var(--surface-alt)]">{titleCaseNode(crumb.label)}</Link>
+                        ? <Link href={crumb.href} className="block rounded-md px-2.5 py-1.5 text-sm text-foreground no-underline hover:bg-[var(--hover-wash)]">{titleCaseNode(crumb.label)}</Link>
                         : <span className="block px-2.5 py-1.5 text-sm text-muted-foreground">{titleCaseNode(crumb.label)}</span>}
                     </li>
                   ))}

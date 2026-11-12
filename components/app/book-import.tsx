@@ -1,46 +1,51 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, toolbarControl } from "@/components/ui/data-toolbar";
-import { EmptyState } from "@/components/ui/page-states";
+import { FilesInImportDialog, resultLine } from "@/components/app/book/setup/files-in-import-dialog";
+import { DataToolbar, RefreshButton, ToolbarSearch } from "@/components/ui/data-toolbar";
+import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { StatusChip } from "@/components/ui/status-chip";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import type { CarrierImport } from "@/lib/ingestion/bookImport";
-import { notify } from "@/lib/notify";
+import { fileDay } from "@/lib/ingestion/constants";
+import { cn } from "@/lib/utils";
 
-const money = (cents: number) => `$${Math.round(cents / 100).toLocaleString("en-US")}`;
-
-/** "Americo — 112 policies, $8,420/mo. 3 at risk." — the moment each upload is worth it. */
-function resultLine(c: CarrierImport): { text: string; tone: "muted" | "ok" | "warn" | "busy" } {
-  if (c.status === "skipped" && !c.file) return { text: "Skipped for now — import it any time.", tone: "muted" };
-  if (!c.file) return { text: "Not imported yet", tone: "muted" };
-  if (c.file.status === "received" || c.file.status === "parsing") return { text: "Reading the file…", tone: "busy" };
-  if (c.file.status === "failed") return { text: c.file.error ?? "The file could not be read.", tone: "warn" };
-  if (c.file.block) return { text: c.file.block, tone: "warn" };
-  const r = c.result;
-  const held = c.file.held ? ` ${c.file.held.toLocaleString("en-US")} rows wait for a status word to be mapped.` : "";
-  if (!r) return { text: `Read — no policies yet.${held}`, tone: held ? "warn" : "muted" };
-  return { text: `${r.policies.toLocaleString("en-US")} ${r.policies === 1 ? "policy" : "policies"}, ${money(r.monthlyPremiumCents)}/mo. ${r.atRisk.toLocaleString("en-US")} at risk.${held}`, tone: held ? "warn" : "ok" };
-}
-
-const TONE = { muted: "text-muted-foreground", ok: "font-semibold text-foreground", warn: "text-[var(--warning-ink)]", busy: "text-muted-foreground italic" } as const;
+type Show = "all" | "not-imported" | "needs-look";
+const notImported = (c: CarrierImport) => !c.file && c.status !== "skipped";
+const needsLook = (c: CarrierImport) => resultLine(c).tone === "warn";
 
 /**
- * LA-4.10 (Notion sprint) · import the book one carrier at a time. Each upload is read straight away
- * and its result shown on its row before the next; skipping is allowed and can be taken back.
- * The carriers are the agency's own from Settings › Carriers (LA-0.4): another one is added there, not here.
+ * A row's result as one plain value or one chip (owner 2026-11-11, one-line rows): what came in, plainly; anything
+ * else as a chip whose tone carries it. The whole sentence is on hover, and in the carrier's dialog.
+ */
+function resultCell(c: CarrierImport) {
+  const line = resultLine(c);
+  if (line.tone === "ok" && c.result) return <span className="whitespace-nowrap tabular-nums" title={line.text}>{`${c.result.policies.toLocaleString("en-US")} ${c.result.policies === 1 ? "policy" : "policies"}`}</span>;
+  if (line.tone === "warn") return <StatusChip tone="warning" title={line.text}>Needs a look</StatusChip>;
+  if (line.tone === "busy") return <StatusChip tone="neutral" title={line.text}>Reading…</StatusChip>;
+  if (c.status === "skipped" && !c.file) return <StatusChip tone="neutral" title={line.text}>Skipped</StatusChip>;
+  if (!c.file) return <StatusChip tone="neutral">Not imported</StatusChip>;
+  return <span className="whitespace-nowrap" title={line.text}>No policies yet</span>;
+}
+
+/**
+ * LA-4.10 (Notion sprint) · import the book one carrier at a time. r7 4·A (owner 2026-11-10): Files in's first tab,
+ * Your carriers. A row is the carrier: clicking it — or dropping its file on it — opens its import dialog
+ * (files-in-import-dialog.tsx), where the date, Upload / Replace and Skip for now / Undo skip now sit; no inputs in
+ * rows. Each upload is read straight away and its result shown on its row. The carriers are the agency's own from
+ * Settings › Carriers (LA-0.4): another one is added there, not here.
  */
 export function BookImport({ carriers, processing, readOnly }: { carriers: CarrierImport[]; processing: boolean; readOnly: boolean }) {
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
-  const [busy, setBusy] = useState<string | null>(null);
-  const [dates, setDates] = useState<Record<string, string>>({});
   const [over, setOver] = useState<string | null>(null);
-  const inputs = useRef<Record<string, HTMLInputElement | null>>({});
-  const today = new Date().toISOString().slice(0, 10);
+  const [open, setOpen] = useState<{ carrierId: string; file: File | null } | null>(null);
+  const [query, setQuery] = useState("");
+  const [show, setShow] = useState<Show>("all");
 
   // While a file is being read, look again every few seconds, so its result appears on its own.
   useEffect(() => {
@@ -49,105 +54,103 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
     return () => clearInterval(timer);
   }, [processing, router]);
 
-  const rows = carriers;
+  const counts = { all: carriers.length, "not-imported": carriers.filter(notImported).length, "needs-look": carriers.filter(needsLook).length };
+  const rows = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return carriers.filter((c) => (!needle || c.carrierName.toLowerCase().includes(needle)) && (show === "all" || (show === "not-imported" ? notImported(c) : needsLook(c))));
+  }, [carriers, query, show]);
+  const chosen = open ? carriers.find((c) => c.carrierId === open.carrierId) ?? null : null;
+  const clear = () => { setQuery(""); setShow("all"); };
 
-  async function upload(carrierId: string, file: File) {
-    setBusy(carrierId);
-    const send = async () => {
-      const form = new FormData();
-      form.set("file", file);
-      form.set("carrier_id", carrierId);
-      form.set("file_date", dates[carrierId] ?? today);
-      const response = await fetch("/api/app/book-import", { method: "POST", body: form });
-      const data = (await response.json().catch(() => ({}))) as { error?: string; outcome?: string };
-      if (!response.ok) throw new Error(data.error ?? "That file did not upload.");
-      return data;
-    };
-    try {
-      // One toast from the upload to its outcome (2026-10-28); the row then shows the file being read.
-      await notify.promise(send, {
-        loading: `Uploading ${file.name}…`,
-        done: (data) => (data.outcome === "skipped" ? "That exact file was already here — using it." : "Uploaded. Reading it now…"),
-        fail: (error) => ({ title: error instanceof Error ? error.message : "That file did not upload.", treatment: "block" }),
-      });
-      router.refresh();
-    } catch {
-      // Said in the toast.
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function skip(carrierId: string, action: "skip" | "unskip") {
-    setBusy(carrierId);
-    try {
-      const response = await fetch("/api/app/book-import", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, carrier_id: carrierId }) });
-      const data = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "That did not save.");
-      router.refresh();
-    } catch (error) {
-      notify.block(error instanceof Error ? error.message : "That did not save.");
-    } finally {
-      setBusy(null);
-    }
-  }
+  const dropProps = (c: CarrierImport) => ({
+    onDragOver: (e: React.DragEvent) => { if (!readOnly) { e.preventDefault(); setOver(c.carrierId); } },
+    onDragLeave: () => setOver((cur) => (cur === c.carrierId ? null : cur)),
+    onDrop: (e: React.DragEvent) => { e.preventDefault(); setOver(null); const file = e.dataTransfer.files?.[0]; if (file && !readOnly) setOpen({ carrierId: c.carrierId, file }); },
+  });
+  const nextStep = (c: CarrierImport) => (!readOnly && !c.file ? (c.status === "skipped" ? "Import it" : "Bring it in") : null);
 
   return (
-    <PagedTableCard
-      total={rows.length}
-      noun="carriers"
-      toolbar={
-        <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
-          <Button asChild variant="outline" size="sm"><Link href="/app/settings#carriers">Add a carrier in Settings</Link></Button>
-        </DataToolbar>
-      }
-    >
-      {rows.length === 0 ? (
-        <EmptyState title="No carriers yet" hint="Add the carriers you write in Settings › Carriers, then upload each one's latest policy file." />
-      ) : (
-        <table className="portal-lead-table w-full min-w-[880px] text-left text-sm">
-          <thead><tr><th className="w-[180px]">Carrier</th><th>Where to find the file</th><th className="w-[250px]">Result</th><th className="w-[150px]">Date on the file</th><th className="w-[190px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
-          <PagedBody>
-            {rows.map((c) => {
-              const line = resultLine(c);
-              const g = c.guidance;
-              return (
-                <tr
-                  key={c.carrierId}
-                  className={over === c.carrierId ? "outline outline-2 outline-[var(--primary)]" : undefined}
-                  onDragOver={(e) => { if (!readOnly) { e.preventDefault(); setOver(c.carrierId); } }}
-                  onDragLeave={() => setOver((cur) => (cur === c.carrierId ? null : cur))}
-                  onDrop={(e) => { e.preventDefault(); setOver(null); const file = e.dataTransfer.files?.[0]; if (file && !readOnly) void upload(c.carrierId, file); }}
-                >
-                  <td className="font-semibold text-foreground"><span className="block whitespace-normal break-words leading-snug">{c.carrierName}</span>{c.writes && <span className="block text-xs font-normal text-muted-foreground">you write this carrier</span>}</td>
-                  <td>
-                    {g ? (
-                      <span className="block whitespace-normal text-sm">
-                        {g.whereInPortal}
-                        {g.reportName && <span className="block text-xs text-muted-foreground">Usually called: {g.reportName}</span>}
-                        {g.formatHint && <span className="block text-xs text-muted-foreground">Choose: {g.formatHint}</span>}
-                        {g.notes && <span className="block text-xs text-muted-foreground">{g.notes}</span>}
-                      </span>
-                    ) : <span className="block whitespace-normal text-muted-foreground">The in-force report in its agent portal</span>}
-                  </td>
-                  <td className={TONE[line.tone]} role="status"><span className="block whitespace-normal">{line.text}</span></td>
-                  <td><input type="date" aria-label={`File date for ${c.carrierName}`} className={`${toolbarControl} w-full`} value={dates[c.carrierId] ?? today} max={today} disabled={readOnly} onChange={(e) => setDates((all) => ({ ...all, [c.carrierId]: e.target.value }))} /></td>
-                  <td className="text-right">
-                    <input ref={(el) => { inputs.current[c.carrierId] = el; }} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) void upload(c.carrierId, file); }} />
-                    {!readOnly && (
-                      <span className="inline-flex gap-2">
-                        <Button type="button" size="sm" disabled={busy !== null} onClick={() => inputs.current[c.carrierId]?.click()}>{busy === c.carrierId ? "Uploading…" : c.file ? "Replace" : "Upload"}</Button>
-                        {c.status === "skipped" ? <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void skip(c.carrierId, "unskip")}>Undo skip</Button>
-                          : !c.file && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void skip(c.carrierId, "skip")}>Skip for now</Button>}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </PagedBody>
-        </table>
+    <>
+      <PagedTableCard
+        total={rows.length}
+        noun="carriers"
+        suffix={readOnly ? undefined : "drop a carrier's file on its row to bring it in"}
+        toolbar={
+          <DataToolbar actions={<>
+            <Link href="/app/settings#carriers" className="text-sm hover:underline">Add a carrier in Settings ›</Link>
+            <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} labelClassName="sr-only" />
+          </>}>
+            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search carriers" />
+            <div role="radiogroup" aria-label="Show" className="flex flex-wrap items-center gap-1.5">
+              <ToggleChip role="radio" selected={show === "all"} count={counts.all} onClick={() => setShow("all")}>All</ToggleChip>
+              <ToggleChip role="radio" selected={show === "not-imported"} count={counts["not-imported"]} countTone={counts["not-imported"] ? "warning" : undefined} onClick={() => setShow("not-imported")}>Not imported</ToggleChip>
+              <ToggleChip role="radio" selected={show === "needs-look"} count={counts["needs-look"]} countTone={counts["needs-look"] ? "danger" : undefined} onClick={() => setShow("needs-look")}>Needs a look</ToggleChip>
+            </div>
+          </DataToolbar>
+        }
+        footer={carriers.length ? (
+          <div className="flex w-full flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            {!readOnly && <span>Drop a carrier&apos;s file on its row to bring it in.</span>}
+            <span className="ml-auto tabular-nums">{rows.length.toLocaleString("en-US")} {rows.length === 1 ? "carrier" : "carriers"}</span>
+          </div>
+        ) : undefined}
+      >
+        {carriers.length === 0 ? (
+          <EmptyState title="No carriers yet" hint="Add the carriers you write in Settings › Carriers, then bring in each one's latest policy file." />
+        ) : rows.length === 0 ? (
+          <NoMatches noun="carriers" onClear={clear} />
+        ) : (
+          <>
+            <table className="portal-lead-table hidden w-full min-w-[880px] text-left text-sm md:table">
+              <thead><tr><th className="w-[200px]">Carrier</th><th>Where to find the file</th><th className="w-[160px]">Result</th><th className="w-[140px]">Last file</th><th className="w-[130px]">Next step</th></tr></thead>
+              <PagedBody>
+                {rows.map((c) => {
+                  const g = c.guidance;
+                  const step = nextStep(c);
+                  return (
+                    <tr
+                      key={c.carrierId}
+                      className={cn("cursor-pointer", over === c.carrierId && "outline outline-2 outline-[var(--primary)]")}
+                      onClick={() => setOpen({ carrierId: c.carrierId, file: null })}
+                      {...dropProps(c)}
+                    >
+                      <td className="whitespace-nowrap font-medium text-foreground" title={c.writes ? "You write this carrier" : undefined}>
+                        <button type="button" className="text-left font-medium hover:underline" onClick={(e) => { e.stopPropagation(); setOpen({ carrierId: c.carrierId, file: null }); }}>{c.carrierName}</button>
+                      </td>
+                      <td className="whitespace-nowrap" title={g && (g.reportName || g.formatHint) ? [g.reportName && `Usually called: ${g.reportName}`, g.formatHint && `Choose: ${g.formatHint}`].filter(Boolean).join(" · ") : undefined}>
+                        {g ? g.whereInPortal : "The in-force report in its agent portal"}
+                      </td>
+                      <td role="status">{resultCell(c)}</td>
+                      <td className="whitespace-nowrap tabular-nums text-muted-foreground">{c.file?.fileDate ? fileDay(c.file.fileDate) : "—"}</td>
+                      <td className="whitespace-nowrap">{step ?? "Open"} ›</td>
+                    </tr>
+                  );
+                })}
+              </PagedBody>
+            </table>
+            {/* Phone (r7 4·5): a carrier is a card. After the table, so the page size is measured from the table's rows. */}
+            <PagedBody as="ul" label="Carriers" className="m-0 grid list-none gap-2 p-3 md:hidden">
+              {rows.map((c) => {
+                const step = nextStep(c);
+                return (
+                  <li key={c.carrierId} className="grid gap-1.5 rounded-lg border border-border bg-card p-3" {...dropProps(c)}>
+                    <div className="flex items-start justify-between gap-2">
+                      <button type="button" className="text-left text-sm font-medium text-foreground" onClick={() => setOpen({ carrierId: c.carrierId, file: null })}>{c.carrierName}</button>
+                      <span className="shrink-0 text-xs text-muted-foreground">{c.file?.fileDate ? fileDay(c.file.fileDate) : ""}</span>
+                    </div>
+                    {c.guidance && !c.file && <span className="text-xs text-muted-foreground">{c.guidance.whereInPortal}{c.guidance.formatHint ? ` · ${c.guidance.formatHint}` : ""}</span>}
+                    <span className="justify-self-start">{resultCell(c)}</span>
+                    {step && <button type="button" className="justify-self-start text-sm hover:underline" onClick={() => setOpen({ carrierId: c.carrierId, file: null })}>{step} ›</button>}
+                  </li>
+                );
+              })}
+            </PagedBody>
+          </>
+        )}
+      </PagedTableCard>
+      {chosen && open && (
+        <FilesInImportDialog key={`${chosen.carrierId}:${open.file?.name ?? ""}`} carrier={chosen} initialFile={open.file} readOnly={readOnly} onClose={() => setOpen(null)} />
       )}
-    </PagedTableCard>
+    </>
   );
 }

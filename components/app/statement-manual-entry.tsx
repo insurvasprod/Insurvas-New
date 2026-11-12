@@ -12,9 +12,12 @@
  * A read-only account sees the PDF and why it cannot type, never the grid. Typed lines are kept as a
  * draft in this browser until they are recorded.
  *
- * Also exports StatementFileButton, the "Original file" action on a statement's header (LA-4.1).
+ * The statement's "Original file" is a plain link now, in its ⋯ (round 7).
  *
  * 2026-10-06 redesign: the PDF and the grid are two full-height columns that scroll on their own.
+ *
+ * Round 7 (board 1·3, 2026-11-10): the statement page's one tab, "Type the lines". "Record N lines for review" is
+ * the title line's primary (a StepSlot); Clear asks first; a failure is a toast, never a box on the page.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -30,35 +33,14 @@ import { TableCard } from "@/components/ui/table-card";
 import { STATEMENT_KIND_LABELS, STATEMENT_LINE_KINDS, type ManualStatementLine } from "@/lib/ledger/statementConstants";
 import { parseAmountCents, parseStatementDate } from "@/lib/ledger/statementParse";
 import { confirmAction } from "@/components/ui/confirm-dialog";
-import { Callout } from "@/components/app/settings/primitives";
+import { StepSlot } from "@/components/app/step-frame/step-slot";
+import { notify } from "@/lib/notify";
 
 async function fileUrl(statementId: string, download: boolean): Promise<string> {
   const response = await fetch(`/api/app/statements/${statementId}/file${download ? "?download=1" : ""}`, { cache: "no-store" });
   const data = (await response.json().catch(() => ({}))) as { url?: string; error?: string };
   if (!response.ok || !data.url) throw new Error(data.error ?? "The statement file could not be opened.");
   return data.url;
-}
-
-/** "Original file": downloads the carrier's file as it was imported. */
-export function StatementFileButton({ statementId, label = "Original file" }: { statementId: string; label?: string }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <span className="inline-flex flex-col items-end gap-1">
-      <Button
-        type="button"
-        variant="outline"
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true); setError(null);
-          try { window.location.assign(await fileUrl(statementId, true)); } catch (reason) { setError(reason instanceof Error ? reason.message : "The file could not be opened."); } finally { setBusy(false); }
-        }}
-      >
-        {busy ? "Opening…" : label}
-      </Button>
-      {error && <span role="alert" className="text-xs text-[var(--error-ink)]">{error}</span>}
-    </span>
-  );
 }
 
 const blank = (): ManualStatementLine => ({ policyNumber: "", insuredName: "", amount: "", kind: "", lineDate: "" });
@@ -93,7 +75,7 @@ function draftLines(stored: unknown): ManualStatementLine[] {
   }));
 }
 
-export function StatementManualEntry({ statementId, canWrite, writeBlockedReason }: { statementId: string; canWrite: boolean; writeBlockedReason: string | null }) {
+export function StatementManualEntry({ statementId, canWrite, slotId }: { statementId: string; canWrite: boolean; /** The title line's slot for "Record N lines for review". */ slotId: string }) {
   const router = useRouter();
   const [url, setUrl] = useState<string | null>(null);
   const [viewerError, setViewerError] = useState<string | null>(null);
@@ -102,7 +84,6 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
   const lines = useMemo(() => draftLines(draft), [draft]);
   const setLines = (next: (current: ManualStatementLine[]) => ManualStatementLine[]) => setDraft(next(lines));
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
@@ -118,7 +99,7 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
   const patch = (index: number, change: Partial<ManualStatementLine>) => setLines((current) => current.map((line, at) => (at === index ? { ...line, ...change } : line)));
 
   async function submit() {
-    setBusy(true); setError(null);
+    setBusy(true);
     try {
       const response = await fetch(`/api/app/statements/${statementId}/lines`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add_manual_lines", lines: filled }) });
       const data = (await response.json().catch(() => ({}))) as { error?: string };
@@ -126,9 +107,10 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
       // Recorded: the draft has served its purpose.
       setDraft(null);
       try { window.localStorage.removeItem(draftKey(statementId)); } catch { /* storage blocked: nothing was kept */ }
+      notify.done(`${filled.length.toLocaleString("en-US")} ${filled.length === 1 ? "line" : "lines"} recorded for review.`, { detail: "Nothing posts until a match is accepted." });
       router.refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The lines were not recorded.");
+      notify.fail("The lines were not recorded.", { detail: reason instanceof Error ? reason.message : "Nothing was changed." });
       setBusy(false);
     }
   }
@@ -149,8 +131,6 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
   if (!canWrite) {
     return (
       <div className="flex flex-col gap-3 xl:h-[calc(100dvh-var(--top-bar-h)-210px)] xl:min-h-[520px]">
-        {/* To the bell, not the page (UI-CONSISTENCY §3). */}
-        {writeBlockedReason && <Callout tone="warning" title={writeBlockedReason} />}
         {viewer}
       </div>
     );
@@ -161,7 +141,11 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
       {viewer}
 
       <div className="flex min-h-0 min-w-0 flex-col gap-3 xl:overflow-y-auto">
-        {error && <Callout tone="error" title={error} />}
+        <StepSlot id={slotId}>
+          <Button type="button" disabled={busy || Boolean(blocked)} title={blocked ?? undefined} onClick={() => void submit()}>
+            {busy ? "Recording…" : `Record ${filled.length.toLocaleString("en-US")} ${filled.length === 1 ? "line" : "lines"} for review`}
+          </Button>
+        </StepSlot>
         <TableCard
           footer={<>
             <span>{filled.length.toLocaleString("en-US")} {filled.length === 1 ? "line" : "lines"} entered</span>
@@ -170,9 +154,6 @@ export function StatementManualEntry({ statementId, canWrite, writeBlockedReason
                 <Button type="button" variant="ghost" disabled={busy} title="Empty the grid. Typed lines are kept on this computer until they are recorded." onClick={() => void confirmAction({ title: "Clear every line typed so far?", description: "The grid is emptied and the typed lines are gone from this computer.", confirmLabel: "Clear lines", cancelLabel: "Keep lines" }).then((ok) => { if (ok) setLines(() => [blank()]); })}>Clear</Button>
               )}
               <Button type="button" variant="outline" disabled={busy} onClick={() => setLines((current) => [...current, blank()])}><Plus aria-hidden="true" />Add line</Button>
-              <Button type="button" disabled={busy || Boolean(blocked)} title={blocked ?? undefined} onClick={() => void submit()}>
-                {busy ? "Recording…" : `Record ${filled.length.toLocaleString("en-US")} ${filled.length === 1 ? "line" : "lines"} for review`}
-              </Button>
             </span>
           </>}
         >

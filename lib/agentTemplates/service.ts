@@ -1265,6 +1265,25 @@ export async function listAgentLeads(
   /** AG-0.5: the session's producer scope (scopeFor). Null — the default — reads the whole book as before. */
   scope: ProducerScope = null,
 ) {
+  return withSubmitterNames(await filterAgentLeads(tenantId, template, search, filterField, filterValue, sortField, direction, scope));
+}
+
+/**
+ * listAgentLeads without the submitter names: the leads read, searched, filtered and sorted. Split out so
+ * the leads route can read the names and the leads' work facts side by side (they need only the ids).
+ */
+export async function filterAgentLeads(
+  tenantId: string,
+  template: AgentTemplate,
+  search: string,
+  filterField: string,
+  filterValue: string,
+  sortField: string,
+  direction: "asc" | "desc",
+  scope: ProducerScope = null,
+  /** visibleLeadIds(tenantId, scope), when the caller started it already (it needs no template). */
+  visible?: PromiseLike<string[]>,
+) {
   const allowedFields = new Set(
     template.template.fields.map((field) => field.field_key),
   );
@@ -1284,7 +1303,7 @@ export async function listAgentLeads(
   } else {
     // A narrowed agency session: only the leads its producers hold, read by id so the list (which the
     // board counts and totals from) never contains another producer's lead.
-    const ids = await visibleLeadIds(tenantId, scope);
+    const ids = await (visible ?? visibleLeadIds(tenantId, scope));
     data = (await readByLeadIds(ids, (chunk) => base().in("id", chunk), "leads"))
       .sort((a, b) => b.created_at.localeCompare(a.created_at));
   }
@@ -1321,6 +1340,11 @@ export async function listAgentLeads(
           { numeric: true },
         ) * (direction === "desc" ? -1 : 1),
     );
+  return leads;
+}
+
+/** Each lead with the name of the person who submitted it ("Workspace" when nobody, or unknown). */
+export async function withSubmitterNames<L extends { created_by: string | null }>(leads: L[]) {
   const creatorIds = [...new Set(leads.map((lead) => lead.created_by).filter((id): id is string => Boolean(id)))];
   const creators = creatorIds.length
     ? await getSupabaseServiceClient().from("users").select("id, name").in("id", creatorIds)

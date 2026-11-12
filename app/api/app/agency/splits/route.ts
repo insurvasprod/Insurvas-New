@@ -3,15 +3,22 @@ import { z } from "zod";
 
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { readSplits, saveSplit } from "@/lib/agency/moneyStores";
+import { lookupPolicies } from "@/lib/agency/splitStore";
 import { refusalResponse } from "@/lib/agency/rpc";
 import { NO_STORE } from "@/lib/agency/http";
 import { audit } from "@/lib/audit/log";
 
-/** AG-1.6 · policies two producers share; the split divides the writer's pool after the override. */
-export async function GET() {
+/**
+ * AG-1.6 · policies two producers share; the split divides the writer's pool after the override. `?q=` is New
+ * split's policy lookup (round 7, 8·1): up to 12 policies in the book by number or client, with the writing
+ * producer. PUT with no shares ends a split: the writer gets the whole pool from now on (round 7, End this split).
+ */
+export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("producer_payouts", ["owner", "bookkeeper"]);
   if (auth instanceof NextResponse) return auth;
   try {
+    const q = request.nextUrl.searchParams.get("q");
+    if (q !== null) return NextResponse.json({ policies: await lookupPolicies(auth.context.tenantId, q.slice(0, 80)) }, { headers: NO_STORE });
     return NextResponse.json({ splits: await readSplits(auth.context.tenantId) }, { headers: NO_STORE });
   } catch (error) {
     return refusalResponse(error);

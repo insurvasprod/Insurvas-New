@@ -32,12 +32,12 @@ export async function GET() {
     );
   } catch (error) {
     console.error("[discrepancies] list", error);
-    return NextResponse.json({ error: "Could not load discrepancies" }, { status: 500 });
+    return NextResponse.json({ error: "Could not load the pay issues" }, { status: 500 });
   }
 }
 
 const bulkSchema = z.object({
-  ids: z.array(z.string().refine(isRecordId, "That discrepancy is not in this workspace")).min(1, "Choose at least one discrepancy").max(200, "Choose at most 200 discrepancies at a time"),
+  ids: z.array(z.string().refine(isRecordId, "That pay issue is not in this workspace")).min(1, "Choose at least one pay issue").max(200, "Choose at most 200 pay issues at a time"),
   status: z.enum(SETTABLE_DISCREPANCY_STATUSES),
   note: z.string().trim().max(1000).nullish(),
 }).strict();

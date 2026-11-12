@@ -20,6 +20,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (!isRecordId(id)) return NextResponse.json({ error: "That statement is not in this workspace" }, { status: 404 });
   try {
     const file = await statementFileUrl(auth.context.tenantId, id, { download: request.nextUrl.searchParams.get("download") === "1" });
+    // `?open=1` (round 7): a plain link opens the file, so a list row's file name and the statement's ⋯ › Original
+    // file need no script. The signed link still lives 60 seconds and is never cached.
+    if (request.nextUrl.searchParams.get("open") === "1") return NextResponse.redirect(file.url, { status: 303, headers: { "Cache-Control": "no-store" } });
     return NextResponse.json({ ok: true, ...file }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return statementFailure(error, "Could not open the statement file");

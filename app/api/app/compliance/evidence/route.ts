@@ -6,6 +6,8 @@ import { buildEvidencePdf, evidenceCsv } from "@/lib/compliance/evidencePdf";
 import { evidenceRange } from "@/lib/compliance/evidenceRange";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
+import { scopeFor } from "@/lib/agency/visibility";
+import { getAgentTemplate, searchAgentLeads } from "@/lib/agentTemplates/service";
 
 /**
  * LA-6.3 (Notion sprint) · the compliance evidence report for one number, lead or client: on screen
@@ -20,6 +22,27 @@ export async function GET(request: NextRequest) {
   const refused = await refuseNarrowInAgency(auth.context, "The compliance evidence report");
   if (refused) return refused;
   const p = request.nextUrl.searchParams;
+  // Run a report › One lead (round 7): find the lead by name or number. Read-only; the report itself still checks
+  // the lead against assertEvidenceAccess when it is opened.
+  const search = p.get("search");
+  if (search !== null) {
+    if (!(await mayGenerateReports(auth.context.tenantId, auth.context.role))) return NextResponse.json({ error: "Your agency has not allowed your role to generate compliance reports." }, { status: 403 });
+    const q = search.trim();
+    if (q.length < 2) return NextResponse.json({ leads: [] }, { headers: { "Cache-Control": "no-store" } });
+    try {
+      const template = await getAgentTemplate(auth.context.tenantId, auth.context.userId);
+      const found = await searchAgentLeads(auth.context.tenantId, template, q, 8, await scopeFor(auth.context));
+      const leads = found.map((l) => {
+        const v = (l.values ?? {}) as Record<string, unknown>;
+        const name = [v.first_name, v.last_name].filter((x) => typeof x === "string" && x.trim()).join(" ") || (typeof v.full_name === "string" ? v.full_name : "");
+        const phone = [v.phone, v.phone_number, v.primary_phone].find((x) => typeof x === "string" && x.trim());
+        return { id: l.id, name: name || "No name", phone: typeof phone === "string" ? phone : null, createdAt: l.created_at };
+      });
+      return NextResponse.json({ leads }, { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Could not search leads" }, { status: 400 });
+    }
+  }
   const phone = p.get("phone");
   const lead = p.get("lead");
   const contact = p.get("contact");

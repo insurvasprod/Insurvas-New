@@ -1,8 +1,8 @@
 "use client";
 
+import { usePagePathname } from "@/components/ui/page-pathname";
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { IntentLink } from "@/components/ui/nav-pending";
 import {
   ArrowLeftRight,
@@ -169,7 +169,7 @@ function NavItemLink({
   onNavigate?: () => void;
   nested?: boolean;
 }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const active = isActivePath(pathname, item.path);
   const Icon = iconFor(item.icon);
   const label = item.navLabel ?? item.label;
@@ -285,7 +285,7 @@ const FLYOUT_CLOSE_MS = 180;
  * clips it.
  */
 function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: string; icon: typeof BriefcaseBusiness; items: MenuItem[]; children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const currentKey = currentFlyoutPage(pathname, items);
   const [open, setOpen] = useState(false);
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -408,7 +408,7 @@ function NavList({
   isCollapsed?: boolean;
   onExpand?: (groupLabel: string) => void;
 }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const tree = buildSidebarTree(menu, moduleAccess);
   const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
   const activeGroupLabel = tree.groups.find((group) => group.items.some(isActive))?.label;

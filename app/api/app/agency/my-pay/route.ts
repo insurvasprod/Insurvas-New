@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { readBalances, readProducerEntries, syncLedger } from "@/lib/agency/ledgerStore";
 import { readRuns } from "@/lib/agency/payoutStore";
+import { teamMember } from "@/lib/agency/payPlanStore";
 import { rowVisible, scopeFor } from "@/lib/agency/visibility";
 import { NO_STORE } from "@/lib/agency/http";
 
@@ -12,15 +13,17 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth;
   await syncLedger(auth.context.tenantId).catch(() => 0);
   const scope = await scopeFor(auth.context);
-  const [balances, entries, runs] = await Promise.all([
+  const [balances, entries, runs, member] = await Promise.all([
     readBalances(auth.context),
     readProducerEntries(auth.context.tenantId, auth.context.userId),
     readRuns(auth.context.tenantId, auth.context.userId),
+    teamMember(auth.context.tenantId, auth.context.userId).catch(() => null),
   ]);
   return NextResponse.json({
     balances: balances.rows.filter((b) => b.producerUserId === auth.context.userId),
     entries,
     // belt and braces: only runs the session may see (for a producer, his own)
     runs: runs.filter((r) => r.producerUserId === auth.context.userId && rowVisible(scope, r.producerUserId)),
+    plan: member?.plan ?? null,
   }, { headers: NO_STORE });
 }

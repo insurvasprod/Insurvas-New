@@ -8,7 +8,7 @@ import { isSchemaGap } from "@/lib/supabase/schemaGap";
 import { moneyEntries, type MoneyFilter } from "./costLedger";
 import type { Basis } from "./costLedgerCore";
 import { fromRow } from "./settingsCore";
-import { chargebackTax, comparisons, moneyIn, perPolicy, periodRange, persisting, statement, type PeriodKind, type PnlLine, type Range } from "./pnlCore";
+import { chargebackTax, comparisons, inBankFor, mergeStatement, moneyIn, paidByLine, perPolicy, periodRange, persisting, readableDate, SECTIONS, statement, type PaidCost, type PeriodKind, type PnlLine, type Range } from "./pnlCore";
 
 /**
  * LA-7.7 (Notion sprint, Module 7 — Accounting) · the P&L, server side. Computed live from the
@@ -71,27 +71,79 @@ async function policies(tenantId: string): Promise<{ rows: ScorePolicy[]; today:
   return { rows, today };
 }
 
-export async function loadPnl(tenantId: string, input: { kind: PeriodKind; range: Range; basis: Basis }) {
+/**
+ * Round 7 · "In the bank" for an accrual cost line: the period's cost entries that have been paid, read straight
+ * from cost_entry by its (tenant_id, incurred_on) index — one read for the whole statement, never one per line —
+ * with each entry's expense (category, acquisition or not) read once by id, so the line is placed exactly as
+ * pnl_lines places it (costLineOf). Null when either read is not there: the column then says "—", never a guess.
+ */
+async function paidCosts(tenantId: string, r: Range): Promise<PaidCost[] | null> {
+  const out: Loose[] = [];
+  for (let from = 0; from < 100_000; from += 1000) {
+    const { data, error } = await db().from("cost_entry").select("entry_type, amount_cents, vendor_id, partner_id, expense_id")
+      .eq("tenant_id", tenantId).gte("incurred_on", r.from).lt("incurred_on", r.to).not("paid_on", "is", null)
+      .order("incurred_on").order("id").range(from, from + 999);
+    if (error) return null;
+    out.push(...(data ?? []));
+    if (!data || data.length < 1000) break;
+  }
+  const ids = [...new Set(out.map((c) => c.expense_id).filter(Boolean))] as string[];
+  const expense = new Map<string, { category: string | null; acquisition: boolean | null }>();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data, error } = await db().from("expense").select("id, category, is_acquisition_cost").eq("tenant_id", tenantId).in("id", ids.slice(i, i + 200));
+    if (error) return null;
+    for (const x of (data ?? []) as Loose[]) expense.set(x.id, { category: x.category ?? null, acquisition: x.is_acquisition_cost ?? null });
+  }
+  return out.map((c) => ({
+    entryType: c.entry_type, amountCents: Number(c.amount_cents), vendorId: c.vendor_id, partnerId: c.partner_id, expenseId: c.expense_id,
+    expenseCategory: c.expense_id ? expense.get(c.expense_id)?.category ?? null : null, expenseAcquisition: c.expense_id ? expense.get(c.expense_id)?.acquisition ?? null : null,
+  }));
+}
+
+/**
+ * The full statement (round 7, 5·A): this period's, the period before's and last year's lines, merged line by
+ * line, each with its "In the bank". Every read starts at once: three pnl_lines, pnl_received, and — on accrual
+ * only — the period's paid costs.
+ */
+export async function statementRows(tenantId: string, input: { kind: PeriodKind; range: Range; basis: Basis }) {
   const { previous, lastYear } = comparisons(input.kind, input.range);
-  // The six months ending with the period: the direction is the signal, not one month's level.
-  const trendFrom = addMonths(`${input.range.to.slice(0, 7)}-01`, -6);
-  const [settings, cur, prev, ly, trend, received, book] = await Promise.all([
-    reportingSettings(tenantId),
+  const [cur, prev, ly, received, paid] = await Promise.all([
     lines(tenantId, input.range, input.basis),
     lines(tenantId, previous, input.basis),
     lines(tenantId, lastYear, input.basis),
-    db().rpc("pnl_monthly", { p_tenant_id: tenantId, p_from: trendFrom, p_to: input.range.to, p_basis: input.basis }),
     db().rpc("pnl_received", { p_tenant_id: tenantId, p_from: input.range.from, p_to: input.range.to }),
+    input.basis === "accrual" ? paidCosts(tenantId, input.range) : Promise.resolve(null),
+  ]);
+  if (received.error) fail(received.error);
+  const money = moneyIn(statement(cur).inCents, received.data == null ? null : Number(received.data));
+  const paidMap = paid ? paidByLine(paid) : null;
+  const rows = mergeStatement(cur, prev, ly);
+  for (const section of SECTIONS) for (const row of rows[section]) row.bank = inBankFor(row, input.basis, money.received, paidMap);
+  return { previous, lastYear, cur, prev, ly, rows, moneyIn: money };
+}
+
+export async function loadPnl(tenantId: string, input: { kind: PeriodKind; range: Range; basis: Basis }) {
+  // The six months ending with the period: the direction is the signal, not one month's level.
+  const trendFrom = addMonths(`${input.range.to.slice(0, 7)}-01`, -6);
+  const [settings, full, trend, book] = await Promise.all([
+    reportingSettings(tenantId),
+    statementRows(tenantId, input),
+    db().rpc("pnl_monthly", { p_tenant_id: tenantId, p_from: trendFrom, p_to: input.range.to, p_basis: input.basis }),
     policies(tenantId),
   ]);
   if (trend.error) fail(trend.error);
-  if (received.error) fail(received.error);
+  const { previous, lastYear, cur, prev, ly } = full;
 
   const s = statement(cur);
-  const inPeriod = (p: ScorePolicy) => !!p.issueDate && p.issueDate >= input.range.from && p.issueDate < input.range.to;
-  const cohort = book.rows.filter((p) => issued(p) && inPeriod(p));
+  const cohortOf = (r: Range) => book.rows.filter((p) => issued(p) && !!p.issueDate && p.issueDate >= r.from && p.issueDate < r.to);
+  const cohort = cohortOf(input.range);
   const cell = persistency(cohort, settings.horizon, book.today, historyStart(book.rows));
   const perIssued = perPolicy(s.acquisitionCents, cohort.length, settings.threshold);
+  // The cost per issued policy across the columns too (5·A): the same rule on each period's own cohort.
+  const prevTotals = totalsOf(prev);
+  const lyTotals = totalsOf(ly);
+  const perIssuedPrevious = perPolicy(prevTotals.acquisitionCents, cohortOf(previous).length, settings.threshold);
+  const perIssuedLastYear = perPolicy(lyTotals.acquisitionCents, cohortOf(lastYear).length, settings.threshold);
   const lasting = persisting({ range: input.range, horizon: settings.horizon, today: book.today, acquisitionCents: s.acquisitionCents, issued: cell.eligible, alive: cell.alive, cohortBuilding: cell.building, threshold: settings.threshold });
 
   const months = new Map<string, { month: string; inCents: number; acquisitionCents: number; overheadCents: number; splitsCents: number }>();
@@ -110,9 +162,10 @@ export async function loadPnl(tenantId: string, input: { kind: PeriodKind; range
   return {
     range: input.range, kind: input.kind, basis: input.basis, settings, today: book.today,
     statement: s,
-    previous: { range: previous, ...totalsOf(prev) },
-    lastYear: { range: lastYear, ...totalsOf(ly) },
-    moneyIn: moneyIn(s.inCents, received.data == null ? null : Number(received.data)),
+    rows: full.rows,
+    previous: { range: previous, ...prevTotals, perIssued: perIssuedPrevious },
+    lastYear: { range: lastYear, ...lyTotals, perIssued: perIssuedLastYear },
+    moneyIn: full.moneyIn,
     issued: cohort.length,
     perIssued,
     persisting: lasting,
@@ -187,15 +240,48 @@ export async function drill(tenantId: string, d: DrillRequest) {
     }
     rows = rows.filter((r) => (corrects.get(r.entryId) === "held") === (d.section === "held"));
   }
+  const names = await sourceNames(tenantId, rows);
   return {
     more: res.more,
+    // Round 7 (5·2): an entry opens its source's own page, named as that page names it.
     rows: rows.map((r) => ({
       ...r,
-      source: r.invoiceId ? { label: "Invoice", href: `/app/invoices?open=${r.invoiceId}` }
-        : r.expenseId ? { label: "Expense", href: `/app/expenses?open=${r.expenseId}` }
-        : r.payoutRunId ? { label: "Payout run", href: `/app/payouts?open=${r.payoutRunId}` }
-        : r.sourceFileId ? { label: "Carrier file", href: `/app/carrier-files/file/${r.sourceFileId}` }
+      source: r.invoiceId ? { label: names.invoice.get(r.invoiceId) ?? "Vendor bill", href: `/app/vendor-bills/${r.invoiceId}` }
+        : r.expenseId ? { label: names.expense.get(r.expenseId) ?? "Expense", href: `/app/expenses/${r.expenseId}` }
+        : r.payoutRunId ? { label: names.run.get(r.payoutRunId) ?? "Payout run", href: `/app/payouts/${r.payoutRunId}` }
+        : r.sourceFileId ? { label: "Commission statement", href: `/app/carrier-files/file/${r.sourceFileId}` }
         : null,
     })),
+  };
+}
+
+/**
+ * The names of a page of entries' sources, one read per kind for the whole page (never one per row): "Vendor bill
+ * CVL-10442 · Crestview Lists", "Expense · Staples", "Payout run · Apex Health Partners · Sep 1 to Sep 30, 2026".
+ * A failed read leaves the plain kind as the label; the link still opens the record.
+ */
+async function sourceNames(tenantId: string, rows: { invoiceId: string | null; expenseId: string | null; payoutRunId: string | null }[]) {
+  const ids = (pick: (r: (typeof rows)[number]) => string | null) => [...new Set(rows.map(pick).filter(Boolean))] as string[];
+  const [invoiceIds, expenseIds, runIds] = [ids((r) => r.invoiceId), ids((r) => r.expenseId), ids((r) => r.payoutRunId)];
+  const read = (table: string, columns: string, list: string[]) => (list.length ? db().from(table).select(columns).eq("tenant_id", tenantId).in("id", list) : Promise.resolve({ data: [] }));
+  const [invoices, expenses, runs] = (await Promise.all([
+    read("vendor_invoice", "id, invoice_number, vendor_id, partner_id", invoiceIds),
+    read("expense", "id, vendor_name", expenseIds),
+    read("payout_run", "id, partner_id, period_start, period_end", runIds),
+  ])) as Loose[];
+  const inv = (invoices.data ?? []) as Loose[];
+  const rn = (runs.data ?? []) as Loose[];
+  const vendorIds = [...new Set(inv.map((i) => i.vendor_id).filter(Boolean))];
+  const partnerIds = [...new Set([...inv.map((i) => i.partner_id), ...rn.map((r) => r.partner_id)].filter(Boolean))];
+  const [vendors, partners] = (await Promise.all([
+    vendorIds.length ? db().from("tenant_lead_vendors").select("id, name").eq("tenant_id", tenantId).in("id", vendorIds) : Promise.resolve({ data: [] }),
+    partnerIds.length ? db().from("partners").select("id, name").eq("tenant_id", tenantId).in("id", partnerIds) : Promise.resolve({ data: [] }),
+  ])) as Loose[];
+  const name = new Map<string, string>([...((vendors.data ?? []) as Loose[]), ...((partners.data ?? []) as Loose[])].map((x) => [x.id as string, x.name as string]));
+  const tail = (id: string | null) => (id && name.get(id) ? ` · ${name.get(id)}` : "");
+  return {
+    invoice: new Map<string, string>(inv.map((i) => [i.id, `Vendor bill ${i.invoice_number}${tail(i.vendor_id ?? i.partner_id)}`])),
+    expense: new Map<string, string>(((expenses.data ?? []) as Loose[]).map((x) => [x.id, x.vendor_name ? `Expense · ${x.vendor_name}` : "Expense"])),
+    run: new Map<string, string>(rn.map((r) => [r.id, `Payout run${tail(r.partner_id)} · ${readableDate(r.period_start)} to ${readableDate(r.period_end)}`])),
   };
 }

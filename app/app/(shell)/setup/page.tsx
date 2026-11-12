@@ -78,7 +78,7 @@ export default async function SetupPage({ searchParams }: { searchParams: Promis
       <PageHeader
         title={title}
         description={description}
-        actions={next ? <Link href={guideHref(next)} className={buttonVariants({ variant: "default" })}>Start: {next.label}</Link> : null}
+        actions={next ? <Link href={guideHref(next)} className={buttonVariants({ variant: "highlight" })}>Start: {next.label}</Link> : null}
       />
       {showFirstValue ? (
         <TableCard>

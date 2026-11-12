@@ -72,7 +72,7 @@ function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
         // on a row you are about to act on. Selected and expanded keep the solid ground.
         // The rule between rows is the soft grey, not the card's own border: a table of 30 rows
         // drawn in --border reads as a grid of boxes rather than a list.
-        "m-row border-b border-[var(--surface-alt)] has-aria-expanded:bg-muted data-[state=selected]:bg-muted",
+        "m-row border-b border-[var(--rule)] has-aria-expanded:bg-muted data-[state=selected]:bg-muted",
         className
       )}
       {...props}

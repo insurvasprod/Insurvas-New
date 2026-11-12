@@ -76,7 +76,7 @@ export function InfoTip({ label, children, className, side = "top" }: {
           onOpenAutoFocus={(event) => event.preventDefault()}
           onPointerEnter={(event) => hover(event, true, 0)}
           onPointerLeave={(event) => hover(event, false, 160)}
-          className="z-50 max-w-[300px] rounded-md border border-border bg-popover px-3 py-2 text-xs leading-normal font-normal tracking-normal normal-case text-[var(--body)] shadow-[0_8px_24px_rgba(16,20,26,.14)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          className="z-50 max-w-[300px] rounded-md border border-border bg-popover px-3 py-2 text-xs leading-normal font-normal tracking-normal normal-case text-[var(--body)] shadow-[var(--shadow-hover)] outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           {children}
           <PopoverPrimitive.Arrow className="fill-[var(--color-card-bg)]" />

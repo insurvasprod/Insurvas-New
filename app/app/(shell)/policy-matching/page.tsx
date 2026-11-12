@@ -5,6 +5,7 @@ import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { Callout } from "@/components/app/settings/primitives";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { ViewTabs } from "@/components/ui/view-tabs";
 import { scopeFor } from "@/lib/agency/visibility";
 import { AI_REVIEW_PENDING, loadMatching, MATCHING_PENDING_MESSAGE } from "@/lib/ingestion/policyMatchingStore";
@@ -49,13 +50,13 @@ export default async function PolicyMatchingPage({ searchParams }: { searchParam
       ) : (
         <>
           <StatStrip label="Policy matching totals">
-            <StatTile label="Waiting for you" value={view.reviews.length.toLocaleString("en-US")} valueTone={view.reviews.length ? "warning" : undefined} footnote="pick the right client" />
+            <StatTile label="Waiting for you" value={view.reviews.length.toLocaleString("en-US")} footnote={view.reviews.length ? <StatusChip tone="warning">Pick the client</StatusChip> : "pick the right client"} />
             {/* LA-4.8: the share of rows resolving at each ladder step, 30 days of files. */}
             <StatTile label="Already linked" value={pct(view.ladder.alreadyLinkedPct)} footnote={`of ${view.ladder.all.toLocaleString("en-US")} policy rows read, 30 days`} />
             <StatTile label="Linked by number" value={pct(view.ladder.exactLinkedPct)} footnote="the sale's policy number" />
             <StatTile label="Matched by search" value={pct(view.ladder.toReviewPct)} footnote="no number: a review or no sale on record" />
             {view.aiAccuracy.reviewed > 0 && <StatTile label="Automatic match accuracy, 7 days" value={pct(view.aiAccuracy.pct)} footnote={`${view.aiAccuracy.correct} of ${view.aiAccuracy.reviewed} confirmed`} />}
-            <StatTile label="Agent codes to map" value={view.unmapped.length.toLocaleString("en-US")} valueTone={view.unmapped.length ? "warning" : undefined} footnote="so each policy credits the right agent" />
+            <StatTile label="Agent codes to map" value={view.unmapped.length.toLocaleString("en-US")} footnote={view.unmapped.length ? <StatusChip tone="warning">To map</StatusChip> : "so each policy credits the right agent"} />
           </StatStrip>
           <PolicyMatchingWorkspace reviews={view.reviews} links={view.links} unmapped={view.unmapped} mapped={view.mapped} members={view.members} carriers={view.carriers} readOnly={guard.entitlement.access === "read_only"} aiNote={AI_REVIEW_PENDING} tab={tab} />
         </>

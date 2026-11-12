@@ -88,7 +88,23 @@ export type TemplateValidation = {
   digit_length?: number;
   format_mask?: string;
   placeholder?: string;
+  /** A date answer may not be later than today (Settings r8 board A4). */
+  no_future?: boolean;
+  /** What a person reads when the answer fails a rule; `{age}` is filled in for date answers. */
+  message?: string;
 };
+
+/**
+ * Form definition format 2 (Settings r8, Application forms A): several rules per question joined by
+ * AND / OR, groups of rules, and page skips. Stored inside form_definition, so it needs no schema
+ * change; a format-1 reader still sees `show_when` whenever the logic is one plain "is" rule.
+ */
+export const TEMPLATE_DEFINITION_FORMAT = 2;
+export const TEMPLATE_RULE_OPS = ["is", "is_not", "one_of", "filled", "empty", "at_least", "at_most", "age_at_least", "age_at_most"] as const;
+export type TemplateRuleOp = (typeof TEMPLATE_RULE_OPS)[number];
+export type TemplateRule = { field_key: string; op: TemplateRuleOp; value?: string; values?: string[] };
+export type TemplateRuleGroup = { match: "all" | "any"; rules: TemplateRule[] };
+export type TemplateLogic = { match: "all" | "any"; rules: Array<TemplateRule | TemplateRuleGroup> };
 
 export type TemplateStage = {
   stage_key: string;
@@ -105,6 +121,13 @@ export type TemplateFormField = {
   conditional_on?: { field_key: string; equals: string } | null;
   /** Half or the full row of the partner form's two columns. Missing: automatic (placementWidth.ts). */
   width?: "half" | "full";
+  /** Format 2: when the question shows. Wins over `show_when`, which is kept as its format-1 shadow. */
+  logic?: TemplateLogic | null;
+  /**
+   * Set by effectiveTemplateForm, never stored: the page's skip rule, so a reader that only sees the
+   * question (templateFormFieldVisible) still hides it while its page is skipped.
+   */
+  page_skip?: TemplateLogic | null;
 };
 
 export type TemplateFormSection = {
@@ -112,6 +135,8 @@ export type TemplateFormSection = {
   label: string;
   fields: TemplateFormField[];
   sort_order: number;
+  /** Format 2: the whole page (section) is skipped while this is true. */
+  skip_when?: TemplateLogic | null;
 };
 
 /**
@@ -123,8 +148,16 @@ export type TemplateSectionGroup = (typeof TEMPLATE_SECTION_GROUPS)[number];
 export type TemplateSectionAvailability = Partial<Record<TemplateSectionGroup, boolean>>;
 
 export type TemplateFormDefinition = {
+  /** 2 once the form uses format-2 logic; absent on older forms (read as 1). */
+  format?: number;
   sections: TemplateFormSection[];
   section_availability?: TemplateSectionAvailability;
+  /**
+   * Format 2: the question rules server intake's validation list does not take yet (`no_future`,
+   * `message`), keyed by question. The builder reads them back into each field's `validation`
+   * (lib/templates/fieldRulesStore.ts); stored here so saving needs no schema or intake change.
+   */
+  field_rules?: Record<string, Pick<TemplateValidation, "no_future" | "message">>;
 };
 
 export type TemplateRow = {

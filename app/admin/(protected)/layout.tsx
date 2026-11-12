@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
 
 import { getCurrentAdmin } from "@/lib/adminAuth/getCurrentAdmin";
@@ -6,8 +7,9 @@ import { ADMIN_ROLE_LABELS } from "@/lib/adminAuth/roles";
 import { buildAdminNav } from "@/lib/adminNav/build";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminTopBar } from "@/components/admin/admin-top-bar";
+import { WarmPage } from "@/components/app/warm-page";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+export default async function AdminLayout({ children, sheet }: { children: React.ReactNode; sheet: React.ReactNode }) {
   const admin = await getCurrentAdmin();
   if (!admin) redirect("/admin/login");
 
@@ -38,7 +40,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         />
         <div className="flex min-w-0 flex-1 flex-col p-4 sm:p-6 lg:p-8 lg:pt-6">
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage className="flex min-w-0 flex-1 flex-col">{children}</DashboardStage>
+        {/* data-page-root: the page area whose links are loaded ahead once it is up (warm-page.tsx). */}
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><div data-page-root className="contents">{children}</div>{/* A "New…" opened from a page: a panel over it (@sheet, route-sheet.tsx). */}{sheet}</DashboardStage>
+        <Suspense fallback={null}><WarmPage /></Suspense>
       </div>
       </main>
     </div>

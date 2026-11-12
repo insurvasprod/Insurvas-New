@@ -14,9 +14,10 @@ import { checkboxControl } from "@/components/ui/field";
 import { EmptyState, LoadingRows } from "@/components/ui/page-states";
 import { SelectMenu } from "@/components/ui/select-menu";
 import { StatusChip } from "@/components/ui/status-chip";
+import { fillLine } from "@/components/ui/table-card-layout";
 import { cn } from "@/lib/utils";
 import { fileDay } from "@/lib/ingestion/constants";
-import type { MatchField, FieldOutcome } from "@/lib/ingestion/policyMatching";
+import type { MatchField } from "@/lib/ingestion/policyMatching";
 import { ageShort, dollars, KIND_META, matchesSearch, reviewFocus, searchParam, searchWords, type NeedsYouKind } from "@/lib/needsYou/kinds";
 import type { QueueItemRow } from "@/lib/ingestion/exceptionQueuesStore";
 import type { ItemDetail } from "@/lib/needsYou/store";
@@ -41,7 +42,7 @@ async function post(url: string, body: unknown): Promise<void> {
 
 /**
  * Book of business › Needs you › Review (round 5, owner 2026-11-03): the queue on the left, one question on the
- * right. Every answer is a big numbered button (keys 1–4, S skips, ↑↓ moves); one press saves through the kind's
+ * right. Every answer is a big button; one press saves through the kind's
  * own API, marks the item done and opens the next. "No sale yet" items can be ticked and answered together
  * (BulkResolve). Kinds with no question of their own here use the item's Decide form in place.
  * `initialQuery`: the search to open on (?q=, passed on from the Needs you list).
@@ -98,49 +99,50 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
     if (following) setCurrentKey(keyOf(following));
   }, [current, done, nextAfter]);
 
-  // Keys: 1–9 and 0 press the answer with that key, S skips, ↑↓ move through the queue. Never while typing.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target && (target.closest("input, textarea, select, [contenteditable=true]") || event.metaKey || event.ctrlKey || event.altKey)) return;
-      if (event.key === "s" || event.key === "S") { event.preventDefault(); skip(); return; }
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        const list = shown;
-        const at = list.findIndex((item) => current && keyOf(item) === keyOf(current));
-        const to = list[at + (event.key === "ArrowDown" ? 1 : -1)];
-        if (to) { event.preventDefault(); setCurrentKey(keyOf(to)); }
-        return;
-      }
-      const answer = answers.current.find((a) => a.key === event.key && !a.disabled);
-      if (answer) { event.preventDefault(); answer.run(); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [skip, shown, current]);
 
   const toggle = (key: string) => setTicked((now) => { const next = new Set(now); if (next.has(key)) next.delete(key); else next.add(key); return next; });
   const allTicked = bulkable.length > 0 && bulkable.every((item) => ticked.has(keyOf(item)));
   const total = items.length;
   const pct = total ? Math.round(((total - left) / total) * 100) : 100;
 
+  // Owner 2026-11-10: the two panes end at the window's foot (the table foundation's line), so the queue scrolls
+  // inside itself instead of stretching the page 200 rows long. Side by side only (lg); a phone keeps the stack.
+  const panes = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = panes.current;
+    if (!el) return;
+    const fit = () => {
+      el.style.height = "";
+      if (window.innerWidth < 1024) return;
+      const bottom = fillLine(el) ?? window.innerHeight - 32;
+      el.style.height = `${Math.max(480, Math.floor(bottom - el.getBoundingClientRect().top - 2))}px`;
+    };
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <div className="flex flex-wrap items-center gap-3">
-        {source && <StatusChip tone="neutral">{source}</StatusChip>}
-        <span className="ml-auto text-sm text-muted-foreground tabular-nums">{(total - left).toLocaleString("en-US")} done · {left.toLocaleString("en-US")} left</span>
-        <span aria-hidden="true" className="h-1 w-40 overflow-hidden rounded-full bg-[var(--border-strong)]"><span className="block h-full bg-[var(--primary)] transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} /></span>
-        <Button asChild variant="outline"><Link href={backHref} onClick={() => router.refresh()}>Done for now</Link></Button>
-      </div>
-
-      <div className={cn(cardSurface, "grid min-h-[560px] flex-1 overflow-hidden lg:grid-cols-[340px_minmax(0,1fr)]")}>
+      <div ref={panes} className={cn(cardSurface, "grid overflow-hidden lg:grid-cols-[340px_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)]")}>
         {/* The queue */}
         {/* On a phone the question comes first and the queue below it, capped; side by side from lg. */}
         <div className="order-2 flex min-h-0 flex-col border-t border-[var(--border)] lg:order-none lg:border-r lg:border-t-0">
+          {/* How far through: on the queue it measures. */}
+          <div className="flex flex-col gap-1.5 border-b border-[var(--border)] px-3 pt-3 pb-2.5">
+            {/* Owner 2026-11-11: summary lines in the body colour, 14px, no bold figures. */}
+            <span className="flex items-baseline justify-between text-sm text-foreground tabular-nums">
+              <span>{left.toLocaleString("en-US")} left</span>
+              <span>{(total - left).toLocaleString("en-US")} done</span>
+            </span>
+            {source && <span className="truncate text-sm text-foreground" title={source}>From {source}</span>}
+            <span aria-hidden="true" className="h-1 w-full overflow-hidden rounded-full bg-[var(--border-strong)]"><span className="block h-full bg-[var(--primary)] transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} /></span>
+          </div>
           <div className="border-b border-[var(--border)] p-3">
             <ToolbarSearch value={query} onChange={search} placeholder="Policy, client, agent code or file" label="Search the queue" className="sm:w-full" />
           </div>
           {bulkable.length > 1 && !readOnly && (
-            <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-sm text-foreground">
               <input type="checkbox" aria-label="Select every No sale yet item" className={checkboxControl} checked={allTicked} onChange={() => setTicked(allTicked ? new Set() : new Set(bulkable.map(keyOf)))} />
               <span>Select all {bulkable.length.toLocaleString("en-US")}</span>
               <span className="ml-auto">Oldest first</span>
@@ -152,34 +154,33 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
               const on = current !== null && keyOf(current) === key;
               const outcome = done.get(key);
               return (
-                <li key={key} className={cn("flex items-center gap-3 border-b border-[var(--border)] px-3 py-2.5 transition-[background-color,box-shadow,opacity] duration-[var(--t-panel)]", on && "bg-[var(--surface-alt)] shadow-[inset_3px_0_0_var(--primary)]", outcome && "opacity-50")}>
+                <li key={key} className={cn("flex items-center gap-3 border-b border-[var(--border)] px-3 py-3 transition-[background-color,box-shadow,opacity] duration-[var(--t-panel)]", on && "bg-[var(--surface-alt)] shadow-[inset_3px_0_0_var(--primary)]", outcome && "opacity-50")}>
                   {item.kind === "no-sale" && !readOnly && !outcome
                     ? <input type="checkbox" aria-label={`Select ${item.about}`} className={checkboxControl} checked={ticked.has(key)} onChange={() => toggle(key)} />
                     : <span className="size-4 shrink-0" aria-hidden="true" />}
                   <button type="button" onClick={() => setCurrentKey(key)} aria-current={on ? "true" : undefined} className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-sm font-semibold text-foreground">{item.about}</span>
-                    <span className="block truncate text-xs text-muted-foreground" title={item.why}>{item.why}</span>
+                    <span className="block whitespace-nowrap text-sm font-medium text-foreground">{item.about}</span>
                   </button>
-                  {outcome ? <StatusChip tone="good">{outcome}</StatusChip> : <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{ageShort(item.ageDays)}</span>}
+                  {outcome ? <StatusChip tone="good">{outcome}</StatusChip> : <span className="shrink-0 whitespace-nowrap text-sm text-muted-foreground tabular-nums">{ageShort(item.ageDays)}</span>}
                 </li>
               );
             })}
           </ul>
           {tickedIds.length > 0 ? (
             <div className="flex flex-wrap items-center gap-2 border-t border-[var(--border)] bg-[var(--surface-alt)] p-3">
-              <span className="text-sm font-semibold text-foreground">{tickedIds.length.toLocaleString("en-US")} selected</span>
+              <span className="text-sm text-foreground">{tickedIds.length.toLocaleString("en-US")} selected</span>
               <span className="ml-auto flex gap-2">
                 <BulkResolve ids={tickedIds} resolution="not_mine" noun="items" label="Not ours" variant="outline" />
                 <BulkResolve ids={tickedIds} resolution="confirm_client" noun="clients" label={`Mark ${tickedIds.length.toLocaleString("en-US")} as mine`} />
               </span>
             </div>
           ) : shown.length > SHOWN ? (
-            <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-xs text-muted-foreground">The first {SHOWN} of {shown.length.toLocaleString("en-US")}; search to narrow.</p>
+            <p className="m-0 border-t border-[var(--border)] px-3 py-2 text-sm text-foreground">The first {SHOWN} of {shown.length.toLocaleString("en-US")}; search to narrow.</p>
           ) : null}
         </div>
 
         {/* The question */}
-        <div className="order-1 min-w-0 overflow-y-auto lg:order-none">
+        <div className="order-1 min-h-0 min-w-0 overflow-y-auto lg:order-none">
           {!items.length ? <div className="p-6"><EmptyState title="Nothing to review here" hint="Every item in this list has been decided." action={<Button asChild><Link href={backHref}>Back</Link></Button>} /></div>
             : !current && words.length && left > 0 ? <div className="p-6"><EmptyState title={shown.length ? "Nothing left that matches" : "Nothing matches"} hint={`${left.toLocaleString("en-US")} still wait outside this search.`} action={<Button type="button" onClick={() => search("")}>Clear the search</Button>} /></div>
             : !current ? <div className="p-6"><EmptyState title="All done" hint={`${(total - left).toLocaleString("en-US")} answered.`} action={<Button asChild><Link href={backHref} onClick={() => router.refresh()}>Back</Link></Button>} /></div>
@@ -189,6 +190,12 @@ export function ReviewWorkspace({ items, startAt, source, backHref, readOnly, in
       </div>
     </div>
   );
+}
+
+/** "Done for now", on the page's title line (owner 2026-11-10): back to the list, refreshed. */
+export function DoneForNow({ href }: { href: string }) {
+  const router = useRouter();
+  return <Button asChild variant="outline"><Link href={href} onClick={() => router.refresh()}>Done for now</Link></Button>;
 }
 
 type Loaded = { state: "loading" } | { state: "ready"; detail: ItemDetail } | { state: "gone"; message: string };
@@ -224,13 +231,22 @@ function Question({ item, readOnly, register, onDone, onSkip, hasNext }: { item:
     }
   }, [busy, readOnly, onDone]);
 
+  // Owner 2026-11-10: who this is about as the title, why it waits under it, the kind and the wait as one quiet
+  // line above; its own page is a button, not a link lost at the far edge.
   const head = (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <StatusChip tone="warning">{KIND_META[item.kind].label}</StatusChip>
-      <span>{item.about}</span>
-      <span>· waiting {ageShort(item.ageDays)} · {item.who}</span>
-      <Link href={item.href} className="ml-auto font-medium text-[var(--accent-ink)] hover:underline">Its page · the row as sent</Link>
-    </div>
+    <header className="flex items-start gap-4 border-b border-[var(--border)] pb-4">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 text-sm text-foreground">
+          <StatusChip tone={KIND_META[item.kind].tone}>{KIND_META[item.kind].label}</StatusChip>
+          <span>Waiting {ageShort(item.ageDays)}</span>
+          <span aria-hidden="true">·</span>
+          <span>{item.who}</span>
+        </div>
+        <h2 className="m-0 mt-2 truncate text-card-title text-[var(--ink)]" title={item.about}>{item.about}</h2>
+        <p className="m-0 mt-0.5 text-sm text-muted-foreground">{item.why}</p>
+      </div>
+      <Button asChild variant="outline" size="sm" className="shrink-0"><Link href={item.href}>Open its page</Link></Button>
+    </header>
   );
 
   if (loaded.state === "loading") return <div className="flex flex-col gap-4 p-6">{head}<LoadingRows rows={4} columns={3} /></div>;
@@ -243,32 +259,23 @@ function Question({ item, readOnly, register, onDone, onSkip, hasNext }: { item:
     );
   }
   const detail = loaded.detail;
-  const footer = (
-    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-      <span>An answer saves and opens the next.</span>
-      {hasNext && <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={onSkip}>Skip <Kbd>S</Kbd></Button>}
-    </div>
-  );
+  const footer = hasNext ? <div className="flex border-t border-[var(--border)] pt-4"><Button type="button" variant="ghost" onClick={onSkip}>Skip</Button></div> : null;
 
   if (detail.kind === "no-sale" && "queue" in detail) return <div className="flex flex-col gap-5 p-4 sm:p-6">{head}<NoSale detail={{ kind: "no-sale", queue: detail.queue }} busy={busy} readOnly={readOnly} register={register} save={save} />{footer}</div>;
   if (detail.kind === "pick-client") return <div className="flex flex-col gap-5 p-4 sm:p-6">{head}<PickClient detail={detail} busy={busy} readOnly={readOnly} register={register} save={save} />{footer}</div>;
-  // Every other kind: its question in words, then the item's own Decide form in place (no number keys).
+  // Every other kind: the item's own Decide form in place.
   return (
     <div className="flex flex-col gap-5 p-4 sm:p-6">{head}
-      <h2 className="m-0 text-card-title text-[var(--ink)]">{item.why}</h2>
       <ItemDecide detail={detail} nextHref={null} listHref={item.href} readOnly={readOnly} inline={{ hasNext, onDone: () => onDone("Saved"), onSkip }} />
     </div>
   );
 }
 
-/** The key that presses an answer. There is no kit key cap (components/ui), so this one is drawn from tokens only. */
-const Kbd = ({ children }: { children: ReactNode }) => <kbd className="rounded-badge border border-[var(--border)] border-b-2 bg-[var(--surface)] px-1.5 font-mono text-xs text-muted-foreground">{children}</kbd>;
-
-/** An answer button (the kit's 36px Button, full width) with its key on the right. */
+/** An answer button (the kit's 36px Button, full width). */
 function AnswerButton({ answer, busy }: { answer: Answer; busy: boolean }) {
   return (
-    <Button type="button" variant={answer.primary ? "default" : "outline"} disabled={busy || answer.disabled} onClick={answer.run} className="w-full justify-between">
-      <span className="truncate">{answer.label}</span><Kbd>{answer.key}</Kbd>
+    <Button type="button" variant={answer.primary ? "default" : "outline"} disabled={busy || answer.disabled} onClick={answer.run} className="w-full justify-start">
+      <span className="truncate">{answer.label}</span>
     </Button>
   );
 }
@@ -371,7 +378,6 @@ function PickClient({ detail, busy, readOnly, register, save }: { detail: Extrac
     { key: "0", label: "None of them: keep it as a new client", disabled: readOnly, run: () => pick(null, "") },
   ];
   useEffect(() => register(list));
-  const mark = (outcome: FieldOutcome | undefined) => (outcome === "match" ? "text-[var(--success-ink)]" : outcome === "mismatch" ? "text-[var(--error-ink)]" : outcome === "partial" ? "text-[var(--warning-ink)]" : "text-muted-foreground");
   const value = (field: MatchField, c: (typeof detail.candidates)[number]) =>
     field === "surname" ? c.name : field === "dob" ? (c.dob ? fileDay(c.dob) : "—") : field === "phone" ? c.phone ?? "—" : field === "premium" ? dollars(c.premiumCents) : dollars(c.faceCents);
 
@@ -385,10 +391,10 @@ function PickClient({ detail, busy, readOnly, register, save }: { detail: Extrac
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {detail.candidates.slice(0, 9).map((c, i) => (
             <div key={c.index} className={cn(cardInset, "flex flex-col gap-1.5 p-3", c === best && "border-[var(--primary)]")}>
-              <span className="truncate text-sm font-semibold text-foreground">{c.name || (c.type === "deal_flow" ? "A sale" : "An application")}</span>
+              <span className="whitespace-nowrap text-sm font-medium text-foreground">{c.name || (c.type === "deal_flow" ? "A sale" : "An application")}</span>
               <span className="text-xs text-muted-foreground">{c.type === "deal_flow" ? "sale" : "application"} of {fileDay(c.date)} · score {c.score}</span>
               <ul className="m-0 flex list-none flex-col gap-0.5 p-0 text-xs">
-                {FIELD_WORDS.map(([field, word]) => <li key={field} className={mark(c.fields[field])}>{c.fields[field] === "match" ? "✓" : c.fields[field] === "mismatch" ? "✕" : "~"} {word} {value(field, c)}</li>)}
+                {FIELD_WORDS.map(([field, word]) => <li key={field} className="text-foreground">{c.fields[field] === "match" ? "✓" : c.fields[field] === "mismatch" ? "✕" : "~"} {word} {value(field, c)}</li>)}
               </ul>
               <AnswerButton answer={list[i]} busy={busy} />
             </div>

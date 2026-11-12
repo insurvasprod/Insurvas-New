@@ -33,6 +33,21 @@ async function context(write = false, productCode: string | null = null) {
   const refused = await refuseNarrowInAgency(auth.context, "Lead import");
   if (refused) return refused;
   const db = getSupabaseServiceClient() as unknown as { from(table: string): LooseQuery };
+  // The saved column maps are per vendor AND product. Every product's are read (newest first) and kept for
+  // the template's product below, so the read need not wait for the template to name it.
+  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).order("updated_at", { ascending: false });
+  // Independent tenant-scoped reads, so one round trip — beside the template, which none of them needs.
+  const reads = Promise.all([
+    listPipelines(auth.context.tenantId),
+    // Drafts too: "New campaign" on Vendors & campaigns creates a draft, and a tenant who just made
+    // one to import into must find it here. The screen says a draft is not dialled until activated.
+    db.from("tenant_campaigns").select("id, vendor_id, name, status").eq("tenant_id", auth.context.tenantId).in("status", ["draft", "active", "paused"]),
+    db.from("tenant_lead_vendors").select("id, name, lead_type, status").eq("tenant_id", auth.context.tenantId).order("name"),
+    readMappings("id, vendor_id, product_code, mapping, updated_at, date_order"),
+    !write ? outboundLimitSnapshot(auth.context.tenantId, auth.entitlement) : Promise.resolve(null),
+  ]);
+  // Awaited after the template; this only keeps a refusal there from leaving it unobserved.
+  reads.catch(() => undefined);
   let picked: Awaited<ReturnType<typeof importTemplateFor>>;
   try {
     picked = await importTemplateFor(auth.context.tenantId, auth.context.userId, productCode);
@@ -42,18 +57,7 @@ async function context(write = false, productCode: string | null = null) {
     throw error;
   }
   const template = picked.template;
-  // The saved column maps are per vendor AND product.
-  const readMappings = (columns: string) => db.from("tenant_import_mappings").select(columns).eq("tenant_id", auth.context.tenantId).eq("product_code", template.template.product_code).order("updated_at", { ascending: false });
-  // Independent tenant-scoped reads, so one round trip.
-  const [pipelines, campaigns, vendors, withDateOrder, limits] = await Promise.all([
-    listPipelines(auth.context.tenantId),
-    // Drafts too: "New campaign" on Vendors & campaigns creates a draft, and a tenant who just made
-    // one to import into must find it here. The screen says a draft is not dialled until activated.
-    db.from("tenant_campaigns").select("id, vendor_id, name, status").eq("tenant_id", auth.context.tenantId).in("status", ["draft", "active", "paused"]),
-    db.from("tenant_lead_vendors").select("id, name, lead_type, status").eq("tenant_id", auth.context.tenantId).order("name"),
-    readMappings("id, vendor_id, product_code, mapping, updated_at, date_order"),
-    !write ? outboundLimitSnapshot(auth.context.tenantId, auth.entitlement) : Promise.resolve(null),
-  ]);
+  const [pipelines, campaigns, vendors, withDateOrder, limits] = await reads;
   // Manual list imports are agent-owned leads, so they enter the default marketing pipeline. A
   // single pipeline also keeps a friendly stage name unambiguous when publisher/affiliate
   // pipelines happen to use the same stage labels.
@@ -62,7 +66,8 @@ async function context(write = false, productCode: string | null = null) {
   const pipeline = pipelines.find((item) => item.partner_type === null && item.is_default) ?? pipelines.find((item) => item.partner_type === "marketing" && item.is_default) ?? pipelines.find((item) => item.is_default) ?? pipelines[0];
   // `date_order` arrives with 20260924343000. Before it, the saved maps are read as they always were.
   const mappings = withDateOrder.error && isMissingColumn(withDateOrder.error) ? await readMappings("id, vendor_id, product_code, mapping, updated_at") : withDateOrder;
-  return { auth, template, products: picked.products, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: mappings.error ? [] : mappings.data as MappingOption[], limits };
+  const productMappings = mappings.error ? [] : (mappings.data as MappingOption[] | null)?.filter((mapping) => mapping.product_code === template.template.product_code) as MappingOption[];
+  return { auth, template, products: picked.products, stages: pipeline?.stages ?? [], campaigns: campaigns.error ? [] : campaigns.data as CampaignOption[], vendors: vendors.error ? [] : vendors.data as VendorOption[], mappings: productMappings, limits };
 }
 
 export async function GET(request: NextRequest) {

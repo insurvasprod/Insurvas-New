@@ -17,10 +17,11 @@ export function RowAsSentTable({ row }: { row: RowAsSent }) {
         <tbody>
           {row.columns.map((column) => (
             <tr key={`${column.column}:${column.header}`}>
-              <td className="font-mono text-xs text-muted-foreground">{column.column}</td>
-              <td>{column.header}</td>
-              <td className="text-foreground">{column.value || <span className="text-muted-foreground">—</span>}</td>
-              <td className="text-muted-foreground">{column.readAs ? column.readAs.replaceAll("_", " ") : "kept, not read"}</td>
+              {/* Owner 2026-11-11: one line, one text colour; only "—" is muted. */}
+              <td className="whitespace-nowrap font-mono font-medium text-foreground">{column.column}</td>
+              <td className="whitespace-nowrap">{column.header}</td>
+              <td className="whitespace-nowrap">{column.value || <span className="text-muted-foreground">—</span>}</td>
+              <td className="whitespace-nowrap">{column.readAs ? column.readAs.replaceAll("_", " ") : "kept, not read"}</td>
             </tr>
           ))}
         </tbody>

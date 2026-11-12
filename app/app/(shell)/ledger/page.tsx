@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { DataInPage } from "@/components/app/data-in/data-in-page";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ACCOUNTS_PENDING_MESSAGE, loadAccounts } from "@/lib/ingestion/carrierAccountsStore";
 import { LEDGER_PENDING_MESSAGE, loadLedger, statementLinesAsLedger } from "@/lib/ingestion/commissionLedgerStore";
@@ -201,9 +202,9 @@ export default async function LedgerPage({ searchParams }: { searchParams: Promi
 
       <StatStrip label="Reported commission">
         <StatTile label="Entries" value={reportedTotals.entries.toLocaleString()} footnote={note(`from ${plural(statementsBehindEntries, "statement", "statements")}`)} />
-        <StatTile label="Gross commission" value={wholeMoney(reportedTotals.grossCents)} valueTone={reportedTotals.grossCents > 0 ? "good" : undefined} footnote={note(reportedTotals.adjustmentsCents !== 0 ? `incl. ${wholeMoney(reportedTotals.adjustmentsCents)} adjustments` : "advances and commission received")} />
+        <StatTile label="Gross commission" value={wholeMoney(reportedTotals.grossCents)} footnote={note(reportedTotals.adjustmentsCents !== 0 ? `incl. ${wholeMoney(reportedTotals.adjustmentsCents)} adjustments` : "advances and commission received")} />
         <StatTile label="Advances" value={wholeMoney(reportedTotals.advancesCents)} footnote={note("paid ahead of earning")} />
-        <StatTile label="Chargebacks" value={wholeMoney(reportedTotals.chargebacksCents)} valueTone={reportedTotals.chargebacksCents !== 0 ? "danger" : undefined} footnote={note(chargebackLines ? `${plural(chargebackLines, "line", "lines")} taken back` : "none reported")} />
+        <StatTile label="Chargebacks" value={wholeMoney(reportedTotals.chargebacksCents)} footnote={reportedTotals.chargebacksCents !== 0 ? <StatusChip tone="danger">{chargebackLines ? `${plural(chargebackLines, "line", "lines")} taken back` : "Taken back"}</StatusChip> : note(chargebackLines ? `${plural(chargebackLines, "line", "lines")} taken back` : "none reported")} />
       </StatStrip>
     </>
   );

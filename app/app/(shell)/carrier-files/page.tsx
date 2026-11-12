@@ -73,12 +73,21 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
   const readOnly = guard.entitlement.access === "read_only";
   // ?view=missing was the Missing tab: it is the Missing chip now.
   const filter: FileFilter = FILE_FILTERS.find((f) => f.key === (asked === "missing" ? "missing" : shown))?.key ?? "all";
+  // Perf pass 2026-11-09: the missing files and the agents' findings need nothing of the list, so they are read
+  // beside it; they are used (and a failure raised) only when the list is available, as before.
+  const settle = <T,>(promise: Promise<T>) => promise.then((value) => ({ ok: true as const, value }), (error: unknown) => ({ ok: false as const, error }));
+  const used = <T,>(read: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+    if (!read.ok) throw read.error;
+    return read.value;
+  };
+  const missingRead = settle(loadMissingFiles(tenantId));
+  const findingsRead = settle(listFindings(tenantId));
   const [list, carriers, unmapped] = await Promise.all([listCarrierFiles(tenantId), fileCarrierChoices(tenantId), listOpenUnmappedStatuses(tenantId)]);
   const [stages, missing] = list.available
-    ? await Promise.all([listFileStages(tenantId, list.files), loadMissingFiles(tenantId)])
+    ? await Promise.all([listFileStages(tenantId, list.files), missingRead.then(used)])
     : [null, { available: false, missing: [] }];
   // LA-4.19: what the agents raised in the runs — Problems found, counted in Needs you.
-  const findings = list.available ? await listFindings(tenantId) : null;
+  const findings = list.available ? used(await findingsRead) : null;
   const openFindings = findings?.findings.filter((f) => f.status === "open").length ?? 0;
 
   const blocked = !list.available ? CARRIER_FILES_PENDING_MESSAGE : readOnly ? "Receiving files is paused while the account is read-only." : null;
@@ -130,14 +139,15 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
       {!missing.available ? <EmptyState title="Missing files are not available yet" hint={BUCKET_PENDING_MESSAGE} />
         : missing.missing.length === 0 ? <EmptyState title="Nothing is late" hint="Every carrier with a cadence has sent its file on time." /> : (
           <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-            <thead><tr><th className="w-[200px]">Carrier</th><th className="w-[170px]">Cadence</th><th className="w-[200px]">Expected</th><th>Why</th><th className="w-[120px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+            <thead><tr><th>Carrier</th><th>Cadence</th><th>Expected</th><th>Status</th><th className="text-right"><span className="sr-only">Actions</span></th></tr></thead>
             <PagedBody>
+              {/* One line per row (owner 2026-11-11): the date plain, the lateness in the one chip, the reasoning its tooltip. */}
               {missing.missing.map((item) => (
                 <tr key={item.id}>
-                  <td><span className="block whitespace-normal break-words font-semibold leading-snug text-foreground">{item.carrierName}</span></td>
-                  <td>{CADENCE[item.cadence] ?? item.cadence}</td>
-                  <td>{item.due ? <StatusChip tone={item.daysLate > 2 ? "danger" : "warning"}>{fileDay(item.due)} · {item.daysLate} {item.daysLate === 1 ? "day" : "days"} late</StatusChip> : "—"}</td>
-                  <td><span className="block whitespace-normal break-words leading-snug">{item.reasoning}</span></td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{item.carrierName}</td>
+                  <td className="whitespace-nowrap">{CADENCE[item.cadence] ?? item.cadence}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{item.due ? fileDay(item.due) : "—"}</td>
+                  <td>{item.due ? <StatusChip tone={item.daysLate > 2 ? "danger" : "warning"} title={item.reasoning}>{item.daysLate} {item.daysLate === 1 ? "day" : "days"} late</StatusChip> : <StatusChip tone="warning" title={item.reasoning}>Late</StatusChip>}</td>
                   <td className="text-right">{upload_({ label: "Upload", size: "sm", variant: "outline", preset: { carrierId: item.carrierId } })}</td>
                 </tr>
               ))}
@@ -173,9 +183,10 @@ export default async function CarrierFilesPage({ searchParams }: { searchParams:
             <StatStrip label="Carrier file totals">
               <StatTile label="Files in use" value={n(current.length)} footnote={replaced ? `${n(replaced)} more replaced by a corrected file` : [["policies", "policy"], ["commissions", "commission"], ["new_business", "new business"]].map(([type, word]) => [current.filter((file) => file.fileType === type).length, word] as const).filter(([count], index) => index < 2 || count > 0).map(([count, word]) => `${n(count)} ${word}`).join(" · ")} />
               {/* Files, as the chip counts them; the rows they hold are the footnote (walk 2026-11-02: 861 beside 10 read as a disagreement). */}
-              <StatTile label="Need you" value={n(counts.needs)} valueTone={counts.needs ? "warning" : undefined} footnote={`${n(needsYou)} ${needsYou === 1 ? "row" : "rows"} waiting on a person${openFindings ? ` · ${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found` : ""}`} href={chipHref("needs")} />
+              {/* Owner 2026-11-11: plain figures; a tile that is a problem says so in one chip in its footnote. */}
+              <StatTile label="Need you" value={n(counts.needs)} footnote={counts.needs ? <StatusChip tone="warning" title={openFindings ? `${n(openFindings)} ${openFindings === 1 ? "problem" : "problems"} found` : undefined}>{n(needsYou)} {needsYou === 1 ? "row" : "rows"} waiting</StatusChip> : "nothing waiting on a person"} href={chipHref("needs")} />
               <StatTile label="Waiting for a layout" value={n(waiting)} footnote="read once Insurvas sets up the layout" />
-              <StatTile label="Failed" value={n(counts.failed)} valueTone={counts.failed ? "warning" : undefined} footnote="cannot be read, see the reason" href={chipHref("failed")} />
+              <StatTile label="Failed" value={n(counts.failed)} footnote={counts.failed ? <StatusChip tone="warning" title="Cannot be read, see the reason">Cannot be read</StatusChip> : "cannot be read, see the reason"} href={chipHref("failed")} />
               <StatTile label="Duplicates skipped" value={n(list.skips.length)} footnote="already received" />
             </StatStrip>
           )}

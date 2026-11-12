@@ -118,20 +118,24 @@ The pages also broke the foundation rules:
 
 ### Accounting
 
-The tabs are **Start here · Partner payouts · Producer pay · Bills, bank & tax**.
+Round 7 (owner pick 7·A "A tab per page, rows open a dialog", 2026-11-10;
+`docs/la4/mockups-r7/accounting.html` §7) replaced the 2026-11-03 form. The tabs are **Books · Bank ·
+Bills & expenses · Partner payouts · Producer pay · Tax**, held in the address (`?tab=books|bank|bills|
+payouts|producers|tax`, default Books). Settings-search anchors map to them (`SECTION_TAB`).
 
-- **Start here:** how your P&L counts money (accrual or cash, and the year start) and acquisition or
-  overhead per category, with the consequence sentence. Persistency month and the sample size are
-  under Advanced.
-- **Partner payouts:** "When a payout run is ready" comes first (wait for review, or publish to the
-  partner). The dispute tolerance is under Advanced.
-- **Producer pay:** yes/no choices are switches and three-way choices are segmented controls. The
-  recovery cap shows only with "Recover a capped share".
-- **Bills, bank & tax:**
-  - The invoice tolerance moved here.
-  - Each bank account is a row that opens Bank deposits. The match tolerances are under Advanced.
-  - The tax notice stays as plain text, never a card.
-- Each of the three safety limits sits beside its setting, with its reason behind the (i).
+- **Each tab is a table:** Setting · Now (the value in words) · Used by (linked) · Changed (who and
+  when from `accounting_setting_change`, else "yours" / "Insurvas's") · Edit ›.
+- **A row opens its dialog** (md; lg for the nine expense categories and for "below zero"). It holds
+  the explanation, the control and its error line, and saves only the keys it changed (the PATCH
+  takes a partial body). The toast is "Saved. Recorded figures are unchanged." with Undo.
+- **Rows that hold two values are one dialog:** Pay partners (cadence and draft days), below zero
+  (the share with its choice), Default split (the % and Of).
+- **Widening who sees tax IDs to bookkeepers asks first** (a confirm).
+- **The four safety limits are lock rows** that never open; the reason is behind the (i). The tax
+  notice is one of them.
+- No save bar and no leave guard. ⋯ holds History (owner only), and each tab's foot links to it.
+- **Read-only (bookkeeper):** the rows read the same, the last column says "Only the owner changes
+  these", and a dialog shows the value with Close only.
 
 ### Retention
 

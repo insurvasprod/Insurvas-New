@@ -5,12 +5,38 @@ import { audit } from "@/lib/audit/log";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { PostKeyConflictError, rotatePostKey, setPostKeyActive, setPostKeyCampaign, updatePostKeyFieldMap } from "@/lib/leadPost/keys";
 import { SchemaPendingError } from "@/lib/leadPost/schemaGap";
+import { afterRotate, endGrace, leadPostR8Ready, makeInstructionsLink, markInstructionsSent, updateVendorSettings } from "@/lib/leadPost/boardStore";
 
 const ROLES = ["owner"] as const;
 
 const patchSchema = z
   .object({
-    action: z.enum(["rotate", "activate", "deactivate", "field_map", "campaign"]),
+    action: z.enum(["rotate", "activate", "deactivate", "field_map", "campaign", "settings", "instructions_sent", "instructions_link"]),
+    // With action "rotate": hours the old key keeps working (round 8; 0 = stops now).
+    graceHours: z.number().int().min(0).max(72).optional(),
+    // With action "settings" (round 8, needs 20261112100100).
+    settings: z
+      .object({
+        priceCents: z.number().int().min(0).max(10_000_000).nullable().optional(),
+        dailyCap: z.number().int().min(1).max(100_000).nullable().optional(),
+        postingHours: z
+          .object({
+            days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+            start: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/),
+            end: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/),
+            timeZone: z.string().min(1).max(64),
+          })
+          .nullable()
+          .optional(),
+        callbackUrl: z.string().trim().max(500).nullable().optional(),
+        callbackEvents: z.array(z.enum(["accepted", "refused"])).max(2).optional(),
+        notes: z.string().max(2000).optional(),
+        testMode: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    // With action "instructions_sent": who the owner emailed them to.
+    email: z.string().trim().email().max(320).nullable().optional(),
     fieldMap: z.record(z.string().trim().min(1).max(120), z.string().trim().min(1).max(120)).optional(),
     // A note per mapped field, keyed by our field. Sent with action "field_map".
     fieldNotes: z.record(z.string().trim().min(1).max(120), z.string().trim().max(200)).optional(),
@@ -31,18 +57,50 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid change" }, { status: 400 });
 
   try {
+    if (parsed.data.action === "settings") {
+      if (!parsed.data.settings) return NextResponse.json({ error: "Send the settings" }, { status: 400 });
+      await updateVendorSettings(auth.context.tenantId, id, parsed.data.settings);
+      await audit({
+        actorType: "tenant",
+        actorId: auth.context.userId,
+        action: "tenant.post_key_updated",
+        targetType: "tenant_vendor_post_keys",
+        targetId: id,
+        // Price, cap and test mode decide what a vendor can bill; the callback address is where we send outcomes.
+        metadata: { settings: Object.keys(parsed.data.settings), testMode: parsed.data.settings.testMode ?? null, priceCents: parsed.data.settings.priceCents ?? null },
+        request,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (parsed.data.action === "instructions_sent") {
+      await markInstructionsSent(auth.context.tenantId, id, parsed.data.email ?? null);
+      return NextResponse.json({ ok: true });
+    }
+
+    if (parsed.data.action === "instructions_link") {
+      const token = await makeInstructionsLink(auth.context.tenantId, id);
+      await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.post_key_updated", targetType: "tenant_vendor_post_keys", targetId: id, metadata: { instructionsLink: true }, request });
+      // The token is returned once; only its hash is kept.
+      return NextResponse.json({ url: `${request.nextUrl.origin}/api/post/${auth.context.tenantId}/guide/${token}` });
+    }
+
     if (parsed.data.action === "rotate") {
+      const graceHours = parsed.data.graceHours ?? 0;
+      // A grace window needs 20261112100100; refused before the rotation, so the old key never stops unexpectedly.
+      if (graceHours > 0 && !(await leadPostR8Ready())) throw new SchemaPendingError();
       const minted = await rotatePostKey({ tenantId: auth.context.tenantId, userId: auth.context.userId, keyId: id });
+      const { graceUntil } = await afterRotate(auth.context.tenantId, id, minted.record.id, graceHours);
       await audit({
         actorType: "tenant",
         actorId: auth.context.userId,
         action: "tenant.post_key_rotated",
         targetType: "tenant_vendor_post_keys",
         targetId: minted.record.id,
-        metadata: { replacedKeyId: id, keyPrefix: minted.record.keyPrefix, vendorId: minted.record.vendorId },
+        metadata: { replacedKeyId: id, keyPrefix: minted.record.keyPrefix, vendorId: minted.record.vendorId, graceUntil },
         request,
       });
-      return NextResponse.json({ key: minted.key, record: minted.record });
+      return NextResponse.json({ key: minted.key, record: minted.record, graceUntil });
     }
 
     if (parsed.data.action === "field_map") {
@@ -80,6 +138,8 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
 
     const isActive = parsed.data.action === "activate";
     const record = await setPostKeyActive({ tenantId: auth.context.tenantId, keyId: id, isActive });
+    // Revoking also ends any grace window an older key of the vendor still has.
+    if (!isActive) await endGrace(auth.context.tenantId, id);
     await audit({
       actorType: "tenant",
       actorId: auth.context.userId,

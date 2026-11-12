@@ -1,5 +1,6 @@
 "use client";
 
+import { DismissButton } from "@/components/app/route-sheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useRef, useState, useTransition, type FormEvent } from "react";
@@ -18,9 +19,10 @@ import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
-import { DELETION_VIA, EVIDENCE_NOTE_MIN, METHOD_LABELS, STATUS_LABELS, VIA_LABELS, holdRemaining, type DeletionStatus, type VerificationMethod } from "@/lib/compliance/dataSubject";
+import { DELETION_VIA, EVIDENCE_NOTE_MIN, METHOD_LABELS, VIA_LABELS, holdRemaining, type VerificationMethod } from "@/lib/compliance/dataSubject";
 import type { DeletionRequest } from "@/lib/compliance/dataSubjectStore";
-import { DELETION_TONE, deletionWho } from "@/lib/compliance/deletionView";
+import { OPEN_DELETION, deletionChip, deletionName, deletionNext, deletionQueue, type DeletionQueue } from "@/lib/compliance/deletionView";
+import { formatPhone } from "@/lib/compliance/evidenceGaps";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { dayMonthYear } from "@/lib/format/dates";
@@ -41,10 +43,9 @@ import { ComplianceSlot } from "@/components/app/compliance/compliance-slot";
  *                                    step's action and More, each a confirm with its fields; tabs What we hold
  *                                    · Audit trail.
  */
-export type DeletionQueue = "open" | "ready" | "done" | "all";
+export type { DeletionQueue };
 /** "16 Oct 2026", as every Compliance step dates things. */
 const day = (iso: string | null) => (iso ? dayMonthYear(iso) : "—");
-const OPEN = new Set(["received", "verifying", "verified", "scheduled"]);
 
 async function send(url: string, init: RequestInit) {
   const res = await fetch(url, init);
@@ -64,17 +65,16 @@ export function DeletionRequestsBoard({ requests, holdDays, queue, mayPerform, r
   const pageSize = useFittingPageSize(480, 45);
   const [now] = useState(() => new Date());
   const isDue = (r: DeletionRequest) => r.status === "scheduled" && holdRemaining(r.scheduledPurgeAt, now).due;
+  // The tab's requests oldest first (the clock started the day each arrived), as the request page's ‹ › walk them.
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     const digits = needle.replace(/\D/g, "");
-    return requests.filter((r) =>
-      (queue === "all" || (queue === "open" && OPEN.has(r.status)) || (queue === "ready" && isDue(r)) || (queue === "done" && !OPEN.has(r.status))) &&
-      (!needle || [r.requesterName, r.email].some((v) => v?.toLowerCase().includes(needle)) || (digits.length >= 3 && (r.phoneDigits ?? "").includes(digits))));
-  }, [requests, queue, q]); // eslint-disable-line react-hooks/exhaustive-deps
+    return deletionQueue(requests, queue, now).filter((r) =>
+      !needle || [r.requesterName, r.email].some((v) => v?.toLowerCase().includes(needle)) || (digits.length >= 3 && (r.phoneDigits ?? "").includes(digits)));
+  }, [requests, queue, q, now]);
   const shown = paginate(visible, page, pageSize);
-  const openCount = requests.filter((r) => OPEN.has(r.status)).length;
+  const openCount = requests.filter((r) => OPEN_DELETION.has(r.status)).length;
   const due = requests.filter(isDue).length;
-  const toVerify = requests.filter((r) => r.status === "received" || r.status === "verifying").length;
   const href = (next: DeletionQueue) => (next === "open" ? "/app/deletion-requests" : `/app/deletion-requests?queue=${next}`);
   return (
     <>
@@ -88,12 +88,11 @@ export function DeletionRequestsBoard({ requests, holdDays, queue, mayPerform, r
           ]} />
       </ComplianceSlot>
       {!readOnly ? <ComplianceSlot slot="corner"><Button asChild><Link href="/app/deletion-requests/new"><Plus aria-hidden="true" />Log a request</Link></Button></ComplianceSlot> : null}
-      {/* What waits on someone goes to the bell (owner 2026-11-02); the rail's badge counts it too. */}
-      {due ? <Callout tone="warning" title={`${due} ${due === 1 ? "hold is" : "holds are"} over`}>{mayPerform ? "Delete and issue the certificate from Ready to delete." : "The agency owner can delete now."}</Callout>
-        : toVerify ? <Callout tone="warning" title={`${toVerify} ${toVerify === 1 ? "request waits" : "requests wait"} for identity to be verified`}>{mayPerform ? `Verifying starts the ${holdDays}-day hold.` : "The agency owner verifies who it is."}</Callout> : null}
+      {/* What waits on someone goes to the bell (owner 2026-11-02) and the rail's badge; on the page it is the
+          tabs' counts, the Ready to delete tile's chip and each row's Next step (r7 5·A). No notice card. */}
       <StatStrip label="Deletion requests">
         <StatTile label="Open" value={String(openCount)} footnote="not yet deleted" href={href("open")} />
-        <StatTile label="Ready to delete" value={String(due)} valueTone={due ? "warning" : undefined} footnote="hold over" href={href("ready")} />
+        <StatTile label="Ready to delete" value={String(due)} footnote={due ? <StatusChip tone="warning">Hold over</StatusChip> : mayPerform ? "hold over" : "the agency owner deletes"} href={href("ready")} />
         <StatTile label="Deleted" value={String(requests.filter((r) => r.status === "completed").length)} footnote="certificate issued" href={href("done")} />
         <StatTile label="Hold" value={`${holdDays} days`} footnote="after verification" />
       </StatStrip>
@@ -106,18 +105,24 @@ export function DeletionRequestsBoard({ requests, holdDays, queue, mayPerform, r
         ) : visible.length === 0 ? (
           q ? <NoMatches noun="requests" onClear={() => setQ("")} /> : <EmptyState title={queue === "ready" ? "No hold is over" : "Nothing here"} hint="Every request stays under All." />
         ) : (
-          <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-            <thead><tr><th>Received</th><th>Who</th><th>Status</th><th>Next</th><th className="text-right"><span className="sr-only">Open</span></th></tr></thead>
+          // One line a request, one chip, the next step a verb (r7 5·A). The whole row opens the request; nothing
+          // deletes from the list. Email is the name's tooltip; Phone keeps a column, as the DNC entry is kept by number.
+          <table className="portal-lead-table w-full min-w-[680px] text-left text-sm">
+            <thead><tr><th>Person</th><th>Phone</th><th>Received</th><th>Status</th><th>Next step</th></tr></thead>
             <tbody>
-              {shown.rows.map((r) => (
-                <tr key={r.id}>
-                  <td className="whitespace-nowrap tabular-nums">{day(r.receivedAt)}</td>
-                  <td className="max-w-[260px] truncate" title={deletionWho(r)}>{deletionWho(r)}</td>
-                  <td><StatusChip tone={DELETION_TONE[r.status as DeletionStatus]}>{STATUS_LABELS[r.status as DeletionStatus] ?? r.status}</StatusChip></td>
-                  <td>{r.status === "scheduled" ? holdRemaining(r.scheduledPurgeAt, now).label : r.status === "verifying" || r.status === "received" ? "Verify who it is" : r.status === "completed" ? "Certificate issued" : "—"}</td>
-                  <td className="text-right"><Button size="sm" variant="outline" asChild><Link href={`/app/deletion-requests/${r.id}`}>Open</Link></Button></td>
-                </tr>
-              ))}
+              {shown.rows.map((r) => {
+                const chip = deletionChip(r, now);
+                const nextStep = deletionNext(r, now);
+                return (
+                  <tr key={r.id} className="cursor-pointer" onClick={(e) => { if (!(e.target as HTMLElement).closest("a")) router.push(`/app/deletion-requests/${r.id}`); }}>
+                    <td className="max-w-[260px] truncate whitespace-nowrap font-medium text-foreground" title={[r.requesterName, r.email].filter(Boolean).join(" · ") || undefined}><Link href={`/app/deletion-requests/${r.id}`} className="hover:underline">{deletionName(r)}</Link></td>
+                    <td className={cn("whitespace-nowrap tabular-nums", !r.phoneDigits && "text-muted-foreground")}>{r.phoneDigits ? formatPhone(r.phoneDigits) : "—"}</td>
+                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{day(r.receivedAt)}</td>
+                    <td className="whitespace-nowrap"><StatusChip tone={chip.tone}>{chip.label}</StatusChip></td>
+                    <td className="whitespace-nowrap" title={nextStep.sentence}>{nextStep.verb} ›</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -133,13 +138,12 @@ export function NewDeletionRequestForm() {
   const blank = { phone: "", email: "", requester_name: "", received_via: "phone", received_at: new Date().toISOString().slice(0, 10) };
   const [f, setF] = useState(blank);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const scope = useRef<HTMLFormElement>(null);
   const dirty = Boolean(f.phone || f.email || f.requester_name);
   const save = async (): Promise<boolean> => {
-    if (!f.phone.trim() && !f.email.trim()) { setError("Enter the phone number or the email to delete."); return false; }
+    // A problem is a toast, never a notice on the page (r7 2026-11-11).
+    if (!f.phone.trim() && !f.email.trim()) { notify.block("Enter the phone number or the email to delete."); return false; }
     setBusy(true);
-    setError(null);
     try {
       const body = await send("/api/app/compliance/deletions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: f.phone || null, email: f.email || null, requester_name: f.requester_name || null, received_via: f.received_via, received_at: f.received_at ? new Date(`${f.received_at}T12:00:00Z`).toISOString() : null }) });
       notify.done("Request logged. Verify who it is next.");
@@ -147,7 +151,7 @@ export function NewDeletionRequestForm() {
       router.push(`/app/deletion-requests/${body.id}`);
       return true;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "That didn't save");
+      notify.block(err instanceof Error ? err.message : "That didn't save", { detail: "Nothing was changed." });
       return false;
     } finally {
       setBusy(false);
@@ -163,9 +167,8 @@ export function NewDeletionRequestForm() {
         <Field label="Arrived by" htmlFor="del-via"><select id="del-via" className={control} value={f.received_via} onChange={(e) => setF({ ...f, received_via: e.target.value })}>{DELETION_VIA.map((v) => <option key={v} value={v}>{VIA_LABELS[v]}</option>)}</select></Field>
         <Field label="Received on" htmlFor="del-received" hint="Log it the day it arrives."><input id="del-received" type="date" className={control} max={new Date().toISOString().slice(0, 10)} value={f.received_at} onChange={(e) => setF({ ...f, received_at: e.target.value })} /></Field>
       </div>
-      {error ? <Callout tone="error" title={error} /> : null}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" asChild><Link href="/app/deletion-requests">Discard</Link></Button>
+        <DismissButton href="/app/deletion-requests">Discard</DismissButton>
         <Button type="submit" disabled={busy}>{busy ? "Saving…" : "Log request"}</Button>
       </div>
       <LeaveGuard dirty={dirty && !busy} scope={scope} onSave={save} onDiscard={() => setF(blank)} what="this request" />

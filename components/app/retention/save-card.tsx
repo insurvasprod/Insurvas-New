@@ -210,11 +210,14 @@ export function CallsTab({ card, calls, canLog }: { card: SaveCard; calls: CallL
             <tbody>
               {calls.map((c) => (
                 <tr key={c.id}>
-                  <td className="tabular-nums">{fileDay(c.at.slice(0, 10))}</td>
-                  <td>{CONTACT_OUTCOME_LABELS[c.outcome] ?? c.outcome}{c.clientReason ? <span className="block text-xs text-muted-foreground">{CLIENT_REASON_LABELS[c.clientReason]}</span> : null}</td>
-                  <td>{ACTION_LABELS[c.actionTaken] ?? c.actionTaken}{c.servicingRequestId ? <Link href={`/app/servicing/${c.servicingRequestId}`} className="block text-xs text-[var(--accent-ink)] hover:underline">The request</Link> : null}</td>
-                  <td><span className="line-clamp-2 whitespace-normal text-muted-foreground" title={c.note ?? undefined}>{c.note ?? "—"}</span></td>
-                  <td className="truncate">{c.by ?? "—"}</td>
+                  <td className="whitespace-nowrap font-medium tabular-nums text-foreground">{fileDay(c.at.slice(0, 10))}</td>
+                  {/* One line per row (owner 2026-11-11): the client's reason is the cell's tooltip; what was done opens the request it sent. */}
+                  <td className="whitespace-nowrap" title={c.clientReason ? CLIENT_REASON_LABELS[c.clientReason] : undefined}>{CONTACT_OUTCOME_LABELS[c.outcome] ?? c.outcome}</td>
+                  <td className="whitespace-nowrap">{c.servicingRequestId
+                    ? <Link href={`/app/servicing/${c.servicingRequestId}`} className="text-foreground hover:underline" title="Open the request">{ACTION_LABELS[c.actionTaken] ?? c.actionTaken}</Link>
+                    : ACTION_LABELS[c.actionTaken] ?? c.actionTaken}</td>
+                  <td className="max-w-[360px] truncate" title={c.note ?? undefined}>{c.note ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap">{c.by ?? <span className="text-muted-foreground">—</span>}</td>
                 </tr>
               ))}
             </tbody>

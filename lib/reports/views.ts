@@ -9,8 +9,11 @@ export const REPORTS_RAIL_COOKIE = "insurvas_reports_rail";
 
 export type ReportsView = "sales" | "activity" | "scoring" | "book" | "cpa" | "partner" | "retention" | "retentionResults" | "producers" | "hierarchy";
 
-/** `offRail`: still a Reports view at its address, but not listed on the rail (it shows only while you are on it). */
-export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; sub: string; href: string; sharesPeriod: boolean; offRail?: true }[] = [
+/**
+ * `offRail`: still a Reports view at its address, but not listed on the rail (it shows only while you are on it).
+ * `elsewhere`: the page lives in another area's frame; the Reports rail keeps its row as a link that opens it there.
+ */
+export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; sub: string; href: string; sharesPeriod: boolean; offRail?: true; elsewhere?: true }[] = [
   { key: "sales", menuKey: "insight.sales-performance", label: "Sales performance", sub: "Funnel, timing, declines", href: "/app/sales-performance", sharesPeriod: true },
   { key: "activity", menuKey: "insight.activity", label: "Team activity", sub: "Dials and outcomes, by person", href: "/app/activity", sharesPeriod: true },
   { key: "scoring", menuKey: "insight.scoring", label: "Queue scoring", sub: "Scored order against plain", href: "/app/scoring", sharesPeriod: false },
@@ -22,16 +25,17 @@ export const REPORTS_VIEWS: { key: ReportsView; menuKey: string; label: string; 
   { key: "hierarchy", menuKey: "team.hierarchy", label: "Hierarchy & overrides", sub: "Who reports to whom, and the override", href: "/app/hierarchy", sharesPeriod: false },
   { key: "cpa", menuKey: "insight.true-cpa", label: "True CPA", sub: "Cost per issued policy", href: "/app/true-cpa", sharesPeriod: true },
   { key: "partner", menuKey: "partners.review", label: "Partner quality", sub: "Lead quality, by partner", href: "/app/partner-quality", sharesPeriod: true },
-  // Module 5's two report pages (owner 2026-11-02: "this can go into reports"), each with its own period.
-  { key: "retention", menuKey: "retention.scorecard", label: "Retention scorecard", sub: "Save rate by reason, per rep", href: "/app/retention-scorecard", sharesPeriod: false },
-  // Off the rail since 2026-11-05 (docs/retention/SPEC.md §7: the radar and its holdout are hidden, not deleted;
-  // the radar no longer runs after files, so this page would only grow stale). Its address still answers.
-  { key: "retentionResults", menuKey: "retention.results", label: "Retention results", sub: "Did the radar and the saves work", href: "/app/retention-results", sharesPeriod: false, offRail: true },
+  // Module 5's two report pages (owner 2026-11-02: "this can go into reports"), each with its own period. Round 7
+  // (owner pick 0·A/5·A/6·A, 2026-11-10; docs/la4/mockups-r7/retention.html): both moved to the Retention rail as
+  // Scorecard and Results; Reports keeps its two rows, which open them there at the same addresses. Results is
+  // back on the rail: it measures the ladder's saves now, the radar only on its last tab.
+  { key: "retention", menuKey: "retention.scorecard", label: "Retention scorecard", sub: "Saved, lost and the save rate, per person", href: "/app/retention-scorecard", sharesPeriod: false, elsewhere: true },
+  { key: "retentionResults", menuKey: "retention.results", label: "Retention results", sub: "What the ladder saved", href: "/app/retention-results", sharesPeriod: false, elsewhere: true },
 ];
 
-/** The view an address belongs to (a partner's page is Partner quality), or null outside Reports. */
+/** The view an address belongs to (a partner's page is Partner quality), or null outside Reports (a row that opens elsewhere too). */
 export function reportsViewOf(pathname: string): ReportsView | null {
-  return REPORTS_VIEWS.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))?.key ?? null;
+  return REPORTS_VIEWS.find((item) => !item.elsewhere && (pathname === item.href || pathname.startsWith(`${item.href}/`)))?.key ?? null;
 }
 
 export function reportsViewLabel(view: ReportsView): string {

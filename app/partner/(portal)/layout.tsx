@@ -1,8 +1,10 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { PartnerSidebar } from "@/components/partner/partner-sidebar";
 import { PartnerTopBar } from "@/components/partner/partner-top-bar";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
+import { WarmPage } from "@/components/app/warm-page";
 import { DashboardStage } from "@/components/ui/dashboard-stage";
 import { getPartnerSession, resolvePartnerContext } from "@/lib/partnerAuth/requirePartner";
 import { partnerRoleLabel } from "@/lib/partnerAuth/roles";
@@ -53,6 +55,8 @@ export default async function PartnerPortalLayout({ children }: { children: Reac
         )}
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
         <DashboardStage className="flex min-w-0 flex-1 flex-col"><PortalPageTransition>{children}</PortalPageTransition></DashboardStage>
+        {/* Loads ahead what each page links to, once it is up (warm-page.tsx). */}
+        <Suspense fallback={null}><WarmPage /></Suspense>
       </div>
       </main>
     </div>

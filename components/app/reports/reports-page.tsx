@@ -1,9 +1,11 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { cookies } from "next/headers";
 
 import { ReportsRail } from "@/components/app/reports/reports-rail";
 import { ReportsHeader } from "@/components/app/reports/reports-slot";
 import { FRAME_GRID, FRAME_RAIL_CELL, FRAME_STEP, FRAME_STEP_CELL } from "@/components/app/step-frame/step-frame-layout";
+import { ViewSwitch } from "@/components/ui/view-switch";
+import type { ShowMode } from "@/lib/reports/show";
 import { REPORTS_RAIL_COOKIE, reportsViewLabel, type ReportsView } from "@/lib/reports/views";
 
 /**
@@ -22,8 +24,13 @@ import { REPORTS_RAIL_COOKIE, reportsViewLabel, type ReportsView } from "@/lib/r
  * Foundation pass (2026-11-03, docs/reports/FOUNDATION-PASS.md), as Accounting: `info` is the view's (i)
  * (what used to be a sentence over a table); a record under a view (a drill, an agent, a partner) passes
  * its `title`, its status `chip` and one muted line of `facts`.
+ *
+ * `show` (Reports round 7, owner pick 0·A, 2026-11-11): puts the "Table · Chart" switch (ViewSwitch) on the title
+ * line, before the view's buttons, defaulting to this view ("chart" on a report, "table" on a drill). The page reads
+ * the same choice with `showOf(searchParams, show)` (lib/reports/show.ts); a client view with `useShow(show)`.
+ * Omitted, the title line is as it was.
  */
-export async function ReportsPage({ view, title, info, chip, facts, children }: { view: ReportsView; title?: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; bar?: boolean; children: ReactNode }) {
+export async function ReportsPage({ view, title, info, chip, facts, show, children }: { view: ReportsView; title?: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; bar?: boolean; show?: ShowMode; children: ReactNode }) {
   const jar = await cookies();
   const collapsed = jar.get(REPORTS_RAIL_COOKIE)?.value === "collapsed";
 
@@ -32,7 +39,14 @@ export async function ReportsPage({ view, title, info, chip, facts, children }: 
     // StepFrameLayout's grid (shared with the loading state, ShellLoading, so switching views redraws the title and
     // the rail where they were). The view scrolls inside its own column; the page never does (lg and up).
     <div data-step-frame className={FRAME_GRID}>
-      <ReportsHeader title={title ?? reportsViewLabel(view)} info={info} chip={chip} facts={facts}>
+      <ReportsHeader
+        title={title ?? reportsViewLabel(view)}
+        info={info}
+        chip={chip}
+        facts={facts}
+        // Suspense: the switch reads the address; on a prerendered page only it waits for it, not the frame.
+        switcher={show ? <Suspense fallback={null}><ViewSwitch fallback={show} /></Suspense> : undefined}
+      >
         <div className={FRAME_RAIL_CELL}>
           <ReportsRail view={view} initialCollapsed={collapsed} />
         </div>

@@ -15,14 +15,14 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ClipboardCheck, Coffee, Headset, PhoneCall, PhoneIncoming, PhoneOff, Phone, Users } from "lucide-react";
+import { ClipboardCheck, Coffee, Headset, PhoneOff, Phone, Users } from "lucide-react";
 
 import { Callout, st } from "@/components/app/settings/primitives";
 import { InboundStepBar } from "@/components/app/inbound/inbound-step-bar";
+import { QuietLine } from "@/components/app/inbound/quiet-line";
 import { callHref, secondsSince, shortDuration, useFloor, type Availability, type FloorData, type Lead } from "@/components/app/inbound/use-floor";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
-import { MoreMenu } from "@/components/ui/more-menu";
 import { PageLoading } from "@/components/ui/page-loading";
 import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
@@ -121,19 +121,21 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
   const statusLocked = readOnly || availability === null;
   const start = () => setAvailability("ready");
   const next = line[0] ?? null;
+  const me = floor.members.find((member) => member.id === currentUserId) ?? null;
+  const teammatesTaking = floor.members.filter((member) => member.id !== currentUserId && member.availability === "ready" && !member.away).length;
   const rest = line.slice(1);
   const restShown = paginate(rest, linePage, linePageSize);
   const takeReason = readOnly ? "Your agency’s account is paused." : !ready ? "Start taking calls first." : undefined;
 
-  // The status, then everything else under More with an icon each (owner 2026-11-05).
+  // The status, then what was under More shown inline (owner 2026-11-09), short so the step bar keeps its room:
+  // Break (take a break) and Stop (stop taking calls)
+  // while you take calls (getting back is the quiet card's Start button), and Team (All callers when solo).
   const headerActions = (
     <>
       <AvailabilityStatus availability={availability} onCall={onCall} />
-      <MoreMenu items={[
-        ready && { label: "Take a break", icon: Coffee, onSelect: () => setAvailability("on_break"), disabled: statusLocked },
-        ready && { label: "Stop taking calls", icon: PhoneOff, onSelect: () => setAvailability("off"), disabled: statusLocked },
-        canSeeTeam && (solo ? { label: "All callers", icon: Users, href: "/app/inbound/team?tab=all" } : { label: "Team", icon: Users, href: "/app/inbound/team" }),
-      ]} />
+      {ready && !onCall && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("on_break")} title="Take a break" aria-label="Take a break"><Coffee aria-hidden="true" />Break</Button>}
+      {ready && !onCall && <Button type="button" variant="outline" disabled={statusLocked} onClick={() => setAvailability("off")} title="Stop taking calls" aria-label="Stop taking calls"><PhoneOff aria-hidden="true" />Stop</Button>}
+      {canSeeTeam && <Button asChild variant="outline"><Link href={solo ? "/app/inbound/team?tab=all" : "/app/inbound/team"}><Users aria-hidden="true" />{solo ? "All callers" : "Team"}</Link></Button>}
     </>
   );
 
@@ -163,7 +165,7 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
         <WaitBar seconds={wait} floor={floor} />
         <div className="flex flex-wrap gap-1.5">{checks(next).map((check) => <StatusChip key={check.label} tone={check.tone} dot={false}>{check.label}</StatusChip>)}</div>
         <div className="flex flex-wrap items-center gap-4">
-          <Button type="button" data-guide="inbound-claim" className="min-w-56" disabled={Boolean(takeReason) || saving === next.id} title={takeReason} onClick={() => void claim(next.id)}>
+          <Button type="button" variant="highlight" data-guide="inbound-claim" className="min-w-56" disabled={Boolean(takeReason) || saving === next.id} title={takeReason} onClick={() => void claim(next.id)}>
             {saving === next.id ? "Taking…" : "Take this call"}
           </Button>
           <span className="text-sm text-[var(--body)]">{takeReason ?? "Opens the call: what we know about them, then verification."}</span>
@@ -174,10 +176,11 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
   })();
 
   return (
-    <div className="m-stagger flex w-full min-w-0 flex-col gap-4">
-      {/* The actions share the step bar's row (owner 2026-10-28), so nothing may sit between the two. */}
-      <PageHeader title="Inbound" actions={headerActions} />
-      <InboundStepBar current={0} />
+    // One column of the window's height (owner 2026-11-09, UI-CONSISTENCY §2 "Fitting the window"): the
+    // title line holds the title, the step bar and the status + More; the line and the aside fill what is
+    // left and scroll inside, never the page. On a phone the page scrolls as usual.
+    <div className="m-stagger flex w-full min-w-0 flex-col gap-4 lg:h-[calc(100dvh-var(--top-bar-h)-56px)]">
+      <PageHeader title="Inbound" lead={<InboundStepBar current={0} />} actions={headerActions} />
       <span role="status" className="sr-only">{arrival}</span>
 
       {readOnly && <Callout tone="warning" title="Your agency’s account is paused: you can see the line, but not take callers." />}
@@ -185,15 +188,16 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
       {pop === "blocked" && (
         <Callout tone="warning" title="Your browser blocks pop-ups from Insurvas, so a waiting caller only shows while this tab is open. Allow notifications for this site in the browser’s site settings." />
       )}
-      {!ready && !readOnly && (
+      {/* With nobody in line the quiet card holds Start; this line is for a caller waiting while you are not taking calls. */}
+      {!ready && !readOnly && next && (
         <section aria-label="Your status" className="m-glass flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border px-5 py-3.5">
           <span className="text-sm text-[var(--body)]"><strong className="font-semibold text-[var(--ink)]">{availability === "on_break" ? "You are on a break." : "You are not taking calls."}</strong> Callers are offered to you only while you are taking calls.</span>
           <Button type="button" onClick={start} disabled={statusLocked}>{availability === "on_break" ? "Back to taking calls" : "Start taking calls"}</Button>
         </section>
       )}
 
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_330px] lg:items-start">
-        <div className="flex min-w-0 flex-col gap-4">
+      <div className="grid min-w-0 gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_330px]">
+        <div className="flex min-w-0 flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
           {floor.pendingHandoffs.map((handoff) => (
             <section key={handoff.id} aria-label="A call passed to you" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color-mix(in_srgb,var(--primary)_35%,var(--border))] bg-[var(--primary-soft)] px-4 py-3">
               <span className="min-w-0 text-sm text-[var(--body)]">
@@ -207,12 +211,20 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           ))}
 
           {next ? nextCard : (
-            <section aria-label="Nobody in line" className="m-glass flex min-h-[280px] flex-col items-center justify-center gap-3 rounded-xl border border-border p-8 text-center">
-              <span aria-hidden="true" className="grid size-12 place-items-center rounded-full bg-[var(--primary-soft)] text-[var(--accent-ink)]"><PhoneIncoming className="size-6" /></span>
-              <h2 className="m-0 text-base font-semibold text-[var(--ink)]">{ready ? "You're all caught up" : "You're not taking calls"}</h2>
-              <p className="m-0 max-w-[44ch] text-sm leading-[1.5] text-[var(--muted)]">{ready ? "No one is waiting. When a caller joins the line, you'll hear a chime and their details will appear right here." : "Start taking calls and the next caller in line is offered to you with a chime."}</p>
-              {floor.callbacks.some((item) => item.isDueToday || item.isOverdue) && <Button asChild variant="outline" size="sm" className="mt-1"><Link href="/app/callbacks"><PhoneCall aria-hidden="true" />Callbacks due today</Link></Button>}
-            </section>
+            // Nobody in line: the Ready check (owner 2026-11-09). Status and time in it, can you be reached,
+            // today's callbacks. A caller who joins replaces it with the caller card.
+            <QuietLine
+              availability={availability}
+              statusSince={me?.statusChangedAt ?? null}
+              now={now}
+              inLine={line.length}
+              teammatesTaking={teammatesTaking}
+              teamHref={canSeeTeam && !solo ? "/app/inbound/team" : null}
+              onStart={start}
+              statusLocked={statusLocked}
+              readOnly={readOnly}
+              callbacks={floor.callbacks}
+            />
           )}
 
           {rest.length > 0 && (
@@ -238,13 +250,15 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
           {floor.truncated && <Callout tone="warning" title="Showing the 500 callers who have waited longest." />}
         </div>
 
-        <aside aria-label="You and your team" className="flex min-w-0 flex-col gap-4">
-          <section className="m-glass flex flex-col gap-3 rounded-xl border border-border p-4">
-            <h2 className="m-0 flex items-center gap-2 text-card-title text-[var(--ink)]"><Headset className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />Calls to wrap up{myCalls.length > 0 && <StatusChip tone="neutral" dot={false}>{myCalls.length}</StatusChip>}</h2>
-            {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--muted)]">All wrapped up. Every call you took has an outcome.</p>}
+        {/* The aside stands the window's height; its list scrolls inside, every call in it, oldest first. */}
+        <aside aria-label="You and your team" className="flex min-w-0 flex-col gap-4 lg:min-h-0">
+          <section className="m-glass flex flex-col gap-3 rounded-xl border border-border p-4 lg:min-h-0 lg:flex-1">
+            <h2 className="m-0 flex items-center gap-2 text-card-title text-[var(--ink)]"><Headset className="size-4 text-[var(--accent-ink)]" aria-hidden="true" />Calls to wrap up{myCalls.length > 0 && <StatusChip tone="neutral" dot={false}>{myCalls.length}</StatusChip>}{myCalls.length > 1 && <span className="ml-auto text-xs font-normal text-[var(--body)]">Oldest first</span>}</h2>
+            {myCalls.length === 0 && <p className="m-0 text-sm text-[var(--body)]">All wrapped up. Every call you took has an outcome.</p>}
             {myCalls.length > 0 && (
-              <ul className="m-0 flex list-none flex-col p-0">
-                {myCalls.slice(0, 6).map((call) => {
+              // The scrollbar sits in the card's padding, so rows keep the width they had before the list scrolled.
+              <ul className="m-0 flex list-none flex-col p-0 lg:-mr-3 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:pr-1 lg:[scrollbar-width:thin]">
+                {myCalls.map((call) => {
                   const age = secondsSince(call.startedAt, now);
                   const forgotten = age >= 4 * 3600;
                   return (
@@ -259,7 +273,6 @@ export function InboundHome({ currentUserId, readOnly, canSeeTeam, solo = false 
                 })}
               </ul>
             )}
-            {myCalls.length > 6 && <p className="m-0 text-xs text-[var(--muted)]">{myCalls.length - 6} more, oldest first</p>}
           </section>
         </aside>
       </div>

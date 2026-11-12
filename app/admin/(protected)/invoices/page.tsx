@@ -31,11 +31,11 @@ export default async function InvoicesPage() {
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
+        tabs={<BillingTabs />}
         title="Invoices"
         description="What we billed, and whether it matches what the provider charged."
         actions={<CustomInvoiceDialog tenants={tenants ?? []} triggerLabel="Raise a custom invoice" triggerSize="default" />}
       />
-      <BillingTabs />
       <InvoicesTable initialInvoices={invoices} totals={totals} invoicedThisMonthCount={invoicedThisMonthCount} tenants={tenants ?? []} now={new Date().getTime()} />
     </div>
   );

@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeftRight, BookUser, BriefcaseBusiness, Calculator, Settings, ChevronsLeft, ChevronsRight, CircleAlert, CreditCard, FileChartColumn, Files, FileText, Import, Landmark, Link2, Receipt, ReceiptText, Scale, Split, UserRoundSearch, Wallet, ChartLine, LifeBuoy, Wrench, HeartHandshake, ChartNoAxesCombined, ShieldCheck, PhoneOff, LockKeyhole, UserX, FileSearch, BadgeCheck, WalletCards, HandCoins, UserRoundCheck, Network, Banknote, type LucideIcon } from "lucide-react";
+import { ArrowLeftRight, BookUser, BriefcaseBusiness, Calculator, Settings, ChevronsLeft, ChevronsRight, CircleAlert, CreditCard, FileChartColumn, Files, FileText, Import, Landmark, Link2, Receipt, ReceiptText, Scale, Split, UserRoundSearch, Wallet, ChartLine, LifeBuoy, Wrench, HeartHandshake, ChartNoAxesCombined, ShieldCheck, PhoneOff, LockKeyhole, UserX, FileSearch, BadgeCheck, WalletCards, HandCoins, UserRoundCheck, Network, Banknote, ListTodo, type LucideIcon } from "lucide-react";
 
 import { IntentLink } from "@/components/ui/nav-pending";
 import { countsFor, rememberCounts, rememberRail } from "@/components/app/step-frame/frame-memory";
+import { load as loadResource, readResource } from "@/lib/client/resource-cache";
 import { cn } from "@/lib/utils";
 
 /** A rail entry. `icon` names one of ICONS (the sidebar's own icon for the page). */
-export type RailStep = { key: string; label: string; href: string; icon: string };
+/** `group`: a small label drawn over the first step of each group (Commissions: Money in · Money out, round 7). */
+/** `elsewhere`: the area whose page this row opens (Accounting's Team payouts and Partner payouts live in Commissions, round 7): drawn like any other step (owner 2026-11-11: no ↗), but never the open step. */
+export type RailStep = { key: string; label: string; href: string; icon: string; group?: string; elsewhere?: string };
 /** What a step's badge counts, singular and plural ("file could not be read" / "files could not be read"). */
 export type RailWaiting = Record<string, [one: string, many: string]>;
 
@@ -20,6 +23,8 @@ const ICONS: Record<string, LucideIcon> = {
   "shield-check": ShieldCheck, "phone-off": PhoneOff, "lock-keyhole": LockKeyhole, "user-x": UserX, "file-search": FileSearch, "badge-check": BadgeCheck,
   // Team and the pages it handed on (2026-11-03): Producers, Hierarchy, Producer payouts, Commission splits.
   "wallet-cards": WalletCards, "hand-coins": HandCoins, "user-round-check": UserRoundCheck, network: Network, banknote: Banknote,
+  // Accounting › To do (round 7).
+  "list-todo": ListTodo,
 };
 
 /** Fired on window after something that waits on a person is decided where it is listed, so badges re-read. */
@@ -70,9 +75,11 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
     if (!countsUrl) return;
     // A stale answer is ignored, not aborted: aborting on unmount surfaced as an uncaught AbortError in dev.
     let stale = false;
-    fetch(countsUrl, { cache: "no-store" })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body: { counts?: Record<string, number> } | null) => { if (!stale && body?.counts) { rememberCounts(countsUrl, body.counts); setCounts(body.counts); } })
+    // Through the app's cache (speed pass 2026-11-09): moving between steps reuses an answer up to 20s old instead of
+    // asking on every step; a decision made in place (`asked`) always asks again.
+    const read = asked > 0 ? loadResource<{ counts?: Record<string, number> }>(countsUrl) : readResource<{ counts?: Record<string, number> }>(countsUrl, { freshFor: 20_000 });
+    read
+      .then((body) => { if (!stale && body?.counts) { rememberCounts(countsUrl, body.counts); setCounts(body.counts); } })
       .catch(() => {});
     return () => { stale = true; };
   }, [step, countsUrl, asked]);
@@ -87,15 +94,17 @@ export function StepRail({ label, cookie, countsUrl, waiting = {}, steps, step, 
     )}>
       <ul ref={list} className="m-0 flex list-none gap-1 overflow-x-auto p-0 lg:flex-col lg:overflow-visible">
         {steps.map((item, index) => {
-          const on = item.key === step;
+          const on = item.key === step && !item.elsewhere;
           // A step further down slides the content up from the right, one further up from the left (§ Motion).
           const here = steps.findIndex((s) => s.key === step);
           const Icon = ICONS[item.icon] ?? Files;
           const n = counts[item.key] ?? 0;
           const words = waiting[item.key];
           const note = n > 0 && words ? `${n.toLocaleString("en-US")} ${n === 1 ? words[0] : words[1]}` : null;
+          const groupLabel = item.group && item.group !== steps[index - 1]?.group ? item.group : null;
           return (
             <li key={item.key} className="shrink-0">
+              {groupLabel && !collapsed ? <p className={cn("m-0 hidden px-3 pb-1 text-xs font-semibold text-muted-foreground lg:block", index > 0 && "pt-3")}>{groupLabel}</p> : null}
               <IntentLink
                 href={item.href}
                 transitionTypes={on ? undefined : [here >= 0 && index < here ? "nav-back" : "nav-forward"]}

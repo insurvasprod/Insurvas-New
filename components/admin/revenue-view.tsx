@@ -94,8 +94,7 @@ export async function RevenueView() {
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      <PageHeader title="Revenue" />
-      <BillingTabs />
+      <PageHeader title="Revenue" tabs={<BillingTabs />} />
 
       <BoardStatGrid>
         <BoardStatTile label="MRR" value={formatCentsAsCurrency(mrr)} footnote={snapshotLabel ? `contracted, ${snapshotLabel}` : "contracted"} />

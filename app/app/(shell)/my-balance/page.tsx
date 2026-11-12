@@ -4,10 +4,12 @@ import { redirect } from "next/navigation";
 
 import { getPlanAudience } from "@/lib/agency/audience";
 import { myBalance, ProducerError } from "@/lib/accounting/producerStore";
+import { policyHref } from "@/lib/ingestion/fileStages";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { AccountingPage } from "@/components/app/accounting/accounting-page";
-import { PagedBody, PagedTableCard } from "@/components/ui/paged";
+import { EntriesTable, RunsTable, type EntryFilter, type EntryKind } from "@/components/app/accounting/producers-board";
+import { dateLabel, monthYearLabel } from "@/lib/accounting/producerLabels";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -20,10 +22,13 @@ import { formatCentsAsCurrency } from "@/lib/money";
  * the chargebacks that made it negative — before the conversation, not when a cheque fails to
  * arrive. Their share only; never what the agency grossed.
  *
- * Foundation pass (2026-11-03): Entries · Payout runs are the step's tabs on the title line (`?view=runs`),
- * each one paged list.
+ * Foundation pass (2026-11-03): Entries · Payout runs are the step's tabs on the title line (`?view=runs`).
+ * Round 7, 4·4 (owner 2026-11-10): still read-only, but an entry opens its policy (the producer's own policy
+ * page, when their plan and role open Policies) and a run row opens that run's statement, read-only.
  */
-export default async function MyBalancePage({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+const KIND: Record<string, EntryKind> = { split_advance: "share", split_earned: "share", split_chargeback: "chargeback" };
+
+export default async function MyBalancePage({ searchParams }: { searchParams: Promise<{ view?: string; show?: string; run?: string }> }) {
   const guard = await guardPage("profit_and_loss");
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="My balance" description="Your share of the commission, and what has come back." />;
@@ -37,9 +42,14 @@ export default async function MyBalancePage({ searchParams }: { searchParams: Pr
   const audience = await getPlanAudience(guard.context.tenantId);
   if (audience === "agency") redirect("/app/my-pay");
   if (audience === "individual") return <RoleGateNotice reason="solo" featureLabel="My balance" detail="Producer splits share commission between an agency and its producers, so they open once you work as an agency." action={{ href: "/app/pnl", label: "Open Profit & loss" }} />;
-  const view = (await searchParams).view === "runs" ? "runs" : "entries";
+  const asked = await searchParams;
+  const view = asked.view === "runs" ? "runs" : "entries";
+  const show: EntryFilter = asked.show === "shares" || asked.show === "chargebacks" ? asked.show : "all";
   let data: Awaited<ReturnType<typeof myBalance>> | null = null;
   let problem: string | null = null;
+  // The policy page's own gate (Policies: book_of_business, a producer may open it, scoped to their book there).
+  const book = await guardPage("book_of_business");
+  const policyLinks = book.entitled && actAsPage(book, ["producer"]);
   try {
     // AG-0.5: only ever the session's own balance; a scope that ever excluded self (a failed read closes it) shows nothing.
     if (await canSeeProducerRow(guard.context, guard.context.userId)) data = await myBalance(guard.context.tenantId, guard.context.userId);
@@ -49,6 +59,13 @@ export default async function MyBalancePage({ searchParams }: { searchParams: Pr
   }
   const money = (c: number) => formatCentsAsCurrency(c);
   const shown = data?.visible ? data : null;
+  const year = new Date().toISOString().slice(0, 4);
+  const paidThisYear = shown ? shown.runs.filter((r) => r.status === "paid" && (r.paidOn ?? r.periodEnd).startsWith(year)) : [];
+  const lastRun = shown?.runs[0];
+  const rows = shown ? shown.entries.map((e) => ({
+    id: e.id, occurredOn: e.occurredOn, what: e.label, reason: e.reason, policyNumber: e.policyNumber, split: null, amountCents: e.amountCents, kind: KIND[e.entryType] ?? ("other" as const),
+    href: policyLinks && e.policyNumber && e.carrierId ? policyHref(e.carrierId, e.policyNumber) : null,
+  })) : [];
   return (
     <AccountingPage
       step="splits"
@@ -64,36 +81,13 @@ export default async function MyBalancePage({ searchParams }: { searchParams: Pr
         : (
           <>
             <StatStrip label="Your balance">
-              <StatTile label={shown.owesAgency ? "You owe the agency" : "The agency owes you"} value={money(Math.abs(shown.balanceCents))} valueTone={shown.owesAgency ? "danger" : undefined} footnote={shown.owesAgency ? "chargebacks beyond what you earned" : "not yet paid out"} href="/app/my-balance" />
-              <StatTile label="Payout runs" value={String(shown.runs.length)} footnote="published to you" href="/app/my-balance?view=runs" />
+              <StatTile label={shown.owesAgency ? "You owe the agency" : "The agency owes you"} value={money(Math.abs(shown.balanceCents))} footnote={shown.owesAgency ? <StatusChip tone="danger">Chargebacks beyond earnings</StatusChip> : "not yet paid out"} href={shown.owesAgency ? "/app/my-balance?show=chargebacks" : "/app/my-balance?show=shares"} />
+              <StatTile label="Paid to you this year" value={money(paidThisYear.reduce((s, r) => s + r.netCents, 0))} footnote={`${paidThisYear.length} run${paidThisYear.length === 1 ? "" : "s"}`} href="/app/my-balance?view=runs" />
+              <StatTile label="Last run" value={lastRun ? money(lastRun.netCents) : "—"} footnote={lastRun ? `${monthYearLabel(lastRun.periodStart)} · ${lastRun.status === "paid" && lastRun.paidOn ? `paid ${dateLabel(lastRun.paidOn)}` : "published"}` : "none published yet"} href={lastRun ? `/app/my-balance?view=runs&run=${lastRun.id}` : "/app/my-balance?view=runs"} />
             </StatStrip>
-            {view === "runs" ? (
-              <PagedTableCard total={shown.runs.length} noun="runs">
-                {shown.runs.length === 0 ? <EmptyState title="No payout runs yet" hint="A run shows here once the agency publishes it to you." /> : (
-                  <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-                    <thead><tr><th>Period</th><th className="text-right">Earned</th><th className="text-right">Clawed back</th><th className="text-right">Withheld</th><th className="text-right">Paid to you</th><th className="w-[140px]">Status</th></tr></thead>
-                    <PagedBody>
-                      {shown.runs.map((r) => (
-                        <tr key={r.id}><td>{r.periodStart} to {r.periodEnd}</td><td className="text-right tabular-nums">{money(r.earnedCents)}</td><td className="text-right tabular-nums">{money(r.clawedBackCents)}</td><td className="text-right tabular-nums">{money(r.withheldCents)}</td><td className="text-right tabular-nums font-medium">{money(r.netCents)}</td><td><StatusChip tone={r.status === "paid" ? "good" : "info"}>{r.status === "paid" ? `Paid ${r.paidOn ?? ""}` : "Published"}</StatusChip></td></tr>
-                      ))}
-                    </PagedBody>
-                  </table>
-                )}
-              </PagedTableCard>
-            ) : (
-              <PagedTableCard total={shown.entries.length} noun="entries">
-                {shown.entries.length === 0 ? <EmptyState title="Nothing yet" hint="Your share appears here as the carriers' commission arrives." /> : (
-                  <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-                    <thead><tr><th className="w-[120px]">Date</th><th>What</th><th className="w-[140px] text-right">Your share</th></tr></thead>
-                    <PagedBody>
-                      {shown.entries.map((e) => (
-                        <tr key={e.id}><td className="tabular-nums">{e.occurredOn}</td><td>{e.label}{e.policyNumber ? ` · policy ${e.policyNumber}` : ""}{e.reason ? <div className="text-xs text-muted-foreground">{e.reason}</div> : null}</td><td className={`text-right tabular-nums ${e.amountCents < 0 ? "text-[var(--error-ink)]" : ""}`}>{money(e.amountCents)}</td></tr>
-                      ))}
-                    </PagedBody>
-                  </table>
-                )}
-              </PagedTableCard>
-            )}
+            {view === "runs"
+              ? <RunsTable key={asked.run ?? "runs"} runs={shown.runs} readOnly mine openRunId={asked.run} />
+              : <EntriesTable key={show} rows={rows} show={show} mine />}
           </>
         )}
     </AccountingPage>

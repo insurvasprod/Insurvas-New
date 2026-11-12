@@ -10,7 +10,8 @@ import { maskTaxId } from "@/lib/agencyProfile/types";
 
 import { ACCOUNTING_BUCKET } from "./invoiceStore";
 import { fromRow } from "./settingsCore";
-import { commissionTaxKey, contractorReport, normaliseTaxId, TAX_CATEGORY_LABELS, TAX_NOTICE, type ExemptReason, type Payee, type TaxCategory } from "./taxCore";
+import { commissionTaxKey, contractorReport, normaliseTaxId, TAX_CATEGORIES, TAX_CATEGORY_LABELS, TAX_NOTICE, type ExemptReason, type Payee, type TaxCategory } from "./taxCore";
+import { categoriesByQuarter, taxQuarters } from "./taxLinks";
 
 /**
  * LA-7.8 (Notion sprint, Module 7 — Accounting) · 1099 figures and the tax-ready export, server
@@ -57,6 +58,8 @@ async function payeeNames(tenantId: string) {
   return names;
 }
 
+export type AddressParts = { line1: string; line2: string; city: string; state: string; postal: string };
+
 /** The year's contractor payments, with each payee's tax profile (masked). */
 export async function contractors(tenantId: string, year: number) {
   const [paid, profiles, names, settings] = await Promise.all([
@@ -68,12 +71,14 @@ export async function contractors(tenantId: string, year: number) {
   if (paid.error) fail(paid.error);
   if (profiles.error) fail(profiles.error);
   const profileOf = new Map<string, Loose>(((profiles.data ?? []) as Loose[]).map((p) => [`${p.payee_type}|${p.payee_id}`, p]));
-  const payees: (Payee & { profileId: string | null; address: string | null; entityType: string | null })[] = ((paid.data ?? []) as Loose[]).map((r) => {
+  const payees: (Payee & { profileId: string | null; address: string | null; addressParts: AddressParts | null; entityType: string | null })[] = ((paid.data ?? []) as Loose[]).map((r) => {
     const key = `${r.payee_type}|${r.payee_id}`;
     const p = profileOf.get(key);
     return {
       payeeType: r.payee_type, payeeId: r.payee_id, displayName: names.get(key) ?? "Payee", paidCents: Number(r.paid_cents), profileId: p?.id ?? null, entityType: p?.entity_type ?? null,
       address: p ? [p.address_line1, p.address_line2, p.city, p.state, p.postal_code].filter(Boolean).join(", ") || null : null,
+      // The form starts from the address on file, so saving the details never blanks it (round 7, 2026-11-10).
+      addressParts: p ? { line1: p.address_line1 ?? "", line2: p.address_line2 ?? "", city: p.city ?? "", state: p.state ?? "", postal: p.postal_code ?? "" } : null,
       profile: p ? { legalName: p.legal_name, taxIdType: p.tax_id_type, taxIdLast4: p.tax_id_last4, w9OnFile: !!p.w9_on_file, exemptReason: p.exempt_reason as ExemptReason | null } : null,
     };
   });
@@ -134,6 +139,52 @@ export async function categoryTotals(tenantId: string, year: number, basis: "cas
   const { data, error } = await db().rpc("tax_category_totals", { p_tenant_id: tenantId, p_from: `${year}-01-01`, p_to: `${year + 1}-01-01`, p_basis: basis });
   if (error) fail(error);
   return ((data ?? []) as Loose[]).map((r) => ({ taxCategory: r.tax_category, sourceType: r.source_type, sourceValue: r.source_value, amountCents: Number(r.amount_cents), entries: Number(r.entries) }));
+}
+
+/**
+ * The year by category, by calendar quarter (round 7, 2026-11-10): the same totals, read once per quarter that has
+ * started — at most four reads side by side, never one per row. A quarter still to come is null.
+ */
+export async function categoryQuarters(tenantId: string, year: number, basis: "cash" | "accrual", today = new Date().toISOString().slice(0, 10)) {
+  const quarters = taxQuarters(year, today);
+  const perQuarter = await Promise.all(quarters.map(async (q) => {
+    if (q.state === "future") return null;
+    const { data, error } = await db().rpc("tax_category_totals", { p_tenant_id: tenantId, p_from: q.from, p_to: q.to, p_basis: basis });
+    if (error) fail(error);
+    return ((data ?? []) as Loose[]).map((r) => ({ taxCategory: r.tax_category as string, amountCents: Number(r.amount_cents) }));
+  }));
+  return { quarters, rows: categoriesByQuarter(perQuarter, TAX_CATEGORIES) };
+}
+
+/** The money contractor_payments counts: the same entry types, by the date it moved. */
+const CONTRACTOR_ENTRY_TYPES = ["lead_cost", "partner_payout", "producer_split", "refund", "adjustment"];
+
+export type PayeePayment = { id: string; paidOn: string; description: string; entryType: string; paidCents: number; invoiceId: string | null; payoutRunId: string | null; reversed: boolean; reversal: boolean };
+
+/**
+ * One payee's payments in the year (a payee page's Payments tab), read as contractor_payments reads them: the payee is
+ * the partner, else the producer, else the vendor on the row; paid is money out, so the sign is turned.
+ */
+export async function payeePayments(tenantId: string, payeeType: "partner" | "producer" | "vendor", payeeId: string, year: number): Promise<PayeePayment[]> {
+  let q = db().from("cost_entry").select("id, entry_type, amount_cents, paid_on, description, invoice_id, payout_run_id, reverses_entry_id").eq("tenant_id", tenantId)
+    .gte("paid_on", `${year}-01-01`).lt("paid_on", `${year + 1}-01-01`).in("entry_type", CONTRACTOR_ENTRY_TYPES);
+  if (payeeType === "partner") q = q.eq("partner_id", payeeId);
+  else if (payeeType === "producer") q = q.is("partner_id", null).eq("producer_user_id", payeeId);
+  else q = q.is("partner_id", null).is("producer_user_id", null).eq("vendor_id", payeeId);
+  const { data, error } = await q.order("paid_on", { ascending: false }).order("id").limit(500);
+  if (error) fail(error);
+  const rows = (data ?? []) as Loose[];
+  const reversedIds = new Set(rows.map((r) => r.reverses_entry_id).filter(Boolean));
+  return rows.map((r) => ({
+    id: r.id, paidOn: r.paid_on, description: r.description, entryType: r.entry_type, paidCents: -Number(r.amount_cents), invoiceId: r.invoice_id ?? null,
+    payoutRunId: r.payout_run_id ?? null, reversed: reversedIds.has(r.id), reversal: !!r.reverses_entry_id,
+  }));
+}
+
+/** A producer payee's record page id (the payee is the user; the page is the producer row), or null without one. */
+export async function producerRecordId(tenantId: string, userId: string): Promise<string | null> {
+  const { data, error } = await db().from("producer").select("id").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle();
+  return error ? null : (data?.id ?? null);
 }
 
 /** The agency's mapping: each source type and value, the bucket it lands in, and whether that is the shipped default. */

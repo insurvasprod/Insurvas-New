@@ -1,5 +1,5 @@
 import { DataInPage } from "@/components/app/data-in/data-in-page";
-import { ReviewWorkspace, type ReviewItem } from "@/components/app/book/needs-you/review-workspace";
+import { DoneForNow, ReviewWorkspace, type ReviewItem } from "@/components/app/book/needs-you/review-workspace";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -53,7 +53,7 @@ export default async function NeedsYouReviewPage({ searchParams }: { searchParam
   const source = [file?.name, typeLabel].filter(Boolean).join(" · ");
 
   return (
-    <DataInPage step="needs-you" title={title}>
+    <DataInPage step="needs-you" title={title} actions={<DoneForNow href={backHref} />}>
       <ReviewWorkspace
         key={`${kind ?? ""}:${fileId ?? ""}:${search.carrier ?? ""}:${search.date ?? ""}:${search.type ?? ""}`}
         items={items}

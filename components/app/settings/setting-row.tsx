@@ -91,5 +91,5 @@ export function SectionTabs<T extends string>({ label, tabs, value, onChange, ac
   /** At most two buttons, the More menu first (UI-CONSISTENCY §2). */
   actions?: ReactNode;
 }) {
-  return <SettingsSectionHeader lead={<ViewTabs label={label} tabs={tabs} value={value} onChange={onChange} />} actions={actions} />;
+  return <SettingsSectionHeader tabs={<ViewTabs label={label} tabs={tabs} value={value} onChange={onChange} />} actions={actions} />;
 }

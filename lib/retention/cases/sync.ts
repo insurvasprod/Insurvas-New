@@ -66,7 +66,7 @@ export async function syncRetentionCases(tenantId: string, { dryRun = false }: {
   const agency = { tenantId, userId: "system", role: "owner", scope: null };
   let openRows: Loose[];
   try {
-    openRows = await everyRow(() => db().from("retention_case").select("id, carrier_id, policy_number, step, reason, deadline, status").eq("tenant_id", tenantId).in("status", [...OPEN_STATUSES]).order("id"));
+    openRows = await everyRow(() => db().from("retention_case").select("id, carrier_id, policy_number, step, reason, deadline, status, evidence").eq("tenant_id", tenantId).in("status", [...OPEN_STATUSES]).order("id"));
   } catch (error) {
     if (!isSchemaGap(error as Loose)) throw error;
     // Before 20261105200000 a dry run still shows what the files would open (nothing is written).
@@ -147,7 +147,7 @@ export async function syncRetentionCases(tenantId: string, { dryRun = false }: {
     const key = keyOf(c);
     const p = policyOf.get(key);
     const stillThere = (paperworkNow.get(key) ?? []).some((x) => x.reason === c.reason);
-    const t = paperworkTransition({ id: c.id, step: "paperwork", reason: c.reason, deadline: c.deadline, status: c.status }, stillThere, { status: p?.status_normalized ?? null, paidTo: p?.paid_to_date ?? null });
+    const t = paperworkTransition({ id: c.id, step: "paperwork", reason: c.reason, deadline: c.deadline, status: c.status, byPerson: c.evidence?.by === "person" }, stillThere, { status: p?.status_normalized ?? null, paidTo: p?.paid_to_date ?? null });
     if (t.kind === "save") plan.saved.push(c.id);
     else if (t.kind === "lose") plan.lost.push({ id: c.id, reason: c.reason, ladder: false });
     void paperKey;

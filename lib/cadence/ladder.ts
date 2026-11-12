@@ -18,7 +18,7 @@
 //
 // Pure and dependency-free so the client can import it (no `server-only`).
 
-import { DEFAULT_CADENCE, DEFAULT_CEILING, parseInterval, type CadenceRow, type PreferredTime, type Slot } from "./engine";
+import { DEFAULT_CADENCE, DEFAULT_CEILING, parseInterval, type CadenceRow, type PreferredTime, type Slot } from "./engine.ts";
 
 /** The last attempt by default (no max attempts set): the scheduler exhausts the lead after this dial. */
 export const LAST_DIALLED_ATTEMPT = DEFAULT_CEILING;
@@ -45,10 +45,16 @@ export type LadderStep = {
   preferredSlot: PreferredTime | null;
   /** Milliseconds from the first dial. The delay is a floor, so this is the earliest it can be. */
   offsetMs: number;
+  /** True when the rule is the outcome's own (a disposition-scoped row), not the shared catch-all. */
+  outcomeRule?: boolean;
 };
 
 const catchAll = (rows: CadenceRow[], attempt: number) =>
   rows.find((row) => row.attemptNumber === attempt && (row.dispositionScope ?? null) === null);
+
+/** The scheduler's lookup for one outcome: that outcome's own row first, then the catch-all. */
+const forOutcome = (rows: CadenceRow[], attempt: number, outcome: string | null | undefined) =>
+  (outcome ? rows.find((row) => row.attemptNumber === attempt && row.dispositionScope === outcome) : undefined) ?? catchAll(rows, attempt);
 
 /**
  * The steps the dialer takes for a lead that never answers, using each attempt's catch-all rule.
@@ -66,15 +72,23 @@ export function effectiveLadder(
    * merges a campaign's rules with the tenant default attempt by attempt; the screen passes that
    * so it describes the dialer that is actually running.
    */
-  options: { lastAttempt?: number; merge?: boolean } = {},
+  options: {
+    lastAttempt?: number;
+    merge?: boolean;
+    /**
+     * The disposition every dial ends in ("no_answer", "voicemail"…). With it, a row scoped to that
+     * outcome wins over the catch-all, as in `schedule_next_attempt`; without it, catch-alls only.
+     */
+    outcome?: string | null;
+  } = {},
 ): LadderStep[] {
   const last = options.lastAttempt ?? LAST_DIALLED_ATTEMPT;
   const inherited = rows.length === 0 && fallback.length > 0;
   const steps: LadderStep[] = [{ attempt: 1, source: "first", delayInterval: null, preferredSlot: null, offsetMs: 0 }];
   let offset = 0;
   for (let attempt = 2; attempt <= last; attempt += 1) {
-    const own = catchAll(inherited ? [] : rows, attempt);
-    const tenant = own ? undefined : inherited || options.merge ? catchAll(fallback, attempt) : undefined;
+    const own = forOutcome(inherited ? [] : rows, attempt, options.outcome);
+    const tenant = own ? undefined : inherited || options.merge ? forOutcome(fallback, attempt, options.outcome) : undefined;
     const rule = own ?? tenant;
     const delayInterval = rule ? rule.delayInterval : builtInRule(attempt).delayInterval;
     const parsed = parseInterval(delayInterval);
@@ -85,6 +99,7 @@ export function effectiveLadder(
       delayInterval,
       preferredSlot: rule ? rule.preferredSlot ?? null : builtInRule(attempt).preferredSlot,
       offsetMs: offset,
+      outcomeRule: Boolean(rule?.dispositionScope),
     });
   }
   return steps;

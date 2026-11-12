@@ -52,7 +52,7 @@ export type ViewContext = PipelineViewContext;
 const CALL_PATH_KEYS = new Set(["callback_scheduled", "do_not_call"]);
 /** Where a move came from, when it was the outcome of a call (tenant_lead_stage_events.source; 'inbound' is LA-1.12-10). */
 const STAGE_EVENT_SOURCE_NOTE: Record<string, string> = { inbound: " · inbound call outcome", dialer: " · dialer call outcome" };
-const callPathOnly = (option: MappedDisposition) => CALL_PATH_KEYS.has(option.key) || option.nextAction === "callback" || option.nextAction === "suppress";
+export const callPathOnly = (option: MappedDisposition) => CALL_PATH_KEYS.has(option.key) || option.nextAction === "callback" || option.nextAction === "suppress";
 
 export function leadName(lead: ViewLead) {
   const values = lead.values;
@@ -532,7 +532,7 @@ export function ListView({
                   const late = isOverdue(lead, context, now);
                   return (
                     <button key={lead.id} type="button" onClick={() => setSelectedId(active ? null : lead.id)} aria-pressed={active} className={cn("flex w-full items-center gap-2.5 border-t border-border px-4 py-2 text-left", active ? "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]" : "bg-card hover:bg-[var(--surface-alt)]")}>
-                      <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-xs font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--surface-alt)] text-[var(--body)]")}>{initials(leadName(lead))}</span>
+                      <span className={cn("inline-flex size-[26px] shrink-0 items-center justify-center rounded-full text-xs font-bold", active ? "bg-[var(--primary)] text-[var(--primary-foreground)]" : "bg-[var(--highlight-soft)] text-[var(--highlight-ink)]")}>{initials(leadName(lead))}</span>
                       <span className="min-w-0 flex-grow">
                         <span className="block truncate text-sm font-semibold">{leadName(lead)}</span>
                         <span className="block truncate text-xs text-muted-foreground tabular-nums">{lead.submitter_name ?? "Workspace"} · {stageAge(lead, now)}</span>

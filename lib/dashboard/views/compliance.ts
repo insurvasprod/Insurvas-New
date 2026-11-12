@@ -222,16 +222,18 @@ export async function loadComplianceView(props: DashViewProps) {
   const days = lastDays(now, zone, zonedParts(now, zone)?.day ?? new Date(now).getUTCDate());
   const monthStart = days[0].start;
   const until = new Date(now + 30 * DAY_MS).toISOString().slice(0, 10);
+  // The Overview draws the needs and the feeds' verdict: no screening chart, last check or recent evidence.
+  const full = !props.forOverview;
 
   const [screening, lastCheck, overview, consent, complaints, deletions, expiring, artefacts] = await Promise.all([
-    can.tcpa ? quiet(monthScreening(tenantId, monthStart)) : null,
-    can.tcpa ? quiet<string | null>(db().from("screening_audit").select("ts").eq("tenant_id", tenantId).order("ts", { ascending: false }).limit(1).then((read: Loose) => rowsOf<{ ts: string }>(read)[0]?.ts ?? null)) : null,
+    can.tcpa && full ? quiet(monthScreening(tenantId, monthStart)) : null,
+    can.tcpa && full ? quiet<string | null>(db().from("screening_audit").select("ts").eq("tenant_id", tenantId).order("ts", { ascending: false }).limit(1).then((read: Loose) => rowsOf<{ ts: string }>(read)[0]?.ts ?? null)) : null,
     can.tcpa ? quiet(suppressionOverview(tenantId)) : null,
     can.consent ? quiet(getConsentEvidence({ tenantId, filter: "every", sources: [], page: 0, pageSize: 1 }).then((view) => view.tiles)) : null,
     can.complaints ? quiet(listComplaints(viewer)) : null,
     can.deletions ? quiet(listDeletionRequests(viewer)) : null,
     can.appointments ? quiet(expiringRecords(tenantId, until)) : null,
-    can.consent ? quiet<ArtefactRow[]>(db().from("tenant_consent_artefacts").select("id, provider, capture_status, captured_at").eq("tenant_id", tenantId).order("captured_at", { ascending: false }).limit(5).then((read: Loose) => rowsOf<ArtefactRow>(read))) : null,
+    can.consent && full ? quiet<ArtefactRow[]>(db().from("tenant_consent_artefacts").select("id, provider, capture_status, captured_at").eq("tenant_id", tenantId).order("captured_at", { ascending: false }).limit(5).then((read: Loose) => rowsOf<ArtefactRow>(read))) : null,
   ]);
 
   const openComplaints = complaints ? complaints.filter((row) => row.status !== "resolved") : null;

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowUpRight, ChevronDown, PanelLeftClose, PanelLeftOpen, Search, Settings2, X,
-  Building2, Calculator, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, FileText, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, ListChecks, Mail, Package, PhoneIncoming, Puzzle, RefreshCw, Repeat, Scale, Send, ShieldCheck, MessageSquareText, UserRound, Users, Workflow,
+  Building2, CalendarDays, ClipboardList, Clock, CreditCard, FileSignature, History, KeyRound, Landmark, LayoutTemplate, LifeBuoy, Mail, Package, PhoneIncoming, Puzzle, Repeat, Scale, Send, MessageSquareText, UserRound, Users, Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
@@ -21,7 +21,7 @@ import type { TenantRole } from "@/lib/tenantAuth/roles";
 import { cn } from "@/lib/utils";
 
 /** Pages whose tabs are a fixed header and whose cards scroll in their own area (owner 2026-11-03). */
-const OWN_SCROLL: ReadonlySet<string> = new Set(["my-profile", "business-identity", "billing", "pipelines", "form-templates"]);
+const OWN_SCROLL: ReadonlySet<string> = new Set(["my-profile", "business-identity", "billing", "pipelines", "form-templates", "sales-process", "lead-posting", "cadence"]);
 import { titleCaseNode } from "@/components/ui/title-case";
 import { titleCase } from "@/lib/format/titleCase";
 
@@ -43,14 +43,11 @@ const SECTION_ICON: Record<string, LucideIcon> = {
   "billing": CreditCard,
   "carriers": FileSignature,
   "sales-extension": Puzzle,
-  "sales-underwriting": ClipboardList,
-  "sales-quotation": Calculator,
-  "sales-field-sets": ListChecks,
-  "sales-disclosures": FileText,
-  "sales-preferences": ShieldCheck,
+  // Round 8 (2026-11-12): Underwriting, Quotation, Field sets, QA rules, Disclosures and Application stages
+  // are the header tabs of Sales process.
+  "sales-process": ClipboardList,
   "sales-welcome-pack": Mail,
   "sales-ai": MessageSquareText,
-  "sales-pipeline-sync": RefreshCw,
   "pipelines": Workflow,
   "form-templates": LayoutTemplate,
   "lead-posting": Send,
@@ -71,14 +68,14 @@ const RAIL_ICON_BUTTON = "inline-flex size-9 shrink-0 items-center justify-cente
 /** One icon per group: the folded menu's strip. */
 const GROUP_ICON: Record<string, LucideIcon> = {
   "Your account": UserRound,
-  // Contracting and Workspace setup were named Carriers and Leads & dialing until 2026-11-03; the
-  // group keys follow the registry's names, so a rename carries its icon with it.
-  "Contracting": FileSignature,
+  // Round 8 (2026-11-12): the groups are named by job. The keys follow the registry's names, so a
+  // rename carries its icon with it.
   "Agency": Building2,
-  "Sales process": ClipboardList,
-  "Workspace setup": Workflow,
+  "Selling": ClipboardList,
+  "Leads & calling": PhoneIncoming,
+  "Integrations": Puzzle,
   "Money & compliance": Landmark,
-  "Platform": KeyRound,
+  "Records": History,
 };
 
 /** The menu folded to its icons is remembered for this browser (a convenience, so storage may fail). */
@@ -435,7 +432,9 @@ export function AgentSettingsTabs({
           breadcrumbs={[{ label: "Settings", href: "/app/settings" }, { label: titleCase(active.label) }]}
           // The "Last changed by" note under the breadcrumb is hidden on every section (owner, 2026-11-04);
           // the log itself is still on Settings history, and each section's changes can be read there.
-          lead={routeSection ? <div ref={setLeadSlot} data-settings-lead="" className="flex min-w-0 items-center empty:hidden" /> : undefined}
+          // Every section's sub-pages land on this line (UI-CONSISTENCY §8b), routed or opened by its #hash: the
+          // section portals its tabs here through SettingsSectionHeader `tabs`. An empty slot takes no room.
+          tabs={<div ref={setLeadSlot} data-settings-lead="" className="flex min-w-0 flex-1 items-end empty:hidden" />}
           actions={<div ref={setActionsSlot} data-settings-actions="" className="flex flex-wrap items-center gap-2.5 empty:hidden" />}
         />
       )}

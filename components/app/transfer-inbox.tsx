@@ -393,15 +393,14 @@ export function TransferInbox({ readOnly, role }: { readOnly: boolean; role: str
 
   // Team › All callers (Inbound A, 2026-10-27; was the Queue view at /app/inbound): every transfer
   // today with its filters, Today by partner and lost-transfer recovery. Agents take callers on Inbound.
+  // Now · All callers are the page's sub-page bar, on the title's line (UI-CONSISTENCY §8b), as on Team › Now.
   const header = (
-    <div className="flex flex-col gap-3">
-      <PageHeader
-        title="Team"
-        breadcrumbs={[{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: "Team" }]}
-        actions={<Button type="button" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Taking…" : "Take the next caller"}</Button>}
-      />
-      <TeamViews current="all" />
-    </div>
+    <PageHeader
+      title="Team"
+      breadcrumbs={[{ label: "Today" }, { label: "Inbound", href: "/app/inbound" }, { label: "Team" }]}
+      tabs={<TeamViews current="all" />}
+      actions={<Button type="button" variant="highlight" onClick={() => void claimNext()} disabled={readOnly || claimingNext}>{claimingNext ? "Taking…" : "Take the next caller"}</Button>}
+    />
   );
 
   if (!data) {

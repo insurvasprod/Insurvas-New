@@ -18,8 +18,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 const roles = ["owner", "bookkeeper"] as const;
 
 const bodySchema = z.object({
-  carrier: z.string().refine(isRecordId, "Choose one carrier's discrepancies"),
-  ids: z.array(z.string().refine(isRecordId, "That discrepancy is not in this workspace")).min(1, "Choose at least one discrepancy").max(200),
+  carrier: z.string().refine(isRecordId, "Choose one carrier's pay issues"),
+  ids: z.array(z.string().refine(isRecordId, "That pay issue is not in this workspace")).min(1, "Choose at least one pay issue").max(200),
   to: z.string().max(600).optional(),
 }).strict();
 
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   const { tenantId, userId } = auth.context;
   try {
     const letter = await getDisputeLetter(tenantId, userId, body.data.carrier, body.data.ids);
-    if (!letter) return NextResponse.json({ error: "None of those discrepancies can go on a letter to that carrier." }, { status: 404 });
+    if (!letter) return NextResponse.json({ error: "None of those pay issues can go on a letter to that carrier." }, { status: 404 });
     const bytes = await buildDisputeLetterPdf(letter, body.data.to ?? letter.savedRecipient ?? "");
     await audit({
       actorType: "tenant",

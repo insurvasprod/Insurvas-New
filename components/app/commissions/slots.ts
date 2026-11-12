@@ -3,4 +3,3 @@
  * so the server page that draws the target and the client list that fills it read one id.
  */
 export const LEDGER_SLOT = "ledger-actions";
-export const PAY_ISSUES_SLOT = "pay-issues-actions";

@@ -1,36 +1,37 @@
+import Link from "next/link";
+
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
-import { ViewTabs } from "@/components/app/book-of-business-views";
-import { CarrierDiscrepancies, DisputeLetters, type HandDiscrepancyRow } from "@/components/app/carrier-discrepancies";
-import { DISCREPANCIES_PENDING_MESSAGE, loadDiscrepancies } from "@/lib/ingestion/discrepancyStore";
-import { payTimingGapText } from "@/lib/ingestion/carrierRules";
-import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
 import { CommissionsPage } from "@/components/app/commissions/commissions-page";
-import { DISCREPANCY_SCHEMA_PENDING_MESSAGE, listDiscrepancies } from "@/lib/discrepancies/service";
-import { Callout } from "@/components/app/settings/primitives";
-import { StepSlotTarget } from "@/components/app/step-frame/step-slot";
-import { PAY_ISSUES_SLOT } from "@/components/app/commissions/slots";
+import { PayIssuesList } from "@/components/app/commissions/pay-issues/pay-issues-list";
+import { LettersList, type LetterRow } from "@/components/app/commissions/pay-issues/letters-list";
+import { CheckNowButton } from "@/components/app/commissions/pay-issues/check-now";
+import { Button } from "@/components/ui/button";
+import { ViewTabs } from "@/components/ui/view-tabs";
+import { loadPayTimingGaps } from "@/lib/ingestion/carrierRulesStore";
+import { loadPayIssues } from "@/lib/discrepancies/payIssues";
+import { LETTER_OUT_STATUSES, LETTER_SETTLED_STATUSES, groupPayIssues, orderPayIssues, payIssueCarrierKey, payIssueHref } from "@/lib/commissions/payIssueGroups";
 
 /**
- * Book of Business › Discrepancies: "You appear to be owed $X".
+ * Commissions › Pay issues (round 7, owner pick 2·A, 2026-11-10; docs/la4/mockups-r7/commissions.html 2·A–2·5).
  *
- * One list (2026-10-08 overlap merge, not a tab per source) of the findings from the carriers' own
- * files (LA-4.15: owed, coming back, held) and the findings from statements imported by hand
- * (LA-4.5: never paid, short-paid, wrong rate, charged back twice or while in force), each with
- * the figures behind it and its own decisions, and a source filter. Letters is the carrier-file
- * findings' saved letters; a hand finding's letter opens on its own page.
+ * The title alone with its (i); Open · Letters out · Settled · Closed on its line (`?view=`; the old
+ * `?view=letters`, `?view=closed` and `?view=statements` addresses still land), then Check now and the primary
+ * "Work the largest", which opens the largest group's first issue (its ‹ › walk the group).
  *
- * The page only reads: findings are recomputed after each change to their facts (and on "Check
- * now"), never because someone opened it. Owner and bookkeeper (`statements.view`), as the menu
- * item. A read-only account reads it and can print a letter, but cannot record decisions.
- * The old "From imported statements" address (?view=statements) lands on the list, filtered to it.
+ * Open lists the findings from the carriers' own files (LA-4.15) and from statements imported by hand (LA-4.5) as
+ * one list: by carrier and kind (each group opening its page, where its letter is drafted), or one by one (each row
+ * opening its issue's page). Warnings are counts, never notices: "Not checked" lists the carriers missing
+ * commission is not checked for. Letters out holds the letters waiting on you or the carrier; Settled the answered
+ * ones, with each carrier's record.
  *
- * Board 13 (2026-11-03): the tabs are Open · Letters out · Closed (`?view=letters`, `?view=closed`). Open reads as
- * groups by cause and carrier, each with its Review page; "Group alike" off is the flat list with every decision.
- * The title line's one primary, "Review the largest", is filled by the list through PAY_ISSUES_SLOT.
+ * The page only reads: findings are recomputed after each change to their facts (and on "Check now"), never because
+ * someone opened it. Owner and bookkeeper (`statements.view`), as the menu item. A read-only account reads it.
  */
-export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<{ view?: string; source?: string }> }) {
+type Tab = "open" | "letters" | "settled" | "closed";
+
+export default async function DiscrepanciesPage({ searchParams }: { searchParams: Promise<{ view?: string; source?: string; carrier?: string }> }) {
   const guard = await guardPage("discrepancy_report");
   if (!guard.entitled) {
     return <FeatureGateNotice guard={guard} featureLabel="Pay issues" description="What each carrier paid against what your contract says it owes, with a dispute letter for each one." />;
@@ -40,56 +41,61 @@ export default async function DiscrepanciesPage({ searchParams }: { searchParams
   }
 
   const tenantId = guard.context.tenantId;
-  const { view, source } = await searchParams;
+  const { view, source, carrier } = await searchParams;
+  const tab: Tab = view === "letters" ? "letters" : view === "settled" ? "settled" : view === "closed" ? "closed" : "open";
   const readOnly = guard.entitlement.access === "read_only";
-  const [found, list, untimed] = await Promise.all([
-    loadDiscrepancies(tenantId),
-    view === "letters" ? null : listDiscrepancies(tenantId),
-    // Carriers missing commission is not checked for (no pay trigger or lag): said, never assumed.
-    view === "letters" ? null : loadPayTimingGaps(tenantId).catch((error) => { console.error("[discrepancies] pay timing could not be read", error); return null; }),
+  const lists = tab === "open" || tab === "closed";
+  const [read, untimed] = await Promise.all([
+    loadPayIssues(tenantId, { names: lists }),
+    // Carriers missing commission is not checked for (no pay trigger or lag): a count on a chip, never assumed.
+    tab === "open" ? loadPayTimingGaps(tenantId).catch((error) => { console.error("[pay-issues] pay timing could not be read", error); return null; }) : null,
   ]);
-  const hand: HandDiscrepancyRow[] = (list?.available ? list.items : []).map((item) => ({
-    id: item.id, kind: item.kind, status: item.status, owedCents: item.owedCents, policyNumber: item.policyNumber, insuredName: item.insuredName,
-    carrierId: item.carrierId, carrierName: item.carrierName, periodStart: item.periodStart, periodEnd: item.periodEnd,
-    expectedCents: item.detail?.expectedCents ?? 0, receivedCents: item.detail?.receivedCents ?? 0, explanation: item.detail?.explanation ?? "",
-    note: item.note, statusChangedByName: item.statusChangedByName, statusChangedAt: item.statusChangedAt, history: item.history,
-  }));
-  const working = (found.available ? found.items.filter((i) => i.status === "open" || i.status === "disputed").length : 0) + hand.filter((i) => i.status === "open" || i.status === "disputed").length;
-  // A letter is out until the carrier's answer is recorded (board 24: "Sent letters wait in Pay issues › Letters out").
-  const lettersOut = found.available ? found.disputes.filter((d) => d.status === "draft" || d.status === "sent" || d.status === "acknowledged").length : 0;
-  const tab = view === "letters" ? "letters" : view === "closed" ? "closed" : "open";
 
+  const working = read.issues.filter((i) => i.status !== "closed");
+  const closed = read.issues.filter((i) => i.status === "closed");
+  const letters: LetterRow[] = read.disputes.map((d) => ({ id: d.id, carrierId: d.carrierId, carrierName: d.carrierName, createdAt: d.createdAt, items: d.discrepancyIds.length, totalCents: d.totalCents, status: d.status, sentVia: d.sentVia, sentAt: d.sentAt, outcomeCents: d.outcomeCents, resolvedAt: d.resolvedAt }));
+  const out = letters.filter((l) => LETTER_OUT_STATUSES.has(l.status));
+  const settled = letters.filter((l) => LETTER_SETTLED_STATUSES.has(l.status));
+
+  // The primary: the largest group's first issue, in the group's own order (its ‹ › walk the group).
+  const largest = groupPayIssues(working)[0];
+  const first = largest ? orderPayIssues(working.filter((i) => i.type === largest.type && payIssueCarrierKey(i) === largest.carrierKey))[0] : undefined;
+
+  const initialSource = view === "statements" || source === "hand" ? "hand" : source === "carrier" ? "carrier" : "";
   return (
     <CommissionsPage
       step="discrepancies"
+      info={<>What each carrier paid against what your contract says it owes. A group is one carrier and one kind of issue: open it to see each policy and to draft its letter. Insurvas never sends a letter; you send it, then record what the carrier did.</>}
       tabs={
         <ViewTabs
-            label="Pay issue views"
-            active={tab}
-            tabs={[
-              { key: "open", label: "Open", count: view === "letters" ? undefined : working, href: "/app/discrepancies" },
-              { key: "letters", label: "Letters out", count: lettersOut || undefined, href: "/app/discrepancies?view=letters" },
-              { key: "closed", label: "Closed", href: "/app/discrepancies?view=closed" },
-            ]}
+          label="Pay issue views"
+          value={tab}
+          tabs={[
+            { key: "open", label: "Open", count: working.length, href: "/app/discrepancies" },
+            { key: "letters", label: "Letters out", count: out.length, href: "/app/discrepancies?view=letters" },
+            { key: "settled", label: "Settled", count: settled.length, href: "/app/discrepancies?view=settled" },
+            { key: "closed", label: "Closed", count: closed.length, href: "/app/discrepancies?view=closed" },
+          ]}
         />
       }
-      actions={tab === "open" ? <StepSlotTarget id={PAY_ISSUES_SLOT} /> : undefined}
+      actions={
+        <span className="inline-flex flex-wrap gap-2">
+          {tab === "open" && <CheckNowButton readOnly={readOnly} />}
+          {first && <Button asChild type="button"><Link href={payIssueHref(first)}>Work the largest</Link></Button>}
+        </span>
+      }
     >
-      {!found.available && <Callout tone="warning" title={<>{DISCREPANCIES_PENDING_MESSAGE}</>} />}
-      {list && !list.available && <Callout tone="warning" title={<>{DISCREPANCY_SCHEMA_PENDING_MESSAGE}</>} />}
-      {untimed && untimed.length > 0 && <Callout tone="warning" title={<>Missing commission is not checked for {untimed.length === 1 ? "1 carrier" : `${untimed.length} carriers`} with no pay trigger or lag set: {payTimingGapText(untimed)}. Insurvas sets these for each carrier.</>} />}
-      {found.available && found.truncated && <Callout tone="warning" title={<>Showing the first {found.items.length.toLocaleString("en-US")} findings, most serious first; the rest are not listed here.</>} />}
-      {view === "letters" ? (
-        found.available && <DisputeLetters disputes={found.disputes} readOnly={readOnly} />
+      {tab === "letters" || tab === "settled" ? (
+        <LettersList letters={tab === "letters" ? out : settled} settled={settled} tab={tab === "letters" ? "out" : "settled"} initialCarrier={carrier ?? ""} />
       ) : (
-        <CarrierDiscrepancies
-          items={found.available ? found.items : []}
-          readOnly={readOnly}
-          handItems={hand}
-          handCanWrite={!readOnly}
-          handBlockedReason={readOnly ? "Reading and printing remain available; decisions are paused while the account is read-only." : null}
-          initialSource={view === "statements" ? "hand" : source ?? ""}
-          initialStatus={tab === "closed" ? "closed" : "open"}
+        <PayIssuesList
+          issues={tab === "closed" ? closed : working}
+          tab={tab}
+          unchecked={untimed ?? []}
+          summary={tab === "open" ? read.summary : null}
+          initialSource={initialSource}
+          today={read.today}
+          unavailable={!read.available}
         />
       )}
     </CommissionsPage>

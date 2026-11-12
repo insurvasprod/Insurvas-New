@@ -42,6 +42,13 @@ export type TimelineItem = {
   summary: string;
   /** Extra facts from the source row: the agent, the disposition, the window, the certificate. */
   facts: string[];
+  /** The lead the record belongs to, when the index knows it (the timeline's "Open ›"). */
+  leadId: string | null;
+  /** A call's agent and its disposition, as the one-line timeline shows them (round 7). */
+  agent: string | null;
+  result: string | null;
+  /** A call the dialler recorded as outside the legal window. */
+  outsideHours: boolean;
 };
 
 export type ConsentItem = {
@@ -60,6 +67,9 @@ export type ConsentItem = {
   validity: string;
 };
 
+/** A gap, with the first time it shows (the report's Since column, round 7). */
+export type ReportGap = GapItem & { firstAt: string | null };
+
 export type LeadItem = { leadId: string; createdAt: string; partner: string | null; campaign: string | null; name: string | null };
 
 export type EvidenceReport = {
@@ -70,8 +80,8 @@ export type EvidenceReport = {
   generatedBy: string;
   phones: string[];
   names: string[];
-  gaps: GapItem[];
-  undetermined: GapItem[];
+  gaps: ReportGap[];
+  undetermined: ReportGap[];
   gapsChecked: number;
   consent: ConsentItem[];
   leads: LeadItem[];
@@ -305,19 +315,27 @@ export async function buildEvidenceReport(viewer: Viewer, scope: EvidenceScope, 
     return true;
   });
   const section = gapsSection(gapList, now);
+  const firstSeen = new Map(gapList.map((g) => [`${g.category}|${g.status}|${g.phone_digits ?? ""}`, g.first_at]));
+  const withSince = (g: GapItem): ReportGap => ({ ...g, firstAt: firstSeen.get(`${g.category}|${g.status}|${g.phoneDigits ?? ""}`) ?? null });
   const facts = await enrich(viewer.tenantId, events);
 
   const timeline: TimelineItem[] = events.map((e) => {
     const extra: string[] = [];
+    let agent: string | null = null;
+    let result: string | null = null;
+    let outsideHours = false;
     if (e.sourceTable === "tenant_call_attempts" && e.eventType === "call_attempt") {
       const c = facts.calls.get(e.sourceId);
-      if (c?.agent_id) extra.push(`Agent: ${facts.userName.get(c.agent_id) ?? "unknown"}`);
-      if (c?.disposition) extra.push(`Disposition: ${String(c.disposition).replace(/_/g, " ")}`);
+      if (c?.agent_id) agent = facts.userName.get(c.agent_id) ?? "unknown";
+      if (c?.disposition) result = String(c.disposition).replace(/_/g, " ");
+      outsideHours = c?.window_verdict === "outside";
+      if (agent) extra.push(`Agent: ${agent}`);
+      if (result) extra.push(`Disposition: ${result}`);
       if (c?.window_verdict === "inside") extra.push(`Inside legal hours (${c.window_state ?? "?"} ${MIN(c.window_local_minute) ?? "?"} local)`);
       else if (c?.window_verdict === "outside") extra.push(`OUTSIDE legal hours: ${MIN(c.window_local_minute) ?? "?"} local; ${c.window_state ?? "the state"} window ${MIN(c.window_start_minute) ?? "?"}–${MIN(c.window_end_minute) ?? "?"}`);
       else if (c?.window_verdict === "undetermined") extra.push(`Legal hours undetermined (${String(c.window_reason ?? "unknown").replace(/_/g, " ")})`);
     }
-    return { at: e.eventAt, eventType: e.eventType, module: e.module, sourceTable: e.sourceTable, sourceId: e.sourceId, sourceSubId: e.sourceSubId, phoneDigits: e.phoneDigits, summary: e.summary, facts: extra };
+    return { at: e.eventAt, eventType: e.eventType, module: e.module, sourceTable: e.sourceTable, sourceId: e.sourceId, sourceSubId: e.sourceSubId, phoneDigits: e.phoneDigits, summary: e.summary, facts: extra, leadId: e.leadId, agent, result, outsideHours };
   });
 
   const leadPhone = new Map(events.filter((e) => e.leadId).map((e) => [e.leadId as string, e.phoneDigits]));
@@ -340,7 +358,7 @@ export async function buildEvidenceReport(viewer: Viewer, scope: EvidenceScope, 
   return {
     scope, scopeLabel: resolved.label, range, generatedAt: now.toISOString(), generatedBy: (me?.name as string | null) ?? (me?.email as string | null) ?? "Unknown user",
     phones: resolved.phones, names: [...new Set(leads.map((l) => l.name).filter((n): n is string => Boolean(n)))],
-    gaps: section.gaps, undetermined: section.undetermined, gapsChecked: section.checked, consent, leads, timeline,
+    gaps: section.gaps.map(withSince), undetermined: section.undetermined.map(withSince), gapsChecked: section.checked, consent, leads, timeline,
   };
 }
 
@@ -418,4 +436,66 @@ async function gapBook(tenantId: string, range: EvidenceRange, claim: unknown): 
   }
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   return { summary: Array.isArray(data.summary) ? data.summary : [], numbers: data.numbers && typeof data.numbers === "object" ? data.numbers : {} };
+}
+
+/**
+ * LA-6.3's log on screen (round 7, Evidence › Reports run): who ran which report, newest first. Read through the
+ * same tenant-filtered service client the report writes with. An owner sees every run; a producer only their own,
+ * since a run names a number they may not have worked.
+ */
+export type ReportRun = {
+  id: string;
+  generatedAt: string;
+  who: string;
+  scopeType: "phone" | "lead" | "contact" | "date_range" | "book_scan";
+  scopeValue: string | null;
+  /** The lead's name for a lead run, when the lead is still here. */
+  scopeName: string | null;
+  rangeFrom: string | null;
+  rangeTo: string | null;
+  output: EvidenceOutput;
+  gapCount: number | null;
+};
+
+export const REPORT_RUNS_LIMIT = 200;
+
+export async function listReportRuns(viewer: Viewer): Promise<{ runs: ReportRun[]; total: number }> {
+  let q = db().from("compliance_report_log").select("id, user_id, scope_type, scope_value, range_from, range_to, output, gap_count, generated_at", { count: "exact" }).eq("tenant_id", viewer.tenantId);
+  if (viewer.role !== "owner") q = q.eq("user_id", viewer.userId);
+  const { data, error, count } = await q.order("generated_at", { ascending: false }).limit(REPORT_RUNS_LIMIT);
+  if (error) rpcFailure(error);
+  const rows = (data ?? []) as Loose[];
+  const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))] as string[];
+  const leadIds = [...new Set(rows.filter((r) => r.scope_type === "lead" && isUuid(String(r.scope_value ?? ""))).map((r) => r.scope_value as string))];
+  const [users, leads] = await Promise.all([
+    userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : Promise.resolve({ data: [] }),
+    leadIds.length ? db().from("agent_leads").select("id, values").eq("tenant_id", viewer.tenantId).in("id", leadIds) : Promise.resolve({ data: [] }),
+  ]);
+  const userName = new Map(((users.data ?? []) as Loose[]).map((u) => [u.id as string, (u.name as string | null) ?? (u.email as string | null) ?? "Unnamed user"]));
+  const leadName = new Map(((leads.data ?? []) as Loose[]).map((l) => {
+    const v = l.values ?? {};
+    const name = [v.first_name, v.last_name].filter((x: unknown) => typeof x === "string" && x.trim()).join(" ") || (typeof v.full_name === "string" ? v.full_name : "");
+    return [l.id as string, name || null];
+  }));
+  const runs = rows.map((r): ReportRun => ({
+    id: r.id,
+    generatedAt: r.generated_at,
+    who: r.user_id ? userName.get(r.user_id) ?? "Unknown user" : "Removed user",
+    scopeType: r.scope_type,
+    scopeValue: r.scope_value ?? null,
+    scopeName: r.scope_type === "lead" ? leadName.get(r.scope_value) ?? null : null,
+    rangeFrom: r.range_from ?? null,
+    rangeTo: r.range_to ?? null,
+    output: r.output,
+    gapCount: r.gap_count ?? null,
+  }));
+  return { runs, total: count ?? runs.length };
+}
+
+/** How many runs Reports run would list (its tab's count), without reading them. Null when the log can't be read. */
+export async function countReportRuns(viewer: Viewer): Promise<number | null> {
+  let q = db().from("compliance_report_log").select("id", { count: "exact", head: true }).eq("tenant_id", viewer.tenantId);
+  if (viewer.role !== "owner") q = q.eq("user_id", viewer.userId);
+  const { count, error } = await q;
+  return error ? null : count ?? 0;
 }

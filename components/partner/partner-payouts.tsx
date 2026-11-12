@@ -13,7 +13,9 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { Pager, paginate } from "@/components/ui/pager";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TableCard } from "@/components/ui/table-card";
-import { Segmented } from "@/components/ui/view-tabs";
+import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
+import { PageHeader } from "@/components/ui/page-header";
+import type { Crumb } from "@/components/ui/breadcrumbs";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import type { PartnerStatement } from "@/lib/accounting/payoutsCore";
 import { pctLabel } from "@/lib/accounting/partnerPayoutCore";
@@ -257,12 +259,18 @@ function ComingUp() {
 }
 
 /** Sample statements for `/design/organization`; a partner's own page never passes them. */
-export function PartnerPayouts({ sample, partnerName }: { sample?: RunRow[]; partnerName?: string }) {
+export function PartnerPayouts({ sample, partnerName, header }: {
+  sample?: RunRow[];
+  partnerName?: string;
+  /** The page's header, drawn here so Invoices · Coming up sit on its line as the sub-page bar (UI-CONSISTENCY §8b). */
+  header?: { title: string; description?: string; breadcrumbs?: Crumb[] };
+}) {
   // Invoices (the published statements) or Coming up (every client and when it pays). The sample shows invoices only.
   const [view, setView] = useState<"invoices" | "upcoming">("invoices");
+  const views = sample ? undefined : <ViewTabs label="Commissions view" value={view} onChange={setView} tabs={[{ key: "invoices", label: "Invoices" }, { key: "upcoming", label: "Coming up" }]} />;
   return (
     <div className="m-stagger flex min-h-0 w-full flex-1 flex-col gap-6">
-      {sample ? null : <div><Segmented label="Commissions view" value={view} onChange={setView} options={[{ key: "invoices", label: "Invoices" }, { key: "upcoming", label: "Coming up" }]} /></div>}
+      {header ? <PageHeader title={header.title} description={header.description} hideTitle breadcrumbs={header.breadcrumbs} tabs={views} /> : views}
       {view === "upcoming" && !sample ? <ComingUp /> : <PartnerInvoices sample={sample} partnerName={partnerName} />}
     </div>
   );

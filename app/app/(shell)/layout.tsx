@@ -24,6 +24,10 @@ import { AppTopBar } from "@/components/app/app-top-bar";
 import { NotifySoundPrimer } from "@/components/app/notify-sound-primer";
 import { PortalPageTransition } from "@/components/portal/portal-page-transition";
 import { ShellEntrance } from "@/components/app/shell-entrance";
+import { BackgroundRefresh } from "@/components/app/background-refresh";
+import { WarmApp } from "@/components/app/warm-app";
+import { WarmPage } from "@/components/app/warm-page";
+import { ResourceScope } from "@/components/app/resource-scope";
 import { overdueComplaintAlert } from "@/components/app/overdue-complaint-banner";
 import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
 import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
@@ -42,7 +46,7 @@ import { PageTrailProvider } from "@/components/ui/page-trail";
  * is what the route guard and requireFeature() are for. But it's what makes the product feel
  * like it was built for the plan they bought.
  */
-export default async function AgentShellLayout({ children }: { children: React.ReactNode }) {
+export default async function AgentShellLayout({ children, sheet }: { children: React.ReactNode; sheet: React.ReactNode }) {
   // Every read below is keyed by the verified session JWT alone (user id and tenant id are signed by
   // us), so none waits on another. They used to run one after another — seven trips to a remote
   // database, ~170–220ms each, before a single page could start. Now they are one round trip.
@@ -182,6 +186,14 @@ export default async function AgentShellLayout({ children }: { children: React.R
       <NotifySoundPrimer />
       {/* The first screen after signing in builds itself in, once (shell-entrance.tsx). */}
       <ShellEntrance />
+      {/* Kept answers are filed under this person and workspace (resource-scope.tsx); rendered before the page. */}
+      <ResourceScope id={`${context.userId}:${context.tenantId}`} />
+      {/* A page served from the router's cache is refreshed behind what it shows (background-refresh.tsx). */}
+      <BackgroundRefresh />
+      {/* Loads ahead, once the first page is idle: every menu page's frame, then the most-used pages' data (warm-app.tsx). */}
+      <WarmApp menu={menu} scope={`${context.userId}:${context.tenantId}`} />
+      {/* Then, on every page: what that page links to — its tabs, rail, title-line buttons (warm-page.tsx). */}
+      <Suspense fallback={null}><WarmPage /></Suspense>
       {takesTransfers && <LiveTransferCard />}
 
       {/* min-w-0 is load-bearing, for the same reason it is on the admin shell: a flex item
@@ -203,7 +215,7 @@ export default async function AgentShellLayout({ children }: { children: React.R
         {/* The walkthrough's step bar, only on a screen opened with ?guide= from Get set up. */}
         <Suspense fallback={null}><SetupGuideBar /></Suspense>
         {/* Foundation v3 (2026-10-27): every page on the one stage, ribbon and glass. */}
-        <DashboardStage className="flex min-w-0 flex-1 flex-col"><SoloProvider solo={solo}><PageTrailProvider menu={menu}><PageAlertsProvider alerts={pageAlerts}><PortalPageTransition>{children}</PortalPageTransition></PageAlertsProvider></PageTrailProvider></SoloProvider></DashboardStage>
+        <DashboardStage className="flex min-w-0 flex-1 flex-col"><SoloProvider solo={solo}><PageTrailProvider menu={menu}><PageAlertsProvider alerts={pageAlerts}><PortalPageTransition>{children}</PortalPageTransition>{/* A "New…" or "Invite…" opened from a page: a panel over it (@sheet, route-sheet.tsx). */}{sheet}</PageAlertsProvider></PageTrailProvider></SoloProvider></DashboardStage>
       </div>
       </main>
     </div>

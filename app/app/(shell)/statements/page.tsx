@@ -1,40 +1,39 @@
-
 import { actAsPagePermission, guardPage } from "@/lib/entitlements/guardPage";
 import { FeatureGateNotice } from "@/components/app/feature-gate-notice";
 import { RoleGateNotice } from "@/components/app/role-gate-notice";
 import { ViewTabs } from "@/components/ui/view-tabs";
-import { Callout } from "@/components/app/settings/primitives";
 import { StatementImportButton } from "@/components/app/statement-import";
 import { StatementsTable } from "@/components/app/statements-table";
 import { UnmatchedLinesTable } from "@/components/app/unmatched-lines-table";
 import { Button } from "@/components/ui/button";
-import { DataInPage } from "@/components/app/data-in/data-in-page";
-import { InfoTip } from "@/components/ui/info-tip";
+import { CommissionsPage } from "@/components/app/commissions/commissions-page";
+import { STATEMENT_VIEWS, parseStatementsView, statementViewCounts, statementsOn, statementsViewHref } from "@/components/app/commissions/statements/list-order";
 import { STATEMENT_EXPLAINER } from "@/lib/dashboard/checklist";
-import { StatStrip, StatTile } from "@/components/ui/stat";
 import {
   STATEMENT_SCHEMA_PENDING_MESSAGE,
-  statementMoney,
   type StatementCarrierOption,
   type StatementMapping,
 } from "@/lib/ledger/statementConstants";
-import { getSavedStatementMappings, listStatementCarriers, listStatements, listUnmatchedLines } from "@/lib/ledger/statementService";
+import { getSavedStatementMappings, listStatementCarriers, listStatements, listUnmatchedLines, listWaitingCents } from "@/lib/ledger/statementService";
 
 /**
- * Book of Business › Statements: every carrier statement imported, newest first, with the import.
+ * Commissions › Statements: every carrier statement imported, with the import.
  *
- * A statement is a record, not a draft: it is never deleted, only voided with a reason, and each
- * row links to the review screen where its lines are accepted, matched by hand or left unmatched.
- * Owner and bookkeeper only (`statements.view`), the same two roles the API admits.
+ * A statement is a record, not a draft: it is never deleted, only voided with a reason, and each row opens the
+ * statement, where its lines are accepted, matched by hand or left unmatched. Owner and bookkeeper only
+ * (`statements.view`), the same two roles the API admits.
  *
- * LA-4.3: a second tab, "Unmatched lines", is the queue across every statement — the lines still
- * without a match, which can be re-matched against the book as it is now.
- *
- * 2026-10-06 redesign: the two lists are segmented tabs on one row under the title, with the page's
- * actions on the right of the same row (as on the Agent Floor).
+ * Round 7 (owner pick 1·A, 2026-11-10; docs/la4/mockups-r7/commissions.html board 1·A): the page is the first step
+ * of the Commissions rail. Its tabs are what is left to do — To review (a line waits for a person, a line could not
+ * be read, or a PDF's lines wait to be typed in), Lines to match (LA-4.3: every unmatched line across statements,
+ * `?view=unmatched`), Reviewed, Voided — on the title line with their counts. No strip and no notice on the page: the
+ * figures are the tab counts and the toolbar's net waiting, and a blocked import is the disabled button's tooltip.
  */
 
-export default async function StatementsPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string }> }) {
+// The (i) names the next step by its name on the rail (round 7: "Pay issues", not "Discrepancies").
+const INFO = STATEMENT_EXPLAINER.replace("Discrepancies", "Pay issues");
+
+export default async function StatementsPage({ searchParams }: { searchParams: Promise<{ import?: string; view?: string; carrier?: string }> }) {
   const guard = await guardPage("statement_ingestion");
   if (!guard.entitled) {
     return (
@@ -50,72 +49,72 @@ export default async function StatementsPage({ searchParams }: { searchParams: P
   }
 
   const readOnly = guard.entitlement.access === "read_only";
-  const [{ available, statements }, { import: importParam, view }] = await Promise.all([listStatements(guard.context.tenantId), searchParams]);
-  const showUnmatched = view === "unmatched";
-  const unmatched = showUnmatched && available ? await listUnmatchedLines(guard.context.tenantId) : null;
+  const tenantId = guard.context.tenantId;
+  const [{ available, statements }, { import: importParam, view: viewParam, carrier }] = await Promise.all([listStatements(tenantId), searchParams]);
+  const view = parseStatementsView(viewParam);
   const blocked = !available ? STATEMENT_SCHEMA_PENDING_MESSAGE : readOnly ? "Importing is paused while the account is read-only." : null;
-  const [carriers, savedMappings]: [StatementCarrierOption[], Record<string, StatementMapping>] = blocked
-    ? [[], {}]
-    : await Promise.all([listStatementCarriers(guard.context.tenantId), getSavedStatementMappings(guard.context.tenantId)]);
+  const [unmatched, waitingCents, carriers, savedMappings]: [Awaited<ReturnType<typeof listUnmatchedLines>> | null, Record<string, number>, StatementCarrierOption[], Record<string, StatementMapping>] = await Promise.all([
+    view === "unmatched" && available ? listUnmatchedLines(tenantId) : Promise.resolve(null),
+    view !== "unmatched" && available ? listWaitingCents(tenantId) : Promise.resolve({}),
+    blocked ? Promise.resolve([]) : listStatementCarriers(tenantId),
+    blocked ? Promise.resolve({}) : getSavedStatementMappings(tenantId),
+  ]);
+  // A blocked import says why on hover only (board 1·4): no notice on the page.
   const importControl = blocked ? (
-    <Button type="button" disabled title={blocked}>Import statement</Button>
+    <Button type="button" disabled title={blocked}>Import a statement</Button>
   ) : (
     <StatementImportButton carriers={carriers} savedMappings={savedMappings} autoOpen={importParam === "1"} />
   );
 
-  const standing = statements.filter((statement) => statement.status !== "voided");
-  const waiting = standing.reduce((total, statement) => total + statement.counts.proposed + statement.counts.unmatched, 0);
-  const acceptedCents = standing.reduce((total, statement) => total + statement.acceptedCents, 0);
-  const toReview = standing.filter((statement) => statement.status === "review").length;
-  // LA-4.2: PDFs stored and waiting for a person to type their lines in.
-  const toType = standing.filter((statement) => statement.status === "awaiting_entry").length;
-  const unmatchedCount = standing.reduce((total, statement) => total + statement.counts.unmatched, 0);
-  const leftUnmatchedCount = standing.reduce((total, statement) => total + statement.counts.leftUnmatched, 0);
-  // The Commission ledger is the next step on the rail (2026-11-02), so only the import stays here.
-  const actions = importControl;
+  const counts = statementViewCounts(statements);
+  // LA-4.2: PDFs stored and waiting for a person to type their lines in sit on To review.
+  const toType = statements.filter((statement) => statement.status === "awaiting_entry").length;
+  const leftUnmatchedCount = statements.filter((statement) => statement.status !== "voided").reduce((total, statement) => total + statement.counts.leftUnmatched, 0);
+  const shown = view === "unmatched" ? [] : statementsOn(statements, view);
+  const empty = !available
+    ? { title: "Statements are not available yet", hint: STATEMENT_SCHEMA_PENDING_MESSAGE }
+    : statements.length === 0
+      ? { title: "No statement imported yet", hint: "Import a carrier's commission statement as CSV, Excel or PDF to review its lines." }
+      : view === "review"
+        ? { title: "Nothing to review", hint: "Every line on every statement is decided. Import the next carrier statement when it arrives." }
+        : view === "reviewed"
+          ? { title: "No statement reviewed yet", hint: "A statement moves here once no line on it waits for a person." }
+          : { title: "No statement voided", hint: "A voided statement is kept here with its reason; its lines no longer post." };
 
   return (
-    // Book of business › Files › Statements (owner 2026-11-02: out of Commissions). A statement is a carrier
-    // file of its own kind, with its own import, review and voiding, so the page moved whole.
-    <DataInPage
-      step="files"
-      title="Statements"
-      chip={<InfoTip label="What is a carrier statement?">{STATEMENT_EXPLAINER}</InfoTip>}
-      actions={actions}
-      tabs={statements.length > 0 ? (
+    <CommissionsPage
+      step="statements"
+      info={INFO}
+      actions={importControl}
+      tabs={
         <ViewTabs
-          label="Statement lists"
-          value={showUnmatched ? "unmatched" : "statements"}
-          tabs={[
-            { key: "statements", label: "Statements", count: statements.length, href: "/app/statements" },
-            { key: "unmatched", label: "Unmatched lines", count: unmatchedCount, href: "/app/statements?view=unmatched" },
-          ]}
+          label="Statements"
+          value={view}
+          tabs={STATEMENT_VIEWS.map((item) => ({
+            key: item.key,
+            label: item.label,
+            count: counts[item.key],
+            href: statementsViewHref(item.key),
+            srSuffix: item.key === "review" && toType ? `(${toType} ${toType === 1 ? "PDF" : "PDFs"} to type in)` : undefined,
+          }))}
         />
-      ) : undefined}
+      }
     >
-
-      {/* To the bell, not the page (UI-CONSISTENCY §3): Callout raises it there. */}
-      {blocked && <Callout tone="warning" title={blocked} />}
-
-      {statements.length > 0 && (
-        <StatStrip label="Statement totals">
-          <StatTile label="Statements" value={standing.length.toLocaleString("en-US")} footnote={`${(statements.length - standing.length).toLocaleString("en-US")} voided`} />
-          <StatTile label="To review" value={toReview.toLocaleString("en-US")} valueTone={toReview ? "warning" : undefined} footnote={toType ? `${toType.toLocaleString("en-US")} ${toType === 1 ? "PDF" : "PDFs"} to type in` : undefined} />
-          <StatTile label="Lines waiting" value={waiting.toLocaleString("en-US")} footnote="for a person" />
-          <StatTile label="Accepted" value={statementMoney(acceptedCents)} footnote="posted to the ledger" />
-        </StatStrip>
-      )}
-
-      {showUnmatched && unmatched ? (
-        <UnmatchedLinesTable lines={unmatched.lines} leftUnmatchedCount={leftUnmatchedCount} canWrite={!readOnly} writeBlockedReason={readOnly ? "Re-matching is paused while the account is read-only." : null} />
+      {view === "unmatched" ? (
+        <UnmatchedLinesTable lines={unmatched?.lines ?? []} leftUnmatchedCount={leftUnmatchedCount} canWrite={!readOnly} writeBlockedReason={readOnly ? "Re-matching is paused while the account is read-only." : null} />
       ) : (
         <StatementsTable
-          statements={statements}
+          key={view}
+          statements={shown}
+          view={view}
+          waitingCents={waitingCents}
+          initialCarrier={carrier ?? ""}
           readOnly={readOnly}
-          emptyTitle={available ? "No statement imported yet" : "Statements are not available yet"}
-          emptyHint={available ? "Import a carrier's commission statement as CSV, Excel or PDF to review its lines." : STATEMENT_SCHEMA_PENDING_MESSAGE}
+          emptyTitle={empty.title}
+          emptyHint={empty.hint}
+          emptyAction={view === "review" && !blocked ? <StatementImportButton carriers={carriers} savedMappings={savedMappings} /> : undefined}
         />
       )}
-    </DataInPage>
+    </CommissionsPage>
   );
 }

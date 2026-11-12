@@ -10,6 +10,7 @@ const STROKE: Record<MeterTone, string> = {
   warning: "var(--warning)",
   danger: "var(--error)",
   primary: "var(--primary)",
+  highlight: "var(--highlight)",
 };
 
 /**

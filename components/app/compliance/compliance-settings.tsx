@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
 
 import { Recipients, SETTINGS_URL, regulatorName, useComplianceBundle } from "@/components/app/compliance/compliance-settings-data";
 import { Advanced, FormSection, FormSections } from "@/components/app/settings/patterns";
@@ -43,6 +42,7 @@ type Tab = "start" | "complaints" | "records" | "holds" | "transfers";
 /** Every anchor Settings search links to (#purge), and the tab that holds it. */
 export const SECTION_TAB = {
   deadlines: "complaints",
+  "index-checks": "transfers",
   retention: "records",
   purge: "records",
   holds: "holds",
@@ -60,7 +60,7 @@ const PAGE = 10;
 
 /** A table row that opens a page; the first cell's link is the keyboard way in. */
 function RowLink({ href, children }: { href: string; children: ReactNode }) {
-  return <Link href={href} className="font-medium text-[var(--ink)] no-underline hover:text-[var(--accent-ink)]">{children}</Link>;
+  return <Link href={href} className="whitespace-nowrap font-medium text-foreground no-underline hover:underline">{children}</Link>;
 }
 
 export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
@@ -117,7 +117,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
 
   const tabs: { key: Tab; label: string; count?: number | null; tone?: "danger" }[] = [
     { key: "start", label: "Start here" },
-    { key: "complaints", label: "Complaints", count: unset.length || null, tone: "danger" },
+    { key: "complaints", label: "Complaints", count: unset.length || null },
     { key: "records", label: "Records" },
     { key: "holds", label: "Holds & deletion", count: activeHolds.length || null },
     { key: "transfers", label: "Gate & reports" },
@@ -164,15 +164,16 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
             <SettingsTableCard title="Response deadlines" actions={<span className="text-sm text-[var(--muted)]">{unset.length ? `${unset.length} not set` : "Every licensed state is set"}</span>}>
               {deadlineRows.length === 0 ? <EmptyState title="No deadlines yet" hint="Add each licensed state's DOI response days, and the FTC's." /> : (
                 <table className={st.table}>
-                  <thead><tr className={st.headRow}><th className={st.th}>Regulator</th><th className={cn(st.th, "text-right")}>Days to respond</th><th className={st.th}>Source</th><th className={cn(st.th, "w-10")} aria-label="Open" /></tr></thead>
+                  <thead><tr className={st.headRow}><th className={st.th}>Regulator</th><th className={cn(st.th, "text-right")}>Days to respond</th><th className={st.th}>Source</th><th className={st.th}>Status</th><th className={st.th}>Next step</th></tr></thead>
                   <tbody>{deadlines.rows.map((r) => {
                     const href = r.responseDays === null ? `${SETTINGS_URL}/deadlines/new?regulator=${r.regulator}` : `${SETTINGS_URL}/deadlines/${r.regulator}`;
                     return (
                       <tr key={r.regulator} className="cursor-pointer hover:bg-[var(--surface-alt)]" onClick={() => router.push(href)}>
                         <td className={st.td}><RowLink href={href}>{regulatorName(r.regulator)}</RowLink></td>
-                        <td className={cn(st.td, st.num)}>{r.responseDays === null ? <span className="text-[var(--muted)]">Not set</span> : r.responseDays}</td>
-                        <td className={st.td}>{r.notes ?? <span className="text-[var(--muted)]">—</span>}</td>
-                        <td className={cn(st.td, "text-right text-[var(--muted)]")}><ChevronRight aria-hidden="true" className="ml-auto size-4" /></td>
+                        <td className={cn(st.td, st.num)}>{r.responseDays === null ? <span className="text-muted-foreground">—</span> : r.responseDays}</td>
+                        <td className={cn(st.td, "whitespace-nowrap")} title={r.notes ?? undefined}>{r.notes ?? <span className="text-muted-foreground">—</span>}</td>
+                        <td className={st.td}>{r.responseDays === null ? <StatusChip tone="warning">Not set</StatusChip> : <StatusChip tone="good">Set</StatusChip>}</td>
+                        <td className={cn(st.td, "whitespace-nowrap")}>{r.responseDays === null ? "Set it" : "Edit"} ›</td>
                       </tr>
                     );
                   })}</tbody>
@@ -197,7 +198,7 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
           <div id="retention" className="scroll-mt-24">
             <SettingsTableCard title="How long records are kept">
               <table className={st.table}>
-                <thead><tr className={st.headRow}><th className={st.th}>Record</th><th className={st.th}>Kept for</th><th className={st.th}>Then</th><th className={st.th}>Basis</th><th className={st.th}>Rule</th><th className={cn(st.th, "w-10")} aria-label="Open" /></tr></thead>
+                <thead><tr className={st.headRow}><th className={st.th}>Record</th><th className={st.th}>Kept for</th><th className={st.th}>Then</th><th className={st.th}>Basis</th><th className={st.th}>Rule</th></tr></thead>
                 <tbody>{RECORD_TYPES.map((t) => {
                   const p = platformRule(t.key);
                   const own = mine(t.key);
@@ -207,11 +208,10 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
                   return (
                     <tr key={t.key} className="cursor-pointer hover:bg-[var(--surface-alt)]" onClick={() => router.push(href)}>
                       <td className={st.td}><RowLink href={href}>{t.label}</RowLink></td>
-                      <td className={st.td}>{shown ? describeDays(shown.retainDays) : <span className="text-[var(--muted)]">—</span>}{own.some((r) => r.state) ? <span className={st.sub}>{own.filter((r) => r.state).length} state rule{own.filter((r) => r.state).length === 1 ? "" : "s"}</span> : null}</td>
-                      <td className={st.td}>{shown ? ACTION_LABELS[shown.action as RetentionAction] ?? shown.action : <span className="text-[var(--muted)]">—</span>}</td>
-                      <td className={st.td}>{shown ? BASIS_LABELS[shown.basis as RetentionBasis] ?? shown.basis : <span className="text-[var(--muted)]">—</span>}</td>
-                      <td className={st.td}>{isLocked ? <StatusChip tone="neutral">Locked: never deleted</StatusChip> : own.length ? <StatusChip tone="good">Yours · {own.length} rule{own.length === 1 ? "" : "s"}</StatusChip> : p ? <StatusChip tone="neutral" dot={false}>Insurvas</StatusChip> : <span className="text-[var(--muted)]">No rule: never deleted</span>}</td>
-                      <td className={cn(st.td, "text-right text-[var(--muted)]")}><ChevronRight aria-hidden="true" className="ml-auto size-4" /></td>
+                      <td className={cn(st.td, "whitespace-nowrap")} title={own.some((r) => r.state) ? `${own.filter((r) => r.state).length} state rule${own.filter((r) => r.state).length === 1 ? "" : "s"} too` : undefined}>{shown ? describeDays(shown.retainDays) : <span className="text-muted-foreground">—</span>}</td>
+                      <td className={cn(st.td, "whitespace-nowrap")}>{shown ? ACTION_LABELS[shown.action as RetentionAction] ?? shown.action : <span className="text-muted-foreground">—</span>}</td>
+                      <td className={cn(st.td, "whitespace-nowrap")}>{shown ? BASIS_LABELS[shown.basis as RetentionBasis] ?? shown.basis : <span className="text-muted-foreground">—</span>}</td>
+                      <td className={cn(st.td, "whitespace-nowrap")}>{isLocked ? <StatusChip tone="neutral">Locked: never deleted</StatusChip> : own.length ? <StatusChip tone="good">Yours · {own.length} rule{own.length === 1 ? "" : "s"}</StatusChip> : p ? <StatusChip tone="neutral">Insurvas</StatusChip> : <StatusChip tone="neutral">No rule: never deleted</StatusChip>}</td>
                     </tr>
                   );
                 })}</tbody>
@@ -233,19 +233,18 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
           <SettingsTableCard title="Runs">
             {data.runs.length === 0 ? <EmptyState title="No runs yet" hint="Start with a dry run: it deletes nothing and shows what a live run would." /> : (
               <table className={st.table}>
-                <thead><tr className={st.headRow}><th className={st.th}>When</th><th className={st.th}>Mode</th><th className={cn(st.th, "text-right")}>Matched</th><th className={cn(st.th, "text-right")}>Held</th><th className={cn(st.th, "text-right")}>Deleted</th><th className={st.th}>Unruled</th><th className={cn(st.th, "w-10")} aria-label="Open" /></tr></thead>
+                <thead><tr className={st.headRow}><th className={st.th}>When</th><th className={st.th}>Mode</th><th className={cn(st.th, "text-right")}>Matched</th><th className={cn(st.th, "text-right")}>Held</th><th className={cn(st.th, "text-right")}>Deleted</th><th className={cn(st.th, "text-right")}>Unruled</th></tr></thead>
                 <tbody>{runs.rows.map((r) => {
                   const href = `${SETTINGS_URL}/runs/${r.id}`;
                   const sum = (k: "rows_matched" | "rows_held" | "rows_purged") => r.results.reduce((a, x) => a + (x[k] ?? 0), 0).toLocaleString("en-US");
                   return (
                     <tr key={r.id} className="cursor-pointer hover:bg-[var(--surface-alt)]" onClick={() => router.push(href)}>
                       <td className={st.td}><RowLink href={href}>{dateTime(r.startedAt, viewerTimeZone())}</RowLink></td>
-                      <td className={st.td}><StatusChip tone={r.mode === "live" ? "danger" : "info"}>{r.mode === "live" ? "Live" : "Dry run"}</StatusChip></td>
+                      <td className={st.td}><StatusChip tone={r.mode === "live" ? "warning" : "neutral"}>{r.mode === "live" ? "Live" : "Dry run"}</StatusChip></td>
                       <td className={cn(st.td, st.num)}>{sum("rows_matched")}</td>
                       <td className={cn(st.td, st.num)}>{sum("rows_held")}</td>
                       <td className={cn(st.td, st.num)}>{sum("rows_purged")}</td>
-                      <td className={st.td}>{r.unruled.length ? r.unruled.length : <span className="text-[var(--muted)]">—</span>}</td>
-                      <td className={cn(st.td, "text-right text-[var(--muted)]")}><ChevronRight aria-hidden="true" className="ml-auto size-4" /></td>
+                      <td className={cn(st.td, st.num)}>{r.unruled.length ? r.unruled.length : <span className="text-muted-foreground">—</span>}</td>
                     </tr>
                   );
                 })}</tbody>
@@ -262,16 +261,17 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
             <SettingsTableCard title="Legal holds" actions={<span className="text-sm text-[var(--muted)]">Nothing under a hold is deleted, by a schedule or a deletion request</span>}>
               {activeHolds.length === 0 ? <EmptyState title="No holds in force" hint="A complaint or a commission dispute places one by itself. Place one by hand for litigation." /> : (
                 <table className={st.table}>
-                  <thead><tr className={st.headRow}><th className={st.th}>Covers</th><th className={st.th}>Why</th><th className={st.th}>Placed</th><th className={st.th}>Note</th><th className={cn(st.th, "w-10")} aria-label="Open" /></tr></thead>
+                  <thead><tr className={st.headRow}><th className={st.th}>Covers</th><th className={st.th}>Kind</th><th className={st.th}>Why</th><th className={st.th}>Placed</th><th className={st.th}>Status</th><th className={st.th}>Next step</th></tr></thead>
                   <tbody>{holds.rows.map((h) => {
                     const href = `${SETTINGS_URL}/holds/${h.id}`;
                     return (
                       <tr key={h.id} className="cursor-pointer hover:bg-[var(--surface-alt)]" onClick={() => router.push(href)}>
-                        <td className={cn(st.td, "whitespace-nowrap")}><RowLink href={href}>{h.scopeValue ?? HOLD_SCOPE_LABELS[h.scope]}</RowLink>{h.scopeValue ? <span className={st.sub}>{HOLD_SCOPE_LABELS[h.scope].replace(/^A /, "")}</span> : null}</td>
-                        <td className={cn(st.td, "whitespace-nowrap")}>{HOLD_REASON_LABELS[h.reason]}{h.automatic ? <span className={st.sub}>Automatic, from its {h.reason === "complaint" ? "complaint" : "dispute"}</span> : null}</td>
-                        <td className={cn(st.td, "whitespace-nowrap")}>{dateTime(h.placedAt, viewerTimeZone())}</td>
-                        <td className={st.td}>{h.note ?? <span className="text-[var(--muted)]">—</span>}</td>
-                        <td className={cn(st.td, "text-right text-[var(--muted)]")}><ChevronRight aria-hidden="true" className="ml-auto size-4" /></td>
+                        <td className={cn(st.td, "whitespace-nowrap")} title={h.note ?? undefined}><RowLink href={href}>{h.scopeValue ?? HOLD_SCOPE_LABELS[h.scope]}</RowLink></td>
+                        <td className={cn(st.td, "whitespace-nowrap")}>{h.scopeValue ? HOLD_SCOPE_LABELS[h.scope].replace(/^A /, "").replace(/^./, (c) => c.toUpperCase()) : <span className="text-muted-foreground">—</span>}</td>
+                        <td className={cn(st.td, "whitespace-nowrap")}>{HOLD_REASON_LABELS[h.reason]}</td>
+                        <td className={cn(st.td, "whitespace-nowrap tabular-nums text-muted-foreground")}>{dateTime(h.placedAt, viewerTimeZone())}</td>
+                        <td className={cn(st.td, "whitespace-nowrap")}>{h.sourceOpen ? <StatusChip tone="warning" title="Released automatically when it is closed">{h.reason === "complaint" ? "Complaint open" : "Dispute open"}</StatusChip> : <StatusChip tone="good">In force</StatusChip>}</td>
+                        <td className={cn(st.td, "whitespace-nowrap")}>Open ›</td>
                       </tr>
                     );
                   })}</tbody>
@@ -332,6 +332,25 @@ export function ComplianceSettingsBoard({ readOnly }: { readOnly: boolean }) {
             </Advanced>
             <p className="m-0 text-sm text-[var(--muted)]">No report copies are stored. Disclosures are edited in <Link className="underline" href="/app/settings#sales-disclosures">Settings › Disclosures</Link>.</p>
           </FormSection>
+          <div id="index-checks" className="scroll-mt-24">
+            {/* LA-6.1 (Notion; round 7): the nightly reconciliation of the compliance record index, visible at last. */}
+            <SettingsTableCard title="Index checks" actions={<span className="text-sm text-muted-foreground">Every night · any record missing is a bug</span>}>
+              {!data.indexChecks?.length ? <EmptyState title="No index checks yet" hint="The first check runs tonight." /> : (
+                <table className={st.table}>
+                  <thead><tr className={st.headRow}><th className={st.th}>Night of</th><th className={cn(st.th, "text-right")}>Missing</th><th className={cn(st.th, "text-right")}>Out of date</th><th className={cn(st.th, "text-right")}>No number</th><th className={st.th}>Status</th></tr></thead>
+                  <tbody>{data.indexChecks.slice(0, PAGE).map((r) => (
+                    <tr key={r.ranAt}>
+                      <td className={cn(st.td, "whitespace-nowrap font-medium text-foreground tabular-nums")}>{dateTime(r.ranAt, viewerTimeZone())}</td>
+                      <td className={cn(st.td, st.num)}>{r.missing.toLocaleString("en-US")}</td>
+                      <td className={cn(st.td, st.num)}>{r.stale.toLocaleString("en-US")}</td>
+                      <td className={cn(st.td, st.num)}>{r.unkeyed.toLocaleString("en-US")}</td>
+                      <td className={st.td}>{r.missing > 0 ? <StatusChip tone="danger">{r.missing.toLocaleString("en-US")} missing</StatusChip> : <StatusChip tone="good">Clean</StatusChip>}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              )}
+            </SettingsTableCard>
+          </div>
           <FormSection id="dashboard" title="Dashboard and monthly email" info="What the compliance dashboard shows, and the monthly coverage email.">
             <SettingRow label="Monthly coverage email" change="The coverage figures and the book-wide gap scan, once a month.">
               {onOff("dashboard.monthlyEmail", "Monthly coverage email")}

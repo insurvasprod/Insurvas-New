@@ -18,6 +18,7 @@ import { ManagerDialog, OffboardDialog, StatusDialog } from "./producer-dialogs"
 import { ProducerCarriersTab } from "./producer-carriers-tab";
 import { ProducerOnboardingTab } from "./producer-onboarding-tab";
 import { ProducerMoneyTab } from "./producer-money-tab";
+import type { MoneyView } from "@/components/app/commissions/producer-pay/money-core";
 import { ProducerSupportCard } from "./producer-support-card";
 import { sendJson, useAgencyData } from "./use-agency-data";
 
@@ -39,7 +40,13 @@ const CHANGED = "agency:producer-changed";
  * supports him), Carriers (AG-0.9), Onboarding (AG-1.10) and Money (his ledger and statements; hidden from a
  * manager, absent for an assistant). The old Production tab was two links; they are in the header's More now.
  */
-export function ProducerDetail({ producerId, tab, viewer }: { producerId: string; tab: ProducerTab; viewer: { isOwner: boolean; isManager: boolean; isBookkeeper: boolean; canSeeMoney: boolean } }) {
+export function ProducerDetail({ producerId, tab, viewer, money }: {
+  producerId: string;
+  tab: ProducerTab;
+  viewer: { isOwner: boolean; isManager: boolean; isBookkeeper: boolean; canSeeMoney: boolean };
+  /** The Money tab (round 7, 4·1): the owner's words, the chip and the month it opens on, the month select's options. */
+  money?: { name: string; initialView: MoneyView; initialSelection: string; months: ReadonlyArray<{ value: string; label: string }> };
+}) {
   const { data, error, loading, reload } = useAgencyData<Detail>(`/api/app/agency/producers/${producerId}`);
   const scores = useAgencyData<{ rows: Score[] }>(tab === "overview" ? "/api/app/agency/scorecards" : null);
   const score = useMemo(() => scores.data?.rows.find((r) => r.producerUserId === data?.userId) ?? null, [scores.data, data]);
@@ -53,7 +60,7 @@ export function ProducerDetail({ producerId, tab, viewer }: { producerId: string
 
   if (tab === "carriers") return <ProducerCarriersTab producerId={producerId} canEdit={viewer.isOwner} />;
   if (tab === "onboarding") return <ProducerOnboardingTab producerId={producerId} isOwner={viewer.isOwner} isSelf={data.isSelf} />;
-  if (tab === "money") return <ProducerMoneyTab url={`/api/app/agency/producers/${producerId}/money`} />;
+  if (tab === "money") return <ProducerMoneyTab url={`/api/app/agency/producers/${producerId}/money`} audience={data.isSelf ? "self" : "owner"} name={money?.name ?? data.displayName} initialView={money?.initialView} initialSelection={money?.initialSelection} months={money?.months} />;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">

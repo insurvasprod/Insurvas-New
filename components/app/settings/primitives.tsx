@@ -57,10 +57,10 @@ export function SettingsSectionProvider({ value, children }: { value: SectionMet
  * Discard / Save pair. Sections that save each edit as it is made pass no actions: a Save button
  * with nothing pending behind it is a control that lies.
  */
-export function SettingsSectionHeader({ actions, trail, lead }: {
+export function SettingsSectionHeader({ actions, trail, tabs }: {
   actions?: ReactNode;
-  /** A routed section's tabs, drawn on the frame's title line (Accounting, Retention, Compliance). */
-  lead?: ReactNode;
+  /** A routed section's tabs: the frame's sub-page bar, under its title (owner 2026-11-09, UI-CONSISTENCY §8). */
+  tabs?: ReactNode;
   /**
    * A record open inside the section (owner 2026-10-28, Underwriting templates): drawn on the
    * title's own line after an arrow, with `actions` at the end of that line. The purpose line and
@@ -84,7 +84,7 @@ export function SettingsSectionHeader({ actions, trail, lead }: {
     }
     return (
       <>
-        {lead && (meta.leadSlot ? createPortal(lead, meta.leadSlot) : lead)}
+        {tabs && (meta.leadSlot ? createPortal(tabs, meta.leadSlot) : tabs)}
         {actions && (meta.actionsSlot ? createPortal(actions, meta.actionsSlot) : <div className="flex justify-end gap-2.5">{actions}</div>)}
       </>
     );
@@ -101,8 +101,10 @@ export function SettingsSectionHeader({ actions, trail, lead }: {
   return (
     // Wraps only on narrow screens. At desktop width the board keeps the pair on the right however
     // long the purpose line runs, so the text takes what is left rather than pushing them under it.
-    <div className="flex flex-wrap items-end justify-between gap-6 lg:flex-nowrap">
-      <div className="min-w-0 flex-1">
+    // With tabs (a section opened outside the Settings frame: Get set up, or embedded in another page) the line is the
+    // page header's: the title, the sub-page bar 16px after it, one hairline under both and the buttons above it (UI-CONSISTENCY §8b).
+    <div data-section-header className={cn("flex flex-wrap items-end justify-between gap-6 lg:flex-nowrap", tabs && "items-center gap-x-4 gap-y-3")}>
+      <div className={cn("min-w-0", tabs ? "shrink-0" : "flex-1")}>
         {/* The purpose line sits behind an (i), as in the framed header (owner, 29 Oct: remove it from
             the page opened from Get set up too). */}
         <h2 className="m-0 flex items-center gap-1.5 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">
@@ -111,7 +113,14 @@ export function SettingsSectionHeader({ actions, trail, lead }: {
         </h2>
         {meta.history && meta.id && <SectionLastChanged sectionKey={meta.id} />}
       </div>
-      {actions && <div className="flex shrink-0 items-center gap-2.5">{actions}</div>}
+      {tabs ? (
+        // The bar and the buttons share one hairline to the line's end, the buttons standing above it (owner
+        // 2026-11-09), as in PageHeader's SubpageLine; under lg the wrapper dissolves.
+        <div data-subpage-line className="contents lg:flex lg:min-w-0 lg:flex-1 lg:items-end lg:gap-x-4 lg:self-stretch lg:border-b lg:border-border">
+          <div data-page-tabs className="flex min-w-0 flex-1 items-center max-lg:order-last max-lg:basis-full [&_[data-subpage-tabs]]:flex-1">{tabs}</div>
+          {actions && <div data-page-actions className="ml-auto flex shrink-0 items-center gap-2.5 lg:mb-1.5">{actions}</div>}
+        </div>
+      ) : actions && <div data-page-actions className="ml-auto flex shrink-0 items-center gap-2.5">{actions}</div>}
     </div>
   );
 }

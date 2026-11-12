@@ -8,6 +8,7 @@ import { IMPORT_CSV_KEY } from "@/lib/agentTemplates/importReviewModel";
 import { cn } from "@/lib/utils";
 import { IntentLink } from "@/components/ui/nav-pending";
 import { rememberLeadsIn } from "@/components/app/step-frame/frame-memory";
+import { readResource } from "@/lib/client/resource-cache";
 
 type RailStep = { key: LeadsInStep; label: string; sub: string; href: string };
 
@@ -77,8 +78,9 @@ export function LeadsInRail({ steps, step, initialCollapsed = false }: { steps: 
   const [reviewHref, setReviewHref] = useState<string | null>(null);
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/app/lead-sources/steps", { cache: "no-store", signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : null))
+    // Through the app's cache (speed pass 2026-11-09): moving between steps reuses an answer up to 20s old.
+    readResource<{ counts?: Partial<Record<LeadsInStep, number>>; reviewHref?: string | null }>("/api/app/lead-sources/steps", { freshFor: 20_000 })
+      .catch(() => null)
       .then(async (body: { counts?: Partial<Record<LeadsInStep, number>>; reviewHref?: string | null } | null) => {
         const here = await stillStaged(stagedHere(), controller.signal);
         const newest = body?.reviewHref?.split("/").pop() ?? null;

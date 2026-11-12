@@ -37,7 +37,7 @@ export function InReportsSlot({ framed, slot, children }: { framed: boolean; slo
 type Own = { title: string | null; facts?: ReactNode; chip?: ReactNode };
 const TitleContext = createContext<((own: Own) => void) | null>(null);
 
-export function ReportsHeader({ title, info, chip, facts, children }: { title: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; children: ReactNode }) {
+export function ReportsHeader({ title, info, chip, facts, switcher, children }: { title: string; info?: ReactNode; chip?: ReactNode; facts?: ReactNode; /** The "Table · Chart" switch (ReportsPage `show`), before the view's buttons. */ switcher?: ReactNode; children: ReactNode }) {
   const [own, setOwn] = useState<Own>({ title: null });
   const shownTitle = own.title ?? title;
   const shownChip = own.chip ?? chip;
@@ -52,8 +52,10 @@ export function ReportsHeader({ title, info, chip, facts, children }: { title: s
         // The facts never widen the title's column (it sizes to its content beside the tabs): they wrap in
         // it, at least 360px wide, so a long line cannot squeeze the tabs (the Accounting walk, 2026-11-03).
         meta={shownFacts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{shownFacts}</p> : undefined}
-        lead={<div id="reports-lead" className="flex min-w-0 flex-wrap items-center gap-2 empty:hidden" />}
-        actions={<div id="reports-corner" className="flex items-center gap-2 empty:hidden" />}
+        tabs={<div id="reports-lead" className="flex min-w-0 flex-1 flex-wrap items-end gap-2 empty:hidden" />}
+        actions={switcher
+          ? <div className="flex items-center gap-2">{switcher}<div id="reports-corner" className="flex items-center gap-2 empty:hidden" /></div>
+          : <div id="reports-corner" className="flex items-center gap-2 empty:hidden" />}
         className="lg:col-span-2 lg:pb-6"
       />
       {children}

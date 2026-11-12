@@ -148,7 +148,11 @@ export const STATUS_LABELS: Record<CaseStatus, string> = {
   open: "Not started", working: "Working", waiting_on_carrier: "With the carrier", saved: "Saved", lost: "Lost", closed_no_save: "Closed without a save",
 };
 
-export type OpenCase = { id: string; step: Step; reason: Reason; deadline: string | null; status: CaseStatus };
+/** `byPerson`: opened by a person (New case, round 7: what a person heard before any file shows it). */
+export type OpenCase = { id: string; step: Step; reason: Reason; deadline: string | null; status: CaseStatus; byPerson?: boolean };
+/** The reasons a person may open a case for (round 7, Lapse risk 4·A: a recorded signal is a case). */
+export const PERSON_REASONS = ["cancellation_request", "payment_date_change", "pending_manual_action"] as const satisfies readonly Reason[];
+export type PersonReason = (typeof PERSON_REASONS)[number];
 export type PolicyNow = { status: string | null; paidTo: string | null };
 
 export type Transition =
@@ -191,7 +195,9 @@ export const chargebackMeansLost = (policyStatus: string | null): boolean => Boo
 
 /** A paperwork case clears when the files no longer show its reason; it is lost if the policy is gone. */
 export function paperworkTransition(open: OpenCase, stillThere: boolean, policy: PolicyNow): Transition {
-  if (stillThere || open.reason === "payment_date_change") return { kind: "keep" };
+  // A case a person opened is not one the files carry: their absence proves nothing. It stays until a person
+  // closes it, or the policy is gone.
+  if (stillThere || open.reason === "payment_date_change" || (open.byPerson && !(policy.status && GONE.has(policy.status)))) return { kind: "keep" };
   if (policy.status && GONE.has(policy.status)) return { kind: "lose", reason: open.reason };
   return { kind: "save" };
 }

@@ -10,7 +10,7 @@
  * canonical keys and the interview's answers (`health.<question_key>`).
  */
 
-import { Fragment, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { Fragment, useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Copy, FileText, Plus, X } from "lucide-react";
 
 import { Field, SettingsCard, control } from "@/components/app/settings/primitives";
@@ -182,7 +182,7 @@ function PdfField({ item, readOnly, busy, onUpload, onOpenPdf, onRemovePdf }: {
   );
 }
 
-export function WordingFields({ item, draft, setDraft, readOnly, onUpload, onOpenPdf, onRemovePdf, busy }: {
+export function WordingFields({ item, draft, setDraft, readOnly, onUpload, onOpenPdf, onRemovePdf, busy, bare = false }: {
   item: DisclosureItem | null;
   draft: DisclosureDraft;
   setDraft: SetDraft;
@@ -191,6 +191,8 @@ export function WordingFields({ item, draft, setDraft, readOnly, onUpload, onOpe
   onOpenPdf: () => void;
   onRemovePdf: () => void;
   busy: boolean;
+  /** Inside a sheet (round 8): no card around the fields; the sheet's section is the frame. */
+  bare?: boolean;
 }) {
   const set = (patch: Partial<DisclosureDraft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   // A code is fixed once it has history: a published version, or a draft that follows one (a copy of an Insurvas document included).
@@ -205,7 +207,7 @@ export function WordingFields({ item, draft, setDraft, readOnly, onUpload, onOpe
   };
 
   return (
-    <SettingsCard>
+    <Block bare={bare}>
       <div className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-[240px_1fr]">
           <Field label="Code" htmlFor="dc-code" required hint={codeFixed ? "Fixed once a version has been published." : "Capital letters, digits and _."}>
@@ -225,7 +227,18 @@ export function WordingFields({ item, draft, setDraft, readOnly, onUpload, onOpe
         </div>
         <PdfField item={item} readOnly={readOnly} busy={busy} onUpload={onUpload} onOpenPdf={onOpenPdf} onRemovePdf={onRemovePdf} />
       </div>
-    </SettingsCard>
+    </Block>
+  );
+}
+
+/** A card on a page; a plain titled group inside a sheet (round 8: never a card inside a sheet). */
+function Block({ bare, title, info, children }: { bare: boolean; title?: string; info?: string; children: ReactNode }) {
+  if (!bare) return <SettingsCard title={title} info={info}>{children}</SettingsCard>;
+  return (
+    <div className="flex flex-col gap-2">
+      {title && <h4 className="m-0 text-sm font-semibold text-[var(--ink)]">{title}{info && <span className="block text-xs font-normal text-[var(--muted)]">{info}</span>}</h4>}
+      {children}
+    </div>
   );
 }
 
@@ -401,12 +414,14 @@ function RuleEditor({ draft, setDraft, readOnly, library, clauseErrors }: {
   );
 }
 
-export function ScopeFields({ draft, setDraft, library, readOnly, clauseErrors }: {
+export function ScopeFields({ draft, setDraft, library, readOnly, clauseErrors, bare = false }: {
   draft: DisclosureDraft;
   setDraft: SetDraft;
   library: DisclosureLibrary;
   readOnly: boolean;
   clauseErrors: Record<string, string>;
+  /** Inside a sheet (round 8): titled groups, not cards. */
+  bare?: boolean;
 }) {
   const set = (patch: Partial<DisclosureDraft>) => setDraft((d) => (d ? { ...d, ...patch } : d));
   const knownCarriers = new Set(library.carriers.map((c) => c.id));
@@ -414,11 +429,11 @@ export function ScopeFields({ draft, setDraft, library, readOnly, clauseErrors }
 
   return (
     <>
-      <SettingsCard title="States" info="The client's state on the application. None picked means every state.">
+      <Block bare={bare} title="States" info="The client's state on the application. None picked means every state.">
         <StatePicker value={draft.statesText} readOnly={readOnly} onChange={(statesText) => set({ statesText })} />
-      </SettingsCard>
+      </Block>
 
-      <SettingsCard title="Carriers" info="The carrier the application goes to. None ticked means every carrier.">
+      <Block bare={bare} title="Carriers" info="The carrier the application goes to. None ticked means every carrier.">
         {library.carriers.length === 0 && extraCarriers.length === 0 ? (
           <span className="block text-sm text-[var(--muted)]">Every carrier. Add carriers to your agency in Carriers to limit it to some.</span>
         ) : (
@@ -441,11 +456,11 @@ export function ScopeFields({ draft, setDraft, library, readOnly, clauseErrors }
             <span className="mt-2 block text-xs leading-[1.5] text-[var(--muted)]">{draft.carrierIds.length ? `${draft.carrierIds.length} picked` : "None ticked: every carrier"}</span>
           </fieldset>
         )}
-      </SettingsCard>
+      </Block>
 
-      <SettingsCard title="Required when" info="Every condition in a rule must hold. If it needs an OR, add another rule. The application attaches the document as soon as a rule holds. Up to 10 rules, 10 conditions each.">
+      <Block bare={bare} title="Required when" info="Every condition in a rule must hold. If it needs an OR, add another rule. The application attaches the document as soon as a rule holds. Up to 10 rules, 10 conditions each.">
         <RuleEditor draft={draft} setDraft={setDraft} readOnly={readOnly} library={library} clauseErrors={clauseErrors} />
-      </SettingsCard>
+      </Block>
     </>
   );
 }

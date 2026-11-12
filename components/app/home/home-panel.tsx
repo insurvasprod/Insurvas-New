@@ -69,7 +69,7 @@ export function PanelLink({ href, children }: { href: string; children: ReactNod
   return (
     <Link
       href={href}
-      className="-mr-1.5 inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md px-1.5 text-[0.8125rem] font-medium text-muted-foreground no-underline transition-colors hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+      className="-mr-1.5 inline-flex h-8 shrink-0 items-center gap-0.5 rounded-md px-1.5 text-[0.8125rem] font-medium text-muted-foreground no-underline transition-colors hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
       {children}
       <ChevronRight className="size-3.5" aria-hidden="true" />
@@ -84,7 +84,7 @@ export function PanelRoundLink({ href, label }: { href: string; label: string })
       href={href}
       aria-label={label}
       title={label}
-      className="grid size-8 shrink-0 place-items-center rounded-full border border-border text-muted-foreground no-underline transition-colors hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
+      className="grid size-8 shrink-0 place-items-center rounded-full border border-border text-muted-foreground no-underline transition-colors hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
     >
       <ChevronRight className="size-4" aria-hidden="true" />
     </Link>

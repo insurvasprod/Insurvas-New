@@ -1,0 +1,863 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Carrier Sync Setup R7</title>
+<style>
+/* Foundation v3 dark tokens (docs/design/foundation-v3/mockup.html). Text sizes: 12 / 14 / 16 only; buttons 14. */
+:root{--canvas:#101715;--surface:#18211E;--raised:#202B26;--hi:#26332E;--text:#F2F6F4;--muted:#9FB0A7;--faint:#6F8079;--border:#2A3631;--input:#55665F;--primary:#35D6AA;--pfg:#0B2119;--psoft:#173A30;--pink:#6BE3C1;--good:#6BE3C1;--goodbg:#173A30;--info:#A4C0F8;--infobg:#172A4A;--warn:#F3C266;--warnbg:#3A2B0C;--bad:#F7A1A1;--badbg:#3F1A1A;--scrim:rgba(0,0,0,.6);--r:16px;--rc:8px}
+*{box-sizing:border-box}
+html,body{margin:0;background:#080d0b;color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+a{color:var(--pink);text-decoration:none}
+h1{font-size:16px;margin:0;font-weight:700;letter-spacing:-.005em}
+h2{font-size:16px;margin:0;font-weight:700}
+h3{font-size:14px;margin:0;font-weight:700}
+p{margin:0}
+.wrap{max-width:1560px;margin:0 auto;padding:24px 16px 96px}
+.lead{color:var(--muted);max-width:1100px;margin:8px 0 0}
+.toc{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;margin:12px 0 8px;background:#080d0b;border-bottom:1px solid var(--border)}
+.toc a{border:1px solid var(--border);border-radius:var(--rc);padding:6px 12px;font-size:14px;color:var(--muted);font-weight:600}
+.toc a.big{color:var(--text);border-color:#1f5a49;background:var(--psoft)}
+.screen{margin:56px 0 0;padding-top:8px;border-top:2px solid var(--border)}
+.screen>h2{font-size:16px;margin:16px 0 4px}
+.sub{color:var(--muted);font-size:14px}
+.board{margin:32px 0}
+.cap{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin:0 0 10px}
+.cap b{font-size:12px;letter-spacing:.06em;color:var(--primary)}
+.cap span{color:var(--muted);font-size:14px}
+.rec{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:700;color:var(--pfg);background:var(--primary);border-radius:6px;padding:2px 8px}
+.alt{display:inline-flex;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 8px}
+.notes{max-width:1200px;color:var(--muted);font-size:14px;margin:10px 4px 0;padding-left:18px}
+.notes li{margin:3px 0}.notes b{color:var(--text)}
+/* the app frame */
+.frame{background:var(--canvas);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.app{display:grid;grid-template-columns:56px 208px minmax(0,1fr);min-height:640px}
+.app.tall{min-height:720px}
+.side{border-right:1px solid var(--border);background:#0a110f}
+.side i{display:block;width:30px;height:30px;border-radius:8px;background:var(--raised);margin:14px auto}
+.side i.on{background:var(--psoft);box-shadow:inset 0 0 0 1px #1f5a49}
+.rail{border-right:1px solid var(--border);padding:16px 10px;display:flex;flex-direction:column;gap:2px}
+.rail .rl{font-size:12px;color:var(--faint);font-weight:600;padding:0 10px 8px}
+.rail a{padding:9px 10px;border-radius:var(--rc);color:var(--muted);font-weight:600;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.rail a.on{background:var(--psoft);color:var(--text);font-weight:700}
+.rail small{font-size:12px;border-radius:6px;padding:0 6px;font-weight:700}
+.rail small.w{background:var(--warnbg);color:var(--warn)}.rail small.r{background:var(--badbg);color:var(--bad)}
+.main{padding:16px 20px 0;display:flex;flex-direction:column;gap:16px;min-width:0}
+.trail{font-size:12px;color:var(--muted)}.trail b{color:var(--text);font-weight:600}.trail a{color:var(--muted)}
+/* title line: title, (i), sub-page bar, buttons; one hairline to the end */
+.tl{display:flex;align-items:flex-end;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--border);padding-bottom:0}
+.tl h1{padding-bottom:10px;display:flex;align-items:center;gap:8px}
+.ib{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:50%;border:1px solid var(--faint);color:var(--faint);font-size:12px;font-weight:700;font-style:normal}
+.ut{display:flex;gap:2px}
+.ut span{padding:8px 10px 9px;font-size:14px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.ut span.on{color:var(--text);border-bottom-color:var(--primary)}
+.n{font-size:12px;background:var(--raised);border-radius:6px;padding:0 6px;margin-left:6px;color:var(--muted);font-weight:600}
+.n.r{color:var(--bad);background:var(--badbg)}.n.w{color:var(--warn);background:var(--warnbg)}
+.tl .sp{flex:1}
+.tl .acts{display:flex;gap:8px;padding-bottom:6px;flex-wrap:wrap}
+/* controls */
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--rc);border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;font-size:14px;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--pfg);border-color:var(--primary)}
+.btn.g{background:none;border-color:transparent;color:var(--muted)}
+.btn.d{color:var(--bad);border-color:#5a2a2a;background:none}
+.btn.dp{background:#d65a5a;border-color:#d65a5a;color:#1a0707}
+.btn.sm{height:32px;padding:0 10px}
+.btn.ic{width:36px;padding:0;justify-content:center}
+.btn.off{opacity:.45}
+.tc{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 12px;border-radius:var(--rc);border:1px solid var(--border);font-weight:600;font-size:14px;color:var(--muted)}
+.tc.on{border-color:var(--primary);background:var(--psoft);color:var(--text)}
+.inp{height:36px;border:1px solid var(--input);background:var(--canvas);border-radius:var(--rc);padding:0 12px;color:var(--text);display:flex;align-items:center;gap:8px;font-size:14px;min-width:0}
+.inp.ph{color:var(--faint)}.inp.sel:after{content:"▾";margin-left:auto;color:var(--faint);font-size:12px}
+.inp.err{border-color:var(--bad)}.inp.focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(53,214,170,.25)}
+.inp.ta{height:72px;align-items:flex-start;padding-top:8px;line-height:1.45}
+.lbl{font-size:12px;color:var(--muted);font-weight:600;margin-bottom:6px;display:flex;gap:6px;align-items:center}
+.hint{font-size:12px;color:var(--faint);margin-top:4px}
+.errl{font-size:12px;color:var(--bad);font-weight:600;margin-top:4px}
+.fg{display:grid;gap:14px}.fg2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.fg3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.fg4{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.box{width:16px;height:16px;border:1.5px solid var(--faint);border-radius:4px;display:inline-block;vertical-align:middle}.box.x{background:var(--primary);border-color:var(--primary)}
+/* cards and tables */
+.card{background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.09);border-radius:var(--r);min-width:0}
+.hd{display:flex;align-items:center;gap:10px;padding:12px 16px}.hd .sp{flex:1}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border)}.toolbar .sp{flex:1}
+table{width:100%;border-collapse:collapse}
+th{font-size:12px;color:var(--muted);text-align:left;font-weight:600;height:40px;padding:0 14px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:6px 14px;height:44px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr.lk td{cursor:pointer}tr.lk:hover td{background:rgba(255,255,255,.025)}
+tr.sel td{background:var(--psoft)}
+td.r,th.r{text-align:right}
+.chev{color:var(--faint);text-align:right;width:36px}
+.foot{display:flex;align-items:center;gap:12px;padding:10px 16px;font-size:12px;color:var(--muted)}.foot .sp{flex:1}
+.pager{display:inline-flex;gap:4px}.pager span{min-width:30px;height:30px;border:1px solid var(--border);border-radius:var(--rc);display:inline-grid;place-items:center;font-size:12px}
+.pager span.on{border-color:var(--primary);color:var(--text)}
+.fill{flex:1;min-height:0;display:flex;flex-direction:column}
+.fill .card{flex:1;display:flex;flex-direction:column;border-bottom-left-radius:0;border-bottom-right-radius:0;border-bottom:0}
+.fill .card .grow{flex:1}
+.st{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.st:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.w{color:var(--warn);background:var(--warnbg)}.g1{color:var(--good);background:var(--goodbg)}.i{color:var(--info);background:var(--infobg)}.b{color:var(--bad);background:var(--badbg)}.z{color:var(--muted);background:var(--raised)}
+.m{color:var(--muted)}.f{color:var(--faint)}.sm12{font-size:12px}.bold{font-weight:700}
+.red{color:var(--bad)}.amb{color:var(--warn)}.grn{color:var(--good)}
+.mono{font-family:ui-monospace,"Geist Mono",Consolas,monospace;font-size:12px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.strip{display:grid;grid-template-columns:repeat(5,1fr);border:1px solid rgba(255,255,255,.09);border-radius:var(--r);background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015))}
+.strip>div{padding:12px 16px;border-right:1px solid var(--border)}.strip>div:last-child{border-right:0}
+.strip .l{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.strip .v{font-size:16px;font-weight:700;margin-top:4px}.strip .fn{font-size:12px;color:var(--muted)}
+/* window dots and matrix cells */
+.dots{display:inline-flex;gap:4px;vertical-align:middle}.dots i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.dv{background:var(--good)}.du{background:var(--muted)}.dm{border:2px solid var(--bad)}
+.wc{display:inline-flex;align-items:center;gap:6px;min-width:96px;height:30px;padding:0 10px;border-radius:var(--rc);border:1px solid var(--border);font-weight:600;font-size:14px}
+.wc i{width:8px;height:8px;border-radius:50%}
+.wc.ms{border:1px dashed #7a3a3a;color:var(--bad);background:rgba(63,26,26,.4)}
+.wc.un{color:var(--text)}
+.wc.hov{border-color:var(--primary);box-shadow:0 0 0 1px var(--primary)}
+/* overlays */
+.stage{position:relative;background:var(--canvas);border:1px solid var(--border);border-radius:16px;padding:28px;display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;overflow:hidden}
+.stage.scr{background:repeating-linear-gradient(135deg,#0c1210 0 12px,#0e1513 12px 24px)}
+.dlg{background:var(--surface);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.6);width:440px;display:flex;flex-direction:column}
+.dlg.lg{width:560px}.dlg.xl{width:720px}.dlg.x2{width:960px}.dlg.cf{width:400px}
+.dlg .dh{padding:18px 20px 0;display:flex;gap:10px;align-items:flex-start}.dlg .dh .sp{flex:1}
+.dlg .dh .x{color:var(--faint);font-size:16px}
+.dlg .dd{color:var(--muted);font-size:14px;padding:6px 20px 0}
+.dlg .db{padding:16px 20px;display:grid;gap:14px}
+.dlg .df{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;align-items:center;flex-wrap:wrap}.dlg .df .sp{flex:1}
+.lbltag{font-size:12px;color:var(--faint);margin-bottom:8px}
+.menu{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:6px;width:224px}
+.menu div{padding:8px 10px;border-radius:7px;font-size:14px}.menu div.on{background:var(--raised)}.menu hr{border:0;border-top:1px solid var(--border);margin:4px 0}
+.pop{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 14px 40px rgba(0,0,0,.55);padding:12px;width:520px}
+.toast{display:flex;gap:10px;align-items:center;background:var(--raised);border:1px solid var(--border);border-radius:12px;padding:12px 14px;font-weight:600;width:350px;font-size:14px}
+.toast .tk{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:12px;flex:none}
+.toast .ok{background:var(--goodbg);color:var(--good)}.toast .bd{background:var(--badbg);color:var(--bad)}.toast .wn{background:var(--warnbg);color:var(--warn)}
+.toast small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.toast .u{margin-left:auto;color:var(--pink);font-size:14px}
+.kv{display:grid;grid-template-columns:150px 1fr;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.kv div{padding:8px 12px;border-bottom:1px solid var(--border);font-size:14px}.kv div:nth-last-child(-n+2){border-bottom:0}.kv .k{color:var(--muted);font-size:12px;font-weight:600;background:rgba(255,255,255,.02)}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center;padding:48px 24px;color:var(--muted)}
+.empty b{color:var(--text);font-size:16px}
+.drop{border:1.5px dashed var(--input);border-radius:12px;padding:20px;text-align:center;color:var(--muted)}
+.drop b{color:var(--text)}
+.track{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.track div .bar{height:4px;border-radius:4px;background:var(--border)}.track div.on .bar,.track div.dn .bar{background:var(--primary)}
+.track div .lb{font-size:12px;font-weight:700;margin-top:6px}.track div .sb{font-size:12px;color:var(--muted)}
+.todo{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:center;padding:10px 16px;border-top:1px solid var(--border);min-height:44px}
+.ring{width:18px;height:18px;border-radius:50%;border:2px solid var(--input)}.ring.x{background:var(--primary);border-color:var(--primary)}
+.sent{padding:14px 16px;border-top:1px solid var(--border);color:#cfdad5;line-height:1.6}.sent b{color:var(--text)}
+.col{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.rc{border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:var(--surface);display:grid;gap:4px}
+.grp td{background:rgba(255,255,255,.025);font-weight:700;height:36px}
+/* phones */
+.phones{display:flex;gap:28px;flex-wrap:wrap}
+.phone{width:375px;border:1px solid var(--border);border-radius:28px;background:var(--canvas);overflow:hidden;display:flex;flex-direction:column;min-height:720px}
+.phone .pb{height:44px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.phone .pm{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.phone .ut{overflow:hidden}
+.pc{border:1px solid rgba(255,255,255,.09);border-radius:14px;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));padding:12px;display:grid;gap:8px}
+.pc .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+/* edit map */
+.ed{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.ed th{background:var(--raised);border-top:0}.ed td{vertical-align:top;padding:10px 14px;height:auto}
+.ed td:first-child{font-weight:600;white-space:nowrap}
+.sh{background:var(--psoft)!important;color:var(--text)!important;font-weight:700}
+.crit{padding:16px 20px}.crit ol{margin:0;padding-left:20px;color:var(--muted)}.crit li{margin:4px 0}.crit b{color:var(--text)}
+.dirgrid{display:grid;gap:8px;grid-template-columns:repeat(3,1fr);margin-top:12px}
+.dirgrid div{border:1px solid var(--border);border-radius:12px;padding:12px;color:var(--muted)}.dirgrid div.pick{border-color:var(--primary)}
+.dirgrid b{color:var(--text)}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>Carrier sync setup · round 7</h1>
+<p class="lead">Owner 2026-11-10: "rearrange this and make sure these things are easy for the user to navigate … for all of the buttons, whatever it opens, let's try to make it as good as possible." Four Setup steps of Carrier sync: <b>Carrier terms</b>, <b>Card moves</b>, <b>Agent codes</b>, <b>Files in</b>. For each: a short critique of today's screen, three directions for its main page with one marked, then every sub-page, pop-up, confirm, empty state, error line, toast and the phone view in the marked direction. The edit map closes the file. Copy is taken from the code (components/app/book/setup/*, carrier-file-upload, carrier-file-doors, carrier-bucket, book-import); the data is a demo agency.</p>
+<ul class="notes">
+<li><b>Rules applied on every board:</b> the title alone on its line (no facts line, nothing beside it); tabs and buttons on the title line over one hairline; the Carrier sync rail on the left; tables fill to the window foot with the pager at the foot; every figure and name links to its filtered page; no notice cards (pending and read-only states become an empty state or a disabled button with its reason); text 12 / 14 / 16 only.</li>
+<li><b>Edits never open inside a table row, and never in a side panel.</b> Each edit names its surface: <span class="st i">Dialog</span> for a short edit that keeps context, <span class="st z">Own page</span> for a long form, <span class="st w">Confirm</span> for a step that loses something. A row is a link; the decision is made in the dialog it opens.</li>
+</ul>
+<nav class="toc"><a class="big" href="#s1">1 · Carrier terms</a><a href="#s1-dir">1 directions</a><a href="#s1-page">1 carrier page</a><a href="#s1-pop">1 pop-ups</a><a class="big" href="#s2">2 · Card moves</a><a href="#s2-dir">2 directions</a><a href="#s2-page">2 rule page</a><a href="#s2-pop">2 pop-ups</a><a class="big" href="#s3">3 · Agent codes</a><a href="#s3-pop">3 pop-ups</a><a class="big" href="#s4">4 · Files in</a><a href="#s4-email">4 Email</a><a href="#s4-bucket">4 Bucket</a><a href="#s4-pop">4 pop-ups</a><a class="big" href="#map">Edit map</a></nav>
+
+<!-- ═══════════════════════════════════ 1 · CARRIER TERMS ═══════════════════════════════════ -->
+<section class="screen" id="s1">
+<h2>1 · Carrier terms</h2>
+<p class="sub">/app/book-setup/carrier-rules and /app/book-setup/carrier-rules/[carrierId] · CarrierCoverageList, CarrierRuleWindows, CarrierFacts</p>
+
+<section class="board"><div class="cap"><b>1·0 CRITIQUE</b><span>today's list and carrier page</span></div>
+<div class="card crit"><ol>
+<li><b>The list hides the answer.</b> Five unlabelled dots say "2 of 5"; which window is missing, and how many days the others give, is only on the carrier's page. "Set 2 windows" is a button in each row that just opens that page.</li>
+<li><b>The carrier page title carries a facts line</b> ("804 in force · 2 rules missing · 2 unverified") and the stepper reads "‹ Carrier / Carrier ›": you can't tell where it goes.</li>
+<li><b>Set it / Edit opens a seven-field editor inside the table row,</b> pushing the other windows down; a window's history is only visible inside that editor.</li>
+<li><b>Money and Files are two half-width label-over-value cards</b> with three kinds of action (edit in place, "Edit in Settings", none for the commissions desk), and the page ends halfway down the window.</li>
+<li><b>Missing setup is a warning callout on the page</b> ("Carrier terms need a database update …").</li>
+</ol></div></section>
+
+<section class="board" id="s1-dir"><div class="cap"><b>1·A WORKLIST</b><span class="alt">Direction A</span><span>today's table, cleaned: the row is the link, the last column says the next step in words</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="terms"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Carrier terms</b></div>
+<div class="tl"><h1>Carrier terms <i class="ib">i</i></h1><span class="sp"></span></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Search carriers</span><span class="tc on">All <span class="n">7</span></span><span class="tc">Missing a rule <span class="n r">4</span></span><span class="tc">Unverified <span class="n">3</span></span><span class="sp"></span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th>Carrier</th><th>In force</th><th>Windows set</th><th>The biggest gap</th><th>Money · files</th><th>Next step</th><th></th></tr>
+<tr class="lk"><td><b>Aetna / CVS</b></td><td><a>986</a></td><td><span class="dots"><i class="dv"></i><i class="dm"></i><i class="du"></i><i class="dm"></i><i class="dm"></i></span> <span class="m">2 of 5</span></td><td class="red bold">Ongoing payment window not set</td><td class="m">On first draft · 45 d<br><span class="sm12">Spreadsheet · layout v2</span></td><td class="amb">3 windows to set</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Aflac</b></td><td><a>804</a></td><td><span class="dots"><i class="dm"></i><i class="dv"></i><i class="du"></i><i class="dm"></i><i class="du"></i></span> <span class="m">3 of 5</span></td><td class="red bold">First payment window not set</td><td class="m">On first draft · 45 d<br><span class="sm12">Spreadsheet · layout v3</span></td><td class="amb">2 windows to set</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Mutual of Omaha</b></td><td><a>657</a></td><td><span class="dots"><i class="dv"></i><i class="dv"></i><i class="dv"></i><i class="dm"></i><i class="du"></i></span> <span class="m">4 of 5</span></td><td class="red bold">Conservation window not set</td><td class="m">On issue · 30 d<br><span class="sm12">Spreadsheet · layout v4</span></td><td class="amb">1 window to set</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Americo</b></td><td><a>388</a></td><td><span class="dots"><i class="du"></i><i class="dm"></i><i class="dm"></i><i class="dm"></i><i class="dm"></i></span> <span class="m">1 of 5</span></td><td class="red bold">Ongoing payment window not set</td><td class="m">Trigger and lag not set<br><span class="sm12">Format not set · no layout yet</span></td><td class="amb">4 windows to set</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Corebridge Financial</b></td><td><a>512</a></td><td><span class="dots"><i class="dv"></i><i class="du"></i><i class="dv"></i><i class="dv"></i><i class="du"></i></span> <span class="m">5 of 5</span></td><td>Nothing missing<br><span class="sm12 m">2 unverified</span></td><td class="m">On issue · 21 d<br><span class="sm12">PDF · layout v1</span></td><td class="m">2 to verify</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>American Amicable</b></td><td><a>1,412</a></td><td><span class="dots"><i class="dv"></i><i class="dv"></i><i class="dv"></i><i class="dv"></i><i class="dv"></i></span> <span class="m">5 of 5</span></td><td>Nothing missing</td><td class="m">On first draft · 14 d<br><span class="sm12">Spreadsheet · layout v7</span></td><td class="m">—</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Foresters Financial</b></td><td><a>241</a></td><td><span class="dots"><i class="dv"></i><i class="dv"></i><i class="du"></i><i class="dv"></i><i class="dv"></i></span> <span class="m">5 of 5</span></td><td>Nothing missing<br><span class="sm12 m">1 unverified</span></td><td class="m">On issue · 30 d<br><span class="sm12">Spreadsheet · layout v2</span></td><td class="m">1 to verify</td><td class="chev">›</td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot"><span><span class="dots"><i class="dv"></i></span> verified &nbsp; <span class="dots"><i class="du"></i></span> observed, unverified &nbsp; <span class="dots"><i class="dm"></i></span> not set</span><span class="sp"></span>7 carriers</div>
+</div></div></div></div></div>
+<ul class="notes"><li>Closest to today. The row button becomes words ("3 windows to set ›"), so the only decision is on the carrier page. Still two clicks to see a window's days.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·B THE TERMS GRID</b><span class="rec">Recommended</span><span>one cell per window: its days, or Set; a cell opens that window's dialog, the name opens the carrier</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="terms"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Carrier terms</b></div>
+<div class="tl"><h1>Carrier terms <i class="ib">i</i></h1><div class="ut"><span class="on">Windows</span><span>Money</span><span>Files</span></div><span class="sp"></span><div class="acts"><span class="btn p">Set the next window</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Search carriers</span><span class="tc on">All <span class="n">7</span></span><span class="tc">Missing a rule <span class="n r">4</span></span><span class="tc">Unverified <span class="n">3</span></span><span class="sp"></span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th style="width:200px">Carrier</th><th class="r" style="width:90px">In force</th><th>First payment</th><th>Ongoing payment</th><th>Reinstatement</th><th>Conservation</th><th>Cancellation request</th><th></th></tr>
+<tr><td><a style="color:var(--text);font-weight:700">Aetna / CVS</a></td><td class="r"><a>986</a></td><td><span class="wc"><i class="dv"></i>30 d</span></td><td><span class="wc ms">+ Set</span></td><td><span class="wc un"><i class="du"></i>90 d</span></td><td><span class="wc ms">+ Set</span></td><td><span class="wc ms">+ Set</span></td><td class="chev">›</td></tr>
+<tr><td><a style="color:var(--text);font-weight:700">Aflac</a></td><td class="r"><a>804</a></td><td><span class="wc ms hov">+ Set</span></td><td><span class="wc"><i class="dv"></i>31 d</span></td><td><span class="wc un"><i class="du"></i>180 d</span></td><td><span class="wc ms">+ Set</span></td><td><span class="wc un"><i class="du"></i>30 d</span></td><td class="chev">›</td></tr>
+<tr><td><a style="color:var(--text);font-weight:700">Mutual of Omaha</a></td><td class="r"><a>657</a></td><td><span class="wc"><i class="dv"></i>30 d</span></td><td><span class="wc"><i class="dv"></i>31 d</span></td><td><span class="wc"><i class="dv"></i>365 d</span></td><td><span class="wc ms">+ Set</span></td><td><span class="wc un"><i class="du"></i>45 d</span></td><td class="chev">›</td></tr>
+<tr><td><a style="color:var(--text);font-weight:700">Americo</a></td><td class="r"><a>388</a></td><td><span class="wc un"><i class="du"></i>21 d</span></td><td><span class="wc ms">+ Set</span></td><td><span class="wc ms">+ Set</span></td><td><span class="wc ms">+ Set</span></td><td><span class="wc ms">+ Set</span></td><td class="chev">›</td></tr>
+<tr><td><a style="color:var(--text);font-weight:700">Corebridge Financial</a></td><td class="r"><a>512</a></td><td><span class="wc"><i class="dv"></i>31 d</span></td><td><span class="wc un"><i class="du"></i>31 d</span></td><td><span class="wc"><i class="dv"></i>730 d</span></td><td><span class="wc"><i class="dv"></i>60 d</span></td><td><span class="wc un"><i class="du"></i>30 d</span></td><td class="chev">›</td></tr>
+<tr><td><a style="color:var(--text);font-weight:700">American Amicable</a></td><td class="r"><a>1,412</a></td><td><span class="wc"><i class="dv"></i>30 d</span></td><td><span class="wc"><i class="dv"></i>31 d</span></td><td><span class="wc"><i class="dv"></i>180 d</span></td><td><span class="wc"><i class="dv"></i>60 d</span></td><td><span class="wc"><i class="dv"></i>30 d</span></td><td class="chev">›</td></tr>
+<tr><td><a style="color:var(--text);font-weight:700">Foresters Financial</a></td><td class="r"><a>241</a></td><td><span class="wc"><i class="dv"></i>30 d</span></td><td><span class="wc"><i class="dv"></i>31 d</span></td><td><span class="wc un"><i class="du"></i>365 d</span></td><td><span class="wc"><i class="dv"></i>45 d</span></td><td><span class="wc"><i class="dv"></i>30 d</span></td><td class="chev">›</td></tr>
+<tr><td colspan="8" style="border:0"></td></tr></table>
+<div class="foot"><span><span class="dots"><i class="dv"></i></span> verified &nbsp; <span class="dots"><i class="du"></i></span> observed, unverified &nbsp; <span class="wc ms" style="min-width:0;height:22px;padding:0 6px;font-size:12px">+ Set</span> not set · days from paid-to</span><span class="sp"></span>7 carriers · sorted by policies left without a countdown</div>
+</div></div></div></div></div>
+<ul class="notes">
+<li><b>The grid is the answer:</b> every carrier's five windows and their days on one screen. A cell (hovered: Aflac · First payment) opens <b>that window's dialog</b> (board 1·4); the carrier's name or › opens the carrier page. The In force figure opens Policies filtered to that carrier.</li>
+<li><b>Set the next window</b> on the title line opens the dialog on the costliest gap (Aetna / CVS · Ongoing payment first, 986 policies) and steps through the gaps: "1 of 9". One primary, no button in any row.</li>
+<li><b>Money</b> and <b>Files</b> tabs are the same grid for the other columns: Pays commission · Payment lag · Minimum payout · Tolerance, and Statement format · Files arrive · Portal · Layout. They replace today's "Money · files" cell, which squeezed two facts into one line. The (i) keeps today's "About carrier terms" text.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·C ONE WINDOW AT A TIME</b><span class="alt">Direction C</span><span>the five windows are the sub-page bar; each lists the carriers for that window</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="terms"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Carrier terms</b></div>
+<div class="tl"><h1>Carrier terms <i class="ib">i</i></h1><div class="ut"><span>First payment<span class="n r">1</span></span><span class="on">Ongoing payment<span class="n r">2</span></span><span>Reinstatement<span class="n r">1</span></span><span>Conservation<span class="n r">3</span></span><span>Cancellation<span class="n r">2</span></span><span>Money · files</span></div><span class="sp"></span></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Search carriers</span><span class="tc on">All</span><span class="tc">Not set <span class="n r">2</span></span><span class="tc">Unverified <span class="n">1</span></span></div>
+<table class="grow"><tr><th>Carrier</th><th class="r">In force</th><th>Closes after</th><th>Grace</th><th>Redraft</th><th>Source</th><th>Whose</th><th></th></tr>
+<tr class="lk"><td><b>Aetna / CVS</b></td><td class="r"><a>986</a></td><td colspan="4"><span class="red bold">Not set</span> <span class="m">· 986 policies in force have no ongoing payment countdown</span></td><td class="m">—</td><td class="chev">Set ›</td></tr>
+<tr class="lk"><td><b>Americo</b></td><td class="r"><a>388</a></td><td colspan="4"><span class="red bold">Not set</span> <span class="m">· 388 policies in force have no ongoing payment countdown</span></td><td class="m">—</td><td class="chev">Set ›</td></tr>
+<tr class="lk"><td><b>Aflac</b></td><td class="r"><a>804</a></td><td>31 d</td><td>31 d</td><td>2 tries · 10 d apart</td><td><span class="st g1">Agreement · verified</span></td><td class="m">yours, from Sep 2, 2026</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Corebridge Financial</b></td><td class="r"><a>512</a></td><td>31 d</td><td>31 d</td><td>—</td><td><span class="st z">Observed · unverified</span></td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Mutual of Omaha</b></td><td class="r"><a>657</a></td><td>31 d</td><td>30 d</td><td>1 try</td><td><span class="st g1">Agreement · verified</span></td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr><td colspan="8" style="border:0"></td></tr></table>
+<div class="foot"><span class="sp"></span>7 carriers</div></div></div></div></div></div>
+<ul class="notes"><li>Good when you sit down with one carrier guide topic ("every grace period"), but a carrier's full picture is split over five tabs.</li></ul>
+<div class="dirgrid"><div><b>A · Worklist</b><br>Safest; still hides the days.</div><div class="pick"><b>B · The terms grid ✓</b><br>Everything on one screen; every cell opens its own edit. One click from "what's missing" to fixing it.</div><div><b>C · One window at a time</b><br>Great for a single topic, poor for a single carrier.</div></div></section>
+
+<!-- 1 · carrier page -->
+<section class="board" id="s1-page"><div class="cap"><b>1·1 A CARRIER · WINDOWS</b><span class="rec">B</span><span>/carrier-rules/[carrierId]: title alone; tabs Windows · Money · Files · History; the stepper names its neighbours</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="terms"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <a>Carrier terms</a> › <b>Aflac</b></div>
+<div class="tl"><h1>Aflac</h1><div class="ut"><span class="on">Windows<span class="n r">2</span></span><span>Money<span class="n r">1</span></span><span>Files</span><span>History<span class="n">9</span></span></div><span class="sp"></span><div class="acts"><span class="btn">‹ Aetna / CVS</span><span class="btn">Mutual of Omaha ›</span><span class="btn p">Set 2 windows</span></div></div>
+<div class="strip"><div><div class="l">In force</div><div class="v"><a style="color:var(--text)">804</a></div><div class="fn">open them in Policies</div></div><div><div class="l">Windows set</div><div class="v amb">3 of 5</div><div class="fn">2 not set</div></div><div><div class="l">Without a countdown</div><div class="v red">804</div><div class="fn">no first payment window</div></div><div><div class="l">Unverified</div><div class="v">2</div><div class="fn">seen in files, not checked</div></div><div><div class="l">Pays commission</div><div class="v">On first draft</div><div class="fn">45 days later · yours</div></div></div>
+<div class="fill"><div class="card">
+<div class="hd"><h3>Retention windows</h3><span class="m sm12">days from paid-to</span><span class="sp"></span><span class="m sm12">a row opens its window</span></div>
+<table class="grow"><tr><th style="width:200px">Window</th><th>Closes after</th><th>Grace</th><th>Redraft</th><th>Source</th><th>Whose</th><th></th></tr>
+<tr class="lk"><td class="bold">First payment</td><td colspan="4"><span class="red bold">Not set</span> <span class="m">· 804 policies in force have no first payment countdown</span></td><td class="m">—</td><td class="chev" style="width:80px"><a>Set it ›</a></td></tr>
+<tr class="lk"><td class="bold">Ongoing payment</td><td>31 d</td><td>31 d</td><td>2 tries · 10 d apart</td><td><span class="st g1">Agreement · verified</span></td><td class="m">yours, from Sep 2, 2026</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Reinstatement</td><td>180 d</td><td>—</td><td>—</td><td><span class="st z">Observed · unverified</span></td><td class="m">Insurvas's</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">Conservation</td><td colspan="4"><span class="red bold">Not set</span> <span class="m">· 804 policies in force have no conservation countdown</span></td><td class="m">—</td><td class="chev"><a>Set it ›</a></td></tr>
+<tr class="lk"><td class="bold">Cancellation request</td><td>30 d</td><td>—</td><td>—</td><td><span class="st z">Phone call · unverified</span></td><td class="m">yours, from Oct 14, 2026 · <span class="amb">yours 45 d from Dec 1, 2026</span></td><td class="chev">›</td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot">Past countdowns keep the rule they used.<span class="sp"></span><a>History of these windows ›</a></div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Title alone.</b> Today's "804 in force · 2 rules missing · 2 unverified" moved into the strip, each figure a link (In force → Policies filtered to Aflac; Unverified → History filtered).</li><li><b>‹ Aetna / CVS · Mutual of Omaha ›</b> step through the grid in its order; the name on the button is the page you land on.</li><li><b>Set 2 windows</b> opens the window dialog on First payment, then Conservation ("1 of 2"). A row opens the same dialog for its window. Read-only accounts: the button is gone and a row opens the dialog read-only with its history.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·2 A CARRIER · MONEY</b><span class="rec">B</span><span>CarrierFacts' money half as a full-width table; a row opens its dialog</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="terms"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <a>Carrier terms</a> › <b>Aflac</b></div>
+<div class="tl"><h1>Aflac</h1><div class="ut"><span>Windows<span class="n r">2</span></span><span class="on">Money<span class="n r">1</span></span><span>Files</span><span>History<span class="n">9</span></span></div><span class="sp"></span><div class="acts"><span class="btn">‹ Aetna / CVS</span><span class="btn">Mutual of Omaha ›</span></div></div>
+<div class="fill"><div class="card">
+<table class="grow"><tr><th style="width:200px">Fact</th><th>Value</th><th>Whose</th><th>Used by</th><th></th></tr>
+<tr class="lk"><td class="bold">Pays commission</td><td>On first draft</td><td class="m">yours, from Sep 2, 2026</td><td class="m">Expected commission · <a>Rate card</a></td><td class="chev">Edit ›</td></tr>
+<tr class="lk"><td class="bold">Payment lag</td><td>45 days</td><td class="m">Insurvas's</td><td class="m">Past the usual lag · <a>Discrepancies</a></td><td class="chev">Edit ›</td></tr>
+<tr class="lk"><td class="bold">Minimum payout</td><td class="m">— not set</td><td class="m">—</td><td class="m">Short payments under it are not flagged</td><td class="chev"><a>Set ›</a></td></tr>
+<tr class="lk"><td class="bold">Tolerance</td><td>$5.00</td><td class="m">Insurvas's</td><td class="m">A payment within it counts as paid in full</td><td class="chev">Edit ›</td></tr>
+<tr class="lk"><td class="bold">Commissions desk</td><td>Aflac Commissions, 1932 Wynnton Rd, Columbus, GA 31999 · commissions@aflac.com<br><span class="sm12 m">Phone: not kept yet</span></td><td class="m">yours, from Oct 3, 2026</td><td class="m">Dispute letters</td><td class="chev"><a>From a dispute letter ›</a></td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table>
+<div class="foot">Clearing a value hands it back to Insurvas's.</div></div></div></div></div></div>
+<ul class="notes"><li>Each row says what the value is <b>used by</b>, linked, so a bookkeeper sees why it matters. Pays commission, Payment lag, Minimum payout and Tolerance open the fact dialog (1·5). The commissions desk is set from a dispute letter, so its row links there (not editable here, as today).</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·3 A CARRIER · FILES and HISTORY</b><span class="rec">B</span><span>file facts with their real edit place named; every saved window as one dated list</span></div>
+<div class="two">
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:430px">
+<div class="tl"><h1>Aflac</h1><div class="ut"><span>Windows</span><span>Money</span><span class="on">Files</span><span>History</span></div><span class="sp"></span></div>
+<div class="card"><table><tr><th>Fact</th><th>Value</th><th>Whose</th><th></th></tr>
+<tr class="lk"><td class="bold">Statement format</td><td>Spreadsheet · <a>commission file layout v3</a> · <a>policy file layout v2</a></td><td class="m">Insurvas's</td><td class="chev">Edit ›</td></tr>
+<tr class="lk"><td class="bold">Files arrive</td><td>Monthly · <a>Files in › Bucket</a></td><td class="m">yours</td><td class="chev">Edit ›</td></tr>
+<tr class="lk"><td class="bold">Portal</td><td>agent.aflac.com<br><span class="sm12 m">Reports › Book of business · Excel · Insurvas's guidance</span></td><td class="m">yours</td><td class="chev"><a>Settings › Carriers ›</a></td></tr>
+<tr><td class="bold">Policy numbers</td><td><span class="mono">^[A-Z]\d{9}$</span></td><td class="m">Insurvas's</td><td class="chev f">kept by Insurvas</td></tr></table></div>
+<p class="m sm12">Portal opens <b>Settings › Carriers › Aflac</b>, its own page (the portal login lives on the carrier card). A layout link opens Carriers › 3 · Field maps on that layout.</p>
+</div></div>
+<div class="frame"><div class="main" style="padding-bottom:16px;min-height:430px">
+<div class="tl"><h1>Aflac</h1><div class="ut"><span>Windows</span><span>Money</span><span>Files</span><span class="on">History<span class="n">9</span></span></div><span class="sp"></span></div>
+<div class="card"><div class="toolbar" style="border-top:0"><span class="tc on">All</span><span class="tc">First payment</span><span class="tc">Ongoing</span><span class="tc">Cancellation</span><span class="tc">Money · files</span></div>
+<table><tr><th>From</th><th>Window</th><th>Rule</th><th>By</th></tr>
+<tr><td class="m">Dec 1, 2026</td><td>Cancellation request</td><td>45 d · phone call <span class="st w">upcoming</span></td><td class="m">Rinor G.</td></tr>
+<tr><td class="m">Oct 14, 2026</td><td>Cancellation request</td><td>30 d · phone call</td><td class="m">Rinor G.</td></tr>
+<tr><td class="m">Sep 2, 2026</td><td>Ongoing payment</td><td>31 d · grace 31 d · agreement</td><td class="m">Dana W. · verified Sep 3 by Dana W.</td></tr>
+<tr><td class="m">Sep 2, 2026</td><td>Pays commission</td><td>On first draft</td><td class="m">Dana W.</td></tr>
+<tr><td class="m">Jun 1, 2026</td><td>Ongoing payment</td><td>Back to Insurvas's</td><td class="m">Dana W.</td></tr>
+<tr><td class="m">Mar 3, 2026</td><td>Reinstatement</td><td>180 d · observed</td><td class="m">Insurvas</td></tr></table>
+<div class="foot">Past countdowns keep the rule they used.<span class="sp"></span>9 changes</div></div>
+</div></div></div>
+<ul class="notes"><li>History was only inside the row editor; it is now a tab, filterable by window, and the window dialog links to it already filtered.</li></ul></section>
+
+<section class="board" id="s1-pop"><div class="cap"><b>1·4 WINDOW DIALOG</b><span class="st i">Dialog · lg 560</span><span>Set it / Edit / a grid cell / Set the next window: one dialog; fields from CarrierRuleWindows' editor</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Set (a missing window), stepping through 2</div>
+<div class="dlg lg"><div class="dh"><h2>Aflac · First payment window</h2><span class="sp"></span><span class="m sm12">1 of 2</span><span class="x">✕</span></div>
+<p class="dd">Not set · 804 policies in force have no first payment countdown.</p>
+<div class="db">
+<div class="fg2"><div><div class="lbl">Closes after</div><div class="inp focus">30</div><div class="hint">days from paid-to</div></div><div><div class="lbl">Grace</div><div class="inp">0</div><div class="hint">days</div></div></div>
+<div class="fg3"><div><div class="lbl">Redraft tries</div><div class="inp">2</div></div><div><div class="lbl">Days apart</div><div class="inp">10</div></div><div><div class="lbl">From</div><div class="inp">Nov 10, 2026</div></div></div>
+<div><div class="lbl">Where it's from</div><div class="chips"><span class="tc on">Agreement</span><span class="tc">Phone call</span><span class="tc">Observed</span></div></div>
+<div><div class="lbl">Note</div><div class="inp ph">Who confirmed it, and when</div></div>
+</div>
+<div class="df"><a class="sm12">History of this window ›</a><span class="sp"></span><span class="btn">Cancel</span><span class="btn">Save</span><span class="btn p">Save and next ›</span></div></div></div>
+<div><div class="lbltag">Edit (yours, unverified) · with the error line</div>
+<div class="dlg lg"><div class="dh"><h2>Aflac · Cancellation request window</h2><span class="sp"></span><span class="x">✕</span></div>
+<p class="dd"><span class="st z">Phone call · unverified</span> &nbsp;yours, from Oct 14, 2026 · yours 45 d from Dec 1, 2026</p>
+<div class="db">
+<div class="fg2"><div><div class="lbl">Closes after</div><div class="inp err"></div><div class="hint">days from paid-to</div></div><div><div class="lbl">Grace</div><div class="inp err"></div><div class="hint">days</div></div></div>
+<div class="fg3"><div><div class="lbl">Redraft tries</div><div class="inp err"></div></div><div><div class="lbl">Days apart</div><div class="inp"></div></div><div><div class="lbl">From</div><div class="inp">Nov 10, 2026</div></div></div>
+<div class="errl">Enter at least one of Closes after, Grace or Redraft tries.</div>
+<div><div class="lbl">Where it's from</div><div class="chips"><span class="tc">Agreement</span><span class="tc on">Phone call</span><span class="tc">Observed</span></div></div>
+<div><div class="lbl">Note</div><div class="inp">Confirmed with Aflac agent services, Nov 10</div></div>
+</div>
+<div class="df"><span class="btn g">Back to Insurvas's</span><span class="btn">Mark it verified</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Save</span></div></div></div>
+</div>
+<ul class="notes"><li><b>Why a dialog:</b> five numbers, a choice and a note: a short edit that keeps the grid or the carrier page behind it (UI-CONSISTENCY §11). Today it opened in the row.</li><li><b>Save and next</b> appears only when stepping (Set N windows / Set the next window). A save error from the server ("That did not save.") shows on the error line, not as a toast, so the fix is beside it.</li><li>Back to Insurvas's and Mark it verified show only for the agency's own rule, as today.</li></ul></section>
+
+<section class="board"><div class="cap"><b>1·5 FACT DIALOGS, CONFIRMS, TOASTS</b><span>money and files facts, the two asks, what a save says</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Fact · a choice</div><div class="dlg"><div class="dh"><h2>Aflac · Pays commission</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">yours, from Sep 2, 2026 · Insurvas's is On issue</p>
+<div class="db"><div><div class="lbl">Pays commission</div><div class="inp sel">On first draft</div></div></div>
+<div class="df"><span class="btn g">Back to Insurvas's</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Save</span></div></div></div>
+<div><div class="lbltag">Fact · an amount, with its error</div><div class="dlg"><div class="dh"><h2>Aflac · Minimum payout</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Not set.</p>
+<div class="db"><div><div class="lbl">Minimum payout</div><div class="inp err">$ 25.0.0</div><div class="errl">Enter an amount, like 25.00.</div></div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Save</span></div></div>
+<p class="m sm12" style="margin-top:8px;max-width:440px">Same dialog for Payment lag (days), Tolerance ($), Statement format (Spreadsheet / PDF) and Files arrive (Daily / Weekly / Monthly / Now and then).</p></div>
+<div><div class="lbltag">Confirm · verify</div><div class="dlg cf"><div class="dh"><h2>Mark it verified?</h2></div><p class="dd">"Cancellation request · 30 d" will show without the unverified mark, recorded as verified by you today.</p><div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Verify</span></div></div></div>
+<div><div class="lbltag">Confirm · back to Insurvas's</div><div class="dlg cf"><div class="dh"><h2>Back to Insurvas's?</h2></div><p class="dd">From today Aflac uses Insurvas's cancellation request window (30 d) for your agency. Past countdowns keep the rule they used.</p><div class="df"><span class="sp"></span><span class="btn">Keep mine</span><span class="btn p">Use Insurvas's</span></div></div></div>
+<div style="display:grid;gap:10px"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><span>First payment window set from Nov 10, 2026.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Aflac: your window after a missed payment applies from Nov 10, 2026.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Cancellation request window verified.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Pays commission: back to Insurvas's.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Payment lag saved.</span></div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>1·6 STATES</b><span>empty, no matches, database update pending, read-only: inside the table, never a callout</span></div>
+<div class="stage" style="padding:20px">
+<div class="card" style="width:460px"><div class="empty"><b>No carriers yet</b><span>Switch on the carriers you work with in Settings › Carriers; each one then has its rules here.</span><span class="btn p">Open Settings › Carriers</span></div></div>
+<div class="card" style="width:460px"><div class="empty"><b>No carriers match</b><span>Nothing matches "omaha" in Missing a rule.</span><span class="btn">Clear the filters</span></div></div>
+<div class="card" style="width:460px"><div class="empty"><b>Carrier terms need a database update</b><span>20261008150000. Until then nothing can be set here.</span></div></div>
+<div class="card" style="width:460px"><div class="hd"><h3>Read-only</h3></div><div style="padding:0 16px 16px" class="m">The title-line button is gone; "Set the next window" reads <span class="btn off sm">Set the next window</span> with "Paused while the account is read-only." on hover. A cell or row still opens its dialog, with the fields shown as text and only History and Close.</div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>1·7 PHONE</b><span>the grid becomes one card a carrier with its five windows as rows; the carrier page stacks</span></div>
+<div class="phones">
+<div class="phone"><div class="pb"><span>☰ Carrier sync</span><span>9:41</span></div><div class="pm">
+<div class="trail">Carrier sync › <b>Carrier terms</b></div><h1>Carrier terms</h1>
+<div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Windows</span><span>Money</span><span>Files</span></div>
+<span class="btn p" style="justify-content:center">Set the next window</span>
+<div class="chips"><span class="tc on">All 7</span><span class="tc">Missing <span class="n r">4</span></span><span class="tc">Unverified 3</span></div>
+<div class="pc"><div class="row"><b>Aetna / CVS</b><a>986 in force ›</a></div>
+<div class="row"><span class="m">First payment</span><span class="wc"><i class="dv"></i>30 d</span></div><div class="row"><span class="m">Ongoing payment</span><span class="wc ms">+ Set</span></div><div class="row"><span class="m">Reinstatement</span><span class="wc un"><i class="du"></i>90 d</span></div><div class="row"><span class="m">Conservation</span><span class="wc ms">+ Set</span></div><div class="row"><span class="m">Cancellation</span><span class="wc ms">+ Set</span></div></div>
+<div class="pc"><div class="row"><b>Aflac</b><a>804 in force ›</a></div><div class="row"><span class="m">First payment</span><span class="wc ms">+ Set</span></div><div class="row"><span class="m">Ongoing payment</span><span class="wc"><i class="dv"></i>31 d</span></div></div>
+</div></div>
+<div class="phone"><div class="pb"><span>‹ Carrier terms</span><span>9:41</span></div><div class="pm">
+<h1>Aflac</h1>
+<div style="display:flex;gap:8px"><span class="btn sm" style="flex:1">‹ Aetna / CVS</span><span class="btn sm" style="flex:1">Mutual of Omaha ›</span></div>
+<div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Windows <span class="n r">2</span></span><span>Money</span><span>Files</span><span>History</span></div>
+<div class="pc"><div class="row"><b>First payment</b><span class="red bold">Not set</span></div><span class="m sm12">804 policies in force have no first payment countdown</span><span class="btn p" style="justify-content:center">Set it</span></div>
+<div class="pc"><div class="row"><b>Ongoing payment</b><span>31 d</span></div><span class="m sm12">grace 31 d · 2 tries · 10 d apart</span><span class="st g1" style="justify-self:start">Agreement · verified</span></div>
+<div class="pc"><div class="row"><b>Reinstatement</b><span>180 d</span></div><span class="st z" style="justify-self:start">Observed · unverified</span></div>
+<p class="m sm12">The window dialog opens full screen on a phone, Save at the foot.</p>
+</div></div></div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 2 · CARD MOVES ═══════════════════════════════════ -->
+<section class="screen" id="s2">
+<h2>2 · Card moves</h2>
+<p class="sub">/app/book-setup/pipeline-rules, /new, /[ruleId]?tab=overview|check|rule|versions · RulesList, RuleOverview, ForecastTable, PreviewTable, RuleForm, StagePicker, VersionsTable, RuleActions</p>
+
+<section class="board"><div class="cap"><b>2·0 CRITIQUE</b><span>today's list, new rule and rule page</span></div>
+<div class="card crit"><ol>
+<li><b>A notice card leads the list:</b> up to six messages joined in one warning callout ("2 rules in forecast, moving nothing until switched to live · 1 card held: two rules disagree · …").</li>
+<li><b>No way to narrow the list:</b> Live, Forecast, Draft and Off rules are mixed, and "Last 7 days" mixes "12 moved" with "would move 14".</li>
+<li><b>Check it puts Right / Wrong buttons in every row,</b> and a Wrong can't carry the note the data keeps (checkedNote).</li>
+<li><b>New rule's title carries a Forecast chip and "Starts in forecast · version 1".</b> Preview on today's data appears under a long form, out of sight.</li>
+<li><b>The rule page has no stepper</b>, so checking several forecasts means going back to the list each time.</li>
+</ol></div></section>
+
+<section class="board" id="s2-dir"><div class="cap"><b>2·A BY MODE</b><span class="rec">Recommended</span><span>the modes are the sub-page bar; the callout's parts become counts where they belong</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="moves"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Card moves</b></div>
+<div class="tl"><h1>Card moves <i class="ib">i</i></h1><div class="ut"><span>All<span class="n">8</span></span><span class="on">Forecast<span class="n w">2</span></span><span>Live<span class="n r">4</span></span><span>Off<span class="n">1</span></span><span>Draft<span class="n">1</span></span></div><span class="sp"></span><div class="acts"><span class="btn p">New rule</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Search rules</span><span class="inp sel" style="width:180px">Every carrier</span><span class="inp sel" style="width:180px">Every event</span><span class="sp"></span><span class="m sm12">A forecast rule moves nothing: it records what it would do.</span></div>
+<table class="grow"><tr><th>Rule</th><th>Carriers</th><th>From</th><th>Moves to</th><th>Last 7 days</th><th>To check</th><th></th></tr>
+<tr class="lk"><td><b>First payment missed → Retention › First draft missed</b><br><span class="sm12 m">First payment missed · adds a note</span></td><td class="m">3 carriers</td><td class="m">Sales › Issued</td><td>Retention pipeline › First draft missed</td><td><a>would move 14</a></td><td><span class="st w">11 not checked</span></td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Later payment missed → Retention › Payment missed</b><br><span class="sm12 m">Later payment missed · adds a note</span></td><td class="m">Every carrier</td><td class="m">Any stage</td><td>Retention pipeline › Payment missed</td><td><a>would move 6</a> · <a class="amb">1 held</a></td><td><span class="st g1">all checked</span></td><td class="chev">›</td></tr>
+<tr><td colspan="7" style="border:0"></td></tr></table>
+<div class="foot"><span class="sp"></span>2 of 8 rules</div></div></div></div></div></div>
+<ul class="notes"><li>Today's callout, part by part: <b>forecast</b> → the Forecast tab's amber count and a "To check" column; <b>held</b> → "1 held" on its rule, linking to Needs you; <b>capped</b> → a red count on Live and a red "Stopped at 50 · look" in that rule's row; <b>engine off / read-only</b> → New rule disabled with the reason on hover; <b>none on</b> → the Live tab's empty state.</li><li>Opens on <b>Forecast</b> when a rule waits for a check ("Rules marked Forecast are the ones to check"), else All.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·B LIFE COLUMNS</b><span class="alt">Direction B</span><span>Draft · Forecast · Live · Off as four columns of rule cards</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="moves"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Card moves</b></div>
+<div class="tl"><h1>Card moves <i class="ib">i</i></h1><span class="sp"></span><div class="acts"><span class="btn p">New rule</span></div></div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex:1;padding-bottom:16px">
+<div class="col"><b>Draft <span class="n">1</span></b><div class="rc"><b>Commission credited → Sales › Paid</b><span class="m sm12">Every carrier · any stage</span></div></div>
+<div class="col"><b>Forecast <span class="n w">2</span></b><div class="rc"><b>First payment missed → Retention › First draft missed</b><span class="m sm12">would move 14 · 11 to check</span></div><div class="rc"><b>Later payment missed → Retention › Payment missed</b><span class="m sm12">would move 6 · 1 held</span></div></div>
+<div class="col"><b>Live <span class="n">4</span></b><div class="rc"><b>Issued → Sales › Issued</b><span class="m sm12">12 moved</span></div><div class="rc"><b>Lapsed → Sales › Lapsed</b><span class="m sm12">3 moved</span></div><div class="rc"><b>Chargeback received → Sales › Charged back</b><span class="m sm12">1 moved</span></div><div class="rc"><b>Paid again → Sales › In force</b><span class="m sm12">2 moved</span></div></div>
+<div class="col"><b>Off <span class="n">1</span></b><div class="rc"><b>Not taken → Sales › Not taken</b><span class="m sm12">records nothing</span></div></div>
+</div></div></div></div>
+<ul class="notes"><li>Shows the track at a glance; cards can't line up carriers, from and to, so comparing rules is harder. Not a drag board: a mode change asks first.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·C A POLICY'S LIFE</b><span class="alt">Direction C</span><span>one row per event in the order a policy lives it; an event with no rule shows the gap</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="moves"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Card moves</b></div>
+<div class="tl"><h1>Card moves <i class="ib">i</i></h1><span class="sp"></span><div class="acts"><span class="btn p">New rule</span></div></div>
+<div class="fill"><div class="card"><table class="grow"><tr><th>When a carrier file says</th><th>Rule</th><th>Moves to</th><th>Mode</th><th>Last 7 days</th></tr>
+<tr class="lk"><td class="bold">Issued</td><td>Issued → Sales › Issued</td><td>Sales › Issued</td><td><span class="st g1">Live</span></td><td class="m">12 moved</td></tr>
+<tr class="lk"><td class="bold">First payment missed</td><td>First payment missed → Retention › First draft missed</td><td>Retention › First draft missed</td><td><span class="st w">Forecast</span></td><td class="m">would move 14</td></tr>
+<tr class="lk"><td class="bold">Later payment missed</td><td>Later payment missed → Retention › Payment missed</td><td>Retention › Payment missed</td><td><span class="st w">Forecast</span></td><td class="m">would move 6</td></tr>
+<tr class="lk"><td class="bold">Paid again</td><td>Paid again → Sales › In force</td><td>Sales › In force</td><td><span class="st g1">Live</span></td><td class="m">2 moved</td></tr>
+<tr class="lk"><td class="bold">Lapsed</td><td>Lapsed → Sales › Lapsed</td><td>Sales › Lapsed</td><td><span class="st g1">Live</span></td><td class="m">3 moved</td></tr>
+<tr class="lk"><td class="bold m">Cancelled</td><td colspan="4" class="m">No rule · a cancelled policy's card stays where it is · <a>New rule for Cancelled ›</a></td></tr>
+<tr class="lk"><td class="bold">Chargeback received</td><td>Chargeback received → Sales › Charged back</td><td>Sales › Charged back</td><td><span class="st g1">Live</span></td><td class="m">1 moved</td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table></div></div></div></div></div>
+<ul class="notes"><li>Teaches what card moves can cover, but 17 events make a long list where most rows are gaps.</li></ul>
+<div class="dirgrid"><div class="pick"><b>A · By mode ✓</b><br>The page opens on what needs a person (the forecasts) and the callout disappears into counts.</div><div><b>B · Life columns</b><br>Clear track, weak comparison.</div><div><b>C · A policy's life</b><br>Best for spotting missing rules; long.</div></div></section>
+
+<section class="board" id="s2-page"><div class="cap"><b>2·1 A RULE · OVERVIEW</b><span class="rec">A</span><span>today's direction F kept; the stepper names the neighbouring rules; title alone</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="moves"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <a>Card moves</a> › <a>Forecast</a> › <b>First payment missed → Retention › First draft missed</b></div>
+<div class="tl"><h1>First payment missed → Retention › First draft missed</h1><div class="ut"><span class="on">Overview</span><span>Check it<span class="n w">11</span></span><span>Rule</span><span>Versions<span class="n">2</span></span></div><span class="sp"></span><div class="acts"><span class="btn">‹ Issued → Sales › Issued</span><span class="btn">Later payment missed ›</span><span class="btn p">Switch to live</span><span class="btn ic">⋯</span></div></div>
+<div class="track"><div class="dn"><div class="bar"></div><div class="lb">✓ 1 · Drafted</div><div class="sb">Nov 3, 2026</div></div><div class="on"><div class="bar"></div><div class="lb">2 · Forecast</div><div class="sb">moves nothing, records what it would</div></div><div><div class="bar"></div><div class="lb m">3 · Live</div><div class="sb">moves cards and adds notes</div></div></div>
+<div style="display:grid;grid-template-columns:1.1fr 1fr;gap:16px;flex:1;padding-bottom:16px;align-items:start">
+<div class="card"><div class="hd"><h3>Before it goes live</h3></div>
+<div class="todo"><span class="ring x"></span><span>It has seen carrier files <span class="m">· 14 would-moves in the last 7 days</span></span><span></span></div>
+<div class="todo"><span class="ring"></span><span><b>Check its 14 would-moves</b> <span class="m">· 3 checked</span></span><a>Check them ›</a></div>
+<div class="todo"><span class="ring"></span><span>Every carrier it covers has a grace set <span class="m">· 1 doesn't, so no missed payment is counted for them</span></span><a>Carrier terms ›</a></div></div>
+<div class="card"><div class="hd"><h3>The rule</h3><span class="m sm12">Version 2, saved Nov 6, 2026</span><span class="sp"></span><a>Change ›</a></div>
+<p class="sent">When a carrier file says a policy is <b>first payment missed</b>, for <b>3 carriers</b>, and its lead's card is in <b>Issued</b>, move the card to <b>Retention pipeline › First draft missed</b> and add the note <span class="m">"First draft missed. Paid to {paid_to_date}, {days_past_due} days late. Carrier closes it in {days_left} days."</span></p></div>
+</div></div></div></div>
+<ul class="notes"><li><b>Stepper:</b> walks the rules in the tab you came from (here Forecast), each button naming the next rule; long names shorten to the event. "Carrier terms ›" opens the grid filtered to the carriers this rule covers with no grace (Americo).</li><li>A live rule shows the strip Moved · Skipped · Held · Marked wrong in place of the checklist (today's RuleOverview), and its primary is Preview today.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·2 A RULE · CHECK IT</b><span class="rec">A</span><span>the would-moves as a list of verdicts; checking happens in the check dialog, one line after another</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="moves"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <a>Card moves</a> › <b>First payment missed → Retention › First draft missed</b></div>
+<div class="tl"><h1>First payment missed → Retention › First draft missed</h1><div class="ut"><span>Overview</span><span class="on">Check it<span class="n w">11</span></span><span>Rule</span><span>Versions<span class="n">2</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Preview today</span><span class="btn p">Check 11 one by one</span><span class="btn ic">⋯</span></div></div>
+<div class="fill"><div class="card">
+<div class="hd"><h3>Last 7 days · 14 would-moves</h3><span class="sp"></span><span class="tc">All 14</span><span class="tc on">Not checked <span class="n w">11</span></span><span class="tc">Right 2</span><span class="tc">Wrong <span class="n r">1</span></span></div>
+<table class="grow"><tr><th style="width:120px">Day</th><th>Lead</th><th>Would have</th><th style="width:220px">Was it right?</th><th></th></tr>
+<tr class="lk"><td class="m">Nov 9, 2026</td><td><b><a style="color:var(--text)">Quinn Testmore</a></b><br><span class="sm12 m">0119990301 · American Amicable · paid to Oct 1, 40 days late</span></td><td>Issued → First draft missed</td><td><span class="st z">Not checked</span></td><td class="chev">Check ›</td></tr>
+<tr class="lk"><td class="m">Nov 9, 2026</td><td><b><a style="color:var(--text)">Nora Fields</a></b><br><span class="sm12 m">AF1022871 · Aflac · paid to Oct 5, 36 days late</span></td><td>Issued → First draft missed</td><td><span class="st z">Not checked</span></td><td class="chev">Check ›</td></tr>
+<tr class="lk"><td class="m">Nov 8, 2026</td><td><b><a style="color:var(--text)">Laura Lopez</a></b><br><span class="sm12 m">AMH6900131 · American Amicable · paid to Sep 28, 42 days late</span></td><td>Issued → First draft missed</td><td><span class="st z">Not checked</span></td><td class="chev">Check ›</td></tr>
+<tr class="lk"><td class="m">Nov 7, 2026</td><td><b><a style="color:var(--text)">Paige Paidout</a></b><br><span class="sm12 m">0119990312 · Americo · paid to Oct 3, 35 days late</span></td><td>Issued → First draft missed</td><td><span class="st z">Not checked</span></td><td class="chev">Check ›</td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table>
+<div class="foot"><span class="sp"></span><span class="pager"><span class="on">1</span><span>2</span><span>3</span></span>11 lines</div></div></div></div></div></div>
+<ul class="notes"><li>No Right / Wrong buttons in the rows: a row (or "Check 11 one by one") opens the check dialog (2·4). The lead's name opens the lead page; the policy number opens the policy.</li><li><b>Preview today</b> opens the preview dialog (2·5) instead of a second table under this one.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·3 A RULE · RULE and NEW RULE</b><span class="st z">Own page</span><span>the form is long and leaves the list: its own page (?tab=rule, /new), save on the title line</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="moves"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <a>Card moves</a> › <b>New rule</b></div>
+<div class="tl"><h1>New rule</h1><span class="sp"></span><div class="acts"><span class="btn">Preview on today's data</span><span class="btn p">Save rule</span></div></div>
+<div class="two" style="padding-bottom:0">
+<div class="card"><div class="hd"><h3>When</h3></div><div class="fg" style="padding:0 16px 16px">
+<div><div class="lbl">Name</div><div class="inp">First payment missed</div></div>
+<div><div class="lbl">Event</div><div class="inp sel">First payment missed</div><div class="hint">Missed means: issued, and the first premium is late by more than the carrier's first-payment grace (Carrier terms). Checked every morning, even when no file arrives.</div></div>
+<div><div class="lbl">Carriers</div><div class="inp sel">Only the carriers I pick</div></div>
+<div class="chips"><span class="tc on">American Amicable</span><span class="tc on">Aflac</span><span class="tc on">Americo</span><span class="tc">Aetna / CVS</span><span class="tc">Mutual of Omaha</span><span class="tc">Corebridge Financial</span></div></div></div>
+<div class="card"><div class="hd"><h3>Move the card</h3></div><div class="fg" style="padding:0 16px 16px">
+<div><div class="lbl">Only when the card is in</div><div class="inp sel focus">1 of 31 stages</div><div class="hint">1 of Sales pipeline</div></div>
+<div class="fg2"><div><div class="lbl">Pipeline</div><div class="inp sel ph err">Choose</div></div><div><div class="lbl">Stage</div><div class="inp sel ph off">Choose</div></div></div>
+<div class="errl">Choose the pipeline and stage the card moves to.</div></div></div>
+</div>
+<div class="card" style="margin-bottom:16px"><div class="hd"><h3>Note on the lead</h3></div><div class="fg" style="padding:0 16px 16px">
+<label><span class="box x"></span> Add a note</label>
+<div class="inp ta">First draft missed. Paid to {paid_to_date}, {days_past_due} days late. Carrier closes it in {days_left} days.</div>
+<div class="chips sm12 m" style="align-items:center">Fill-ins: <span class="mono">{paid_to_date}</span> <span class="mono">{days_past_due}</span> <span class="mono">{days_left}</span> <span class="mono">{months_paid}</span> <span class="mono">{premium}</span> <span class="mono">{amount}</span> <span class="mono">{carrier}</span> <span class="mono">{policy_number}</span></div>
+<span class="sm12 amb">{amount} has no value for this event and will read "not known".</span>
+<span class="sm12 m">Saving makes version 1, in forecast: it records what it would do and moves nothing.</span></div></div>
+</div></div></div>
+<ul class="notes"><li><b>New rule</b>: title alone (the Forecast chip and "Starts in forecast · version 1" become the last line of the form). The form's first problem is its error line next to the field, not a toast.</li><li><b>A rule's Rule tab</b> is the same page under the rule's title and tabs; its primary reads <b>Save as a new version</b> (disabled until something changed). ⋯ › "Rename or change" lands here with Name focused.</li></ul></section>
+
+<section class="board" id="s2-pop"><div class="cap"><b>2·4 CHECK DIALOG</b><span class="st i">Dialog · lg 560</span><span>one would-move at a time; Wrong asks why (the checkedNote the data already keeps)</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Checking</div><div class="dlg lg"><div class="dh"><h2>Check would-move 4 of 14</h2><span class="sp"></span><span class="x">✕</span></div>
+<div class="db"><div class="kv"><div class="k">Lead</div><div><a>Quinn Testmore</a></div><div class="k">Policy</div><div><a class="mono">0119990301</a> · American Amicable</div><div class="k">Because</div><div>First draft missed: paid to Oct 1, 2026, 40 days late</div><div class="k">Card</div><div>Sales › Issued → <b>Retention › First draft missed</b></div><div class="k">Note it adds</div><div class="m">First draft missed. Paid to Oct 1, 2026, 40 days late. Carrier closes it in 21 days.</div></div></div>
+<div class="df"><span class="btn g">‹ Back</span><span class="btn g">Skip ›</span><span class="sp"></span><span class="btn">Wrong</span><span class="btn p">Right</span></div></div></div>
+<div><div class="lbltag">After Wrong</div><div class="dlg lg"><div class="dh"><h2>Check would-move 4 of 14</h2><span class="sp"></span><span class="x">✕</span></div>
+<div class="db"><div class="m">Quinn Testmore · 0119990301 · Sales › Issued → Retention › First draft missed</div><div><div class="lbl">What's wrong with it?</div><div class="inp ta focus">Client paid by phone on Nov 2; the carrier file is behind.</div><div class="hint">Optional. Shown beside the Wrong mark.</div></div></div>
+<div class="df"><span class="btn g">Cancel</span><span class="sp"></span><span class="btn p">Mark it wrong and next ›</span></div></div></div>
+<div><div class="lbltag">A checked line (Undo)</div><div class="dlg lg"><div class="dh"><h2>Check would-move 2 of 14</h2><span class="sp"></span><span class="x">✕</span></div><div class="db"><div class="m">Nora Fields · AF1022871 · Issued → First draft missed</div><div><span class="st b">Wrong · paid at the counter</span> <span class="m sm12">by Dana W., Nov 9</span></div></div><div class="df"><span class="btn g">Undo</span><span class="sp"></span><span class="btn p">Next ›</span></div></div></div>
+</div>
+<ul class="notes"><li><b>Why a dialog:</b> a verdict needs the whole line (lead, policy, because, card, note) and sometimes a reason; in a row it was two small buttons with no context. Keyboard: R right, W wrong, → skip.</li></ul></section>
+
+<section class="board"><div class="cap"><b>2·5 PREVIEW, STAGE PICKER, MENU, CONFIRMS</b><span>every other pop-up of a rule</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Preview on today's data · Dialog 2xl 960</div><div class="dlg x2"><div class="dh"><h2>Preview on today's data</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">As of Nov 10, 2026 · 3 would move · 2 not · writes nothing</p>
+<div class="db" style="padding:12px 0 0"><table><tr><th style="width:150px">Result</th><th>Lead</th><th>Because</th><th>Card</th><th>Why</th></tr>
+<tr><td><span class="st i">Would move</span></td><td><b>Quinn Testmore</b><br><span class="sm12 m">American Amicable · 0119990301</span></td><td class="m">40 days late</td><td>Issued → First draft missed</td><td class="m">Adds a note</td></tr>
+<tr><td><span class="st w">Held</span></td><td><b>Mara Okafor</b><br><span class="sm12 m">Aflac · AF1029934</span></td><td class="m">33 days late</td><td>Issued</td><td class="m">Two rules disagree</td></tr>
+<tr><td><span class="st z">Skipped</span></td><td><b>Leo Barnes</b><br><span class="sm12 m">Americo · 0119990355</span></td><td class="m">—</td><td>In force</td><td class="m">Card is not in Issued</td></tr>
+<tr><td><span class="st b">Stops at the cap</span></td><td><b>Ana Ruiz</b><br><span class="sm12 m">Aflac · AF1030210</span></td><td class="m">31 days late</td><td>Issued</td><td class="m">50 moves in one run</td></tr></table></div>
+<div class="df"><span class="m sm12">1 carrier has policies behind but no grace set, so no missed payment is counted for them. <a>Set one in Carrier terms ›</a></span><span class="sp"></span><span class="btn p">Close</span></div></div></div>
+<div><div class="lbltag">Only when the card is in · Popover</div><div class="pop"><div class="inp ph">Search stages</div>
+<div style="margin-top:12px;display:grid;gap:12px"><div><div class="sm12 m bold" style="display:flex;justify-content:space-between">Sales pipeline · 1 of 9 <a>All</a></div><div class="chips" style="margin-top:6px"><span class="tc">Submitted</span><span class="tc on">Issued</span><span class="tc">In force</span><span class="tc">Lapsed</span><span class="tc">Charged back</span><span class="tc">+4</span></div></div>
+<div><div class="sm12 m bold" style="display:flex;justify-content:space-between">Retention pipeline · 0 of 7 <a>All</a></div><div class="chips" style="margin-top:6px"><span class="tc">First draft missed</span><span class="tc">Payment missed</span><span class="tc">Saved</span><span class="tc">+4</span></div></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);margin-top:12px;padding-top:12px"><span class="btn g sm">Any stage</span><span class="m sm12">1 of 31 stages</span></div></div></div>
+<div><div class="lbltag">⋯ menu</div><div class="menu"><div>Duplicate</div><div>Rename or change</div><div class="m">Back to forecast <span class="sm12">(live rules)</span></div><hr><div class="red">Turn off</div></div></div>
+<div><div class="lbltag">Confirm · switch to live</div><div class="dlg"><div class="dh"><h2>Switch "First payment missed → Retention › First draft missed" to live?</h2></div><p class="dd">From now on it moves cards and adds notes. Past would-moves are not replayed unless you tick below.</p>
+<div class="db"><div class="kv"><div class="k">Forecast</div><div>7 days · 14 would-moves</div><div class="k">You checked</div><div>2 right · 1 wrong</div></div><label><span class="box"></span> Also move the 3 cards that qualify right now</label></div>
+<div class="df"><span class="sp"></span><span class="btn">Not yet</span><span class="btn p">Switch to live</span></div></div></div>
+<div><div class="lbltag">Confirm · turn off</div><div class="dlg cf"><div class="dh"><h2>Turn off "Not taken → Sales › Not taken"?</h2></div><p class="dd">It stops moving cards and recording what it would do. Turn it on again any time; nothing is lost.</p><div class="df"><span class="sp"></span><span class="btn">Keep it on</span><span class="btn dp">Turn off</span></div></div></div>
+<div><div class="lbltag">Leave guard · Rule tab or New rule</div><div class="dlg cf"><div class="dh"><h2>Leave without saving this rule?</h2></div><p class="dd">Your changes to the stage and the note are not saved.</p><div class="df"><span class="sp"></span><span class="btn">Discard</span><span class="btn p">Save</span></div></div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>2·6 VERSIONS, STATES, TOASTS</b><span>read-only history; empty lists; what each action says</span></div>
+<div class="stage" style="padding:20px">
+<div class="card" style="flex:1 1 620px"><div class="hd"><h3>2 versions</h3></div><table><tr><th>Version</th><th>Saved</th><th>When</th><th>From</th><th>Moves to</th><th>Note</th></tr>
+<tr><td>v2 <span class="st g1">In use</span></td><td class="m">Nov 6, 2026</td><td>First payment missed<br><span class="sm12 m">American Amicable, Aflac, Americo</span></td><td class="m">Issued</td><td>Retention pipeline › First draft missed</td><td class="m">First draft missed. Paid to {paid_to_date}…</td></tr>
+<tr><td>v1</td><td class="m">Nov 3, 2026</td><td>First payment missed<br><span class="sm12 m">Every carrier</span></td><td class="m">Any stage</td><td>Retention pipeline › First draft missed</td><td class="m">No note</td></tr></table></div>
+<div style="display:grid;gap:12px;flex:1 1 360px">
+<div class="card"><div class="empty" style="padding:28px"><b>No card-move rules yet</b><span>A rule moves a lead's card when something happens to its policy, and adds a note. It starts in forecast: it records what it would do and moves nothing until you switch it to live.</span><span class="btn p">New rule</span></div></div>
+<div class="card"><div class="empty" style="padding:28px"><b>Nothing would have moved in the last 7 days</b><span>A forecast line appears when the rule's event happens to a policy linked to a lead and every check passes.</span></div></div>
+<div class="card"><div class="empty" style="padding:28px"><b>No rule is live</b><span>No rule is on, so no card moves. Open a forecast rule and switch it to live.</span><span class="btn">Show Forecast</span></div></div></div>
+<div style="display:grid;gap:10px;align-content:start">
+<div class="toast"><span class="tk ok">✓</span><span>Rule saved. It starts in forecast: it records what it would do and moves nothing.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Saved as version 3.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>"Issued → Sales › Issued" is live.<small>3 cards moved now.</small></span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Copied as a new rule, in forecast.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>"Not taken → Sales › Not taken" is off. It records nothing until it is on again.</span><span class="u">Undo</span></div>
+<div class="toast"><span class="tk bd">!</span><span>That did not work.<small>Shown on the dialog's error line when a dialog is open.</small></span></div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>2·7 PHONE</b><span>list by mode; a rule's Overview; the check dialog full screen</span></div>
+<div class="phones">
+<div class="phone"><div class="pb"><span>☰ Carrier sync</span><span>9:41</span></div><div class="pm"><div class="trail">Carrier sync › <b>Card moves</b></div><h1>Card moves</h1>
+<div class="ut" style="border-bottom:1px solid var(--border)"><span>All 8</span><span class="on">Forecast <span class="n w">2</span></span><span>Live 4</span><span>Off 1</span></div>
+<span class="btn p" style="justify-content:center">New rule</span>
+<div class="pc"><b>First payment missed → Retention › First draft missed</b><span class="m sm12">3 carriers · from Issued</span><div class="row"><a>would move 14</a><span class="st w">11 not checked</span></div></div>
+<div class="pc"><b>Later payment missed → Retention › Payment missed</b><span class="m sm12">Every carrier · any stage</span><div class="row"><a>would move 6 · 1 held</a><span class="st g1">all checked</span></div></div></div></div>
+<div class="phone"><div class="pb"><span>‹ Card moves</span><span>9:41</span></div><div class="pm"><h1>First payment missed → Retention › First draft missed</h1>
+<div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Overview</span><span>Check it <span class="n w">11</span></span><span>Rule</span></div>
+<div class="track"><div class="dn"><div class="bar"></div><div class="lb">Drafted</div></div><div class="on"><div class="bar"></div><div class="lb">Forecast</div></div><div><div class="bar"></div><div class="lb m">Live</div></div></div>
+<div class="pc"><div class="row"><span><b>Check its 14 would-moves</b><br><span class="m sm12">3 checked</span></span><a>Check ›</a></div></div>
+<div class="pc"><div class="row"><span>Every carrier has a grace set<br><span class="m sm12">1 doesn't</span></span><a>Carrier terms ›</a></div></div>
+<span class="btn p" style="justify-content:center">Switch to live</span></div></div>
+<div class="phone"><div class="pb"><span>✕ Check</span><span>4 of 14</span></div><div class="pm"><b>Quinn Testmore</b><span class="m sm12">0119990301 · American Amicable</span><div class="kv" style="grid-template-columns:100px 1fr"><div class="k">Because</div><div>40 days late</div><div class="k">Card</div><div>Issued → First draft missed</div></div><div style="flex:1;min-height:240px"></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><span class="btn" style="justify-content:center">Wrong</span><span class="btn p" style="justify-content:center">Right</span></div></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 3 · AGENT CODES ═══════════════════════════════════ -->
+<section class="screen" id="s3">
+<h2>3 · Agent codes</h2>
+<p class="sub">/app/book-setup/agent-codes · AgentCodes (POST /api/app/policy-matching: map_agent, unmap_agent, add_agent)</p>
+
+<section class="board"><div class="cap"><b>3·0 CRITIQUE</b><span>today's table</span></div>
+<div class="card crit"><ol>
+<li><b>The decision is made inside the table:</b> every "To map" row holds a person dropdown and a Map button.</li>
+<li><b>Add agent code inserts a row of three inputs</b> at the top of the table, above the codes it should sit with.</li>
+<li><b>Moving a code to another person takes two steps</b> (Unmap, then map again), and Unmap sits on every mapped row.</li>
+<li><b>The policies count links nowhere</b>, so you can't see which policies a code credits before you map it.</li>
+<li>To map / Mapped / All are filter chips in the toolbar, not the sub-page bar; the pending state is a callout.</li>
+</ol></div></section>
+
+<section class="board"><div class="cap"><b>3·A CODES, AND A MAP DIALOG</b><span class="rec">Recommended</span><span>To map · Mapped · All on the title line; a row opens its dialog; "Map one by one" walks the codes</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="codes"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Agent codes</b></div>
+<div class="tl"><h1>Agent codes <i class="ib">i</i></h1><div class="ut"><span class="on">To map<span class="n r">3</span></span><span>Mapped<span class="n">41</span></span><span>All<span class="n">44</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Add agent code</span><span class="btn p">Map one by one</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Search agent codes</span><span class="inp sel" style="width:200px">Every carrier</span><span class="sp"></span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th>Code</th><th>Carrier</th><th class="r">Policies</th><th>Person</th><th></th></tr>
+<tr class="lk sel"><td class="mono">AMW5029736</td><td>American Amicable</td><td class="r"><a>142 policies</a></td><td class="m">Nobody · no producer gets the credit</td><td class="chev">Map ›</td></tr>
+<tr class="lk"><td class="mono">AET-88213</td><td>Aetna / CVS</td><td class="r"><a>37 policies</a></td><td class="m">Nobody · no producer gets the credit</td><td class="chev">Map ›</td></tr>
+<tr class="lk"><td class="mono">0119990312</td><td>Americo</td><td class="r"><a>12 policies</a></td><td class="m">Nobody · no producer gets the credit</td><td class="chev">Map ›</td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table>
+<div class="foot"><span class="sp"></span>3 agent codes · 3 to map</div></div></div></div></div></div>
+<ul class="notes"><li>A row opens the map dialog (3·1) on its code; the policies figure opens Policies filtered to that carrier and code. The Mapped tab shows the person in the Person column and opens the mapped-code dialog (3·2).</li><li>"Map one by one" opens the dialog on the biggest code and steps through the rest ("1 of 3"). Today's (i) text is kept: "A code nobody owns leaves its policies unassigned…".</li></ul></section>
+
+<section class="board"><div class="cap"><b>3·B BY PERSON</b><span class="alt">Direction B</span><span>people first: each producer with the codes that credit them; unowned codes on top</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="codes"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Agent codes</b></div>
+<div class="tl"><h1>Agent codes <i class="ib">i</i></h1><span class="sp"></span><div class="acts"><span class="btn">Add agent code</span></div></div>
+<div class="fill"><div class="card"><table class="grow"><tr><th>Person · code</th><th>Carrier</th><th class="r">Policies</th><th></th></tr>
+<tr class="grp"><td colspan="4"><span class="red">Nobody</span> · 3 codes · 191 policies</td></tr>
+<tr class="lk"><td class="mono">AMW5029736</td><td>American Amicable</td><td class="r"><a>142</a></td><td class="chev">Map ›</td></tr>
+<tr class="grp"><td colspan="4">Dana Whitfield · 4 codes · 388 policies</td></tr>
+<tr class="lk"><td class="mono">MOO-41877</td><td>Mutual of Omaha</td><td class="r"><a>210</a></td><td class="chev">›</td></tr>
+<tr class="lk"><td class="mono">AFL-77120</td><td>Aflac</td><td class="r"><a>96</a></td><td class="chev">›</td></tr>
+<tr class="grp"><td colspan="4">Marcus Bell · 2 codes · 81 policies</td></tr>
+<tr class="lk"><td class="mono">CBF-30019</td><td>Corebridge Financial</td><td class="r"><a>64</a></td><td class="chev">›</td></tr>
+<tr><td colspan="4" style="border:0"></td></tr></table></div></div></div></div></div>
+<ul class="notes"><li>Answers "which codes are Dana's?" well; the codes to map, the page's job, are one group among many.</li></ul></section>
+
+<section class="board"><div class="cap"><b>3·C BY CARRIER</b><span class="alt">Direction C</span><span>a carrier's codes together, with its writing number from Settings › Carriers</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="codes"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Agent codes</b></div>
+<div class="tl"><h1>Agent codes <i class="ib">i</i></h1><div class="ut"><span class="on">American Amicable<span class="n r">1</span></span><span>Aetna / CVS<span class="n r">1</span></span><span>Americo<span class="n r">1</span></span><span>Aflac</span><span>Mutual of Omaha</span><span>+2</span></div><span class="sp"></span></div>
+<div class="fill"><div class="card"><table class="grow"><tr><th>Code</th><th class="r">Policies</th><th>Person</th><th></th></tr>
+<tr class="lk"><td class="mono">AMW5029736</td><td class="r"><a>142</a></td><td class="red">Nobody</td><td class="chev">Map ›</td></tr>
+<tr class="lk"><td class="mono">AMW5011208</td><td class="r"><a>301</a></td><td>Priya Shah</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="mono">AMW5011945</td><td class="r"><a>88</a></td><td>Marcus Bell</td><td class="chev">›</td></tr>
+<tr><td colspan="4" style="border:0"></td></tr></table></div></div></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · Codes, and a map dialog ✓</b><br>Opens on the codes to map, and the map is one dialog with the policies one click away.</div><div><b>B · By person</b><br>Good for audits, buries the job.</div><div><b>C · By carrier</b><br>Tabs run out past six carriers.</div></div></section>
+
+<section class="board" id="s3-pop"><div class="cap"><b>3·1 MAP, CHANGE, ADD, UNMAP</b><span class="st i">Dialog · md 440</span><span>every edit of a code; Unmap asks first (a loss)</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Map a code · stepping</div><div class="dlg"><div class="dh"><h2>Map AMW5029736</h2><span class="sp"></span><span class="m sm12">1 of 3</span><span class="x">✕</span></div><p class="dd">American Amicable · <a>142 policies</a> wait for a person: no producer gets the credit, and their commissions can't be split.</p>
+<div class="db"><div><div class="lbl">Person</div><div class="inp sel focus">Priya Shah</div></div></div>
+<div class="df"><span class="btn g">Skip ›</span><span class="sp"></span><span class="btn">Map</span><span class="btn p">Map and next ›</span></div></div></div>
+<div><div class="lbltag">A mapped code</div><div class="dlg"><div class="dh"><h2>MOO-41877</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Mutual of Omaha · <a>210 policies</a> credit Dana Whitfield.</p>
+<div class="db"><div><div class="lbl">Person</div><div class="inp sel">Dana Whitfield</div><div class="hint">Choosing someone else moves the code to them in one step.</div></div></div>
+<div class="df"><span class="btn d">Unmap</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Save</span></div></div></div>
+<div><div class="lbltag">Add agent code · with its error line</div><div class="dlg"><div class="dh"><h2>Add agent code</h2><span class="sp"></span><span class="x">✕</span></div>
+<div class="db"><div><div class="lbl">Agent code</div><div class="inp mono">AFL-77120</div><div class="hint">As the carrier writes it</div></div><div><div class="lbl">Carrier</div><div class="inp sel">Aflac</div></div><div><div class="lbl">Person</div><div class="inp sel">Marcus Bell</div></div><div class="errl">That did not save.</div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Add</span></div></div></div>
+<div><div class="lbltag">Confirm · unmap</div><div class="dlg cf"><div class="dh"><h2>Unmap MOO-41877?</h2></div><p class="dd">MOO-41877 at Mutual of Omaha stops pointing to Dana Whitfield. It goes back to the codes to map.</p><div class="df"><span class="sp"></span><span class="btn">Keep it</span><span class="btn dp">Unmap</span></div></div></div>
+<div style="display:grid;gap:10px;align-content:start"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><span>Agent code mapped.</span></div><div class="toast"><span class="tk ok">✓</span><span>Agent code added.</span></div><div class="toast"><span class="tk ok">✓</span><span>Mapping removed.</span><span class="u">Undo</span></div></div>
+</div>
+<ul class="notes"><li><b>Why dialogs:</b> each edit is one choice with its consequence said beside it; the list stays as it was behind. The mapped-code dialog adds what today needs two steps for (change the person directly) using the same map_agent call.</li></ul></section>
+
+<section class="board"><div class="cap"><b>3·2 STATES and PHONE</b><span>empty tabs, no matches, read-only</span></div>
+<div class="stage" style="padding:20px">
+<div class="card" style="width:420px"><div class="empty"><b>Every code is mapped</b><span>Each carrier code now credits a person. A new code shows up here the first time a file carries it.</span><span class="btn">Show Mapped</span></div></div>
+<div class="card" style="width:420px"><div class="empty"><b>No agent codes yet</b><span>Each carrier's writing-agent code appears here the first time a file carries it, or add one yourself.</span><span class="btn p">Add agent code</span></div></div>
+<div class="card" style="width:420px"><div class="empty"><b>Policy matching needs a database update</b><span>20261008170000.</span></div><div class="foot">Read-only: the title-line buttons are disabled, "Paused while the account is read-only."; a row opens its dialog with the person as text.</div></div>
+<div class="phone" style="min-height:560px"><div class="pb"><span>☰ Carrier sync</span><span>9:41</span></div><div class="pm"><h1>Agent codes</h1><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">To map <span class="n r">3</span></span><span>Mapped 41</span><span>All 44</span></div>
+<span class="btn p" style="justify-content:center">Map one by one</span>
+<div class="pc"><div class="row"><span class="mono">AMW5029736</span><a>142 ›</a></div><span class="m sm12">American Amicable · nobody</span></div>
+<div class="pc"><div class="row"><span class="mono">AET-88213</span><a>37 ›</a></div><span class="m sm12">Aetna / CVS · nobody</span></div>
+<div class="pc"><div class="row"><span class="mono">0119990312</span><a>12 ›</a></div><span class="m sm12">Americo · nobody</span></div></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ 4 · FILES IN ═══════════════════════════════════ -->
+<section class="screen" id="s4">
+<h2>4 · Files in</h2>
+<p class="sub">/app/book-setup/how-files-arrive, /email, /bucket · BookImport, CarrierFileUploadButton, CarrierFileDoors, CarrierBucket</p>
+
+<section class="board"><div class="cap"><b>4·0 CRITIQUE</b><span>today's Files in, Email and Bucket</span></div>
+<div class="card crit"><ol>
+<li><b>Three cards of sentences sit between the strip and the table</b>; what they describe lives on two other pages (Email, Bucket) reached only through those cards. Upload appears twice (title line and card).</li>
+<li><b>Your carriers puts a date input and Upload / Replace / Skip for now in every row</b>; drag-and-drop onto a row works but nothing says so.</li>
+<li><b>Email adds senders through a form in the table's toolbar</b>, removes a sender at once without asking, and shows errors in a red box above the table.</li>
+<li><b>Bucket's toolbar holds a day stepper, search, four selects, Check now and Refresh</b>; missing files are a second table stacked above.</li>
+<li>Email and Bucket pages carry their own title, so the three ways in never read as one place.</li>
+</ol></div></section>
+
+<section class="board"><div class="cap"><b>4·A THREE WAYS IN AS TABS</b><span class="rec">Recommended</span><span>Your carriers · Email · Bucket on the title line; the cards go; a carrier row opens its import dialog</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="files"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Files in</b></div>
+<div class="tl"><h1>Files in <i class="ib">i</i></h1><div class="ut"><span class="on">Your carriers<span class="n w">2</span></span><span>Email<span class="n">4</span></span><span>Bucket<span class="n r">1</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Look over imported clients</span><span class="btn p">Upload a file</span></div></div>
+<div class="strip"><div><div class="l">Carriers done</div><div class="v amb">5 of 7</div><div class="fn">imported or skipped for now</div></div><div><div class="l">Policies</div><div class="v"><a style="color:var(--text)">4,212</a></div><div class="fn">in your book now</div></div><div><div class="l">Premium a month</div><div class="v">$318,940</div><div class="fn"><a class="amb">96 policies at risk</a></div></div><div><div class="l">Persistency</div><div class="v">Building</div><div class="fn">4 of 13 months of files</div></div><div><div class="l">Advances at risk</div><div class="v">$41,280</div><div class="fn">unearned, on 212 policies with an advance</div></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="inp ph" style="width:260px">⌕ Search carriers</span><span class="tc on">All 7</span><span class="tc">Not imported <span class="n w">2</span></span><span class="tc">Needs a look <span class="n r">1</span></span><span class="sp"></span><a>Add a carrier in Settings ›</a><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th style="width:200px">Carrier</th><th>Where to find the file</th><th>Result</th><th style="width:140px">Last file</th><th></th></tr>
+<tr class="lk"><td><b>Americo</b><br><span class="sm12 m">you write this carrier</span></td><td>Agent portal › Reports › In force<br><span class="sm12 m">Usually called: Inforce Listing · Choose: Excel</span></td><td class="m">Not imported yet</td><td class="m">—</td><td class="chev">Bring it in ›</td></tr>
+<tr class="lk"><td><b>Foresters Financial</b></td><td class="m">The in-force report in its agent portal</td><td class="m">Skipped for now — import it any time.</td><td class="m">—</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Aflac</b><br><span class="sm12 m">you write this carrier</span></td><td>agent.aflac.com › Reports › Book of business<br><span class="sm12 m">Usually called: Policy Inforce · Choose: Excel</span></td><td class="amb">804 policies, $61,220/mo. 31 at risk. 12 rows wait for a status word to be mapped.</td><td class="m">Nov 3, 2026</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>American Amicable</b></td><td>Agent portal › Book of business › Export<br><span class="sm12 m">Usually called: policySummary · Choose: XLSX</span></td><td class="bold">1,412 policies, $104,880/mo. 38 at risk.</td><td class="m">Nov 1, 2026</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Aetna / CVS</b></td><td>Producer World › Book of business<br><span class="sm12 m">Choose: CSV</span></td><td class="bold">986 policies, $72,430/mo. 14 at risk.</td><td class="m">Oct 30, 2026</td><td class="chev">›</td></tr>
+<tr class="lk"><td><b>Mutual of Omaha</b></td><td>Sales Professional Access › My Business</td><td class="m" style="font-style:italic">Reading the file…</td><td class="m">Nov 10, 2026</td><td class="chev">›</td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table>
+<div class="foot"><span>Drop a carrier's file on its row to bring it in.</span><span class="sp"></span>7 carriers</div></div></div></div></div></div>
+<ul class="notes"><li>The cards' sentences now live where they belong: the Email address heads the Email tab, "1 expected file is missing" is the Bucket tab's red count. Upload a file is once, on the title line, opening the one upload dialog (4·3).</li><li>A row opens <b>its carrier's import dialog</b> (4·2): the date, the file, Skip for now / Undo skip. "Policies" opens Policies; "96 policies at risk" opens Policies filtered to at risk.</li></ul></section>
+
+<section class="board"><div class="cap"><b>4·B ARRIVALS GRID</b><span class="alt">Direction B</span><span>a carrier a row: its last policy and commission files, how they come, when the next is due</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="files"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Files in</b></div>
+<div class="tl"><h1>Files in <i class="ib">i</i></h1><span class="sp"></span><div class="acts"><span class="btn">Email setup</span><span class="btn">Bucket</span><span class="btn p">Upload a file</span></div></div>
+<div class="fill"><div class="card"><table class="grow"><tr><th>Carrier</th><th>Last policy file</th><th>Last commission file</th><th>Comes by</th><th>Files arrive</th><th>Next due</th></tr>
+<tr class="lk"><td><b>Aflac</b></td><td><a>Nov 3</a></td><td><a>Oct 31</a></td><td>Bucket</td><td>Monthly</td><td><span class="st b">Missing · Nov 7</span></td></tr>
+<tr class="lk"><td><b>American Amicable</b></td><td><a>Nov 1</a></td><td><a>Nov 8</a></td><td>Email</td><td>Weekly</td><td class="m">Nov 15</td></tr>
+<tr class="lk"><td><b>Americo</b></td><td class="m">—</td><td class="m">—</td><td>Upload</td><td class="m">not set</td><td class="m">—</td></tr>
+<tr><td colspan="6" style="border:0"></td></tr></table></div></div></div></div></div>
+<ul class="notes"><li>Shows the rhythm of every carrier, but the first-run job (bring each book in) loses its home, and Email / Bucket become buttons again.</li></ul></section>
+
+<section class="board"><div class="cap"><b>4·C DOOR TILES</b><span class="alt">Direction C</span><span>today's three cards shrunk to one line of tiles with a figure each, the table below</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="files"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <b>Files in</b></div>
+<div class="tl"><h1>Files in <i class="ib">i</i></h1><span class="sp"></span><div class="acts"><span class="btn p">Upload a file</span></div></div>
+<div class="strip" style="grid-template-columns:repeat(3,1fr)"><div><div class="l">Upload</div><div class="v">Any file</div><div class="fn">CSV, Excel or PDF</div></div><div><div class="l">Email</div><div class="v">4 senders</div><div class="fn">ellery-fields@files.insurvas.com</div></div><div><div class="l">Bucket</div><div class="v red">1 missing</div><div class="fn">6 files dropped today</div></div></div>
+<div class="fill"><div class="card"><table class="grow"><tr><th>Carrier</th><th>Where to find the file</th><th>Result</th><th></th></tr><tr class="lk"><td><b>Americo</b></td><td>Agent portal › Reports › In force</td><td class="m">Not imported yet</td><td class="chev">›</td></tr><tr><td colspan="4" style="border:0"></td></tr></table></div></div></div></div></div>
+<div class="dirgrid"><div class="pick"><b>A · Three ways in as tabs ✓</b><br>One place, one bar: everything about getting files in is a tab away; no cards on the page.</div><div><b>B · Arrivals grid</b><br>Best once running; weak for the first import.</div><div><b>C · Door tiles</b><br>Smallest change; tiles still lead to separate pages.</div></div></section>
+
+<section class="board" id="s4-email"><div class="cap"><b>4·1 EMAIL TAB</b><span class="rec">A</span><span>the address heads the card; senders are the table; adding opens a dialog, removing asks</span></div>
+<div class="frame"><div class="app"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="files"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <a>Files in</a> › <b>Email</b></div>
+<div class="tl"><h1>Files in <i class="ib">i</i></h1><div class="ut"><span>Your carriers<span class="n w">2</span></span><span class="on">Email<span class="n">4</span></span><span>Bucket<span class="n r">1</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Add sender</span><span class="btn p">Copy address</span></div></div>
+<div class="fill"><div class="card">
+<div class="hd"><span class="mono" style="font-size:14px;color:var(--text)">ellery-fields@files.insurvas.com</span><span class="m sm12">Forward carrier files here. Each CSV, Excel or PDF attachment is received as its own file.</span></div>
+<table class="grow"><tr><th>Sender</th><th>Carrier</th><th style="width:140px">Added by</th><th></th></tr>
+<tr class="lk"><td class="bold">commissions@aflac.com</td><td>Aflac</td><td class="m">Insurvas</td><td class="chev f">kept by Insurvas</td></tr>
+<tr class="lk"><td class="bold">@americanamicable.com</td><td>American Amicable</td><td class="m">This agency</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">bookreports@aetna.com</td><td>Aetna / CVS</td><td class="m">This agency</td><td class="chev">›</td></tr>
+<tr class="lk"><td class="bold">@mutualofomaha.com</td><td>Mutual of Omaha</td><td class="m">Insurvas</td><td class="chev f">kept by Insurvas</td></tr>
+<tr><td colspan="4" style="border:0"></td></tr></table>
+<div class="foot">A file from an unknown sender still arrives, but waits until its carrier is known.<span class="sp"></span>4 senders</div></div></div></div></div></div>
+<ul class="notes"><li>An agency sender's row opens a small dialog with its carrier and Remove (asks first). Insurvas's senders are not editable, as today. "4" on the tab opens this list; the old /email address lands on this tab.</li></ul></section>
+
+<section class="board" id="s4-bucket"><div class="cap"><b>4·2 BUCKET TAB</b><span class="rec">A</span><span>the day is the toolbar's lead; missing files are rows flagged at the top of the same day; filters open inline</span></div>
+<div class="frame"><div class="app tall"><div class="side"><i></i><i class="on"></i><i></i></div>
+<div class="rail" data-on="files"></div>
+<div class="main">
+<div class="trail"><a>Carrier sync</a> › <a>Files in</a> › <b>Bucket</b></div>
+<div class="tl"><h1>Files in <i class="ib">i</i></h1><div class="ut"><span>Your carriers<span class="n w">2</span></span><span>Email<span class="n">4</span></span><span class="on">Bucket<span class="n r">1</span></span></div><span class="sp"></span><div class="acts"><span class="btn">Copy the folder</span><span class="btn p">Check now</span></div></div>
+<div class="fill"><div class="card">
+<div class="toolbar" style="border-top:0"><span class="btn ic">‹</span><span class="inp" style="width:160px">Nov 10, 2026</span><span class="btn ic">›</span><span class="inp ph" style="width:260px">⌕ Search agency, carrier or file</span><span class="tc">Filters <span class="n">0</span></span><span class="sp"></span><span class="btn ic g">⟳</span></div>
+<table class="grow"><tr><th style="width:180px">Agency</th><th style="width:200px">Carrier</th><th style="width:130px">Type</th><th style="width:150px">Status</th><th>File</th></tr>
+<tr><td class="bold">Ellery & Fields</td><td>Aflac</td><td>Commissions</td><td><span class="st b">Missing</span></td><td class="m">Monthly · due Nov 7, 2026 · nothing dropped since Oct 7 · <a>Upload it ›</a></td></tr>
+<tr class="lk"><td class="bold">Ellery & Fields</td><td>American Amicable</td><td>Policies</td><td><span class="st g1">Received</span></td><td><a>policySummary_11-10-2026.xlsx</a><br><span class="sm12 m">412 KB · Nov 10, 6:02 AM · 1,412 rows</span></td></tr>
+<tr class="lk"><td class="bold">Ellery & Fields</td><td>Aetna / CVS</td><td>Commissions</td><td><span class="st i">Reading</span></td><td><a>AET_comm_20261110.csv</a><br><span class="sm12 m">88 KB · Nov 10, 6:04 AM</span></td></tr>
+<tr class="lk"><td class="bold">Ellery & Fields</td><td>Mutual of Omaha</td><td>New business</td><td><span class="st b">Can't be read</span><br><span class="sm12 m">replaced 1 earlier file</span></td><td><a>MOO_newbiz.pdf</a><br><span class="sm12 red">The PDF has no text layer.</span></td></tr>
+<tr class="lk"><td class="bold">Ellery & Fields</td><td>Corebridge Financial</td><td>Policies</td><td><span class="st g1">Received</span></td><td><a>CBF_inforce_1110.xlsx</a><br><span class="sm12 m">201 KB · Nov 10, 6:10 AM · 512 rows</span></td></tr>
+<tr><td colspan="5" style="border:0"></td></tr></table>
+<div class="foot"><span class="sp"></span><span class="pager"><span class="on">1</span></span>5 files · new files are picked up every 5 minutes</div></div></div></div></div></div>
+<ul class="notes"><li><b>Missing files join the day's table</b> as red rows with "Upload it ›" (the upload dialog preset to that carrier), instead of a second table above. The four selects move into the inline Filters panel (UI-CONSISTENCY §6a). A file opens its file page.</li><li>Copy the folder copies <span class="mono">carrier-files/&lt;agency id&gt;/MM-DD-YYYY/&lt;agency&gt;/&lt;carrier&gt;/&lt;Policies | Commissions | New Business&gt;/</span>.</li></ul></section>
+
+<section class="board" id="s4-pop"><div class="cap"><b>4·3 IMPORT and UPLOAD DIALOGS</b><span class="st i">Dialog · lg 560 / md 440</span><span>a carrier's book import; the one upload dialog, its clash question and its error line</span></div>
+<div class="stage scr">
+<div><div class="lbltag">A carrier row · Bring in its book</div><div class="dlg lg"><div class="dh"><h2>Bring in Americo's book</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Its latest in-force file: that is your existing book with Americo.</p>
+<div class="db"><div class="kv"><div class="k">Where to find it</div><div>Agent portal › Reports › In force</div><div class="k">Usually called</div><div>Inforce Listing</div><div class="k">Choose</div><div>Excel</div></div>
+<div class="drop"><b>Drop the file here</b> or <a>choose it</a><br><span class="sm12">CSV or Excel</span></div>
+<div><div class="lbl">Date on the file</div><div class="inp" style="width:200px">Nov 10, 2026</div></div></div>
+<div class="df"><span class="btn g">Skip for now</span><span class="sp"></span><span class="btn">Cancel</span><span class="btn p off">Upload</span></div></div></div>
+<div><div class="lbltag">Already in · result and Replace</div><div class="dlg lg"><div class="dh"><h2>Aflac's book</h2><span class="sp"></span><span class="x">✕</span></div>
+<div class="db"><div class="kv"><div class="k">Last file</div><div><a>Policy Inforce 11-03.xlsx</a> · Nov 3, 2026</div><div class="k">Result</div><div class="amb">804 policies, $61,220/mo. 31 at risk. 12 rows wait for a status word to be mapped.</div></div>
+<a class="sm12">Map the 12 status words ›</a>
+<div class="drop">Drop a newer file to <b>replace</b> it</div><div><div class="lbl">Date on the file</div><div class="inp" style="width:200px">Nov 10, 2026</div></div></div>
+<div class="df"><span class="sp"></span><span class="btn p">Close</span></div></div></div>
+<div><div class="lbltag">Upload a file · with its error line</div><div class="dlg"><div class="dh"><h2>Upload a carrier file</h2><span class="sp"></span><span class="x">✕</span></div><p class="dd">Policy or commission file: CSV, Excel or PDF.</p>
+<div class="db"><div><div class="lbl">File</div><div class="inp">AET_comm_20261110.csv</div></div><div><div class="lbl">Carrier</div><div class="inp sel">Aetna / CVS</div></div><div class="fg2"><div><div class="lbl">Type</div><div class="inp sel ph err">Choose a type</div></div><div><div class="lbl">File date</div><div class="inp">Nov 10, 2026</div></div></div><div class="errl">Choose whether this is a policy file or a commission file.</div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Upload</span></div></div></div>
+<div><div class="lbltag">Upload · the clash question</div><div class="dlg"><div class="dh"><h2>Is this a corrected copy of AET_comm_20261109.csv?</h2></div><p class="dd">Replacing takes that file's lines out of the books (it stays listed). A different statement is kept beside it.</p>
+<div class="df"><span class="btn">Change the date</span><span class="btn">It's a different statement</span><span class="sp"></span><span class="btn p">Yes, it replaces it</span></div></div></div>
+</div>
+<ul class="notes"><li>Today's skip and date sat in each row; now they are in the carrier's dialog, with the portal guidance in front of you while you fetch the file. The header "Upload a carrier file" becomes visible (it was screen-reader only) so the dialog says what it is.</li></ul></section>
+
+<section class="board"><div class="cap"><b>4·4 EMAIL and BUCKET POP-UPS, STATES, TOASTS</b><span>add sender, remove sender, no address yet, empty day</span></div>
+<div class="stage scr">
+<div><div class="lbltag">Add sender · Dialog md</div><div class="dlg"><div class="dh"><h2>Add a carrier sender</h2><span class="sp"></span><span class="x">✕</span></div>
+<div class="db"><div><div class="lbl">Carrier</div><div class="inp sel ph err">Carrier</div><div class="errl">Choose the carrier this sender is.</div></div><div><div class="lbl">Sender address or @domain</div><div class="inp">@corebridgefinancial.com</div><div class="hint">commissions@carrier.com or @carrier.com</div></div></div>
+<div class="df"><span class="sp"></span><span class="btn">Cancel</span><span class="btn p">Add sender</span></div></div></div>
+<div><div class="lbltag">Confirm · remove sender (new: today it removes at once)</div><div class="dlg cf"><div class="dh"><h2>Remove bookreports@aetna.com?</h2></div><p class="dd">Files from it still arrive, but wait until their carrier is known.</p><div class="df"><span class="sp"></span><span class="btn">Keep it</span><span class="btn dp">Remove</span></div></div></div>
+<div class="card" style="width:420px"><div class="empty"><b>No address yet</b><span>Give the agency its own address, then forward carrier files to it.</span><span class="btn p">Create address</span></div></div>
+<div class="card" style="width:420px"><div class="empty"><b>Nothing dropped into the bucket on Nov 9, 2026</b><span class="mono">carrier-files/…/11-09-2026/&lt;agency&gt;/&lt;carrier&gt;/…</span><span class="btn">Copy the folder</span></div></div>
+<div class="card" style="width:420px"><div class="empty"><b>Importing a book needs a database update</b><span>20261008190000.</span></div><div class="foot">Read-only: Upload a file and Check now are disabled with "Receiving files is paused while the account is read-only."</div></div>
+<div style="display:grid;gap:10px;align-content:start"><div class="lbltag">Toasts</div>
+<div class="toast"><span class="tk ok">✓</span><span>Uploaded. Reading it now…</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>That exact file was already here — using it.</span></div>
+<div class="toast"><span class="tk wn">!</span><span>Received, but it cannot be read<small>The PDF has no text layer.</small></span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Checked: 2 files read.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Folder copied.</span></div>
+<div class="toast"><span class="tk ok">✓</span><span>Copied</span><small style="margin-left:auto">address</small></div></div>
+</div></section>
+
+<section class="board"><div class="cap"><b>4·5 PHONE</b><span>tabs scroll; a carrier is a card; Bucket keeps the day stepper</span></div>
+<div class="phones">
+<div class="phone"><div class="pb"><span>☰ Carrier sync</span><span>9:41</span></div><div class="pm"><h1>Files in</h1><div class="ut" style="border-bottom:1px solid var(--border)"><span class="on">Your carriers <span class="n w">2</span></span><span>Email 4</span><span>Bucket <span class="n r">1</span></span></div>
+<span class="btn p" style="justify-content:center">Upload a file</span>
+<div class="pc"><div class="row"><b>Americo</b><span class="m sm12">Not imported yet</span></div><span class="m sm12">Agent portal › Reports › In force · Excel</span><span class="btn" style="justify-content:center">Bring it in</span></div>
+<div class="pc"><div class="row"><b>Aflac</b><span class="m sm12">Nov 3</span></div><span class="amb sm12">804 policies, $61,220/mo. 31 at risk. 12 rows wait for a status word.</span></div></div></div>
+<div class="phone"><div class="pb"><span>☰ Carrier sync</span><span>9:41</span></div><div class="pm"><h1>Files in</h1><div class="ut" style="border-bottom:1px solid var(--border)"><span>Your carriers</span><span>Email</span><span class="on">Bucket <span class="n r">1</span></span></div>
+<div style="display:flex;gap:6px"><span class="btn ic">‹</span><span class="inp" style="flex:1">Nov 10, 2026</span><span class="btn ic">›</span></div><span class="btn p" style="justify-content:center">Check now</span>
+<div class="pc"><div class="row"><b>Aflac · Commissions</b><span class="st b">Missing</span></div><span class="m sm12">Monthly · due Nov 7</span><a>Upload it ›</a></div>
+<div class="pc"><div class="row"><b>American Amicable · Policies</b><span class="st g1">Received</span></div><a class="sm12">policySummary_11-10-2026.xlsx</a></div></div></div>
+</div></section>
+</section>
+
+<!-- ═══════════════════════════════════ EDIT MAP ═══════════════════════════════════ -->
+<section class="screen" id="map">
+<h2>Edit map</h2>
+<p class="sub">Every change on the four screens in the recommended directions: where it opens, why there, and what it writes. Nothing opens inside a row or in a side panel.</p>
+<div class="board"><table class="ed"><tr><th>What</th><th>Opens from</th><th>Surface</th><th>Why there</th><th>Writes</th></tr>
+<tr><td colspan="5" class="sh">1 · Carrier terms</td></tr>
+<tr><td>Set / edit a window (closes after, grace, redraft tries, days apart, from, source, note)</td><td>A grid cell · a carrier page row · Set N windows · Set the next window</td><td><span class="st i">Dialog lg</span> (stepping when opened from a Set button)</td><td>Seven short fields; the grid or carrier stays behind it</td><td>add_rule: a new dated rule</td></tr>
+<tr><td>Mark it verified</td><td>Window dialog</td><td><span class="st w">Confirm</span></td><td>Records your name as verifier</td><td>verify</td></tr>
+<tr><td>Back to Insurvas's (window)</td><td>Window dialog</td><td><span class="st w">Confirm</span></td><td>Your rule stops applying from today</td><td>clear_override</td></tr>
+<tr><td>Pays commission · Payment lag · Minimum payout · Tolerance · Statement format · Files arrive</td><td>Money / Files tab row · grid Money / Files tab cell</td><td><span class="st i">Dialog md</span></td><td>One value each; "Back to Insurvas's" inside</td><td>save_settings</td></tr>
+<tr><td>Portal</td><td>Files tab row</td><td><span class="st z">Own page</span> Settings › Carriers › the carrier</td><td>The portal login is kept on the carrier card</td><td>Settings</td></tr>
+<tr><td>Layouts</td><td>Files tab links</td><td><span class="st z">Own page</span> Carriers › Field maps</td><td>A layout is its own editor</td><td>Field maps</td></tr>
+<tr><td>Commissions desk</td><td>Money tab row</td><td><span class="st z">Own page</span> the dispute letter</td><td>Set from a dispute letter, as today</td><td>—</td></tr>
+<tr><td>History</td><td>History tab · window dialog link</td><td><span class="st z">Tab</span></td><td>Read-only, filterable</td><td>nothing</td></tr>
+<tr><td colspan="5" class="sh">2 · Card moves</td></tr>
+<tr><td>New rule</td><td>Title line · empty state</td><td><span class="st z">Own page</span> /new</td><td>A long form; leave guard on unsaved</td><td>create: version 1, in forecast</td></tr>
+<tr><td>Change a rule (name, event, carriers, from stages, pipeline, stage, note)</td><td>Rule tab · Overview "Change ›" · ⋯ Rename or change</td><td><span class="st z">Own page</span> ?tab=rule</td><td>Same form; Save as a new version on the title line</td><td>save_version</td></tr>
+<tr><td>From stages</td><td>"Only when the card is in"</td><td>Popover</td><td>A picker anchored to its control</td><td>(with the form)</td></tr>
+<tr><td>Preview on today's data · Preview today</td><td>Rule tab · Check it · live rule's primary</td><td><span class="st i">Dialog 2xl</span></td><td>A table to read, writes nothing</td><td>nothing</td></tr>
+<tr><td>Right / Wrong (+ why) · Undo</td><td>Check it row · Check N one by one · Overview "Check them ›"</td><td><span class="st i">Dialog lg</span>, stepping</td><td>A verdict needs the whole line; no buttons in rows</td><td>check (+ checkedNote)</td></tr>
+<tr><td>Start the forecast · Switch to live · Turn on</td><td>Title-line primary by mode</td><td>Button · <span class="st w">Confirm</span> for live (replay tick)</td><td>The next step on the track</td><td>set_mode / set_enabled</td></tr>
+<tr><td>Back to forecast · Turn off · Duplicate</td><td>⋯</td><td>Menu · <span class="st w">Confirm</span> for Turn off</td><td>Rare; Turn off loses recording</td><td>set_mode / set_enabled / duplicate</td></tr>
+<tr><td>Versions</td><td>Versions tab</td><td><span class="st z">Tab</span></td><td>Read-only</td><td>nothing</td></tr>
+<tr><td colspan="5" class="sh">3 · Agent codes</td></tr>
+<tr><td>Map a code</td><td>To map row · Map one by one</td><td><span class="st i">Dialog md</span>, stepping</td><td>One choice with its cost said</td><td>map_agent</td></tr>
+<tr><td>Change a mapped code's person</td><td>Mapped row</td><td><span class="st i">Dialog md</span></td><td>One step instead of unmap + map</td><td>map_agent</td></tr>
+<tr><td>Unmap</td><td>Mapped code dialog</td><td><span class="st w">Confirm</span></td><td>A loss: the code goes back to To map</td><td>unmap_agent</td></tr>
+<tr><td>Add agent code</td><td>Title line · empty state</td><td><span class="st i">Dialog md</span></td><td>Three fields; was a row inside the table</td><td>add_agent</td></tr>
+<tr><td colspan="5" class="sh">4 · Files in</td></tr>
+<tr><td>Bring in a carrier's book · date · Skip for now · Undo skip · Replace</td><td>Your carriers row · drop on a row</td><td><span class="st i">Dialog lg</span></td><td>Guidance beside the file and date; no inputs in rows</td><td>book-import upload / skip / unskip</td></tr>
+<tr><td>Upload a file (any carrier, type, day)</td><td>Title line · Bucket missing row "Upload it ›" (preset)</td><td><span class="st i">Dialog md</span> → clash question in the same dialog</td><td>The one upload dialog everywhere</td><td>carrier-files POST</td></tr>
+<tr><td>Create address · Copy address</td><td>Email tab empty state · title line</td><td>Button</td><td>One action</td><td>create_address</td></tr>
+<tr><td>Add sender</td><td>Email tab title line</td><td><span class="st i">Dialog md</span></td><td>Was a form in the table toolbar</td><td>add_sender</td></tr>
+<tr><td>Remove sender</td><td>An agency sender's row → dialog</td><td><span class="st w">Confirm</span> (new)</td><td>A loss: its files stop being recognised</td><td>DELETE sender</td></tr>
+<tr><td>Check now · day · filters</td><td>Bucket tab title line · toolbar · Filters panel</td><td>Button · inline Filters panel</td><td>Reads the bucket at once; filters open inline (§6a)</td><td>check_now · nothing</td></tr>
+</table></div>
+<ul class="notes"><li><b>Picks:</b> Carrier terms <b>B · The terms grid</b>; Card moves <b>A · By mode</b> (keeping direction F's rule page); Agent codes <b>A · Codes, and a map dialog</b>; Files in <b>A · Three ways in as tabs</b>.</li>
+<li><b>Not mapped to a surface (no editor in the code today):</b> the card-move engine switch and cap per run (shown in today's summary line, never editable in the app); the policy number pattern (its "Edit in Settings" lands on Settings › Carriers, which has no pattern field: Insurvas keeps it); the commissions desk's phone ("not kept yet"); a Wrong verdict's note (the data keeps checkedNote but no screen writes it: drawn here as new).</li></ul>
+</section>
+</div>
+<script>
+// The Carrier sync rail, drawn once for every frame.
+const RAIL=[["needs","Needs you",'<small class="w">7</small>'],["rate","Rate card",""],["terms","Carrier terms",'<small class="r">9</small>'],["moves","Card moves",'<small class="w">2</small>'],["codes","Agent codes",'<small class="r">3</small>'],["files","Files in",'<small class="r">1</small>']];
+document.querySelectorAll(".rail[data-on]").forEach(function(el){var on=el.getAttribute("data-on");el.innerHTML='<div class="rl">Carrier sync</div>'+RAIL.map(function(r){return '<a class="'+(r[0]===on?"on":"")+'">'+r[1]+r[2]+"</a>";}).join("");});
+</script>
+</body>
+</html>

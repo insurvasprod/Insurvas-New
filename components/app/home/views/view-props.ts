@@ -25,4 +25,10 @@ export type DashViewProps = {
   /** This request's "now". */
   now: number;
   noMoney: boolean;
+  /**
+   * Read for the Overview (speed pass 2026-11-10): only what the Overview draws (the module's needs, its one
+   * figure and the cards it borrows); lists and charts only the module's own view shows are not read. The
+   * Overview ran every module's full loader at once, about 400 requests a load.
+   */
+  forOverview?: boolean;
 };

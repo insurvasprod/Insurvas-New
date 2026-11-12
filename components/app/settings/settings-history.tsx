@@ -11,6 +11,7 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Callout, SettingsSectionHeader, SettingsStack, st } from "@/components/app/settings/primitives";
 import { cn } from "@/lib/utils";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { sectionHref } from "@/lib/settings/registry";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
@@ -34,6 +35,9 @@ function hrefFor(sectionKey: string): string | null {
   const section = SETTINGS_SECTIONS.find((s) => s.id === sectionKey);
   return section ? sectionHref(section) : null;
 }
+
+/** The history's answer, as the app's cache keeps it under its URL (`query`). */
+type HistoryBody = { entries: SettingsAuditEntry[]; actors?: Array<{ id: string; name: string }> };
 
 function query(filters: Filters, mine: boolean, format?: "csv") {
   const params = new URLSearchParams();
@@ -74,22 +78,18 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
     const asked = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("history");
     return { section: asked && /^[a-z][a-z0-9_-]{1,63}$/.test(asked) ? asked : "", actor: "", type: "", from: "", to: "" };
   });
-  const [entries, setEntries] = useState<SettingsAuditEntry[] | null>(null);
-  const [actors, setActors] = useState<Array<{ id: string; name: string }>>([]);
+  const [entries, setEntries] = useState<SettingsAuditEntry[] | null>(() => seed<HistoryBody>(query(filters, mine))?.data?.entries ?? null);
+  const [actors, setActors] = useState<Array<{ id: string; name: string }>>(() => seed<HistoryBody>(query(filters, mine))?.data?.actors ?? []);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const zone = useMemo(() => viewerTimeZone(), []);
   const [openSaves, setOpenSaves] = useState<ReadonlySet<string>>(new Set());
   const items = useMemo(() => groupBySave(entries ?? []), [entries]);
 
+  // Through the app's cache (lib/client/resource-cache.ts): a repeat visit draws the last answer at once.
   const load = useCallback(
-    () =>
-      fetch(query(filters, mine), { cache: "no-store" })
-        .then(async (response) => {
-          const body = await response.json().catch(() => null);
-          if (!response.ok) throw new Error(body?.error ?? "Could not read the settings history");
-          return body;
-        })
+    (fresh = false) =>
+      (fresh ? loadResource<HistoryBody>(query(filters, mine)) : readResource<HistoryBody>(query(filters, mine)))
         .then((body) => {
           setEntries(body.entries);
           if (body.actors?.length) setActors(body.actors);
@@ -100,10 +100,18 @@ export function SettingsHistory({ mine = false }: { mine?: boolean }) {
         }),
     [filters, mine],
   );
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const kept = peek<HistoryBody>(query(filters, mine))?.data;
+    if (kept) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+      setEntries((current) => current ?? kept.entries);
+      if (kept.actors?.length) setActors((current) => (current.length ? current : kept.actors ?? []));
+    }
+    void load();
+  }, [filters, mine, load]);
   async function reload() {
     setRefreshing(true);
-    try { await load(); } finally { setRefreshing(false); }
+    try { await load(true); } finally { setRefreshing(false); }
   }
 
   const set = (patch: Partial<Filters>) => setFilters((current) => ({ ...current, ...patch }));

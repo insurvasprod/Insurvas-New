@@ -1,37 +1,41 @@
 "use client";
 
 /**
- * Settings › Sales › Application field sets (LA-3.7; owner pick B, 2026-10-30, canvas page
- * settings-field-sets). Reads and writes /api/app/settings/sales/templates?kind=application_field_set;
- * `?preview=sample` (outside production) renders the design fixtures and saves nothing.
+ * Settings › Sales process › Carrier application (was Application field sets, LA-3.7). Reads and writes
+ * /api/app/settings/sales/templates?kind=application_field_set; `?preview=sample` (outside production) renders the
+ * design fixtures and saves nothing.
  *
- * The carriers on the left, one row per carrier and product, grouped into the agency's own sets and
- * the ones still on the platform set; the picked one on the right. Every field an application can
- * carry is listed there as Not asked / Optional / Required, because Required is what the set is for:
- * the application step marks those fields and pre-submit QA refuses to pass without them
- * (lib/applications/service.ts reads only `required`). The carrier's wording rides along per field.
+ * Settings round 8 (owner pick A, sales-process board "3 · Carrier application", 2026-11-12): the carriers on the
+ * left (one row per carrier and product), the picked carrier's application on the right — every field an
+ * application can carry, one line each, Not asked / Optional / Required, drag to reorder, and whether the
+ * carrier's autofill map places it. Required is what the set is for: the Application step marks those fields and
+ * pre-submit checks refuse a case without them (lib/applications/service.ts reads only `required`). A field opens
+ * in a right sheet (its label, help, where autofill puts it, the versions).
  *
- * Also here: what changed from the platform set, the versions with who and when, whether the
- * carrier's autofill map (/api/app/field-maps) places every asked field, Give a carrier its own set
- * (starting from any set), Use for other carriers, Delete draft, Retire and Reset to default (back to the Insurvas set).
- * A platform set is read-only until it is customised for the agency.
+ * One save model: a change goes into the agency's draft as it is made (on the Insurvas set, the first change
+ * copies it into a draft); Publish vN puts the draft live. Also here: what changed from the platform set (the
+ * Changed filter), Give a carrier its own set, Use for other carriers, Discard draft, Retire and Reset to default.
+ *
+ * The board's PDF page and box per field are not stored (the autofill map keys fields by name, not by box), so
+ * the sheet says whether the map places a field and links to the map; it does not pick a box.
  */
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, GripVertical, Lock, Pencil, Plus, Search } from "lucide-react";
+import { GripVertical, Lock, Plus } from "lucide-react";
 
-import { Callout, SettingsStack, control } from "@/components/app/settings/primitives";
+import { SettingsSectionHeader, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { EmptyState } from "@/components/ui/page-states";
-import { StatStrip, StatTile } from "@/components/ui/stat";
-import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
-import { Segmented, UnderlineTabs } from "@/components/ui/view-tabs";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { Sheet } from "@/components/ui/sheet";
+import { StatusChip } from "@/components/ui/status-chip";
 import { FILLABLE_FIELD_MAP_STATUSES } from "@/lib/extension/constants";
 import type { FieldMapView } from "@/lib/extension/types";
 import { notify } from "@/lib/notify";
+import { agoText } from "@/lib/salesSettings/salesProcess";
 import {
   FIELD_SET_GROUPS, FIELD_STATE_LABEL, addCustom, changesFrom, editEntry, groupEntries, moveWithinGroup, requireAsked, setKeyState, stateOfKey, unplacedKeys,
   type FieldState, type QuestionDraft,
@@ -41,10 +45,9 @@ import { definitionProblem } from "@/lib/salesSettings/templateSchemas";
 import type { TemplateRowView } from "@/lib/salesSettings/views";
 import { cn } from "@/lib/utils";
 
+import { GoldCount, Pane, SelectRow, SheetSection, StatusLine, TabBody, TabFrame, ThreeWay, useDraftAutosave, WIDE_SHEET, type StatusTone } from "../sales-process/parts";
 import { AddFieldSetDialog, CopyToCarriersDialog, FieldSetPublishDialog, FieldSetRetireDialog, QuestionDialog, type StartFrom } from "./field-sets-dialogs";
-import {
-  DiscardSave, ReadOnlyNotice, RowMenu, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, WithReason, plural, salesApi, shortDay,
-} from "./shared";
+import { RowMenu, SalesPanelTop, WithReason, plural, salesApi, shortDay } from "./shared";
 import { liveOf, useSalesTemplates } from "./templates-data";
 
 type SetRow = {
@@ -59,7 +62,7 @@ type SetRow = {
   inUse: TemplateRowView | null;
   /** The agency's own live version for this pair, if any — what Retire retires. */
   liveOwn: TemplateRowView | null;
-  /** The agency's open draft for this pair, if any — what Delete draft deletes. */
+  /** The agency's open draft for this pair, if any — what Discard draft deletes. */
   draftOwn: TemplateRowView | null;
   /** The platform set this pair falls back to without its own. */
   platform: TemplateRowView | null;
@@ -67,10 +70,9 @@ type SetRow = {
   versions: TemplateRowView[];
 };
 
-type Filter = "all" | "own" | "draft" | "platform" | "gaps";
-type Tab = "fields" | "preview" | "changes" | "versions";
-type Show = "all" | "asked" | "required";
+type Show = "all" | "required" | "changed";
 type Dialog = { kind: "add"; carrierId: string | null; productCode: string } | { kind: "publish"; template: TemplateRowView } | { kind: "retire"; template: TemplateRowView } | { kind: "copy" } | null;
+type Side = "preview" | "versions" | null;
 
 /** Carriers › 3 · Field maps, where a carrier's autofill map is built and checked. */
 const FIELD_MAP_HREF = "/app/settings#carriers/carriers-maps";
@@ -79,19 +81,12 @@ const newestOf = (list: TemplateRowView[]) => [...list].sort((a, b) => b.version
 const storedJson = (t: TemplateRowView) => JSON.stringify(fieldSetFromEntries(fieldSetEntries(t.definition)));
 const entriesOf = (t: TemplateRowView | null) => fieldSetEntries(t?.definition);
 
-function statusOf(r: SetRow): { tone: StatusTone; label: string } {
-  if (r.draftOwn && r.liveOwn) return { tone: "good", label: `Live v${r.liveOwn.version} · draft v${r.draftOwn.version}` };
-  if (r.draftOwn) return { tone: "info", label: `Draft v${r.draftOwn.version}` };
-  if (r.liveOwn) return { tone: "good", label: `Live v${r.liveOwn.version}` };
-  return { tone: "neutral", label: "Platform set" };
-}
-
 /**
- * Each carrier's autofill map keys, from the map the extension fills with (published or needing
- * review; the agency's own before Insurvas's). Null while loading, in sample mode, or without the
- * extension feature: the section then says nothing about autofill.
+ * Each carrier's autofill map keys, from the map the extension fills with (published or needing review; the
+ * agency's own before Insurvas's). Null while loading, in sample mode, or without the extension feature: the
+ * page then says nothing about autofill. The Sales process Overview reads it too.
  */
-function useAutofillKeys(enabled: boolean) {
+export function useAutofillKeys(enabled: boolean) {
   const [keys, setKeys] = useState<Map<string, Set<string>> | null>(null);
   useEffect(() => {
     if (!enabled) return;
@@ -109,7 +104,7 @@ function useAutofillKeys(enabled: boolean) {
         }
         if (!gone) setKeys(new Map([...best].map(([id, m]) => [id, new Set(m.entries.map((e) => e.fieldKey))])));
       } catch {
-        // Autofill is a hint here; without it the section still works.
+        // Autofill is a hint here; without it the page still works.
       }
     })();
     return () => { gone = true; };
@@ -117,27 +112,24 @@ function useAutofillKeys(enabled: boolean) {
   return keys;
 }
 
-export function SalesFieldSets() {
+export function SalesFieldSets({ focus = null }: { focus?: string | null } = {}) {
   const api = useSalesTemplates("application_field_set");
   const router = useRouter();
   const { payload, sample } = api;
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [entries, setEntries] = useState<FieldSetEntry[]>([]);
-  /** The question dialog: adding one to a section, or editing a field. */
+  /** The field sheet: adding a question to a section, or one field. */
   const [question, setQuestion] = useState<{ mode: "add"; group: string } | { mode: "edit"; key: string } | null>(null);
-  /** Said to screen readers after a keyboard move. */
   const [announce, setAnnounce] = useState("");
   const [dragKey, setDragKey] = useState<string | null>(null);
   const listRefs = useRef<Record<string, HTMLUListElement | null>>({});
   const startingDraft = useRef(false);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-  const [tab, setTab] = useState<Tab>("fields");
   const [fieldQuery, setFieldQuery] = useState("");
   const [show, setShow] = useState<Show>("all");
-  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [side, setSide] = useState<Side>(null);
 
   const all = useMemo(() => payload?.templates ?? [], [payload]);
   const canEdit = Boolean(payload?.canEdit);
@@ -165,7 +157,6 @@ export function SalesFieldSets() {
       const codes = [...new Set(payload.carrierProducts.filter((p) => p.carrierId === c.id).map((p) => p.productCode))];
       for (const code of codes.length ? codes : ["final_expense"]) out.push(make(c.id, c.name, code));
     }
-    // The agency's sets for a pair not on the list above (a carrier-less set, or a product line added here).
     for (const t of all.filter((x) => x.tenantOwned)) {
       const key = `${t.carrierId ?? ""}|${t.productCode}`;
       if (!out.some((r) => r.key === key)) out.push(make(t.carrierId, t.carrierName ?? "Every carrier", t.productCode));
@@ -181,76 +172,54 @@ export function SalesFieldSets() {
   const definition = useMemo(() => fieldSetFromEntries(entries), [entries]);
   const dirty = Boolean(editing && JSON.stringify(definition) !== storedJson(editing));
   const problem = editing && !readOnly ? definitionProblem("application_field_set", definition) : null;
-  const ownerOnly = canEdit ? null : "Only an owner can change field sets.";
+  const ownerOnly = canEdit ? null : "Only an owner can change carrier applications.";
 
   /** The asked fields the carrier's map does not place; null when there is no map (or no word on maps). */
   const unplacedOf = (r: SetRow, list: FieldSetEntry[]) => (mapKeys && r.carrierId ? unplacedKeys(list, mapKeys.get(r.carrierId) ?? null) : null);
-  const autofillOf = (r: SetRow, list: FieldSetEntry[]): { text: string; tone: "good" | "warning" | "muted"; gap: boolean } | null => {
-    if (!mapKeys || !r.carrierId) return null;
-    const missing = unplacedOf(r, list);
-    if (missing === null) return { text: "No autofill map", tone: "muted", gap: false };
-    return missing.length ? { text: `${plural(missing.length, "field")} not placed`, tone: "warning", gap: true } : { text: "Fills every field", tone: "good", gap: false };
-  };
-
-  type FilterOption = { key: Filter; label: string; test: (r: SetRow) => boolean };
-  const allFilters: FilterOption[] = [
-    { key: "all", label: "All", test: () => true },
-    { key: "own", label: "Your own", test: (r) => Boolean(r.own) },
-    { key: "draft", label: "Drafts", test: (r) => Boolean(r.draftOwn) },
-    { key: "platform", label: "Platform", test: (r) => !r.own },
-    { key: "gaps", label: "Autofill gaps", test: (r) => Boolean(autofillOf(r, entriesOf(r.own ?? r.inUse))?.gap) },
-  ];
-  // "Autofill gaps" shows only when some carrier's map misses an asked field.
-  const filters = allFilters.filter((f) => f.key !== "gaps" || rows.some(f.test));
-  const activeFilter = filters.find((f) => f.key === filter) ?? filters[0];
-  const q = query.trim().toLowerCase();
-  const listed = rows.filter((r) => activeFilter.test(r) && (!q || `${r.carrierName} ${r.productLabel}`.toLowerCase().includes(q)));
-  const ownListed = listed.filter((r) => r.own);
-  const platformListed = listed.filter((r) => !r.own);
 
   const load = (r: SetRow) => {
     setSelectedKey(r.key);
     setEntries(entriesOf(r.own ?? r.inUse));
-    setTab("fields");
     setFieldQuery("");
     setSaveError(null);
   };
-  const leaveEdits = async () => {
-    if (!dirty || !selected) return true;
-    return confirmAction({
-      title: "Leave without saving?",
-      description: `You changed the ${selected.carrierName} · ${selected.productLabel} field set and have not saved it.`,
-      confirmLabel: "Discard changes",
-      cancelLabel: "Keep editing",
-    });
-  };
-  const open = async (r: SetRow) => {
+  const autosave = useDraftAutosave({
+    signature: JSON.stringify({ key: selectedKey, definition }),
+    dirty,
+    enabled: Boolean(editing && !readOnly && !problem && !sample),
+    save: async () => {
+      if (!editing) return false;
+      const { saved, error } = await api.save(editing.id, { definition: definition as Record<string, unknown> });
+      setSaveError(error);
+      return Boolean(saved);
+    },
+  });
+  const open = (r: SetRow) => {
     if (r.key === selectedKey) return;
-    if (!(await leaveEdits())) return;
+    autosave.reset();
     load(r);
   };
-  const close = async () => {
-    if (!(await leaveEdits())) return;
-    setSelectedKey(null);
-  };
-  // Owner 2026-11-04: on a wide screen the first carrier opens by itself, once, so the set's pane is never
-  // an empty "Pick a carrier". A phone keeps the list first, and closing a set is not undone.
-  const autoOpened = useRef(false);
+
+  // A wide screen opens the first carrier (or the one a link names: "fs.<carrier>|<product>").
+  const autoOpened = useRef<string | null>(null);
   useEffect(() => {
-    if (autoOpened.current || selectedKey || !listed.length) return;
-    if (!window.matchMedia("(min-width: 1024px)").matches) return;
-    const timer = window.setTimeout(() => { autoOpened.current = true; load(listed[0]); }, 0);
+    if (!rows.length) return;
+    const named = focus?.startsWith("fs.") ? rows.find((r) => r.key === focus.slice(3)) : null;
+    const want = named ?? (!autoOpened.current && !selectedKey && window.matchMedia("(min-width: 1024px)").matches ? rows[0] : null);
+    if (!want || autoOpened.current === (focus ?? "first")) return;
+    autoOpened.current = focus ?? "first";
+    const timer = window.setTimeout(() => load(want), 0);
     return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listed.length, selectedKey]);
+  }, [rows.length, focus]);
 
-  const discard = () => { if (selected) { setEntries(entriesOf(selected.own ?? selected.inUse)); setSaveError(null); } };
   /**
-   * Every edit goes through here. On the agency's own set it edits the draft in hand; on a platform
-   * set it first copies the set into the agency's draft (as Customise does), then applies the edit.
+   * Every edit goes through here. On the agency's own set it edits the draft in hand; on a platform set it first
+   * copies the set into the agency's draft (as Customise does), then applies the edit.
    */
   const change = (fn: (list: FieldSetEntry[]) => FieldSetEntry[]) => {
     if (!canEdit || !selected) return;
+    setSaveError(null);
     if (editing) { setEntries(fn); return; }
     if (!selected.inUse || startingDraft.current) return;
     startingDraft.current = true;
@@ -259,7 +228,6 @@ export function SalesFieldSets() {
       .finally(() => { startingDraft.current = false; });
   };
   const setState = (key: string, state: FieldState) => change((list) => setKeyState(list, key, state));
-  /** One step up or down within the field's section, from the keyboard. */
   const nudge = (key: string, by: number) => {
     const e = entries.find((x) => x.key === key);
     if (!e) return;
@@ -280,7 +248,6 @@ export function SalesFieldSets() {
   const startDrag = (event: ReactPointerEvent<HTMLButtonElement>, key: string, group: string) => {
     if (readOnly || event.button !== 0) return;
     event.preventDefault();
-    // On a platform set the first drag starts the agency's draft; the field moves from the next one.
     if (!editing) { change((list) => list); return; }
     setDragKey(key);
     let last = -1;
@@ -313,24 +280,13 @@ export function SalesFieldSets() {
     setQuestion(null);
   };
 
-  const save = async () => {
-    if (!editing) return false;
-    setSaving(true);
-    const { saved, error } = await api.save(editing.id, { definition: definition as Record<string, unknown> });
-    setSaving(false);
-    setSaveError(error);
-    if (saved) setEntries(fieldSetEntries(saved.template.definition));
-    return Boolean(saved);
-  };
-
   /** A new draft for a pair, copied from any set; opens it. */
   const createFrom = async (fromId: string, carrierId: string | null, productCode: string) => {
     const carrierName = payload?.carriers.find((c) => c.id === carrierId)?.name ?? rows.find((r) => r.carrierId === carrierId)?.carrierName ?? "Carrier";
     const line = payload?.productLines.find((p) => p.code === productCode)?.name ?? productCode;
     const copied = await api.copy(fromId, { product_code: productCode, carrier_id: carrierId, name: `${carrierName} · ${line}` }, "Draft created. Publish it when it matches the carrier's form.");
+    autosave.reset();
     setSelectedKey(`${carrierId ?? ""}|${productCode}`);
-    setTab("fields");
-    // Sample mode copies on screen only and returns nothing: start from the source's fields.
     setEntries(fieldSetEntries((copied ?? all.find((t) => t.id === fromId))?.definition));
   };
 
@@ -351,16 +307,13 @@ export function SalesFieldSets() {
   const deleteDraft = async () => {
     if (!selected?.draftOwn) return;
     const ok = await confirmAction({
-      title: `Delete draft v${selected.draftOwn.version}?`,
+      title: `Discard draft v${selected.draftOwn.version}?`,
       description: selected.liveOwn ? `Your changes since v${selected.liveOwn.version} are lost. v${selected.liveOwn.version} stays live.` : `${selected.carrierName} goes back to the platform set. This cannot be undone.`,
-      confirmLabel: "Delete draft",
+      confirmLabel: "Discard draft",
       cancelLabel: "Keep it",
     });
     if (!ok) return;
-    if (await api.remove(selected.draftOwn.id)) {
-      const live = selected.liveOwn;
-      setEntries(entriesOf(live ?? selected.platform));
-    }
+    if (await api.remove(selected.draftOwn.id)) { autosave.reset(); setEntries(entriesOf(selected.liveOwn ?? selected.platform)); }
   };
 
   const backToPlatform = async () => {
@@ -381,6 +334,7 @@ export function SalesFieldSets() {
         ...(selected.liveOwn ? [{ url: `${base}/${selected.liveOwn.id}/retire`, method: "POST" }] : []),
       ], `${selected.carrierName} is back on the Insurvas default`);
     }
+    autosave.reset();
     setEntries(entriesOf(selected.platform));
   };
 
@@ -414,428 +368,240 @@ export function SalesFieldSets() {
   // ── the picked set ──
   const required = entries.filter((e) => e.required).length;
   const optional = entries.length - required;
-  const notAsked = FIELD_SET_GROUPS.reduce((n, g) => n + g.keys.length, 0) - entries.filter((e) => !e.custom).length;
   const changes = selected ? changesFrom(entriesOf(selected.platform), entries) : [];
-  const auto = selected ? autofillOf(selected, entries) : null;
-  const unplaced = new Set(selected ? unplacedOf(selected, entries) ?? [] : []);
+  const changedKeys = new Set(changes.map((c) => c.key));
+  const unplacedList = selected ? unplacedOf(selected, entries) : null;
+  const unplaced = new Set(unplacedList ?? []);
   const platformKeys = entriesOf(selected?.platform ?? null);
-  const status = selected ? statusOf(selected) : null;
-  const pair = selected ? `${selected.carrierName} · ${selected.productLabel}` : "";
-  const versionLine = !selected ? "" : !selected.own
-    ? "The Insurvas default. Any change you make starts your own draft; nothing goes live until you publish it."
-    : [
-      // The chip already names the version; the line says what it means.
-      selected.draftOwn && selected.liveOwn ? `Editing the draft; v${selected.liveOwn.version} stays live until you publish` : selected.draftOwn ? "Never published" : `Changing a field starts draft v${(selected.versions[0]?.version ?? 0) + 1}`,
-      selected.own.editedBy ? `edited by ${selected.own.editedBy}, ${shortDay(selected.own.updatedAt)}` : `edited ${shortDay(selected.own.updatedAt)}`,
-    ].join(" · ");
-  const publishable = Boolean(editing?.status === "draft" && !dirty);
-  const shownProblem = saveError ?? (dirty ? problem : null);
   const platformRequired = platformKeys.filter((e) => e.required).length;
-  // Changes and Versions belong to the agency's own set; a platform set shows Fields.
-  const activeTab: Tab = !selected?.own && (tab === "changes" || tab === "versions") ? "fields" : tab;
+  const pair = selected ? `${selected.carrierName} · ${selected.productLabel}` : "";
   const fq = fieldQuery.trim().toLowerCase();
+  const allCount = FIELD_SET_GROUPS.reduce((n, g) => n + g.keys.length, 0) + entries.filter((e) => e.custom).length;
   // Each section: its asked fields in the agent's order (they move), then the built-in fields it does not ask.
   const visibleGroups = FIELD_SET_GROUPS.map((g) => {
     const asked = groupEntries(entries, g.key);
     const off = show === "all" ? g.keys.filter((k) => !asked.some((e) => e.key === k)) : [];
     const keep = (key: string, entry: FieldSetEntry | null) => {
       if (show === "required" && !entry?.required) return false;
-      return !fq || `${entry?.label ?? ""} ${fieldMeta(key).label} ${entry?.help ?? ""} ${key}`.toLowerCase().includes(fq);
+      if (show === "changed" && !changedKeys.has(key)) return false;
+      return !fq || `${entry?.label ?? ""} ${fieldMeta(key).label} ${entry?.help ?? ""}`.toLowerCase().includes(fq);
     };
-    return {
-      ...g,
-      asked,
-      shown: [...asked.map((e) => ({ key: e.key, entry: e as FieldSetEntry | null })), ...off.map((k) => ({ key: k, entry: null as FieldSetEntry | null }))].filter((r) => keep(r.key, r.entry)),
-    };
+    return { ...g, asked, shown: [...asked.map((e) => ({ key: e.key, entry: e as FieldSetEntry | null })), ...off.map((k) => ({ key: k, entry: null as FieldSetEntry | null }))].filter((r) => keep(r.key, r.entry)) };
   }).filter((g) => g.shown.length > 0 || (!fq && show === "all"));
 
-  const primary = !selected ? null : !selected.own ? (
-    <WithReason reason={ownerOnly ?? (selected.inUse ? null : "There is no platform set to copy for this product.")}>
-      <Button type="button" disabled={!canEdit || !selected.inUse} title="Makes a draft copy you can change. Nothing goes live until you publish it." onClick={() => { if (selected.inUse) void createFrom(selected.inUse.id, selected.carrierId, selected.productCode); }}>
-        Customise for {selected.carrierName}
-      </Button>
+  const status: { tone: StatusTone; text: string } = !payload ? { tone: "muted", text: "Reading your carrier applications" }
+    : !selected ? { tone: "muted", text: rows.length ? "Pick a carrier" : "No carriers yet" }
+    : saveError ? { tone: "bad", text: `${pair} · couldn't save to the draft: ${saveError}` }
+    : dirty && problem ? { tone: "warn", text: `${pair} · not saved yet: ${problem}` }
+    : autosave.state === "saving" || dirty ? { tone: "muted", text: `${pair} · saving to the draft` }
+    : unplacedList?.length ? { tone: "warn", text: `${pair} · ${plural(unplacedList.length, "field")} autofill can't place on the carrier's form` }
+    : !selected.own ? { tone: "muted", text: `${pair} · on the Insurvas default${canEdit ? " · a change starts your own draft" : ""}` }
+    : selected.draftOwn ? { tone: "warn", text: `${pair} · v${selected.draftOwn.version} draft, not live${selected.liveOwn ? ` · v${selected.liveOwn.version} stays live until you publish` : ""} · edited${selected.draftOwn.editedBy ? ` by ${selected.draftOwn.editedBy}` : ""} ${agoText(selected.draftOwn.updatedAt)}` }
+    : { tone: "ok", text: `${pair} · v${selected.liveOwn?.version} live${mapKeys && selected.carrierId ? " · autofill places every field" : ""}` };
+
+  const primary = !selected ? (
+    <WithReason reason={ownerOnly}>
+      <Button type="button" variant="outline" disabled={!canEdit || !payload} onClick={() => payload && setDialog({ kind: "add", carrierId: rows.find((r) => !r.own)?.carrierId ?? payload.carriers[0]?.id ?? null, productCode: (payload.productLines.find((p) => p.sold !== false) ?? payload.productLines[0])?.code ?? "final_expense" })}>Give a carrier its own set</Button>
     </WithReason>
-  ) : dirty ? (
-    <DiscardSave saving={saving} problem={problem} onDiscard={discard} onSave={() => { void save(); }} saveLabel={editing?.status === "draft" ? "Save draft" : `Save as draft v${(selected.versions[0]?.version ?? 0) + 1}`} />
-  ) : publishable && editing ? (
-    <WithReason reason={ownerOnly ?? problem}>
-      <Button type="button" disabled={!canEdit || Boolean(problem)} onClick={() => setDialog({ kind: "publish", template: editing })}>Publish v{editing.version}</Button>
+  ) : !selected.own ? (
+    <WithReason reason={ownerOnly ?? (selected.inUse ? null : "There is no platform set to copy for this product.")}>
+      <Button type="button" disabled={!canEdit || !selected.inUse} onClick={() => { if (selected.inUse) void createFrom(selected.inUse.id, selected.carrierId, selected.productCode); }}>Customise for {selected.carrierName}</Button>
+    </WithReason>
+  ) : selected.draftOwn && editing?.status === "draft" ? (
+    <WithReason reason={dirty ? "Saving to the draft — a moment." : ownerOnly ?? problem}>
+      <Button type="button" disabled={!canEdit || dirty || Boolean(problem)} onClick={() => setDialog({ kind: "publish", template: editing })}>Publish v{editing.version}</Button>
     </WithReason>
   ) : null;
 
+  const editEntryOf = question?.mode === "edit" ? entries.find((e) => e.key === question.key) ?? null : null;
+
   return (
-    <SettingsStack>
-      <SalesPanelTop
-        sample={sample}
-        actions={payload && (
-          <WithReason reason={ownerOnly}>
-            <Button type="button" disabled={!canEdit} onClick={() => setDialog({ kind: "add", carrierId: rows.find((r) => !r.own)?.carrierId ?? payload.carriers[0]?.id ?? null, productCode: (payload.productLines.find((p) => p.sold !== false) ?? payload.productLines[0])?.code ?? "final_expense" })}>
-              Give a carrier its own set
-            </Button>
-          </WithReason>
-        )}
-      />
-
+    <TabFrame>
+      <SettingsSectionHeader actions={primary} />
+      <SalesPanelTop sample={sample} />
       {api.schemaPending ? (
-        <SalesSetupPending what="Application field sets" />
-      ) : api.loading && !payload ? (
-        <SalesLoading label="Loading field sets" columns={4} />
+        <StatusLine tone="warn">Carrier applications need a database update. Ask your Insurvas admin to apply the latest migrations.</StatusLine>
       ) : api.error && !payload ? (
-        <SalesLoadError message={api.error} onRetry={() => { void api.reload(); }} />
+        <StatusLine tone="bad" action={<Button type="button" variant="outline" size="sm" onClick={() => { void api.reload(); }}>Try again</Button>}>Could not load the carrier applications. Nothing was changed. {api.error}</StatusLine>
       ) : (
-        <>
-          {!canEdit && <ReadOnlyNotice what="field sets" />}
+        <StatusLine tone={status.tone} action={unplacedList?.length && selected?.carrierId ? <Link href={FIELD_MAP_HREF} className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">Open the field map</Link> : undefined}>
+          {status.text}{!canEdit && payload ? " · read only: only an owner changes carrier applications" : ""}
+        </StatusLine>
+      )}
 
-          <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
-            {/* The carriers. On a phone the list gives way to the picked set. */}
-            <section aria-label="Carriers" className={cn("m-glass flex min-w-0 flex-col gap-3 rounded-lg border p-3.5", selected && "max-lg:hidden")}>
-              <div className="flex items-center gap-2">
-                <label className="relative block min-w-0 flex-1">
-                  <span className="sr-only">Search carriers</span>
-                  <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--body)]" aria-hidden="true" />
-                  <input type="search" className={cn(control, "mt-0 pl-9")} placeholder="Search carriers or products" value={query} onChange={(e) => setQuery(e.target.value)} />
-                </label>
-                <select aria-label="Show" className={cn(control, "mt-0 w-auto shrink-0")} value={activeFilter.key} onChange={(e) => setFilter(e.target.value as Filter)}>
-                  {filters.map((f) => <option key={f.key} value={f.key}>{f.label} · {rows.filter(f.test).length}</option>)}
-                </select>
-              </div>
-              {rows.length === 0 ? (
-                <EmptyState title="No carriers yet" hint="Add a carrier in Carriers. It uses the platform Final Expense set until you give it its own." />
-              ) : listed.length === 0 ? (
-                <p className="m-0 px-1 py-4 text-center text-sm text-[var(--body)]">No carrier matches. Clear the search or pick All.</p>
-              ) : (
-                <div className="flex flex-col gap-1.5">
-                  {[{ title: "Your own sets", list: ownListed }, { title: "On the Insurvas default", list: platformListed }].filter((g) => g.list.length).map((g) => (
-                    <div key={g.title} className="flex flex-col gap-1.5">
-                      <h3 className="m-0 px-1 pt-1.5 text-xs font-semibold text-[var(--body)]">{g.title} · {g.list.length}</h3>
-                      <ul className="m-0 flex list-none flex-col gap-1.5 p-0">
-                        {g.list.map((r) => {
-                          const list = entriesOf(r.own ?? r.inUse);
-                          const st = statusOf(r);
-                          const a = autofillOf(r, list);
-                          const on = r.key === selectedKey;
-                          return (
-                            <li key={r.key}>
+      <TabBody>
+        <Pane
+          className="lg:w-[270px] lg:shrink-0"
+          label="Carriers"
+        >
+          <div className="border-b border-[var(--border)] px-3 py-2">
+            <input type="search" aria-label="Search carriers" className={cn(control, "mt-0")} placeholder="Search carriers" value={query} onChange={(e) => setQuery(e.target.value)} />
+          </div>
+          {!payload ? <SectionLoading rows={6} columns={1} label="Loading carriers" /> : rows.length === 0 ? (
+            <EmptyState title="No carriers yet" hint="Add a carrier in Carriers. It uses the platform set until you give it its own." />
+          ) : (
+            rows.filter((r) => { const q = query.trim().toLowerCase(); return !q || `${r.carrierName} ${r.productLabel}`.toLowerCase().includes(q); }).map((r) => {
+              const list = r.key === selectedKey ? entries : entriesOf(r.own ?? r.inUse);
+              const gaps = unplacedOf(r, list)?.length ?? 0;
+              const req = list.filter((e) => e.required).length;
+              return (
+                <SelectRow
+                  key={r.key}
+                  selected={r.key === selectedKey}
+                  onClick={() => open(r)}
+                  title={r.carrierName}
+                  sub={`${r.productLabel} · ${gaps ? `${gaps} unplaced` : `${req} required`}${r.draftOwn ? " · draft" : r.own ? "" : " · Insurvas"}`}
+                  end={gaps ? <GoldCount value={gaps} label={`${gaps} fields autofill can't place`} /> : undefined}
+                />
+              );
+            })
+          )}
+        </Pane>
+
+        <Pane
+          className="lg:flex-1"
+          title="Fields on the carrier's application"
+          actions={selected && shown ? (
+            <>
+              {selected.own && canEdit && <Button type="button" variant="ghost" size="sm" onClick={() => setDialog({ kind: "copy" })}>Use for other carriers</Button>}
+              <ThreeWay
+                label="Fields to show"
+                value={show}
+                onChange={setShow}
+                options={[{ key: "all", label: `All ${allCount}` }, { key: "required", label: `Required ${required}` }, { key: "changed", label: `Changed ${changes.length}` }]}
+              />
+              <input type="search" aria-label="Find a field" className={cn(control, "mt-0 w-40")} placeholder="Find a field" value={fieldQuery} onChange={(e) => setFieldQuery(e.target.value)} />
+              <RowMenu
+                label={`the ${pair} application`}
+                items={[
+                  { label: "What the agent sees", onSelect: () => setSide("preview") },
+                  selected.versions.length > 0 && { label: "Versions", onSelect: () => setSide("versions") },
+                  Boolean(selected.carrierId) && mapKeys !== null && { label: "Open the field map", onSelect: () => router.push(FIELD_MAP_HREF) },
+                  canEdit && Boolean(selected.draftOwn) && { label: `Discard draft v${selected.draftOwn?.version}`, onSelect: () => { void deleteDraft(); }, danger: true },
+                  canEdit && Boolean(selected.liveOwn) && { label: `Retire v${selected.liveOwn?.version}`, onSelect: () => setDialog({ kind: "retire", template: selected.liveOwn! }), danger: true },
+                ]}
+              />
+            </>
+          ) : undefined}
+          footer={selected && shown ? (
+            <>
+              <span className="min-w-0 flex-1">
+                {selected.own ? `${plural(changes.length, "change")} from the platform set · ` : ""}Review refuses a case missing any of {plural(required, "Required field")}{optional ? ` · ${optional} optional` : ""}
+              </span>
+              {selected.own && canEdit && <Button type="button" variant="ghost" size="sm" onClick={() => { void backToPlatform(); }}>Reset to default</Button>}
+            </>
+          ) : undefined}
+        >
+          {!payload ? <SectionLoading rows={8} columns={3} label="Loading fields" /> : !selected || !shown ? (
+            <p className="m-0 px-4 py-6 text-sm text-[var(--muted)]">Pick a carrier. Each uses the Insurvas set until you give it its own; Required fields must be filled before Submit.</p>
+          ) : (
+            <div className="flex flex-col">
+              <p className="sr-only" aria-live="polite">{announce}</p>
+              {visibleGroups.length === 0 && <p className="m-0 px-4 py-6 text-center text-sm text-[var(--muted)]">No field matches. Clear the search or show All.</p>}
+              {visibleGroups.map((g, gi) => {
+                const movable = !readOnly && !fq && show === "all";
+                return (
+                  <div key={g.key}>
+                    <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-1.5 text-xs font-semibold text-[var(--body)]">
+                      <span className="min-w-0 flex-1">{g.label} <span className="font-normal text-[var(--muted)]">· {g.asked.filter((e) => e.required).length} required</span></span>
+                      {!readOnly && g.asked.length > g.asked.filter((e) => e.required).length && <Button type="button" variant="ghost" size="xs" onClick={() => change((list) => requireAsked(list, g.asked.map((e) => e.key)))}>Require all asked</Button>}
+                      {!readOnly && <Button type="button" variant="ghost" size="xs" onClick={() => setQuestion({ mode: "add", group: g.key })}><Plus aria-hidden="true" />Add question</Button>}
+                      {gi === 0 && mapKeys && selected.carrierId && <span className="w-28 shrink-0 text-right">Autofill</span>}
+                    </div>
+                    <ul ref={(el) => { listRefs.current[g.key] = el; }} className="m-0 list-none p-0">
+                      {g.shown.map(({ key: k, entry }) => {
+                        const state = entry ? (entry.required ? "required" : "optional") : "off";
+                        const meta = fieldMeta(k);
+                        const name = entry?.custom ? entry.label : meta.label;
+                        const sensitive = Boolean(entry?.sensitive) || meta.type === "Masked text";
+                        const wording = entry && !entry.custom && entry.label !== entry.canonicalLabel ? entry.label : "";
+                        const changed = selected.own && (Boolean(entry?.custom) || stateOfKey(platformKeys, k) !== state || Boolean(wording) || Boolean(entry?.help));
+                        const place = !mapKeys || !selected.carrierId ? null : !entry ? "—" : entry.custom ? "By hand" : unplaced.has(k) ? "Can't place" : "Placed";
+                        return (
+                          <li
+                            key={k}
+                            data-asked-key={entry ? k : undefined}
+                            className={cn("flex items-center gap-2 border-b border-[var(--border)] px-3 py-1.5 transition-shadow last:border-b-0", !entry && "opacity-70", dragKey === k && "shadow-[var(--shadow-overlay)] ring-1 ring-[var(--brand-500)]")}
+                          >
+                            {entry && movable ? (
                               <button
                                 type="button"
-                                aria-current={on ? "true" : undefined}
-                                onClick={() => { void open(r); }}
-                                className={cn(
-                                  "flex w-full flex-col gap-1 rounded-md border px-3 py-2.5 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-                                  on ? "border-[var(--brand-500)] bg-[var(--primary-soft)]" : "border-transparent hover:bg-[var(--surface-alt)]",
-                                )}
+                                aria-label={`Move ${name}. Drag, or use the up and down arrow keys.`}
+                                className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] active:cursor-grabbing"
+                                onPointerDown={(e) => startDrag(e, k, g.key)}
+                                onKeyDown={(e) => onHandleKey(e, k)}
                               >
-                                <span className="flex items-center justify-between gap-2">
-                                  <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]">{r.carrierName}</span>
-                                  {on && dirty ? <StatusChip dot={false} tone="warning">Unsaved</StatusChip> : r.own && <StatusChip dot={false} tone={st.tone}>{st.label}</StatusChip>}
-                                </span>
-                                <span className="flex items-center justify-between gap-2 text-xs text-[var(--body)]">
-                                  <span className="min-w-0 truncate">{r.productLabel} · {list.filter((e) => e.required).length} required</span>
-                                  {a?.gap && <span className="shrink-0 text-[var(--warning-ink)]">{a.text}</span>}
-                                </span>
+                                <GripVertical className="size-4" aria-hidden="true" />
                               </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            {/* The picked set. */}
-            <section aria-label={selected ? `${pair} field set` : "Field set"} className={cn("m-glass flex min-w-0 flex-col gap-4 rounded-lg border p-4 sm:p-5", !selected && "max-lg:hidden")}>
-              {!selected || !shown ? (
-                <div className="flex min-h-[320px] flex-col items-center justify-center gap-2 text-center">
-                  <p className="m-0 text-base font-semibold text-[var(--ink)]">Pick a carrier</p>
-                  <p className="m-0 max-w-[420px] text-sm text-[var(--body)]">
-                    Each carrier uses the Insurvas default set until you give it its own. A field set says which fields an agent must fill before submitting that carrier&apos;s application.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <Button type="button" variant="ghost" className="-ml-3 w-fit lg:hidden" onClick={() => { void close(); }}><ArrowLeft aria-hidden="true" />All carriers</Button>
-                  <div className="flex flex-wrap items-start gap-3">
-                    <div className="min-w-0 flex-1">
-                      <h2 className="m-0 text-card-title text-[var(--ink)]">{pair}</h2>
-                      <p className="m-0 mt-1 flex flex-wrap items-center gap-2 text-xs text-[var(--body)]">
-                        {status && <StatusChip dot={false} tone={status.tone}>{status.label}</StatusChip>}
-                        {versionLine}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-1.5">
-                      {selected.own && (
-                        <WithReason reason={ownerOnly}>
-                          <Button type="button" variant="outline" size="sm" disabled={!canEdit} onClick={() => setDialog({ kind: "copy" })}>Use for other carriers</Button>
-                        </WithReason>
-                      )}
-                      {/* The one action sits just before the ⋯, which stays last (owner 2026-10-30). */}
-                      {primary}
-                      <RowMenu
-                        label={`the ${pair} field set`}
-                        items={[
-                          Boolean(selected.carrierId) && mapKeys !== null && { label: "Open the field map", onSelect: () => router.push(FIELD_MAP_HREF) },
-                          Boolean(selected.draftOwn) && { label: `Delete draft v${selected.draftOwn?.version}`, onSelect: () => { void deleteDraft(); }, disabled: !canEdit, reason: ownerOnly, danger: true },
-                          Boolean(selected.liveOwn) && { label: `Retire v${selected.liveOwn?.version}`, onSelect: () => setDialog({ kind: "retire", template: selected.liveOwn! }), disabled: !canEdit, reason: ownerOnly, danger: true },
-                          Boolean(selected.own) && { label: "Reset to default", onSelect: () => { void backToPlatform(); }, disabled: !canEdit, reason: ownerOnly, danger: true },
-                        ]}
-                      />
-                    </div>
-                  </div>
-
-                  <StatStrip label={`${pair} at a glance`}>
-                    <StatTile label="Required" value={required} valueTone="primary" />
-                    <StatTile label="Optional" value={optional} />
-                    <StatTile label="Not asked" value={notAsked} />
-                    {auto && <StatTile label="Autofill" valueSize="text" value={auto.text} valueTone={auto.tone === "good" ? "good" : auto.tone === "warning" ? "warning" : undefined} />}
-                  </StatStrip>
-
-                  <p className="m-0 text-sm leading-[1.5] text-[var(--ink)]">
-                    Agents must fill {plural(required, "field")} before they can submit an application to {selected.carrierName}, and pre-submit QA checks them.{" "}
-                    {optional > 0 ? `${optional} more ${optional === 1 ? "is" : "are"} asked but can stay blank.` : ""}
-                  </p>
-                  {auto?.gap && (
-                    <p className="m-0 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--warning-ink)]">
-                      {auto.text === "No autofill map"
-                        ? `The browser extension has no map for ${selected.carrierName} yet, so agents type these in by hand.`
-                        : `The browser extension cannot place ${[...unplaced].map((k) => fieldMeta(k).label).join(", ")} on the ${selected.carrierName} form.`}
-                      <a href={FIELD_MAP_HREF} className="font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">{auto.text === "No autofill map" ? "Build a map" : "Open the field map"} →</a>
-                    </p>
-                  )}
-                  {shownProblem && <Callout tone="error" title={shownProblem} />}
-
-                  <UnderlineTabs
-                    label="Field set"
-                    idPrefix="fs"
-                    value={activeTab}
-                    onChange={setTab}
-                    controls={(k) => `fs-panel-${k}`}
-                    tabs={[
-                      { key: "fields", label: "Fields" },
-                      { key: "preview", label: "What the agent sees" },
-                      // A platform set has no changes of its own and none of the agency's versions.
-                      ...(selected.own ? [
-                        { key: "changes" as const, label: "Changes from platform", count: changes.length },
-                        { key: "versions" as const, label: "Versions", count: selected.versions.length },
-                      ] : []),
-                    ]}
-                  />
-
-                  {activeTab === "fields" && (
-                    <div id="fs-panel-fields" role="tabpanel" aria-labelledby="fs-tab-fields" className="flex flex-col gap-5">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <label className="relative block min-w-[200px] flex-1">
-                          <span className="sr-only">Find a field</span>
-                          <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[var(--body)]" aria-hidden="true" />
-                          <input type="search" className={cn(control, "mt-0 pl-9")} placeholder="Find a field" value={fieldQuery} onChange={(e) => setFieldQuery(e.target.value)} />
-                        </label>
-                        <Segmented
-                          label="Fields to show"
-                          value={show}
-                          onChange={setShow}
-                          options={[
-                            { key: "all", label: "All" },
-                            { key: "asked", label: "Asked", count: entries.length },
-                            { key: "required", label: "Required", count: required },
-                          ]}
-                        />
-                      </div>
-                      {visibleGroups.length === 0 && (
-                        <p className="m-0 py-4 text-center text-sm text-[var(--body)]">No field matches. Clear the search or show All.</p>
-                      )}
-                      <p className="sr-only" aria-live="polite">{announce}</p>
-                      {visibleGroups.map((g) => {
-                        const req = g.asked.filter((e) => e.required).length;
-                        const builtInAsked = g.asked.filter((e) => !e.custom).length;
-                        const own = g.asked.length - builtInAsked;
-                        // Moving only makes sense in the full list of a section, not a filtered one.
-                        const movable = !readOnly && !fq && show !== "required";
-                        return (
-                          <div key={g.key} className="flex flex-col gap-1.5">
-                            <div className="flex flex-wrap items-center justify-between gap-2 px-1">
-                              <h3 className="m-0 text-sm font-semibold text-[var(--ink)]">
-                                {g.label} <span className="font-normal text-[var(--body)]">· {req} required · {builtInAsked} of {g.keys.length} asked{own ? ` · ${own} of your own` : ""}</span>
-                              </h3>
-                              {!readOnly && (
-                                <span className="flex items-center gap-1">
-                                  {g.asked.length > req && <Button type="button" variant="ghost" size="sm" onClick={() => change((list) => requireAsked(list, g.asked.map((e) => e.key)))}>Require all asked</Button>}
-                                  <Button type="button" variant="ghost" size="sm" onClick={() => setQuestion({ mode: "add", group: g.key })}><Plus aria-hidden="true" />Add question</Button>
-                                </span>
-                              )}
-                            </div>
-                            <ul ref={(el) => { listRefs.current[g.key] = el; }} className="m-0 flex list-none flex-col gap-1 p-0">
-                              {g.shown.map(({ key: k, entry }) => {
-                                const state = entry ? (entry.required ? "required" : "optional") : "off";
-                                const meta = fieldMeta(k);
-                                const name = entry?.custom ? entry.label : meta.label;
-                                const sensitive = Boolean(entry?.sensitive) || meta.type === "Masked text";
-                                const wording = entry && !entry.custom && entry.label !== entry.canonicalLabel ? entry.label : "";
-                                const changed = Boolean(entry?.custom) || stateOfKey(platformKeys, k) !== state || Boolean(wording) || Boolean(entry?.help);
-                                return (
-                                  <li
-                                    key={k}
-                                    data-asked-key={entry ? k : undefined}
-                                    className={cn(
-                                      "flex flex-col gap-2 rounded-md bg-[var(--surface-alt)] px-2 py-2 transition-shadow sm:flex-row sm:items-center",
-                                      !entry && "opacity-70",
-                                      dragKey === k && "shadow-[var(--shadow-overlay)] ring-1 ring-[var(--brand-500)]",
-                                    )}
-                                  >
-                                    <div className="flex min-w-0 flex-1 items-start gap-1.5">
-                                      {entry && movable ? (
-                                        <button
-                                          type="button"
-                                          aria-label={`Move ${name}. Drag, or use the up and down arrow keys.`}
-                                          className="mt-0.5 flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-[var(--body)] hover:bg-[var(--surface)] hover:text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] active:cursor-grabbing"
-                                          onPointerDown={(e) => startDrag(e, k, g.key)}
-                                          onKeyDown={(e) => onHandleKey(e, k)}
-                                        >
-                                          <GripVertical className="size-4" aria-hidden="true" />
-                                        </button>
-                                      ) : <span className="size-7 shrink-0" aria-hidden="true" />}
-                                      <div className="flex min-w-0 flex-1 flex-col gap-0.5 pt-1">
-                                        <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm font-semibold text-[var(--ink)]">
-                                          {name}
-                                          <span className="text-xs font-normal text-[var(--body)]">{entry?.typeLabel ?? meta.type}</span>
-                                          {entry?.custom && <StatusChip dot={false} tone="info">Your question</StatusChip>}
-                                          {sensitive && <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--error-ink)]"><Lock className="size-3" aria-hidden="true" />Masked, each reveal is logged</span>}
-                                          {entry && unplaced.has(k) && <span className="text-xs font-semibold text-[var(--warning-ink)]">Autofill can&apos;t place it</span>}
-                                          {selected.own && changed && <span className="size-1.5 rounded-full bg-[var(--brand-500)]" title="Differs from the platform set" aria-label="Differs from the platform set" role="img" />}
-                                        </span>
-                                        {wording && <span className="text-xs text-[var(--body)]">The carrier calls it &ldquo;{wording}&rdquo;</span>}
-                                        {entry?.help && <span className="text-xs text-[var(--body)]">{entry.help}</span>}
-                                      </div>
-                                      {/* On a phone the pencil sits on the title line, so the three choices keep one line. */}
-                                      {!readOnly && entry && (
-                                        <Button type="button" variant="ghost" size="icon" className="size-9 sm:hidden" aria-label={`Edit ${name}`} onClick={() => setQuestion({ mode: "edit", key: k })}>
-                                          <Pencil aria-hidden="true" />
-                                        </Button>
-                                      )}
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      {readOnly ? (
-                                        <StatusChip dot={false} tone={state === "required" ? "good" : "neutral"}>{FIELD_STATE_LABEL[state]}</StatusChip>
-                                      ) : entry?.custom ? (
-                                        <Segmented
-                                          label={`How ${name} is asked`}
-                                          value={state}
-                                          onChange={(st) => setState(k, st)}
-                                          options={(["optional", "required"] as const).map((st) => ({ key: st, label: FIELD_STATE_LABEL[st] }))}
-                                        />
-                                      ) : (
-                                        <Segmented
-                                          label={`How ${name} is asked`}
-                                          value={state}
-                                          onChange={(st) => setState(k, st)}
-                                          options={(["off", "optional", "required"] as const).map((st) => ({ key: st, label: FIELD_STATE_LABEL[st] }))}
-                                        />
-                                      )}
-                                      {!readOnly && entry && (
-                                        <Button type="button" variant="ghost" size="icon" className="hidden size-9 sm:inline-flex" aria-label={`Edit ${name}`} onClick={() => setQuestion({ mode: "edit", key: k })}>
-                                          <Pencil aria-hidden="true" />
-                                        </Button>
-                                      )}
-                                    </div>
-                                  </li>
-                                );
-                              })}
-                              {g.shown.length === 0 && <li className="px-3 py-2 text-xs text-[var(--body)]">Nothing asked here.</li>}
-                            </ul>
-                          </div>
+                            ) : <span className="size-7 shrink-0" aria-hidden="true" />}
+                            <button
+                              type="button"
+                              disabled={!entry}
+                              title={!entry ? "Ask it first to change its label" : wording ? `The carrier calls it “${wording}”` : undefined}
+                              onClick={() => entry && setQuestion({ mode: "edit", key: k })}
+                              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-[6px] text-left text-sm text-[var(--ink)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)] enabled:hover:underline disabled:cursor-default"
+                            >
+                              {sensitive && <Lock className="size-3 shrink-0 text-[var(--muted)]" aria-label="Masked" />}
+                              <span className="truncate">{name}{wording ? ` · “${wording}”` : ""}</span>
+                              {changed && <span className="size-1.5 shrink-0 rounded-full bg-[var(--brand-500)]" title="Differs from the platform set" aria-label="Differs from the platform set" role="img" />}
+                            </button>
+                            {readOnly ? (
+                              <StatusChip dot={false} tone={state === "required" ? "good" : "neutral"}>{FIELD_STATE_LABEL[state]}</StatusChip>
+                            ) : (
+                              <ThreeWay
+                                label={`How ${name} is asked`}
+                                value={state}
+                                onChange={(st) => setState(k, st)}
+                                options={(entry?.custom ? (["optional", "required"] as const) : (["off", "optional", "required"] as const)).map((st) => ({ key: st, label: FIELD_STATE_LABEL[st] }))}
+                              />
+                            )}
+                            {place !== null && <span className={cn("w-28 shrink-0 text-right text-xs", place === "Can't place" ? "font-semibold text-[var(--highlight-ink)]" : "text-[var(--muted)]")}>{place}</span>}
+                          </li>
                         );
                       })}
-                    </div>
-                  )}
+                      {g.shown.length === 0 && <li className="px-4 py-2 text-xs text-[var(--muted)]">Nothing asked here.</li>}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Pane>
+      </TabBody>
 
-                  {activeTab === "changes" && (
-                    <div id="fs-panel-changes" role="tabpanel" aria-labelledby="fs-tab-changes" className="flex flex-col gap-2">
-                      {!selected.own ? (
-                        <p className="m-0 text-sm text-[var(--body)]">This is the platform set itself.</p>
-                      ) : changes.length === 0 ? (
-                        <p className="m-0 text-sm text-[var(--body)]">Same as the platform set ({platformRequired} required).</p>
-                      ) : (
-                        <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                          {changes.map((c) => (
-                            <li key={c.key} className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-[var(--surface-alt)] px-3 py-2 text-sm">
-                              <span className="font-semibold text-[var(--ink)]">{c.label}</span>
-                              <span className="text-[var(--body)]">
-                                {[
-                                  c.added ? `Your question, ${FIELD_STATE_LABEL[c.to].toLowerCase()}` : c.from !== c.to ? `${FIELD_STATE_LABEL[c.from]} on the platform → ${FIELD_STATE_LABEL[c.to].toLowerCase()} here` : FIELD_STATE_LABEL[c.to],
-                                  c.moved ? "moved" : null,
-                                  c.wording ? `the carrier calls it “${c.wording}”` : null,
-                                  c.help ? "help for the agent" : null,
-                                ].filter(Boolean).join(" · ")}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {selected.own && (
-                        <WithReason reason={ownerOnly}>
-                          <Button type="button" variant="outline" className="w-fit" disabled={!canEdit} onClick={() => { void backToPlatform(); }}>Reset to default</Button>
-                        </WithReason>
-                      )}
-                    </div>
-                  )}
+      <LeaveGuard dirty={Boolean(editing && !readOnly && dirty)} onSave={async () => { if (!editing) return false; const { saved, error } = await api.save(editing.id, { definition: definition as Record<string, unknown> }); setSaveError(error); return Boolean(saved); }} onDiscard={() => { if (selected) setEntries(entriesOf(selected.own ?? selected.inUse)); }} what="this carrier application" />
 
-                  {activeTab === "preview" && (
-                    <div id="fs-panel-preview" role="tabpanel" aria-labelledby="fs-tab-preview" className="flex flex-col gap-4">
-                      <p className="m-0 text-sm text-[var(--body)]">
-                        The application step for {pair}, as an agent sees it. Fields marked <span className="font-semibold text-[var(--success-ink)]">*</span> must be filled before Submit.
-                      </p>
-                      {[
-                        { key: "insured", label: "Insured", list: entries.filter((e) => e.group === "insured") },
-                        { key: "address", label: "Address and contact", list: entries.filter((e) => e.group === "addr" || e.group === "contact") },
-                        { key: "owner", label: "Owner and coverage", list: entries.filter((e) => !e.custom && (e.group === "owner" || e.group === "cov")) },
-                        { key: "questions", label: `${selected.carrierName} questions`, list: entries.filter((e) => e.custom && ["owner", "cov", "pay"].includes(e.group)) },
-                        { key: "payment", label: "Payment (on the Payment step)", list: entries.filter((e) => !e.custom && e.group === "pay") },
-                      ].filter((sec) => sec.list.length).map((sec) => (
-                        <div key={sec.key} className="flex flex-col gap-2">
-                          <h3 className="m-0 text-sm font-semibold text-[var(--ink)]">{sec.label}</h3>
-                          <ul className="m-0 grid list-none gap-1.5 p-0 sm:grid-cols-2">
-                            {sec.list.map((e) => (
-                              <li key={e.key} className="flex flex-col gap-0.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--ink)]">
-                                <span className="inline-flex items-center gap-1 font-semibold">
-                                  {e.sensitive && <Lock className="size-3 text-[var(--error-ink)]" aria-label="Masked" />}
-                                  {e.custom ? e.label : e.canonicalLabel}
-                                  {e.required && <span className="text-[var(--success-ink)]" aria-label="required">*</span>}
-                                </span>
-                                {!e.custom && e.label !== e.canonicalLabel && <span className="text-[var(--body)]">On the form: &ldquo;{e.label}&rdquo;</span>}
-                                {e.help && <span className="text-[var(--body)]">{e.help}</span>}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {activeTab === "versions" && (
-                    <div id="fs-panel-versions" role="tabpanel" aria-labelledby="fs-tab-versions" className="flex flex-col gap-2">
-                      {selected.versions.length === 0 ? (
-                        <p className="m-0 text-sm text-[var(--body)]">Your agency has no versions of this set yet. It uses the platform set.</p>
-                      ) : (
-                        <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                          {selected.versions.map((v) => (
-                            <li key={v.id} className="flex flex-wrap items-center gap-3 rounded-md bg-[var(--surface-alt)] px-3 py-2 text-sm">
-                              <span className="w-9 font-semibold text-[var(--ink)]">v{v.version}</span>
-                              <StatusChip dot={false} tone={v.status === "published" ? "good" : v.status === "draft" ? "info" : "neutral"}>{v.status === "published" ? "Live" : v.status === "draft" ? "Draft" : "Retired"}</StatusChip>
-                              <span className="min-w-0 flex-1 text-[var(--body)]">{[v.editedBy, shortDay(v.updatedAt)].filter(Boolean).join(" · ")}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      <p className="m-0 text-xs text-[var(--body)]">A published version never changes. Applications keep the version they started on.</p>
-                    </div>
-                  )}
-                </>
-              )}
-            </section>
-          </div>
-
-          <LeaveGuard dirty={Boolean(editing && !readOnly && dirty)} onSave={save} onDiscard={discard} what="this field set" />
-        </>
+      {side === "preview" && selected && (
+        <Sheet title="What the agent sees" subtitle={`${pair} · the Application step; * must be filled before Submit`} onClose={() => setSide(null)} className={WIDE_SHEET}>
+          {[
+            { key: "insured", label: "Insured", list: entries.filter((e) => e.group === "insured") },
+            { key: "address", label: "Address and contact", list: entries.filter((e) => e.group === "addr" || e.group === "contact") },
+            { key: "owner", label: "Owner and coverage", list: entries.filter((e) => !e.custom && (e.group === "owner" || e.group === "cov")) },
+            { key: "questions", label: `${selected.carrierName} questions`, list: entries.filter((e) => e.custom && ["owner", "cov", "pay"].includes(e.group)) },
+            { key: "payment", label: "Payment (on the Payment step)", list: entries.filter((e) => !e.custom && e.group === "pay") },
+          ].filter((sec) => sec.list.length).map((sec) => (
+            <SheetSection key={sec.key} title={sec.label}>
+              <ul className="m-0 grid list-none gap-1.5 p-0 sm:grid-cols-2">
+                {sec.list.map((e) => (
+                  <li key={e.key} className="flex flex-col gap-0.5 rounded-md border border-[var(--border)] px-2.5 py-1.5 text-xs text-[var(--ink)]">
+                    <span className="inline-flex items-center gap-1 font-semibold">
+                      {e.sensitive && <Lock className="size-3 text-[var(--muted)]" aria-label="Masked" />}
+                      {e.custom ? e.label : e.canonicalLabel}
+                      {e.required && <span className="text-[var(--success-ink)]" aria-label="required">*</span>}
+                    </span>
+                    {!e.custom && e.label !== e.canonicalLabel && <span className="text-[var(--body)]">On the form: &ldquo;{e.label}&rdquo;</span>}
+                    {e.help && <span className="text-[var(--body)]">{e.help}</span>}
+                  </li>
+                ))}
+              </ul>
+            </SheetSection>
+          ))}
+        </Sheet>
+      )}
+      {side === "versions" && selected && (
+        <Sheet title="Versions" subtitle={`${pair} · a published version never changes; applications keep the version they started on`} onClose={() => setSide(null)}>
+          <VersionList versions={selected.versions} />
+        </Sheet>
       )}
 
       {dialog?.kind === "add" && payload && (
@@ -873,25 +639,42 @@ export function SalesFieldSets() {
           }}
         />
       )}
-      {question && selected && (() => {
-        const entry = question.mode === "edit" ? entries.find((e) => e.key === question.key) ?? null : null;
-        if (question.mode === "edit" && !entry) return null;
-        const groups = FIELD_SET_GROUPS.map((g) => ({ key: g.key, label: g.label }));
-        return (
-          <QuestionDialog
-            mode={question.mode}
-            builtIn={entry && !entry.custom ? { key: entry.key, name: entry.canonicalLabel, typeLabel: entry.typeLabel, sensitive: entry.sensitive } : null}
-            initial={entry ? {
-              label: entry.label, help: entry.help, type: entry.custom?.type ?? "text", options: entry.custom?.options ?? [], group: entry.group, state: entry.required ? "required" : "optional",
-            } : { label: "", help: "", type: "text", options: [], group: question.mode === "add" ? question.group : "insured", state: "optional" }}
-            groups={groups}
-            types={CUSTOM_TYPE_LABEL}
-            onSubmit={saveQuestion}
-            onRemove={entry?.custom ? () => removeQuestion(entry.key) : undefined}
-            onClose={() => setQuestion(null)}
-          />
-        );
-      })()}
+      {question && selected && (question.mode === "add" || editEntryOf) && (
+        <QuestionDialog
+          key={question.mode === "add" ? `add-${question.group}` : question.key}
+          mode={question.mode}
+          pair={pair}
+          builtIn={editEntryOf && !editEntryOf.custom ? { key: editEntryOf.key, name: editEntryOf.canonicalLabel, typeLabel: editEntryOf.typeLabel, sensitive: editEntryOf.sensitive } : null}
+          initial={editEntryOf ? {
+            label: editEntryOf.label, help: editEntryOf.help, type: editEntryOf.custom?.type ?? "text", options: editEntryOf.custom?.options ?? [], group: editEntryOf.group, state: editEntryOf.required ? "required" : "optional",
+          } : { label: "", help: "", type: "text", options: [], group: question.mode === "add" ? question.group : "insured", state: "optional" }}
+          groups={FIELD_SET_GROUPS.map((g) => ({ key: g.key, label: g.label }))}
+          types={CUSTOM_TYPE_LABEL}
+          onSubmit={saveQuestion}
+          onRemove={editEntryOf?.custom ? () => removeQuestion(editEntryOf.key) : undefined}
+          onClose={() => setQuestion(null)}
+          extra={editEntryOf ? (
+            <>
+              {selected.carrierId && mapKeys && (
+                <SheetSection title="Where autofill puts it" sub="The browser extension writes the answer onto the carrier's form when the case is sent.">
+                  {editEntryOf.custom ? (
+                    <p className="m-0 text-sm text-[var(--body)]">Your own question: the agent types it into the carrier&apos;s form.</p>
+                  ) : unplaced.has(editEntryOf.key) ? (
+                    <p className="m-0 text-sm text-[var(--error-ink)]">Not placed. The agent will write it by hand. <Link href={FIELD_MAP_HREF} className="font-semibold text-[var(--accent-ink)] hover:underline">Place it in the field map</Link></p>
+                  ) : (
+                    <p className="m-0 text-sm text-[var(--body)]">Placed by the {selected.carrierName} field map.</p>
+                  )}
+                </SheetSection>
+              )}
+              {selected.versions.length > 0 && (
+                <SheetSection title="Versions" sub={selected.draftOwn ? `v${selected.draftOwn.version} draft is yours.${selected.liveOwn ? ` v${selected.liveOwn.version} is live.` : ""}` : undefined}>
+                  <VersionList versions={selected.versions} />
+                </SheetSection>
+              )}
+            </>
+          ) : undefined}
+        />
+      )}
       {dialog?.kind === "copy" && selected && (
         <CopyToCarriersDialog
           pair={pair}
@@ -905,6 +688,20 @@ export function SalesFieldSets() {
           onSubmit={copyTo}
         />
       )}
-    </SettingsStack>
+    </TabFrame>
+  );
+}
+
+function VersionList({ versions }: { versions: TemplateRowView[] }) {
+  if (!versions.length) return <p className="m-0 text-sm text-[var(--muted)]">Your agency has no versions of this set yet. It uses the platform set.</p>;
+  return (
+    <ul className="m-0 flex list-none flex-col p-0">
+      {versions.map((v) => (
+        <li key={v.id} className="flex items-center gap-3 border-t border-[var(--border)] py-2 text-sm first:border-t-0">
+          <StatusChip dot={false} tone={v.status === "published" ? "good" : v.status === "draft" ? "info" : "neutral"}>{v.status === "published" ? "Live" : v.status === "draft" ? "Draft" : "Retired"}</StatusChip>
+          <span className="min-w-0 flex-1 truncate text-[var(--body)]">v{v.version} · {[v.editedBy, shortDay(v.updatedAt)].filter(Boolean).join(" · ")}</span>
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -45,6 +45,18 @@ export async function getVendorCards(tenantId: string, trueCpa: boolean): Promis
   const db = getSupabaseServiceClient() as unknown as Db;
   const pending: VendorCardsResponse["pending"] = [];
 
+  // The True CPA reads need nothing the first three return, so all six go out together (they were a
+  // second round trip after the first three, and the scorecard is the slowest of them).
+  const today = new Date().toISOString().slice(0, 10);
+  const trueCpaReads = trueCpa
+    ? Promise.all([
+      getVendorCostPerPolicy(tenantId, { from: ALL_TIME_FROM, to: today }).then((result) => ({ result, error: null as string | null }), (cause: unknown) => ({ result: null, error: cause instanceof Error ? cause.message : "Could not load the scorecard" })),
+      db.rpc("vendor_returns_candidates_summary", { p_tenant_id: tenantId }),
+      db.rpc("vendor_undialable_rates", { p_tenant_id: tenantId }),
+    ])
+    : null;
+  // Awaited below; this only keeps a throw above from leaving it unobserved.
+  trueCpaReads?.catch(() => undefined);
   const [vendorResult, cardResult, consentResult] = await Promise.all([
     db.from("tenant_lead_vendors").select("id, name, status").eq("tenant_id", tenantId).order("name"),
     db.rpc("tenant_vendor_card", { p_tenant_id: tenantId }),
@@ -68,13 +80,8 @@ export async function getVendorCards(tenantId: string, trueCpa: boolean): Promis
   let claimable: ClaimableRow[] | null = null;
   let undialable: UndialableRow[] | null = null;
 
-  if (trueCpa) {
-    const today = new Date().toISOString().slice(0, 10);
-    const [scorecard, summary, rates] = await Promise.all([
-      getVendorCostPerPolicy(tenantId, { from: ALL_TIME_FROM, to: today }).then((result) => ({ result, error: null as string | null }), (cause: unknown) => ({ result: null, error: cause instanceof Error ? cause.message : "Could not load the scorecard" })),
-      db.rpc("vendor_returns_candidates_summary", { p_tenant_id: tenantId }),
-      db.rpc("vendor_undialable_rates", { p_tenant_id: tenantId }),
-    ]);
+  if (trueCpaReads) {
+    const [scorecard, summary, rates] = await trueCpaReads;
 
     // Scorecard's getVendorCostPerPolicy (vendor_rows) is THE per-vendor cost per policy. Until
     // 20260925708200 is applied it says `available: false`, and a per-vendor figure summed here

@@ -3,7 +3,7 @@ import { TableCard } from "@/components/ui/table-card";
 import { fileDay } from "@/lib/ingestion/constants";
 import { EVENT_LABELS } from "@/lib/pipelineRules/rules";
 import type { BoardPipeline, RuleVersionRow } from "@/lib/pipelineRules/store";
-import { stageNames } from "@/components/app/book/setup/rules-list";
+import { stageNames } from "@/components/app/book/setup/card-moves-shared";
 
 /**
  * A rule's Versions tab: every version, newest first. A content change made each one; a version never
@@ -21,15 +21,12 @@ export function VersionsTable({ versions, current, board, carriers }: { versions
             const to = stages.get(v.targetStageId);
             return (
               <tr key={v.id}>
-                <td><span className="inline-flex items-center gap-2">v{v.version}{v.version === current && <StatusChip tone="good">In use</StatusChip>}</span></td>
-                <td className="tabular-nums text-muted-foreground">{fileDay(v.createdAt.slice(0, 10))}</td>
-                <td>
-                  <span className="block leading-snug text-foreground">{EVENT_LABELS[v.event].label}</span>
-                  <span className="block text-xs text-muted-foreground">{v.carrierIds.length ? v.carrierIds.map((id) => carrierName.get(id) ?? "a carrier").join(", ") : "Every carrier"}</span>
-                </td>
-                <td className="text-muted-foreground">{v.fromStageIds.length ? v.fromStageIds.map((id) => stages.get(id)?.stage ?? "a stage").join(", ") : "Any stage"}</td>
-                <td>{to ? `${to.pipeline} › ${to.stage}` : "A stage no longer on the board"}</td>
-                <td className="max-w-[320px] whitespace-normal text-muted-foreground">{v.noteOn ? v.noteTemplate : "No note"}</td>
+                <td className="whitespace-nowrap font-medium text-foreground"><span className="inline-flex items-center gap-2">v{v.version}{v.version === current && <StatusChip tone="good">In use</StatusChip>}</span></td>
+                <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(v.createdAt.slice(0, 10))}</td>
+                <td className="whitespace-nowrap" title={v.carrierIds.length ? v.carrierIds.map((id) => carrierName.get(id) ?? "a carrier").join(", ") : "Every carrier"}>{EVENT_LABELS[v.event].label}</td>
+                <td className="whitespace-nowrap">{v.fromStageIds.length ? v.fromStageIds.map((id) => stages.get(id)?.stage ?? "a stage").join(", ") : "Any stage"}</td>
+                <td className="whitespace-nowrap">{to ? `${to.pipeline} › ${to.stage}` : "A stage no longer on the board"}</td>
+                <td className="whitespace-nowrap">{v.noteOn ? <span title={v.noteTemplate ?? undefined}>Adds a note</span> : "No note"}</td>
               </tr>
             );
           })}
