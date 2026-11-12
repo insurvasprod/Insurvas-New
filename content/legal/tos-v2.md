@@ -74,7 +74,7 @@ Users and Partners. You will:
   requires it;
 - grant each User only the access their role needs, and remove access promptly when it is no
   longer needed; and
-- notify us without undue delay at [SUPPORT EMAIL] if you believe your account, credentials or
+- notify us without undue delay at info@insurvas.com if you believe your account, credentials or
   Customer Data have been accessed without authorisation.
 
 You must provide accurate account and billing information and keep it up to date.
@@ -209,7 +209,7 @@ same length, at the then-current price for your plan, until you cancel.** If the
 is going to change, we will notify you before the new price applies to your renewal.
 
 You may cancel at any time. An account owner can cancel online in **Settings › Plan & billing**, or
-you can email us at [SUPPORT EMAIL]. Cancellation stops future renewals and takes effect at the end
+you can email us at info@insurvas.com. Cancellation stops future renewals and takes effect at the end
 of the current billing period, and the Service remains available until then.
 
 ## 12. Term, suspension and termination
@@ -237,7 +237,7 @@ termination. Sections that by their nature should survive termination, including
 After your subscription ends, your workspace remains available in read-only mode for
 [90] days so that you can view and export Customer Data. After that period, the workspace can no
 longer be accessed. You may ask us to delete your remaining Customer Data at any time by writing to
-[SUPPORT EMAIL], and we will delete or de-identify it within [30] days of your request, except for
+info@insurvas.com, and we will delete or de-identify it within [30] days of your request, except for
 data we are required to retain by law or need to keep for billing, security, dispute or
 legal-compliance purposes, which we will continue to protect under these Terms.
 
@@ -331,8 +331,7 @@ jurisdiction of the state and federal courts located in [COUNTY, STATE] for any 
 of or relating to these Terms. **Each party waives any right to a jury trial in any such dispute.**
 
 **Notices.** We may send notices to the email address of your account owner or display them in the
-Service. Legal notices to us must be sent to [LEGAL NOTICE ADDRESS] with a copy to [LEGAL NOTICE
-EMAIL].
+Service. Legal notices to us must be sent to [LEGAL NOTICE ADDRESS] with a copy to info@insurvas.com.
 
 **Electronic communications.** You agree to receive agreements, notices, invoices and other
 communications from us electronically.
@@ -358,4 +357,4 @@ your purchase orders or other documents do not apply.
 maximum extent permissible and the remaining provisions will stay in effect. A failure to enforce
 a provision is not a waiver of it.
 
-**Contact.** Questions about these Terms can be sent to [SUPPORT EMAIL].
+**Contact.** Questions about these Terms can be sent to info@insurvas.com.

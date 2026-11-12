@@ -190,7 +190,7 @@ affected customers and individuals, and regulators where required, as the law re
 
 These rights may be available to residents of states with comprehensive privacy laws, such as
 California, Colorado, Connecticut, Virginia, Utah, Texas and Oregon, subject to the exemptions
-those laws provide. To make a request, email [PRIVACY EMAIL]. We will verify your identity before
+those laws provide. To make a request, email info@insurvas.com. We will verify your identity before
 acting on a request and respond within the time required by applicable law. Where the law allows,
 you may use an authorised agent to make a request on your behalf. If we decline your request, you
 may appeal by replying to our decision, and we will respond to your appeal in writing within the
@@ -243,4 +243,4 @@ account owners before it takes effect and, where required, ask for acceptance of
 ## 14. Contact us
 
 If you have questions about this policy or our privacy practices, please contact us by email at
-[PRIVACY EMAIL] or by post at [LEGAL ENTITY NAME], [POSTAL ADDRESS].
+info@insurvas.com or by post at [LEGAL ENTITY NAME], [POSTAL ADDRESS].

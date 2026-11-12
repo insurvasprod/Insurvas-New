@@ -14,9 +14,7 @@ new version. Legal documents are append-only, so a published version cannot be w
 | `[ENTITY TYPE]` | ToS §1 | e.g. limited liability company, corporation |
 | `[STATE OF FORMATION]` | ToS §1 | |
 | `[POSTAL ADDRESS]` | Privacy §14 | |
-| `[SUPPORT EMAIL]` | ToS §4, §11, §13, §19 | Account, security and cancellation contact |
-| `[PRIVACY EMAIL]` | Privacy §9, §14 | Privacy requests and appeals |
-| `[LEGAL NOTICE ADDRESS]`, `[LEGAL NOTICE EMAIL]` | ToS §19 | Where formal legal notices go |
+| `[LEGAL NOTICE ADDRESS]` | ToS §19 | Postal address for formal legal notices (the notice email is info@insurvas.com) |
 | `[GOVERNING LAW STATE]` | ToS §19 | |
 | `[COUNTY, STATE]` | ToS §19 | Venue for disputes |
 | `[insurvas.com/legal/refund]` | ToS §9 | The Refund Policy must be published at this address first |
