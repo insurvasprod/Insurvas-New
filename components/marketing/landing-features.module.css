@@ -3,6 +3,7 @@
    dark five-tools section, and two dark bands read as one), and the page's darkest ground in dark. */
 .section {
   --band: color-mix(in srgb, var(--footer-bg) 62%, black);
+  --ease-out: cubic-bezier(.23, 1, .32, 1);
   position: relative;
   isolation: isolate;
   scroll-margin-top: 80px;
@@ -10,17 +11,46 @@
   color: var(--ink);
 }
 :global(.dark) .section { background: color-mix(in srgb, var(--canvas) 70%, black); }
-.inner { width: min(100% - 64px, 1280px); margin: 0 auto; padding: clamp(64px, 7vw, 96px) 0 clamp(64px, 8vw, 96px); }
+.inner { width: min(100% - 64px, 1280px); margin: 0 auto; padding: clamp(88px, 10vw, 140px) 0 clamp(64px, 8vw, 96px); }
+
+/* The colour break (Keller, 10 Nov): a green light behind the stack that blooms once as the section
+   arrives (data-lit, landing-bento.tsx) and then stays with the cards while they scroll. One layer,
+   held in place by sticky, so it never moves with the scroll; only its opacity and scale animate. */
+.glow {
+  position: sticky;
+  z-index: -1;
+  top: 0;
+  display: block;
+  height: 100svh;
+  margin-bottom: -100svh;
+  /* One light beside the heading, where it shows as the section arrives; one along the floor, which
+     shows round the cards' edges once they stick. */
+  background:
+    radial-gradient(34% 34% at 80% 30%, color-mix(in srgb, var(--primary) 26%, transparent), transparent 72%),
+    radial-gradient(60% 26% at 50% 100%, color-mix(in srgb, var(--primary) 18%, transparent), transparent 72%);
+  opacity: 0;
+  transform: scale(.82);
+  transition: opacity 1100ms var(--ease-out), transform 1500ms var(--ease-out);
+  pointer-events: none;
+}
+.section[data-lit] .glow { opacity: 1; transform: none; }
+:global(:root:not(.dark)) .glow {
+  background:
+    radial-gradient(34% 34% at 80% 30%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 72%),
+    radial-gradient(60% 26% at 50% 100%, color-mix(in srgb, var(--primary) 14%, transparent), transparent 72%);
+}
+
 .head { max-width: 760px; margin-bottom: clamp(36px, 5vw, 56px); }
 .eyebrow { margin: 0 0 14px; color: var(--accent-ink); font-size: 14px; font-weight: 600; }
 .title { margin: 0; font: 600 clamp(34px, 4vw, 56px)/1.04 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
 .title em { color: var(--accent-ink); font-family: var(--font-accent-serif); font-size: 1.1em; font-style: italic; font-weight: 400; letter-spacing: -.01em; }
 .lede { max-width: 52ch; margin: 16px 0 0; color: var(--muted); font-size: 17px; line-height: 1.6; }
 
-/* The stack: each card sticks a little lower than the one before, and settles back when covered. */
-.stack { display: grid; gap: 28px; }
+/* The stack: each card sticks a little lower than the one before. The wide gap is the hold (Keller,
+   10 Nov: "see how fast it is? we want to elongate it"): a card that has landed stays still and
+   readable for a stretch of scroll before the next one rises over it. */
+.stack { display: grid; gap: clamp(28px, 44svh, 440px); }
 .card {
-  --cover: 0;
   position: sticky;
   top: var(--top, 96px);
   display: grid;
@@ -33,76 +63,141 @@
   background:
     radial-gradient(70% 90% at 85% 40%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 70%),
     linear-gradient(180deg, color-mix(in srgb, var(--footer-bg) 80%, black), color-mix(in srgb, var(--footer-bg) 45%, black));
-  box-shadow: 0 -24px 60px -30px rgb(0 0 0 / 70%), inset 0 1px 0 rgb(255 255 255 / 5%);
-  /* On white the stack needs a softer shadow; the card edge carries the separation. */
-  transform: scale(calc(1 - var(--cover) * .05));
+  /* Green light spilling up off the top edge onto the card beneath: the depth Keller asked for. */
+  box-shadow:
+    0 -26px 70px -34px color-mix(in srgb, var(--primary) 55%, transparent),
+    0 -24px 60px -30px rgb(0 0 0 / 70%),
+    inset 0 1px 0 rgb(255 255 255 / 5%);
   transform-origin: 50% 0;
-  filter: brightness(calc(1 - var(--cover) * .35));
+  /* The card scales as the next one covers it. Without this, the browser redraws the whole card,
+     shadows and diagram, at every new size: about 4 seconds of drawing over a 120-frame scroll
+     before (owner, 10 Nov: "the scrolling here isn't smooth at all"). With it, the card is drawn
+     once and only moved. Computers only: on phones Safari's memory for layers is small. */
+  will-change: transform;
+}
+/* The lit top edge; it brightens as the card rises over the one beneath (landing-bento.tsx). */
+.rim {
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 10%;
+  left: 10%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 85%, white), transparent);
+  box-shadow: 0 0 22px 2px color-mix(in srgb, var(--primary) 55%, transparent);
+  opacity: .35;
+  pointer-events: none;
 }
 
-.copy { position: relative; display: flex; flex-direction: column; justify-content: center; padding: clamp(32px, 4vw, 52px) clamp(24px, 3vw, 40px) clamp(32px, 4vw, 52px) clamp(32px, 4vw, 56px); }
-.count { color: var(--primary); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
-.copy h3 { max-width: 16ch; margin: 10px 0 0; font: 600 clamp(28px, 2.7vw, 40px)/1.06 var(--font-brand); letter-spacing: -.03em; text-wrap: balance; }
-.copy > p { max-width: 46ch; margin: 14px 0 0; color: var(--nav-muted); font-size: 16px; line-height: 1.55; }
-.copy ul { display: grid; gap: 9px; margin: 18px 0 0; padding: 0; list-style: none; }
-.copy ul li { position: relative; padding-left: 20px; color: var(--nav-ink); font-size: 14.5px; line-height: 1.45; }
-.copy ul li::before { position: absolute; top: .55em; left: 2px; width: 6px; height: 6px; border-radius: 2px; background: var(--primary); content: ""; }
-/* The module's pages, as small chips under the points: what it is made of, in the app's own words. */
+/* The shade over a card as the next one covers it (landing-bento.tsx sets its opacity). Its own
+   layer, like the rim's, so fading it never repaints the card beneath. */
+.dim { position: absolute; z-index: 5; inset: 0; border-radius: inherit; background: rgb(0 0 0); opacity: 0; pointer-events: none; will-change: opacity; }
+.rim { will-change: opacity; }
+
+/* The copy column holds two faces in one grid cell, the card's face and its "More info" panel, so
+   the card is as tall as the taller of the two and never changes height when they swap. */
+.copy { position: relative; display: grid; align-items: center; padding: clamp(32px, 4vw, 52px) clamp(24px, 3vw, 40px) clamp(32px, 4vw, 52px) clamp(32px, 4vw, 56px); }
+.front, .panel {
+  display: flex;
+  grid-area: 1 / 1;
+  flex-direction: column;
+  transition: opacity 240ms var(--ease-out), transform 280ms var(--ease-out), visibility 0s linear 0s;
+}
+.card[data-open] .front, .card:not([data-open]) .panel {
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 150ms ease-out, transform 150ms ease-out, visibility 0s linear 150ms;
+}
+.card[data-open] .front { transform: translateY(-8px); }
+.card:not([data-open]) .panel { transform: translateY(10px); }
+
+.copy h3 { margin: 0; font: inherit; }
+.label { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; color: color-mix(in srgb, var(--nav-ink) 88%, transparent); font: 600 clamp(18px, 1.45vw, 21px)/1.3 var(--font-brand); letter-spacing: -.01em; }
+.count { color: var(--primary); font-size: .8em; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.tagline { display: block; max-width: 13ch; margin-top: 14px; color: var(--nav-ink); font: 600 clamp(32px, 3.2vw, 48px)/1.04 var(--font-brand); letter-spacing: -.032em; text-wrap: balance; }
+.points { display: grid; gap: 10px; margin: 24px 0 0; padding: 0; list-style: none; }
+.points li { position: relative; padding-left: 20px; color: var(--nav-ink); font-size: 15.5px; line-height: 1.45; }
+.points li::before { position: absolute; top: .55em; left: 2px; width: 6px; height: 6px; border-radius: 2px; background: var(--primary); content: ""; }
+
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 30px; }
+.more:focus-visible, .back:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+/* "More info": the card's one control now (owner, 11 Nov: the sign-up link per card removed), plainly a button (Keller: "make sure it's very obvious"). */
+.more, .back { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(234 246 242 / 22%); border-radius: 999px; background: rgb(234 246 242 / 4%); color: var(--nav-ink); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; transition: background-color 180ms ease, border-color 180ms ease, transform 160ms ease-out; }
+.more { padding: 11px 18px; }
+.more svg, .back svg { width: 16px; height: 16px; }
+.more svg { transition: transform 220ms var(--ease-out); }
+.more:active, .back:active { transform: scale(.97); }
+@media (hover: hover) and (pointer: fine) {
+  .more:hover, .back:hover { border-color: rgb(234 246 242 / 38%); background: rgb(234 246 242 / 9%); }
+  .more:hover svg { transform: rotate(90deg); }
+}
+
+/* The panel behind "More info": the module's full line, its four points and the app pages it is made of. */
+.back { align-self: flex-start; padding: 7px 14px 7px 10px; font-size: 14px; }
+.panelTitle { margin: 20px 0 0; color: var(--nav-ink); font: 600 clamp(22px, 2vw, 28px)/1.15 var(--font-brand); letter-spacing: -.02em; text-wrap: balance; }
+.panelLede { max-width: 46ch; margin: 10px 0 0; color: var(--nav-muted); font-size: 15.5px; line-height: 1.55; }
+.panel .points { gap: 9px; margin-top: 18px; }
+.panel .points li { font-size: 14.5px; }
+/* The module's pages, as small chips: what it is made of, in the app's own words. */
 .inside { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin-top: 20px; border-top: 1px solid rgb(234 246 242 / 10%); padding-top: 16px; }
 .inside > span { color: var(--nav-muted); font-size: 12.5px; font-weight: 600; }
-.copy .inside ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
-.copy .inside li { border: 1px solid rgb(234 246 242 / 14%); border-radius: 999px; background: rgb(234 246 242 / 4%); padding: 3px 10px; color: var(--nav-ink); font-size: 12.5px; line-height: 1.4; }
-.copy .inside li::before { display: none; }
-.cta { display: inline-flex; align-self: flex-start; align-items: center; gap: 10px; margin-top: 22px; border-radius: 999px; background: var(--primary); padding: 12px 20px; color: var(--on-primary); font-size: 15px; font-weight: 650; text-decoration: none; transition: transform 180ms ease, box-shadow 220ms ease; }
-.cta svg { width: 16px; height: 16px; transition: transform 220ms cubic-bezier(.2, .8, .2, 1); }
-.cta:hover { box-shadow: 0 12px 30px -10px color-mix(in srgb, var(--primary) 80%, transparent); transform: translateY(-1px); }
-.cta:hover svg { transform: translateX(3px); }
-.cta:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+.inside ul { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.inside li { border: 1px solid rgb(234 246 242 / 14%); border-radius: 999px; background: rgb(234 246 242 / 4%); padding: 3px 10px; color: var(--nav-ink); font-size: 12.5px; line-height: 1.4; }
 
 /* ── The flow diagram's frame (A5.3): the diagram centred in the card's right half. ─────────────── */
 .scene { position: relative; display: grid; place-items: center; min-height: 380px; padding: clamp(24px, 3vw, 44px); }
 
-:global(:root:not(.dark)) .card { border-color: color-mix(in srgb, var(--footer-bg) 30%, transparent); box-shadow: 0 -18px 40px -30px rgb(13 64 55 / 45%), 0 24px 50px -30px rgb(13 64 55 / 40%); }
+:global(:root:not(.dark)) .card {
+  border-color: color-mix(in srgb, var(--footer-bg) 30%, transparent);
+  box-shadow:
+    0 -22px 56px -30px color-mix(in srgb, var(--primary) 50%, transparent),
+    0 -18px 40px -30px rgb(13 64 55 / 45%),
+    0 24px 50px -30px rgb(13 64 55 / 40%);
+}
 
 /* Narrower screens: one card after another, each rising and tilting up into place as it scrolls in
    (the transform is set from the scroll in landing-bento.tsx, only while the card is entering). */
 @media (max-width: 1000px) {
-  .card { position: relative; top: 0; grid-template-columns: minmax(0, 1fr); min-height: 0; transform: none; transform-origin: 50% 100%; filter: none; }
+  .stack { gap: 28px; }
+  .card { position: relative; top: 0; grid-template-columns: minmax(0, 1fr); min-height: 0; transform-origin: 50% 100%; will-change: auto; }
+  .dim, .rim { will-change: auto; }
+  .rim { display: none; }
   .copy { padding: 36px 28px 8px; }
   .scene { min-height: 0; padding: 20px 28px 32px; }
 }
-/* The shade a phone lays over a card as the next one covers it (landing-bento.tsx). */
-.dim { display: none; }
 
 /* Phones: the cards stack as they do on a computer (owner, 6 Nov), so each fits one screen: its
-   number, name and line, the workflow, the button. The points and the page chips go; the workflow
-   already shows both. */
+   number, name and tagline, the workflow, the buttons. The points wait behind "More info", which
+   opens over the whole card. */
 @media (max-width: 640px) {
   .card { position: sticky; top: calc(68px + var(--i) * 5px); transform-origin: 50% 0; }
-  .dim { position: absolute; z-index: 5; inset: 0; display: block; border-radius: inherit; background: rgb(0 0 0); opacity: 0; pointer-events: none; }
-  .copy > ul { display: none; }
+  .rim { display: block; }
   /* Phones: headings centred (Umar, 6 Nov: everything in the phone centre aligned). */
   .head { margin-inline: auto; text-align: center; }
   .lede { margin-inline: auto; }
-  .count, .copy h3, .copy > p { justify-self: center; text-align: center; }
-  .inner { width: calc(100% - 24px); }
+  .inner { width: calc(100% - 24px); padding-top: 72px; }
   .head { margin-bottom: 28px; }
   .stack { gap: 18px; }
   .card { border-radius: 22px; padding: 24px 16px 22px; }
-  .copy { display: contents; }
-  .count, .copy h3, .copy > p { order: 1; }
-  .copy h3 { max-width: none; margin-top: 6px; font-size: 25px; }
-  .copy > p { margin-top: 10px; font-size: 14.5px; line-height: 1.5; }
+  .copy, .front { display: contents; }
+  .copy h3 { order: 1; text-align: center; }
+  .label { justify-content: center; font-size: 16px; }
+  .tagline { max-width: none; margin-top: 8px; font-size: 26px; }
+  .front > .points { display: none; }
   .scene { order: 2; margin: 16px -4px 0; padding: 0; }
-  .copy > ul { order: 3; gap: 7px; margin-top: 18px; }
-  .copy ul li { font-size: 14px; }
-  .inside { display: none; }
-  .cta { order: 4; justify-self: center; margin-top: 16px; min-height: 44px; box-sizing: border-box; }
-}
-/* A short phone screen: the line goes too, so the card still fits. */
-@media (max-width: 640px) and (max-height: 620px) {
-  .copy > p { display: none; }
+  .actions { order: 3; justify-content: center; gap: 10px; margin-top: 16px; }
+  .more { min-height: 44px; box-sizing: border-box; }
+  /* The panel covers the card; the workflow's 3D layers would show through it, so they hide while it
+     is open. The page chips stay off phones, as before. */
+  .card[data-open] .scene { visibility: hidden; }
+  .panel .inside { display: none; }
+  .panelTitle { font-size: 21px; }
+  .panel { position: absolute; z-index: 20; inset: 0; overflow-y: auto; border-radius: inherit; background: linear-gradient(180deg, color-mix(in srgb, var(--footer-bg) 80%, black), color-mix(in srgb, var(--footer-bg) 50%, black)); padding: 20px 20px 24px; }
+  .back { min-height: 40px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .card { opacity: 1; transform: none; filter: none; }
+  .card { opacity: 1; transform: none; }
+  .glow, .front, .panel { transition: none; }
+  .glow { transform: none; }
+  .card[data-open] .front, .card:not([data-open]) .panel { transform: none; }
 }

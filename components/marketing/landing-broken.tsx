@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useEffect, useRef } from "react";
-import { Check } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 import { InsurvasLogo } from "@/components/shared/insurvas-logo";
 import styles from "@/components/marketing/landing-broken.module.css";
@@ -145,6 +145,7 @@ const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 const easeOut = (t: number) => 1 - (1 - t) ** 3;
+const smooth = (t: number) => t * t * (3 - 2 * t);
 
 function Face({ leak, side }: { leak: (typeof LEAKS)[number]; side: "problem" | "fix" }) {
   return (
@@ -174,37 +175,70 @@ export function LandingBroken() {
     const gate = section.querySelector<HTMLElement>("[data-gate]")!;
     const problems = section.querySelector<HTMLElement>("[data-problems]")!;
     const solved = section.querySelector<HTMLElement>("[data-solved]")!;
+    const aura = section.querySelector<HTMLElement>("[data-aura]")!;
+    const burst = section.querySelector<HTMLElement>("[data-burst]")!;
+    const cue = section.querySelector<HTMLElement>("[data-cue]")!;
     let frame = 0;
+
+    // Where everything sits within the section, measured when the layout changes and never per
+    // frame: reading an offset after writing a transform makes the browser restyle the page, and
+    // the old loop did that once per card, every frame. Transforms do not move offsets, so a
+    // measurement stays true while the cards travel.
+    type Box = ReturnType<typeof offsetWithin>;
+    let geo: { cards: Box[]; slots: Box[]; gate: Box; from: Box; to: Box } | null = null;
+    const measure = () => {
+      geo = {
+        cards: cards.map((card) => offsetWithin(card, section)),
+        slots: slots.map((slot) => offsetWithin(slot, section)),
+        gate: offsetWithin(gate, section),
+        from: offsetWithin(problems, section),
+        to: offsetWithin(solved, section),
+      };
+    };
+    // What was last written, so an unchanged value is never written again.
+    const written = new Map<HTMLElement, string>();
+    const put = (el: HTMLElement, prop: "transform" | "opacity", value: string) => {
+      const key = `${prop}:${value}`;
+      if (written.get(el) === key) return;
+      written.set(el, key);
+      el.style[prop] = value;
+    };
+    const writtenFlip: boolean[] = cards.map(() => false);
 
     const clear = () => {
       cards.forEach((card) => { card.style.transform = ""; });
       flips.forEach((flip) => { flip.style.transform = ""; });
-      gate.style.removeProperty("--glow");
+      [aura, burst, cue].forEach((el) => { el.style.opacity = ""; el.style.transform = ""; });
+      written.clear();
+      writtenFlip.fill(false);
     };
 
     const update = () => {
       frame = 0;
-      if (!scene.matches) { delete section.dataset.mode; clear(); return; }
-      section.dataset.mode = "scene";
+      if (!scene.matches) { delete section.dataset.mode; clear(); geo = null; return; }
+      if (section.dataset.mode !== "scene") { section.dataset.mode = "scene"; geo = null; }
+      if (!geo) measure();
+      const { cards: home, slots: place, gate: g, from, to } = geo!;
+      // The one read a frame, before any write: how far the page has scrolled into the section.
+      const scroll = -section.getBoundingClientRect().top;
       const vh = window.innerHeight;
-      const scroll = window.scrollY;
-      const top = section.getBoundingClientRect().top + scroll;
-      const at = (el: HTMLElement) => { const o = offsetWithin(el, section); return { x: o.x, y: o.y + top, h: o.h }; };
-      const from = at(problems);
-      const to = at(solved);
-      const g = at(gate);
-      // Start once the problems are centred on screen; end once the fixes sit fully in view.
-      // Start with the problems centred, but never with the top row under the menu bar.
-      const start = from.y - vh / 2 + Math.min(40, (vh - from.h) / 2 - 80);
+      // Keller, 10 Nov: "I'm scrolling, I'm looking, and then, oh, it's starting to move." The
+      // problems hold still for a short stretch while they come into view, then set off.
+      const leave = 0.04;
+      // They set off the moment they are wholly on screen (owner, 11 Nov: they had scrolled up under
+      // the menu bar before they moved), or once centred if that comes first; the journey ends once
+      // the fixes sit fully in view. The hold comes before the set-off point, so solve for the start
+      // that puts t = leave exactly there. (Boxes are measured by their centres: offsetWithin.)
+      const setOff = Math.min(from.y + from.h / 2 - vh + 24, from.y - vh / 2 + Math.min(40, (vh - from.h) / 2 - 80));
       const end = to.y + to.h / 2 - vh + 28;
+      const start = (setOff - leave * end) / (1 - leave);
       const range = Math.max(1, end - start);
       const t = clamp01((scroll - start) / range);
       const atGate = clamp01((g.y - vh / 2 - start) / range);
       let glow = 0;
       cards.forEach((card, i) => {
-        const a = at(card);
-        const b = at(slots[i]);
-        const leave = 0;
+        const a = home[i];
+        const b = place[i];
         const through = Math.min(0.9, Math.max(leave + 0.1, atGate + (i - 3) * 0.022));
         const land = i < 4 ? 0.95 : 0.995; // the bottom row lands as its row comes fully into view
         let x = a.x;
@@ -227,23 +261,38 @@ export function LandingBroken() {
           tilt = 18 * (1 - u);
         }
         glow = Math.max(glow, 1 - Math.abs(t - through) / 0.05);
-        card.style.transform = t <= leave ? "" : `translate3d(${x - a.x}px, ${y - a.y}px, 0) perspective(900px) rotateX(${tilt}deg) scale(${scale})`;
-        flips[i].style.transform = fixed ? "rotateY(180deg)" : "";
+        put(card, "transform", t <= leave ? "" : `translate3d(${(x - a.x).toFixed(1)}px, ${(y - a.y).toFixed(1)}px, 0) perspective(900px) rotateX(${tilt.toFixed(2)}deg) scale(${scale.toFixed(4)})`);
+        if (writtenFlip[i] !== fixed) { writtenFlip[i] = fixed; flips[i].style.transform = fixed ? "rotateY(180deg)" : ""; }
       });
-      gate.style.setProperty("--glow", String(0.25 + 0.75 * glow));
+
+      // Keller: "there should be colour here… the colour break, and it's behind… then there's more
+      // colour that breaks out." Light rises behind the scene as the cards set off, bursts behind
+      // the gate as each one goes through, and settles once they have landed.
+      const rise = smooth(clamp01((t - leave * 0.6) / 0.16));
+      const settle = smooth(clamp01((t - 0.85) / 0.15));
+      put(aura, "opacity", (rise * (1 - 0.35 * settle)).toFixed(3));
+      put(aura, "transform", `scale(${(0.86 + 0.14 * rise).toFixed(3)})`);
+      const burstOn = clamp01(glow);
+      put(burst, "opacity", burstOn.toFixed(3));
+      put(burst, "transform", `scale(${(0.85 + 0.25 * burstOn).toFixed(3)})`);
+      // The cue under the problems: it has scrolled into view by the end of the hold, and fades as
+      // the cards set off.
+      put(cue, "opacity", (1 - clamp01((t - leave * 0.7) / (leave * 0.4))).toFixed(3));
     };
     const schedule = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    // A resize, or the section's own content changing size (a font, an image), moves the places.
+    const remeasure = () => { geo = null; schedule(); };
 
     update();
     window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", schedule);
-    scene.addEventListener("change", schedule);
-    const watch = new ResizeObserver(schedule);
+    window.addEventListener("resize", remeasure);
+    scene.addEventListener("change", remeasure);
+    const watch = new ResizeObserver(remeasure);
     watch.observe(section);
     return () => {
       window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", schedule);
-      scene.removeEventListener("change", schedule);
+      window.removeEventListener("resize", remeasure);
+      scene.removeEventListener("change", remeasure);
       watch.disconnect();
       window.cancelAnimationFrame(frame);
       delete section.dataset.mode;
@@ -253,11 +302,13 @@ export function LandingBroken() {
 
   return (
     <section ref={sectionRef} id="industries" aria-labelledby="audience-title" className={styles.section}>
+      {/* The light behind the journey (see above): it stays with the screen while the cards travel. */}
+      <span className={styles.aura} data-aura="" aria-hidden="true" />
       <div className={styles.inner}>
         <header className={styles.head}>
           <p className={styles.eyebrow}>What’s broken today</p>
           <h2 id="audience-title" className={styles.heading}>Seven leaks in your business. One system closes them.</h2>
-          <p className={styles.lede}>Each one costs you money every month.<span className={styles.sceneHint}> Scroll, and watch them go through Insurvas.</span></p>
+          <p className={styles.lede}>Each one costs you money every month.</p>
         </header>
 
         <ul className={styles.grid} data-problems="">
@@ -270,10 +321,13 @@ export function LandingBroken() {
             </li>
           ))}
         </ul>
+        {/* Only where the cards really travel; it fades as they set off. */}
+        <p className={styles.cue} data-cue="" aria-hidden="true">Scroll, and watch them get fixed<ChevronDown /></p>
 
         {/* The gate: the five tools go in, one system comes out (Umar's A3, in one line). */}
         <div className={styles.gateZone}>
           <p className={styles.gateNote}>A CRM, a dialer, two spreadsheets and a prayer</p>
+          <span className={styles.burst} data-burst="" aria-hidden="true" />
           <div className={styles.gate} data-gate="">
             <InsurvasLogo variant="wordmark" tone="dark" size="public" alt="Insurvas" />
             <span className={styles.gateScan} aria-hidden="true" />

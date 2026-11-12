@@ -1,102 +1,168 @@
-/* Life and health (owner, 9 Nov): a short band. The words on the left; on the right a framed stage
-   with a soft green glow, where two rows of product lines drift in opposite
-   directions, edges faded, still on hover. */
-.band { border-bottom: 1px solid var(--border); background: var(--canvas); }
-.inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; gap: clamp(28px, 4vw, 64px); width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(44px, 5vw, 64px) 0; }
+/* Life and health as a before and after (owner, 10 Nov; tasks/landing-life-health/spec.md). One frame,
+   two drawn scenes, a slider between them. The scenes are deep olive in both themes; the band around
+   them follows the page. */
+/* A section of its own, edge to edge (owner, 10 Nov: "full width, remove the title"). The scenes are
+   deep olive in both themes. */
+.band { position: relative; background: #0d4037; }
+:global(.dark) .band { background: #031310; }
+/* The section's name, for screen readers only: the scenes carry it visually. */
+.eyebrow { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; color: var(--accent-ink); font-size: 15px; font-weight: 650; letter-spacing: -.005em; }
-.eyebrow::before { width: 22px; height: 2px; border-radius: 2px; background: var(--primary); content: ""; }
-.heading { max-width: 25ch; margin: 0; color: var(--ink); font: 600 clamp(26px, 2.4vw, 34px)/1.16 var(--font-brand); letter-spacing: -.025em; text-wrap: balance; }
-.lede { max-width: 46ch; margin: 18px 0 0; color: var(--muted); font-size: clamp(15px, 1.2vw, 17px); line-height: 1.5; text-wrap: pretty; }
-
-/* The stage: a framed panel with a green glow rising from its foot. */
-.stage {
+/* ── The frame ───────────────────────────────────────────────────────────────────────────────── */
+.frame {
   position: relative;
-  display: grid;
-  gap: 12px;
-  min-width: 0;
-  padding: clamp(18px, 2vw, 26px) 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  background:
-    radial-gradient(120% 90% at 50% 120%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 62%),
-    var(--surface-sunken);
   isolation: isolate;
-}
-
-.row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 4px; padding-left: clamp(16px, 1.8vw, 24px); }
-.rowLabel { display: inline-flex; align-items: center; gap: 8px; min-width: 96px; color: var(--ink); font-size: 14px; font-weight: 650; letter-spacing: -.005em; }
-.rowIcon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; background: var(--primary-soft); color: var(--accent-ink); }
-
-/* The drift: the track holds two identical halves and slides one half's width, then loops. Room above
-   and below so a lifted pill is never clipped. */
-.viewport {
+  /* owner, 10 Nov: "a bit smaller in length". Never taller than the screen (a phone on its side). */
+  height: clamp(min(500px, 100svh), 70svh, 700px);
   overflow: hidden;
-  padding: 6px 0;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
-  mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  background: #0d4037;
+  cursor: ew-resize;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
-.track { display: flex; width: max-content; animation: drift 48s linear infinite; }
-.row[data-line="health"] .track { animation-duration: 42s; animation-direction: reverse; }
-.viewport:hover .track { animation-play-state: paused; }
-.set { display: flex; gap: 10px; margin: 0; padding: 0 10px 0 0; list-style: none; }
+.layer { position: absolute; inset: 0; }
+/* "Then" is cut off at the divider by two transforms moving against each other (landing-lines.tsx). */
+.clip { overflow: hidden; z-index: 1; }
+.clip, .clip > .layer { will-change: transform; }
 
-/* A pill: its icon in a tinted well, a hairline edge lit from above, and a small lift under the pointer. */
-.pill {
-  display: inline-flex;
+/* ── A scene ─────────────────────────────────────────────────────────────────────────────────── */
+.scene {
+  position: absolute;
+  isolation: isolate; /* its own stack, so "Now"'s words never rise through "Then" */
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: #eaf6f2;
+  /* The sky of Framer's Particle Wave Shader, sampled from its own demo: rgb(3 8 3). Flat on
+     purpose — the field supplies all the light, and a lit ground under it only greys it out. */
+  background: rgb(3 8 3);
+}
+/* Light theme (owner, 12 Nov: "it should have different colours in light mode"): the ground is the
+   brand's deep olive ink, #0d4037 — the green of the trust band's photo and the footer — and the
+   particles come from the brand's own mint ramp below. Dark keeps the reference's night. */
+:global(html:not(.dark)) .scene { background: #0d4037; }
+:global(.dark) .frame { background: #031310; }
+
+/* ── The background ────────────────────────────────────────────────────────────────────────────
+   A rolling landscape of particles, each hanging a line to a floor far below, drawn with WebGL —
+   `particles-waves.tsx` has the picture and why it is a shader now. The owner asked for Framer's
+   Particle Wave Shader, exactly (12 Nov). Earlier passes here were a Canvas 2D version of it, a
+   field of dots, a cove of light trails, blurred ribbons, and a lit floor in perspective.
+
+   The palette is sampled from the reference's own particles, left to right: the median hue of
+   single lit points (87°, 104°, 134°), at full value. The shader scales them, and where thousands
+   overlap, additive blending carries them towards white by itself — the bright seams. This leaves
+   the brand ramp on purpose: the owner asked for the reference exactly, and the brand green (164°)
+   is teal-er than anything in it. The canvas reads them as tokens, so the component names no
+   colour (§9). */
+.field {
+  --wave-1: rgb(188 255 105);
+  --wave-2: rgb(153 255 118);
+  --wave-3: rgb(100 255 137);
+
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+/* Light theme: the light end of the brand ramp — soft mint, light mint, soft mint — so the particles
+   read as light against the deep green rather than green on green (owner, 12 Nov: "make the dots
+   brighter, you can't tell anything"). The gain and size are read by the canvas: more light per
+   particle and a slightly larger dot, since this ground is far brighter than the night. */
+:global(html:not(.dark)) .field {
+  --wave-1: rgb(197 255 237);
+  --wave-2: rgb(143 245 213);
+  --wave-3: rgb(197 255 237);
+  --wave-gain: 1.7;
+  --wave-size: 1.25;
+}
+/* Edge to edge, as the reference runs. */
+.field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+/* A scrim under the words. The light moves, so without it the headline's contrast would move with
+   it; this holds the middle of the frame dark enough for white type whatever the trails do. */
+.bloom {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(60% 40% at 50% 38%, rgb(2 12 10 / 44%), rgb(2 12 10 / 0) 78%);
+}
+:global(html:not(.dark)) .bloom { background: radial-gradient(60% 40% at 50% 38%, rgb(8 44 38 / 50%), rgb(8 44 38 / 0) 78%); }
+
+
+/* Film grain and a vignette, so the light reads as photographed rather than drawn. */
+.grain {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  /* A vignette only. This used to carry a white fractal noise as well, at 5% — film grain, for a
+     drawn floor. Over a field of light it was a grey haze across the whole band: it is what
+     raised ours above the reference's mean brightness while halving its highlights. */
+  background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(3 8 3 / 70%) 100%);
+  opacity: .55;
+  pointer-events: none;
+}
+:global(html:not(.dark)) .grain { background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(6 33 28 / 70%) 100%); }
+
+.tag { position: absolute; z-index: 2; bottom: clamp(20px, 3vw, 36px); display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgb(234 246 242 / 18%); border-radius: 999px; background: rgb(3 19 16 / 45%); padding: 6px 12px; color: rgb(234 246 242 / 86%); font: 650 12px/1 var(--font-sans); letter-spacing: .08em; text-transform: uppercase; }
+.tag::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
+.scene[data-side="then"] .tag { left: clamp(20px, 3vw, 40px); }
+.scene[data-side="now"] .tag { right: clamp(20px, 3vw, 40px); color: #4fe3bb; border-color: rgb(79 227 187 / 40%); }
+.scene[data-side="now"] .tag::before { box-shadow: 0 0 10px #4fe3bb; }
+
+.content { position: relative; z-index: 2; display: grid; align-self: center; justify-items: center; gap: 0; max-width: 940px; padding: 0 clamp(24px, 5vw, 64px) clamp(70px, 12vh, 120px); text-align: center; }
+.headline { margin: 0; color: #f3fbf8; font: 600 clamp(34px, 4.6vw, 68px)/1.02 var(--font-brand); letter-spacing: -.035em; text-wrap: balance; text-shadow: 0 10px 40px rgb(2 12 10 / 55%); }
+.headline em { padding-right: .015em; font-family: var(--font-accent-serif); font-size: 1.12em; font-style: italic; font-weight: 400; letter-spacing: -.01em; background: linear-gradient(180deg, #c5ffed 0%, #07d6a0 85%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+.groups { display: grid; justify-items: center; gap: 10px; margin-top: 26px; }
+.group { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.groupLabel { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; color: #4fe3bb; font: 650 13px/1 var(--font-sans); }
+.groupLabel svg { width: 15px; height: 15px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid rgb(234 246 242 / 16%); border-radius: 999px; background: rgb(234 246 242 / 6%); padding: 7px 13px 7px 10px; color: #eaf6f2; font: 550 13.5px/1 var(--font-sans); white-space: nowrap; }
+.chip svg { width: 14px; height: 14px; color: #4fe3bb; }
+
+/* ── The slider ──────────────────────────────────────────────────────────────────────────────── */
+.handle { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: 0; will-change: transform; outline: none; }
+.handle::before { position: absolute; top: 0; bottom: 0; left: -1px; width: 2px; background: linear-gradient(180deg, transparent, rgb(197 255 237 / 90%) 18%, rgb(197 255 237 / 90%) 82%, transparent); box-shadow: 0 0 18px 1px rgb(79 227 187 / 55%); content: ""; }
+.knob {
+  position: absolute;
+  top: 50%;
+  left: -26px;
+  display: flex;
+  justify-content: center;
   align-items: center;
-  gap: 10px;
-  height: 46px;
-  padding: 0 18px 0 6px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: linear-gradient(180deg, var(--surface), color-mix(in srgb, var(--surface) 86%, var(--surface-alt)));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--canvas) 70%, transparent),
-    0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent),
-    0 6px 16px -10px color-mix(in srgb, var(--ink) 30%, transparent);
-  color: var(--ink);
-  font: 550 15px/1 var(--font-brand);
-  letter-spacing: -.01em;
-  white-space: nowrap;
-  transition: transform 220ms cubic-bezier(.23, 1, .32, 1), border-color 200ms ease, box-shadow 220ms ease;
+  gap: 0;
+  width: 52px;
+  height: 52px;
+  margin-top: -26px;
+  border: 1px solid rgb(197 255 237 / 55%);
+  border-radius: 50%;
+  background: rgb(6 35 29 / 82%);
+  color: #c5ffed;
+  box-shadow: 0 0 0 6px rgb(7 214 160 / 12%), 0 12px 30px -8px rgb(2 12 10 / 80%), inset 0 1px 0 rgb(255 255 255 / 12%);
+  transition: scale 200ms cubic-bezier(.23, 1, .32, 1), box-shadow 200ms ease;
+  will-change: transform;
 }
-.pill:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
-  box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--canvas) 70%, transparent),
-    0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent),
-    0 10px 22px -12px color-mix(in srgb, var(--primary) 55%, transparent);
+.knob svg { width: 17px; height: 17px; margin: 0 -2px; }
+.frame[data-dragging] .knob, .knob:active { scale: .94; }
+@media (hover: hover) and (pointer: fine) { .frame:hover .knob { box-shadow: 0 0 0 8px rgb(7 214 160 / 18%), 0 12px 30px -8px rgb(2 12 10 / 80%), inset 0 1px 0 rgb(255 255 255 / 12%); } }
+.handle:focus-visible .knob { outline: 2px solid #4fe3bb; outline-offset: 4px; }
+
+/* Phones: a taller frame, the type and chips a step smaller. */
+@media (max-width: 760px) {
+  .frame { height: clamp(560px, 78svh, 680px); }
+  .tag { bottom: 16px; font-size: 11px; }
+  .scene[data-side="then"] .tag { left: 16px; }
+  .scene[data-side="now"] .tag { right: 16px; }
+  .content { padding: 0 18px 120px; }
+  .headline { font-size: clamp(30px, 9vw, 40px); }
+    .groups { margin-top: 20px; gap: 8px; }
+  .group { gap: 6px; }
+  .chip { padding: 6px 10px 6px 8px; font-size: 12.5px; }
+  /* Low on the frame, in the light below the chips, so it never sits on the words. */
+  .knob { top: 86%; width: 46px; height: 46px; left: -23px; margin-top: -23px; }
 }
-.pillIcon { display: grid; width: 34px; height: 34px; flex: none; place-items: center; border-radius: 50%; background: var(--surface-alt); color: var(--muted); }
-/* Health in the brand's tint, so the two rows read apart at a glance. */
-.row[data-line="health"] .pill { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); }
-.row[data-line="health"] .pillIcon { background: var(--primary-soft); color: var(--accent-ink); }
-
-@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-
-/* No motion: one set of each, wrapped, nothing faded, no lift. */
 @media (prefers-reduced-motion: reduce) {
-  .viewport { -webkit-mask-image: none; mask-image: none; }
-  .track { width: auto; animation: none; }
-  .set { flex-wrap: wrap; padding: 0; }
-  .set[aria-hidden="true"], .pill[aria-hidden="true"] { display: none; }
-  .pill, .pill:hover { transform: none; transition: none; }
-}
-
-@media (max-width: 860px) {
-  .inner { grid-template-columns: minmax(0, 1fr); }
-}
-@media (max-width: 640px) {
-  /* Phones: headings centred, as on the rest of the page; each row's label sits above its pills. */
-  .copy { display: flex; flex-direction: column; align-items: center; text-align: center; }
-  .heading { margin-inline: auto; }
-  .stage { gap: 14px; }
-  .row { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 6px; padding-left: 0; }
-  .rowLabel { min-width: 0; }
-  .viewport { width: 100%; }
-  .pill { height: 42px; padding-right: 15px; font-size: 14px; }
-  .pillIcon { width: 30px; height: 30px; }
+  .knob { transition: none; }
 }

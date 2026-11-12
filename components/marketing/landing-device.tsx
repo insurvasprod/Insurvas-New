@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import {
-  Bell, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn, ChevronDown, ChevronRight, ClipboardList, ContactRound, FileCheck,
+  ArrowLeft, ArrowRight, Bell, BookOpen, Building2, CalendarCheck, CalendarDays, ChartColumn, ChevronDown, ChevronRight, ClipboardList, ContactRound, FileCheck,
   FilePenLine, Handshake, Inbox, Landmark, LayoutDashboard, LifeBuoy, Package, PanelLeftClose, PhoneCall, Receipt, RefreshCw, Search, Settings,
   ShieldCheck, SquareKanban, Sun, TriangleAlert,
 } from "lucide-react";
@@ -33,6 +33,8 @@ import { DeviceOverview, DeviceOverviewHeader } from "@/components/marketing/lan
 const PAGE_MS = 5_000;
 /** How long a page chosen by hand stays before the cycle carries on. */
 const HOLD_MS = 20_000;
+/** How long the cycle waits after the mouse last moved on the sidebar. */
+const RAIL_PAUSE_MS = 2_500;
 
 // The design is drawn at one screen size and scaled to fit, like a real screenshot would be.
 const SCREEN_W = 1280;
@@ -81,12 +83,42 @@ export function LandingDevice() {
   const holdTicks = useRef(0);
   const current = DEVICE_PAGES.find((entry) => entry.key === page) ?? DEVICE_PAGES[0];
 
-  const choose = (key: DevicePageKey) => { holdTicks.current = Math.round(HOLD_MS / PAGE_MS); setPage(key); };
+  // The hover invite (Keller, 10 Nov: "nobody knows that you can interact with these pages"). A
+  // mouse over the laptop takes the "Pick a page to explore" chip along, lights the bezel and
+  // pulses the sidebar. The first click inside the laptop ends the lesson: no more chip or pulse
+  // this visit.
+  //
+  // Where it waits changed on 11 Nov (Artin). He asked for the resting cue to sit "in the corners
+  // at the top, so top right and top left", to hold rather than "fade away instantly", and to not
+  // "cover any part of the dashboard" — the chip used to wait centred over the screen, which it
+  // did. So the resting state moved out of the screen into `.cues` (CSS, below the bezel in the
+  // markup): brackets on both top corners, and a label with the curved arrow he described above
+  // the right one. The chip itself is now only ever the thing that trails a pointer, and it glides
+  // back to that corner when the mouse leaves, so the two read as one object.
+  const stageRef = useRef<HTMLDivElement>(null);
+  const chipRef = useRef<HTMLDivElement>(null);
+  const hovering = useRef(false);
+  // The page holds still only while the mouse is moving on the sidebar, about to pick a page, and
+  // for a moment after. Not while it is anywhere over the laptop (owner, 10 Nov: "it's stuck there"),
+  // and not while a mouse merely rests on the sidebar: one parked there froze the pages until a
+  // click (owner, 11 Nov). When the mouse last moved on the sidebar, or 0.
+  const railAt = useRef(0);
+  const learnt = useRef(false);
 
-  // A new page every few seconds while the device is on screen, unless one was just chosen by hand.
+  const choose = (key: DevicePageKey) => {
+    holdTicks.current = Math.round(HOLD_MS / PAGE_MS);
+    learnt.current = true;
+    deviceRef.current?.setAttribute("data-learnt", "true");
+    chipRef.current?.setAttribute("data-show", "false");
+    setPage(key);
+  };
+
+  // A new page every few seconds while the device is on screen, unless one was just chosen by hand
+  // or the mouse is on the sidebar.
   useEffect(() => {
     if (!live || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => {
+      if (performance.now() - railAt.current < RAIL_PAUSE_MS) return;
       if (holdTicks.current > 0) { holdTicks.current -= 1; return; }
       if (document.hidden) return;
       setPage((now) => DEVICE_PAGES[(DEVICE_PAGES.findIndex((entry) => entry.key === now) + 1) % DEVICE_PAGES.length].key);
@@ -157,6 +189,110 @@ export function LandingDevice() {
     return () => { window.removeEventListener("scroll", schedule); window.removeEventListener("resize", schedule); window.cancelAnimationFrame(frame); };
   }, []);
 
+  // The invite's moving parts. Nothing here touches React state: the hover is an attribute on the
+  // device, and the chip is moved by a transform written once a frame, only while it is moving. It
+  // trails the pointer with a little lag (eased, not glued), and sits in the stage rather than the
+  // tilted device so the pointer's coordinates map straight onto it. Mouse only: a tap never shows it.
+  useEffect(() => {
+    const device = deviceRef.current;
+    const stage = stageRef.current;
+    const chip = chipRef.current;
+    if (!device || !stage || !chip) return;
+    const mouse = window.matchMedia("(hover: hover) and (pointer: fine)");
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    let frame = 0;
+    let x = 0, y = 0, toX = 0, toY = 0;
+    let shown = "false";
+    // Written only when it changes: an attribute set on every pointer move restyles the chip each time.
+    const show = (on: boolean) => {
+      const next = String(on);
+      if (next !== shown) { shown = next; chip.setAttribute("data-show", next); }
+    };
+    const place = () => { chip.style.transform = `translate3d(${x.toFixed(1)}px, ${y.toFixed(1)}px, 0)`; };
+    const glide = () => {
+      frame = 0;
+      const ease = reduce ? 1 : 0.2;
+      x += (toX - x) * ease;
+      y += (toY - y) * ease;
+      place();
+      if (Math.abs(toX - x) > 0.25 || Math.abs(toY - y) > 0.25) frame = window.requestAnimationFrame(glide);
+    };
+    const kick = () => { if (!frame) frame = window.requestAnimationFrame(glide); };
+
+    // Where the chip waits when no mouse is on the laptop: the top-left corner, under the cue's
+    // label (Artin, 11 Nov; the owner moved it to this corner on 12 Nov). It is never shown there —
+    // the cue is what you see at rest — but a mouse
+    // that arrives lifts the chip from that corner and a mouse that leaves sends it back, so the
+    // label and the chip read as one object rather than two copies of the same hint. Until 11 Nov
+    // the chip rested visible over the middle of the screen, which is the "covering the dashboard"
+    // he objected to. The first click inside the laptop ends it for the visit.
+    let restX = 0, restY = 0, placed = false;
+    const rest = () => {
+      restX = device.offsetLeft + 14;
+      restY = device.offsetTop - 2;
+      if (hovering.current) return;
+      toX = restX; toY = restY;
+      if (!placed) { x = toX; y = toY; place(); placed = true; } else kick();
+    };
+    if (mouse.matches) rest();
+    const fit = new ResizeObserver(() => { if (mouse.matches) rest(); });
+    fit.observe(stage);
+
+    const aim = (event: PointerEvent) => {
+      const box = stage.getBoundingClientRect();
+      toX = event.clientX - box.left + 18;
+      toY = event.clientY - box.top + 20;
+      // Over the sidebar the pointer is already where it should be: the chip steps aside.
+      const overRail = event.target instanceof Element && event.target.closest("nav") !== null;
+      railAt.current = overRail ? performance.now() : 0;
+      show(!learnt.current && !overRail);
+    };
+    const enter = (event: PointerEvent) => {
+      if (event.pointerType !== "mouse" || !mouse.matches) return;
+      hovering.current = true;
+      device.setAttribute("data-hover", "true");
+      aim(event);
+      kick(); // glides from where it waits to the pointer
+    };
+    const move = (event: PointerEvent) => {
+      if (!hovering.current) return;
+      aim(event);
+      kick();
+    };
+    const leave = () => {
+      railAt.current = 0;
+      if (!hovering.current) return;
+      hovering.current = false;
+      device.removeAttribute("data-hover");
+      toX = restX; toY = restY;
+      // Back to the corner and out of sight: the cue fades in again behind it.
+      show(false);
+      kick();
+    };
+    // Any click inside the laptop, a page in its sidebar or not: the visitor has found it.
+    const learn = () => {
+      learnt.current = true;
+      device.setAttribute("data-learnt", "true");
+      show(false);
+    };
+    device.addEventListener("pointerenter", enter);
+    device.addEventListener("pointermove", move, { passive: true });
+    device.addEventListener("pointerleave", leave);
+    device.addEventListener("click", learn);
+    // A scroll moves the laptop out from under a still mouse without always saying so: the pause ends.
+    const unpause = () => { railAt.current = 0; };
+    window.addEventListener("scroll", unpause, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", unpause);
+      device.removeEventListener("pointerenter", enter);
+      device.removeEventListener("pointermove", move);
+      device.removeEventListener("pointerleave", leave);
+      device.removeEventListener("click", learn);
+      fit.disconnect();
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   /** A sidebar row: a button when it opens a sample page, otherwise a picture of the row. */
   const row = ({ icon: Icon, label, page: target, badge }: NavPage, extra?: ReactNode, sub = false) => {
     const className = sub ? `${styles.navItem} ${styles.navSub}` : styles.navItem;
@@ -173,10 +309,23 @@ export function LandingDevice() {
   };
 
   return (
-    <div className={styles.stage}>
+    <div ref={stageRef} className={styles.stage}>
       <div className={styles.halo} aria-hidden="true" />
       <div className={styles.frameOutline} aria-hidden="true" />
       <div ref={deviceRef} className={styles.device} data-live={live}>
+        {/* The resting cue (Artin, 11 Nov): brackets on both top corners, and above the right one a
+            label with the curved arrow he asked for, running back down to the bezel. Decoration —
+            the viewport's own label already tells a screen reader the pages can be chosen. */}
+        <div className={styles.cues} aria-hidden="true">
+          <span className={`${styles.corner} ${styles.cornerLeft}`} />
+          <span className={`${styles.corner} ${styles.cornerRight}`} />
+          <span className={styles.cueLabel}>Pick a page to explore<ArrowRight /></span>
+          {/* The viewBox is cropped to the path, so none of the drawn height is wasted on margin.
+              It runs out from under the label's right end and sweeps down into the screen. */}
+          <svg className={styles.cueArrow} viewBox="22 6 84 160" aria-hidden="true">
+            <path d="M24 8 C 28 70 48 130 104 164 M104 164 l -9 -16 M104 164 l -18 0" />
+          </svg>
+        </div>
         <div className={styles.bezel}>
           <span className={styles.camera} aria-hidden="true" />
           <div ref={viewportRef} className={styles.viewport} style={{ height: SCREEN_H * scale }} role="group" aria-label="A sample Insurvas workspace. Choose a page in its sidebar to look inside.">
@@ -250,6 +399,11 @@ export function LandingDevice() {
             </div>
           </div>
         </div>
+      </div>
+      {/* The invite that trails a mouse over the laptop (see above). Decoration: the screen's own
+          label already says the pages can be chosen. */}
+      <div ref={chipRef} className={styles.invite} data-show="false" aria-hidden="true">
+        <span className={styles.inviteChip}><ArrowLeft />Pick a page to explore</span>
       </div>
       {/* Phones and tablets: the scaled sidebar is too small to tap, so the same pages as tabs. */}
       <div ref={tabsRef} className={styles.pageTabs} role="group" aria-label="Sample workspace pages">
