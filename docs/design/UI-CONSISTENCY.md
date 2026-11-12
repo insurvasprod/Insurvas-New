@@ -491,7 +491,13 @@ the title line, so the step's first card starts level with the rail's top (owner
     `AuthHeading`), legal links.
   - Width: 472px, or `width="wide"` (720px) only for a grid of choices or a document (Your agency,
     Your plan, Payment, accept terms).
-  - The panel is an `AuthStory` (label, title, rows with a hairline above each; a row can carry a
+  - Agent sign-in and the sign-up funnel put the brand field on the left and the form on the
+    right. The field is the landing page's own (`WaveField`, look "auth"), so the door and the
+    front page are the same software; it replaced a road photograph on 2026-11-12.
+    `AuthPhotoPanel` retains the plan summary and payment receipt as real content where supplied;
+    the mobile receipt stays in the form. The field has a pause control and respects reduced
+    motion. Other auth doors keep their existing layouts.
+  - Other panels use an `AuthStory` (label, title, rows with a hairline above each; a row can carry a
     value, or a ✓/✗ state with its word), or real content (the plan summary, the receipt) passed
     as `story`.
 - Controls from `components/portal/auth-controls.tsx`: `AuthField` + `AuthInput` (or
@@ -522,8 +528,8 @@ the title line, so the step's first card starts level with the rail's top (owner
 - An open picker list is drawn at the auth shell (a portal), never inside the form column: each
   line of the column is its own layer while the entrance animation holds, so a list drawn inside
   it goes under every later line. It fits the room left in the window and never makes it scroll.
-- The brand panel is still: `--brand-700` with one soft light, no ribbon or other motion
-  (owner, 2026-10-27).
+- Outside the agent photo panel, the brand panel is still: `--brand-700` with one soft light, no
+  ribbon or other motion (owner, 2026-10-27).
 - Every auth screen, sign-up steps included, keeps the logo at the top and centres the rest in the
   space below it (`AuthLayout` `align`, default "center"). No auth screen scrolls, vertically or
   sideways, at 1536×826 (the owner's 125%-scaled screen), 1366×657 or 1920×1030.

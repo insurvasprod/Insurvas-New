@@ -251,11 +251,7 @@ export function TenantAuthWorkspace({
     // The sign-in page cannot know an agency from one agent, so it names neither (manager review, 2026-10-28).
     // Same header as sign-up: the title on the left, a short note on the right, one bar under (owner, 2026-11-03).
     heading: (
-      <div data-auth-line="" className="mb-6">
-        <div className="flex flex-wrap items-end justify-center gap-x-4 gap-y-1">
-          <div className="min-w-0"><AuthHeading title="Sign in to your Workspace" /></div>
-        </div>
-      </div>
+      <AuthHeading title="Welcome back">Sign in to your Insurvas workspace.</AuthHeading>
     ),
     body: (
       <>
@@ -289,7 +285,7 @@ export function TenantAuthWorkspace({
           label="Password"
           htmlFor="tenant-login-password"
           aside={
-            <button type="button" onClick={openReset} data-tap="" className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            <button type="button" onClick={openReset} data-tap="" className="text-xs font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
               Forgot password?
             </button>
           }
@@ -531,7 +527,7 @@ export function TenantAuthWorkspace({
   const view = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
 
   return (
-    <AuthLayout plane="agent" heading={view.heading} footer={view.footer}>
+    <AuthLayout plane="agent" photo heading={view.heading} footer={view.footer}>
       {view.body}
     </AuthLayout>
   );

@@ -15,7 +15,7 @@ import { AuthBrand, PortalAuthSplitShell, type PortalAuthMode } from "@/componen
  * panel, so no two looked alike. Now the column is always, top to bottom: logo, steps, back link,
  * the screen's own content (opening with <AuthHeading>), legal links — and the panel is an
  * <AuthStory>, or real content (the plan summary, the receipt) passed as `story`. The agent
- * sign-in passes no panel: it is one centred card on the brand field (owner, 2026-11-03).
+ * sign-in and signup use the approved photo panel; real summaries remain in that panel.
  *
  * It is the only component that renders PortalAuthSplitShell (lib/design/authShell.test.mjs).
  */
@@ -36,6 +36,7 @@ export function AuthLayout({
   back,
   heading,
   story,
+  photo = false,
   footer,
   footerInline = false,
   note,
@@ -65,10 +66,12 @@ export function AuthLayout({
   note?: ReactNode;
   /**
    * The brand panel: an <AuthStory>, or real content such as the plan summary or the receipt.
-   * Omit it for a door that is one centred column with no panel (the agent sign-in); the shell is
-   * then drawn as a single card on the brand field (owner, 2026-11-03).
+   * Omit it for a door that is one centred column with no panel; the shell is then drawn as a
+   * single card on the brand field, unless the photo panel is requested.
    */
   story?: ReactNode;
+  /** Agent sign-in and signup use the approved photo panel. */
+  photo?: boolean;
   /**
    * "center" (the default): the logo stays at the top and the rest sits in the middle of the space
    * below it (owner, 2026-10-27: sign-in looked unfinished with the form at the top; then "all of
@@ -85,13 +88,15 @@ export function AuthLayout({
 }) {
   // No panel means the single door: the card is painted and the heading and the other ways in sit
   // on the field around it (globals.css, data-layout="single").
-  const single = !story;
+  const single = !story && !photo;
   return (
     <PortalAuthSplitShell
       mode={mode}
       className={PLANE_CLASS[plane]}
+      photo={photo}
       form={
         <div className="portal-auth-form-inner" data-width={width} data-align={align ?? "center"} style={width === "wide" ? { maxWidth: 720 } : undefined}>
+          {photo && mode === "sign-in" && <div className="auth-photo-top">New to Insurvas? <Link href="/signup">Create an account ↗</Link></div>}
           {/* flex, so the inline logo link adds no line-height gap under it. */}
           <div className="m-stagger flex" data-auth-logo="">
             <AuthBrand href="/" label="Insurvas home">
@@ -130,7 +135,7 @@ export function AuthLayout({
                 {footer && !(single && footerInline && legal) && <div data-auth-footer="">{footer}</div>}
               </div>
             </ViewTransition>
-            {legal && (single && footerInline && footer ? (
+            {!photo && legal && (single && footerInline && footer ? (
               <div data-auth-footer-row="">
                 <div data-auth-footer="">{footer}</div>
                 <AuthLegalLinks onDark={single} />
@@ -140,6 +145,7 @@ export function AuthLayout({
             ))}
             {note && <div data-auth-note="">{note}</div>}
           </div>
+          {photo && legal && <div className="auth-photo-legal"><span>© {new Date().getFullYear()} Insurvas Inc.</span><AuthLegalLinks /></div>}
         </div>
       }
       story={story}

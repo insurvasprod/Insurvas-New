@@ -4355,3 +4355,58 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-partner-submit-page .portal-partner-submit-consent-line label { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 14px; font-weight: 500; letter-spacing: -.02em; cursor: pointer; }
 .portal-partner-submit-page .portal-partner-submit-consent-line input { flex: none; width: 17px; height: 17px; margin: 0; accent-color: var(--primary); }
 .portal-partner-submit-page .portal-partner-submit-outstanding { color: var(--warning-ink); font-size: 13px; font-weight: 500; cursor: help; }
+
+/* Agent sign-in and sign-up: the landing page's own field, inset beside the form (owner, 12 Nov:
+   "a theme that suits everything in this SaaS"). It replaced a bought road photograph with a slow
+   zoom on it; the studies are in tasks/auth-panel/todo.md. */
+.portal-tenant-auth-shell[data-photo] { background: var(--surface); }
+.portal-tenant-auth-shell[data-photo] .portal-auth-split-form { grid-column: 2; background: var(--surface); padding: 28px clamp(24px, 5vw, 76px) 20px; }
+.portal-tenant-auth-shell[data-photo] .portal-auth-split-story { grid-column: 1; align-items: stretch; padding: 12px; background: var(--surface); }
+.portal-tenant-auth-shell[data-photo] .portal-auth-form-inner { width: 100%; max-width: 472px; }
+.portal-tenant-auth-shell[data-photo] [data-auth-heading-slot] [data-auth-heading] h1 { color: var(--ink); }
+.portal-tenant-auth-shell[data-photo] [data-auth-heading-slot] [data-auth-heading] p { color: var(--muted); }
+.auth-photo-top { display: flex; justify-content: flex-end; gap: .5rem; color: var(--muted); font-size: .75rem; }
+.auth-photo-top a { color: var(--accent-ink); font-weight: 600; text-decoration: none; }
+.auth-photo-top a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.auth-photo-legal { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--muted-foreground); font-size: .625rem; }
+.auth-photo-legal .portal-login-footer { margin: 0; }
+.auth-photo-panel { position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--brand-700); color: var(--on-dark); padding: clamp(28px, 3.5vw, 48px); }
+.auth-photo-field, .auth-photo-shade { position: absolute; inset: 0; z-index: -1; pointer-events: none; }
+/* The band's dark palette: night olive, deep green, the bright green, the soft crest. The canvas
+   reads these, so the component names no colour (§9). */
+.auth-photo-field {
+  --wave-1: rgb(3 24 20);
+  --wave-2: rgb(8 88 70);
+  --wave-3: rgb(7 214 160);
+  --wave-4: rgb(197 255 237);
+
+  overflow: hidden;
+}
+.auth-photo-field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+/* The words sit at the top here, so the shade is weighted to the top; the field holds its own ramp
+   back under them as well (`u_holdY` in wave-field.tsx). */
+.auth-photo-shade { background: linear-gradient(180deg, rgb(2 12 10 / .42), rgb(2 12 10 / 0) 48%, rgb(2 12 10 / .5)); }
+.auth-photo-panel[data-has-summary] .auth-photo-shade { background: rgb(5 33 25 / .88); }
+.auth-photo-logo { display: inline-flex; width: fit-content; }
+/* Top set: the claim under the logo, the field taking the lower half, one quiet line at the foot. */
+.auth-photo-copy { max-width: 560px; margin-top: clamp(14px, 2vw, 30px); margin-bottom: auto; }
+.auth-photo-kicker { max-width: 52ch; color: var(--brand-300, #4fe3bb); font-size: .8125rem; line-height: 1.45; font-weight: 600; }
+.auth-photo-title { max-width: 15ch; margin: 12px 0 0; font-family: var(--font-display); font-size: clamp(2.375rem, 4vw, 3.625rem); line-height: 1.02; letter-spacing: -.045em; font-weight: 600; text-wrap: balance; }
+.auth-photo-title em { padding-right: .02em; font-family: var(--font-accent-serif, var(--font-accent)), Georgia, serif; font-size: 1.1em; font-style: italic; font-weight: 400; letter-spacing: -.01em; color: #8ff5d5; }
+.auth-photo-description { position: absolute; right: clamp(28px, 3.5vw, 48px); bottom: clamp(16px, 2vw, 30px); left: clamp(28px, 3.5vw, 48px); max-width: 46ch; margin: 0; font-size: .875rem; line-height: 1.5; color: rgb(234 246 242 / .62); }
+.auth-photo-summary { width: 100%; max-width: 38rem; margin: auto 0; padding-block: 16px 28px; }
+.auth-photo-motion { position: absolute; right: clamp(28px, 3.5vw, 48px); bottom: 20px; border: 1px solid rgb(255 255 255 / .55); border-radius: 6px; background: rgb(9 46 39 / .8); color: var(--on-dark); padding: 7px 10px; font-size: .625rem; font-weight: 600; }
+.auth-photo-motion:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+@media (min-width: 1024px) { .portal-tenant-auth-shell[data-photo] [data-auth-logo] { display: none; } }
+@media (max-width: 1023px) {
+  .portal-tenant-auth-shell[data-photo] .portal-auth-split-form { grid-column: 1; padding: 28px 20px; }
+  .portal-tenant-auth-shell[data-photo] .portal-auth-split-story { display: none; }
+}
+@media (max-height: 900px) {
+  .portal-tenant-auth-shell[data-photo] .portal-auth-split-form { padding-block: 18px; }
+  .auth-photo-panel { padding-block: 28px; }
+  .auth-photo-title { font-size: clamp(2rem, 3.5vw, 3rem); }
+  .auth-photo-copy { margin-top: 12px; }
+}
+/* The field draws one frame and holds it under reduced motion, so there is nothing to pause. */
+@media (prefers-reduced-motion: reduce) { .auth-photo-motion { display: none; } }

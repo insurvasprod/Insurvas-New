@@ -35,9 +35,9 @@
   place-items: center;
   overflow: hidden;
   color: #eaf6f2;
-  /* The sky of Framer's Particle Wave Shader, sampled from its own demo: rgb(3 8 3). Flat on
-     purpose — the field supplies all the light, and a lit ground under it only greys it out. */
-  background: rgb(3 8 3);
+  /* What shows if WebGL does not start: the band's own night olive. The gradient is opaque, so
+     nothing of this is seen once it is running. */
+  background: rgb(3 19 16);
 }
 /* Light theme (owner, 12 Nov: "it should have different colours in light mode"): the ground is the
    brand's deep olive ink, #0d4037 — the green of the trust band's photo and the footer — and the
@@ -46,49 +46,69 @@
 :global(.dark) .frame { background: #031310; }
 
 /* ── The background ────────────────────────────────────────────────────────────────────────────
-   A rolling landscape of particles, each hanging a line to a floor far below, drawn with WebGL —
-   `particles-waves.tsx` has the picture and why it is a shader now. The owner asked for Framer's
-   Particle Wave Shader, exactly (12 Nov). Earlier passes here were a Canvas 2D version of it, a
-   field of dots, a cove of light trails, blurred ribbons, and a lit floor in perspective.
+   A fluid gradient: four colours poured through a noise field that warps itself, so the bands fold
+   and swell and never repeat — `wave-field.tsx` has the picture and how it is made. The owner
+   asked for Framer's New Wave Gradient, exactly (12 Nov). Earlier passes here were that studio's
+   Particle Wave Shader rebuilt the same way, a Canvas 2D version of it, a field of dots, a cove of
+   light trails, blurred ribbons, and a lit floor in perspective.
 
-   The palette is sampled from the reference's own particles, left to right: the median hue of
-   single lit points (87°, 104°, 134°), at full value. The shader scales them, and where thousands
-   overlap, additive blending carries them towards white by itself — the bright seams. This leaves
-   the brand ramp on purpose: the owner asked for the reference exactly, and the brand green (164°)
-   is teal-er than anything in it. The canvas reads them as tokens, so the component names no
-   colour (§9). */
+   The palette is the brand's own ramp, darkest first: the shader walks it from `--wave-1` to
+   `--wave-4` as the field rises, so the first two are the ground the band sits on and the last is
+   the crest that only the brightest sliver reaches. The canvas reads them as tokens, so the
+   component names no colour (§9).
+
+   The two scenes are told apart here by colour, and in `wave-field.tsx` by how fast and how far
+   the field folds (owner, 12 Nov: "differentiate them a bit"). */
 .field {
-  --wave-1: rgb(188 255 105);
-  --wave-2: rgb(153 255 118);
-  --wave-3: rgb(100 255 137);
-
   position: absolute;
   z-index: 0;
   inset: 0;
   overflow: hidden;
   pointer-events: none;
 }
-/* Light theme: the light end of the brand ramp — soft mint, light mint, soft mint — so the particles
-   read as light against the deep green rather than green on green (owner, 12 Nov: "make the dots
-   brighter, you can't tell anything"). The gain and size are read by the canvas: more light per
-   particle and a slightly larger dot, since this ground is far brighter than the night. */
-:global(html:not(.dark)) .field {
-  --wave-1: rgb(197 255 237);
-  --wave-2: rgb(143 245 213);
-  --wave-3: rgb(197 255 237);
-  --wave-gain: 1.7;
-  --wave-size: 1.25;
+/* "Then": life alone. Night olive to the institutional mid green, with the mint crest held back —
+   one line of business, a closed-in field. */
+.scene[data-side="then"] .field {
+  --wave-1: rgb(3 20 16);
+  --wave-2: rgb(7 53 43);
+  --wave-3: rgb(9 124 97);
+  --wave-4: rgb(96 233 193);
+}
+/* "Now": life and health. The same night, opened out — the bright brand green through it and the
+   soft green of the ramp's light end at the crest. */
+.scene[data-side="now"] .field {
+  --wave-1: rgb(3 24 20);
+  --wave-2: rgb(8 88 70);
+  --wave-3: rgb(7 214 160);
+  --wave-4: rgb(197 255 237);
+}
+/* Light theme (owner, 12 Nov: "it should have different colours in light mode"): the band is the
+   brand's deep olive ink in daylight, not night, so both scenes start a step up the ramp and run
+   brighter — the field has to read against a lit ground rather than a dark sky. */
+:global(html:not(.dark)) .scene[data-side="then"] .field {
+  --wave-1: rgb(8 46 38);
+  --wave-2: rgb(14 78 65);
+  --wave-3: rgb(11 148 115);
+  --wave-4: rgb(160 249 221);
+}
+:global(html:not(.dark)) .scene[data-side="now"] .field {
+  --wave-1: rgb(10 56 46);
+  --wave-2: rgb(12 128 101);
+  --wave-3: rgb(86 232 191);
+  --wave-4: rgb(226 253 244);
 }
 /* Edge to edge, as the reference runs. */
 .field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-/* A scrim under the words. The light moves, so without it the headline's contrast would move with
-   it; this holds the middle of the frame dark enough for white type whatever the trails do. */
+/* A scrim under the words, and only the half of that job the shader cannot do. The gradient holds
+   the middle of the frame back down its own ramp (`u_hold` in `wave-field.tsx`), which keeps the
+   centre a deep green of the picture rather than a grey veil over it; this adds the last of the
+   contrast for white type, and is light enough not to read as a patch. */
 .bloom {
   position: absolute;
   inset: 0;
-  background: radial-gradient(60% 40% at 50% 38%, rgb(2 12 10 / 44%), rgb(2 12 10 / 0) 78%);
+  background: radial-gradient(68% 46% at 50% 40%, rgb(2 12 10 / 20%), rgb(2 12 10 / 0) 78%);
 }
-:global(html:not(.dark)) .bloom { background: radial-gradient(60% 40% at 50% 38%, rgb(8 44 38 / 50%), rgb(8 44 38 / 0) 78%); }
+:global(html:not(.dark)) .bloom { background: radial-gradient(68% 46% at 50% 40%, rgb(5 36 30 / 28%), rgb(5 36 30 / 0) 78%); }
 
 
 /* Film grain and a vignette, so the light reads as photographed rather than drawn. */
@@ -99,7 +119,7 @@
   /* A vignette only. This used to carry a white fractal noise as well, at 5% — film grain, for a
      drawn floor. Over a field of light it was a grey haze across the whole band: it is what
      raised ours above the reference's mean brightness while halving its highlights. */
-  background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(3 8 3 / 70%) 100%);
+  background: radial-gradient(120% 100% at 50% 50%, transparent 60%, rgb(2 12 10 / 70%) 100%);
   opacity: .55;
   pointer-events: none;
 }
@@ -112,7 +132,7 @@
 .scene[data-side="now"] .tag::before { box-shadow: 0 0 10px #4fe3bb; }
 
 .content { position: relative; z-index: 2; display: grid; align-self: center; justify-items: center; gap: 0; max-width: 940px; padding: 0 clamp(24px, 5vw, 64px) clamp(70px, 12vh, 120px); text-align: center; }
-.headline { margin: 0; color: #f3fbf8; font: 600 clamp(34px, 4.6vw, 68px)/1.02 var(--font-brand); letter-spacing: -.035em; text-wrap: balance; text-shadow: 0 10px 40px rgb(2 12 10 / 55%); }
+.headline { margin: 0; color: #f3fbf8; font: 600 clamp(34px, 4.6vw, 68px)/1.02 var(--font-brand); letter-spacing: -.035em; text-wrap: balance; text-shadow: 0 0 10px rgb(2 12 10 / 86%), 0 0 26px rgb(2 12 10 / 72%), 0 2px 8px rgb(2 12 10 / 70%), 0 10px 40px rgb(2 12 10 / 50%); }
 .headline em { padding-right: .015em; font-family: var(--font-accent-serif); font-size: 1.12em; font-style: italic; font-weight: 400; letter-spacing: -.01em; background: linear-gradient(180deg, #c5ffed 0%, #07d6a0 85%); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
 .groups { display: grid; justify-items: center; gap: 10px; margin-top: 26px; }
