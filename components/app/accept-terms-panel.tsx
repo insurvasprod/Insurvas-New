@@ -165,7 +165,7 @@ export function AcceptTermsPanel({ documents }: { documents: OutstandingDoc[] })
           </span>
         </label>
 
-        <Button className="h-11 shrink-0 px-5" disabled={!accepted || submitting} onClick={submit}>
+        <Button className="auth-h shrink-0 px-5" disabled={!accepted || submitting} onClick={submit}>
           {submitting && <LoaderCircle className="animate-spin" />}
           {submitting ? "Recording…" : "Accept and continue"}
         </Button>

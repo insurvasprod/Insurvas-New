@@ -93,7 +93,7 @@ export function SetPasswordForm({
   if (tokenState.status === "unreachable") {
     return (
       <AuthCard width={640} title="We could not check your link" description="Insurvas could not be reached. Your link has not been used.">
-        <Button type="button" className="mt-6 h-11 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
+        <Button type="button" className="auth-h mt-6 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
       </AuthCard>
     );
   }
@@ -102,7 +102,7 @@ export function SetPasswordForm({
     return (
       <AuthCard width={640} title="This link no longer works" description="It has expired or has already been used. A link works once.">
         <p className="mt-6 text-sm text-[var(--body)]">Invited to a workspace? Ask whoever invited you to send a new invitation. Resetting a password? Ask for a new link from sign in, or sign in with an emailed link instead.</p>
-        <Button asChild className="mt-6 h-11 w-full"><Link href={loginPath}>Go to sign in</Link></Button>
+        <Button asChild className="auth-h mt-6 w-full"><Link href={loginPath}>Go to sign in</Link></Button>
       </AuthCard>
     );
   }
@@ -138,7 +138,7 @@ export function SetPasswordForm({
           <AuthFact label="Invitation expires" value={expiry(tokenState.expiresAt)} />
         </div>
         {error && <AuthAlert>{error}</AuthAlert>}
-        <Button type="button" className="mt-6 h-11 w-full" disabled={loading} onClick={accept}>{loading ? "Joining…" : "Accept invitation"}</Button>
+        <Button type="button" className="auth-h mt-6 w-full" disabled={loading} onClick={accept}>{loading ? "Joining…" : "Accept invitation"}</Button>
       </AuthCard>
     );
   }
@@ -157,10 +157,10 @@ export function SetPasswordForm({
       <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
         {/* The account the password is for, so a password manager files it under the right name. */}
         <input type="email" name="username" autoComplete="username" value={tokenState.email} readOnly hidden />
-        <NewPasswordField id="new-password" label="New password" autoFocus value={password} onChange={(next) => { setPassword(next); setError(null); }} inputClassName="h-11 border-[var(--border-strong)] bg-card px-3 text-base" />
+        <NewPasswordField id="new-password" label="New password" autoFocus value={password} onChange={(next) => { setPassword(next); setError(null); }} inputClassName="auth-h border-[var(--border-strong)] bg-card px-3 text-base" />
 
         {error && <AuthAlert>{error}</AuthAlert>}
-        <Button type="submit" className="mt-2 h-11 w-full" disabled={!ready || loading}>{loading ? "Saving…" : invite ? "Set password and open Insurvas" : "Set password and sign in"}</Button>
+        <Button type="submit" className="auth-h mt-2 w-full" disabled={!ready || loading}>{loading ? "Saving…" : invite ? "Set password and open Insurvas" : "Set password and sign in"}</Button>
       </form>
     </AuthCard>
   );

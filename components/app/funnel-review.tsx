@@ -40,7 +40,7 @@ export function FunnelReview({ title, subtitle, rows, continueHref, back }: {
         ))}
       </dl>
       <FunnelActions back={back} className="mt-6">
-        <Button asChild className="h-11">
+        <Button asChild className="auth-h">
           <Link href={continueHref}>Continue</Link>
         </Button>
       </FunnelActions>

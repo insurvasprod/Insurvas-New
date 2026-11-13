@@ -36,7 +36,7 @@ import { useEffect, useRef } from "react";
 /** Where this field is running. The landing band is one picture in two states; the auth
  *  panel is the same field on the sign-in door (owner, 12 Nov: "a theme that suits
  *  everything in this SaaS"). */
-export type WaveLook = "then" | "now" | "auth";
+export type WaveLook = "then" | "now" | "auth" | "map";
 
 const TOKENS = ["--wave-1", "--wave-2", "--wave-3", "--wave-4"] as const;
 
@@ -65,6 +65,13 @@ const LOOK: Record<WaveLook, { seed: number; speed: number; travel: number; scal
      middle. No pointer parallax here — a form is a place people type, not a place they
      wave the mouse about. */
   auth: { seed: 43.7, speed: 0.5, travel: 0.17, scale: 0.9, warp: 0.7, amp: 0.42, tilt: 0.45, gamma: 1.05, hold: 0.95, holdY: 0.26, drift: 0 },
+  /* Behind the licence map. The door's field is a picture in its own right - bright crest, wide
+     swing - and a map laid on it has nothing to stand against: the lit states and the crest are
+     the same green. So behind a map the same shader is driven deep. The swing is cut by a third,
+     the ramp is held well down by the gamma, and the pale crest never arrives. It still moves, it
+     still folds, it is unmistakably the same field as the landing page; it has simply stopped
+     competing (owner, 13 Nov). */
+  map: { seed: 43.7, speed: 0.42, travel: 0.14, scale: 0.9, warp: 0.7, amp: 0.3, tilt: 0.3, gamma: 1.85, hold: 0.55, holdY: 0.02, drift: 0 },
 };
 
 /** One triangle over the whole clip space; there is no geometry in this picture. */

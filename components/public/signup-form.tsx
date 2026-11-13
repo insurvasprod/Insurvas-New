@@ -25,7 +25,7 @@ type Props = {
 };
 
 // The auth field (components/portal/auth-controls.tsx): 44px, 16px text at every width.
-const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
+const fieldClass = "auth-h border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
 
 /**
  * Step 1 of 3: the account. Email, password and the legal box, nothing else (manager review,

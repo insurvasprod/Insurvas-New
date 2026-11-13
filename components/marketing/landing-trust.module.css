@@ -1,6 +1,8 @@
 /* The trust band (Umar, 4 Nov, A2.1; owner, 6 Nov: more visual, less text). A graded photo with the
    figures along its foot on the left; the statement and a short three-stop line on the right. */
-.band { border-bottom: 1px solid var(--border); background: var(--canvas); }
+/* No rule along the foot: the life and health band below now dissolves into this ground, and a
+   line there would be the hard edge the fade removes (owner, 13 Nov). */
+.band { background: var(--canvas); }
 .inner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); align-items: stretch; gap: clamp(32px, 5vw, 80px); width: min(100% - 64px, 1320px); margin: 0 auto; padding: clamp(56px, 6vw, 88px) 0; }
 
 /* The photo: graded into the deep green so it belongs to the page, darker at its foot for the figures. */

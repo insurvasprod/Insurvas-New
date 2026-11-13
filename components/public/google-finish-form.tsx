@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 
 type LegalDoc = { id: string; doc_type: string; version: number; title: string };
 
-const fieldClass = "h-11 border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
+const fieldClass = "auth-h border-[var(--border-strong)] bg-card px-3 text-base md:text-base";
 
 /**
  * Step 1 after "Continue with Google" (owner, 2026-10-27). The same form as step 1: the Email field

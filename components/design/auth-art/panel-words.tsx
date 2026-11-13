@@ -43,7 +43,7 @@ export function PanelWords({ words }: { words: Words }) {
       <div className={styles.copy}>
         <p className="auth-photo-kicker">{KICKER}</p>
         <p className="auth-photo-title">Know what every<br />lead cost you.</p>
-        <p className="auth-photo-description">{BLURB}</p>
+        <p className={styles.foot}>{BLURB}</p>
         <p className="auth-photo-caption">{FLOOR}</p>
       </div>
     );

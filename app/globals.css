@@ -2064,6 +2064,13 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
     background-attachment: fixed;
   }
 }
+/* One height for every control in an auth column (auth-controls.tsx, the Google button, the step
+   actions). 44px is the standard because these are screens people use on a phone (§13, owner
+   2026-10-27). A mouse does not need the thumb allowance, and on an 826px window the controls are
+   what decides whether a step scrolls, so a fine pointer gets 40 (owner, 2026-11-12). Unlayered,
+   so it outranks a size utility the base Button carries. */
+.auth-h { height: 44px; }
+@media (pointer: fine) { .auth-h { height: 40px; } }
 /* Short screens (a 1366×768 laptop, a zoomed 1080p screen): the same layout, tighter, so every auth
    screen fits without scrolling (owner, 2026-10-27). The order and widths do not change. */
 /* 900px, not 820px: a 1080p or 1200p screen at 125% Windows scaling gives the browser about 826px
@@ -2090,10 +2097,42 @@ html:has(.portal-tenant-auth-shell) { scrollbar-gutter: stable; }
 }
 .portal-tenant-auth-shell .portal-auth-split-form > div { justify-content: flex-start; }
 .portal-tenant-auth-shell .portal-auth-form-inner { margin: 0 auto; display: flex; flex-direction: column; flex: 1 0 auto; }
-/* Every auth screen, the sign-up steps included (owner, 2026-10-27: "all of them in the center"):
-   the logo stays at the top and the block from the steps to the legal links sits in the middle of
-   the space below it. Auto margins, so a screen taller than the window simply starts at the top. */
-.portal-tenant-auth-shell .portal-auth-form-inner[data-align="center"] > [data-auth-body] { margin-block: auto; }
+/* Every auth screen, the sign-up steps included: the block from the steps to the legal links is
+   anchored to one top edge, so the heading lands in the same place on every step and the content
+   grows downward from it. `margin-bottom: auto` keeps the legal links at the foot.
+
+   This was `margin-block: auto` — centred — from the owner's 2026-10-27 note, "all of them in the
+   center". Centring means the block starts wherever its own height puts it, and measured at
+   1536x826 that moved the heading 224px across the flow: sign-in 269, your account 294, confirm
+   242, plan 224, about you 174, all done 398. Owner, 2026-11-12: the layout has to be the same on
+   every step. It is the same change that evens out the scroll headroom, which ran from 646px on
+   the profile step to under 540px on the rest. */
+.portal-tenant-auth-shell .portal-auth-form-inner[data-align="center"] {
+  /* How far down the block starts, and the room the progress bar takes when there is one. */
+  /* Lower than it was (owner, 2026-11-13, twice: step 1 and Confirm Your Email sat "too up").
+     It grows with the window rather than as a flat share of it: about 180px at 826px tall, but
+     only 80px at 700px, so the tallest step (About you) still clears the legal links on a short
+     laptop screen. */
+  --auth-anchor: clamp(16px, calc((100vh - 600px) * .8), 190px);
+  --auth-steps-space: 49px;
+}
+/* The wide steps (Your plan, About you) are the tallest, and at the shared anchor About you sat low
+   against the legal links ("so down … it looks so bad", owner, 2026-11-13). They start higher, so
+   the block sits near the middle of the column instead. */
+.portal-tenant-auth-shell .portal-auth-form-inner[data-align="center"][data-width="wide"] {
+  --auth-anchor: clamp(16px, calc((100vh - 600px) * .55), 130px);
+}
+.portal-tenant-auth-shell .portal-auth-form-inner[data-align="center"] > [data-auth-body] {
+  margin-top: var(--auth-anchor);
+  margin-bottom: auto;
+}
+/* A door with no progress bar (sign-in) is centred in its column. It used to sit at the steps'
+   anchor plus the progress bar's room, so that going into step 1 the heading did not move; once
+   the steps were lowered (2026-11-13) that left sign-in 248px from the top and 36px from the legal
+   links ("why isnt this centered", owner, 2026-11-13). */
+.portal-tenant-auth-shell .portal-auth-form-inner[data-align="center"] > [data-auth-body]:not(:has(> [data-auth-steps])) {
+  margin-block: auto;
+}
 /* On a touch screen a standalone link-button (Back, Sign out, Forgot password?, Switch to agency) is
    44px to tap, the same as every auth field; with a mouse it keeps its own height. */
 @media (pointer: coarse) {
@@ -2229,6 +2268,9 @@ html:has(.portal-tenant-auth-shell[data-layout="single"]) body { background: tra
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-heading] h1 { color: var(--on-dark); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-heading] p { color: var(--nav-muted); }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer] { margin-top: 1.5rem; color: var(--nav-muted); }
+/* The split doors (agent sign-in, sign-up) had no gap at all: "Create an account" sat on the Sign In
+   button (owner, 2026-11-13). The same 1.5rem as the single column. */
+.portal-tenant-auth-shell[data-photo] [data-auth-footer] { margin-top: 1.5rem; }
 .portal-tenant-auth-shell[data-layout="single"] [data-auth-footer] :is(a, button) { color: var(--on-dark); }
 .portal-tenant-auth-shell[data-layout="single"] :is([data-auth-footer], .portal-login-footer) :is(a, button):hover { color: var(--on-dark); text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 560px) {
@@ -4358,16 +4400,14 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 
 /* Agent sign-in and sign-up: the landing page's own field, inset beside the form (owner, 12 Nov:
    "a theme that suits everything in this SaaS"). It replaced a bought road photograph with a slow
-   zoom on it; the studies are in tasks/auth-panel/todo.md. */
+   zoom on it; the studies are in tasks/auth-panel/todo.md. The form is on the left and the field
+   on the right (manager review, 2026-11-13; it was the other way round until then). */
 .portal-tenant-auth-shell[data-photo] { background: var(--surface); }
-.portal-tenant-auth-shell[data-photo] .portal-auth-split-form { grid-column: 2; background: var(--surface); padding: 28px clamp(24px, 5vw, 76px) 20px; }
-.portal-tenant-auth-shell[data-photo] .portal-auth-split-story { grid-column: 1; align-items: stretch; padding: 12px; background: var(--surface); }
+.portal-tenant-auth-shell[data-photo] .portal-auth-split-form { grid-column: 1; background: var(--surface); padding: 28px clamp(24px, 5vw, 76px) 20px; }
+.portal-tenant-auth-shell[data-photo] .portal-auth-split-story { grid-column: 2; align-items: stretch; padding: 12px; background: var(--surface); }
 .portal-tenant-auth-shell[data-photo] .portal-auth-form-inner { width: 100%; max-width: 472px; }
 .portal-tenant-auth-shell[data-photo] [data-auth-heading-slot] [data-auth-heading] h1 { color: var(--ink); }
 .portal-tenant-auth-shell[data-photo] [data-auth-heading-slot] [data-auth-heading] p { color: var(--muted); }
-.auth-photo-top { display: flex; justify-content: flex-end; gap: .5rem; color: var(--muted); font-size: .75rem; }
-.auth-photo-top a { color: var(--accent-ink); font-weight: 600; text-decoration: none; }
-.auth-photo-top a:hover { text-decoration: underline; text-underline-offset: 3px; }
 .auth-photo-legal { display: flex; align-items: center; justify-content: space-between; gap: 16px; color: var(--muted-foreground); font-size: .625rem; }
 .auth-photo-legal .portal-login-footer { margin: 0; }
 .auth-photo-panel { position: relative; isolation: isolate; display: flex; flex: 1; min-width: 0; flex-direction: column; overflow: hidden; border-radius: 24px; background: var(--brand-700); color: var(--on-dark); padding: clamp(28px, 3.5vw, 48px); }
@@ -4383,20 +4423,22 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   overflow: hidden;
 }
 .auth-photo-field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
-/* The words sit at the top here, so the shade is weighted to the top; the field holds its own ramp
-   back under them as well (`u_holdY` in wave-field.tsx). */
-.auth-photo-shade { background: linear-gradient(180deg, rgb(2 12 10 / .42), rgb(2 12 10 / 0) 48%, rgb(2 12 10 / .5)); }
+/* A summary panel keeps its words at the top, so its shade is weighted there; the field holds
+   its own ramp back under them as well (`u_holdY` in wave-field.tsx). */
+.auth-photo-shade { background: linear-gradient(180deg, rgb(2 12 10 / .42), rgb(2 12 10 / 0) 48%, rgb(2 12 10 / .3)); }
 .auth-photo-panel[data-has-summary] .auth-photo-shade { background: rgb(5 33 25 / .88); }
 .auth-photo-logo { display: inline-flex; width: fit-content; }
-/* Top set: the claim under the logo, the field taking the lower half, one quiet line at the foot. */
-.auth-photo-copy { max-width: 560px; margin-top: clamp(14px, 2vw, 30px); margin-bottom: auto; }
+/* The sign-in panel without a summary: the layered-text staircase over the wave field, as the
+   21st.dev demo sets it (auth-photo-panel.tsx). The kicker and title below are still drawn by the
+   dev-only studies under /design/auth-art. */
+.auth-photo-layered { display: flex; flex: 1; min-height: 0; align-items: center; justify-content: center; overflow: hidden; color: var(--on-dark); }
+/* The staircase is set in px (as published); a narrow panel scales it rather than clipping it. */
+@media (max-width: 1279px) { .auth-photo-layered > div { scale: .8; } }
 .auth-photo-kicker { max-width: 52ch; color: var(--brand-300, #4fe3bb); font-size: .8125rem; line-height: 1.45; font-weight: 600; }
-.auth-photo-title { max-width: 15ch; margin: 12px 0 0; font-family: var(--font-display); font-size: clamp(2.375rem, 4vw, 3.625rem); line-height: 1.02; letter-spacing: -.045em; font-weight: 600; text-wrap: balance; }
+.auth-photo-title { max-width: 14ch; margin: 14px 0 0; font-family: var(--font-display); font-size: clamp(2.375rem, 4vw, 3.625rem); line-height: 1.02; letter-spacing: -.045em; font-weight: 600; text-wrap: balance; }
 .auth-photo-title em { padding-right: .02em; font-family: var(--font-accent-serif, var(--font-accent)), Georgia, serif; font-size: 1.1em; font-style: italic; font-weight: 400; letter-spacing: -.01em; color: #8ff5d5; }
-.auth-photo-description { position: absolute; right: clamp(28px, 3.5vw, 48px); bottom: clamp(16px, 2vw, 30px); left: clamp(28px, 3.5vw, 48px); max-width: 46ch; margin: 0; font-size: .875rem; line-height: 1.5; color: rgb(234 246 242 / .62); }
 .auth-photo-summary { width: 100%; max-width: 38rem; margin: auto 0; padding-block: 16px 28px; }
-.auth-photo-motion { position: absolute; right: clamp(28px, 3.5vw, 48px); bottom: 20px; border: 1px solid rgb(255 255 255 / .55); border-radius: 6px; background: rgb(9 46 39 / .8); color: var(--on-dark); padding: 7px 10px; font-size: .625rem; font-weight: 600; }
-.auth-photo-motion:focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; }
+
 @media (min-width: 1024px) { .portal-tenant-auth-shell[data-photo] [data-auth-logo] { display: none; } }
 @media (max-width: 1023px) {
   .portal-tenant-auth-shell[data-photo] .portal-auth-split-form { grid-column: 1; padding: 28px 20px; }
@@ -4406,7 +4448,6 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .portal-tenant-auth-shell[data-photo] .portal-auth-split-form { padding-block: 18px; }
   .auth-photo-panel { padding-block: 28px; }
   .auth-photo-title { font-size: clamp(2rem, 3.5vw, 3rem); }
-  .auth-photo-copy { margin-top: 12px; }
 }
-/* The field draws one frame and holds it under reduced motion, so there is nothing to pause. */
-@media (prefers-reduced-motion: reduce) { .auth-photo-motion { display: none; } }
+/* The field draws one frame and holds it under reduced motion (wave-field.tsx), which is why the
+   panel carries no pause button (owner, 2026-11-12). */

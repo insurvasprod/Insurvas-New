@@ -428,7 +428,7 @@ function ContinueButton({ onDark = false }: { onDark?: boolean }) {
   const { saving, save } = useChoice();
   return (
     <FunnelActions back="/app/verify-email" onDark={onDark}>
-      <Button type="button" className="h-11" disabled={saving} onClick={save}>
+      <Button type="button" className="auth-h" disabled={saving} onClick={save}>
         {saving && <LoaderCircle className="animate-spin" aria-hidden="true" />}
         {saving ? "Saving…" : "Continue to payment"}
       </Button>

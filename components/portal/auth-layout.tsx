@@ -73,9 +73,11 @@ export function AuthLayout({
   /** Agent sign-in and signup use the approved photo panel. */
   photo?: boolean;
   /**
-   * "center" (the default): the logo stays at the top and the rest sits in the middle of the space
-   * below it (owner, 2026-10-27: sign-in looked unfinished with the form at the top; then "all of
-   * them in the center", the sign-up steps too). "top" is kept for a screen that needs it.
+   * "center" (the default): the block from the steps to the legal links is anchored to one top
+   * edge, a little under a seventh of the window down, and grows from there — so the heading is in
+   * the same place on every door and every step (owner, 2026-11-12: the layout has to be the same
+   * on all of them). It was literally centred until then, which moved the heading 224px across the
+   * sign-up flow. "top" is kept for a screen that needs to start higher still.
    */
   align?: "top" | "center";
   /**
@@ -96,7 +98,6 @@ export function AuthLayout({
       photo={photo}
       form={
         <div className="portal-auth-form-inner" data-width={width} data-align={align ?? "center"} style={width === "wide" ? { maxWidth: 720 } : undefined}>
-          {photo && mode === "sign-in" && <div className="auth-photo-top">New to Insurvas? <Link href="/signup">Create an account ↗</Link></div>}
           {/* flex, so the inline logo link adds no line-height gap under it. */}
           <div className="m-stagger flex" data-auth-logo="">
             <AuthBrand href="/" label="Insurvas home">

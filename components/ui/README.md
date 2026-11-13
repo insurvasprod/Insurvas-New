@@ -32,6 +32,7 @@ What lives here and which rule owns it:
 | Searchable select (one choice, search at the top; a quick filter beside a search): `SelectMenu` | `select-menu.tsx` | §5, §6a |
 | Dialog, confirm, sheet, popover, menu, toast, search | `dialog.tsx`, `confirm-dialog.tsx`, `sheet.tsx`, `popover.tsx`, `dropdown-menu.tsx`, `toaster.tsx` (raise toasts with `lib/notify`), `search-command.tsx` | §11 |
 | Status chip | `status-chip.tsx` | §12 |
+| Layered text (the sign-in panel's word staircase, 21st.dev): `LayeredText` | `layered-text.tsx` | §0, auth doors |
 | Motion: overlay enter/exit, the panel's exit, the tab pill (`tab-track.tsx`), page turns (`paged.tsx`), chart tweens, page transitions (`components/portal/portal-page-transition.tsx`), links that prefetch and show pending (`nav-pending.tsx`) | the motion layer in `app/globals.css`; see `/app/motion-lab` | §18 |
 
 Do not: add a second component that does what one of these does, name a colour (use tokens), or

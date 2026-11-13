@@ -224,3 +224,270 @@ horizontal overflow; the landing band re-rendered and unchanged; **60fps** on th
 **Left alone on purpose:** `public/marketing/auth-utah-road.webp` and its line in
 `public/marketing/README.md` are untracked work from the Codex session, and nothing of mine
 references the photograph any more. Deleting it is the owner's call, not mine.
+
+## The audit (owner, 12 Nov: "compact, professional, same layout on every step, no scrolling")
+
+Read-only, measured in the browser at 1536×826 and 1366×768, not judged from screenshots.
+Published: https://claude.ai/artifact/5fd7a1qh6EG5ybP8TzpddV
+
+| Screen | Heading top | Body height | Column | Scrolls below |
+|---|---|---|---|---|
+| Agent sign-in | 269 | 287 | 472 | <540 |
+| Step 1 · your account | 294 | 336 | 472 | <540 |
+| Step 1 · confirm email | 242 | 439 | 472 | <540 |
+| Step 2 · plan | 224 | 475 | 611 | 666 |
+| Step 3 · about you | 174 | 576 | 611 | 646 |
+| All done | 398 | 128 | 472 | <540 |
+| **spread** | **224px** | **448px** | **139px** | |
+
+**The finding that matters: the heading moves 224px between steps.** The panel's claim is anchored
+(90px from the top, 134px tall, every screen); the form beside it is vertically centred, so where
+the eye lands depends on how much content the step happens to have. That is what "the layout is not
+the same" means, and one change fixes all six: anchor the step body to one top edge and let it grow
+downward.
+
+Also: the column measure changes under the reader (472 on the form steps, 611 on plan and profile);
+"all done" is 128px of content in an 826px window; the plan and profile steps have the least scroll
+headroom (666px and 646px) while the rest survive below 540px.
+
+Scale (0 unusable → 4 no material defects in the inspected scope): layout & responsive **2**,
+implementation integrity **3**, theming **3**, accessibility **3** (one unlabelled input on
+"About you"), performance **3** (60fps with the field, reduced motion holds a frame).
+
+**Not inspected, and not scored:** tab order inside the form, screen-reader announcements, the
+payment step (no dev variant), touch on hardware, and the worst-case contrast of white type over
+the field on this panel specifically.
+
+- [ ] Anchor the step body to one top edge across all six (P1)
+- [ ] Label the input on "About you" (P1)
+- [ ] Rebuild "all done": it is the first second of ownership and it is nearly empty (P1)
+- [ ] One column measure; the plan step gets a denser grid rather than a wider column (P2)
+- [ ] Budget every step to the same height so the scroll headroom is even (P2)
+- [ ] Confirm-email: the mailbox shortcuts outweigh the primary path (P2)
+
+### P1 done: the step body is anchored, not centred
+
+`app/globals.css`, the one rule that was `margin-block: auto` on `[data-auth-body]`. It now starts
+at a fixed `--auth-anchor` (`clamp(16px, 10vh, 104px)`) and grows downward, with `margin-bottom:
+auto` keeping the legal links at the foot. A door with no progress bar reserves its space
+(`--auth-steps-space: 49px`) so the heading lands with the steps' headings rather than 49px above
+them.
+
+Measured at 1536×826, heading top:
+
+| | before | after |
+|---|---|---|
+| Agent sign-in | 269 | **168** |
+| Step 1 · your account | 294 | **168** |
+| Step 1 · confirm email | 242 | **168** |
+| Step 2 · plan | 224 | **168** |
+| Step 3 · about you | 174 | **168** |
+| All done | 398 | **168** |
+| spread | **224px** | **0px** |
+
+The shipped `/app/login` measures 168 too, and 162 at 1366×768; neither scrolls.
+
+**The honest trade:** anchoring pushes tall content down, so the profile step now scrolls below
+706px of viewport height where it used to survive to 646px (the plan step is unchanged at 666px).
+At the owner's 826 there is 120px of headroom and at 1366×768 there is 62px. The remedy is not a
+higher anchor — it is the next item, budgeting every step to one height. The owner's 2026-10-27
+"all of them in the center" is superseded and the reason is recorded in the rule itself.
+
+### P1 done: the state combobox has a name
+
+`components/app/state-picker.tsx` takes a `label` prop and puts it on `aria-label`; the About-you
+form passes "Primary State". Its visible label is a `FieldLabel`, which is not tied to the input,
+so a screen reader announced the control with no name. The field beside it ("Agency name") already
+carried an `aria-label`, so this follows that convention rather than inventing a second one.
+Verified: **0 unlabelled controls** on sign-in, step 1, and both About-you variants.
+
+### P1 withdrawn: "all done is nearly empty"
+
+**That finding was wrong, and the mistake is worth recording.** What `/design/auth` draws for "all
+done" is a stub — one heading and one line, written to exercise the layout. The real screen is
+`app/app/welcome/page.tsx`: the activation moment, with what the first statement says the agency is
+owed, the carrier-file upload beside a labelled sample, and the forwarding address. It needs a
+session and a read statement to render, so it was never inspected, and it should have been reported
+as not inspected instead of scored through its stand-in.
+
+**The lesson for the next audit:** two of the six screens on that page are stand-ins. Anything the
+showcase draws is checked against the route it mirrors before it is judged.
+
+### Next, in order
+
+- [ ] One column measure (472 on the form steps, 611 on plan and profile) — P2, the other half of
+      "the same layout on every step"
+- [ ] Budget every step to one height; the profile step scrolls below 706px where the rest survive
+      past 540px — P2
+- [ ] Confirm-email hierarchy: the mailbox shortcuts outweigh the primary path, and the two
+      recovery actions sit at opposite ends — P2
+- [ ] Inspect the real welcome screen once there is a session with a read statement
+
+### P2 partly done: evening the step heights
+
+Measured first, which changed the answer. The step bodies at 1536×826 were 128 / 287 / 336 / 439 /
+475 / **576**, and the profile step was the one that scrolled first (below 706px of viewport).
+
+**The auth screens are already running a compact rhythm at the owner's size.** `@media (max-height:
+900px)` in globals.css (owner, 2026-10-27, "step 4 did not fit") already pulls the heading margin to
+14px, the field gap to 12px, the plan cards and dividers in. There is very little padding left to
+take out, which is why the win here is small and honest rather than large:
+
+| | before | after |
+|---|---|---|
+| About you, body | 576 | **562** |
+| About you, scrolls below | 706 | **686** |
+| Plan, scrolls below | 666 | 666 |
+
+The gain came from the profile form's own field grid (`gap-5` → `gap-x-5 gap-y-4`), not from the
+shared rhythm. **Two edits I made to the shared rhythm were no-ops and were reverted**:
+`AuthHeading`'s `mb-6` and `authControl`'s `mt-1.5` are both overridden by that media block, so
+changing the Tailwind class changed nothing — the computed margin stayed at 14px. Worth knowing
+before anyone tries to tune auth spacing from the components again: **the rhythm lives in
+globals.css, not in the classes.**
+
+The two heavy steps are now within 20px of each other (686 and 666) and the rest survive past 540,
+so no single step is the outlier any more. At 1536×826 the worst step has 140px of headroom; at
+1366×768, 82px.
+
+**To go further, one of these, and both are decisions rather than cleanups:**
+- Controls at 40px with a mouse, keeping 44px on touch. 44px is UI-CONSISTENCY §13, owner
+  2026-10-27, justified as "the screens people use on a phone" — the pointer query would keep that
+  reason intact. Worth roughly 20-25px on the profile step and a little on every screen.
+- Restructure the profile step's fields so it is not the tallest screen by 87px.
+
+---
+
+## Round: the door's clean-up, and one named control height (12 Nov)
+
+The owner, on the shipped `/app/login`: the top-right "Create an account" had to go, the
+"Partner portal" button "looks bad there", the pause-motion button "we dont need that", and the
+line to its left "looks really bad".
+
+**What went, and why each was right to go:**
+- **The top-right way in.** It was the same link that already sits under the form, where a door's
+  other ways in belong. Two of them meant the first thing on the page competed with the form.
+  `.auth-photo-top` is gone from `auth-layout.tsx` and the stylesheet.
+- **The pause control.** `prefers-reduced-motion: reduce` already holds the field on one frame
+  (`wave-field.tsx` line 266) — that is the accommodation, and it is system-wide. The button only
+  added a second, visible one, parked over the artwork. The panel no longer keeps `paused` state.
+- **The foot line.** "Leads, calls, applications and commissions, connected in one workspace" said
+  the claim again in smaller type, across the busiest part of the field. The panel is now two
+  voices: the line that says what this is, and the claim.
+- **The shade's foot** came down from .5 to .3 with it: it was carrying that line's contrast, and
+  with no words down there it was a dark band over the brightest part of the field.
+- **The partner door** got its question back ("Partner or affiliate? Partner portal") on its own
+  line under "New to Insurvas?". Bare beside "Create an account" it read as a second thing to do
+  here, which it is not — it is a different audience's door.
+
+### The control height, approved and shipped
+
+One class, `auth-h`, defined once in globals.css: **44px, and 40px under `@media (pointer: fine)`**.
+44 stays the standard (§13: the screens people use on a phone); a mouse has no thumb to allow for.
+Unlayered, so it outranks any size utility the base `Button` carries.
+
+The stricter ratchet found more than the eight files I expected: `authShell.test.mjs` now fails any
+auth screen that spells a height itself, which turned up **21 controls across 9 further files**
+(verify-email, welcome, set-password, suspended, verification-failed and the three partner forms,
+plus `password-field`). All now take the named height. `min-h-11` is untouched everywhere — those
+are touch floors on checkbox rows and the volume chips, not control heights.
+
+| at 1536×826 | before | after |
+|---|---|---|
+| heading y, all six screens | 168 | **150** (the top link's row went with it) |
+| confirm email, scrolls below | 566 | **526** |
+| About you, scrolls below | 686 | **666** |
+| About you, body | 562 | **552** |
+| plan, scrolls below | 666 | 666 (plan cards, not controls) |
+
+Four of the six screens now survive below 480px of viewport. 114 design tests, typecheck and lint
+on the touched files all pass.
+
+**Still open (P2, from the audit):** one column measure (472 on the form steps vs 611 on
+plan/profile); the confirm-email hierarchy (the mailbox shortcuts outweigh the primary path, and
+the two recovery actions sit at opposite ends). The real welcome screen still needs a session to
+inspect — the showcase entry is a stub.
+
+---
+
+## Round: the licence map ships (13 Nov)
+
+The owner asked for a component in place of the claim in the middle of the panel — "find a good
+component, search websites that you can find components, a really good one with animations that
+suits us". Three were built into the real door and shown: an **activity ledger** (Magic UI's
+Animated List, restyled as the workspace's own rows), the **licence map**, and a **flow diagram**
+(Animated Beam). He picked the map, then took it through four rounds.
+
+**What each round changed, and why:**
+
+1. **"better designed, more detailed, more realistic."** The first map was a hand-drawn 50-point
+   outline with a uniform dot grid. Replaced with real census boundaries projected in Albers conic
+   equal area (29.5°/45.5° parallels), Alaska at 36% and Hawaii enlarged as insets, 4,762 dots on a
+   hex lattice. Delaware, Rhode Island and DC are sampled finer or they vanish — a licence map that
+   quietly drops a state is worse than no map.
+2. **"glassy parts for each state... the logo in the middle taking over."** Dots became polygons:
+   2,753 outline points, each state a pane with a gradient down its height, a lit edge and one
+   sheen across the top-left. The sheen is what makes it read as glass rather than paint.
+3. **"the lines feel weird."** Six curves all bowing the same way round read as a pinwheel. They
+   went straight, then — "like connections from satellite" — became arcs that lift perpendicular to
+   their own run and always on the upper side of it, over a dashed ground track. **The ground track
+   is what sells the height**; without it an arc is just a curve.
+4. **"the logo in that circle, I don't know why."** Measured rather than guessed: the isotype's ink
+   fills **97% of its box across and only 81% down**. It is a landscape mark, so a round badge could
+   only clip its width or strand it vertically. The disc went; it has its own shadow over a soft
+   ground shaped like the mark.
+
+**Two things that were wrong and measurable, both found by looking at a 2× crop rather than the
+page:**
+- The link gradient ran the full length of the finished line, so while the head was still near the
+  mark everything drawn sat in the transparent end of it: six white dots and no lines. It runs
+  along the drawn part now.
+- A link that stopped dead on a state's border left a stub for a state that starts close by
+  (Texas). It carries on in until it is a length worth drawing and stops the moment the ray would
+  leave again; far states are already past that length.
+
+### What shipped
+
+| | |
+|---|---|
+| `lib/geo/us-states.json` | 36KB, 51 states, precomputed — no mapping library on the page |
+| `components/shared/licence-map.tsx` | the canvas: base, glass, the fill front, the links |
+| `components/shared/wave-field.tsx` | a new `"map"` look: the same shader driven deep |
+| `components/portal/auth-photo-panel.tsx` | the map where the claim was; summaries untouched |
+| `app/globals.css` | `.licence-map` block, `--map-*` tokens, an even shade behind the map |
+
+**No invented data anywhere.** Every state is lit, because an agent holds as many licences as they
+write in — which is also what killed the last sample figure on this panel. The readout is 51 ·
+states + DC · license your agents wherever they write.
+
+Verified on the shipped `/app/login` and on the sign-up steps at 1536×826: no page scroll, the
+plan step keeps its summary panel, **the form column is byte-for-byte unchanged** (owner: "change
+only that left part"). 114 design tests, typecheck and lint pass.
+
+**Still open (P2, from the audit):** one column measure (472 on the form steps vs 611 on
+plan/profile); the confirm-email hierarchy. The real welcome screen still needs a session.
+
+### After it shipped: the links went straight (13 Nov)
+
+Three shapes were tried on the same day, in this order, and the owner rejected the first two:
+**curves** bowing one way round ("they feel weird"), then **arcs** lifting off the map over a
+dashed ground track ("like connections from satellite" — his own ask, which he then disliked on
+the panel), then the arcs **flattened to a tenth of the run**, which still read as curved. They are
+straight runs now.
+
+Worth keeping: a straight run and its ground track are the same line, so the dashed track went with
+the bow — leaving it would have drawn a dashed line underneath a solid one. What carries a link now
+is the signal travelling it with a bright head, the ring where it touches down, and the state
+answering. That was always the part doing the work; the curve was decoration on top of it.
+
+### And the readout went too (13 Nov)
+
+"Remove this text as well, it looks bad." The line under the map — **51 · states + DC · license
+your agents wherever they write** — is gone, the figure with it: struck through on his screenshot
+was the caption, but a bare 51 has no referent once the words beside it leave, and it would have
+read as something left behind rather than something kept.
+
+That is every word off this panel now: the kicker, the claim, the foot line, the pause button, the
+top-right way in, and finally the readout. What is left is the logo and the map. Worth noting how
+the whole sequence went — each piece of text looked fine until the one next to it was removed, and
+the panel reads better after every one.

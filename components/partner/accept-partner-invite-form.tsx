@@ -71,7 +71,7 @@ export function AcceptPartnerInviteForm() {
     return (
       <div>
         <FunnelHeading title="Open your invitation">This page needs the link from the invitation email an agency sent you. Open that email and press its button.</FunnelHeading>
-        <Button asChild variant="outline" className="h-11 w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
+        <Button asChild variant="outline" className="auth-h w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
       </div>
     );
   }
@@ -80,7 +80,7 @@ export function AcceptPartnerInviteForm() {
     return (
       <div>
         <FunnelHeading title="We could not check your invitation">Insurvas could not be reached. Your invitation has not been used.</FunnelHeading>
-        <Button type="button" className="h-11 w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
+        <Button type="button" className="auth-h w-full" onClick={() => { setTokenState({ status: "checking" }); setAttempt((value) => value + 1); }}>Try again</Button>
       </div>
     );
   }
@@ -89,7 +89,7 @@ export function AcceptPartnerInviteForm() {
     return (
       <div>
         <FunnelHeading title="This invitation no longer works">It has expired or was already used. Ask your partner administrator to send a new one.</FunnelHeading>
-        <Button asChild variant="outline" className="h-11 w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
+        <Button asChild variant="outline" className="auth-h w-full border-[var(--border-strong)]"><Link href="/partner/login">Go to partner sign in</Link></Button>
       </div>
     );
   }
@@ -119,7 +119,7 @@ export function AcceptPartnerInviteForm() {
           <input id="invite-remember" type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} className="size-5 shrink-0 accent-[var(--accent-ink)]" />
           Keep me signed in on this device
         </label>
-        <Button type="submit" className="mt-1 h-11 w-full" disabled={loading}>{loading ? "Accepting…" : "Accept and open the portal"}</Button>
+        <Button type="submit" className="auth-h mt-1 w-full" disabled={loading}>{loading ? "Accepting…" : "Accept and open the portal"}</Button>
       </form>
       <p className="mt-5 text-sm text-muted-foreground">Access covers only {tokenState.partnerName}’s leads and messages. <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:underline">Use a different account</Link></p>
     </div>

@@ -328,16 +328,18 @@ export function TenantAuthWorkspace({
     </>
     ),
     // Both "elsewhere" lines in one style, side by side where they fit (manager review, 2026-10-28:
-    // the partner line had a different font and colour).
+    // the partner line had a different font and colour). The two lines sit 1.5rem apart, the same
+    // gap as between the Sign In button and the first of them (owner, 2026-11-13).
     footer: (
-      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm leading-normal tracking-[-0.02em]">
+      <div className="flex flex-col gap-6 text-sm leading-normal tracking-[-0.02em]">
         <p className="m-0">
           New to Insurvas?{" "}
           <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
             Create an account
           </Link>
         </p>
-        <p className="m-0">
+        <p className="m-0 text-muted-foreground">
+          Partner or affiliate?{" "}
           <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
             Partner portal
           </Link>
