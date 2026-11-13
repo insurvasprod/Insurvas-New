@@ -136,6 +136,35 @@ export async function saveSetupGuideState(tenantId: string, userId: string, stat
   if (error) throw new Error(`Could not save your setup progress: ${error.message}`);
 }
 
+/** Where a required step was paused (guided setup, 2026-11-13): the step and the move inside it. */
+export type SetupPause = { key: string; move: number };
+
+/**
+ * The person's paused step (migration 20261113100000). Read on its own so a database without the columns yet
+ * costs only the cross-device Resume (the browser keeps its own copy), never the rest of the walkthrough.
+ */
+export async function loadSetupPause(tenantId: string, userId: string): Promise<SetupPause | null> {
+  try {
+    const { data, error } = await db().from("tenant_setup_guide").select("paused_step, paused_move").eq("tenant_id", tenantId).eq("user_id", userId).maybeSingle();
+    if (error || !data?.paused_step) return null;
+    return { key: data.paused_step, move: typeof data.paused_move === "number" ? data.paused_move : 0 };
+  } catch {
+    return null;
+  }
+}
+
+/** Saves (or clears, with null) the paused step. False when it could not be kept (the columns not migrated yet). */
+export async function saveSetupPause(tenantId: string, userId: string, pause: SetupPause | null): Promise<boolean> {
+  try {
+    const { error } = await db()
+      .from("tenant_setup_guide")
+      .upsert({ tenant_id: tenantId, user_id: userId, paused_step: pause?.key ?? null, paused_move: pause ? pause.move : null }, { onConflict: "tenant_id,user_id" });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
 /** A member's walkthrough, once finished, is stamped like the owner's and does not come back. */
 export async function recordMemberSetupFinished(tenantId: string, userId: string, state: SetupGuideState): Promise<void> {
   if (state.finishedAt) return;

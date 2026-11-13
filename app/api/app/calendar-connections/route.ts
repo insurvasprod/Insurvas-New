@@ -10,6 +10,7 @@ import {
   startCalendarConnection,
   syncCalendarBusy,
 } from "@/lib/appointments/linkedCalendars";
+import { pullMeetingLengths } from "@/lib/appointments/calendarMirror";
 import { anyRoleHasPermission } from "@/lib/tenantAuth/permissions";
 import { contextRoles } from "@/lib/tenantAuth/requireTenant";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
@@ -25,6 +26,9 @@ const CALENDAR_ROLES = ["owner", "producer", "assistant"] as const;
 const postSchema = z.discriminatedUnion("action", [
   z.object({ action: z.literal("connect"), provider: z.enum(["google", "microsoft"]), userId: z.string().uuid() }).strict(),
   z.object({ action: z.literal("sync"), id: z.string().uuid() }).strict(),
+  // The calendar page's Refresh: read this person's linked Google calendar now (busy time and the
+  // lengths of our meetings), rather than waiting for the 15-minute pass.
+  z.object({ action: z.literal("refresh"), userId: z.string().uuid() }).strict(),
 ]);
 
 export async function GET() {
@@ -54,6 +58,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ url });
     }
 
+    if (parsed.data.action === "refresh") {
+      const userId = parsed.data.userId;
+      if (auth.context.role !== "owner" && userId !== auth.context.userId)
+        return NextResponse.json({ error: "You can only refresh your own calendar.", code: "not_your_calendar" }, { status: 403 });
+      const { connections } = await listCalendarConnections(auth.context.tenantId);
+      const theirs = connections.filter((item) => item.userId === userId && (item.status === "connected" || item.status === "error"));
+      for (const connection of theirs) await syncCalendarBusy(connection.id).catch(() => undefined);
+      const lengths = await pullMeetingLengths({ tenantId: auth.context.tenantId, userId });
+      return NextResponse.json({ ok: true, linked: theirs.length, lengthsChanged: lengths.changed });
+    }
+
     const syncId = parsed.data.id;
     const { connections } = await listCalendarConnections(auth.context.tenantId);
     const connection = connections.find((item) => item.id === syncId);
@@ -61,7 +76,8 @@ export async function POST(request: NextRequest) {
     if (auth.context.role !== "owner" && connection.userId !== auth.context.userId)
       return NextResponse.json({ error: "You can only refresh your own calendar.", code: "not_your_calendar" }, { status: 403 });
     const busy = await syncCalendarBusy(connection.id);
-    return NextResponse.json({ ok: true, busy });
+    const lengths = await pullMeetingLengths({ tenantId: auth.context.tenantId, userId: connection.userId }).catch(() => ({ changed: 0 }));
+    return NextResponse.json({ ok: true, busy, lengthsChanged: lengths.changed });
   } catch (error) {
     if (error instanceof CalendarProviderNotConfiguredError)
       return NextResponse.json({ error: error.message, code: "provider_not_configured", missing: error.missing }, { status: 503 });

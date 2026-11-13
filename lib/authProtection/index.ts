@@ -80,19 +80,23 @@ export async function checkLoginAllowed(
   request: Request,
   factor: LoginFactor = "password",
 ): Promise<LoginProtectionResult> {
-  const settings = await config();
   const ip = callerIp(request.headers);
   const key = scopeKey(actorType, email, ip, factor);
-  const lockoutThreshold = lockoutThresholdFor(factor, settings.lockoutThreshold);
   const supabase = getSupabaseServiceClient();
 
-  const { data: lockout, error: lockoutError } = await supabase
-    .from("rate_limits")
-    .select("hits, window_start")
-    .eq("bucket_key", lockoutKey(key))
-    .order("window_start", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ hits: number; window_start: string }>();
+  // The settings and the lockout row are independent reads, so they go out together (sign-in speed,
+  // 2026-11-13). Nothing is claimed until both are back.
+  const [settings, { data: lockout, error: lockoutError }] = await Promise.all([
+    config(),
+    supabase
+      .from("rate_limits")
+      .select("hits, window_start")
+      .eq("bucket_key", lockoutKey(key))
+      .order("window_start", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ hits: number; window_start: string }>(),
+  ]);
+  const lockoutThreshold = lockoutThresholdFor(factor, settings.lockoutThreshold);
   if (lockoutError) {
     console.error("[login-protection] lockout check failed", lockoutError.message);
     // Login protection is fail-closed: bypassing a security control is worse than briefly making

@@ -31,7 +31,7 @@ export default async function AccountingSettingsPage({ searchParams }: { searchP
     // The one Settings layout: header, breadcrumb and menu come from the frame (settings-shell plan,
     // Task 6); this page keeps its gates above and draws only its board.
     <SettingsRouteFrame sectionId="accounting">
-      <AccountingSettingsBody loaded={loaded} canEdit={guard.role === "owner" && guard.entitlement.access !== "read_only"} canSeeHistory={guard.role === "owner"} initialTab={initialTab} />
+      <AccountingSettingsBody loaded={loaded} canEdit={guard.role === "owner" && guard.entitlement.access !== "read_only"} canSeeHistory={guard.role === "owner"} readOnlyWhy={guard.role !== "owner" ? "owner" : guard.entitlement.access === "read_only" ? "paused" : undefined} initialTab={initialTab} />
     </SettingsRouteFrame>
   );
 }
@@ -59,13 +59,13 @@ type Loaded =
   | { ok: true; settings: Awaited<ReturnType<typeof loadAccountingSettings>>; changes: Awaited<ReturnType<typeof withNames>>; accounts: Awaited<ReturnType<typeof listAccounts>> }
   | { ok: false; error: unknown };
 
-async function AccountingSettingsBody({ loaded, canEdit, canSeeHistory, initialTab }: { loaded: Promise<Loaded>; canEdit: boolean; canSeeHistory: boolean; initialTab: Tab }) {
+async function AccountingSettingsBody({ loaded, canEdit, canSeeHistory, readOnlyWhy, initialTab }: { loaded: Promise<Loaded>; canEdit: boolean; canSeeHistory: boolean; readOnlyWhy?: "owner" | "paused"; initialTab: Tab }) {
   const result = await loaded;
   if (!result.ok && !(result.error instanceof SettingsError)) throw result.error;
   return (
       <div className="flex min-h-0 flex-grow flex-col gap-4">
       {result.ok ? (
-        <AccountingSettingsBoard initial={result.settings} locked={LOCKED} changes={result.changes} accounts={result.accounts} canEdit={canEdit} canSeeHistory={canSeeHistory} initialTab={initialTab} />
+        <AccountingSettingsBoard initial={result.settings} locked={LOCKED} changes={result.changes} accounts={result.accounts} canEdit={canEdit} canSeeHistory={canSeeHistory} readOnlyWhy={readOnlyWhy} initialTab={initialTab} />
       ) : (
         <TableCard><EmptyState title="Not switched on yet" hint={(result.error as SettingsError).message ?? ""} /></TableCard>
       )}

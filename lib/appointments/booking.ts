@@ -92,6 +92,9 @@ export const BOOKING_REFUSALS: Record<string, readonly [number, string]> = {
     503,
     "The state calling rules are out of date, so no call can be booked until the platform refreshes them.",
   ],
+  // A longer meeting (changeAppointmentLength) that would run into the agent's next booking.
+  APPOINTMENT_LENGTH_OVERLAPS: [409, "That length runs into the agent's next appointment. Choose a shorter length or move the meeting."],
+  APPOINTMENT_LENGTH_INVALID: [400, "Choose a length between 5 minutes and 8 hours."],
   // The race. LA-2.11 criterion 1 is "one succeeds, one is told it went" — so this message says
   // the slot went, not that something failed.
   APPOINTMENT_SLOT_TAKEN: [409, "That slot was taken while you were booking it. Choose another."],
@@ -153,6 +156,26 @@ export async function rescheduleAppointment(input: {
     p_starts_at_utc: input.startsAtUtc,
   });
   if (result.error) throw new Error(result.error.message);
+}
+
+/**
+ * One meeting's length, changed on its own (owner, 2026-11-13). Only a booked or confirmed meeting
+ * that has not started. The table's trigger moves its end and occupied range; the exclusion
+ * constraint refuses a length that runs into the agent's next booking (23P01), which is said as such.
+ */
+export async function changeAppointmentLength(input: { tenantId: string; appointmentId: string; durationMinutes: number }): Promise<void> {
+  if (!Number.isInteger(input.durationMinutes) || input.durationMinutes < 5 || input.durationMinutes > 480) throw new Error("APPOINTMENT_LENGTH_INVALID");
+  type Filter = PromiseLike<Result<unknown>> & { eq(column: string, value: unknown): Filter };
+  const db = getSupabaseServiceClient() as unknown as { from(table: string): { update(values: Record<string, unknown>): Filter } };
+  const facts = await appointmentFacts(input.tenantId, input.appointmentId);
+  if (!facts) throw new Error("APPOINTMENT_NOT_FOUND");
+  if (facts.status !== "booked" && facts.status !== "confirmed") throw new Error("APPOINTMENT_NOT_ACTIVE");
+  if (Date.parse(facts.startsAtUtc) <= Date.now()) throw new Error("APPOINTMENT_ALREADY_STARTED");
+  const saved = await db.from("tenant_appointments").update({ duration_minutes: input.durationMinutes }).eq("tenant_id", input.tenantId).eq("id", input.appointmentId);
+  if (saved.error) {
+    if (saved.error.code === "23P01" || /exclusion|conflicting key/i.test(saved.error.message)) throw new Error("APPOINTMENT_LENGTH_OVERLAPS");
+    throw new Error(saved.error.message);
+  }
 }
 
 /**

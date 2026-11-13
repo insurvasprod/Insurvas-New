@@ -694,7 +694,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
     : `Checks Do Not Call, litigators, duplicates and phone numbers for ${(validation?.validRows ?? fileRows).toLocaleString()} rows, then opens the review. Nothing is written yet.`;
   const continueControl = <span className="inline-flex items-center" title={continueNote}>
     <span id="import-continue-note" className="sr-only">{continueNote}</span>
-    <Button type="submit" form="lead-import-form" disabled={Boolean(blockedReason) || saving} aria-describedby="import-continue-note">
+    <Button type="submit" data-guide="lead-import-continue" form="lead-import-form" disabled={Boolean(blockedReason) || saving} aria-describedby="import-continue-note">
       {saving ? "Checking…" : <>Continue to Review<ArrowRight aria-hidden /></>}
     </Button>
   </span>;

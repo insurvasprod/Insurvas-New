@@ -126,7 +126,7 @@ async function deliverOne(delivery: Delivery, subscription: Subscription, now: D
       tenantId: subscription.tenant_id,
       kind: "webhook_disabled",
       title: `Webhook "${subscription.label}" was turned off`,
-      body: `Deliveries to ${new URL(subscription.target_url).host} kept failing (${error ?? "no answer"}). Fix the receiver, then resume it in Settings › API keys & webhooks.`,
+      body: `Deliveries to ${new URL(subscription.target_url).host} kept failing (${error ?? "no answer"}). Fix the receiver, then resume it in Settings › Integrations.`,
       link: "/app/settings#integrations",
       sourceKey: `webhook-disabled:${subscription.id}:${now.toISOString().slice(0, 13)}`,
       roles: ["owner"],

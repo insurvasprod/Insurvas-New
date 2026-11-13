@@ -669,14 +669,14 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
     : !vendors.some((vendor) => vendorTakesCampaigns(vendor.status)) ? "Set a vendor to active first — a retired vendor takes no new campaigns" : null);
   const newCampaignFor = (vendor: Vendor | null, outline = false) => {
     const no = noVendorForCampaign ?? (vendor && !takes(vendor.id) ? `Set ${vendor.name} to active first to add a campaign from it` : null);
-    return <Button type="button" variant={outline ? "outline" : "default"} disabled={no !== null} title={no ?? (vendor ? `A new campaign from ${vendor.name}` : undefined)} onClick={() => openNewCampaign(vendor?.id)}><Plus aria-hidden="true" />New Campaign</Button>;
+    return <Button type="button" data-guide="campaign-new" variant={outline ? "outline" : "default"} disabled={no !== null} title={no ?? (vendor ? `A new campaign from ${vendor.name}` : undefined)} onClick={() => openNewCampaign(vendor?.id)}><Plus aria-hidden="true" />New Campaign</Button>;
   };
   // At the plan's cap, Activate is held here rather than refused by the server after the click.
   const activateBlocked = locked ?? (atActiveLimit && activeLimit ? `Your plan allows ${activeLimit.limit} active campaign${activeLimit.limit === 1 ? "" : "s"}. Pause one, or see plans.` : null);
 
   // The two create actions, just before Refresh in whichever table is showing (owner 2026-10-28). New campaign is the one primary.
   const createActions = <>
-    <Button type="button" variant="outline" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Store aria-hidden="true" />New Vendor</Button>
+    <Button type="button" data-guide="campaign-vendor-new" variant="outline" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Store aria-hidden="true" />New Vendor</Button>
     {newCampaignFor(pickedVendor)}
   </>;
 
@@ -1012,7 +1012,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
           </Field>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setNewCampaign(null)}>Cancel</Button>
-            <Button type="button" disabled={!newCampaign.vendor_id || !newCampaign.name.trim() || nameTaken || creating} onClick={() => void createCampaign()}><Plus aria-hidden="true" />{creating ? "Creating…" : "Create campaign"}</Button>
+            <Button type="button" data-guide="campaign-create" disabled={!newCampaign.vendor_id || !newCampaign.name.trim() || nameTaken || creating} onClick={() => void createCampaign()}><Plus aria-hidden="true" />{creating ? "Creating…" : "Create campaign"}</Button>
           </DialogFooter>
         </>}
       </DialogContent>

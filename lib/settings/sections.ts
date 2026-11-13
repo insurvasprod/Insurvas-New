@@ -189,10 +189,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
 
   // ── Integrations ────────────────────────────────────────────────────────────────────────────────
   {
-    group: "Integrations", id: "integrations", label: "API keys & webhooks", sort_order: 10, owned_by_module: "LA-8.7", required_roles: OWNER,
-    description: "Keys that let another system post leads in or read your book, and webhooks that send policy and commission events out.",
-    short: "Integration keys, their scopes and last use, and signed webhooks.",
-    search_keywords: ["api", "api key", "integration", "webhook", "zapier", "developer", "token", "signing secret"],
+    group: "Integrations", id: "integrations", label: "Integrations", sort_order: 10, owned_by_module: "LA-8.7", required_roles: OWNER,
+    description: "Everything connected to Insurvas in one place: apps that use an API key, webhooks that send policy and commission events out, your lead vendors and the browser extension.",
+    short: "Who's connected, API keys, webhooks and the developer docs.",
+    search_keywords: ["api", "api key", "api keys", "integration", "integrations", "webhook", "webhooks", "zapier", "make", "google sheets", "data warehouse", "developer", "developer docs", "token", "signing secret", "rotate key", "revoke key", "deliveries", "connected apps"],
   },
   { group: "Integrations", id: "sales-extension", label: "Browser extension", sort_order: 20, owned_by_module: "LA-3.12", required_feature: "applications", required_roles: OWNER, description: "The extension's install state, the carrier sites it may work on, and its recent access grants.", search_keywords: ["extension", "chrome"] },
 

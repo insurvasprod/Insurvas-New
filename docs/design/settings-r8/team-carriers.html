@@ -1,0 +1,804 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Team and Carriers</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Board-only extras, built from kit tokens only. */
+.lnk{color:var(--accent-ink);font-weight:500;text-decoration:none}
+.sp{flex:1}
+.body.col{flex-direction:column}
+.side{width:340px;flex:none;display:flex;flex-direction:column;gap:12px;min-height:0}
+.stack{flex:1;display:flex;flex-direction:column;gap:12px;min-width:0;min-height:0}
+.r-end{text-align:right}
+td.r-end,th.r-end{text-align:right}
+.seg.sm span{font-size:12px;padding:4px 10px}
+.input.sm{height:30px;font-size:12px}
+.card tbody td,.sheet tbody td{max-width:260px;overflow:hidden;text-overflow:ellipsis}
+td .who{display:inline-flex;align-items:center;gap:10px}
+td .who b{color:var(--ink);font-weight:600}
+td .who small{color:var(--muted);font-size:12px}
+.av.sm{width:22px;height:22px;font-size:12px}
+.av.lg{width:40px;height:40px;font-size:14px}
+.sheet .tabs{flex:none;padding:0 18px;gap:20px}
+.sheet-sub{font-size:12px;color:var(--muted);padding:0 18px 10px;margin-top:-6px}
+.sh-top{border-bottom:1px solid var(--rule)}
+.sh-top .sheet-h{border-bottom:0}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:10px 16px;align-items:center;font-size:14px;margin:0}
+.kv dt{font-size:12px;color:var(--muted);margin:0}
+.kv dd{margin:0;color:var(--ink);min-width:0}
+.choice{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border);border-radius:12px;margin-bottom:6px;background:var(--card)}
+.choice.on{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary);background:var(--primary-soft)}
+.choice b{display:block;font-size:14px;color:var(--ink);font-weight:600}
+.choice small{display:block;font-size:12px;color:var(--muted)}
+.choice .end{margin-left:auto;font-size:12px;color:var(--muted)}
+.trow{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--rule)}
+.trow:last-child{border-bottom:0}
+.trow b{display:block;font-size:14px;font-weight:500;color:var(--ink)}
+.trow small{display:block;font-size:12px;color:var(--muted)}
+.trow .end{margin-left:auto;display:flex;align-items:center;gap:8px}
+.states-chips{display:flex;gap:6px;flex-wrap:wrap}
+.sc{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:8px;border:1px solid var(--border);font-size:12px;font-weight:600;color:var(--ink);background:var(--card)}
+.sc small{font-weight:400;color:var(--muted)}
+.sc.add{border-style:dashed;color:var(--accent-ink)}
+.work{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.dialog .row.end{justify-content:flex-end;margin-top:14px}
+.dialog.wz{width:720px;padding:0;display:flex;flex-direction:column;max-height:640px}
+.wz-h{padding:18px 22px 14px;border-bottom:1px solid var(--rule)}
+.wz-h h4{margin:0 0 2px;font-size:16px}
+.wz-h p{margin:0 0 14px;font-size:12px;color:var(--muted)}
+.wz-b{padding:18px 22px;overflow:auto;flex:1;min-height:0}
+.wz-f{display:flex;gap:8px;align-items:center;padding:12px 22px;border-top:1px solid var(--rule)}
+.pickgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.pickgrid .choice{margin:0}
+.fm{display:grid;grid-template-columns:minmax(0,1fr) 24px minmax(0,1fr);gap:6px 8px;align-items:center;font-size:12px}
+.fm .c{border:1px solid var(--border);border-radius:8px;padding:5px 9px;color:var(--ink);background:var(--card);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fm .c.miss{border-style:dashed;color:var(--muted)}
+.fm i{font-style:normal;color:var(--muted);text-align:center}
+.det summary{cursor:pointer;color:var(--accent-ink);font-weight:600;font-size:12px}
+/* state matrix */
+.mx th,.mx td{text-align:center}
+.mx th:first-child,.mx td:first-child{text-align:left}
+.mx td.y{color:var(--accent-ink);font-weight:600}
+.mx td.n{color:var(--muted)}
+.mx td.sel{box-shadow:inset 0 0 0 2px var(--primary)}
+.mx tfoot td{font-size:12px;color:var(--muted);padding:8px 14px;background:var(--band)}
+.pop{position:absolute;z-index:7;width:300px;background:var(--card);border:1px solid var(--card-border);border-radius:14px;box-shadow:var(--overlay);padding:14px 16px}
+.pop h4{margin:0 0 6px;font-size:14px}
+.facts{margin:0;padding:0;list-style:none}
+.facts li{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.facts li:last-child{border-bottom:0}
+.facts li i{font-style:normal;width:22px;height:22px;flex:none;border-radius:50%;background:var(--band);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--muted)}
+.dev{display:flex;align-items:center;gap:12px}
+.dev b{display:block;font-size:16px;color:var(--ink)}
+.dev small{font-size:12px;color:var(--muted)}
+/* end-of-board notes */
+.changes{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.changes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px 16px;font-size:14px}
+.changes h3{font-size:16px;margin:0 0 6px}
+.changes ul{margin:0;padding-left:18px}
+.changes li{margin:3px 0}
+.verdict{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.verdict > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px 16px;font-size:14px}
+.verdict > div.yes{border:2px solid var(--primary)}
+.verdict b{display:block;font-size:16px;margin-bottom:4px}
+@media (max-width:1100px){.side{width:auto}.changes,.verdict{grid-template-columns:1fr}.body{flex-direction:column}.pickgrid{grid-template-columns:1fr}}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Team &amp; access · Carriers · Browser extension</h1>
+  <p class="lead">Three Agency pages that answer "who works here, what may they touch, and which carriers can they sell". Today Team is a stat strip over a paged table with two dialogs; Carriers offers three different ways to edit the same contracts (a setup tab, a carrier card dialog and a states tab) plus a hidden Field maps tab; the Browser extension page is four stacked cards. This wave-3 board shows one recommended design for each.</p>
+  <div class="notes">
+    <div><b>1 · Seats take a whole strip</b>Seats, Pending invites, Buffer seats and Setter seats are four big tiles above the table, pushing the people down. They are a sentence's worth of facts.</div>
+    <div><b>2 · Leaving someone is a dead end</b>Manage only changes role or suspends. Nobody asks what happens to their 42 leads, callbacks and open cases, so work is orphaned when an agent leaves.</div>
+    <div><b>3 · One carrier, three editors</b>"Set up %" edits the contract, the carrier card dialog edits it again, and "States" edits appointments a third way. The owner can't tell which one wins.</div>
+    <div><b>4 · Technical values up front</b>Writing numbers sit in the main grid and the field-map tab is hidden behind a flag, so the one thing that breaks commission imports is the hardest to find.</div>
+    <div><b>5 · The extension page is noise</b>An install card, a carrier-sites table, a paged grants table with Revoke in every row and a facts card, all at the same weight. "Is it working, and who has it?" takes a scroll.</div>
+    <div><b>6 · Licensed states live in three places</b>The person's row, the States tab and the carrier appointments. This board keeps one home: the person sheet, which reads appointments.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">One recommended design per page · L / D theme</span>
+  </div>
+
+  <div>
+  <!-- ═══════════════════════ TEAM & ACCESS ═══════════════════════ -->
+    <div class="sec"><h2>1 · Team &amp; access · one line a person</h2><span>seats ride the status line; colour only in the status chip; a person opens as a right sheet</span></div>
+    <div class="app tall" data-page="Team &amp; access">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Team &amp; access</h3><nav class="tabs"><a class="on">People <span class="c">17</span></a><a>Invites <span class="c">2</span></a><a>Deactivated <span class="c">3</span></a></nav><div class="acts"><span class="btn hl">+ Invite someone</span></div></div>
+        <div class="status"><span class="dot"></span>17 of 25 seats used · 2 invites waiting · buffer seats 2 of 2 · setter seats 3 of 5 · <a class="lnk">Plan &amp; billing</a></div>
+        <div class="body col">
+          <div class="card flex1">
+            <div class="card-h"><b>People</b><div class="r"><span class="seg sm"><span class="on">All 17</span><span>Agents 9</span><span>Setters 3</span><span>Office 5</span></span><span class="input sm ph" style="width:200px">Find a person</span></div></div>
+            <div class="scroll"><table>
+              <thead><tr><th>Person</th><th>Access</th><th>Licensed in</th><th>Last seen</th><th>Status</th><th></th></tr></thead>
+              <tbody>
+                <tr><td><span class="who"><span class="av">EE</span><b>Elena Ellery</b><small>Owner · you</small></span></td><td>Everything</td><td>TX, OK, LA, FL</td><td>Now</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">RF</span><b>Rob Fields</b></span></td><td>Admin</td><td>TX</td><td>1 h ago</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">MV</span><b>Marisol Vance</b><small>Team lead</small></span></td><td>Agent</td><td>TX, OK, FL, GA</td><td>Now</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">DR</span><b>Dana Ruiz</b><small>Team lead</small></span></td><td>Agent</td><td>TX, LA, MS</td><td>Now</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr class="h"><td><span class="who"><span class="av">DO</span><b>Devin Okafor</b></span></td><td>Agent</td><td>TX, OK</td><td>2 days ago</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">AW</span><b>Andre Wallace</b></span></td><td>Agent</td><td>TX, AL</td><td>5 h ago</td><td><span class="chip warn">License ends Dec 4</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">KB</span><b>Keisha Bryant</b></span></td><td>Setter · dial and book</td><td class="muted">Not needed</td><td>Now</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">TN</span><b>Tom Nguyen</b></span></td><td>Setter · dial and book</td><td class="muted">Not needed</td><td>20 min ago</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">PS</span><b>Priya Shah</b></span></td><td>Intake · leads and inbound</td><td class="muted">Not needed</td><td>3 h ago</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">BC</span><b>Ben Carter</b><small>Buffer agent</small></span></td><td>Agent</td><td>TX</td><td>Now</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">LO</span><b>Luis Ortega</b></span></td><td>Accounting</td><td class="muted">Not needed</td><td>Yesterday</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><span class="who"><span class="av">GK</span><b>Grace Kim</b><small>Buffer agent</small></span></td><td>Retention</td><td>TX, OK</td><td>Now</td><td><span class="chip">Suspended</span></td><td class="muted">›</td></tr>
+              </tbody>
+            </table></div>
+            <div class="card-f small muted">Showing 12 of 17 · scroll for more · "Now" means Insurvas was open in the last two minutes</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>2 · Person sheet · access, licences, open work</h2><span>everything about one person; licensed states are read from carrier appointments and edited only here</span></div>
+    <div class="app tall" data-page="Team &amp; access">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Team &amp; access</h3><nav class="tabs"><a class="on">People <span class="c">17</span></a><a>Invites <span class="c">2</span></a><a>Deactivated <span class="c">3</span></a></nav><div class="acts"><span class="btn hl">+ Invite someone</span></div></div>
+        <div class="status warn"><span class="dot"></span>Devin Okafor · 1 unsaved change</div>
+        <div class="body col"><div class="card flex1"><div class="scroll"><table>
+          <thead><tr><th>Person</th><th>Access</th><th>Licensed in</th></tr></thead>
+          <tbody>
+            <tr><td><span class="who"><span class="av">MV</span><b>Marisol Vance</b></span></td><td>Agent</td><td>TX, OK, FL, GA</td></tr>
+            <tr><td><span class="who"><span class="av">DR</span><b>Dana Ruiz</b></span></td><td>Agent</td><td>TX, LA, MS</td></tr>
+            <tr class="s"><td><span class="who"><span class="av">DO</span><b>Devin Okafor</b></span></td><td>Agent</td><td>TX, OK</td></tr>
+            <tr><td><span class="who"><span class="av">AW</span><b>Andre Wallace</b></span></td><td>Agent</td><td>TX, AL</td></tr>
+          </tbody></table></div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><span class="av lg">DO</span><div><b>Devin Okafor</b><div class="small muted">devin@elleryfields.com · joined Mar 3 · last seen 2 days ago</div></div><span class="chip ok" style="margin-left:8px">Active</span><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="fsec"><h4>Access</h4><p>One role; it decides the pages they see and the leads they're given.</p>
+            <div class="choice on"><span class="radio on"></span><div><b>Agent</b><small>Leads, dialer, calendar and quoting</small></div><span class="end">uses an agent seat</span></div>
+            <div class="choice"><span class="radio"></span><div><b>Setter</b><small>Dial and book only; never given a lead that needs a licence</small></div><span class="end">setter seat · 2 free</span></div>
+            <div class="choice"><span class="radio"></span><div><b>Intake</b><small>Leads, imports and inbound; no dialer</small></div></div>
+            <div class="small muted" style="margin:6px 0 10px"><a class="lnk">Show 3 more roles</a> · Admin, Accounting, Retention</div>
+            <div class="trow"><div><b>Team lead</b><small>Sees their team's calls and is told when a transfer escalates</small></div><span class="end"><span class="switch"></span></span></div>
+            <div class="trow"><div><b>Buffer agent</b><small>Takes inbound overflow · no buffer seats left</small></div><span class="end"><span class="switch"></span></span></div>
+          </div>
+          <div class="fsec"><h4>Licensed in</h4><p>Read from his carrier appointments. Add a state he's licensed in but not yet appointed.</p>
+            <div class="states-chips"><span class="sc">TX <small>3 carriers</small></span><span class="sc">OK <small>2 carriers</small></span><span class="sc">LA <small>licence only</small></span><span class="sc add">+ Add a state</span></div>
+            <div class="help">Licence ends: TX Jun 30, 2027 · OK Feb 14, 2027 · LA Sep 1, 2027</div>
+          </div>
+          <div class="fsec"><h4>Open work</h4><p>What Devin holds right now. Hand it over before he leaves or changes role.</p>
+            <div class="work"><div class="tile"><small>Leads</small><b>42</b></div><div class="tile"><small>Callbacks</small><b>6</b></div><div class="tile"><small>Open cases</small><b>3</b></div><div class="tile"><small>Policies on his book</small><b>118</b></div></div>
+            <div class="row"><label class="l" style="margin:0">Hand over to</label><div class="input" style="width:240px"><span class="av sm">DR</span>Dana Ruiz<span class="end">▾</span></div><span class="btn o sm">Hand over now</span></div>
+            <div class="help">Policies stay on his book for commission history; servicing moves to the person you pick.</div>
+          </div>
+        </div>
+        <div class="sheet-f"><span class="btn danger" style="margin-right:auto">Deactivate…</span><span class="btn g">Suspend</span><span class="btn g">Cancel</span><span class="btn p">Save</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>3 · Invite sheet</h2><span>who, what they do, where they're licensed; the seat cost is said before you send</span></div>
+    <div class="app" data-page="Team &amp; access">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Team &amp; access</h3><nav class="tabs"><a class="on">People <span class="c">17</span></a><a>Invites <span class="c">2</span></a><a>Deactivated <span class="c">3</span></a></nav><div class="acts"><span class="btn hl">+ Invite someone</span></div></div>
+        <div class="status"><span class="dot"></span>17 of 25 seats used · 2 invites waiting</div>
+        <div class="body col"><div class="card flex1"><div class="card-b muted small">People table as in screen 1</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <div class="sheet-h"><b>Invite someone</b><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="fgrid"><div><label class="l">First and last name</label><div class="input">Jordan Pierce</div></div><div><label class="l">Work email</label><div class="input focus">jordan@elleryfields.com</div></div></div>
+          <div class="fsec" style="margin-top:12px"><h4>What they'll do</h4>
+            <div class="choice on"><span class="radio on"></span><div><b>Agent</b><small>Leads, dialer, calendar and quoting</small></div></div>
+            <div class="choice"><span class="radio"></span><div><b>Setter</b><small>Dial and book only</small></div></div>
+            <div class="choice"><span class="radio"></span><div><b>Intake</b><small>Leads, imports and inbound; no dialer</small></div></div>
+            <div class="small"><a class="lnk">More roles</a></div>
+          </div>
+          <div class="fsec"><h4>Licensed in</h4><p>Optional. You can add these after they accept.</p>
+            <div class="states-chips"><span class="sc">TX</span><span class="sc">OK</span><span class="sc add">+ Add a state</span></div></div>
+        </div>
+        <div class="sheet-f"><span class="small muted" style="margin-right:auto">Uses 1 of 8 free agent seats · link lasts 7 days</span><span class="btn g">Cancel</span><span class="btn p">Send invite</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>4 · Deactivate · confirm</h2><span>says what happens to their work, their seat and their history before anything changes</span></div>
+    <div class="app" data-page="Team &amp; access">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Team &amp; access</h3><nav class="tabs"><a class="on">People <span class="c">17</span></a><a>Invites</a><a>Deactivated</a></nav></div>
+        <div class="status"><span class="dot"></span>17 of 25 seats used</div>
+        <div class="body col"><div class="card flex1"><div class="card-b muted small">People table</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog" style="width:480px">
+        <h4>Deactivate Devin Okafor?</h4>
+        <p>He can't sign in from now on. His seat is freed for someone new.</p>
+        <div class="trow"><span class="check on"></span><div><b>Move his 42 leads and 6 callbacks to Dana Ruiz</b></div></div>
+        <div class="trow"><span class="check on"></span><div><b>Move his 3 open cases to Dana Ruiz</b><small>Carrier writing stays under Devin's number until the case is issued</small></div></div>
+        <div class="trow"><span class="check"></span><div><b>End his browser-extension access</b><small>Done anyway when he's deactivated</small></div></div>
+        <p class="small muted" style="margin:10px 0 0">His 118 policies and commission history stay. You can reactivate him from Deactivated.</p>
+        <div class="row end"><span class="btn g">Cancel</span><span class="btn danger">Deactivate Devin</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>5 · Team · empty, loading, error</h2></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>People</b></div><div class="empty"><span class="ic">+</span><b>It's just you so far</b><p>Invite agents, setters and office staff. 24 seats are free on your plan.</p><span class="btn o">Invite someone</span></div></div>
+      <div class="card"><div class="card-h"><b>People</b></div><div class="card-b"><div class="skel" style="width:40%"></div><div class="skel"></div><div class="skel" style="width:80%"></div><div class="skel"></div><div class="skel" style="width:65%"></div></div></div>
+      <div class="card"><div class="card-b">
+        <div class="status bad"><span class="dot"></span>Every seat is in use. Free one or add seats before this invite can go. <a class="lnk">Add seats</a></div>
+        <div class="status bad"><span class="dot"></span>Couldn't save Devin's access. Nothing changed. <a class="lnk">Try again</a></div>
+        <div class="status warn"><span class="dot"></span>You can't change your own access. Another admin or the owner can.</div>
+      </div></div>
+    </div>
+
+  <!-- ═══════════════════════ CARRIERS ═══════════════════════ -->
+    <div class="sec"><h2>6 · Carriers · first run is the setup wizard</h2><span>with no carriers yet, the page is the three steps; once done it becomes the table</span></div>
+    <div class="app tall" data-page="Carriers">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Carriers</h3><div class="acts"><span class="btn g">Skip for now</span></div></div>
+        <div class="status warn"><span class="dot"></span>No carriers yet · quotes, appointments and commission files need at least one</div>
+        <div class="body col">
+          <div class="card flex1">
+            <div class="card-h"><div class="steps" style="flex:1"><span class="on"><i>1</i>Your carriers</span><em></em><span><i>2</i>Your commission %</span><em></em><span><i>3</i>States you're appointed in</span></div></div>
+            <div class="scroll"><div class="card-b">
+              <div class="row" style="margin-bottom:12px"><b style="font-size:16px">Which carriers do you sell?</b><span class="sp"></span><span class="input sm ph" style="width:240px">Find a carrier</span></div>
+              <div class="pickgrid">
+                <div class="choice on"><span class="check on"></span><div><b>Mutual of Omaha</b><small>Final expense, term, IUL, Med Supp</small></div></div>
+                <div class="choice on"><span class="check on"></span><div><b>Aetna / CVS</b><small>Final expense, Med Supp</small></div></div>
+                <div class="choice on"><span class="check on"></span><div><b>American Amicable</b><small>Final expense, mortgage protection</small></div></div>
+                <div class="choice on"><span class="check on"></span><div><b>Corebridge Financial</b><small>Guaranteed issue, SIWL</small></div></div>
+                <div class="choice on"><span class="check on"></span><div><b>Transamerica</b><small>Final expense, term</small></div></div>
+                <div class="choice"><span class="check"></span><div><b>Americo</b><small>Final expense, term, mortgage</small></div></div>
+                <div class="choice"><span class="check"></span><div><b>Royal Neighbors of America</b><small>Final expense</small></div></div>
+                <div class="choice"><span class="check"></span><div><b>Foresters Financial</b><small>Final expense, term</small></div></div>
+                <div class="choice"><span class="check"></span><div><b>Gerber Life</b><small>Guaranteed issue</small></div></div>
+              </div>
+              <p class="small muted" style="margin:12px 0 0">Can't find yours? <a class="lnk">Ask Insurvas to add it</a> · usually within a day.</p>
+            </div></div>
+            <div class="card-f"><span class="small muted">5 picked</span><span class="sp"></span><span class="btn p">Next: your commission %</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>7 · Carriers · one table</h2><span>one line a carrier; contract health is the only colour; the hidden Field maps tab is gone (it lives in each carrier's sheet)</span></div>
+    <div class="app" data-page="Carriers">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Carriers</h3><nav class="tabs"><a class="on">Carriers <span class="c">5</span></a><a>States</a></nav><div class="acts"><span class="btn hl">+ Add carrier</span></div></div>
+        <div class="status warn"><span class="dot"></span>5 carriers · appointed in 9 states · Transamerica's commission file needs 2 columns matched</div>
+        <div class="body col">
+          <div class="card flex1">
+            <div class="scroll"><table>
+              <thead><tr><th>Carrier</th><th>Products</th><th class="r-end">Your % first year</th><th>Appointed in</th><th class="r-end">Writers</th><th>Last commission file</th><th>Contract</th><th></th></tr></thead>
+              <tbody>
+                <tr class="h"><td><b>Mutual of Omaha</b></td><td>Living Promise, Term Life Express +2</td><td class="r-end">105%</td><td>9 states</td><td class="r-end">4</td><td>Nov 7</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><b>Aetna / CVS</b></td><td>Accendo, Med Supp</td><td class="r-end">100%</td><td>7 states</td><td class="r-end">3</td><td>Nov 5</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><b>American Amicable</b></td><td>Senior Choice, Home Protector</td><td class="r-end">110%</td><td>8 states</td><td class="r-end">4</td><td>Nov 6</td><td><span class="chip ok">Active</span></td><td class="muted">›</td></tr>
+                <tr><td><b>Corebridge Financial</b></td><td>Guaranteed Issue WL, SIWL</td><td class="r-end">90%</td><td>3 states</td><td class="r-end">1</td><td class="muted">None yet</td><td><span class="chip info">2 appointments pending</span></td><td class="muted">›</td></tr>
+                <tr><td><b>Transamerica</b></td><td>FE Express, Trendsetter</td><td class="r-end">95%</td><td>6 states</td><td class="r-end">3</td><td>Oct 31</td><td><span class="chip warn">File needs matching</span></td><td class="muted">›</td></tr>
+              </tbody>
+            </table></div>
+            <div class="card-f small muted">Click a carrier to edit its contract, products, states and commission file in one place</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>8 · Carrier sheet · everything about one carrier</h2><span>contract, products, appointed states and the commission file in one scroll; writing numbers behind technical details</span></div>
+    <div class="app tall" data-page="Carriers">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Carriers</h3><nav class="tabs"><a class="on">Carriers <span class="c">5</span></a><a>States</a></nav><div class="acts"><span class="btn hl">+ Add carrier</span></div></div>
+        <div class="status"><span class="dot"></span>5 carriers · appointed in 9 states</div>
+        <div class="body col"><div class="card flex1"><div class="scroll"><table>
+          <thead><tr><th>Carrier</th><th>Appointed in</th><th>Contract</th></tr></thead>
+          <tbody><tr class="s"><td><b>Mutual of Omaha</b></td><td>9 states</td><td><span class="chip ok">Active</span></td></tr>
+          <tr><td><b>Aetna / CVS</b></td><td>7 states</td><td><span class="chip ok">Active</span></td></tr>
+          <tr><td><b>American Amicable</b></td><td>8 states</td><td><span class="chip ok">Active</span></td></tr></tbody></table></div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><span class="ic">M</span><div><b>Mutual of Omaha</b><div class="small muted">Contracted Feb 12, 2024 · through Integrity Marketing · 412 policies on the book</div></div><span class="chip ok" style="margin-left:8px">Active</span><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="fsec"><h4>Contract</h4><p>What Mutual of Omaha pays your agency. Producer splits live in Commissions.</p>
+            <div class="fgrid">
+              <div><label class="l">First-year commission</label><div class="input">105 <span class="end">%</span></div></div>
+              <div><label class="l">Renewal</label><div class="input">5 <span class="end">% years 2–10</span></div></div>
+              <div><label class="l">Advance</label><div class="input">9 months <span class="end">▾</span></div></div>
+              <div><label class="l">Chargeback window</label><div class="input">12 months <span class="end">▾</span></div></div>
+            </div>
+          </div>
+          <div class="fsec"><h4>Products you sell</h4>
+            <div class="row"><span class="tog on">Living Promise</span><span class="tog on">Term Life Express</span><span class="tog on">IUL Express</span><span class="tog on">Medicare Supplement</span><span class="tog">Guaranteed Advantage</span><span class="tog">Children's Whole Life</span></div>
+          </div>
+          <div class="fsec"><h4>Appointed states and writers</h4><p>Who may write Mutual of Omaha, and where.</p>
+            <table>
+              <thead><tr><th>Writer</th><th>Appointed in</th><th>Since</th></tr></thead>
+              <tbody>
+                <tr><td><span class="who"><span class="av sm">MV</span>Marisol Vance</span></td><td>TX, OK, FL, GA</td><td>Feb 2024</td></tr>
+                <tr><td><span class="who"><span class="av sm">DR</span>Dana Ruiz</span></td><td>TX, LA, MS</td><td>Apr 2024</td></tr>
+                <tr><td><span class="who"><span class="av sm">DO</span>Devin Okafor</span></td><td>TX, OK</td><td>Mar 2026</td></tr>
+                <tr><td><span class="who"><span class="av sm">EE</span>Elena Ellery</span></td><td>TX, OK, LA, FL</td><td>Feb 2024</td></tr>
+              </tbody>
+            </table>
+            <div class="row" style="margin-top:10px"><span class="btn sm o">+ Add a writer</span><a class="lnk small">See every carrier on the States matrix</a></div>
+            <details class="det" style="margin-top:12px"><summary>Show technical details · writing numbers</summary>
+              <dl class="kv" style="margin-top:8px"><dt>Marisol Vance</dt><dd class="mono">MOO-4471902</dd><dt>Dana Ruiz</dt><dd class="mono">MOO-4483315</dd><dt>Devin Okafor</dt><dd class="mono">MOO-5102278</dd><dt>Agency</dt><dd class="mono">MOO-AG-118844</dd></dl>
+            </details>
+          </div>
+          <div class="fsec"><h4>Commission file</h4><p>How we read Mutual of Omaha's statement. 14 of 14 columns matched · last file Nov 7, 212 rows.</p>
+            <div class="fm">
+              <span class="c">Policy Number</span><i>→</i><span class="c">Policy number</span>
+              <span class="c">Writing Agent</span><i>→</i><span class="c">Writer</span>
+              <span class="c">Comm Amt</span><i>→</i><span class="c">Commission paid</span>
+              <span class="c">Txn Type</span><i>→</i><span class="c">Advance · renewal · chargeback</span>
+            </div>
+            <div class="row" style="margin-top:10px"><span class="btn sm o">Open the full map</span><span class="btn sm g">Try it on a file</span></div>
+          </div>
+        </div>
+        <div class="sheet-f"><span class="btn danger" style="margin-right:auto">End contract…</span><span class="btn g">Cancel</span><span class="btn p">Save carrier</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>9 · Add carrier · step 2 of 3</h2><span>the same three steps as first run, as a short dialog: carrier → contract → states</span></div>
+    <div class="app tall" data-page="Carriers">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Carriers</h3><nav class="tabs"><a class="on">Carriers <span class="c">5</span></a><a>States</a></nav><div class="acts"><span class="btn hl">+ Add carrier</span></div></div>
+        <div class="status"><span class="dot"></span>5 carriers · appointed in 9 states</div>
+        <div class="body col"><div class="card flex1"><div class="card-b muted small">Carrier table</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog wz">
+        <div class="wz-h"><h4>Add Americo</h4><p>Takes a minute. You can change all of this later in Americo's sheet.</p>
+          <div class="steps"><span class="done"><i>✓</i>Carrier</span><em></em><span class="on"><i>2</i>Contract</span><em></em><span><i>3</i>States and writers</span></div></div>
+        <div class="wz-b">
+          <div class="fgrid">
+            <div><label class="l">Contracted through</label><div class="input">Integrity Marketing <span class="end">▾</span></div></div>
+            <div><label class="l">Contracted from</label><div class="input">Nov 12, 2026</div></div>
+            <div><label class="l">First-year commission</label><div class="input focus">100 <span class="end">%</span></div><div class="help">Ask your upline if unsure; most final-expense contracts are 80–120%</div></div>
+            <div><label class="l">Renewal</label><div class="input">3 <span class="end">%</span></div></div>
+          </div>
+          <div class="fsec" style="margin-top:14px"><h4>Products you'll sell</h4>
+            <div class="row"><span class="tog on">Eagle Premier final expense</span><span class="tog on">CBO term</span><span class="tog">HMS mortgage protection</span></div></div>
+        </div>
+        <div class="wz-f"><span class="btn g">Back</span><span class="sp"></span><span class="small muted">Step 2 of 3</span><span class="btn p">Next: states and writers</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>10 · States · the appointment matrix</h2><span>states down, carriers across; pick a writer to see only theirs; a cell opens who is appointed there</span></div>
+    <div class="app tall" data-page="Carriers">
+      <div class="main">
+        <div class="crumb">Settings › Agency</div>
+        <div class="head"><h3>Carriers</h3><nav class="tabs"><a>Carriers <span class="c">5</span></a><a class="on">States</a></nav><div class="acts"><span class="btn hl">+ Add carrier</span></div></div>
+        <div class="status"><span class="dot"></span>9 states · 2 appointments pending with Corebridge</div>
+        <div class="body col">
+          <div class="card flex1" style="position:relative">
+            <div class="card-h"><b>Where you can sell</b><div class="r"><span class="seg sm"><span class="on">Whole agency</span><span>Marisol Vance</span><span>Dana Ruiz</span><span>Devin Okafor</span><span>+3</span></span></div></div>
+            <div class="scroll"><table class="mx">
+              <thead><tr><th>State</th><th>Mutual of Omaha</th><th>Aetna / CVS</th><th>American Amicable</th><th>Corebridge</th><th>Transamerica</th><th>Licensed writers</th></tr></thead>
+              <tbody>
+                <tr><td><b>Texas</b></td><td class="y">✓ 4</td><td class="y">✓ 3</td><td class="y">✓ 4</td><td class="y">✓ 1</td><td class="y">✓ 3</td><td>8</td></tr>
+                <tr><td><b>Oklahoma</b></td><td class="y">✓ 3</td><td class="y">✓ 2</td><td class="y">✓ 2</td><td><span class="chip info">Pending</span></td><td class="y">✓ 1</td><td>4</td></tr>
+                <tr><td><b>Louisiana</b></td><td class="y">✓ 2</td><td class="y">✓ 1</td><td class="y">✓ 2</td><td class="n">—</td><td class="y sel">✓ 1</td><td>3</td></tr>
+                <tr><td><b>Florida</b></td><td class="y">✓ 2</td><td class="y">✓ 2</td><td class="y">✓ 1</td><td class="n">—</td><td class="n">—</td><td>2</td></tr>
+                <tr><td><b>Georgia</b></td><td class="y">✓ 1</td><td class="n">—</td><td class="y">✓ 1</td><td class="n">—</td><td class="y">✓ 1</td><td>1</td></tr>
+                <tr><td><b>Mississippi</b></td><td class="y">✓ 1</td><td class="y">✓ 1</td><td class="y">✓ 1</td><td class="n">—</td><td class="y">✓ 1</td><td>1</td></tr>
+                <tr><td><b>Alabama</b></td><td class="y">✓ 1</td><td class="y">✓ 1</td><td class="y">✓ 1</td><td><span class="chip info">Pending</span></td><td class="y">✓ 1</td><td>1</td></tr>
+                <tr><td><b>Arkansas</b></td><td class="y">✓ 1</td><td class="n">—</td><td class="y">✓ 1</td><td class="n">—</td><td class="n">—</td><td>1</td></tr>
+                <tr><td><b>Tennessee</b></td><td class="y">✓ 1</td><td class="y">✓ 1</td><td class="n">—</td><td class="y">✓ 1</td><td class="n">—</td><td>1</td></tr>
+              </tbody>
+              <tfoot><tr><td colspan="7">✓ and a number = appointed, with how many writers · — = not appointed · click a cell to add or remove a writer</td></tr></tfoot>
+            </table></div>
+            <div class="pop" style="right:150px;top:236px">
+              <h4>Transamerica in Louisiana</h4>
+              <div class="trow"><span class="av sm">DR</span><div><b>Dana Ruiz</b><small>Appointed Jun 2025</small></div><span class="end"><span class="btn g sm">Remove</span></span></div>
+              <div class="trow"><span class="av sm">EE</span><div><b>Elena Ellery</b><small>Licensed in LA, not appointed</small></div><span class="end"><span class="btn o sm">Add</span></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>11 · Carriers · empty, loading, error</h2></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Commission file · Transamerica</b></div><div class="empty"><span class="ic">⇄</span><b>2 columns aren't matched yet</b><p>"Adv Bal" and "Chgbk Rsn" from the Oct 31 file. Match them once and every file reads cleanly.</p><span class="btn o">Match 2 columns</span></div></div>
+      <div class="card"><div class="card-h"><b>Carriers</b></div><div class="card-b"><div class="skel" style="width:30%"></div><div class="skel"></div><div class="skel"></div><div class="skel" style="width:75%"></div></div></div>
+      <div class="card"><div class="card-b">
+        <div class="status bad"><span class="dot"></span>Couldn't save Mutual of Omaha. Your changes are kept. <a class="lnk">Try again</a></div>
+        <div class="status warn"><span class="dot"></span>Ending this contract leaves 3 open cases with Mutual of Omaha. They stay open.</div>
+        <div class="status bad"><span class="dot"></span>No carrier matches "Amerco". <a class="lnk">Ask Insurvas to add it</a></div>
+      </div></div>
+    </div>
+
+  <!-- ═══════════════════════ BROWSER EXTENSION ═══════════════════════ -->
+    <div class="sec"><h2>12 · Browser extension · one calm page</h2><span>is it installed, which carrier sites it fills, who may use it; facts in a side card, Revoke in each row's end</span></div>
+    <div class="app tall" data-page="Browser extension">
+      <div class="main">
+        <div class="crumb">Settings › Integrations</div>
+        <div class="head"><h3>Browser extension</h3><div class="acts"><span class="btn o">Check again</span></div></div>
+        <div class="status"><span class="dot"></span>Installed on this device · version 2.4 · 11 people can use it · last fill today 10:42 AM by Dana Ruiz</div>
+        <div class="body">
+          <div class="stack">
+            <div class="card" style="flex:0 0 auto">
+              <div class="card-h"><b>Carrier sites it fills</b><div class="r"><span class="small muted">5 sites</span></div></div>
+              <table>
+                <thead><tr><th>Carrier</th><th>Site</th><th>Fills</th><th>Fills this month</th><th>Works</th></tr></thead>
+                <tbody>
+                  <tr><td><b>Mutual of Omaha</b></td><td>Sales Professional Access</td><td>Application, health questions</td><td>148</td><td><span class="chip ok">Working</span></td></tr>
+                  <tr><td><b>Aetna / CVS</b></td><td>Producer World</td><td>Application</td><td>61</td><td><span class="chip ok">Working</span></td></tr>
+                  <tr><td><b>American Amicable</b></td><td>Agent portal e-app</td><td>Application, beneficiaries</td><td>97</td><td><span class="chip ok">Working</span></td></tr>
+                  <tr><td><b>Corebridge Financial</b></td><td>SimpliNow</td><td>Application</td><td>4</td><td><span class="chip warn">Site changed</span></td></tr>
+                  <tr><td><b>Transamerica</b></td><td>Agent Center</td><td>Application, payment</td><td>39</td><td><span class="chip ok">Working</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="card flex1">
+              <div class="card-h"><b>Who can use it</b><div class="r"><span class="input sm ph" style="width:180px">Find a person</span><span class="btn sm g">Revoke everyone…</span></div></div>
+              <div class="scroll"><table>
+                <thead><tr><th>Person</th><th>Carrier sites</th><th>Given by</th><th>Since</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td><span class="who"><span class="av sm">MV</span><b>Marisol Vance</b></span></td><td>All 5</td><td>Elena Ellery</td><td>Feb 2024</td><td class="r-end"><a class="lnk small">Revoke</a></td></tr>
+                  <tr><td><span class="who"><span class="av sm">DR</span><b>Dana Ruiz</b></span></td><td>All 5</td><td>Elena Ellery</td><td>Apr 2024</td><td class="r-end"><a class="lnk small">Revoke</a></td></tr>
+                  <tr class="h"><td><span class="who"><span class="av sm">DO</span><b>Devin Okafor</b></span></td><td>Mutual of Omaha, Transamerica</td><td>Rob Fields</td><td>Mar 2026</td><td class="r-end"><a class="lnk small">Revoke</a></td></tr>
+                  <tr><td><span class="who"><span class="av sm">AW</span><b>Andre Wallace</b></span></td><td>Mutual of Omaha, American Amicable</td><td>Rob Fields</td><td>Aug 2026</td><td class="r-end"><a class="lnk small">Revoke</a></td></tr>
+                  <tr><td><span class="who"><span class="av sm">BC</span><b>Ben Carter</b></span></td><td>Mutual of Omaha</td><td>Marisol Vance</td><td>Sep 2026</td><td class="r-end"><a class="lnk small">Revoke</a></td></tr>
+                  <tr><td><span class="who"><span class="av sm">EE</span><b>Elena Ellery</b></span></td><td>All 5</td><td class="muted">Owner</td><td>Feb 2024</td><td></td></tr>
+                </tbody>
+              </table></div>
+              <div class="card-f small muted">Setters and intake never get the extension · <a class="lnk">6 more people</a></div>
+            </div>
+          </div>
+          <div class="side">
+            <div class="card" style="flex:0 0 auto"><div class="card-b">
+              <div class="dev"><span class="ic">✓</span><div><b>Installed in Chrome</b><small>This device · version 2.4 · up to date</small></div></div>
+            </div></div>
+            <div class="card" style="flex:0 0 auto">
+              <div class="card-h"><b>How it works</b></div>
+              <div class="card-b" style="padding-top:4px;padding-bottom:4px"><ul class="facts">
+                <li><i>1</i>An agent opens a case and clicks "Fill on carrier site".</li>
+                <li><i>2</i>The extension copies the answers into the carrier's own e-app. The agent reviews and submits there.</li>
+                <li><i>3</i>It never stores carrier passwords and only works for people listed here.</li>
+              </ul></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>13 · Revoke one person</h2><span>says what stops and what doesn't</span></div>
+    <div class="app" data-page="Browser extension">
+      <div class="main">
+        <div class="crumb">Settings › Integrations</div>
+        <div class="head"><h3>Browser extension</h3></div>
+        <div class="status"><span class="dot"></span>Installed on this device · 11 people can use it</div>
+        <div class="body"><div class="card flex1"><div class="card-b muted small">Page as in screen 12</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog">
+        <h4>Revoke Devin Okafor's extension access?</h4>
+        <p>He stops filling Mutual of Omaha and Transamerica applications from Insurvas straight away. Applications he already sent aren't touched.</p>
+        <div class="trow"><span class="check"></span><div><b>Only for Transamerica</b><small>Keep Mutual of Omaha</small></div></div>
+        <div class="row end"><span class="btn g">Cancel</span><span class="btn danger">Revoke</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>14 · Extension · not installed, loading, error</h2></div>
+    <div class="states">
+      <div class="card"><div class="empty"><span class="ic">↓</span><b>Not installed on this device</b><p>Install it in Chrome to fill carrier applications from a case in one click.</p><span class="btn hl">Install for Chrome</span></div></div>
+      <div class="card"><div class="card-h"><b>Who can use it</b></div><div class="card-b"><div class="skel"></div><div class="skel" style="width:70%"></div><div class="skel"></div></div></div>
+      <div class="card"><div class="card-b">
+        <div class="status warn"><span class="dot"></span>Corebridge changed its site on Nov 10. Fills may miss fields until we update; agents can finish by hand.</div>
+        <div class="status bad"><span class="dot"></span>Couldn't revoke Devin's access. He can still use it. <a class="lnk">Try again</a></div>
+        <div class="status warn"><span class="dot"></span>Only admins and the owner can give or revoke access.</div>
+      </div></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>What changes vs today</h2><span>no setting is removed; three editors become one sheet per record</span></div>
+  <div class="changes">
+    <div><h3>Team &amp; access</h3><ul>
+      <li>The four seat tiles become one <b>status line</b></li>
+      <li>One-line people table with gold avatars; colour only in Status</li>
+      <li>Invite and Manage dialogs become <b>right sheets</b></li>
+      <li>The person sheet adds <b>Open work</b> and a hand-over picker</li>
+      <li>Deactivate confirms what moves where; today only Suspend exists <span class="tag-mig">needs a migration</span></li>
+      <li>Licensed states have one home: the person sheet, read from appointments</li>
+    </ul></div>
+    <div><h3>Carriers</h3><ul>
+      <li>"Set up %", the carrier dialog and States become <b>one table + one carrier sheet</b></li>
+      <li>The setup tab becomes the <b>first-run</b> page and the Add carrier dialog</li>
+      <li>States becomes a <b>matrix</b>, filterable by writer, cells edit appointments</li>
+      <li>The hidden Field maps tab moves into the sheet as <b>Commission file</b></li>
+      <li>Writing numbers go behind "Show technical details"</li>
+    </ul></div>
+    <div><h3>Browser extension</h3><ul>
+      <li>Install state moves to the status line and a small side card</li>
+      <li>Carrier sites show monthly fills and whether each still works</li>
+      <li>Grants become "Who can use it", one line each, Revoke at the row's end</li>
+      <li>Revoke can be limited to one carrier <span class="tag-mig">needs a migration</span></li>
+      <li>The facts card becomes three numbered lines</li>
+    </ul></div>
+  </div>
+  <div class="verdict">
+    <div class="yes"><b>Looks good</b>Say "build team and carriers" and all three pages are built as drawn. Deactivate with hand-over and per-carrier revoke need a database update; everything else uses today's data.</div>
+    <div><b>Change this</b>Name the screen number and what to change (for example "8 · put the commission file on its own sheet tab" or "10 · show licence end dates in the matrix"). The board is redrawn before anything is built.</div>
+  </div>
+</div>
+<script>
+/* Board-only: draw the shared settings frame (top bar, icon rail, settings rail) into every .app; data-page marks the active rail item. */
+(function () {
+  var groups = [
+    ["Your account", ["My profile", "Plan &amp; billing"]],
+    ["Agency", ["Business identity", "Team &amp; access <small>17/25</small>", "Products", "Carriers <span class=\"cnt\">1</span>"]],
+    ["Selling", ["Sales process", "Application forms", "AI assistant"]],
+    ["Leads &amp; calling", ["Lead posting", "Dialing cadence", "Calling windows", "Inbound settings", "Calendar &amp; availability", "Pipelines &amp; outcomes"]],
+    ["Integrations", ["API keys &amp; webhooks", "Browser extension"]],
+    ["Money &amp; compliance", ["Accounting", "Retention", "Compliance"]],
+    ["Records", ["Settings history"]]
+  ];
+  document.querySelectorAll(".app").forEach(function (app) {
+    if (app.querySelector(".top")) return;
+    var page = (app.getAttribute("data-page") || "").replace(/&amp;/g, "&");
+    var rail = '<div class="find">Search settings · /</div>';
+    groups.forEach(function (g) {
+      rail += "<h5>" + g[0] + "</h5>";
+      g[1].forEach(function (item) {
+        var name = item.replace(/ <.*$/, "").replace(/&amp;/g, "&");
+        rail += "<a" + (name === page ? ' class="on"' : "") + ">" + item + "</a>";
+      });
+    });
+    app.insertAdjacentHTML("afterbegin",
+      '<div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">EE</span></div>' +
+      '<div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>' +
+      '<nav class="srail">' + rail + "</nav>");
+  });
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

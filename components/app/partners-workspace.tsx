@@ -1532,7 +1532,7 @@ export function PartnersWorkspace({
               >
                 {justAdded ? "Done" : "Cancel"}
               </Button>
-              <Button type="submit" disabled={busy !== null || createAtLimit || emailLooksWrong}>
+              <Button type="submit" data-guide="publisher-submit" disabled={busy !== null || createAtLimit || emailLooksWrong}>
                 {busy ? "Saving…" : editing ? "Save" : justAdded ? "Add another" : "Add publisher"}
               </Button>
             </DialogFooter>

@@ -8,7 +8,7 @@ import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 
 /**
- * Settings › API keys & webhooks (LA-8.7) — the agency's integration keys. Owners only; every other
+ * Settings › Integrations (LA-8.7) — the agency's integration keys. Owners only; every other
  * role gets 403. The full key is in the POST response once and nowhere else, ever.
  */
 

@@ -982,7 +982,6 @@ export function TopBarShell({
  * component so the sidebar's button — which is styled for a dark ground — is left alone.
  */
 function TopBarSignOut({ endpoint, redirect }: { endpoint: string; redirect: string }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -996,8 +995,10 @@ function TopBarSignOut({ endpoint, redirect }: { endpoint: string; redirect: str
       document.documentElement.classList.add("shell-leave");
       // Nothing this person read stays in the tab for whoever signs in next (lib/client/resource-cache.ts).
       clearResources();
-      router.push(redirect);
-      router.refresh();
+      // A fresh document, not a client move (owner, 2026-11-13: "weird gray untouchable fields … until you
+      // refresh"). The client move kept this tab's router cache of the last person's pages and the shell's
+      // classes; a new document starts clean, and replace() keeps the workspace out of Back.
+      window.location.replace(redirect);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign out could not be completed");
       setLoading(false);

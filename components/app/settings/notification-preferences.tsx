@@ -1,138 +1,178 @@
 "use client";
 
 /**
- * Settings › My profile › Notifications (LA-8.4, Notion sprint; redesign 2026-10-27, owner pick A):
- * per event, per channel, a digest for the high-volume ones, quiet hours — and four alerts that
- * cannot be switched off, shown locked with the reason rather than hidden, because someone who
- * cannot find why an email keeps arriving assumes the setting is broken.
+ * Settings › My profile › Alerts (LA-8.4, Notion sprint): per event, per channel, a digest for the
+ * high-volume ones, quiet hours — and four alerts that cannot be switched off, shown locked with the
+ * reason rather than hidden, because someone who cannot find why an email keeps arriving assumes the
+ * setting is broken.
  *
- * One table: an alert per row, a switch per channel, and "Email as" chips where a digest is offered;
- * quiet hours sit above it and a group filter (plus "Always on") narrows it. Each change saves.
+ * Settings round 8, board A (owner pick 2026-11-12): the alerts table is part of My profile's one page
+ * and saves with its ONE save bar — each switch used to save on its own, a second way to save on the
+ * same page. useAlertsDraft holds the draft (quiet hours + every alert's channels); AlertsSection draws
+ * it: quiet hours on one line, a filter (All / Off / Always on, a group, a search) and one line per alert.
  *
  * Draws whatever the registry (lib/notifications/events.ts) holds; a new event needs no change here.
  */
 
 import { useEffect, useState } from "react";
 
-import { Callout, control, LockIcon, SettingsCard, SettingsSectionHeader, SettingsStack, st, Switch } from "@/components/app/settings/primitives";
+import { SaveFoot, Seg, StatusLine } from "@/components/app/settings/business/indexed-form";
+import { control, LockIcon, SettingsCard, SettingsSectionHeader, SettingsStack, st, Switch } from "@/components/app/settings/primitives";
+import { cardSurface } from "@/components/ui/card";
 import { InfoTip } from "@/components/ui/info-tip";
 import { SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { NOTIFICATION_GROUPS, type DigestCadence } from "@/lib/notifications/events";
 
 type Channel = "in_app" | "email" | "push";
+type Delivery = { in_app: boolean; email: boolean; push: boolean; digest: DigestCadence; protected: boolean };
 type EventView = {
   key: string; label: string; description: string; group: (typeof NOTIFICATION_GROUPS)[number];
   supportsDigest: boolean; protected: boolean; protectedReason: string | null;
-  delivery: { in_app: boolean; email: boolean; push: boolean; digest: DigestCadence; protected: boolean };
+  delivery: Delivery;
 };
-type View = { available: boolean; timeZone: string | null; quiet: { enabled: boolean; start: string; end: string }; events: EventView[] };
-type Filter = "all" | "locked" | (typeof NOTIFICATION_GROUPS)[number];
+type Quiet = { enabled: boolean; start: string; end: string };
+type View = { available: boolean; timeZone: string | null; quiet: Quiet; events: EventView[] };
+type Filter = "all" | "off" | "locked";
 
+/** The board's column order: In app · Browser · Email. */
 const CHANNELS: { key: Channel; label: string }[] = [
-  { key: "in_app", label: "In the app" },
-  { key: "email", label: "Email" },
+  { key: "in_app", label: "In app" },
   { key: "push", label: "Browser" },
+  { key: "email", label: "Email" },
 ];
-const DIGEST_LABELS: Record<DigestCadence, string> = { immediate: "Each one", daily: "Daily digest", weekly: "Weekly digest", off: "No email" };
-/** Under the sticky chip bar (44px), so the column names stay in view too. */
-const STICKY_TH = "sticky top-11 z-10 bg-[var(--surface)]";
+const DIGEST_LABELS: Record<DigestCadence, string> = { immediate: "Right away", daily: "Daily digest", weekly: "Weekly digest", off: "No email" };
 /** The email choices once email is on; turning email off is the switch. */
 const DIGEST_CHOICES: DigestCadence[] = ["immediate", "daily", "weekly"];
+const STICKY_TH = "sticky top-0 z-10 bg-[var(--surface-alt)]";
 
-/** `embedded`: drawn inside My profile, whose header names the section. */
-export function NotificationPreferences({ embedded = false }: { embedded?: boolean } = {}) {
+const isOff = (e: EventView) => !e.protected && !e.delivery.in_app && !e.delivery.email && !e.delivery.push;
+const sameDelivery = (a: Delivery, b: Delivery) => a.in_app === b.in_app && a.email === b.email && a.push === b.push && a.digest === b.digest;
+
+export type AlertsDraft = ReturnType<typeof useAlertsDraft>;
+
+export function useAlertsDraft() {
   const [view, setView] = useState<View | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [quiet, setQuiet] = useState<View["quiet"] | null>(null);
-  const [filter, setFilter] = useState<Filter>("all");
+  const [deliveries, setDeliveries] = useState<Record<string, Delivery>>({});
+  const [quiet, setQuiet] = useState<Quiet | null>(null);
 
   useEffect(() => {
     let live = true;
     void fetch("/api/app/notification-preferences", { cache: "no-store" }).then(async (res) => {
       const body = await res.json().catch(() => null);
       if (!live) return;
-      if (!res.ok) { setError(body?.error ?? "Your notification preferences could not be read."); return; }
+      if (!res.ok) { setError(body?.error ?? "Your alert choices could not be read."); return; }
       setView(body);
       setQuiet(body.quiet);
-    });
+      setDeliveries({});
+    }).catch(() => { if (live) setError("Your alert choices could not be read."); });
     return () => { live = false; };
   }, []);
 
-  async function save(body: Record<string, unknown>, done: string) {
-    setBusy(true);
-    try {
-      const res = await fetch("/api/app/notification-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const result = await res.json().catch(() => null);
-      if (!res.ok) { notify.fail(result?.error ?? "That could not be saved"); return; }
-      setView(result);
-      setQuiet(result.quiet);
-      notify.done(done);
-    } finally {
-      setBusy(false);
-    }
-  }
+  // The table as drafted: each alert with the delivery chosen on screen.
+  const events: EventView[] = (view?.events ?? []).map((e) => (deliveries[e.key] ? { ...e, delivery: deliveries[e.key] } : e));
+  const changedKeys = (view?.events ?? []).filter((e) => deliveries[e.key] && !sameDelivery(deliveries[e.key], e.delivery)).map((e) => e.key);
+  const quietChanged = Boolean(view && quiet && (quiet.enabled !== view.quiet.enabled || quiet.start !== view.quiet.start || quiet.end !== view.quiet.end));
+  const count = changedKeys.length + (quietChanged ? 1 : 0);
 
-  // One alert's switch or email choice: it moves at once and the table stays live (2026-10-29: every
-  // click greyed the whole table until the server answered, and each one raised a toast). A save
-  // that fails puts the row back and says so.
-  async function saveEvent(key: string, delivery: Partial<EventView["delivery"]>, body: Record<string, unknown>) {
-    const before = view;
-    setView((current) => current && { ...current, events: current.events.map((e) => (e.key === key ? { ...e, delivery: { ...e.delivery, ...delivery } } : e)) });
-    const res = await fetch("/api/app/notification-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event_key: key, ...body }) }).catch(() => null);
-    const result = await res?.json().catch(() => null);
-    if (!res?.ok) { setView(before); notify.fail(result?.error ?? "That could not be saved"); }
-  }
-
-  const header = embedded ? null : <SettingsSectionHeader />;
-  if (error) return <SettingsStack>{header}<Callout tone="error" title={error} /></SettingsStack>;
-  if (!view || !quiet) return <SettingsStack>{header}<SettingsCard><SectionLoading rows={6} columns={4} label="Loading your notification preferences" /></SettingsCard></SettingsStack>;
-
-  const locked = view.events.filter((e) => e.protected);
-  const groups = NOTIFICATION_GROUPS.filter((group) => view.events.some((e) => e.group === group));
-  const shown = filter === "all" ? view.events : filter === "locked" ? locked : view.events.filter((e) => e.group === filter);
-  // Quiet hours save as they change, like every alert below (settings redesign R4: one save model per
-  // tab). The switch saves on click; a time saves when you leave its field, once it differs.
-  const saveQuiet = (next: View["quiet"]) => {
-    setQuiet(next);
-    const changed = next.enabled !== view.quiet.enabled || next.start !== view.quiet.start || next.end !== view.quiet.end;
-    if (changed && view.available) void save({ quiet: next }, "Quiet hours saved");
+  const setDelivery = (key: string, patch: Partial<Delivery>) => {
+    const base = events.find((e) => e.key === key);
+    if (!base || base.protected) return;
+    setDeliveries((current) => ({ ...current, [key]: { ...base.delivery, ...patch } }));
   };
-  const switchedOff = view.events.filter((e) => !e.protected && !e.delivery.in_app && !e.delivery.email && !e.delivery.push).length;
+  const discard = () => { setDeliveries({}); if (view) setQuiet(view.quiet); };
+
+  /** Saves every changed alert and quiet hours; resolves to the problems (empty when all saved). */
+  async function save(): Promise<string[]> {
+    if (!view || !view.available) return [];
+    const problems: string[] = [];
+    const latest: { view: View | null } = { view: null };
+    const failed = new Set<string>();
+    const put = async (body: Record<string, unknown>): Promise<string | null> => {
+      const res = await fetch("/api/app/notification-preferences", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).catch(() => null);
+      const result = await res?.json().catch(() => null);
+      if (!res?.ok) return result?.error ?? "That could not be saved. Nothing changed.";
+      latest.view = result as View;
+      return null;
+    };
+    for (const key of changedKeys) {
+      const before = view.events.find((e) => e.key === key)!.delivery;
+      const after = deliveries[key];
+      const patch: Record<string, unknown> = {};
+      for (const field of ["in_app", "email", "push", "digest"] as const) if (after[field] !== before[field]) patch[field] = after[field];
+      const problem = await put({ event_key: key, ...patch });
+      if (problem) { problems.push(problem); failed.add(key); }
+    }
+    let quietFailed = false;
+    if (quietChanged && quiet) {
+      const problem = await put({ quiet });
+      if (problem) { problems.push(problem); quietFailed = true; }
+    }
+    const fresh = latest.view;
+    if (fresh) {
+      setView(fresh);
+      // What did not save stays a draft; everything else now matches the server.
+      setDeliveries((current) => Object.fromEntries(Object.entries(current).filter(([key]) => failed.has(key))));
+      if (!quietFailed) setQuiet(fresh.quiet);
+    }
+    return problems;
+  }
+
+  const switchedOff = events.filter(isOff).length;
+  const notes = [error, view && !view.available ? "alerts need a database update" : null].filter(Boolean) as string[];
+  return { view, error, events, quiet, setQuiet, setDelivery, changedKeys, quietChanged, count, switchedOff, notes, discard, save };
+}
+
+/** Quiet hours on one line, the filter, and the alerts table — inside My profile's one card. */
+export function AlertsSection({ alerts, disabled = false }: { alerts: AlertsDraft; disabled?: boolean }) {
+  const [filter, setFilter] = useState<Filter>("all");
+  const [group, setGroup] = useState<string>("");
+  const [find, setFind] = useState("");
+  const { view, quiet, events } = alerts;
+
+  if (alerts.error) return <p className="m-0 text-sm text-[var(--error-ink)]">{alerts.error}</p>;
+  if (!view || !quiet) return <SectionLoading rows={6} columns={4} label="Loading your alerts" />;
+
+  const locked = events.filter((e) => e.protected);
+  const off = events.filter(isOff);
+  const groups = NOTIFICATION_GROUPS.filter((g) => events.some((e) => e.group === g));
+  const words = find.trim().toLowerCase();
+  const shown = (filter === "all" ? events : filter === "locked" ? locked : off)
+    .filter((e) => !group || e.group === group)
+    .filter((e) => !words || `${e.label} ${e.description} ${e.group}`.toLowerCase().includes(words));
+  const readOnly = disabled || !view.available;
 
   const row = (e: EventView) => {
-    const off = !e.protected && !e.delivery.in_app && !e.delivery.email && !e.delivery.push;
+    const changed = alerts.changedKeys.includes(e.key);
     return (
-      <tr key={e.key} id={`notify-${e.key}`}>
-        <td className={st.td}>
-          <span className="flex flex-wrap items-center gap-1.5 font-semibold text-[var(--ink)]">
-            {e.label}
-            {e.protected ? <span className="inline-flex items-center gap-1 rounded-full bg-[var(--surface-alt)] px-2 text-xs font-semibold text-[var(--muted)]"><LockIcon />Always on</span> : null}
+      <tr key={e.key} id={`notify-${e.key}`} className={cn(changed && "[&>td]:bg-[var(--primary-soft)]")}>
+        <td className={cn(st.td, "max-w-[360px] whitespace-nowrap")}>
+          <span className="flex min-w-0 items-center gap-1.5 text-[var(--ink)]">
+            <span className="min-w-0 truncate">{e.label}</span>
+            {e.protected ? <span className="inline-flex h-[22px] shrink-0 items-center gap-1 rounded-badge border border-[var(--border)] px-2 text-xs font-medium text-[var(--muted)]"><LockIcon />Always on</span> : null}
+            <InfoTip label={`About ${e.label.toLowerCase()}`}>{e.protected && e.protectedReason ? `Cannot be switched off. ${e.protectedReason}` : e.description}</InfoTip>
           </span>
-          <span className={st.sub}>{e.protected && e.protectedReason ? `Cannot be switched off. ${e.protectedReason}` : e.description}</span>
-          {off ? <span className="block text-xs text-[var(--warning-ink)]">Off: you will not hear about this.</span> : null}
         </td>
         {CHANNELS.map((c) => (
-          <td key={c.key} className={cn(st.td, c.key === "email" ? "text-left" : "text-center")} title={e.protected ? "This alert cannot be switched off" : undefined}>
+          <td key={c.key} className={cn(st.td, "whitespace-nowrap", c.key === "email" ? "text-left" : "text-center")} title={e.protected ? "This alert cannot be switched off" : undefined}>
             <span className={cn("inline-flex items-center gap-2", c.key !== "email" && "justify-center")}>
               <Switch checked={e.delivery[c.key]} disabled={e.protected || !view.available} label={`${e.label}: ${c.label}`}
-                onChange={(next) => void saveEvent(e.key, { [c.key]: next }, { [c.key]: next })} />
+                onChange={(next) => !disabled && alerts.setDelivery(e.key, c.key === "email" && next && e.delivery.digest === "off" ? { email: true, digest: "immediate" } : { [c.key]: next })} />
               {/* How email arrives sits beside its own switch, only while email is on. */}
               {c.key === "email" && e.supportsDigest && e.delivery.email ? (
                 <select
                   aria-label={`${e.label}: how email arrives`}
-                  disabled={!view.available}
+                  disabled={readOnly}
                   value={e.delivery.digest === "off" ? "immediate" : e.delivery.digest}
-                  onChange={(event) => { const digest = event.target.value as DigestCadence; void saveEvent(e.key, { digest, email: true }, { digest, email: true }); }}
+                  onChange={(event) => alerts.setDelivery(e.key, { digest: event.target.value as DigestCadence, email: true })}
                   className="h-7 rounded-md border border-[var(--border-strong)] bg-[var(--surface)] px-2 text-xs font-medium text-[var(--ink)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring-color)] disabled:opacity-50"
                 >
                   {DIGEST_CHOICES.map((d) => <option key={d} value={d}>{DIGEST_LABELS[d]}</option>)}
                 </select>
-              ) : null}
+              ) : c.key === "email" && e.delivery.email ? <span className="text-xs text-[var(--muted)]">{DIGEST_LABELS.immediate}</span> : null}
             </span>
           </td>
         ))}
@@ -141,65 +181,91 @@ export function NotificationPreferences({ embedded = false }: { embedded?: boole
   };
 
   return (
-    <SettingsStack>
-      {header}
-      {!view.available ? <Callout tone="warning" title="Saving notification preferences needs a database update." /> : null}
-
-      {/* Quiet hours: one line. The times appear only while it is on; the switch and each time save as they change. */}
-      <div id="notify-quiet-hours" className="m-glass flex min-h-12 flex-wrap items-center gap-x-4 gap-y-2 rounded-[12px] border border-[var(--border)] px-4 py-2">
-        <label className="flex items-center gap-2 text-sm font-medium text-[var(--ink)]">
-          <Switch checked={quiet.enabled} disabled={busy || !view.available} label="Quiet hours" onChange={(next) => saveQuiet({ ...quiet, enabled: next })} />
-          Quiet hours
-        </label>
+    <div className="flex min-w-0 flex-col gap-2.5">
+      {/* Quiet hours: one line. The times show only while it is on. */}
+      <div id="notify-quiet-hours" className="flex min-h-9 scroll-mt-24 flex-wrap items-center gap-x-2.5 gap-y-2">
+        <Switch checked={quiet.enabled} disabled={readOnly} label="Quiet hours" onChange={(next) => alerts.setQuiet({ ...quiet, enabled: next })} />
+        <b className="text-sm font-semibold text-[var(--ink)]">Quiet hours</b>
         {quiet.enabled ? (
           <>
-            <label className="flex items-center gap-2 text-sm text-[var(--body)]">From
-              <input type="time" className={`${control} mt-0 h-8 w-auto`} value={quiet.start} disabled={busy} onChange={(e) => setQuiet({ ...quiet, start: e.target.value })} onBlur={() => saveQuiet(quiet)} />
-            </label>
-            <label className="flex items-center gap-2 text-sm text-[var(--body)]">Until
-              <input type="time" className={`${control} mt-0 h-8 w-auto`} value={quiet.end} disabled={busy} onChange={(e) => setQuiet({ ...quiet, end: e.target.value })} onBlur={() => saveQuiet(quiet)} />
-            </label>
+            <label className="sr-only" htmlFor="notify-quiet-start">Quiet from</label>
+            <input id="notify-quiet-start" type="time" className={cn(control, "mt-0 h-8 w-auto text-xs")} value={quiet.start} disabled={readOnly} onChange={(e) => alerts.setQuiet({ ...quiet, start: e.target.value })} />
+            <span className="text-xs text-[var(--muted)]">to</span>
+            <label className="sr-only" htmlFor="notify-quiet-end">Quiet until</label>
+            <input id="notify-quiet-end" type="time" className={cn(control, "mt-0 h-8 w-auto text-xs")} value={quiet.end} disabled={readOnly} onChange={(e) => alerts.setQuiet({ ...quiet, end: e.target.value })} />
+            <span className="text-xs text-[var(--muted)]">{view.timeZone ? `${view.timeZone} · ` : ""}email and browser wait; Always on still comes through</span>
           </>
         ) : (
-          <span className="text-sm text-[var(--muted)]">Off. Turn it on to hold email and browser alerts overnight.</span>
+          <span className="text-xs text-[var(--muted)]">Off. Turn it on to hold email and browser alerts overnight.</span>
         )}
-        <span className="ml-auto inline-flex items-center">
-          <InfoTip label="About quiet hours">{`No email or browser alerts between these times${view.timeZone ? ` (${view.timeZone})` : ""}. Held emails go when they end; the alerts marked Always on still come through.`}</InfoTip>
-        </span>
       </div>
 
-      {/* The filter chips stay in view while the table scrolls under them. */}
-      <div className="sticky top-0 z-20 flex min-h-9 items-center gap-2 bg-[var(--canvas)]">
-        <div role="radiogroup" aria-label="Which alerts" className="flex flex-wrap items-center gap-2">
-          <ToggleChip role="radio" selected={filter === "all"} count={view.events.length} onClick={() => setFilter("all")}>All</ToggleChip>
-          {groups.map((group) => (
-            <ToggleChip key={group} role="radio" selected={filter === group} count={view.events.filter((e) => e.group === group).length} onClick={() => setFilter(group)}>
-              {group}
-            </ToggleChip>
-          ))}
-          {locked.length ? (
-            <span id="notify-protected" className="inline-flex" title="Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too.">
-              <ToggleChip role="radio" selected={filter === "locked"} count={locked.length} onClick={() => setFilter("locked")}>
-                <LockIcon />Always on
-              </ToggleChip>
-            </span>
-          ) : null}
-        </div>
-        {switchedOff ? <span className="ml-auto text-xs text-[var(--warning-ink)]">{switchedOff} switched off</span> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <Seg<Filter>
+          label="Which alerts"
+          size="xs"
+          value={filter}
+          onChange={setFilter}
+          options={[
+            { key: "all", label: `All ${events.length}` },
+            { key: "off", label: `Off ${off.length}`, title: "Alerts you will not hear about" },
+            { key: "locked", label: `Always on ${locked.length}`, title: "Missing one of these causes harm that cannot be undone, so they always reach you — through quiet hours too." },
+          ]}
+        />
+        <span id="notify-protected" className="sr-only">Always on alerts cannot be switched off.</span>
+        {groups.length > 1 ? (
+          <select aria-label="Alert group" className={cn(control, "mt-0 h-8 w-auto text-xs")} value={group} onChange={(event) => setGroup(event.target.value)}>
+            <option value="">Every group</option>
+            {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+          </select>
+        ) : null}
+        <label className="sr-only" htmlFor="notify-find">Find an alert</label>
+        <input id="notify-find" type="search" placeholder="Find an alert" className={cn(control, "mt-0 ml-auto h-8 w-[200px] text-xs")} value={find} onChange={(event) => setFind(event.target.value)} />
       </div>
 
-      {/* The card's body would scroll sideways and so break a sticky header; four columns never need it. */}
+      {/* The card's body would scroll sideways and so break the sticky header; four columns never need it. */}
       <TableCard bodyClassName="overflow-x-visible">
         <table className={st.table}>
           <thead>
             <tr className={st.headRow}>
               <th className={cn(st.th, STICKY_TH)}>Alert</th>
-              {CHANNELS.map((c) => <th key={c.key} className={cn(st.th, STICKY_TH, c.key === "email" ? "w-[230px] text-left" : "w-[104px] text-center")}>{c.label}</th>)}
+              {CHANNELS.map((c) => <th key={c.key} className={cn(st.th, STICKY_TH, c.key === "email" ? "w-[230px] text-left" : "w-[96px] text-center")}>{c.label}</th>)}
             </tr>
           </thead>
-          <tbody>{shown.map(row)}</tbody>
+          <tbody>
+            {shown.map(row)}
+            {shown.length === 0 ? <tr><td colSpan={4} className={cn(st.td, "text-center text-[var(--muted)]")}>No alerts match.</td></tr> : null}
+          </tbody>
         </table>
       </TableCard>
+    </div>
+  );
+}
+
+/** Alerts on a page of their own (outside My profile): the same draft and one save bar. */
+export function NotificationPreferences({ embedded = false }: { embedded?: boolean } = {}) {
+  const alerts = useAlertsDraft();
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const header = embedded ? null : <SettingsSectionHeader />;
+  if (!alerts.view && !alerts.error) return <SettingsStack>{header}<SettingsCard><SectionLoading rows={6} columns={4} label="Loading your alerts" /></SettingsCard></SettingsStack>;
+  const save = async () => {
+    setSaving(true);
+    const problems = await alerts.save();
+    setSaving(false);
+    setProblem(problems.length ? problems.join(" ") : null);
+    if (!problems.length) notify.done("Alerts saved");
+  };
+  return (
+    <SettingsStack className="gap-3">
+      {header}
+      <StatusLine tone={problem || alerts.error ? "danger" : alerts.count || alerts.notes.length ? "warning" : "good"}>
+        {problem ?? (alerts.count ? `${alerts.count} unsaved ${alerts.count === 1 ? "change" : "changes"}` : alerts.notes[0] ?? "Saved")}
+      </StatusLine>
+      <section className={cn(cardSurface, "flex min-w-0 flex-col overflow-hidden")}>
+        <div className="p-4"><AlertsSection alerts={alerts} disabled={saving} /></div>
+        <SaveFoot count={alerts.count} what="alerts" saving={saving} onDiscard={alerts.discard} onSave={() => void save()} />
+      </section>
     </SettingsStack>
   );
 }

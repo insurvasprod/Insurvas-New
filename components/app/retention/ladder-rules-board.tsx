@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { CountLink, GroupRow, NumberField, OpenRow, putLadderRules, SettingDialog, useDialogSave } from "@/components/app/retention/retention-settings-rows";
+import { CountLink, NumberField, putLadderRules, SettingDialog, useDialogSave } from "@/components/app/retention/retention-settings-rows";
+import { GroupRow, NowCell, SettingFoot, SettingRow, SettingTable, UsedCell, ValueCell, type Column, type ValueKind } from "@/components/app/settings/money/setting-kit";
 import { EmptyState } from "@/components/ui/page-states";
-import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { Segmented } from "@/components/ui/view-tabs";
 import { DEFAULT_LADDER_SETTINGS, FROM_FLAG, REASON_LABELS, REASON_STEP, REASONS, STEP_LABELS, type Reason } from "@/lib/retention/cases/ladder";
@@ -28,6 +28,14 @@ export const ladderChanges = (rules: LadderRules) =>
   rules.disabled.length + (rules.urgentDays !== DEFAULT_LADDER_SETTINGS.urgentDays ? 1 : 0) + (rules.unreachableAfter !== DEFAULT_LADDER_SETTINGS.unreachableAfter ? 1 : 0);
 // The reason on every step of Cases (a reason link with no step looks across the ladder, round 7).
 const casesFor = (reason: Reason) => `/app/retention?reason=${reason}`;
+// Settings r8: the shared one-line setting rows (Setting · Now · Used by · Open now · Value · ›).
+const LADDER_COLUMNS: Column[] = [
+  { label: "What the files show", className: "w-[30%]" },
+  { label: "Puts the policy on" },
+  { label: "Counts", md: true },
+  { label: "Open now", className: "w-[1%] text-right" },
+  { label: "Value", className: "w-[1%]" },
+];
 
 export function LadderRulesBoard({ rules, words, openByReason, canEdit, onSaved }: {
   rules: LadderRules;
@@ -41,51 +49,47 @@ export function LadderRulesBoard({ rules, words, openByReason, canEdit, onSaved 
   const carriers = new Set(words.map((w) => w.carrierName)).size;
   const urgentYours = rules.urgentDays !== DEFAULT_LADDER_SETTINGS.urgentDays;
   const unreachableYours = rules.unreachableAfter !== DEFAULT_LADDER_SETTINGS.unreachableAfter;
+  // The row's one chip (Settings r8 money pattern): Yours when the agency changed it, Owner for a read-only viewer.
+  const valueOf = (yours: boolean): ValueKind => (!canEdit ? "owner" : yours ? "yours" : "insurvas");
+  const values: ValueKind[] = [...REASONS.map((r) => valueOf(rules.disabled.includes(r))), valueOf(urgentYours), valueOf(unreachableYours), "locked"];
 
   return (
     <>
-      <TableCard>
-        <table className="portal-lead-table w-full min-w-[720px] text-left text-sm" data-even="off">
-          <thead>
-            <tr>
-              <th>What the files show</th>
-              <th className="w-[220px]">Puts the policy on</th>
-              <th className="w-[120px]">Counts</th>
-              <th className="w-[140px] text-right">Open now</th>
-              <th className="w-[1%]"><span className="sr-only">Open</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            {REASONS.map((r) => {
-              const on = !rules.disabled.includes(r);
-              const count = openByReason?.[r];
-              return (
-                <OpenRow canEdit={canEdit} key={r} label={REASON_LABELS[r]} sub={r === "payment_date_change" ? "opened by a person: no file carries it" : undefined} onOpen={() => setOpen({ kind: "fact", reason: r })}>
-                  <td className="whitespace-nowrap">{STEP_LABELS[REASON_STEP[r]]}</td>
-                  <td className="whitespace-nowrap">{on ? "On" : <StatusChip tone="warning">Off</StatusChip>}</td>
-                  <td className="text-right">{count === undefined || (!on && count === 0) ? <span className="text-muted-foreground">—</span> : <CountLink href={casesFor(r)} value={count} />}</td>
-                </OpenRow>
-              );
-            })}
-            <GroupRow span={5}>Thresholds</GroupRow>
-            <OpenRow canEdit={canEdit} label="A deadline is urgent within" onOpen={() => setOpen({ kind: "urgent" })}>
-              <td className="whitespace-nowrap tabular-nums">{rules.urgentDays} {rules.urgentDays === 1 ? "day" : "days"}</td>
-              <td className="whitespace-nowrap">{urgentYours ? "yours" : "Insurvas's"}</td>
-              <td />
-            </OpenRow>
-            <OpenRow canEdit={canEdit} label="Unreachable after" onOpen={() => setOpen({ kind: "unreachable" })}>
-              <td className="whitespace-nowrap tabular-nums">{rules.unreachableAfter} {rules.unreachableAfter === 1 ? "try" : "tries"}</td>
-              <td className="whitespace-nowrap">{unreachableYours ? "yours" : "Insurvas's"}</td>
-              <td />
-            </OpenRow>
-            <OpenRow canEdit={false} label="Carrier words that count" sub="set per carrier by Insurvas as it reads their files" onOpen={() => setOpen({ kind: "words" })}>
-              <td className="whitespace-nowrap tabular-nums">{words.length ? `${words.length} ${words.length === 1 ? "word" : "words"} · ${carriers} ${carriers === 1 ? "carrier" : "carriers"}` : "None yet"}</td>
-              <td className="whitespace-nowrap">Insurvas&apos;s</td>
-              <td className="whitespace-nowrap text-right">Read only</td>
-            </OpenRow>
-          </tbody>
-        </table>
-      </TableCard>
+      <SettingTable columns={LADDER_COLUMNS} footer={<SettingFoot values={values} />}>
+        <tbody>
+          {REASONS.map((r) => {
+            const on = !rules.disabled.includes(r);
+            const count = openByReason?.[r];
+            return (
+              <SettingRow key={r} label={REASON_LABELS[r]} onOpen={() => setOpen({ kind: "fact", reason: r })}>
+                <NowCell>{STEP_LABELS[REASON_STEP[r]]}</NowCell>
+                <UsedCell>{on ? "Counts" : "Does not count"}{r === "payment_date_change" ? " · opened by a person" : ""}</UsedCell>
+                <td className="whitespace-nowrap text-right tabular-nums">{count === undefined || (!on && count === 0) ? <span className="text-[var(--muted)]">—</span> : <CountLink href={casesFor(r)} value={count} />}</td>
+                <ValueCell value={valueOf(!on)} />
+              </SettingRow>
+            );
+          })}
+          <GroupRow span={6}>Thresholds</GroupRow>
+          <SettingRow label="A deadline is urgent within" onOpen={() => setOpen({ kind: "urgent" })}>
+            <NowCell>{rules.urgentDays} {rules.urgentDays === 1 ? "day" : "days"}</NowCell>
+            <UsedCell>Cases, the urgent sort</UsedCell>
+            <td />
+            <ValueCell value={valueOf(urgentYours)} />
+          </SettingRow>
+          <SettingRow label="Unreachable after" onOpen={() => setOpen({ kind: "unreachable" })}>
+            <NowCell>{rules.unreachableAfter} {rules.unreachableAfter === 1 ? "try" : "tries"}</NowCell>
+            <UsedCell>Cases, the Unreachable step</UsedCell>
+            <td />
+            <ValueCell value={valueOf(unreachableYours)} />
+          </SettingRow>
+          <SettingRow label="Carrier words that count" onOpen={() => setOpen({ kind: "words" })}>
+            <NowCell>{words.length ? `${words.length} ${words.length === 1 ? "word" : "words"} · ${carriers} ${carriers === 1 ? "carrier" : "carriers"}` : "None yet"}</NowCell>
+            <UsedCell>Set per carrier by Insurvas</UsedCell>
+            <td />
+            <ValueCell value="locked" />
+          </SettingRow>
+        </tbody>
+      </SettingTable>
       {open?.kind === "fact" && <FactDialog reason={open.reason} rules={rules} canEdit={canEdit} onSaved={onSaved} onClose={() => setOpen(null)} />}
       {(open?.kind === "urgent" || open?.kind === "unreachable") && <ThresholdDialog which={open.kind} rules={rules} canEdit={canEdit} onSaved={onSaved} onClose={() => setOpen(null)} />}
       {open?.kind === "words" && <WordsDialog words={words} onClose={() => setOpen(null)} />}
@@ -175,7 +179,7 @@ function WordsDialog({ words, onClose }: { words: FlaggedWord[]; onClose: () => 
       readValue={words.length === 0 ? (
         <EmptyState title="No carrier words flagged yet" hint="Until one is, the ladder reads the status, the paid-to date and the commission file. A flagged word (a banking problem, a lapse notice, a pending action) adds its own reason." />
       ) : (
-        <span className="block max-h-[50vh] overflow-y-auto">
+        <TableCard bodyClassName="max-h-[50vh] overflow-y-auto">
           <table className="portal-lead-table w-full text-left text-sm" data-even="off">
             <thead><tr><th>Carrier</th><th>Their word</th><th>Counts as</th></tr></thead>
             <tbody>
@@ -188,7 +192,7 @@ function WordsDialog({ words, onClose }: { words: FlaggedWord[]; onClose: () => 
               ))}
             </tbody>
           </table>
-        </span>
+        </TableCard>
       )}
       onClose={onClose}
     />

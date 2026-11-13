@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Mockup boards (docs/design/**) are standalone HTML with their own CSS; never scan them for classes (2026-11-12). */
+@source not "../docs";
 
 /*
  * Tailwind v4 has no `dark:` variant until one is declared. ThemeProvider puts `class="dark"` on
@@ -818,6 +820,17 @@ body:has([data-nav-pending])::before {
   animation: m-nav-progress 2400ms var(--e-out) 150ms both;
 }
 
+/* Pending button (2026-11-13, `pending` on components/ui/button.tsx; first on Sign in): the same hairline, inside the
+   button along its foot, from the moment it is pressed until the answer or the next page is here. The button holds
+   its colour and its label says what is happening; it settles back from the press once, and nothing else moves. */
+@keyframes m-pending-press { from { transform: scale(.98); } }
+[data-slot="button"][data-pending] { position: relative; overflow: hidden; animation: m-pending-press var(--t-panel) var(--e-out); }
+[data-slot="button"][data-pending]::after {
+  content: ""; position: absolute; inset: auto 0 0 0; height: 2px; pointer-events: none;
+  background: currentColor; opacity: .5; transform-origin: left;
+  animation: m-nav-progress 2400ms var(--e-out) both;
+}
+
 /* Indicator (2026-11-09, components/ui/tab-track.tsx): in a segmented row the chosen look is one pill that slides
    between tabs; the tabs themselves sit over it with no fill of their own. */
 [data-tab-pill] {
@@ -876,7 +889,9 @@ html.shell-enter .portal-agent main > :last-child { animation: m-rise 480ms var(
 
 /* Signing out (Wave 8): the workspace dims and settles back while the sign-in page comes; never to blank. */
 .portal-agent { transition: opacity var(--t-page) var(--e), transform var(--t-page) var(--e); }
-html.shell-leave .portal-agent { opacity: .55; transform: scale(.99); pointer-events: none; }
+/* Only the workspace dims: the agent sign-in page wears `portal-agent` too (auth-layout.tsx), and dimming it left a
+   grey page nobody could click until a reload (owner, 2026-11-13). */
+html.shell-leave .portal-agent:not(.portal-tenant-auth-shell) { opacity: .55; transform: scale(.99); pointer-events: none; }
 
 /* Sign-up steps (Wave 8, components/portal/auth-layout.tsx): from step to step the bars hold still and only the
    step's own content slides in from the right, as the funnel moves on. A door without bars keeps its rise. */
@@ -2672,6 +2687,10 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent-nav-business-group .portal-agent-nav-icon { width: 1rem; height: 1rem; }
 .portal-agent-nav-business-group .portal-agent-nav-sublist-nested { margin-left: 0 !important; padding-left: 0 !important; }
 .portal-agent-nav-settings { margin-top: .125rem !important; }
+/* The rail's foot (owner 2026-11-13): Docs above Settings, pinned to the bottom of the rail. */
+.portal-agent-nav { min-height: 100%; grid-template-rows: auto; align-content: start; }
+.portal-agent-nav:has(> .portal-agent-nav-foot) { display: flex; flex-direction: column; }
+.portal-agent-nav-foot { margin-top: auto; padding-top: .75rem; display: grid; gap: .125rem; }
 .portal-agent-sidebar-desktop.is-collapsed { width: 76px; padding-inline: .55rem; }
 .portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-brand { padding-inline: .15rem; }
 .portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-brand > div { justify-content: center; }

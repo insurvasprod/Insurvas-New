@@ -246,7 +246,7 @@ export function StatementImportButton({
 
   return (
     <>
-      <Button type="button" onClick={() => setOpen(true)}>
+      <Button type="button" data-guide="statement-open" onClick={() => setOpen(true)}>
         Import a statement
       </Button>
       <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) reset(); }}>
@@ -264,7 +264,7 @@ export function StatementImportButton({
             <div className="grid gap-4 text-sm">
               <div className="grid gap-1.5">
                 <Label htmlFor="statement-file">Statement file (CSV, Excel or PDF)</Label>
-                <Input id="statement-file" type="file" accept={STATEMENT_FILE_ACCEPT} onChange={(event) => void chooseFile(event.target.files?.[0])} />
+                <Input id="statement-file" data-guide="statement-file" type="file" accept={STATEMENT_FILE_ACCEPT} onChange={(event) => void chooseFile(event.target.files?.[0])} />
                 {fileName && fileKind === "pdf" && <p className="text-xs text-muted-foreground">{fileName} · PDF, kept as it is; its lines are typed in after import</p>}
                 {fileName && fileKind !== "pdf" && <p className="text-xs text-muted-foreground">{fileName}{sheetName ? ` · sheet “${sheetName}”` : ""} · {headers.length} columns</p>}
               </div>
@@ -377,7 +377,7 @@ export function StatementImportButton({
               </Button>
             )}
             {step === "file" && fileKind !== "pdf" && (
-              <Button type="button" disabled={Boolean(fileProblem)} title={fileProblem ?? undefined} onClick={() => { setError(null); setStep("map"); }}>
+              <Button type="button" disabled={Boolean(fileProblem)} title={fileProblem ?? undefined} data-guide="statement-next" onClick={() => { setError(null); setStep("map"); }}>
                 Next: columns
               </Button>
             )}
@@ -387,12 +387,12 @@ export function StatementImportButton({
               </Button>
             )}
             {step === "map" && (
-              <Button type="button" disabled={Boolean(mappingProblem) || busy} title={mappingProblem ?? undefined} onClick={() => void runPreview()}>
+              <Button type="button" disabled={Boolean(mappingProblem) || busy} title={mappingProblem ?? undefined} data-guide="statement-preview" onClick={() => void runPreview()}>
                 {busy ? "Reading the file…" : "Preview"}
               </Button>
             )}
             {step === "preview" && preview && (
-              <Button type="button" disabled={busy || Boolean(preview.duplicate)} title={preview.duplicate ? "Already imported for this carrier and period" : undefined} onClick={() => void runImport()}>
+              <Button type="button" data-guide="statement-import" disabled={busy || Boolean(preview.duplicate)} title={preview.duplicate ? "Already imported for this carrier and period" : undefined} onClick={() => void runImport()}>
                 {busy ? "Importing…" : `Import ${preview.totalLines.toLocaleString("en-US")} ${preview.totalLines === 1 ? "line" : "lines"} for review`}
               </Button>
             )}

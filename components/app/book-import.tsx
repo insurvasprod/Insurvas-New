@@ -101,7 +101,7 @@ export function BookImport({ carriers, processing, readOnly }: { carriers: Carri
           <NoMatches noun="carriers" onClear={clear} />
         ) : (
           <>
-            <table className="portal-lead-table hidden w-full min-w-[880px] text-left text-sm md:table">
+            <table data-guide="book-carriers" className="portal-lead-table hidden w-full min-w-[880px] text-left text-sm md:table">
               <thead><tr><th className="w-[200px]">Carrier</th><th>Where to find the file</th><th className="w-[160px]">Result</th><th className="w-[140px]">Last file</th><th className="w-[130px]">Next step</th></tr></thead>
               <PagedBody>
                 {rows.map((c) => {

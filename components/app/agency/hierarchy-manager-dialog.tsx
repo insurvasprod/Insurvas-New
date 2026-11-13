@@ -70,7 +70,7 @@ export function ChangeManagerDialog({ people, open, onOpenChange, onDone }: { pe
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={save} disabled={busy || !from || !producer}>{busy ? "Saving…" : "Save"}</Button>
+          <Button data-guide="hierarchy-save" onClick={save} disabled={busy || !from || !producer}>{busy ? "Saving…" : "Save"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

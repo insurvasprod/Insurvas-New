@@ -147,6 +147,7 @@ label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bot
 .av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
 .ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
 .muted{color:var(--muted)}
+small{font-size:12px}
 .small{font-size:12px}
 .mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
 .code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}

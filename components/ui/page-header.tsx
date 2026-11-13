@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -6,6 +6,7 @@ import { Breadcrumbs, type Crumb } from "./breadcrumbs";
 import { PageTrail } from "./page-trail";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageAlertSlot } from "@/components/ui/page-alerts";
+import { GuideMe } from "@/components/app/setup/guide-me";
 
 /**
  * The top of every page, in one shape (owner 2026-10-30, the Partner Chat header everywhere):
@@ -76,6 +77,7 @@ export function PageHeader({
             <div className="flex items-center gap-1.5">
               {breadcrumbs ? <Breadcrumbs crumbs={breadcrumbs} /> : <PageTrail title={title} />}
               {description && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+              <Suspense fallback={null}><GuideMe /></Suspense>
             </div>
             <PageAlertSlot />
           </div>
@@ -112,6 +114,8 @@ export function PageHeader({
                   the heading and the trail. */}
               {description && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
               {titleInfo}
+              {/* Guided setup (owner 2026-11-13): "Guide me" beside the (i) on a page that holds one of the reader's setup steps. */}
+              <Suspense fallback={null}><GuideMe /></Suspense>
             </div>
             {/* The shell's alerts (an overdue complaint, a payment problem) on the title's line, never a
                 banner above the page (owner 2026-11-02: the banner pushed every page into a scroll). With
