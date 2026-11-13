@@ -1035,11 +1035,27 @@ html.shell-leave .portal-agent:not(.portal-tenant-auth-shell) { opacity: .55; tr
 .portal-top-badge.is-alert { background: var(--error); color: var(--on-error); }
 /* Must be done now (owner 2026-11-02): one bell for notifications and alerts; the urgent item counts on
    its badge and is the Inbox's pinned first row. */
-.portal-top-urgent-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 4px; }
-.portal-top-urgent-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid color-mix(in srgb, var(--error) 45%, transparent); background: var(--error-surface); color: var(--error-ink); font-size: .875rem; line-height: 1.45; text-decoration: none; }
+.portal-top-urgent-list { display: flex; flex-direction: column; gap: 6px; padding: 12px 12px 4px; }
+/* A calm card, not a red slab (owner, 2026-11-13 mock-up): the card's own ground, a red edge, a red
+   icon, the title, one line of why, and the action as a small solid button. */
+.portal-top-urgent-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px;
+  border: 1px solid var(--border-strong); border-radius: 10px; background: var(--surface-alt);
+  box-shadow: inset 3px 0 0 var(--error); color: var(--ink); text-decoration: none;
+  transition: border-color var(--t-micro) var(--e);
+}
 .portal-top-urgent-row:hover, .portal-top-urgent-row:focus-visible { border-color: var(--error); outline: none; }
-.portal-top-urgent-text { flex: 1; min-width: 0; font-weight: 600; }
-.portal-top-urgent-action { flex: none; font-weight: 700; text-decoration: underline; }
+.portal-top-urgent-icon { display: grid; place-items: center; width: 30px; height: 30px; flex: none; border-radius: 8px; background: var(--error-surface); color: var(--error); }
+.portal-top-urgent-text { flex: 1; min-width: 0; }
+.portal-top-urgent-title { display: block; font-size: .875rem; line-height: 1.4; letter-spacing: -.02em; font-weight: 600; color: var(--ink); }
+.portal-top-urgent-detail { display: block; margin-top: 1px; font-size: .75rem; line-height: 1.45; letter-spacing: -.01em; color: var(--muted); }
+.portal-top-urgent-action {
+  display: inline-flex; align-items: center; height: 30px; padding: 0 12px; flex: none;
+  border-radius: 8px; background: var(--ink); color: var(--surface);
+  font-size: .8125rem; font-weight: 600; letter-spacing: -.01em;
+}
+/* The bell with only unread notifications: a small dot, no number (a red number means something needs doing). */
+.portal-top-dot { position: absolute; top: 7px; right: 7px; width: 8px; height: 8px; border-radius: 999px; background: var(--primary); box-shadow: 0 0 0 2px var(--surface); }
 .portal-top-divider { width: 1px; height: 22px; margin-inline: 2px; background: var(--border); }
 .portal-top-account {
   display: inline-flex; align-items: center; gap: .5rem;
@@ -1049,7 +1065,7 @@ html.shell-leave .portal-agent:not(.portal-tenant-auth-shell) { opacity: .55; tr
   transition: background-color var(--t-micro) var(--e), border-color var(--t-micro) var(--e);
 }
 .portal-top-account:hover { background: var(--surface-alt); border-color: var(--border-strong); }
-.portal-top-account[aria-expanded="true"] { background: var(--primary-soft); border-color: var(--primary); }
+.portal-top-account[aria-expanded="true"] { background: var(--surface-alt); border-color: var(--border-strong); }
 .portal-top-account-name { font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 500; color: var(--ink); }
 @media (max-width: 1099px) { .portal-top-account-name { display: none; } }
 .portal-top-avatar {
@@ -1107,6 +1123,9 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-top-hit-meta { display: block; margin-top: 2px; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .portal-top-hit-path { flex-shrink: 0; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; color: var(--muted); }
 .portal-top-empty { padding: 1.375rem .875rem; text-align: center; }
+.portal-top-empty-mark { display: grid; place-items: center; width: 34px; height: 34px; margin: 0 auto .5rem; border-radius: 999px; background: var(--primary-soft); color: var(--accent-ink); }
+/* A quiet label over a list inside a panel ("Other alerts"), in the sentence case of the rest. */
+.portal-top-list-label { margin: 0; padding: .625rem .875rem .25rem; font-size: .75rem; line-height: 1.5; font-weight: 600; color: var(--muted); }
 .portal-top-empty-head { font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 600; color: var(--ink); }
 .portal-top-empty-body { margin-top: .25rem; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); }
 
@@ -1123,19 +1142,18 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-top-notif-body { display: block; margin-top: 3px; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--body); }
 
 /* alerts — wrong with the queue, and they clear when it is fixed */
-.portal-top-alert {
-  display: flex; gap: .625rem; padding: .75rem .875rem;
-  border-bottom: 1px solid var(--border); border-left: 3px solid var(--warning);
-  background: var(--warning-surface); color: var(--warning-ink);
-}
-.portal-top-alert[data-severity="critical"] { border-left-color: var(--error); background: var(--error-surface); color: var(--error-ink); }
-/* the mark takes the severity colour, the title its darker ink — the board's two-step */
-.portal-top-alert > svg { margin-top: 1px; color: var(--warning); }
-.portal-top-alert[data-severity="critical"] > svg { color: var(--error); }
+/* A coloured dot for how bad, then the title, the line under it and the one action. The row stays
+   on the panel's own ground: the colour is the dot's, not a wash over the words. */
+.portal-top-alert { display: flex; gap: .75rem; padding: .75rem .875rem; border-top: 1px solid var(--border); color: var(--ink); }
+.portal-top-alert:first-child, .portal-top-list-label + .portal-top-alert { border-top: 0; }
+.portal-top-alert-dot { width: 8px; height: 8px; margin-top: 7px; flex: none; border-radius: 999px; background: var(--warning); }
+.portal-top-alert[data-severity="critical"] .portal-top-alert-dot { background: var(--error); }
+.portal-top-alert[data-severity="info"] .portal-top-alert-dot { background: var(--info); }
+.portal-top-alert-text { min-width: 0; flex: 1; }
 .portal-top-foot-end { margin-left: auto; }
 .portal-top-alert-title { display: block; font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 600; }
-.portal-top-alert-body { display: block; margin-top: 3px; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--body); }
-.portal-top-alert-cta { display: inline-flex; align-items: center; gap: .3125rem; margin-top: .4375rem; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; font-weight: 600; color: var(--ink); text-decoration: none; }
+.portal-top-alert-body { display: block; margin-top: 1px; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); }
+.portal-top-alert-cta { display: inline-flex; align-items: center; gap: .3125rem; margin-top: .375rem; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; font-weight: 600; color: var(--accent-ink); text-decoration: none; }
 
 /* alert settings, inside the alerts panel */
 .portal-top-settings { padding: .875rem; }
@@ -1154,26 +1172,39 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-top-settings-button:disabled { cursor: not-allowed; opacity: .7; }
 
 /* account menu — who you are, then what you can change, then out */
-.portal-top-identity { display: flex; gap: .625rem; padding: .8125rem .875rem; border-bottom: 1px solid var(--border); }
+.portal-top-identity { display: flex; align-items: center; gap: .75rem; padding: .875rem .875rem .75rem; }
 .portal-top-identity > span:last-child { min-width: 0; }
 .portal-top-identity-name { display: block; font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 600; color: var(--ink); }
-.portal-top-identity-email { display: block; margin-top: 1px; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.portal-top-identity-role { display: block; margin-top: 3px; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); }
-.portal-top-menu { padding: .25rem 0; }
+.portal-top-identity-email { display: block; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-top-identity-role { display: flex; align-items: center; gap: .5rem; margin-top: .375rem; min-width: 0; }
+.portal-top-identity-workspace { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .75rem; line-height: 1.5; color: var(--muted); }
+.portal-top-menu { padding: .375rem; border-top: 1px solid var(--border); }
+/* One line per item (owner, 2026-11-13 mock-up): icon, label, and on the right a key or a count. */
 .portal-top-menu-row {
-  display: flex; align-items: center; gap: .625rem; width: 100%; text-align: left;
-  padding: .5625rem .875rem; border: 0; background: none; font: inherit; color: inherit;
-  text-decoration: none; cursor: pointer;
+  display: flex; align-items: center; gap: .6875rem; width: 100%; min-height: 36px; text-align: left;
+  padding: .375rem .625rem; border: 0; border-radius: 8px; background: none; font: inherit;
+  font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; color: var(--body);
+  text-decoration: none; cursor: pointer; transition: background-color var(--t-micro) var(--e), color var(--t-micro) var(--e);
 }
+.portal-top-menu-row:hover:not(.portal-top-menu-static), .portal-top-menu-row:focus-visible { background: var(--hover-wash); color: var(--ink); outline: none; }
 .portal-top-menu-row > svg { color: var(--muted); flex-shrink: 0; }
 .portal-top-menu-row > span { min-width: 0; }
-.portal-top-menu-row > span > span:first-child { display: block; font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; color: var(--ink); }
-.portal-top-menu-row > span > span:last-child { display: block; margin-top: 1px; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); }
+/* The workspace list keeps a second line: which role you hold there. */
+.portal-top-menu-row > span > span:first-child { display: block; color: var(--ink); }
+.portal-top-menu-row > span > span:last-child:not(:first-child) { display: block; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); }
 .portal-top-menu-row:disabled { cursor: default; }
-.portal-top-signout { border-top: 1px solid var(--border); padding: .25rem 0; }
-.portal-top-menu-signout { padding-block: .625rem; }
-.portal-top-menu-signout > svg { color: var(--error-ink); }
-.portal-top-menu-signout > span > span:first-child { font-weight: 600; color: var(--error-ink); }
+.portal-top-menu-static { cursor: default; }
+.portal-top-menu-key {
+  margin-left: auto; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box;
+  display: inline-grid; place-items: center; border: 1px solid var(--border-strong); border-radius: 5px;
+  background: var(--canvas); color: var(--muted); font: 600 11px/1 var(--font-sans);
+}
+.portal-top-menu-meta { margin-left: auto; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.portal-top-theme { margin-left: auto; height: 32px; }
+.portal-top-signout { border-top: 1px solid var(--border); padding: .375rem; }
+/* Plain and set apart at the foot; red only on hover, when it is about to happen. */
+.portal-top-menu-signout:hover, .portal-top-menu-signout:focus-visible { background: var(--error-surface); color: var(--error-ink); }
+.portal-top-menu-signout:hover > svg, .portal-top-menu-signout:focus-visible > svg { color: var(--error-ink); }
 .portal-top-signout-error { padding: 0 .875rem .5rem; font-size: .75rem; color: var(--error-ink); }
 
 /*
@@ -3488,8 +3519,9 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   border-color: color-mix(in srgb, var(--nav-ink), transparent 70%);
   background: color-mix(in srgb, var(--nav-ink), transparent 92%);
 }
-.portal-top-icon[aria-expanded="true"],
-.portal-top-account[aria-expanded="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary), transparent 80%); color: var(--nav-ink); }
+.portal-top-icon[aria-expanded="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary), transparent 80%); color: var(--nav-ink); }
+/* The open account button is lit, not outlined in green: a person is not an action (owner, 2026-11-13). */
+.portal-top-account[aria-expanded="true"] { border-color: color-mix(in srgb, var(--nav-ink), transparent 70%); background: color-mix(in srgb, var(--nav-ink), transparent 90%); color: var(--nav-ink); }
 .portal-top-icon-alert { color: var(--error); }
 .portal-top-account-name { color: var(--nav-ink); }
 .portal-top-divider { background: var(--nav-line); }
@@ -3862,10 +3894,11 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 
 /* The plan, a line in the account menu. */
-.portal-top-account-extra { border-bottom: 1px solid var(--border); }
-.portal-top-plan { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .625rem .875rem; }
+.portal-top-account-extra { padding: 0 .75rem .75rem; }
+.portal-top-plan { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-alt); }
+.portal-top-plan > span { min-width: 0; }
 .portal-top-plan-label { display: block; font-size: .75rem; line-height: 1.5; letter-spacing: -.01em; color: var(--muted); }
-.portal-top-plan-name { display: block; font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 600; color: var(--ink); }
+.portal-top-plan-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .875rem; line-height: 1.5; letter-spacing: -.02em; font-weight: 600; color: var(--ink); }
 .portal-top-plan-link { flex-shrink: 0; font-size: .75rem; line-height: 1.5; font-weight: 600; color: var(--accent-ink); text-decoration: none; }
 .portal-top-plan-link:hover { text-decoration: underline; }
 
@@ -4131,7 +4164,9 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 :has(> .portal-agent-rail) .portal-top-search-input,
 :has(> .portal-agent-rail) .portal-top-search-input:focus { background: color-mix(in srgb, var(--nav-bg), black 38%); }
 @media (max-width: 639px) { .portal-top-new { display: none; } }
-.portal-top-inbox-tabs { flex: none; padding: 10px 12px 2px; }
+.portal-top-inbox-tabs { flex: none; padding: 4px 10px 0 14px; }
+.portal-top-inbox-gear { display: inline-grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 8px; background: none; color: var(--muted); cursor: pointer; }
+.portal-top-inbox-gear:hover, .portal-top-inbox-gear:focus-visible { background: var(--hover-wash); color: var(--ink); outline: none; }
 
 /* NavB's rail look on the collapsed sidebar (owner 2026-10-28): six areas, each an outline icon over
    its name, a count badge on the icon's top-right corner, the open page's area as a green pill. */

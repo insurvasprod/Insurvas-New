@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlarmClockOff, AtSign, Bell, Check, CheckCheck, Clock, MessageSquare, PhoneCall, PhoneForwarded, Settings2, TriangleAlert, Wrench, type LucideIcon } from "lucide-react";
+import { AlarmClockOff, AtSign, Bell, Check, CheckCheck, Clock, MessageSquare, PhoneCall, PhoneForwarded, TriangleAlert, Wrench, type LucideIcon } from "lucide-react";
 
 import type { AgentAlert } from "@/lib/agentAlerts/useAgentAlertFeed";
 import {
@@ -345,11 +345,7 @@ export function NotificationCentrePanel({
               <CheckCheck className="size-4" aria-hidden />Mark all as read
             </button>
           )}
-        {openPreferences && (
-          <button type="button" onClick={openPreferences} className="portal-top-foot-link inline-flex items-center gap-1.5">
-            <Settings2 className="size-4" aria-hidden />Preferences
-          </button>
-        )}
+        {/* Preferences are the gear beside the Inbox tabs (owner, 2026-11-13), not a second door here. */}
       </div>
     </>
   );

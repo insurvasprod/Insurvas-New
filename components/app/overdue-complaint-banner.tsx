@@ -11,8 +11,10 @@ export function overdueComplaintAlert(count: number): TopBarUrgent | null {
   if (count <= 0) return null;
   return {
     id: "overdue-regulator-complaint",
-    text: `${count === 1 ? "A regulator complaint is past its response deadline." : `${count} regulator complaints are past their response deadline.`} A missed deadline puts the licence at risk.`,
+    // A short title and one line of why (owner, 2026-11-13: the Inbox's urgent card).
+    text: count === 1 ? "Complaint past its deadline" : `${count} complaints past their deadline`,
+    detail: "Your licence is at risk.",
     href: "/app/complaints",
-    action: "Respond now",
+    action: "Respond",
   };
 }

@@ -5,8 +5,8 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowRightLeft, Bell, BellOff, Check, ChevronDown, KeyboardIcon, LogOut, Search, SlidersHorizontal,
-  TriangleAlert, UserRound,
+  ArrowRight, ArrowRightLeft, Bell, BellOff, Check, ChevronDown, CircleHelp, KeyboardIcon, LogOut, Monitor, Moon, Search,
+  Settings2, SlidersHorizontal, Sun, SunMoon, TriangleAlert, UserRound,
 } from "lucide-react";
 
 import { useAgentAlertFeed, type AgentAlert } from "@/lib/agentAlerts/useAgentAlertFeed";
@@ -14,7 +14,9 @@ import { WORKSPACE_ALERT_EVENTS } from "@/lib/agentAlerts/presentation";
 import { bellToneOf } from "@/lib/agentAlerts/bell";
 import { AgentAlertPreferences } from "@/components/app/agent-alert-preferences";
 import { NotificationCentrePanel, useBellCentre } from "@/components/app/agent-notification-centre";
-import { ThemeSwitch } from "@/components/public/theme-switch";
+import { useTheme, type Theme } from "@/components/theme-provider";
+import { StatusChip } from "@/components/ui/status-chip";
+import { SWITCH_FRAME, switchOption } from "@/components/ui/view-tabs";
 import { KeyboardShortcutsDialog } from "@/components/app/keyboard-shortcuts-dialog";
 import { allMenuItems } from "@/lib/menu/definition";
 import { OPEN_ALERT_SETTINGS_EVENT } from "@/lib/agentAlerts/openAlertSettings";
@@ -118,7 +120,16 @@ export type TopBarAlert = {
  * page — a red warning icon beside the bell on every page, and the first row of the Inbox. It has no
  * close and no "mark read": it clears only when the thing behind it is done.
  */
-export type TopBarUrgent = { id: string; text: string; href: string; action: string };
+export type TopBarUrgent = {
+  id: string;
+  /** The short title, read first ("Complaint past its deadline"). */
+  text: string;
+  /** One line under it: why it matters. */
+  detail?: string;
+  href: string;
+  /** The button's word ("Respond"). */
+  action: string;
+};
 
 export type TopBarFeed = {
   /** What must be done now: pinned first in the Inbox, with the red icon in the bar (TopBarUrgent). */
@@ -233,6 +244,7 @@ export function TopBarShell({
   profileHref,
   profileLabel,
   profileHint,
+  helpHref,
   signOutEndpoint,
   signOutRedirect,
   workspacesEndpoint,
@@ -285,6 +297,8 @@ export function TopBarShell({
   profileHref?: string;
   profileLabel?: string;
   profileHint?: string;
+  /** The account menu's "Help & docs" row; omitted where the shell has no docs of its own. */
+  helpHref?: string;
   signOutEndpoint: string;
   signOutRedirect: string;
   /**
@@ -476,6 +490,13 @@ export function TopBarShell({
         inputRef.current?.focus();
         return;
       }
+      // The account menu shows "?" beside Keyboard shortcuts: the key opens them from anywhere.
+      if (event.key === "?" && !typing) {
+        event.preventDefault();
+        setMenu(null);
+        setShortcutsOpen(true);
+        return;
+      }
       if (!typing) {
         const direction = listKeyDirection(event);
         if (direction && moveFocusInList(direction)) { event.preventDefault(); return; }
@@ -567,19 +588,25 @@ export function TopBarShell({
     if (bellOpen || alertsOpen) { close(); return; }
     toggle(urgent.length || (!notifications.length && alertCount) ? "alerts" : "notifications");
   }
-  const urgentText = urgent.map((item) => item.text).join(" ");
-  // Pinned above either list, never scrolled away, never marked read.
+  const urgentText = urgent.map((item) => [item.text, item.detail].filter(Boolean).join(". ")).join(" ");
+  // Pinned above either list, never scrolled away, never marked read. A calm card (owner, 2026-11-13
+  // mock-up): a red edge and icon, a short title, one line of why, and the action as a button.
   const urgentRows = urgent.length ? (
     <div className="portal-top-urgent-list" role="alert">
       {urgent.map((item) => (
         <a key={item.id} href={item.href} onClick={close} className="portal-top-urgent-row">
-          <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-          <span className="portal-top-urgent-text">{item.text}</span>
+          <span className="portal-top-urgent-icon" aria-hidden="true"><TriangleAlert className="size-4" /></span>
+          <span className="portal-top-urgent-text">
+            <span className="portal-top-urgent-title">{item.text}</span>
+            {item.detail && <span className="portal-top-urgent-detail">{item.detail}</span>}
+          </span>
           <span className="portal-top-urgent-action">{item.action}</span>
         </a>
       ))}
     </div>
   ) : null;
+  // The two lists as tabs, and their settings as one gear on the same line: no second heading under
+  // the tabs saying the same thing again.
   const inboxTabs = inbox && feed ? (
     <div className="portal-top-inbox-tabs">
       <ViewTabs
@@ -590,9 +617,23 @@ export function TopBarShell({
           { key: "notifications", label: "Notifications", count: notifications.length || null },
           { key: "alerts", label: "Alerts", count: alertCount + urgent.length || null, tone: "danger" },
         ]}
+        actions={feed.preferences ? (
+          <button
+            type="button"
+            onClick={() => openPreferences(menu === "alerts" ? "alerts" : "notifications")}
+            className="portal-top-inbox-gear"
+            aria-label={menu === "alerts" ? "Alert settings" : "Notification preferences"}
+            title={menu === "alerts" ? "Alert settings" : "Notification preferences"}
+          >
+            <Settings2 className="size-4" aria-hidden="true" />
+          </button>
+        ) : undefined}
       />
     </div>
   ) : null;
+  // The bell's red number counts only what needs doing (alerts and the urgent item). Unread
+  // notifications alone show a small dot: something new, nothing wrong.
+  const needsYou = alertCount + urgent.length;
 
   let flatIndex = -1;
 
@@ -689,8 +730,7 @@ export function TopBarShell({
       {/* ------------------------------------------------------- the right */}
       <div className="portal-top-actions">
         {actions}
-        {/* Light / dark, the landing page's switch and reveal, in front of the bell (owner, 2026-10-13). */}
-        {!inbox && <ThemeSwitch compact />}
+        {/* Light and dark live in the account menu now (owner, 2026-11-13), so the bar keeps one fewer button. */}
         {feed?.doNotDisturb && <span className="hidden text-xs leading-[1.5] font-semibold text-[var(--warning-ink)] sm:inline" title="Sound and browser alerts are muted. Escalation emails are still sent.">Do not disturb</span>}
         {/* One icon for notifications and alerts (owner 2026-11-02): what must be done now rides on the bell's
             count and opens first in the Inbox; no second button beside it. */}
@@ -704,9 +744,10 @@ export function TopBarShell({
           data-alert={alertCount > 0 || undefined}
         >
           {feed.doNotDisturb ? <BellOff className="size-4 text-[var(--warning-ink)]" aria-hidden="true" /> : <Bell className="size-4" aria-hidden="true" />}
-          {inboxCount > 0 && <span className="portal-top-badge">{inboxCount > 99 ? "99+" : inboxCount}</span>}
+          {needsYou > 0
+            ? <span className="portal-top-badge is-alert">{needsYou > 99 ? "99+" : needsYou}</span>
+            : inboxCount > 0 && <span className="portal-top-dot" aria-hidden="true" />}
         </button>}
-        {inbox && <ThemeSwitch compact />}
         {feed && !inbox && <button
           type="button"
           aria-label={`Notifications${notifications.length ? `, ${notifications.length} unread` : ""}${feed.doNotDisturb ? ", do not disturb is on" : ""}`}
@@ -757,10 +798,12 @@ export function TopBarShell({
           <section aria-label="Notifications" className="portal-top-panel portal-top-panel-notif m-swap">
             {inboxTabs}
             {urgentRows}
-            <header className="portal-top-panel-head">
-              <span>Notifications</span>
-              <span>{notifications.length ? `${notifications.length} unread` : "Nothing unread"}</span>
-            </header>
+            {!inbox && (
+              <header className="portal-top-panel-head">
+                <span>Notifications</span>
+                <span>{notifications.length ? `${notifications.length} unread` : "Nothing unread"}</span>
+              </header>
+            )}
             <div className="portal-top-panel-scroll" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
               {notifications.map((item) => (
                 <a
@@ -809,16 +852,20 @@ export function TopBarShell({
           <section aria-label="Alerts" className={`portal-top-panel m-swap ${inbox ? "portal-top-panel-notif" : "portal-top-panel-alerts"}`}>
             {inboxTabs}
             {urgentRows}
-            <header className="portal-top-panel-head">
-              <span>Alerts</span>
-              <span>Clears when fixed, not when read</span>
-            </header>
+            {/* The Inbox names this list in its tab; the separate alerts panel (partner, staff) names it here. */}
+            {!inbox && (
+              <header className="portal-top-panel-head">
+                <span>Alerts</span>
+                <span>{alertCount ? `${alertCount} open` : "None open"}</span>
+              </header>
+            )}
             <div className="portal-top-panel-scroll" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
+              {urgent.length > 0 && <p className="portal-top-list-label">Other alerts</p>}
               {/* This page's own notices first: they hold while the page is open. */}
               {pageNotices.map((notice) => (
                 <div key={notice.id} className="portal-top-alert" data-severity={notice.tone === "error" ? "critical" : notice.tone === "warning" ? "warning" : "info"}>
-                  <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-                  <span>
+                  <span className="portal-top-alert-dot" aria-hidden="true" />
+                  <span className="portal-top-alert-text">
                     <span className="portal-top-alert-title">{notice.title}</span>
                     {notice.detail ? <span className="portal-top-alert-body">{notice.detail}</span> : null}
                   </span>
@@ -826,8 +873,8 @@ export function TopBarShell({
               ))}
               {alerts.map((alert) => (
                 <div key={alert.id} className="portal-top-alert" data-severity={alert.severity}>
-                  <TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-                  <span>
+                  <span className="portal-top-alert-dot" aria-hidden="true" />
+                  <span className="portal-top-alert-text">
                     <span className="portal-top-alert-title">{alert.title}</span>
                     <span className="portal-top-alert-body">{alert.body}</span>
                     <a href={alert.link} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-alert-cta m-arrow">
@@ -837,25 +884,30 @@ export function TopBarShell({
                   </span>
                 </div>
               ))}
+              {/* Never "nothing is wrong" under an urgent card that says otherwise. */}
               {!alertCount && (
                 <div className="portal-top-empty">
-                  <p className="portal-top-empty-head">{feed.alertsEmpty.head}</p>
-                  <p className="portal-top-empty-body">{feed.alertsEmpty.body}</p>
+                  <span className="portal-top-empty-mark" aria-hidden="true"><Check className="size-4" /></span>
+                  <p className="portal-top-empty-head">{urgent.length ? "Nothing else needs you" : feed.alertsEmpty.head}</p>
+                  <p className="portal-top-empty-body">{urgent.length ? "Alerts clear on their own once the work is done." : feed.alertsEmpty.body}</p>
                 </div>
               )}
             </div>
-            <div className="portal-top-panel-foot">
-              {feed.alertCentreHref && (
-                <Link href={feed.alertCentreHref} onClick={close} className="portal-top-foot-action">
-                  Open the alert centre
-                </Link>
-              )}
-              {feed.preferences && (
-                <button type="button" onClick={() => openPreferences("alerts")} className="portal-top-foot-link portal-top-foot-end">
-                  Alert settings
-                </button>
-              )}
-            </div>
+            {(feed.alertCentreHref || (!inbox && feed.preferences)) && (
+              <div className="portal-top-panel-foot">
+                {!inbox && feed.preferences && (
+                  <button type="button" onClick={() => openPreferences("alerts")} className="portal-top-foot-link">
+                    Alert settings
+                  </button>
+                )}
+                {feed.alertCentreHref && (
+                  <Link href={feed.alertCentreHref} onClick={close} className="portal-top-foot-action portal-top-foot-end inline-flex items-center gap-1">
+                    Alert centre
+                    <ArrowRight className="size-3.5" aria-hidden="true" />
+                  </Link>
+                )}
+              </div>
+            )}
           </section>
         )}
 
@@ -902,7 +954,10 @@ export function TopBarShell({
               <span>
                 <span className="portal-top-identity-name">{user.name}</span>
                 <span className="portal-top-identity-email">{user.email}</span>
-                <span className="portal-top-identity-role">{user.roleLabel} · {user.workspaceName}</span>
+                <span className="portal-top-identity-role">
+                  <StatusChip>{user.roleLabel}</StatusChip>
+                  <span className="portal-top-identity-workspace">{user.workspaceName}</span>
+                </span>
               </span>
             </div>
             {accountExtra && <div className="portal-top-account-extra">{accountExtra}</div>}
@@ -937,30 +992,38 @@ export function TopBarShell({
                 </button>
               </div>
             ) : (
+              // One line per item (owner, 2026-11-13 mock-up). What used to be each row's second line is its
+              // tooltip, and a shortcut is drawn as its key.
               <div className="portal-top-menu" {...{ [KBD_LIST_ATTRIBUTE]: "" }}>
                 {profileHref && (
-                  <Link href={profileHref} onClick={close} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
-                    <UserRound className="size-3.5" aria-hidden="true" />
-                    <span><span>{profileLabel}</span><span>{profileHint}</span></span>
+                  <Link href={profileHref} onClick={close} title={profileHint} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                    <UserRound className="size-4" aria-hidden="true" />
+                    <span>{profileLabel}</span>
                   </Link>
                 )}
                 {feed?.preferences && (
-                  <button type="button" onClick={() => openPreferences("account")} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
-                    <SlidersHorizontal className="size-3.5" aria-hidden="true" />
-                    <span><span>Notification preferences</span><span>{feed.preferencesHint}</span></span>
+                  <button type="button" onClick={() => openPreferences("account")} title={feed.preferencesHint} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                    <SlidersHorizontal className="size-4" aria-hidden="true" />
+                    <span>Notification preferences</span>
                   </button>
                 )}
-                <button type="button" onClick={() => { close(); setShortcutsOpen(true); }} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
-                  <KeyboardIcon className="size-3.5" aria-hidden="true" />
-                  <span><span>Keyboard shortcuts</span><span>Slash to search, J and K to move</span></span>
+                <button type="button" onClick={() => { close(); setShortcutsOpen(true); }} title="Slash to search, J and K to move" {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                  <KeyboardIcon className="size-4" aria-hidden="true" />
+                  <span>Keyboard shortcuts</span>
+                  <kbd className="portal-top-menu-key">?</kbd>
                 </button>
+                <ThemeRow />
+                {helpHref && (
+                  <Link href={helpHref} onClick={close} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                    <CircleHelp className="size-4" aria-hidden="true" />
+                    <span>Help &amp; docs</span>
+                  </Link>
+                )}
                 {canSwitch && (
-                  <button type="button" onClick={() => setChoosingWorkspace(true)} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
-                    <ArrowRightLeft className="size-3.5" aria-hidden="true" />
-                    <span>
-                      <span>Switch workspace</span>
-                      <span>{workspaces[currentWorkspaceIndex].name} · {currentWorkspaceIndex + 1} of {workspaces.length}</span>
-                    </span>
+                  <button type="button" onClick={() => setChoosingWorkspace(true)} title={`${workspaces[currentWorkspaceIndex].name}, ${currentWorkspaceIndex + 1} of ${workspaces.length}`} {...{ [KBD_ITEM_ATTRIBUTE]: "" }} className="portal-top-menu-row m-row">
+                    <ArrowRightLeft className="size-4" aria-hidden="true" />
+                    <span>Switch workspace</span>
+                    <span className="portal-top-menu-meta">{workspaces.length}</span>
                   </button>
                 )}
               </div>
@@ -1007,15 +1070,49 @@ function TopBarSignOut({ endpoint, redirect }: { endpoint: string; redirect: str
 
   return (
     <>
-      <button type="button" onClick={() => void signOut()} disabled={loading} aria-busy={loading} className="portal-top-menu-row portal-top-menu-signout m-row">
-        <LogOut className="size-3.5" aria-hidden="true" />
-        <span>
-          <span>{loading ? "Signing out…" : "Log out"}</span>
-          <span>Ends this session on this device only</span>
-        </span>
+      <button type="button" onClick={() => void signOut()} disabled={loading} aria-busy={loading} title="Ends this session on this device only" className="portal-top-menu-row portal-top-menu-signout m-row">
+        <LogOut className="size-4" aria-hidden="true" />
+        <span>{loading ? "Signing out…" : "Log out"}</span>
       </button>
       {error && <p role="alert" className="portal-top-signout-error">{error}</p>}
     </>
+  );
+}
+
+const THEMES: ReadonlyArray<{ key: Theme; label: string; Icon: typeof Sun }> = [
+  { key: "light", label: "Light", Icon: Sun },
+  { key: "dark", label: "Dark", Icon: Moon },
+  { key: "system", label: "Match this device", Icon: Monitor },
+];
+
+/**
+ * Light, dark or the device's own, in the account menu (owner, 2026-11-13): it used to be a moon
+ * button of its own in the bar. Three small icon buttons in the shared switch frame; the chosen one
+ * is pressed.
+ */
+function ThemeRow() {
+  const { theme, setTheme } = useTheme();
+  return (
+    <div className="portal-top-menu-row portal-top-menu-static">
+      <SunMoon className="size-4" aria-hidden="true" />
+      <span id="portal-top-theme-label">Theme</span>
+      <span role="radiogroup" aria-labelledby="portal-top-theme-label" className={`${SWITCH_FRAME} portal-top-theme`}>
+        {THEMES.map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={theme === key}
+            aria-label={label}
+            title={label}
+            onClick={() => setTheme(key)}
+            className={switchOption(theme === key, "inline-grid size-7 place-items-center")}
+          >
+            <Icon className="size-3.5" aria-hidden="true" />
+          </button>
+        ))}
+      </span>
+    </div>
   );
 }
 
@@ -1055,14 +1152,16 @@ function agentFeedLists(alerts: AgentAlert[]) {
 export type TopBarPlan = { name: string | null; seats: number | null; isOwner: boolean };
 
 function PlanLine({ plan, onNavigate }: { plan: TopBarPlan; onNavigate?: () => void }) {
-  const size = [plan.name ?? "No plan", plan.seats === null ? null : `${plan.seats} ${plan.seats === 1 ? "seat" : "seats"}`].filter(Boolean).join(" · ");
+  // The seats ride on the label, so a long plan name can shorten without hiding them.
+  const seats = plan.seats === null ? null : `${plan.seats} ${plan.seats === 1 ? "seat" : "seats"}`;
+  const name = plan.name ?? "No plan";
   return (
     <div className="portal-top-plan">
       <span>
-        <span className="portal-top-plan-label">Plan</span>
-        <span className="portal-top-plan-name">{size}</span>
+        <span className="portal-top-plan-label">{seats ? `Plan · ${seats}` : "Plan"}</span>
+        <span className="portal-top-plan-name" title={name}>{name}</span>
       </span>
-      {plan.isOwner && <Link href="/app/settings#billing" onClick={onNavigate} className="portal-top-plan-link">Plan &amp; billing</Link>}
+      {plan.isOwner && <Link href="/app/settings#billing" onClick={onNavigate} className="portal-top-plan-link" aria-label="Manage plan and billing">Manage</Link>}
     </div>
   );
 }
@@ -1095,8 +1194,8 @@ export function AppTopBar({ user, userId, plan, menu, urgent }: {
     doNotDisturb: source.settings?.do_not_disturb === true,
     notificationsEmptyBody: "Handoffs, mentions, partner messages and callbacks due appear here as they happen.",
     alertsEmpty: {
-      head: "Nothing is wrong with the queue",
-      body: "Unclaimed leads and escalations appear here. They are not messages — they clear when somebody claims the work, not when you read this.",
+      head: "All clear",
+      body: "Nothing needs you right now. Alerts clear on their own once the work is done.",
     },
   };
   return (
@@ -1109,6 +1208,7 @@ export function AppTopBar({ user, userId, plan, menu, urgent }: {
       profileHref="/app/settings#my-profile"
       profileLabel="Your profile"
       profileHint="Name, phone, licence numbers"
+      helpHref="/app/docs"
       signOutEndpoint="/api/app/auth/logout"
       signOutRedirect="/app/login"
       workspacesEndpoint="/api/app/auth/workspaces"
