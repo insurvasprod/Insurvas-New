@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import { Check } from "lucide-react";
 
 import { MarketingCta } from "@/components/marketing/cta";
@@ -24,6 +24,25 @@ const EXAMPLES = ["A carrier or vendor feed we do not read yet", "A workflow you
 
 export function LandingContact() {
   const [state, setState] = useState<State>({ status: "idle" });
+  const sectionRef = useRef<HTMLElement>(null);
+
+  // The section rises in as it is reached (manager, 2026-11-13): the heading, the line under it, the
+  // three points and the form, one after another. It is armed only from here, once the page runs and
+  // only while the section is still below the screen, so without JavaScript, under reduced motion, or
+  // when the page opens at #contact, it is simply there.
+  useEffect(() => {
+    const section = sectionRef.current;
+    if (!section || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    if (section.getBoundingClientRect().top < window.innerHeight * 0.85) return;
+    section.dataset.reveal = "armed";
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry?.isIntersecting) return;
+      section.dataset.reveal = "in";
+      io.disconnect();
+    }, { rootMargin: "0px 0px -18% 0px" });
+    io.observe(section);
+    return () => io.disconnect();
+  }, []);
   const fields = state.status === "error" ? state.fields : {};
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -49,17 +68,18 @@ export function LandingContact() {
   const error = (name: FieldName) => fields[name] && <span id={`contact-${name}-error`} className={styles.error}>{fields[name]}</span>;
 
   return (
-    <section id="contact" aria-labelledby="contact-title" className={styles.section}>
+    <section ref={sectionRef} id="contact" aria-labelledby="contact-title" className={styles.section}>
+      {/* One centred column (manager, 2026-11-13): the ask on top, the form under it. */}
       <div className={styles.inner}>
         <div className={styles.ask}>
-          <h2 id="contact-title" className={styles.heading}>Need something we have not built yet?</h2>
-          <p className={styles.lede}>Tell us about your floor and what you need. A person on our team reads every request and answers by email.</p>
+          <h2 id="contact-title" className={styles.heading} data-rise="" style={{ "--i": 0 } as CSSProperties}>Need something we have not built yet?</h2>
+          <p className={styles.lede} data-rise="" style={{ "--i": 1 } as CSSProperties}>Tell us about your floor and what you need. A person on our team reads every request and answers by email.</p>
           <ul className={styles.examples}>
-            {EXAMPLES.map((example) => <li key={example}><Check aria-hidden="true" />{example}</li>)}
+            {EXAMPLES.map((example, index) => <li key={example} data-rise="" style={{ "--i": 2 + index * 0.5 } as CSSProperties}><Check aria-hidden="true" />{example}</li>)}
           </ul>
         </div>
 
-        <div className={styles.panel}>
+        <div className={styles.panel} data-rise="" style={{ "--i": 3.5 } as CSSProperties}>
           {state.status === "sent" ? (
             <div className={styles.sent} role="status">
               <span className={styles.sentMark} aria-hidden="true"><Check /></span>
