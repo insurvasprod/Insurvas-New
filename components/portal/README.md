@@ -10,6 +10,7 @@ every auth combination on `/design/auth` (development only).
 | Piece | File | Use |
 |---|---|---|
 | `AuthLayout` | `auth-layout.tsx` | Every sign-in and sign-up screen. Props: `plane`, `width`, `steps`, `back`, `story`. |
+| `AuthPhotoPanel` | `auth-photo-panel.tsx` | The agent sign-in and signup panel: the landing page's field (`WaveField`, look "auth") under the claim; retains a supplied plan or payment summary. |
 | `AuthSteps`, `AuthBack`, `AuthHeading`, `AuthStory` | `auth-layout.tsx` | The step bar, the back link, the one heading, the one brand panel |
 | `AuthField`, `AuthInput`, `AuthSubmit`, `AuthSecondary`, `AuthAlert`, `authLabel`, `authControl` | `auth-controls.tsx` | 44px fields and buttons, one alert |
 | `PortalAuthSplitShell` | `portal-auth-split-shell.tsx` | Rendered by `AuthLayout` only |

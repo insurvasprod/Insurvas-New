@@ -18,7 +18,14 @@ const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat
 const instrumentSerif = Instrument_Serif({ subsets: ["latin"], weight: "400", style: ["italic"], variable: "--font-accent", display: "swap" });
 const fontVariables = [inter.variable, interTight.variable, geistMono.variable, montserrat.variable, instrumentSerif.variable].join(" ");
 
+// The origin link previews resolve against: WhatsApp and the rest fetch the preview image
+// (app/opengraph-image.tsx) from an absolute URL, so it has to be the public site, not localhost.
+const siteUrl =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "https://www.insurvas.com");
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Insurvas",
   description: "Insurvas insurance operations workspace",
 };

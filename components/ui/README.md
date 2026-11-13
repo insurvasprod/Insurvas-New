@@ -35,6 +35,7 @@ What lives here and which rule owns it:
 | Searchable select (one choice, search at the top; a quick filter beside a search): `SelectMenu` | `select-menu.tsx` | §5, §6a |
 | Dialog, confirm, sheet, popover, menu, toast, search | `dialog.tsx`, `confirm-dialog.tsx`, `sheet.tsx`, `popover.tsx`, `dropdown-menu.tsx`, `toaster.tsx` (raise toasts with `lib/notify`), `search-command.tsx` | §11 |
 | Status chip | `status-chip.tsx` | §12 |
+| Layered text (the sign-in panel's word staircase, 21st.dev): `LayeredText` | `layered-text.tsx` | §0, auth doors |
 | A page's own menu in the Settings look (filter box, bold groups, small items, a foot): `MenuCard`. Docs and Get set up use it | `menu-card.tsx` | §8 |
 | Steps in order on one numbered line (`NumberedSteps`), and a few figures in one strip (`FactsStrip`) | `numbered-steps.tsx` | §5b |
 | Motion: overlay enter/exit, the panel's exit, the sub-page bar's sliding line (`tab-track.tsx`), page turns (`paged.tsx`), chart tweens, page transitions (`components/portal/portal-page-transition.tsx`), links that prefetch and show pending (`nav-pending.tsx`) | the motion layer in `app/globals.css`; see `/app/motion-lab` | §18 |

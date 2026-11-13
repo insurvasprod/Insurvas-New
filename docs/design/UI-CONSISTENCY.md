@@ -546,13 +546,31 @@ the eyes to catch", so people missed that the sub-pages existed.
     `AuthHeading`), legal links.
   - Width: 472px, or `width="wide"` (720px) only for a grid of choices or a document (Your agency,
     Your plan, Payment, accept terms).
-  - The panel is an `AuthStory` (label, title, rows with a hairline above each; a row can carry a
+  - Agent sign-in and the sign-up funnel put the form on the left and the brand field on the
+    right (manager review, 2026-11-13; swapped from field-left). The field is the landing page's own (`WaveField`, look "auth"), so the door and the
+    front page are the same software; it replaced a road photograph on 2026-11-12.
+    `AuthPhotoPanel` retains the plan summary and payment receipt as real content where supplied;
+    the mobile receipt stays in the form. Where there is no summary the panel is the logo and the
+    **layered text** (`components/ui/layered-text.tsx`, from 21st.dev, set as published; owner,
+    2026-11-13: "100% the same"): LEADS, CALLS, SALES, POLICIES, PAYOUTS, PROFIT stacked as an
+    isometric staircase over the landing page's field, each row rolling up into the next on hover - the
+    path a lead takes through the product. The field runs behind it and behind the summaries.
+    The map that stood here is parked in `tasks/auth-panel/parked/`. No pause control: the
+    staircase skips its hover roll and the field holds one still frame under
+    `prefers-reduced-motion`, which is the accommodation. The sign-in door's other ways in all
+    sit under the form, never over the field. Other auth doors keep their existing layouts.
+  - Other panels use an `AuthStory` (label, title, rows with a hairline above each; a row can carry a
     value, or a ✓/✗ state with its word), or real content (the plan summary, the receipt) passed
     as `story`.
 - Controls from `components/portal/auth-controls.tsx`: `AuthField` + `AuthInput` (or
-  `authLabel` / `authControl` on a native control) at **44px**, `AuthSubmit` (full width, 44px),
-  `AuthSecondary`, and one `AuthAlert` with `tone="error" | "info" | "success"`. Auth screens are
-  exempt from the 36px rule (§5) for this reason; app pages are not.
+  `authLabel` / `authControl` on a native control), `AuthSubmit` (full width), `AuthSecondary`,
+  and one `AuthAlert` with `tone="error" | "info" | "success"`. Every one of them carries the
+  class **`auth-h`** and no height of its own; the height is defined once in `globals.css` as
+  **44px**, and **40px under `@media (pointer: fine)`** — 44 is the thumb allowance for the
+  screens people use on a phone, which a mouse does not need, and on an 826px window the
+  controls are what decides whether a step scrolls (owner, 2026-11-12). Auth screens are exempt
+  from the 36px rule (§5) for this reason; app pages are not, and `auth-h` counts against
+  §5 there (`uiConsistency.test.mjs`). Guarded by `authShell.test.mjs`.
 - Copy follows the order things happen: the first sign-up step creates an account ("Create your
   account", button "Create account"); the trial is named only on the payment step, where it
   starts. The full copy, screen by screen, is in
@@ -577,8 +595,8 @@ the eyes to catch", so people missed that the sub-pages existed.
 - An open picker list is drawn at the auth shell (a portal), never inside the form column: each
   line of the column is its own layer while the entrance animation holds, so a list drawn inside
   it goes under every later line. It fits the room left in the window and never makes it scroll.
-- The brand panel is still: `--brand-700` with one soft light, no ribbon or other motion
-  (owner, 2026-10-27).
+- Outside the agent photo panel, the brand panel is still: `--brand-700` with one soft light, no
+  ribbon or other motion (owner, 2026-10-27).
 - Every auth screen, sign-up steps included, keeps the logo at the top and centres the rest in the
   space below it (`AuthLayout` `align`, default "center"). No auth screen scrolls, vertically or
   sideways, at 1536×826 (the owner's 125%-scaled screen), 1366×657 or 1920×1030.

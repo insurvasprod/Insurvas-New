@@ -8,11 +8,10 @@ import { authControl, authLabel } from "@/components/app/auth-card";
 import { AuthAlert } from "@/components/portal/auth-controls";
 import { FunnelActions } from "@/components/portal/funnel-actions";
 import { businessProfileHeading } from "@/components/app/funnel-headings";
-import { MultiPicker } from "@/components/app/multi-picker";
+import { MultiPicker, SinglePicker } from "@/components/app/multi-picker";
 import { StatePicker } from "@/components/app/state-picker";
 import { PhoneCountryPicker } from "@/components/public/phone-country-picker";
 import { Button } from "@/components/ui/button";
-import { Segmented } from "@/components/ui/view-tabs";
 import { BUSINESS_FOCUS_OPTIONS, inferBusinessFocus, LEAD_SOURCE_OPTIONS, PRODUCT_OPTIONS, productsForBusinessFocus, type BusinessFocus, VOLUME_OPTIONS } from "@/lib/signup/constants";
 import { checkPhone, phoneCountry, splitPhone } from "@/lib/signup/phone";
 import { cn } from "@/lib/utils";
@@ -190,11 +189,11 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
     <div>
       {/* One line saying why (copy table, owner 2026-10-27); the NPN is asked later in Settings. */}
       {withHeading && businessProfileHeading({ gate, solo })}
-      <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-5">
+      <form onSubmit={(event) => void save(event)} noValidate data-auth-fields="" className="flex flex-col gap-4">
         {/* One grid, two to a row on a wide screen, so the step fits without scrolling (2026-10-26).
             One grid rather than one per row: an independent agent has no business-name field, and the
             fields after it move up a cell instead of leaving a gap (manager review, 2026-10-28). */}
-        <div className="grid grid-cols-1 items-start gap-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 items-start gap-x-5 gap-y-4 sm:grid-cols-2">
           <label className="block">
             <span className={authLabel}>First name</span>
             <input className={authControl} autoComplete="given-name" maxLength={60} value={firstName} onChange={(event) => setFirstName(event.target.value)} />
@@ -209,7 +208,7 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
                 with a divider, so they always line up (owner, 2026-10-28: "the code is not in line"). */}
             <div
               className={cn(
-                "mt-1.5 flex h-11 overflow-hidden rounded-md border border-[var(--border-strong)] bg-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]",
+                "auth-h mt-1.5 flex overflow-hidden rounded-md border border-[var(--border-strong)] bg-card focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]",
                 phoneError && "border-[var(--error)]",
               )}
             >
@@ -243,13 +242,17 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
           {/* Hints open toward the inside of the column they land in, which shifts by one for an agent. */}
           <div>
             {label("state", "Primary State", solo)}
-            <StatePicker value={primaryState} onChange={setPrimaryState} />
+            <StatePicker value={primaryState} onChange={setPrimaryState} label="Primary State" />
           </div>
           <div>
             {label("focus", "Business focus")}
-            <div className="mt-1.5">
-              <Segmented label="Business focus" options={BUSINESS_FOCUS_OPTIONS} value={businessFocus} onChange={setBusinessFocus} />
-            </div>
+            <SinglePicker
+              label="Business focus"
+              placeholder="Choose a focus"
+              options={BUSINESS_FOCUS_OPTIONS.map((option) => ({ value: option.key, label: option.label }))}
+              value={businessFocus}
+              onChange={setBusinessFocus}
+            />
             {businessFocus && (
               <div className="mt-3">
                 {label("sell", "What you sell", !solo)}
@@ -296,11 +299,11 @@ export function BusinessProfileForm({ initial = null, person, audience = "agency
               skip business information"). A plain link: nothing typed here is sent. */}
           <div className="flex gap-3">
             {skipHref && (
-              <Button asChild variant="outline" className="h-11 shrink-0 border-[var(--border-strong)] px-5">
+              <Button asChild variant="outline" className="auth-h shrink-0 border-[var(--border-strong)] px-5">
                 <a href={skipHref} data-profile-skip="">Skip for now</a>
               </Button>
             )}
-            <Button type="submit" className="h-11 min-w-0 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
+            <Button type="submit" className="auth-h min-w-0 flex-1 px-4" disabled={submitting}>{submitting ? "Saving…" : "Continue"}</Button>
           </div>
         </FunnelActions>
       </form>

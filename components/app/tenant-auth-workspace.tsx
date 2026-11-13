@@ -284,11 +284,7 @@ export function TenantAuthWorkspace({
     // The sign-in page cannot know an agency from one agent, so it names neither (manager review, 2026-10-28).
     // Same header as sign-up: the title on the left, a short note on the right, one bar under (owner, 2026-11-03).
     heading: (
-      <div data-auth-line="" className="mb-6">
-        <div className="flex flex-wrap items-end justify-center gap-x-4 gap-y-1">
-          <div className="min-w-0"><AuthHeading title="Sign in to your Workspace" /></div>
-        </div>
-      </div>
+      <AuthHeading title="Welcome back">Sign in to your Insurvas workspace.</AuthHeading>
     ),
     body: (
       <>
@@ -323,7 +319,7 @@ export function TenantAuthWorkspace({
           label="Password"
           htmlFor="tenant-login-password"
           aside={
-            <button type="button" onClick={openReset} data-tap="" className="text-sm font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
+            <button type="button" onClick={openReset} data-tap="" className="text-xs font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
               Forgot password?
             </button>
           }
@@ -367,16 +363,18 @@ export function TenantAuthWorkspace({
     </>
     ),
     // Both "elsewhere" lines in one style, side by side where they fit (manager review, 2026-10-28:
-    // the partner line had a different font and colour).
+    // the partner line had a different font and colour). The two lines sit 1.5rem apart, the same
+    // gap as between the Sign In button and the first of them (owner, 2026-11-13).
     footer: (
-      <div className="flex flex-wrap gap-x-5 gap-y-1.5 text-sm leading-normal tracking-[-0.02em]">
+      <div className="flex flex-col gap-6 text-sm leading-normal tracking-[-0.02em]">
         <p className="m-0">
           New to Insurvas?{" "}
           <Link href="/signup" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
             Create an account
           </Link>
         </p>
-        <p className="m-0">
+        <p className="m-0 text-muted-foreground">
+          Partner or affiliate?{" "}
           <Link href="/partner/login" className="font-semibold text-[var(--accent-ink)] hover:text-foreground hover:underline">
             Partner portal
           </Link>
@@ -566,7 +564,7 @@ export function TenantAuthWorkspace({
   const view = twoFactorStep ? twoFactor : linkToken ? linkFinishPanel : linkRequest !== "closed" ? linkRequestPanel : resetting ? reset : signIn;
 
   return (
-    <AuthLayout plane="agent" heading={view.heading} footer={view.footer}>
+    <AuthLayout plane="agent" photo heading={view.heading} footer={view.footer}>
       {view.body}
     </AuthLayout>
   );

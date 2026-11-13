@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
  * fifty of them had to be scrolled. This is a combobox: type "tex" or "TX" and Enter; arrows move;
  * Escape closes; the list follows the theme. The value is the two-letter code, as the select's was.
  */
-export function StatePicker({ value, onChange, id, describedBy }: { value: string; onChange: (code: string) => void; id?: string; describedBy?: string }) {
+export function StatePicker({ value, onChange, id, describedBy, label }: { value: string; onChange: (code: string) => void; id?: string; describedBy?: string; /** The control's accessible name. Its visible label is a FieldLabel, which is not tied to this input. */ label?: string }) {
   const autoId = useId();
   const inputId = id ?? `${autoId}-state`;
   const listId = `${autoId}-list`;
@@ -57,6 +57,7 @@ export function StatePicker({ value, onChange, id, describedBy }: { value: strin
         ref={inputRef}
         id={inputId}
         role="combobox"
+        aria-label={label}
         aria-expanded={open}
         aria-controls={listId}
         aria-autocomplete="list"

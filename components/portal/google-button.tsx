@@ -21,7 +21,7 @@ export function GoogleButton({ intent, plan, cycle, className }: {
   if (plan) query.set("plan", plan);
   if (cycle) query.set("cycle", cycle);
   return (
-    <Button asChild variant="outline" className={cn("h-11 w-full gap-2.5 border-[var(--border-strong)]", className)}>
+    <Button asChild variant="outline" className={cn("auth-h w-full gap-2.5 border-[var(--border-strong)]", className)}>
       <a href={`/api/app/auth/google/start?${query}`}>
         {/* eslint-disable-next-line @next/next/no-img-element -- an 18px brand mark; next/image adds nothing */}
         <img src="/brand/google-g.svg" alt="" width={18} height={18} className="size-[18px] shrink-0" />

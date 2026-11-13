@@ -105,7 +105,7 @@ export function PartnerLoginForm() {
                 <AuthInput id="partner-reset-email" type="email" inputMode="email" autoComplete="username" autoFocus value={resetEmail} onChange={(event) => { setResetEmail(event.target.value); setResetError(null); }} />
               </div>
               {resetError && <AuthAlert>{resetError}</AuthAlert>}
-              <Button type="submit" className="mt-1 h-11 w-full" disabled={resetState === "sending"}>{resetState === "sending" ? "Sending…" : "Send the reset link"}</Button>
+              <Button type="submit" className="auth-h mt-1 w-full" disabled={resetState === "sending"}>{resetState === "sending" ? "Sending…" : "Send the reset link"}</Button>
             </form>
           </>
         )}
@@ -210,7 +210,7 @@ export function PartnerLoginForm() {
           <AuthAlert id="partner-login-error">{error}</AuthAlert>
         )}
 
-        <Button type="submit" className="mt-1 h-11 w-full" disabled={loading}>
+        <Button type="submit" className="auth-h mt-1 w-full" disabled={loading}>
           {loading ? "Signing in…" : "Sign in"}
         </Button>
       </form>

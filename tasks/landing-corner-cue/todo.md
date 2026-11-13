@@ -322,6 +322,140 @@ that it serves the current code by grepping the served chunks for markers from e
 
 **Files:** `components/marketing/landing-lines.tsx`, `landing-lines.module.css`
 
+## Task 10: New Wave Gradient, not a particle field (owner, 12 Nov)
+
+"My manager said this is how we did it, it's so fancy" — [**New Wave
+Gradient**](https://www.framer.com/marketplace/components/new-wave-gradient/), a different component
+again: a fluid, organic gradient, no particles anywhere in it. Asked for exactly that picture, in
+our colours in both themes, with the two scenes told apart.
+
+- [x] Looked at the live demo (wavegradient.framer.website). What makes it: **four colours on one
+      ramp, walked by a noise field that has been warped by itself twice**, and nothing else — no
+      particles, no geometry, no blur pass. One warp gives soft blobs; the second and third fold the
+      bands back over each other, which is the liquid look.
+- [x] Built as `components/marketing/wave-gradient.tsx`, raw WebGL, no dependency. **Not their
+      code** — the same picture, rebuilt from the demo. `particles-waves.tsx` is gone (in the
+      history); nothing else used it.
+- [x] **Mixed in linear light.** Deep green to pale mint mixed in sRGB goes through a dead grey; the
+      ramp squares the colours, mixes, and takes the root back.
+- [x] **Half a level of static dither**, or the dark greens stair-step across a band this wide.
+- [x] **The stops are not even quarters** — the two deep colours hold the floor, and the crest is
+      the last fifth. Even quarters put the pale end across half the frame.
+- [x] **The field's share is kept under the diagonal's** (`amp` < `tilt`). With the two even the
+      field carried the whole frame down the ramp and the band went flat and dark a few minutes in —
+      caught by watching it run, not at t=0. The composition now holds however far it wanders: deep
+      foot, lit corner, the field only bending the boundary between them.
+- [x] **The two scenes.** "Then" (life alone): tighter field, slower, folds less, crest held back by
+      a gamma above 1. "Now" (life and health): broader bands, nearly twice the folding, more
+      movement, the crest shows. Seeds far apart, or the two echo each other across the divider.
+- [x] **Colours, per side and per theme**, in the stylesheet (§9: no hex in the component).
+      Dark is the brand ramp out of night olive; light starts a step up it and runs brighter, since
+      there the band is deep olive daylight, not a night sky.
+- [x] **Drawn at 0.56 of the screen's pixels** (0.42 on touch, 0.34 on a data saver) and scaled back
+      up: nothing in a picture this soft survives to the pixel, and two of these run at once behind
+      the slider. **60 fps** with both on screen, on the owner's Radeon 780M.
+- [x] Mouse parallax, as the reference has; read from the window, since the canvas takes no pointer
+      events of its own (the band over it is a slider you drag)
+- [x] 43 design tests, typecheck and lint clean; checked at 1536×826 and 375×812, both themes
+- [x] Owner review on localhost:3000 — the picture passed; the movement did not, and took Tasks 11
+      and 12 to put right
+
+**Files:** `components/marketing/wave-gradient.tsx` (new), `landing-lines.tsx`,
+`landing-lines.module.css`, `particles-waves.tsx` (deleted)
+
+## Task 11: the animation too, measured (owner, 12 Nov)
+
+"The wave gradient has an animation as well, I want it 100% the same." It did not have one.
+
+- [x] **It was frozen, and the cause was a bug, not a slow setting.** The loop was started only by
+      the IntersectionObserver, and that observer only ever reports a *change*: when the band was
+      already on screen as the component mounted, its first call matched the state the component was
+      already in and returned — so `requestAnimationFrame` was never called at all. One frame, held
+      for ever. Worse, anything that resized the canvas afterwards blanked the band completely,
+      since setting `canvas.width` clears the drawing buffer and nothing redrew it. The loop now
+      starts on mount and the observer only pauses and resumes it. (`particles-waves.tsx` had the
+      same shape; this would have been latent there too.)
+- [x] **Field time is accumulated, not read off the clock**, so scrolling the band away and back
+      picks up where it left off instead of jumping, and a gap in the frames is capped at half a
+      second — a background tab gets none at all.
+- [x] **Matched against the reference by measurement.** Both were screenshotted five seconds apart
+      with the same batch, and compared as mean change per pixel over the picture's own spread —
+      scale-free, so two palettes can be held against each other. Our band is captured with its
+      words hidden so only the gradient is in the figure.
+
+| | normalised change per 5s |
+|---|---|
+| reference (5 steps) | **0.403** |
+| ours, before (frozen) | 0.000 |
+| ours, first working pass | 0.074 |
+| ours, final | **0.427** |
+
+      **Five steps matter.** The first reading of the reference used two, one of which was an
+      outlier, and gave 0.717 — nearly twice the truth. Two rounds of speed went into chasing that
+      number before more steps showed the reference's own pairs ranging from 0.13 to 0.55.
+- [x] **The composition had to be allowed to move.** An earlier pass had made a fixed diagonal most
+      of the tone and let the field only ripple it (that was the fix for the band going flat and
+      dark). Measured, that capped the motion at a fifth of the reference however fast the field
+      drifted, because four fifths of the picture was standing still. The field carries it now; the
+      flatness is prevented instead by **normalising the field** by its own spread, and by a scale
+      that keeps two cells of it across the frame — so there is always a high and a low in view.
+- [x] **The words are protected by a ceiling, not a weight.** Taking a fixed amount off the middle
+      of the ramp is a visible dark smudge sitting in the centre whenever the light moves off it.
+      Capping the ramp over the words instead leaves anything already dark untouched and dims a
+      crest only as it crosses them. Measured with the words hidden, white type on the worst 5% of
+      what the headline sits on: **2.5:1 before, 4.8:1 after** (large type needs 3:1).
+- [x] The CSS scrim came down from 54% to 32% as a result: the shader does that job better, and the
+      band keeps its own green instead of a grey veil.
+- [x] 43 design tests, typecheck and lint clean; both themes and both scenes checked
+
+## Task 12: it moves, but not where anyone is looking (owner, 12 Nov)
+
+"The animation is working only when hovering with mouse, but not like the one I sent you." Two real
+causes, both found by measuring rather than by looking.
+
+- [x] **Measure in a browser that is actually getting frames.** The app's preview pane runs
+      `requestAnimationFrame` at **1fps** even with the pane displayed and the page focused — a
+      plain rAF loop typed into its console gets the same, so it is the pane, not our code. Any
+      animation looks frozen-except-on-input there, which is exactly the reported symptom. All the
+      figures below come from headless Chromium with the d3d11 flags: 61fps, real GPU, 1536x826.
+- [x] **The rate matched but the character did not.** Measured at two timescales:
+
+| step | ours (before) | reference |
+|---|---|---|
+| 500ms | 0.303 | 0.186 |
+| 2s | 0.331 | 0.438 |
+
+      Ours changed **1.6× as fast over half a second** and only **0.76×** over two. That is the
+      signature of a field boiling in place: churn saturates, travel accumulates. The reference's
+      bright mass crosses the frame in about ten seconds and ours was going nowhere.
+      **Motion is now two separate things** — `travel`, the whole field sliding bodily across the
+      frame, and `speed`, a much slower morph as it goes. Travel carries it; the morph keeps it from
+      looking like a panned texture.
+- [x] **The middle of the band was flat, and the middle is where people look.** Measured per region,
+      the change every two seconds at the headline was **11** against the reference's **29** —
+      the ceiling over the words plus the scrim had taken the life out of exactly that block, so the
+      only motion a person could see was the parallax answering their own mouse. The ceiling is now
+      high and gentle and shaped as a wide, short band hugging the headline, and the scrim came down
+      from 32% to 20%; the headline carries a tighter halo instead.
+
+| | before | now | reference |
+|---|---|---|---|
+| change per 2s, whole band | 21.9 | **35.7** | 31.2 |
+| change per 2s, at the words | 11.1 | **18.3** | 29.5 |
+| white type on the worst 5% behind it | 4.8:1 | **3.7:1** dark, 3.4:1 light | n/a |
+
+- [x] **The travel brought back the flatness it was warned about**: a window sliding across the
+      field wanders into low-variance neighbourhoods, and normalising the field globally does not
+      help with that. Fixed by keeping more of the fixed diagonal (`tilt` 0.3 → 0.45), which
+      guarantees a corner-to-corner range whatever the field is doing, and by softening `warp` so
+      the masses are broad like the reference's rather than marbled.
+- [x] The remaining gap is at the words (18 against 29) and is **a constraint the reference does not
+      have**: its demo puts dark text on a light field, ours puts white type on this one. The centre
+      can only be as lively as white type on it can stay legible.
+- [x] 43 design tests, typecheck and lint clean
+- [x] **Owner signed the motion off on localhost:3000 (12 Nov).** The band is settled; what is left
+      of this round is the commit and the PR.
+
 ## Checkpoint
 
 - [x] Lint clean; typecheck clean for all source files (the only errors are in `.next/dev/types/*`,

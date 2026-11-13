@@ -31,9 +31,8 @@ export function FunnelStepper({ step }: { step: FunnelStep }) {
 
 /**
  * The sign-up journey's frame: the one auth layout (components/portal/auth-layout.tsx) with the
- * sign-up stepper. Owner, 2026-11-03: the showcase panel is gone from sign-up, as from sign-in: the
- * journey is one centred card on the brand field, its heading above the card. A step with real
- * content for a panel (the plan summary, the receipt) still passes it as `aside` and keeps the split.
+ * sign-up stepper. The agent photo panel stays in place across the journey; steps with real panel
+ * content (the plan summary and receipt) pass it as `aside` over that panel.
  */
 export function FunnelFrame({ step, children, wide = false, aside, back, stepsAside, legal = true, heading }: {
   /** The step's heading, drawn above the card on the brand field. Without it, a leading FunnelHeading child is lifted. */
@@ -60,6 +59,7 @@ export function FunnelFrame({ step, children, wide = false, aside, back, stepsAs
     <AuthLayout
       plane="agent"
       mode="sign-up"
+      photo
       width={wide ? "wide" : "default"}
       // On the centred card the other way in ("Have an account? Sign in") sits under the card, like the sign-in's;
       // beside a panel it stays on the step line.
