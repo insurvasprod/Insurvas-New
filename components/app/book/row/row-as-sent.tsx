@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 import { EmptyState } from "@/components/ui/page-states";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { cn } from "@/lib/utils";
@@ -26,7 +27,7 @@ export type AsSentEntry = {
 
 /**
  * A row of a carrier file › The row as sent (round 5, board 5): every column on one list, the columns the
- * layout reads first, then those it keeps unread (muted). "Used N" and "All M" filter it. No paging: a row
+ * layout reads first, then those it keeps unread (a "Not read" chip). "Used N" and "All M" filter it. No paging: a row
  * has tens of columns, never hundreds, and the question "did we read this right?" needs them side by side.
  */
 export function RowAsSent({ entries, missing, noMap }: { entries: AsSentEntry[]; missing: string | null; noMap: boolean }) {
@@ -42,7 +43,7 @@ export function RowAsSent({ entries, missing, noMap }: { entries: AsSentEntry[];
           <ToggleChip role="radio" selected={show === "all"} count={entries.length} onClick={() => setShow("all")}>All</ToggleChip>
         </div>
       }
-      footer={missing ? <p className="m-0 border-t border-border px-4 py-3 text-xs text-[var(--warning-ink)]">{missing}</p> : undefined}
+      footer={missing ? <p className="m-0 border-t border-border px-4 py-3 text-sm text-foreground">{missing}</p> : undefined}
     >
       {shown.length === 0 ? (
         <EmptyState
@@ -51,28 +52,21 @@ export function RowAsSent({ entries, missing, noMap }: { entries: AsSentEntry[];
         />
       ) : (
         <table className="portal-lead-table w-full text-left text-sm">
-          <thead><tr><th>Column</th><th>Value as sent</th></tr></thead>
+          <thead><tr><th>Column</th><th>Value as sent</th><th>Became</th></tr></thead>
           <tbody>
-            {shown.map((entry) => {
-              const read = Boolean(entry.became);
-              return (
-                <tr key={entry.key}>
-                  <td className={cn("max-w-[220px] truncate", read ? "text-foreground" : "text-muted-foreground")} title={entry.header}>
-                    {entry.header} <span className="ml-1 font-mono text-xs text-muted-foreground">{entry.column}</span>
-                  </td>
-                  <td className="max-w-[360px] truncate" title={entry.raw ?? (entry.shown || undefined)}>
-                    {entry.shown === "" ? <span className="text-muted-foreground">(empty)</span> : (
-                      <span className={cn(entry.mono && "font-mono text-xs", read ? "font-semibold text-foreground" : "text-muted-foreground")}>{entry.shown}</span>
-                    )}
-                    {read ? (
-                      <span className="ml-2 text-xs text-muted-foreground" title={entry.becameTitle ?? undefined}>→ {entry.became}</span>
-                    ) : (
-                      <span className="ml-2 text-xs text-muted-foreground">· not read</span>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
+            {/* One line per column, one text colour (owner 2026-11-11): the column's letter and the cell exactly as sent are
+                tooltips; a column the layout keeps unread says so in its one chip. */}
+            {shown.map((entry) => (
+              <tr key={entry.key}>
+                <td className="whitespace-nowrap font-medium text-foreground" title={`Column ${entry.column}`}>{entry.header}</td>
+                <td className="whitespace-nowrap" title={entry.raw ?? undefined}>
+                  {entry.shown === "" ? <span className="text-muted-foreground">—</span> : <span className={cn(entry.mono && "font-mono")}>{entry.shown}</span>}
+                </td>
+                <td className="whitespace-nowrap">
+                  {entry.became ? <span title={entry.becameTitle ?? undefined}>{entry.became}</span> : <StatusChip tone="neutral">Not read</StatusChip>}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}

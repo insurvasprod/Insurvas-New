@@ -1,54 +1,43 @@
 "use client";
 
 /**
- * Settings › Sales › Application stages (LA-3.23, STATUS-MODEL §6; called "Pipeline sync" until 2026-10-30 —
- * the id stays sales-pipeline-sync so links, search and the settings history keep working). Reads and saves
- * GET/PUT /api/app/settings/sales/stage-map; Activity reads …/stage-map/activity; `?preview=sample`
- * reads the sample stages.
+ * Settings › Sales process › Stage moves (was Application stages, LA-3.23, STATUS-MODEL §6; called "Pipeline
+ * sync" until 2026-10-30). Reads and saves GET/PUT /api/app/settings/sales/stage-map; recent moves read
+ * …/stage-map/activity; `?preview=sample` reads the sample stages.
  *
- * Which of the agency's own pipeline stages a lead's card moves to when its application reaches
- * each state. An unmapped state moves nothing ("Doesn't move the card"). A card moved by hand stays
- * where it was put — the sync never overrides a person.
+ * Which of the agency's own pipeline stages a lead's card moves to when its application reaches each state. An
+ * unmapped state moves nothing ("Doesn't move the card"). A card moved by hand stays where it was put, and a card
+ * never moves backwards (except to quoting after a decline): the sync's own rules, always on.
  *
- * Per pipeline (owner 2026-10-29, 20261029100000): each pipeline maps its own stages; a lead's card
- * moves only within the pipeline it is on. Before that migration there is one map, as before.
+ * Settings round 8 (owner pick A, sales-process board "6 · Stage moves", 2026-11-12): the map of application events
+ * to stages for one pipeline at a time (a switch picks it), with the recent moves beside it instead of a Map /
+ * Activity tab pair. An event opens in a right sheet with one stage per pipeline; Save there stores it. Fill in
+ * (match stage names, copy another pipeline, clear) changes the map and the Save on the title line stores it.
  *
- * Redesign 2026-10-30 (ui-taste round, canvas page settings-pipeline-sync, direction A): the pipelines
- * are the page's spine, each with how many states move a card and what to check; the map shows the
- * board it moves cards on; several pipelines can change before one Save; Fill in matches stage names,
- * copies another pipeline's map or clears; Activity shows the sync's moves and checks open cases. On a
- * phone the list comes first, then the map.
- *
- * A pipeline with nothing saved is pre-filled from its own stage names when it is opened (the §6
- * seeding rule, case-insensitive); nothing that does not match is guessed, and nothing is stored until
- * Save.
+ * A pipeline with nothing saved is pre-filled from its own stage names when it is opened (the §6 seeding rule);
+ * nothing that does not match is guessed, and nothing is stored until it is saved.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, ChevronLeft } from "lucide-react";
+import { AlertTriangle, ArrowRight } from "lucide-react";
 import { notify } from "@/lib/notify";
 
-import { DefaultChip, resetConfirmOptions } from "@/components/app/settings/defaults";
-import { Callout, SettingsStack } from "@/components/app/settings/primitives";
+import { resetConfirmOptions } from "@/components/app/settings/defaults";
+import { SettingsSectionHeader, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
-import { cardSurface } from "@/components/ui/card";
-import { InfoTip } from "@/components/ui/info-tip";
-import { titleCaseNode } from "@/components/ui/title-case";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { EmptyState } from "@/components/ui/page-states";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { StatusChip } from "@/components/ui/status-chip";
-import { TableCard } from "@/components/ui/table-card";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { Sheet } from "@/components/ui/sheet";
 import { PIPELINE_SYNC_KEYS, SAMPLE_PIPELINES, SAMPLE_STAGES, type PipelineSyncKey } from "@/lib/applications/settingsFixtures";
 import { mapChecks, matchByName, matchCount, type MapCheck } from "@/lib/salesSettings/stageMapChecks";
 import type { PipelineOption, StageMapView } from "@/lib/salesSettings/stageMap";
 import { cn } from "@/lib/utils";
 
-import { CardFact, DiscardSave, ReadOnlyNotice, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, useSalesSample } from "./shared";
-import { BoardPreview, CopyDialog, FillMenu, mappedCount, PIPELINES_HREF, PipelineList, StagePicker, type Mapping, type PipelineRow } from "./pipeline-sync-parts";
+import { Pane, SheetSection, StatusLine, TabBody, TabFrame, ThreeWay } from "../sales-process/parts";
+import { SalesPanelTop, useSalesSample } from "./shared";
+import { CopyDialog, FillMenu, mappedCount, PIPELINES_HREF, StagePicker, UNMAPPED, type Mapping } from "./pipeline-sync-parts";
 import { PipelineSyncActivity } from "./pipeline-sync-activity";
 
 const EMPTY = Object.fromEntries(PIPELINE_SYNC_KEYS.map((k) => [k.key, null])) as Mapping;
@@ -64,9 +53,10 @@ const SAMPLE: StageMapView = {
 };
 
 const same = (a: Mapping, b: Mapping) => PIPELINE_SYNC_KEYS.every((k) => (a[k.key] ?? null) === (b[k.key] ?? null));
-type Tab = "map" | "activity";
 
 export function SalesPipelineSync() {
+  /** The application event open in the sheet, with each pipeline's map as it opened. */
+  const [editing, setEditing] = useState<{ key: PipelineSyncKey; before: Record<string, Mapping> } | null>(null);
   const sample = useSalesSample();
   const [view, setView] = useState<StageMapView | null>(sample ? SAMPLE : null);
   const [loading, setLoading] = useState(!sample);
@@ -76,9 +66,6 @@ export function SalesPipelineSync() {
   // Pipelines whose draft is only the stage-name pre-fill (the save bar says so).
   const [prefilled, setPrefilled] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("map");
-  // Phone: the list first, then the map of the pipeline picked.
-  const [phoneMap, setPhoneMap] = useState(false);
   const [copyOpen, setCopyOpen] = useState(false);
   const [focus, setFocus] = useState<PipelineSyncKey | null>(null);
   const [saving, setSaving] = useState(false);
@@ -149,10 +136,7 @@ export function SalesPipelineSync() {
   const dirtyIds = pipelines.filter((p) => drafts[p.id] && !same(drafts[p.id], savedFor(p.id))).map((p) => p.id);
   const dirty = dirtyIds.length > 0;
   const ro = !view?.canEdit;
-  const pipeline = pipelines.find((p) => p.id === selected) ?? null;
 
-  const rowsForList: PipelineRow[] = pipelines.map((p) => ({ id: p.id, name: p.name, mapped: mappedCount(draftFor(p.id)), checks: checksFor(p).length, dirty: dirtyIds.includes(p.id), noStages: p.stages.length === 0 }));
-  const following = pipelines.filter((p) => mappedCount(savedFor(p.id)) > 0).length;
 
   function setDraft(id: string, next: Mapping) {
     setDrafts((d) => ({ ...d, [id]: next }));
@@ -191,7 +175,6 @@ export function SalesPipelineSync() {
       // A saved map moves cards from the next application change on; the toast says how to catch up the rest.
       notify.done(done.length > 1 ? `Application stages saved · ${names.join(", ")}` : "Application stages saved", {
         detail: "Cards follow from each application's next change. Cards already waiting can move from Activity.",
-        ...(view.canEdit && selected !== AGENCY ? { action: { label: "Check cards", onClick: () => setTab("activity") } } : {}),
       });
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : "That didn't save. Try again.");
@@ -213,59 +196,87 @@ export function SalesPipelineSync() {
     if (ok) setDraft(p.id, { ...EMPTY });
   }
 
-  const pick = (id: string) => {
-    open(id);
-    setTab((t) => (t === "activity" && (ro || id === AGENCY) ? "map" : t));
-    setPhoneMap(true);
+  const pick = (id: string) => open(id);
+
+  const pipeline = pipelines.find((p) => p.id === selected) ?? null;
+  const checks = pipeline ? checksFor(pipeline) : [];
+  const map = pipeline ? draftFor(pipeline.id) : null;
+  const byName = pipeline && pipeline.id !== AGENCY ? matchByName(pipeline) : null;
+  const matches = byName && map ? PIPELINE_SYNC_KEYS.filter((k) => byName[k.key] && byName[k.key] !== map[k.key]).length : 0;
+  const dirtyNames = dirtyIds.map((id) => pipelines.find((p) => p.id === id)?.name).filter(Boolean).join(", ");
+  const prefillOnly = dirty && dirtyIds.every((id) => prefilled.has(id));
+  const allChecks = pipelines.reduce((n, p) => n + checksFor(p).length, 0);
+  const mappedMost = pipelines.length ? Math.max(...pipelines.map((p) => mappedCount(savedFor(p.id)))) : 0;
+  const stageName = (p: PipelineOption, m: Mapping, key: PipelineSyncKey) => {
+    const id = m[key];
+    if (!id) return null;
+    return p.stages.find((s) => s.id === id)?.name ?? "A stage that was archived";
   };
 
-  const prefillOnly = dirty && dirtyIds.every((id) => prefilled.has(id));
-  const dirtyNames = dirtyIds.map((id) => pipelines.find((p) => p.id === id)?.name).filter(Boolean).join(", ");
+  const openEvent = (key: PipelineSyncKey) => setEditing({ key, before: Object.fromEntries(pipelines.map((p) => [p.id, draftFor(p.id)])) });
+  /** Cancel puts every pipeline's map back as it was when the sheet opened. */
+  const cancelEvent = () => {
+    if (editing) setDrafts((d) => {
+      const nextDrafts = { ...d };
+      for (const [id, m] of Object.entries(editing.before)) {
+        if (same(m, savedFor(id))) delete nextDrafts[id];
+        else nextDrafts[id] = m;
+      }
+      return nextDrafts;
+    });
+    setEditing(null);
+  };
+  const event = editing ? PIPELINE_SYNC_KEYS.find((k) => k.key === editing.key) ?? null : null;
 
   return (
-    <SettingsStack>
+    <TabFrame>
+      <SettingsSectionHeader
+        actions={
+          <>
+            <Button asChild variant="outline"><Link href={PIPELINES_HREF}>Open Pipelines &amp; outcomes</Link></Button>
+            {view?.canEdit && dirty && <Button type="button" variant="ghost" disabled={saving} onClick={discard}>Discard</Button>}
+            {view?.canEdit && dirty && <Button type="button" disabled={saving} onClick={() => { void save(); }}>{saving ? "Saving…" : dirtyIds.length > 1 ? `Save ${dirtyIds.length} pipelines` : "Save"}</Button>}
+          </>
+        }
+      />
       <SalesPanelTop sample={sample} />
-      {loading ? <SalesLoading label="Loading application stages" rows={7} columns={2} /> : error ? (
+      {loading ? <StatusLine tone="muted">Reading your stage moves</StatusLine> : error ? (
         error.pending
-          ? <SalesSetupPending what="Application stages" />
-          : <SalesLoadError message={error.text} onRetry={load} />
+          ? <StatusLine tone="warn">Stage moves need a database update. Ask your Insurvas admin to apply the latest migrations.</StatusLine>
+          : <StatusLine tone="bad" action={<Button type="button" variant="outline" size="sm" onClick={load}>Try again</Button>}>{error.text}</StatusLine>
+      ) : saveError ? (
+        <StatusLine tone="bad">Couldn&apos;t save: {saveError} Your changes are still here.</StatusLine>
+      ) : dirty ? (
+        <StatusLine tone="warn">{prefillOnly ? `Filled in from the stage names of ${dirtyNames} — nothing moves until you save` : `Unsaved changes · ${dirtyNames}`}</StatusLine>
       ) : view && (
-        <>
-          {saveError && <Callout tone="error" title={saveError} />}
-          {ro && <ReadOnlyNotice what="application stages" />}
+        <StatusLine tone={allChecks ? "warn" : "ok"}>
+          {mappedMost} of {PIPELINE_SYNC_KEYS.length} events mapped in {pipelines.length} {pipelines.length === 1 ? "pipeline" : "pipelines"}{allChecks ? ` · ${allChecks} to check` : ""}{ro ? " · read only: only an owner changes stage moves" : ""}
+        </StatusLine>
+      )}
 
-          {pipelines.length === 0 ? (
-            <EmptyState title="No pipelines yet" hint="Add a pipeline and its stages in Pipelines & outcomes, then choose here where its cards go." action={<Button asChild variant="outline"><Link href={PIPELINES_HREF}>Open Pipelines &amp; outcomes</Link></Button>} />
-          ) : (
-            <div className="grid items-start gap-4 md:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]">
-              <TableCard
-                title="Pipelines"
-                info="Each pipeline has its own map. A lead's card moves only inside the pipeline it is on, so a pipeline that moves nothing keeps its cards where people put them."
-                action={<CardFact>{following} of {pipelines.length} follow their applications</CardFact>}
-                className={cn(phoneMap && "max-md:hidden")}
-              >
-                <PipelineList rows={rowsForList} value={selected} onPick={pick} />
-              </TableCard>
-
-              {pipeline && (
-                <div className={cn("flex min-w-0 flex-col gap-2", !phoneMap && "max-md:hidden")}>
-                  <Button type="button" variant="ghost" className="w-fit md:hidden" onClick={() => setPhoneMap(false)}><ChevronLeft aria-hidden="true" />Pipelines</Button>
-                  <PipelineCard
-                    key={pipeline.id}
-                    pipeline={pipeline}
-                    map={draftFor(pipeline.id)}
-                    saved={savedFor(pipeline.id)}
-                    checks={checksFor(pipeline)}
-                    ro={ro}
-                    legacy={pipeline.id === AGENCY}
-                    dirty={dirtyIds.includes(pipeline.id)}
-                    tab={ro || pipeline.id === AGENCY ? "map" : tab}
-                    onTab={setTab}
-                    focus={focus}
-                    sample={sample}
-                    canCopy={pipelines.some((p) => p.id !== pipeline.id && mappedCount(draftFor(p.id)) > 0)}
-                    onChange={(next) => setDraft(pipeline.id, next)}
-                    onMatch={() => setDraft(pipeline.id, { ...draftFor(pipeline.id), ...Object.fromEntries(Object.entries(matchByName(pipeline)).filter(([, v]) => v)) })}
+      {view && pipelines.length === 0 ? (
+        <EmptyState title="No pipelines yet" hint="Add a pipeline and its stages in Pipelines & outcomes, then choose here where its cards go." action={<Button asChild variant="outline"><Link href={PIPELINES_HREF}>Open Pipelines &amp; outcomes</Link></Button>} />
+      ) : (
+        <TabBody>
+          <Pane
+            className="lg:flex-1"
+            title="When the application…"
+            actions={pipeline && map ? (
+              <>
+                {pipelines.length > 1 && pipelines.length <= 3 ? (
+                  <ThreeWay label="Pipeline" value={pipeline.id} onChange={pick} options={pipelines.map((p) => ({ key: p.id, label: p.name }))} />
+                ) : pipelines.length > 3 ? (
+                  <select aria-label="Pipeline" className={cn(control, "mt-0 w-auto")} value={pipeline.id} onChange={(e) => pick(e.target.value)}>
+                    {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                ) : null}
+                {!ro && pipeline.stages.length > 0 && (
+                  <FillMenu
+                    matches={matches}
+                    canCopy={pipelines.some((p) => p.id !== pipeline.id && mappedCount(draftFor(p.id)) > 0) && pipeline.id !== AGENCY}
+                    canClear={mappedCount(map) > 0}
+                    canReset={dirtyIds.includes(pipeline.id)}
+                    onMatch={() => setDraft(pipeline.id, { ...map, ...Object.fromEntries(Object.entries(matchByName(pipeline)).filter(([, v]) => v)) })}
                     onCopy={() => setCopyOpen(true)}
                     onClear={() => void clearPipeline(pipeline)}
                     onReset={() => {
@@ -273,181 +284,88 @@ export function SalesPipelineSync() {
                       setPrefilled((s) => new Set([...s].filter((id) => id !== pipeline.id)));
                       notify.done(`${pipeline.name} is back as saved`);
                     }}
-                    onMapState={(key) => { setTab("map"); setFocus(key); }}
                   />
-                  {copyOpen && (
-                    <CopyDialog
-                      open={copyOpen}
-                      onOpenChange={setCopyOpen}
-                      target={pipeline}
-                      current={draftFor(pipeline.id)}
-                      sources={pipelines.filter((p) => p.id !== pipeline.id && mappedCount(draftFor(p.id)) > 0).map((p) => ({ pipeline: p, map: draftFor(p.id) }))}
-                      onCopy={(next) => setDraft(pipeline.id, next)}
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          <LeaveGuard dirty={view.canEdit && dirty} onDiscard={discard} what="the application stages" />
-          <SettingsSaveBar
-            visible={view.canEdit && dirty}
-            note={prefillOnly ? `Filled in from ${dirtyNames}'s stage names — nothing moves until you save.` : `Unsaved changes · ${dirtyNames}`}
+                )}
+              </>
+            ) : undefined}
           >
-            <DiscardSave saving={saving} onDiscard={discard} onSave={() => { void save(); }} saveLabel={dirtyIds.length > 1 ? `Save ${dirtyIds.length} pipelines` : "Save changes"} />
-          </SettingsSaveBar>
-        </>
-      )}
-    </SettingsStack>
-  );
-}
-
-/* ── one pipeline: its board, its map, its activity ───────────────────── */
-
-function PipelineCard({ pipeline, map, saved, checks, ro, legacy, dirty, tab, onTab, focus, sample, canCopy, onChange, onMatch, onCopy, onClear, onReset, onMapState }: {
-  pipeline: PipelineOption;
-  map: Mapping;
-  saved: Mapping;
-  checks: MapCheck[];
-  ro: boolean;
-  legacy: boolean;
-  dirty: boolean;
-  tab: Tab;
-  onTab: (tab: Tab) => void;
-  focus: PipelineSyncKey | null;
-  sample: boolean;
-  canCopy: boolean;
-  onChange: (next: Mapping) => void;
-  onMatch: () => void;
-  onCopy: () => void;
-  onClear: () => void;
-  onReset: () => void;
-  onMapState: (key: PipelineSyncKey) => void;
-}) {
-  const count = mappedCount(map);
-  const flagged = useMemo(() => new Set(checks.map((c) => c.key)), [checks]);
-  const checkFor = (key: PipelineSyncKey) => checks.find((c) => c.key === key)?.text;
-  const noStages = pipeline.stages.length === 0;
-  const byName = useMemo(() => matchByName(pipeline), [pipeline]);
-  // What Match stage names would still change: a state whose same-named stage it is not on yet.
-  const matches = legacy ? 0 : PIPELINE_SYNC_KEYS.filter((k) => byName[k.key] && byName[k.key] !== map[k.key]).length;
-
-  // Owner 2026-10-30: the card scrolls inside itself. Its title row (with the tabs and Fill in) and the
-  // board stay put; only the states below scroll. On a phone the page scrolls as usual.
-  const card = useRef<HTMLElement>(null);
-  const height = useFitHeight(card, dirty ? 76 : 0);
-
-  return (
-    <section ref={card} aria-label={`${pipeline.name} application stages`} className={cn(cardSurface, "flex min-h-0 flex-col")} style={height ? { height } : undefined}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-[var(--border)] px-4 py-3">
-        <div className="flex min-w-0 items-center gap-1">
-          <h2 className="text-card-title text-[var(--ink)]">{titleCaseNode(pipeline.name)}</h2>
-          <InfoTip label="How cards move">{RULES}</InfoTip>
-        </div>
-        <ViewTabs<Tab>
-          label={`${pipeline.name} application stages`}
-          tabs={ro || legacy ? [{ key: "map", label: "Map" }] : [{ key: "map", label: "Map" }, { key: "activity", label: "Activity" }]}
-          value={tab}
-          onChange={onTab}
-        />
-        {!ro && tab === "map" && !noStages && <FillMenu matches={matches} canCopy={canCopy && !legacy} canClear={count > 0} canReset={dirty} onMatch={onMatch} onCopy={onCopy} onClear={onClear} onReset={onReset} />}
-        <span className="ml-auto flex flex-wrap items-center gap-2">
-          {dirty && <StatusChip tone="info">Unsaved{mappedCount(saved) !== count ? ` · ${mappedCount(saved)} → ${count}` : ""}</StatusChip>}
-          {checks.length > 0 && <StatusChip tone="warning">{checks.length} to check</StatusChip>}
-          {/* Nothing saved: the sync runs on the Insurvas default (stage names). */}
-          {!legacy && mappedCount(saved) === 0 && <DefaultChip />}
-        </span>
-      </div>
-
-      {tab === "activity" ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pt-4"><PipelineSyncActivity pipelineId={pipeline.id} pipelineName={pipeline.name} sample={sample} dirty={dirty} onMapState={onMapState} /></div>
-      ) : noStages ? (
-        <EmptyState
-          title={`${pipeline.name} has no stages to move to`}
-          hint="Add its stages first, then choose here where its cards go."
-          action={<Button asChild variant="outline"><Link href={PIPELINES_HREF}>Open Pipelines &amp; outcomes</Link></Button>}
-        />
-      ) : (
-        <>
-          {/* Frozen: the board, and the line that says nothing follows yet. */}
-          <div className="shrink-0 pt-3">
-            {!legacy && <BoardPreview pipeline={pipeline} map={map} flagged={flagged} />}
-            {count === 0 && !ro && (
-              <p className="m-0 px-4 pb-3 text-sm text-[var(--ink)]">Nothing on {pipeline.name} follows its applications yet. Choose a stage for each state below{matches ? ", or use Fill in › Match stage names" : ""}.</p>
+            {loading || !view ? <SectionLoading rows={7} columns={3} label="Loading stage moves" /> : !pipeline || !map ? null : pipeline.stages.length === 0 ? (
+              <EmptyState title={`${pipeline.name} has no stages to move to`} hint="Add its stages first, then choose here where its cards go." action={<Button asChild variant="outline"><Link href={PIPELINES_HREF}>Open Pipelines &amp; outcomes</Link></Button>} />
+            ) : (
+              <ul className="m-seq m-0 list-none p-0" aria-label={`Where the cards of ${pipeline.name} go`}>
+                {PIPELINE_SYNC_KEYS.map((k) => {
+                  const warning = checks.find((c) => c.key === k.key)?.text;
+                  const to = stageName(pipeline, map, k.key);
+                  return (
+                    <li key={k.key} id={`ps-row-${k.key}`} className={cn("border-b border-[var(--border)] last:border-b-0", focus === k.key && "bg-[var(--primary-soft)]")}>
+                      <button type="button" onClick={() => openEvent(k.key)} className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+                        <span aria-hidden="true" className="inline-grid size-7 shrink-0 place-items-center rounded-[8px] bg-[var(--primary-soft)] text-xs font-semibold text-[var(--accent-ink)]">{k.label.charAt(0)}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-[var(--ink)]">{k.label}</span>
+                          <span className="block truncate text-xs text-[var(--muted)]">{k.when}{k.key === "requoting" ? " · the one move back" : ""}</span>
+                        </span>
+                        <ArrowRight aria-hidden="true" className="size-4 shrink-0 text-[var(--muted)]" />
+                        <span className="min-w-0 flex-1">
+                          <span className={cn("block truncate text-sm font-semibold", to ? "text-[var(--ink)]" : "text-[var(--muted)]")}>{to ?? UNMAPPED}</span>
+                          <span className={cn("block truncate text-xs", warning ? "text-[var(--warning-ink)]" : "text-[var(--muted)]")}>{warning ? <><AlertTriangle aria-hidden="true" className="mr-1 inline size-3" />{warning}</> : pipeline.name}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-[var(--muted)]">{ro ? "View" : "Edit"}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </div>
-          {/* The one scrolling part: the states, under a header that stays at its top. */}
-          <div className="min-h-0 flex-1 overflow-y-auto border-t border-[var(--border)]" data-ps-rows="">
-            <div className="sticky top-0 z-[1] hidden grid-cols-[minmax(0,1fr)_minmax(260px,340px)] gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2 text-label text-[var(--body)] md:grid">
-              <span>When the application…</span>
-              <span>the card moves to</span>
-            </div>
-            <ul className="m-seq m-0 list-none p-0" aria-label={`Where ${pipeline.name}'s cards go`}>
-              {PIPELINE_SYNC_KEYS.map((k) => {
-                const warning = checkFor(k.key);
-                return (
-                  <li
-                    key={k.key}
-                    id={`ps-row-${k.key}`}
-                    className={cn("grid gap-2 border-b border-[var(--border)] px-4 py-3 transition-colors duration-500 last:border-b-0 md:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] md:items-center md:gap-4", focus === k.key && "bg-[var(--primary-soft)]")}
-                  >
-                    <div className="min-w-0">
-                      <label htmlFor={`ps-${k.key}`} className="block text-sm font-semibold text-[var(--ink)]">{k.label}</label>
-                      <span className="text-xs text-[var(--body)]">{k.when}{k.key === "requoting" ? " · the one move back" : ""}</span>
-                    </div>
-                    <StagePicker
-                      id={`ps-${k.key}`}
-                      stateKey={k.key}
-                      pipeline={pipeline}
-                      map={map}
-                      disabled={ro}
-                      onChange={(stageId) => onChange({ ...map, [k.key]: stageId })}
-                    />
-                    {warning && (
-                      <p className="m-in m-0 flex items-start gap-1.5 text-xs text-[var(--warning-ink)] md:col-span-2">
-                        <AlertTriangle aria-hidden="true" className="mt-px size-3.5 shrink-0" />{warning}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
+          </Pane>
 
-/**
- * The card's height so it ends at the bottom of the window (md and up), measured from where it sits in
- * its scrolling column: the column then has nothing to scroll and the card scrolls inside. `reserve`
- * keeps room for the save bar under it. Undefined on a phone, where the page scrolls as usual.
- */
-function useFitHeight(ref: React.RefObject<HTMLElement | null>, reserve: number): number | undefined {
-  const [height, setHeight] = useState<number | undefined>(undefined);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const scroller = (() => {
-      for (let p = el.parentElement; p; p = p.parentElement) {
-        const y = getComputedStyle(p).overflowY;
-        if ((y === "auto" || y === "scroll") && p.scrollHeight > p.clientHeight - 1) return p;
-      }
-      return null;
-    })();
-    const measure = () => {
-      if (window.innerWidth < 768) { setHeight(undefined); return; }
-      const rect = el.getBoundingClientRect();
-      const box = scroller ? scroller.getBoundingClientRect() : { top: 0, height: window.innerHeight };
-      const offset = rect.top - box.top + (scroller?.scrollTop ?? window.scrollY);
-      const visible = scroller ? scroller.clientHeight : window.innerHeight;
-      setHeight(Math.max(420, Math.floor(visible - offset - 24 - reserve)));
-    };
-    measure();
-    window.addEventListener("resize", measure);
-    return () => window.removeEventListener("resize", measure);
-  }, [ref, reserve]);
-  return height;
+          <Pane className="lg:w-[360px] lg:shrink-0" title="Recent moves" sub={pipeline?.name}>
+            {pipeline && pipeline.id !== AGENCY && !ro ? (
+              <div className="p-3"><PipelineSyncActivity key={pipeline.id} pipelineId={pipeline.id} pipelineName={pipeline.name} sample={sample} dirty={dirtyIds.includes(pipeline.id)} onMapState={(key) => { setFocus(key); openEvent(key); }} /></div>
+            ) : <p className="m-0 px-4 py-6 text-sm text-[var(--muted)]">{ro ? "Only an owner sees the moves." : "Moves show per pipeline once each pipeline has its own map."}</p>}
+          </Pane>
+        </TabBody>
+      )}
+
+      {copyOpen && pipeline && (
+        <CopyDialog
+          open={copyOpen}
+          onOpenChange={setCopyOpen}
+          target={pipeline}
+          current={draftFor(pipeline.id)}
+          sources={pipelines.filter((p) => p.id !== pipeline.id && mappedCount(draftFor(p.id)) > 0).map((p) => ({ pipeline: p, map: draftFor(p.id) }))}
+          onCopy={(next) => setDraft(pipeline.id, next)}
+        />
+      )}
+
+      {editing && event && (
+        <Sheet
+          title={`When the application ${event.when.charAt(0).toLowerCase()}${event.when.slice(1)}`}
+          subtitle={event.label}
+          onClose={cancelEvent}
+          footer={ro ? <Button type="button" variant="outline" className="ml-auto" onClick={() => setEditing(null)}>Close</Button> : (
+            <span className="ml-auto flex gap-2">
+              <Button type="button" variant="outline" onClick={cancelEvent}>Cancel</Button>
+              <Button type="button" disabled={saving} onClick={() => { void save().then(() => setEditing(null)); }}>{saving ? "Saving…" : dirty ? "Save" : "Done"}</Button>
+            </span>
+          )}
+        >
+          <SheetSection title="Move the lead card to" sub="One stage per pipeline. Leave it on “Doesn't move the card” to leave the card where it is.">
+            {pipelines.map((p) => (
+              <div key={p.id} className="flex flex-col gap-1.5">
+                <label htmlFor={`ps-${p.id}-${event.key}`} className="text-label text-[var(--body)]">{p.name}</label>
+                {p.stages.length === 0 ? <span className="text-sm text-[var(--muted)]">No stages yet.</span> : (
+                  <StagePicker id={`ps-${p.id}-${event.key}`} stateKey={event.key} pipeline={p} map={draftFor(p.id)} disabled={ro} onChange={(stageId) => setDraft(p.id, { ...draftFor(p.id), [event.key]: stageId })} />
+                )}
+              </div>
+            ))}
+          </SheetSection>
+          <SheetSection title="If the card is already further along" sub={RULES}>
+            <p className="m-0 text-sm text-[var(--body)]">Never moves a card backwards · always on</p>
+          </SheetSection>
+        </Sheet>
+      )}
+
+      {view && <LeaveGuard dirty={view.canEdit && dirty} onDiscard={discard} what="the stage moves" />}
+    </TabFrame>
+  );
 }

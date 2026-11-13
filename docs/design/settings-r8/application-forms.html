@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Application Forms Board</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* board-only extras, built from the kit tokens only */
+.mono,.copy .v{font-size:12px}
+.hmeta{display:flex;gap:6px;align-items:center;padding-bottom:8px}
+.col{display:flex;flex-direction:column;gap:8px}
+.lib h6{font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 6px}
+.lib h6:first-child{margin-top:0}
+.ft{display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;padding:7px 10px;border:1px solid var(--tile-edge);border-radius:8px;font-size:14px;color:var(--body);background:var(--tile);margin-bottom:6px}
+.ft i{width:20px;height:20px;border-radius:6px;background:var(--band);font-style:normal;font-size:12px;font-weight:700;display:grid;place-items:center;color:var(--muted);flex:none}
+.ft.drag{box-shadow:var(--overlay);border-color:var(--primary);transform:rotate(-2deg)}
+.ft small{margin-left:auto;font-size:12px;color:var(--muted)}
+.ftg{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.ftg .ft{margin:0;font-size:12px;padding:6px 8px}
+.qs{display:flex;flex-direction:column;gap:8px}
+.q{position:relative;border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px 10px 30px;background:var(--card)}
+.q.on{box-shadow:0 0 0 2px var(--ring);border-color:transparent}
+.q.dim{opacity:.55}
+.q .grip{position:absolute;left:10px;top:13px;width:9px;height:15px;background:radial-gradient(circle,var(--border-strong) 1.3px,transparent 1.6px) 0 0/4.5px 5px}
+.q .ql{font-size:14px;font-weight:600;color:var(--ink);display:flex;align-items:center;gap:6px}
+.q .qm{font-size:12px;color:var(--muted);margin-top:2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.q .fake{margin-top:8px}
+.q .tools{position:absolute;right:10px;top:9px;display:flex;gap:4px}
+.q .tools span{width:24px;height:24px;border-radius:6px;display:grid;place-items:center;font-size:12px;color:var(--muted);border:1px solid var(--tile-edge);background:var(--card)}
+.req{color:var(--bad);font-weight:700}
+.qrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.drop{border-top:2px dashed var(--primary);margin:2px 0;position:relative;height:0}
+.drop span{position:absolute;right:8px;top:-11px;font-size:12px;font-weight:600;background:var(--primary-soft);color:var(--accent-ink);padding:0 8px;border-radius:6px}
+.pgtabs{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.pgtabs span{font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--border);color:var(--body);background:var(--card)}
+.pgtabs span.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:600}
+.ins .tabs{flex:none;margin-bottom:12px}
+.sel{height:30px;border:1px solid var(--border-strong);border-radius:8px;padding:0 10px;display:inline-flex;align-items:center;gap:6px;font-size:12px;background:var(--card);color:var(--ink);white-space:nowrap}
+.sel::after{content:"▾";font-size:12px;color:var(--muted)}
+.sel.v::after{display:none}
+.cond{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--tile-edge);border-radius:8px;background:var(--tile);font-size:14px}
+.cond .x{margin-left:auto;color:var(--muted);font-size:12px}
+.cgroup{border:1px dashed var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.join{font-size:12px;font-weight:700;color:var(--accent-ink);padding:2px 8px;border-radius:6px;background:var(--primary-soft);align-self:flex-start}
+.join.or{background:var(--info-s);color:var(--info)}
+.sentence{font-size:14px;color:var(--body);background:var(--band);border-radius:8px;padding:8px 10px}
+.phone{width:250px;height:500px;border:8px solid var(--border-strong);border-radius:32px;background:var(--card);overflow:hidden;display:flex;flex-direction:column;flex:none}
+.phone .pb{padding:14px;display:flex;flex-direction:column;gap:10px;flex:1;overflow:hidden}
+.desk{border:1px solid var(--tile-edge);border-radius:12px;overflow:hidden;background:var(--card);display:flex;flex-direction:column;flex:1;min-width:0}
+.desk .chrome{height:30px;background:var(--band);border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:6px;padding:0 10px;font-size:12px;color:var(--muted)}
+.desk .chrome i{width:8px;height:8px;border-radius:50%;background:var(--border)}
+.desk .db{padding:20px 28px;display:flex;flex-direction:column;gap:12px}
+.prog{height:4px;border-radius:2px;background:var(--band)}
+.prog b{display:block;height:100%;background:var(--primary);border-radius:2px}
+.hbar{height:8px;border-radius:4px;background:var(--band);width:180px;display:inline-block;vertical-align:middle}
+.hbar b{display:block;height:100%;border-radius:4px;background:var(--primary)}
+.hbar.w b{background:var(--warn)}
+.qr{width:150px;height:150px;flex:none;border-radius:8px;border:10px solid var(--card);box-shadow:0 0 0 1px var(--tile-edge);background:
+  linear-gradient(var(--card),var(--card)) 6px 6px/26px 26px no-repeat,
+  linear-gradient(var(--ink),var(--ink)) 0 0/38px 38px no-repeat,
+  linear-gradient(var(--card),var(--card)) 98px 6px/26px 26px no-repeat,
+  linear-gradient(var(--ink),var(--ink)) 92px 0/38px 38px no-repeat,
+  linear-gradient(var(--card),var(--card)) 6px 98px/26px 26px no-repeat,
+  linear-gradient(var(--ink),var(--ink)) 0 92px/38px 38px no-repeat,
+  repeating-conic-gradient(var(--ink) 0 25%,var(--card) 0 50%) 0 0/13px 13px}
+.fn{border:1px solid var(--tile-edge);border-radius:10px;padding:8px 12px;background:var(--card);font-size:14px;color:var(--ink);display:flex;align-items:center;gap:8px}
+.fn small{font-size:12px;color:var(--muted);margin-left:auto}
+.fn.on{box-shadow:0 0 0 2px var(--ring);border-color:transparent}
+.fn.rule{background:var(--info-s);color:var(--info);border-color:transparent;font-size:12px;font-weight:600;align-self:center}
+.arrow{width:2px;height:16px;background:var(--border-strong);margin:0 auto}
+.fork{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.fork > div{display:flex;flex-direction:column;gap:0}
+.fork .lbl{font-size:12px;font-weight:600;color:var(--muted);text-align:center;margin-bottom:4px}
+.dl{display:flex;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.dl .w{width:76px;flex:none}
+.del{text-decoration:line-through;color:var(--muted)}
+.vbars{display:flex;align-items:flex-end;gap:8px;height:150px;padding:0 4px;border-bottom:1px solid var(--rule)}
+.vbars div{flex:1;background:var(--primary-soft);border-radius:6px 6px 0 0;position:relative}
+.vbars div.w{background:var(--warn-s)}
+.vlab{display:flex;gap:8px;padding:6px 4px 0}
+.vlab span{flex:1;font-size:12px;color:var(--muted);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.yn{display:flex;flex-direction:column;gap:8px;max-width:360px}
+.yn span{height:44px;border:1px solid var(--border-strong);border-radius:10px;display:flex;align-items:center;padding:0 12px;gap:10px;font-size:16px;color:var(--ink);background:var(--card)}
+.yn span.on{background:var(--primary-soft);border-color:var(--primary)}
+.yn .k{width:22px;height:22px;border:1px solid var(--border);border-radius:5px;font-size:12px;font-weight:700;display:grid;place-items:center;color:var(--muted);background:var(--card)}
+.stage{background:var(--band);border-radius:12px;flex:1;display:flex;flex-direction:column;justify-content:center;padding:28px 48px;gap:14px}
+.stage .qn{font-size:12px;font-weight:600;color:var(--accent-ink)}
+.stage .qt{font-size:16px;font-weight:600;color:var(--ink)}
+.stage .qh{font-size:14px;color:var(--muted)}
+.gal{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.fc{border:1px solid var(--tile-edge);border-radius:12px;background:var(--card);overflow:hidden}
+.fc .th{height:96px;background:var(--band);padding:14px;display:flex;flex-direction:column;gap:6px}
+.fc .th .ln{height:8px;border-radius:4px;background:var(--tile-edge)}
+.fc .th .bt{height:18px;width:60px;border-radius:6px;background:var(--primary-soft)}
+.fc .fb{padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.fc .fb b{font-size:14px;color:var(--ink)}
+.fc .fb small{font-size:12px;color:var(--muted)}
+.fc.new{border-style:dashed;display:grid;place-items:center;min-height:180px;color:var(--accent-ink);font-weight:600}
+.sc{border:1px solid var(--tile-edge);border-radius:12px;margin-bottom:12px;background:var(--card)}
+.sc-h{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--band);border-radius:12px 12px 0 0;font-size:14px}
+.sc.shut .sc-h{border-radius:12px}
+.sc-h b{font-size:14px;color:var(--ink)}
+.sc-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.ir{display:grid;grid-template-columns:18px 1fr 150px 92px 70px;gap:10px;align-items:center;padding:8px 14px;border-top:1px solid var(--rule);font-size:14px;color:var(--body)}
+.ir:first-of-type{border-top:0}
+.ir .grip{width:9px;height:15px;background:radial-gradient(circle,var(--border-strong) 1.3px,transparent 1.6px) 0 0/4.5px 5px}
+.ir.on{background:var(--hover)}
+.ir .lab{border-bottom:1px dashed var(--border);padding:2px 0;color:var(--ink)}
+.ir .lab.edit{border:1px solid var(--ring);border-radius:6px;padding:4px 8px;outline:2px solid var(--ring);outline-offset:1px}
+.inl{padding:12px 14px 14px 42px;border-top:1px solid var(--rule);background:var(--tile);display:flex;flex-direction:column;gap:10px}
+.outline a{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.outline a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.outline a small{margin-left:auto;font-size:12px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:140px 1fr;gap:6px 12px;font-size:14px}
+.kv span:nth-child(odd){color:var(--muted);font-size:12px;padding-top:2px}
+.cmpx{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.legend{border:1px solid var(--tile-edge);border-radius:12px;padding:12px 14px;background:var(--board-card);font-size:14px}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Application forms</h1>
+  <p class="lead">The lead intake form a partner or agent fills in to create a lead, one per product (Final Expense, Term life, Medicare…), copied from the Insurvas form for that product. Today it is a careful single-form editor: one draft kept in this browser until <b>Publish version N</b>, questions moved with up/down arrows, one “show after X = Y” condition each, and no way to test, share, hook up or measure the form. The owner wants it as easy to set up as Typeform, Jotform, HubSpot forms or Tally, using every feature we already have and adding the ones premium form builders take for granted.</p>
+  <div class="notes">
+    <div><b>1 · One form per product, and no way to make another</b>No create, no duplicate. An agency that runs a Spanish Final Expense form, or a short web form next to a long partner form, cannot. Several forms per product is the biggest gap. <span class="tag-mig">needs a migration</span></div>
+    <div><b>2 · The draft lives in one browser</b>Close the laptop, switch machines or let a teammate help, and the work is gone. Publish controls also show twice (header and bottom bar). Drafts should be saved to Insurvas and publish should live in one place. <span class="tag-mig">needs a migration</span></div>
+    <div><b>3 · Logic is one condition, order is arrows</b>“Show after X = Y” cannot say “Tobacco is Yes <i>and</i> age is over 60”. Arrows make a 13-question form slow to arrange. There are no pages or steps, so phone users scroll one long list.</div>
+    <div><b>4 · Nothing to prove the form works</b>“Try the form” fills a dialog but creates nothing. There is no test submission that shows the lead, its pipeline stage and where each answer landed on the application.</div>
+    <div><b>5 · The form cannot leave Insurvas</b>No share link, embed code or QR for an agency website or a mailer, no webhook when a form is sent, no numbers on starts, completions or where people stop.</div>
+    <div><b>Forms vs Application field sets</b>The <strong>application form</strong> (this page) <i>creates the lead</i>: what a partner, agent or website visitor answers up front. <strong>Application field sets</strong> are the carrier’s paper application per carrier × product, deciding which fields are Not asked / Optional / Required on the case’s Application step later. Answers flow from form to application by matching field names; every option below shows that match openly so it is not a guess.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · Three-pane builder</button><button data-opt-btn="B">B · One question at a time</button><button data-opt-btn="C">C · Overview + sections</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ═════════════════════════════ OPTION A ═════════════════════════════ -->
+  <div class="opt A">
+    <div class="sec"><h2>A1 · Forms list</h2><span>Several forms per product, each with status, version, submissions and completion. New form opens a sheet: start from Insurvas, duplicate, or blank.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling</div>
+        <div class="head"><h3>Application forms</h3><nav class="tabs"><a class="on">Forms <span class="c">5</span></a><a>Results</a><a>Webhooks <span class="c">1</span></a></nav><div class="acts"><span class="btn p">New form</span></div></div>
+        <div class="status"><span class="dot"></span>4 forms live · 1 draft · 1,264 forms started in the last 30 days</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><div class="seg"><span class="on">All products</span><span>Final Expense</span><span>Term life</span><span>Medicare</span><span>Mortgage</span></div><div class="r"><span class="input ph" style="width:220px;height:32px">Find a form</span></div></div>
+            <div class="scroll"><table><thead><tr><th>Form</th><th>Product</th><th>Version</th><th>Started · 30 days</th><th>Completed</th><th>Changed</th><th>Status</th></tr></thead><tbody>
+              <tr class="s"><td>Final Expense intake</td><td>Final Expense</td><td>v8 · 4 changes in draft</td><td>812</td><td>64%</td><td>Today · Demo Agent</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Final Expense · Spanish</td><td>Final Expense</td><td>Not published</td><td>—</td><td>—</td><td>Yesterday · Rosa Medina</td><td><span class="chip info">Draft</span></td></tr>
+              <tr><td>Term life quick quote</td><td>Term life</td><td>v3</td><td>291</td><td>71%</td><td>Oct 28 · Demo Agent</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Medicare Supplement</td><td>Medicare</td><td>v5</td><td>161</td><td>58%</td><td>Oct 12 · Jordan Ellery</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Mortgage protection mailer</td><td>Mortgage protection</td><td>v2</td><td>0</td><td>—</td><td>Sep 30 · Jordan Ellery</td><td><span class="chip">Off</span></td></tr>
+            </tbody></table></div>
+          </div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <div class="sheet-h"><b>New form</b><span class="tag-mig">needs a migration</span><span class="x">✕</span></div>
+        <div class="sheet-b col" style="gap:14px">
+          <div><label class="l">Product</label><div class="input">Final Expense<span class="end">▾</span></div><div class="help">A product can have as many forms as you like. Each one makes leads for this product.</div></div>
+          <div><label class="l">Start from</label>
+            <div class="col">
+              <div class="li on" style="border-radius:10px;border:1px solid var(--tile-edge)"><span class="radio on"></span><div><b>The Insurvas Final Expense form</b><small>13 questions on 4 pages · kept up to date by Insurvas until you change it</small></div></div>
+              <div class="li" style="border-radius:10px;border:1px solid var(--tile-edge)"><span class="radio"></span><div><b>A copy of one of your forms</b><small>Final Expense intake, Term life quick quote…</small></div></div>
+              <div class="li" style="border-radius:10px;border:1px solid var(--tile-edge)"><span class="radio"></span><div><b>A blank form</b><small>Just name, phone and consent, the three every lead needs</small></div></div>
+            </div>
+          </div>
+          <div><label class="l">Form name</label><div class="input focus">Final Expense · Spanish</div><div class="help">Partners see this name when they pick a form.</div></div>
+          <div><label class="l">Who fills it in</label><div class="row"><span class="tog on">Partners</span><span class="tog on">Your agents</span><span class="tog">Anyone with the link</span></div></div>
+        </div>
+        <div class="sheet-f"><span class="btn o">Cancel</span><span class="btn p">Create and open</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A2 · Main editor</h2><span>Field library left (drag in), the live form centre with pages and drag handles, inspector right with Field / Logic / Validation. One place to publish.</span></div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a class="on">Build</a><a>Settings</a><a>Results</a><a>Versions <span class="c">8</span></a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn o">Test submission</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>4 changes not published · draft saved to Insurvas 1 min ago, so it follows you to any computer <span class="tag-mig">needs a migration</span></div>
+        <div class="body">
+          <div class="card lib" style="width:236px;flex:none">
+            <div class="card-h"><b>Add a field</b></div>
+            <div class="scroll"><div class="card-b">
+              <div class="input ph" style="height:32px;margin-bottom:12px">Search fields</div>
+              <h6>Insurvas questions · ready to use</h6>
+              <div class="ft"><i>D</i>Date of birth</div>
+              <div class="ft"><i>T</i>Tobacco use<small>in use</small></div>
+              <div class="ft drag"><i>$</i>Coverage amount</div>
+              <div class="ft"><i>B</i>Beneficiary</div>
+              <div class="ft"><i>H</i>Height &amp; weight<small>in use</small></div>
+              <div class="ft"><i>C</i>Health conditions<small>in use</small></div>
+              <div class="ft"><i>S</i>State</div>
+              <div class="ft"><i>✓</i>Consent to contact</div>
+              <h6>Field types</h6>
+              <div class="ftg"><div class="ft"><i>Aa</i>Text</div><div class="ft"><i>¶</i>Long text</div><div class="ft"><i>#</i>Number</div><div class="ft"><i>$</i>Money</div><div class="ft"><i>D</i>Date</div><div class="ft"><i>☎</i>Phone</div><div class="ft"><i>@</i>Email</div><div class="ft"><i>Y</i>Yes / no</div><div class="ft"><i>○</i>Choice</div><div class="ft"><i>☐</i>Multiple</div><div class="ft"><i>S</i>SSN</div><div class="ft"><i>R</i>Bank</div></div>
+              <h6>Layout</h6>
+              <div class="ftg"><div class="ft"><i>↵</i>New page</div><div class="ft"><i>H</i>Heading</div></div>
+            </div></div>
+          </div>
+          <div class="card flex1">
+            <div class="card-h"><div class="pgtabs"><span>1 · About you</span><span class="on">2 · Health</span><span>3 · Coverage</span><span>4 · Consent</span><span>+ Page</span><span class="tag-mig">needs a migration</span></div></div>
+            <div class="scroll"><div class="card-b" style="max-width:640px;margin:0 auto;width:100%">
+              <div class="small muted" style="margin-bottom:10px">Partners see this page second. Drag a field by its handle, or drag one in from the left.</div>
+              <div class="qs">
+                <div class="q on"><span class="grip"></span><div class="ql">Do you use tobacco or nicotine? <span class="req">*</span></div><div class="qm">Yes / no · Insurvas question · goes to the application’s Tobacco use</div><div class="yn fake" style="flex-direction:row;max-width:none"><span class="on" style="height:36px;font-size:14px;flex:1"><span class="k">Y</span>Yes</span><span style="height:36px;font-size:14px;flex:1"><span class="k">N</span>No</span></div><div class="tools"><span>⧉</span><span>⋯</span></div></div>
+                <div class="q"><span class="grip"></span><div class="ql">How many cigarettes a day?</div><div class="qm">Number · <span class="chip info">Shows when 2 rules match</span></div></div>
+                <div class="drop"><span>Coverage amount goes here</span></div>
+                <div class="qrow">
+                  <div class="q"><span class="grip"></span><div class="ql">Height <span class="req">*</span></div><div class="qm">ft / in · half width</div></div>
+                  <div class="q"><span class="grip"></span><div class="ql">Weight <span class="req">*</span></div><div class="qm">lbs · 80–500 · half width</div></div>
+                </div>
+                <div class="q"><span class="grip"></span><div class="ql">Any of these health conditions? <span class="req">*</span></div><div class="qm">Multiple choice · 9 choices · “None of these” clears the rest</div></div>
+                <div class="q dim"><span class="grip"></span><div class="ql">Hospitalised in the last 2 years?</div><div class="qm">Yes / no · hidden on this form</div></div>
+              </div>
+            </div></div>
+            <div class="card-f"><span class="btn o sm">+ Add a field</span><span class="btn g sm">+ Heading</span><span class="sp"></span><span class="small muted">Values reach the application by field name · 13 of 13 matched</span></div>
+          </div>
+          <div class="card ins" style="width:300px;flex:none">
+            <div class="card-h"><b>Tobacco use</b><div class="r"><span class="small muted">Page 2 · question 1</span></div></div>
+            <div class="scroll"><div class="card-b col" style="gap:12px">
+              <nav class="tabs"><a class="on">Field</a><a>Logic</a><a>Validation</a></nav>
+              <div><label class="l">Question</label><div class="input">Do you use tobacco or nicotine?</div></div>
+              <div><label class="l">Help under the question</label><div class="input textarea">Includes cigarettes, vapes, cigars, chew and nicotine patches in the last 12 months.</div></div>
+              <div><label class="l">Answer with</label><div class="input">Yes / no<span class="end">▾</span></div></div>
+              <div class="row" style="justify-content:space-between"><span>Must be answered</span><span class="switch on"></span></div>
+              <div class="row" style="justify-content:space-between"><span>Width</span><div class="seg"><span>Half</span><span class="on">Full</span></div></div>
+              <div class="row" style="justify-content:space-between"><span>Only your agents see it</span><span class="switch"></span></div>
+              <div class="tile"><small>Lands on the application as</small><div class="row" style="margin-top:4px"><b style="font-size:14px">Tobacco use</b><span class="chip ok">Matched</span></div><div class="help">Saved as <span class="mono">tobacco_use</span>. Final Expense field sets ask for it on 6 carriers.</div></div>
+            </div></div>
+            <div class="card-f"><span class="btn danger sm">Remove</span><span class="sp"></span><span class="btn o sm">Duplicate</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A3 · Conditional logic</h2><span>Inspector › Logic. Groups of rules joined by AND / OR, read back as one plain sentence. Page skips live here too.</span></div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a class="on">Build</a><a>Settings</a><a>Results</a><a>Versions <span class="c">8</span></a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn o">Test submission</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>5 changes not published · draft saved to Insurvas just now</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><div class="pgtabs"><span>1 · About you</span><span class="on">2 · Health</span><span>3 · Coverage</span><span>4 · Consent</span></div></div>
+            <div class="scroll"><div class="card-b" style="max-width:560px;margin:0 auto;width:100%"><div class="qs">
+              <div class="q"><span class="grip"></span><div class="ql">Do you use tobacco or nicotine? <span class="req">*</span></div><div class="qm">Yes / no</div></div>
+              <div class="q on"><span class="grip"></span><div class="ql">How many cigarettes a day?</div><div class="qm">Number · <span class="chip info">Shows when 2 rules match</span></div></div>
+              <div class="qrow"><div class="q"><span class="grip"></span><div class="ql">Height <span class="req">*</span></div><div class="qm">ft / in</div></div><div class="q"><span class="grip"></span><div class="ql">Weight <span class="req">*</span></div><div class="qm">lbs</div></div></div>
+              <div class="q"><span class="grip"></span><div class="ql">Any of these health conditions? <span class="req">*</span></div><div class="qm">Multiple choice</div></div>
+            </div></div></div>
+          </div>
+          <div class="card ins" style="width:440px;flex:none">
+            <div class="card-h"><b>How many cigarettes a day?</b></div>
+            <div class="scroll"><div class="card-b col" style="gap:12px">
+              <nav class="tabs"><a>Field</a><a class="on">Logic <span class="c">2</span></a><a>Validation</a></nav>
+              <div class="row"><span>Show this question when</span><span class="sel">all</span><span>of these are true</span></div>
+              <div class="cond"><span class="sel">Tobacco use</span><span class="sel">is</span><span class="sel">Yes</span><span class="x">✕</span></div>
+              <span class="join">AND</span>
+              <div class="cgroup">
+                <div class="row small muted">Any of these</div>
+                <div class="cond"><span class="sel">Age (from Date of birth)</span><span class="sel">is at least</span><span class="sel v">60</span><span class="x">✕</span></div>
+                <span class="join or">OR</span>
+                <div class="cond"><span class="sel">State</span><span class="sel">is one of</span><span class="sel">FL, GA, TX</span><span class="x">✕</span></div>
+                <span class="btn g sm">+ Or another rule</span>
+              </div>
+              <div class="row"><span class="btn o sm">+ And a rule</span><span class="btn o sm">+ And a group</span></div>
+              <div class="sentence">Shows when Tobacco use is Yes <b>and</b> (the person is 60 or older <b>or</b> lives in FL, GA or TX).</div>
+              <div class="fsec" style="padding-bottom:0"><h4>When it is hidden</h4><p>A hidden answer is cleared, so it never reaches the lead.</p><div class="row" style="justify-content:space-between"><span>Clear the answer</span><span class="switch on"></span></div></div>
+              <div class="fsec"><h4>Page rules</h4><p>Skip or jump whole pages.</p><div class="cond"><span>Skip page</span><span class="sel">3 · Coverage</span><span>when</span><span class="sel">Coverage amount</span><span class="sel">is empty</span></div></div>
+              <div class="fsec"><h4>All logic on this form <span class="chip n">4</span></h4>
+                <div class="li" style="padding:8px 0"><div><b>Cigarettes a day</b><small>Tobacco use is Yes and (age 60+ or FL, GA, TX)</small></div></div>
+                <div class="li" style="padding:8px 0"><div><b>Beneficiary relationship</b><small>Beneficiary name is filled in</small></div></div>
+                <div class="li" style="padding:8px 0"><div><b>Which conditions, and when?</b><small>Health conditions is not “None of these”</small></div></div>
+                <div class="li" style="padding:8px 0;border-bottom:0"><div><b>Page 3 · Coverage</b><small>Skipped when Coverage amount is empty</small></div></div>
+              </div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A4 · Validation for a field</h2><span>Inspector › Validation in plain words. The canvas shows the error exactly as a partner will see it.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a class="on">Build</a><a>Settings</a><a>Results</a><a>Versions <span class="c">8</span></a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn o">Test submission</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>6 changes not published · draft saved to Insurvas just now</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><div class="pgtabs"><span class="on">1 · About you</span><span>2 · Health</span><span>3 · Coverage</span><span>4 · Consent</span></div></div>
+            <div class="scroll"><div class="card-b" style="max-width:560px;margin:0 auto;width:100%"><div class="qs">
+              <div class="q"><span class="grip"></span><div class="ql">Full name <span class="req">*</span></div><div class="qm">Text · letters only</div></div>
+              <div class="qrow">
+                <div class="q on"><span class="grip"></span><div class="ql">Date of birth <span class="req">*</span></div><div class="fake"><div class="input bad">03 / 14 / 1932</div><div class="err">Final Expense covers ages 50 to 85. This person is 94.</div></div></div>
+                <div class="q"><span class="grip"></span><div class="ql">State <span class="req">*</span></div><div class="qm">Choice · 50 states + DC</div></div>
+              </div>
+              <div class="q"><span class="grip"></span><div class="ql">Phone <span class="req">*</span></div><div class="qm">Phone · (###) ###-#### · US only</div></div>
+              <div class="q"><span class="grip"></span><div class="ql">Best time to call</div><div class="qm">Choice · Morning / Afternoon / Evening</div></div>
+            </div></div></div>
+          </div>
+          <div class="card ins" style="width:360px;flex:none">
+            <div class="card-h"><b>Date of birth</b></div>
+            <div class="scroll"><div class="card-b col" style="gap:12px">
+              <nav class="tabs"><a>Field</a><a>Logic</a><a class="on">Validation <span class="c">3</span></a></nav>
+              <div><label class="l">Age on the day they apply</label><div class="row"><div class="input" style="width:90px">50</div><span class="muted">to</span><div class="input" style="width:90px">85</div></div><div class="help">The same ages as Settings › Who can apply. Change one, both change.</div></div>
+              <div class="row" style="justify-content:space-between"><span>No dates in the future</span><span class="switch on"></span></div>
+              <div><label class="l">Shown format</label><div class="input">MM / DD / YYYY<span class="end">▾</span></div></div>
+              <div><label class="l">Message when it fails</label><div class="input textarea">Final Expense covers ages 50 to 85. This person is {age}.</div><div class="help">{age} is filled in for you.</div></div>
+              <div class="fsec"><h4>Try a value</h4><p>Checks the rules above without saving.</p><div class="input">03/14/1932</div><div class="row" style="margin-top:8px"><span class="chip bad">Fails · age 94</span></div></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A5 · Preview, computer and phone</h2><span>Preview opens over the builder. Both widths side by side, answers can be typed, logic runs live.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense intake</div>
+        <div class="head"><h3>Preview</h3><nav class="tabs"><a>Computer</a><a>Phone</a><a class="on">Both</a></nav><div class="acts"><span class="btn o">Back to building</span><span class="btn p">Test submission</span></div></div>
+        <div class="status"><span class="dot"></span>Showing your draft · nothing is saved from the preview</div>
+        <div class="body">
+          <div class="desk">
+            <div class="chrome"><i></i><i></i><i></i><span style="margin-left:8px">forms.insurvas.com/ellery-fields/final-expense</span></div>
+            <div class="db">
+              <div class="row" style="justify-content:space-between"><b style="font-size:16px">Ellery &amp; Fields · Final Expense</b><span class="small muted">Page 2 of 4</span></div>
+              <div class="prog"><b style="width:50%"></b></div>
+              <div><label class="l">Do you use tobacco or nicotine? *</label><div class="row"><span class="tog on" style="flex:1">Yes</span><span class="tog" style="flex:1">No</span></div></div>
+              <div><label class="l">How many cigarettes a day?</label><div class="input">10</div><div class="help">Shown because Tobacco is Yes and the person is 67.</div></div>
+              <div class="qrow"><div><label class="l">Height *</label><div class="input">5 ft 8 in</div></div><div><label class="l">Weight *</label><div class="input">182 lbs</div></div></div>
+              <div><label class="l">Any of these health conditions? *</label><div class="row small"><span class="check on"></span>Diabetes <span class="check"></span>Heart attack <span class="check"></span>COPD <span class="check"></span>None of these</div></div>
+              <div class="row"><span class="btn o">Back</span><span class="sp" style="flex:1"></span><span class="btn p">Next · Coverage</span></div>
+            </div>
+          </div>
+          <div class="phone">
+            <div class="pb">
+              <div class="small muted">Page 2 of 4</div><div class="prog"><b style="width:50%"></b></div>
+              <b style="font-size:16px">Health</b>
+              <div><label class="l">Do you use tobacco or nicotine? *</label><div class="row"><span class="tog on" style="flex:1">Yes</span><span class="tog" style="flex:1">No</span></div></div>
+              <div><label class="l">How many cigarettes a day?</label><div class="input">10</div></div>
+              <div><label class="l">Height *</label><div class="input">5 ft 8 in</div></div>
+              <div><label class="l">Weight *</label><div class="input">182 lbs</div></div>
+              <div style="flex:1"></div>
+              <span class="btn p" style="justify-content:center">Next</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A6 · Test submission result</h2><span>Sends the draft as a real but tagged test lead: shows the lead, its stage, routing, the webhook and where each answer landed.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a class="on">Build</a><a>Settings</a><a>Results</a><a>Versions <span class="c">8</span></a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn o">Test submission</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>Test sent at 10:42 AM · not counted in results, nobody was notified</div>
+        <div class="body"><div class="card flex1"><div class="card-b muted">The builder stays behind the sheet.</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Test submission · it worked</b><span class="chip ok">Lead made</span><span class="x">✕</span></div>
+        <div class="sheet-b col" style="gap:14px">
+          <div class="strip tile" style="padding:0"><div><small>Test lead</small><b style="font-size:16px">Margaret Ellis</b></div><div><small>Pipeline stage</small><b style="font-size:16px">New lead</b></div><div><small>Would go to</small><b style="font-size:16px">Round robin</b></div><div><small>Webhook</small><b style="font-size:16px">200 · 182 ms</b></div></div>
+          <div class="card"><div class="card-h"><b>Where each answer landed</b><div class="r"><span class="small muted">13 answers · 12 on the lead, 9 on the application</span></div></div>
+            <table><thead><tr><th>Question</th><th>Answer</th><th>Lead field</th><th>Application field</th></tr></thead><tbody>
+              <tr><td>Full name</td><td>Margaret Ellis</td><td>Name</td><td>Insured name</td></tr>
+              <tr><td>Date of birth</td><td>06/02/1958 · age 67</td><td>Date of birth</td><td>Date of birth</td></tr>
+              <tr><td>Tobacco use</td><td>Yes</td><td>Tobacco use</td><td>Tobacco use</td></tr>
+              <tr><td>Cigarettes a day</td><td>10</td><td>Cigarettes a day</td><td>—</td></tr>
+              <tr><td>Coverage amount</td><td>$15,000</td><td>Coverage amount</td><td>Face amount</td></tr>
+              <tr class="h"><td>Best time to call</td><td>Evening</td><td>Best time to call</td><td><span class="chip warn">No match</span></td></tr>
+              <tr><td>Consent to contact</td><td>Agreed 10:42 AM</td><td>Consent record</td><td>—</td></tr>
+            </tbody></table>
+          </div>
+          <div class="help">“No match” means the carrier application has no field with that name. It still lives on the lead. Map it in Application field sets if a carrier needs it.</div>
+        </div>
+        <div class="sheet-f"><span class="btn danger">Delete test lead</span><span class="sp" style="flex:1"></span><span class="btn o">Open test lead</span><span class="btn p">Send another</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A7 · Share sheet</h2><span>One link, per-partner tracking, embed code and a QR. Share is this page’s one gold button.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a class="on">Build</a><a>Settings</a><a>Results</a><a>Versions <span class="c">8</span></a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>Link shares the live version 8 · your draft is not public</div>
+        <div class="body"><div class="card flex1"><div class="card-b muted">The builder stays behind the sheet.</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Share this form</b><span class="tag-mig">needs a migration</span><span class="x">✕</span></div>
+        <div class="sheet-b col" style="gap:16px">
+          <nav class="tabs" style="flex:none"><a class="on">Link</a><a>Embed</a><a>QR code</a><a>Partner links <span class="c">14</span></a></nav>
+          <div><label class="l">Form link</label><div class="copy"><span class="v">https://forms.insurvas.com/ellery-fields/final-expense</span><span class="btn o sm">Copy</span></div></div>
+          <div><label class="l">Who can open it</label><div class="seg"><span class="on">Anyone with the link</span><span>Signed-in partners</span><span>Your agents</span></div><div class="help">Anyone-with-the-link leads ask for consent on the last page and are checked against your Never call list.</div></div>
+          <div><label class="l">Embed on your website</label><div class="seg" style="margin-bottom:8px"><span class="on">In the page</span><span>Pop-up button</span><span>Full page</span></div>
+            <div class="code">&lt;div data-insurvas-form="final-expense"&gt;&lt;/div&gt;
+&lt;script async src="https://forms.insurvas.com/embed.js"&gt;&lt;/script&gt;</div></div>
+          <div class="row" style="align-items:flex-start;gap:16px"><span class="qr"></span><div class="col"><b>QR code for mailers</b><span class="small muted">Opens the same link with source = mailer, so mailer leads show up apart in Results.</span><div class="row"><span class="btn o sm">Download PNG</span><span class="btn o sm">Download SVG</span></div></div></div>
+          <div><label class="l">Lead source for this link</label><div class="input">Website · Final Expense<span class="end">▾</span></div></div>
+        </div>
+        <div class="sheet-f"><span class="btn o">Done</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A8 · Submission webhook</h2><span>Form settings › When a form is sent. Signed POST to the agency’s own system, with deliveries and retries.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a>Build</a><a class="on">Settings</a><a>Results</a><a>Versions <span class="c">8</span></a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>1 webhook working · last delivery 4 min ago</div>
+        <div class="body">
+          <div class="card" style="width:230px;flex:none"><div class="scroll"><div class="outline" style="padding:8px">
+            <a>Who can apply</a><a>Pages &amp; parts</a><a>After sending</a><a class="on">When a form is sent <small>1</small></a><a>For your agents only</a><a>Versions &amp; Insurvas updates</a>
+          </div></div></div>
+          <div class="card flex1">
+            <div class="card-h"><b>When a form is sent</b><span class="tag-mig">needs a migration</span><div class="r"><span class="btn o sm">Send a test</span></div></div>
+            <div class="scroll"><div class="card-b">
+              <div class="fgrid">
+                <div class="full"><label class="l">Send to this address</label><div class="input">https://hooks.elleryfields.com/insurvas/final-expense</div></div>
+                <div><label class="l">Send when</label><div class="row"><span class="tog on">A form is sent</span><span class="tog">A test is sent</span><span class="tog">A form is left half-done</span></div></div>
+                <div><label class="l">Signing secret</label><div class="copy"><span class="v">•••••••••••••••••••• ends 7f2c</span><span class="btn o sm">Show once</span></div><div class="help">We sign every call so your system knows it came from Insurvas.</div></div>
+                <div class="full"><label class="l">What we send</label><div class="code">{ "event": "form.submitted", "form": "final-expense-intake", "version": 8,
+  "lead_id": "ld_…", "answers": { "full_name": "…", "date_of_birth": "…", "tobacco_use": true, … } }</div></div>
+              </div>
+              <div class="fsec" style="margin-top:12px"><h4>Recent deliveries</h4><p>Failed calls retry 5 times over 2 hours.</p>
+                <table><thead><tr><th>When</th><th>Lead</th><th>Took</th><th>Answer</th></tr></thead><tbody>
+                  <tr><td>Today 10:38 AM</td><td>Walter Brooks</td><td>211 ms</td><td><span class="chip ok">200 OK</span></td></tr>
+                  <tr><td>Today 9:51 AM</td><td>Dolores Kim</td><td>198 ms</td><td><span class="chip ok">200 OK</span></td></tr>
+                  <tr><td>Yesterday 6:02 PM</td><td>Earl Watkins</td><td>10 s</td><td><span class="chip warn">Retried · 200 on 2nd try</span></td></tr>
+                </tbody></table>
+              </div>
+            </div></div>
+            <div class="card-f"><span class="btn danger sm">Remove webhook</span><span class="sp"></span><span class="btn p">Save webhook</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A9 · Versions and publish</h2><span>Versions tab: every published version, what changed in plain words, restore. Publish asks once, here and nowhere else.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a>Build</a><a>Settings</a><a>Results</a><a class="on">Versions <span class="c">8</span></a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>Draft has 4 changes since version 8</div>
+        <div class="body">
+          <div class="card" style="width:380px;flex:none"><div class="card-h"><b>Versions</b></div><div class="scroll">
+            <div class="li on"><div><b>Draft · version 9</b><small>4 changes · Demo Agent, Rosa Medina</small></div><span class="end chip info">Draft</span></div>
+            <div class="li"><div><b>Version 8</b><small>Nov 3 · Demo Agent · 12 partner drafts on it</small></div><span class="end chip ok">Live</span></div>
+            <div class="li"><div><b>Version 7</b><small>Oct 20 · Jordan Ellery</small></div></div>
+            <div class="li"><div><b>Version 6</b><small>Oct 2 · Demo Agent</small></div></div>
+            <div class="li"><div><b>Insurvas update available</b><small>Insurvas Final Expense v4 adds “Prior coverage”</small></div><span class="end btn o sm">Review</span></div>
+          </div></div>
+          <div class="card flex1"><div class="card-h"><b>What changed in the draft</b><div class="r"><span class="btn g sm">Undo all</span></div></div><div class="scroll"><div class="card-b">
+            <div class="dl"><span class="w"><span class="chip ok">Added</span></span>“How many cigarettes a day?” on page 2, shown by 2 rules</div>
+            <div class="dl"><span class="w"><span class="chip info">Changed</span></span>Coverage amount: most allowed <span class="del">$25,000</span> → $50,000</div>
+            <div class="dl"><span class="w"><span class="chip info">Moved</span></span>Beneficiary from page 4 to page 3 · Coverage</div>
+            <div class="dl"><span class="w"><span class="chip bad">Removed</span></span>Email · answers already collected stay on their leads</div>
+          </div></div></div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog">
+        <h4>Publish version 9?</h4>
+        <p>New leads use version 9 from now on. The 12 partner drafts already started stay on version 8 until they are sent.</p>
+        <label class="l">Note for the team (optional)</label><div class="input" style="margin-bottom:12px">Ask cigarettes a day for older smokers</div>
+        <div class="row" style="margin-bottom:14px"><span class="check on"></span><span class="small">Tell partners who use this form</span></div>
+        <div class="row" style="justify-content:flex-end"><span class="btn o">Cancel</span><span class="btn p">Publish version 9</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A10 · Results</h2><span>Starts, completions and where people stop, by question and by link. Rises in gold.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><div class="hmeta"><span class="chip n">Final Expense</span><span class="chip ok">v8 live</span></div><nav class="tabs"><a>Build</a><a>Settings</a><a class="on">Results</a><a>Versions <span class="c">8</span></a></nav><div class="acts"><span class="seg"><span>7 days</span><span class="on">30 days</span><span>90 days</span></span><span class="btn hl">Share</span></div></div>
+        <div class="status"><span class="dot"></span>Last 30 days · version 8 · counted from partner, agent and website forms <span class="tag-mig">needs a migration</span></div>
+        <div class="body" style="flex-direction:column">
+          <div class="card"><div class="strip"><div><small>Opened</small><b>2,418</b></div><div><small>Started</small><b>1,264</b></div><div><small>Sent</small><b>812</b></div><div><small>Finished</small><b>64% <span class="chip hl">+6 pts</span></b></div><div><small>Time to finish</small><b>3m 40s</b></div></div></div>
+          <div class="row" style="flex:1;min-height:0;align-items:stretch;gap:12px">
+            <div class="card flex1"><div class="card-h"><b>Where people stop</b><div class="r"><span class="small muted">of 1,264 who started</span></div></div><div class="scroll"><table><thead><tr><th>Question</th><th>Page</th><th>Reached</th><th>Stopped here</th><th></th></tr></thead><tbody>
+              <tr><td>Full name</td><td>1</td><td>1,264</td><td>2%</td><td><span class="hbar"><b style="width:100%"></b></span></td></tr>
+              <tr><td>Date of birth</td><td>1</td><td>1,239</td><td>5%</td><td><span class="hbar"><b style="width:98%"></b></span></td></tr>
+              <tr><td>Phone</td><td>1</td><td>1,177</td><td>4%</td><td><span class="hbar"><b style="width:93%"></b></span></td></tr>
+              <tr><td>Tobacco use</td><td>2</td><td>1,130</td><td>3%</td><td><span class="hbar"><b style="width:89%"></b></span></td></tr>
+              <tr class="h"><td>Health conditions</td><td>2</td><td>1,096</td><td><span class="chip warn">14% · most</span></td><td><span class="hbar w"><b style="width:87%"></b></span></td></tr>
+              <tr><td>Coverage amount</td><td>3</td><td>943</td><td>6%</td><td><span class="hbar"><b style="width:75%"></b></span></td></tr>
+              <tr><td>Beneficiary</td><td>3</td><td>886</td><td>5%</td><td><span class="hbar"><b style="width:70%"></b></span></td></tr>
+              <tr><td>Consent to contact</td><td>4</td><td>842</td><td>4%</td><td><span class="hbar"><b style="width:67%"></b></span></td></tr>
+            </tbody></table></div></div>
+            <div class="card" style="width:340px;flex:none"><div class="card-h"><b>By link</b></div><div class="scroll"><table><thead><tr><th>Source</th><th>Sent</th><th>Finished</th></tr></thead><tbody>
+              <tr><td>Partner portal</td><td>506</td><td>72%</td></tr><tr><td>Website embed</td><td>188</td><td>51%</td></tr><tr><td>Mailer QR</td><td>74</td><td>48%</td></tr><tr><td>Agents</td><td>44</td><td>90%</td></tr>
+            </tbody></table></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A11 · Loading, empty, error</h2><span>Inside the builder’s centre card.</span></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Loading</b></div><div class="card-b"><div class="skel" style="width:40%"></div><div class="skel" style="height:44px"></div><div class="skel" style="height:44px"></div><div class="skel" style="width:70%;height:44px"></div></div></div>
+      <div class="card"><div class="card-h"><b>No forms yet</b></div><div class="card-b empty"><span class="ic">+</span><b>Make your first Final Expense form</b><p>Start from the Insurvas form: 13 questions, ready to share.</p><span class="btn p">Start from Insurvas</span></div></div>
+      <div class="card"><div class="card-h"><b>Could not save</b></div><div class="card-b empty"><span class="ic" style="background:var(--bad-s);color:var(--bad)">!</span><b>Your last change did not save</b><p>We kept it on this computer and will try again. Nothing was published.</p><span class="btn o">Try again now</span></div></div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════ OPTION B ═════════════════════════════ -->
+  <div class="opt B">
+    <div class="sec"><h2>B1 · Forms gallery</h2><span>Product picker on the left, each product’s forms as cards with a thumbnail of the first question.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling</div>
+        <div class="head"><h3>Application forms</h3><nav class="tabs"><a class="on">Forms <span class="c">5</span></a><a>Results</a><a>Webhooks <span class="c">1</span></a></nav><div class="acts"><span class="btn p">New form</span></div></div>
+        <div class="status"><span class="dot"></span>4 live · 1 draft · 812 Final Expense forms sent in 30 days</div>
+        <div class="body">
+          <div class="card" style="width:220px;flex:none"><div class="card-h"><b>Products</b></div><div class="scroll"><div class="outline" style="padding:8px">
+            <a class="on">Final Expense <small>2</small></a><a>Term life <small>1</small></a><a>Medicare <small>1</small></a><a>Mortgage protection <small>1</small></a><a>Indexed universal life <small>0</small></a>
+          </div></div></div>
+          <div class="card flex1"><div class="card-h"><b>Final Expense forms</b><span class="tag-mig">needs a migration</span></div><div class="scroll"><div class="card-b"><div class="gal">
+            <div class="fc"><div class="th"><span class="small muted">1 → Full name</span><div class="ln" style="width:70%"></div><div class="ln" style="width:40%"></div><div class="bt"></div></div><div class="fb"><b>Final Expense intake</b><small>13 questions · 4 steps · v8</small><div class="row"><span class="chip ok">Live</span><span class="small muted">812 sent · 64% finish</span></div></div></div>
+            <div class="fc"><div class="th"><span class="small muted">1 → Nombre completo</span><div class="ln" style="width:60%"></div><div class="ln" style="width:30%"></div><div class="bt"></div></div><div class="fb"><b>Final Expense · Spanish</b><small>13 questions · not published</small><div class="row"><span class="chip info">Draft</span><span class="small muted">by Rosa Medina</span></div></div></div>
+            <div class="fc new">+ New Final Expense form<span class="small muted" style="font-weight:400">From Insurvas, a copy, or blank</span></div>
+          </div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B2 · Main editor</h2><span>Questions as cards on the left (drag to reorder), the selected question large in the middle exactly as the person sees it, its settings on the right.</span></div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a class="on">Questions</a><a>Logic <span class="c">4</span></a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn o">Test</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>v8 live · 4 changes in the draft, saved to Insurvas 1 min ago</div>
+        <div class="body">
+          <div class="card" style="width:260px;flex:none"><div class="card-h"><b>13 questions</b><div class="r"><span class="btn o sm">+ Add</span></div></div><div class="scroll">
+            <div class="li"><span class="chip n">1</span><div><b>Full name</b><small>Text</small></div></div>
+            <div class="li"><span class="chip n">2</span><div><b>Date of birth</b><small>Date · ages 50–85</small></div></div>
+            <div class="li"><span class="chip n">3</span><div><b>State</b><small>Choice</small></div></div>
+            <div class="li"><span class="chip n">4</span><div><b>Phone</b><small>Phone</small></div></div>
+            <div class="li on"><span class="chip n">5</span><div><b>Tobacco use</b><small>Yes / no · branches</small></div></div>
+            <div class="li" style="padding-left:28px"><span class="chip n">5a</span><div><b>Cigarettes a day</b><small>Only if Yes</small></div></div>
+            <div class="li"><span class="chip n">6</span><div><b>Height &amp; weight</b><small>2 answers</small></div></div>
+            <div class="li"><span class="chip n">7</span><div><b>Health conditions</b><small>Multiple choice</small></div></div>
+            <div class="li"><span class="chip n">8</span><div><b>Coverage amount</b><small>Money</small></div></div>
+            <div class="li"><span class="chip n">9</span><div><b>Beneficiary</b><small>Name + relationship</small></div></div>
+            <div class="li"><span class="chip n">10</span><div><b>Best time to call</b><small>Choice</small></div></div>
+            <div class="li"><span class="chip n">11</span><div><b>Consent to contact</b><small>Agree box</small></div></div>
+            <div class="li"><span class="chip n">✓</span><div><b>Thank-you screen</b><small>“An agent will call you”</small></div></div>
+          </div></div>
+          <div class="card flex1"><div class="card-b" style="flex:1;display:flex;flex-direction:column;gap:10px">
+            <div class="row"><span class="seg"><span class="on">Computer</span><span>Phone</span></span><span class="sp" style="flex:1"></span><span class="small muted">Question 5 of 11</span></div>
+            <div class="stage">
+              <div class="qn">5 →</div>
+              <div class="qt">Do you use tobacco or nicotine? *</div>
+              <div class="qh">Includes cigarettes, vapes, cigars, chew and patches in the last 12 months.</div>
+              <div class="yn"><span class="on"><span class="k">A</span>Yes</span><span><span class="k">B</span>No</span></div>
+              <div class="row"><span class="btn p">OK</span><span class="small muted">press Enter ↵</span></div>
+            </div>
+          </div></div>
+          <div class="card" style="width:280px;flex:none"><div class="card-h"><b>Question 5</b></div><div class="scroll"><div class="card-b col" style="gap:12px">
+            <div><label class="l">Answer with</label><div class="input">Yes / no<span class="end">▾</span></div></div>
+            <div class="row" style="justify-content:space-between"><span>Must be answered</span><span class="switch on"></span></div>
+            <div class="row" style="justify-content:space-between"><span>Letter keys A, B</span><span class="switch on"></span></div>
+            <div class="row" style="justify-content:space-between"><span>Agents only</span><span class="switch"></span></div>
+            <div class="tile"><small>Then</small><b style="font-size:14px">Yes → 5a Cigarettes a day</b><div class="small muted">No → 6 Height &amp; weight</div><span class="btn g sm" style="padding:0;margin-top:4px">Edit in Logic</span></div>
+            <div class="tile"><small>Lands on the application as</small><div class="row"><b style="font-size:14px">Tobacco use</b><span class="chip ok">Matched</span></div></div>
+          </div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B3 · Logic as a flow</h2><span>Logic tab: the form as a flow map. Click a jump to edit it with AND / OR rules.</span></div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a class="on">Logic <span class="c">4</span></a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn o">Test</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>4 jumps · every path reaches Consent</div>
+        <div class="body">
+          <div class="card flex1"><div class="scroll"><div class="card-b" style="max-width:560px;margin:0 auto;width:100%">
+            <div class="fn">1–4 · Name, birth date, state, phone<small>everyone</small></div><div class="arrow"></div>
+            <div class="fn on">5 · Tobacco use</div><div class="arrow"></div>
+            <div class="fork">
+              <div><div class="lbl">If Tobacco = Yes and age 60+</div><div class="fn rule">→ go to Smoking questions</div><div class="arrow"></div><div class="fn">5a · Cigarettes a day</div><div class="arrow"></div><div class="fn">5b · Years smoking</div></div>
+              <div><div class="lbl">Otherwise</div><div class="fn rule">→ skip to 6</div></div>
+            </div>
+            <div class="arrow"></div>
+            <div class="fn">6–7 · Height &amp; weight, health conditions</div><div class="arrow"></div>
+            <div class="fork">
+              <div><div class="lbl">If Coverage amount is empty</div><div class="fn rule">→ jump to 10</div></div>
+              <div><div class="lbl">Otherwise</div><div class="fn">8–9 · Coverage, beneficiary</div></div>
+            </div>
+            <div class="arrow"></div>
+            <div class="fn">10–11 · Best time to call, consent</div><div class="arrow"></div>
+            <div class="fn">✓ Thank-you screen</div>
+          </div></div></div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <div class="sheet-h"><b>Jump after question 5</b><span class="x">✕</span></div>
+        <div class="sheet-b col" style="gap:12px">
+          <div class="row"><span>Go to</span><span class="sel">5a · Cigarettes a day</span><span>when</span><span class="sel">all</span><span>of these match</span></div>
+          <div class="cond"><span class="sel">Tobacco use</span><span class="sel">is</span><span class="sel">Yes</span><span class="x">✕</span></div>
+          <span class="join">AND</span>
+          <div class="cgroup"><div class="small muted">Any of these</div>
+            <div class="cond"><span class="sel">Age</span><span class="sel">is at least</span><span class="sel v">60</span><span class="x">✕</span></div>
+            <span class="join or">OR</span>
+            <div class="cond"><span class="sel">Health conditions</span><span class="sel">includes</span><span class="sel">COPD</span><span class="x">✕</span></div>
+          </div>
+          <div class="row"><span class="btn o sm">+ And</span><span class="btn o sm">+ Or group</span></div>
+          <div class="sentence">If Tobacco = Yes <b>and</b> (age 60+ <b>or</b> has COPD) → go to Smoking questions. Otherwise → 6 Height &amp; weight.</div>
+          <div><label class="l">Otherwise go to</label><div class="input">6 · Height &amp; weight<span class="end">▾</span></div></div>
+        </div>
+        <div class="sheet-f"><span class="btn danger">Remove jump</span><span class="sp" style="flex:1"></span><span class="btn p">Save jump</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>B4 · Validation for a field</h2><span>Settings column › Rules, with the error shown live on the big question.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a class="on">Questions</a><a>Logic <span class="c">4</span></a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>5 changes in the draft · saved just now</div>
+        <div class="body">
+          <div class="card flex1"><div class="card-b" style="flex:1;display:flex;flex-direction:column">
+            <div class="stage">
+              <div class="qn">8 →</div>
+              <div class="qt">How much coverage would you like? *</div>
+              <div class="qh">Most families choose between $10,000 and $25,000.</div>
+              <div class="input bad" style="max-width:360px;height:44px;font-size:16px">$ 75,000</div>
+              <div class="err">Choose an amount from $2,000 to $50,000.</div>
+            </div>
+          </div></div>
+          <div class="card" style="width:320px;flex:none"><div class="card-h"><b>Question 8 · Rules</b></div><div class="scroll"><div class="card-b col" style="gap:12px">
+            <div><label class="l">Amount allowed</label><div class="row"><div class="input" style="width:110px">$2,000</div><span class="muted">to</span><div class="input" style="width:110px">$50,000</div></div></div>
+            <div><label class="l">Steps of</label><div class="input">$500</div></div>
+            <div><label class="l">Suggest</label><div class="row"><span class="tog on">$10,000</span><span class="tog on">$15,000</span><span class="tog on">$25,000</span></div><div class="help">Shown as quick picks under the box.</div></div>
+            <div><label class="l">Message when it fails</label><div class="input textarea">Choose an amount from {min} to {max}.</div></div>
+            <div class="row"><span class="input" style="flex:1">75000</span><span class="chip bad">Too high</span></div>
+          </div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B5 · Preview, computer and phone</h2><span>One question per screen on both. Progress bar, keyboard hints on computer, thumb-size answers on phone.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense intake</div>
+        <div class="head"><h3>Preview</h3><nav class="tabs"><a>Computer</a><a>Phone</a><a class="on">Both</a></nav><div class="acts"><span class="btn o">Restart</span><span class="btn p">Send as a test</span></div></div>
+        <div class="status"><span class="dot"></span>Draft · answers here are not saved</div>
+        <div class="body">
+          <div class="desk"><div class="chrome"><i></i><i></i><i></i><span style="margin-left:8px">forms.insurvas.com/ellery-fields/final-expense</span></div>
+            <div class="prog" style="border-radius:0"><b style="width:45%;border-radius:0"></b></div>
+            <div class="stage" style="border-radius:0;background:var(--card)">
+              <div class="qn">5 →</div><div class="qt">Do you use tobacco or nicotine? *</div>
+              <div class="yn"><span><span class="k">A</span>Yes</span><span><span class="k">B</span>No</span></div>
+              <div class="row"><span class="btn p">OK</span><span class="small muted">press Enter ↵</span><span class="sp" style="flex:1"></span><span class="btn o sm">↑</span><span class="btn o sm">↓</span></div>
+            </div>
+          </div>
+          <div class="phone"><div class="prog" style="border-radius:0"><b style="width:45%;border-radius:0"></b></div><div class="pb" style="justify-content:center">
+            <div class="qn small" style="color:var(--accent-ink);font-weight:600">5 →</div><b style="font-size:16px">Do you use tobacco or nicotine? *</b>
+            <div class="yn"><span><span class="k">A</span>Yes</span><span><span class="k">B</span>No</span></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B6 · Test submission result</h2><span>Test mode walks the form, then shows the path taken and what was made.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense intake</div>
+        <div class="head"><h3>Test result</h3><nav class="tabs"><a class="on">Path</a><a>Answers</a><a>Webhook</a></nav><div class="acts"><span class="btn danger">Delete test lead</span><span class="btn o">Open test lead</span><span class="btn p">Test again</span></div></div>
+        <div class="status"><span class="dot"></span>Sent 10:42 AM · test lead made, not counted, nobody notified</div>
+        <div class="body">
+          <div class="card flex1"><div class="card-h"><b>Path taken · 12 of 13 questions</b></div><div class="scroll">
+            <div class="li"><span class="chip n">1</span><div><b>Full name</b><small>Margaret Ellis</small></div></div>
+            <div class="li"><span class="chip n">2</span><div><b>Date of birth</b><small>06/02/1958 · age 67, inside 50–85</small></div></div>
+            <div class="li"><span class="chip n">5</span><div><b>Tobacco use</b><small>Yes → jumped to 5a (age 67 ≥ 60)</small></div></div>
+            <div class="li"><span class="chip n">5a</span><div><b>Cigarettes a day</b><small>10</small></div></div>
+            <div class="li"><span class="chip n">8</span><div><b>Coverage amount</b><small>$15,000</small></div></div>
+            <div class="li"><span class="chip n">11</span><div><b>Consent to contact</b><small>Agreed · TCPA text v3 saved</small></div></div>
+          </div></div>
+          <div class="card" style="width:360px;flex:none"><div class="card-h"><b>What was made</b></div><div class="scroll"><div class="card-b col">
+            <div class="kv"><span>Lead</span><span>Margaret Ellis · Test</span><span>Pipeline</span><span>Final Expense › New lead</span><span>Would go to</span><span>Round robin · next is <span class="av" style="width:22px;height:22px">JE</span></span><span>Application</span><span>9 of 12 answers matched</span><span>Webhook</span><span><span class="chip ok">200 · 182 ms</span></span></div>
+            <div class="help">Not matched: Best time to call, Cigarettes a day, Years smoking. They stay on the lead.</div>
+          </div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B7 · Share sheet</h2><span>Typeform-style embed modes with a live thumbnail, plus link and QR.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a>Logic <span class="c">4</span></a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>Sharing version 8</div>
+        <div class="body"><div class="card flex1"><div class="card-b muted">The editor stays behind the sheet.</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Share</b><span class="tag-mig">needs a migration</span><span class="x">✕</span></div>
+        <div class="sheet-b col" style="gap:16px">
+          <div><label class="l">Link</label><div class="copy"><span class="v">https://forms.insurvas.com/ellery-fields/final-expense</span><span class="btn o sm">Copy</span></div></div>
+          <div><label class="l">Embed as</label><div class="gal">
+            <div class="fc"><div class="th" style="height:72px"><div class="ln" style="width:90%"></div><div class="bt" style="width:100%;height:30px"></div></div><div class="fb"><b>In the page</b></div></div>
+            <div class="fc" style="box-shadow:0 0 0 2px var(--ring)"><div class="th" style="height:72px;align-items:flex-end;justify-content:flex-end"><div class="bt" style="width:44px;height:24px;background:var(--primary)"></div></div><div class="fb"><b>Floating button</b></div></div>
+            <div class="fc"><div class="th" style="height:72px;align-items:center;justify-content:center"><div class="bt" style="width:70%;height:44px"></div></div><div class="fb"><b>Pop-up</b></div></div>
+          </div></div>
+          <div class="code">&lt;script async src="https://forms.insurvas.com/embed.js"
+  data-form="final-expense" data-mode="button" data-label="Get a quote"&gt;&lt;/script&gt;</div>
+          <div class="row" style="align-items:flex-start;gap:16px"><span class="qr"></span><div class="col"><b>QR code</b><span class="small muted">Tracks as source = QR.</span><span class="btn o sm">Download</span></div></div>
+        </div>
+        <div class="sheet-f"><span class="btn o">Done</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>B8 · Submission webhook</h2><span>Settings tab › Connections. Same setup as A, laid out as a single settings card.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a>Logic <span class="c">4</span></a><a class="on">Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>Webhook working · 3 deliveries today</div>
+        <div class="body">
+          <div class="card flex1"><div class="card-h"><b>Connections</b><span class="tag-mig">needs a migration</span></div><div class="scroll"><div class="card-b">
+            <div class="fsec"><h4>Send each form to your system</h4><p>We POST the answers, signed, the moment a form is sent.</p>
+              <div class="fgrid"><div class="full"><label class="l">Address</label><div class="input">https://hooks.elleryfields.com/insurvas/final-expense</div></div>
+              <div><label class="l">Signing secret</label><div class="copy"><span class="v">•••••••••••••••• ends 7f2c</span><span class="btn o sm">Rotate</span></div></div>
+              <div><label class="l">Also send</label><div class="row"><span class="tog on">Tests</span><span class="tog">Half-done forms</span></div></div></div>
+              <div class="row" style="margin-top:12px"><span class="btn o">Send a test</span><span class="chip ok">Last test 200 OK</span></div>
+            </div>
+            <div class="fsec"><h4>Also send to</h4><p>Ready-made, no code.</p><div class="row"><span class="tog">Zapier</span><span class="tog">Google Sheets</span><span class="tog">Email a copy</span></div></div>
+            <div class="fsec"><h4>Deliveries</h4><table><thead><tr><th>When</th><th>Lead</th><th>Answer</th></tr></thead><tbody>
+              <tr><td>10:38 AM</td><td>Walter Brooks</td><td><span class="chip ok">200 OK</span></td></tr>
+              <tr><td>9:51 AM</td><td>Dolores Kim</td><td><span class="chip ok">200 OK</span></td></tr>
+              <tr><td>Yesterday 6:02 PM</td><td>Earl Watkins</td><td><span class="chip bad">500 · retrying</span></td></tr>
+            </tbody></table></div>
+          </div></div><div class="card-f"><span class="sp"></span><span class="btn p">Save</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B9 · Versions and publish</h2><span>A timeline, with the draft compared to the live version side by side; publish confirms once.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a>Logic <span class="c">4</span></a><a>Settings</a><a>Results</a><a class="on">Versions</a></nav><div class="acts"><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>Draft differs from v8 in 4 places</div>
+        <div class="body">
+          <div class="card" style="width:280px;flex:none"><div class="scroll">
+            <div class="li on"><div><b>Draft</b><small>today · <span class="av" style="width:20px;height:20px">DA</span> <span class="av" style="width:20px;height:20px">RM</span></small></div><span class="end chip info">Draft</span></div>
+            <div class="li"><div><b>v8</b><small>Nov 3 · Demo Agent</small></div><span class="end chip ok">Live</span></div>
+            <div class="li"><div><b>v7</b><small>Oct 20 · Jordan Ellery</small></div></div>
+            <div class="li"><div><b>v6</b><small>Oct 2 · Demo Agent</small></div></div>
+          </div></div>
+          <div class="card flex1"><div class="card-h"><b>v8 → draft</b></div><div class="scroll"><div class="card-b cmpx">
+            <div class="col"><span class="small muted">v8 · live</span><div class="fn">5 · Tobacco use</div><div class="fn">6 · Height &amp; weight</div><div class="fn">8 · Coverage · up to $25,000</div><div class="fn" style="opacity:.6"><span class="del">Email</span></div></div>
+            <div class="col"><span class="small muted">Draft</span><div class="fn">5 · Tobacco use · <span class="chip info">jump added</span></div><div class="fn" style="box-shadow:0 0 0 2px var(--ok)">5a · Cigarettes a day · <span class="chip ok">new</span></div><div class="fn">6 · Height &amp; weight</div><div class="fn">8 · Coverage · up to $50,000</div></div>
+          </div></div></div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog"><h4>Publish version 9?</h4><p>4 changes: 1 question added, 1 jump added, 1 limit raised, Email removed. 12 forms already started finish on v8.</p><div class="row" style="justify-content:flex-end"><span class="btn o">Cancel</span><span class="btn p">Publish version 9</span></div></div>
+    </div>
+
+    <div class="sec"><h2>B10 · Results</h2><span>Per-question run of bars: how many reached each question; the biggest drop in warn.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a>Logic <span class="c">4</span></a><a>Settings</a><a class="on">Results</a><a>Versions</a></nav><div class="acts"><span class="seg"><span>7 d</span><span class="on">30 d</span><span>90 d</span></span><span class="btn hl">Share</span></div></div>
+        <div class="status"><span class="dot"></span>Last 30 days <span class="tag-mig">needs a migration</span></div>
+        <div class="body" style="flex-direction:column">
+          <div class="card"><div class="strip"><div><small>Started</small><b>1,264</b></div><div><small>Sent</small><b>812</b></div><div><small>Finished</small><b>64% <span class="chip hl">+6 pts</span></b></div><div><small>Time to finish</small><b>3m 40s</b></div></div></div>
+          <div class="card flex1"><div class="card-h"><b>Reached each question</b><div class="r"><span class="chip warn">Most stop at 7 · Health conditions</span></div></div><div class="card-b" style="flex:1">
+            <div class="vbars"><div style="height:100%"></div><div style="height:98%"></div><div style="height:96%"></div><div style="height:93%"></div><div style="height:89%"></div><div style="height:88%"></div><div class="w" style="height:87%"></div><div style="height:75%"></div><div style="height:70%"></div><div style="height:69%"></div><div style="height:67%"></div></div>
+            <div class="vlab"><span>Name</span><span>Birth</span><span>State</span><span>Phone</span><span>Tobacco</span><span>Ht/Wt</span><span>Health</span><span>Coverage</span><span>Benef.</span><span>Call time</span><span>Consent</span></div>
+            <div class="help" style="margin-top:12px">Tip from the numbers: 14% stop at Health conditions. Splitting it into yes/no questions usually lifts finishing.</div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B11 · Loading, empty, error</h2><span>Inside the question list and stage.</span></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Loading</b></div><div class="card-b"><div class="skel" style="width:30%"></div><div class="skel" style="height:24px;width:80%"></div><div class="skel" style="height:44px;width:60%"></div><div class="skel" style="height:44px;width:60%"></div></div></div>
+      <div class="card"><div class="card-h"><b>No questions yet</b></div><div class="card-b empty"><span class="ic">?</span><b>Ask your first question</b><p>Or add the Insurvas Final Expense questions in one go.</p><span class="btn p">Add Insurvas questions</span></div></div>
+      <div class="card"><div class="card-h"><b>Logic problem</b></div><div class="card-b empty"><span class="ic" style="background:var(--bad-s);color:var(--bad)">!</span><b>Question 9 can never be reached</b><p>Every path jumps past it. Fix the jump after question 8 to publish.</p><span class="btn o">Show the jump</span></div></div>
+    </div>
+  </div>
+
+  <!-- ═════════════════════════════ OPTION C ═════════════════════════════ -->
+  <div class="opt C">
+    <div class="sec"><h2>C1 · Forms library</h2><span>Every product’s forms grouped, with the numbers that matter. Totals on top.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling</div>
+        <div class="head"><h3>Application forms</h3><nav class="tabs"><a class="on">Library</a><a>Results</a><a>Webhooks</a></nav><div class="acts"><span class="btn o">Duplicate</span><span class="btn p">New form</span></div></div>
+        <div class="status"><span class="dot"></span>5 forms across 4 products · 1 draft waiting</div>
+        <div class="body" style="flex-direction:column">
+          <div class="card"><div class="strip"><div><small>Live forms</small><b>4</b></div><div><small>Sent · 30 days</small><b>1,264 <span class="chip hl">+212</span></b></div><div><small>Finished</small><b>63%</b></div><div><small>Drafts</small><b>1</b></div></div></div>
+          <div class="card flex1"><div class="scroll"><table><thead><tr><th>Form</th><th>Version</th><th>Sent · 30 d</th><th>Finished</th><th>Changed</th><th>Status</th></tr></thead><tbody>
+            <tr><td colspan="6" style="background:var(--band);font-size:12px;font-weight:600;color:var(--muted)">Final Expense · 2 forms <span class="tag-mig">needs a migration</span></td></tr>
+            <tr class="s"><td>Final Expense intake</td><td>v8</td><td>812</td><td>64%</td><td>Today</td><td><span class="chip ok">Live</span></td></tr>
+            <tr><td>Final Expense · Spanish</td><td>—</td><td>—</td><td>—</td><td>Yesterday</td><td><span class="chip info">Draft</span></td></tr>
+            <tr><td colspan="6" style="background:var(--band);font-size:12px;font-weight:600;color:var(--muted)">Term life · 1 form</td></tr>
+            <tr><td>Term life quick quote</td><td>v3</td><td>291</td><td>71%</td><td>Oct 28</td><td><span class="chip ok">Live</span></td></tr>
+            <tr><td colspan="6" style="background:var(--band);font-size:12px;font-weight:600;color:var(--muted)">Medicare · 1 form</td></tr>
+            <tr><td>Medicare Supplement</td><td>v5</td><td>161</td><td>58%</td><td>Oct 12</td><td><span class="chip ok">Live</span></td></tr>
+            <tr><td colspan="6" style="background:var(--band);font-size:12px;font-weight:600;color:var(--muted)">Mortgage protection · 1 form</td></tr>
+            <tr><td>Mortgage protection mailer</td><td>v2</td><td>0</td><td>—</td><td>Sep 30</td><td><span class="chip">Off</span></td></tr>
+          </tbody></table></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C2 · Section editor</h2><span>An outline of steps on the left; each step is a card of one-line questions edited in place. Drag by the handle. No side panel.</span></div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a class="on">Questions</a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn o">Test</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>Final Expense · v8 live · 4 changes saved to Insurvas, not published</div>
+        <div class="body">
+          <div class="card" style="width:220px;flex:none"><div class="card-h"><b>Steps</b><span class="tag-mig">needs a migration</span></div><div class="scroll"><div class="outline" style="padding:8px">
+            <a>1 · About you <small>5</small></a><a class="on">2 · Health <small>5</small></a><a>3 · Coverage <small>3</small></a><a>4 · Consent <small>1</small></a><a style="color:var(--accent-ink)">+ Add a step</a>
+          </div></div></div>
+          <div class="card flex1"><div class="scroll"><div class="card-b">
+            <div class="sc shut"><div class="sc-h"><span class="grip" style="width:9px;height:15px;background:radial-gradient(circle,var(--border-strong) 1.3px,transparent 1.6px) 0 0/4.5px 5px"></span><b>1 · About you</b><span class="small muted">Full name, Date of birth, State, Phone, Best time to call</span><div class="r"><span class="btn g sm">Open ▾</span></div></div></div>
+            <div class="sc"><div class="sc-h"><b>2 · Health</b><span class="small muted">Shown to everyone</span><div class="r"><span class="btn g sm">Rename</span><span class="btn g sm">⋯</span></div></div>
+              <div class="ir" style="font-size:12px;color:var(--muted);padding-top:6px;padding-bottom:6px"><span></span><span>Question</span><span>Answer with</span><span>Must answer</span><span></span></div>
+              <div class="ir on"><span class="grip"></span><span class="lab edit">Do you use tobacco or nicotine?</span><span class="sel">Yes / no</span><span class="switch on"></span><span class="btn g sm">Less ▴</span></div>
+              <div class="inl">
+                <div class="fgrid"><div><label class="l">Help under the question</label><div class="input">Cigarettes, vapes, cigars, chew, patches · last 12 months</div></div><div><label class="l">Width</label><div class="seg"><span>Half</span><span class="on">Full</span></div></div></div>
+                <div class="row"><span class="btn o sm">+ Show only when…</span><span class="btn o sm">+ Rules</span><span class="small muted">Lands on the application as Tobacco use</span><span class="chip ok">Matched</span></div>
+              </div>
+              <div class="ir"><span class="grip"></span><span class="lab">How many cigarettes a day?</span><span class="sel">Number</span><span class="switch"></span><span class="chip info">If 2 rules</span></div>
+              <div class="ir"><span class="grip"></span><span class="lab">Height</span><span class="sel">Height ft / in</span><span class="switch on"></span><span class="btn g sm">More ▾</span></div>
+              <div class="ir"><span class="grip"></span><span class="lab">Weight</span><span class="sel">Number · lbs</span><span class="switch on"></span><span class="btn g sm">More ▾</span></div>
+              <div class="ir"><span class="grip"></span><span class="lab">Any of these health conditions?</span><span class="sel">Multiple choice</span><span class="switch on"></span><span class="btn g sm">More ▾</span></div>
+              <div class="ir"><span></span><span style="color:var(--accent-ink);font-weight:500">+ Add a question</span><span class="small muted">or pick an Insurvas question: Beneficiary, Coverage amount…</span><span></span><span></span></div>
+            </div>
+            <div class="sc shut"><div class="sc-h"><b>3 · Coverage</b><span class="small muted">Coverage amount, Beneficiary name, relationship</span><div class="r"><span class="btn g sm">Open ▾</span></div></div></div>
+            <div class="sc shut"><div class="sc-h"><b>4 · Consent</b><span class="small muted">Consent to contact</span><div class="r"><span class="btn g sm">Open ▾</span></div></div></div>
+          </div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C3 · Conditional logic, inline</h2><span>“Show only when…” opens under the question as a sentence you complete, with AND / OR.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a class="on">Questions</a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>5 changes not published</div>
+        <div class="body"><div class="card flex1"><div class="scroll"><div class="card-b">
+          <div class="sc"><div class="sc-h"><b>2 · Health</b></div>
+            <div class="ir"><span class="grip"></span><span class="lab">Do you use tobacco or nicotine?</span><span class="sel">Yes / no</span><span class="switch on"></span><span class="btn g sm">More ▾</span></div>
+            <div class="ir on"><span class="grip"></span><span class="lab">How many cigarettes a day?</span><span class="sel">Number</span><span class="switch"></span><span class="btn g sm">Less ▴</span></div>
+            <div class="inl">
+              <div class="row"><b>Show only when</b><span class="sel">all</span><span>of these are true</span></div>
+              <div class="cond"><span class="sel">Tobacco use</span><span class="sel">is</span><span class="sel">Yes</span><span class="x">✕</span></div>
+              <span class="join">AND</span>
+              <div class="cgroup"><div class="cond"><span class="sel">Age</span><span class="sel">is at least</span><span class="sel v">60</span><span class="x">✕</span></div><span class="join or">OR</span><div class="cond"><span class="sel">State</span><span class="sel">is one of</span><span class="sel">FL, GA, TX</span><span class="x">✕</span></div></div>
+              <div class="row"><span class="btn o sm">+ And</span><span class="btn o sm">+ Or</span><span class="sp" style="flex:1"></span><span class="btn g sm">Remove condition</span><span class="btn p sm">Done</span></div>
+              <div class="sentence">Asked when Tobacco use is Yes <b>and</b> (age 60+ <b>or</b> in FL, GA, TX). 31% of last month’s people would have seen it.</div>
+            </div>
+            <div class="ir"><span class="grip"></span><span class="lab">Height</span><span class="sel">Height ft / in</span><span class="switch on"></span><span class="btn g sm">More ▾</span></div>
+          </div>
+          <div class="sc"><div class="sc-h"><b>Step rule</b><span class="small muted">3 · Coverage</span></div><div class="inl" style="border-top:0"><div class="cond"><span>Skip this step when</span><span class="sel">Coverage amount</span><span class="sel">is empty</span></div></div></div>
+        </div></div></div></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C4 · Validation, inline</h2><span>“Rules” opens under the question with plain choices and a try-it box.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a class="on">Questions</a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>6 changes not published</div>
+        <div class="body"><div class="card flex1"><div class="scroll"><div class="card-b">
+          <div class="sc"><div class="sc-h"><b>1 · About you</b></div>
+            <div class="ir"><span class="grip"></span><span class="lab">Full name</span><span class="sel">Text</span><span class="switch on"></span><span class="btn g sm">More ▾</span></div>
+            <div class="ir"><span class="grip"></span><span class="lab">Date of birth</span><span class="sel">Date</span><span class="switch on"></span><span class="chip n">Ages 50–85</span></div>
+            <div class="ir on"><span class="grip"></span><span class="lab">Phone</span><span class="sel">Phone</span><span class="switch on"></span><span class="btn g sm">Less ▴</span></div>
+            <div class="inl">
+              <div class="fgrid">
+                <div><label class="l">Phone numbers allowed</label><div class="seg"><span class="on">US only</span><span>US + Canada</span><span>Any</span></div></div>
+                <div><label class="l">Shown as</label><div class="input">(###) ###-####<span class="end">▾</span></div></div>
+                <div><label class="l">Also check</label><div class="row"><span class="tog on">Can take calls</span><span class="tog on">Not on Never call</span></div></div>
+                <div><label class="l">Message when it fails</label><div class="input">Enter a 10-digit US phone number.</div></div>
+                <div class="full"><label class="l">Try a number</label><div class="row"><div class="input bad" style="width:220px">(555) 012-34</div><span class="chip bad">9 digits</span><span class="small muted">Enter a 10-digit US phone number.</span></div></div>
+              </div>
+            </div>
+            <div class="ir"><span class="grip"></span><span class="lab">Best time to call</span><span class="sel">Choice</span><span class="switch"></span><span class="btn g sm">More ▾</span></div>
+          </div>
+        </div></div></div></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C5 · Preview, computer and phone</h2><span>Split view: steps as a stepper on computer, one step per screen on phone.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms › Final Expense intake</div>
+        <div class="head"><h3>Preview</h3><nav class="tabs"><a>Computer</a><a>Phone</a><a class="on">Both</a></nav><div class="acts"><span class="btn o">Back to questions</span><span class="btn p">Send as a test</span></div></div>
+        <div class="status"><span class="dot"></span>Draft preview · nothing saved</div>
+        <div class="body">
+          <div class="desk"><div class="chrome"><i></i><i></i><i></i><span style="margin-left:8px">Partner portal · New lead</span></div><div class="db">
+            <div class="steps"><span class="done"><i>✓</i>About you</span><em></em><span class="on"><i>2</i>Health</span><em></em><span><i>3</i>Coverage</span><em></em><span><i>4</i>Consent</span></div>
+            <div class="fgrid">
+              <div class="full"><label class="l">Do you use tobacco or nicotine? *</label><div class="row"><span class="tog on">Yes</span><span class="tog">No</span></div></div>
+              <div><label class="l">Height *</label><div class="input">5 ft 8 in</div></div><div><label class="l">Weight *</label><div class="input">182 lbs</div></div>
+              <div class="full"><label class="l">Any of these health conditions? *</label><div class="row small"><span class="check on"></span>Diabetes <span class="check"></span>Heart attack <span class="check"></span>COPD <span class="check"></span>None of these</div></div>
+            </div>
+            <div class="row"><span class="btn o">Back</span><span style="flex:1"></span><span class="btn p">Next</span></div>
+          </div></div>
+          <div class="phone"><div class="pb">
+            <div class="small muted">Step 2 of 4 · Health</div><div class="prog"><b style="width:50%"></b></div>
+            <div><label class="l">Do you use tobacco or nicotine? *</label><div class="row"><span class="tog on" style="flex:1">Yes</span><span class="tog" style="flex:1">No</span></div></div>
+            <div><label class="l">How many cigarettes a day?</label><div class="input">10</div></div>
+            <div><label class="l">Height *</label><div class="input">5 ft 8 in</div></div>
+            <div style="flex:1"></div><span class="btn p" style="justify-content:center">Next</span>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C6 · Test submission result</h2><span>A dialog over the editor: made, matched, delivered, with a link to the test lead.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a class="on">Questions</a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn o">Preview</span><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>Test sent 10:42 AM</div>
+        <div class="body"><div class="card flex1"><div class="card-b muted">Editor behind the dialog.</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog" style="width:520px">
+        <h4>Test sent · lead made</h4>
+        <p>Margaret Ellis was created as a test lead. It is hidden from reports and nobody was notified.</p>
+        <div class="col" style="gap:0;margin-bottom:14px">
+          <div class="dl"><span class="w"><span class="chip ok">Done</span></span>Lead in Final Expense › New lead</div>
+          <div class="dl"><span class="w"><span class="chip ok">Done</span></span>12 of 13 answers saved on the lead</div>
+          <div class="dl"><span class="w"><span class="chip warn">Check</span></span>9 answers reach the application · Best time to call has no match</div>
+          <div class="dl"><span class="w"><span class="chip ok">Done</span></span>Webhook answered 200 in 182 ms</div>
+        </div>
+        <div class="row" style="justify-content:flex-end"><span class="btn danger">Delete it</span><span class="btn o">Open the test lead</span><span class="btn p">Done</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C7 · Share sheet</h2><span>Link, embed and QR as three plain sections, with a per-partner link list.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a class="on">Questions</a><a>Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>Sharing version 8</div>
+        <div class="body"><div class="card flex1"><div class="card-b muted">Editor behind the sheet.</div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet">
+        <div class="sheet-h"><b>Share</b><span class="tag-mig">needs a migration</span><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="fsec"><h4>Link</h4><p>Anyone with it can fill in the form.</p><div class="copy"><span class="v">forms.insurvas.com/ellery-fields/final-expense</span><span class="btn o sm">Copy</span></div></div>
+          <div class="fsec"><h4>On your website</h4><p>Paste before &lt;/body&gt;.</p><div class="code">&lt;script async src="https://forms.insurvas.com/embed.js"
+  data-form="final-expense"&gt;&lt;/script&gt;</div></div>
+          <div class="fsec"><h4>QR code</h4><div class="row" style="gap:14px"><span class="qr"></span><span class="btn o sm">Download</span></div></div>
+          <div class="fsec"><h4>Partner links</h4><p>Each partner’s leads are credited to them.</p>
+            <div class="li"><span class="av">SH</span><div><b>Safe Harbor Leads</b><small>…/final-expense?p=safe-harbor</small></div><span class="end btn o sm">Copy</span></div>
+            <div class="li"><span class="av">MP</span><div><b>Midwest Prospects</b><small>…/final-expense?p=midwest</small></div><span class="end btn o sm">Copy</span></div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>C8 · Submission webhook</h2><span>Settings tab, one calm section among the form’s settings.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a class="on">Settings</a><a>Results</a><a>Versions</a></nav><div class="acts"><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status"><span class="dot"></span>Ages 50–85 · partners and agents · 1 webhook</div>
+        <div class="body"><div class="card flex1"><div class="scroll"><div class="card-b" style="max-width:760px">
+          <div class="fsec"><h4>Who can apply</h4><p>Read from Date of birth.</p><div class="row"><div class="input" style="width:90px">50</div><span class="muted">to</span><div class="input" style="width:90px">85</div></div></div>
+          <div class="fsec"><h4>Who fills it in</h4><p>&nbsp;</p><div class="row"><span class="tog on">Partners</span><span class="tog on">Your agents</span><span class="tog on">Anyone with the link</span></div></div>
+          <div class="fsec"><h4>When a form is sent <span class="tag-mig">needs a migration</span></h4><p>Send each one to your own system, signed.</p>
+            <div class="fgrid"><div class="full"><label class="l">Address</label><div class="input">https://hooks.elleryfields.com/insurvas/final-expense</div></div>
+            <div><label class="l">Signing secret</label><div class="copy"><span class="v">•••••••••••• ends 7f2c</span><span class="btn o sm">Rotate</span></div></div>
+            <div><label class="l">Last delivery</label><div class="row" style="height:36px"><span class="chip ok">200 OK</span><span class="small muted">10:38 AM · Walter Brooks</span></div></div></div>
+            <div class="row" style="margin-top:12px"><span class="btn o sm">Send a test</span><span class="btn g sm">See all deliveries</span></div>
+          </div>
+          <div class="fsec"><h4>For your agents only</h4><p>Hidden from partners and the public link.</p><div class="row"><span class="chip n">Lead source</span><span class="chip n">Agent notes</span><span class="btn g sm">+ Add</span></div></div>
+        </div></div><div class="card-f"><span class="sp"></span><span class="btn p">Save settings</span></div></div></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C9 · Versions and publish</h2><span>Versions tab as a table; “what changed” opens under the row. Publish confirms once.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a>Settings</a><a>Results</a><a class="on">Versions</a></nav><div class="acts"><span class="btn hl">Share</span><span class="btn p">Publish v9</span></div></div>
+        <div class="status warn"><span class="dot"></span>Draft has 4 changes</div>
+        <div class="body"><div class="card flex1"><div class="scroll"><table><thead><tr><th>Version</th><th>Published</th><th>By</th><th>Changes</th><th>Sent on it</th><th>Status</th></tr></thead><tbody>
+          <tr class="s"><td>Draft</td><td>—</td><td>Demo Agent, Rosa Medina</td><td>4</td><td>—</td><td><span class="chip info">Draft</span></td></tr>
+          <tr><td colspan="6" style="white-space:normal;background:var(--tile)"><div class="dl" style="border:0;padding:4px 0"><span class="w"><span class="chip ok">Added</span></span>Cigarettes a day, asked when Tobacco is Yes and (60+ or FL, GA, TX)</div><div class="dl" style="border:0;padding:4px 0"><span class="w"><span class="chip info">Changed</span></span>Coverage amount up to <span class="del">$25,000</span> $50,000</div><div class="dl" style="border:0;padding:4px 0"><span class="w"><span class="chip bad">Removed</span></span>Email</div></td></tr>
+          <tr><td>v8</td><td>Nov 3</td><td>Demo Agent</td><td>2</td><td>812</td><td><span class="chip ok">Live</span></td></tr>
+          <tr><td>v7</td><td>Oct 20</td><td>Jordan Ellery</td><td>5</td><td>1,040</td><td><span class="chip">Old</span></td></tr>
+          <tr><td>v6</td><td>Oct 2</td><td>Demo Agent</td><td>1</td><td>377</td><td><span class="chip">Old</span></td></tr>
+        </tbody></table></div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog"><h4>Publish version 9?</h4><p>Partners, agents and the public link get it straight away. Forms already started finish on v8.</p><div class="row" style="margin-bottom:14px"><span class="check on"></span><span class="small">Email partners a heads-up</span></div><div class="row" style="justify-content:flex-end"><span class="btn o">Cancel</span><span class="btn p">Publish version 9</span></div></div>
+    </div>
+
+    <div class="sec"><h2>C10 · Results</h2><span>Per step, then per question inside the step that loses most people.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Business identity</a><a>Team &amp; access</a><a>Products</a><a>Carriers</a><h5>Selling</h5><a>Sales process</a><a class="on">Application forms <small>5</small></a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a><h5>Integrations</h5><a>API keys &amp; webhooks</a></nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling › Application forms</div>
+        <div class="head"><h3>Final Expense intake</h3><nav class="tabs"><a>Questions</a><a>Settings</a><a class="on">Results</a><a>Versions</a></nav><div class="acts"><span class="seg"><span>7 d</span><span class="on">30 d</span><span>90 d</span></span><span class="btn hl">Share</span></div></div>
+        <div class="status"><span class="dot"></span>Last 30 days · v8 <span class="tag-mig">needs a migration</span></div>
+        <div class="body" style="flex-direction:column">
+          <div class="card"><div class="strip"><div><small>Started</small><b>1,264</b></div><div><small>Sent</small><b>812</b></div><div><small>Finished</small><b>64% <span class="chip hl">+6 pts</span></b></div><div><small>Time to finish</small><b>3m 40s</b></div></div></div>
+          <div class="card flex1"><div class="scroll"><table><thead><tr><th>Step</th><th>Reached</th><th>Left here</th><th></th></tr></thead><tbody>
+            <tr><td>1 · About you</td><td>1,264</td><td>11%</td><td><span class="hbar"><b style="width:100%"></b></span></td></tr>
+            <tr class="h"><td>2 · Health</td><td>1,130</td><td><span class="chip warn">17% · most</span></td><td><span class="hbar w"><b style="width:89%"></b></span></td></tr>
+            <tr><td style="padding-left:34px">Health conditions</td><td>1,096</td><td>14%</td><td><span class="hbar w"><b style="width:87%"></b></span></td></tr>
+            <tr><td style="padding-left:34px">Height &amp; weight</td><td>1,130</td><td>3%</td><td><span class="hbar"><b style="width:89%"></b></span></td></tr>
+            <tr><td>3 · Coverage</td><td>943</td><td>11%</td><td><span class="hbar"><b style="width:75%"></b></span></td></tr>
+            <tr><td>4 · Consent</td><td>842</td><td>4%</td><td><span class="hbar"><b style="width:67%"></b></span></td></tr>
+          </tbody></table></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C11 · Loading, empty, error</h2><span>Library and editor states.</span></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Loading</b></div><div class="card-b"><div class="skel" style="width:50%"></div><div class="skel"></div><div class="skel"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:60%"></div></div></div>
+      <div class="card"><div class="card-h"><b>Empty step</b></div><div class="card-b empty"><span class="ic">+</span><b>Step 3 has no questions</b><p>Add one, or move questions here by dragging their handle.</p><span class="btn p">Add a question</span></div></div>
+      <div class="card"><div class="card-h"><b>Could not load</b></div><div class="card-b empty"><span class="ic" style="background:var(--bad-s);color:var(--bad)">!</span><b>The forms did not load</b><p>Your saved draft is safe. Check your connection and try again.</p><span class="btn o">Try again</span></div></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose</span></div>
+  <div class="pick">
+    <div class="rec"><b>A · Three-pane builder (recommended)</b>The pattern people already know from Jotform and HubSpot: drag a field in, see the form, set it on the right. Keeps today’s canvas and side panel, so it is the shortest path from what is built.
+      <ul><li>Several forms per product, create from Insurvas, a copy or blank <span class="tag-mig">needs a migration</span></li><li>Draft saved to Insurvas, one Publish, versions with “what changed” <span class="tag-mig">needs a migration</span></li><li>Drag to reorder and drag in Insurvas questions; pages <span class="tag-mig">needs a migration</span></li><li>AND / OR logic, page skips, validation with “try a value”</li><li>Test submission that shows the lead and where each answer landed</li><li>Share link, embed, QR, webhook, results <span class="tag-mig">needs a migration</span></li></ul></div>
+    <div><b>B · One question at a time</b>Typeform-style: the form is a deck of question cards and logic reads as a flow. Best for website leads on phones; slower for agents who fill a long form during a call.
+      <ul><li>Everything new in A, but one question per screen for the person filling it in</li><li>Logic as a flow map (“If Tobacco = Yes → Smoking questions”)</li><li>Results per question as a bar run</li><li>Biggest change from today’s form; partner portal would need a second renderer</li></ul></div>
+    <div><b>C · Overview + sections</b>A forms library first, then a calm section-by-section editor with inline editing, no side panel. Easiest for a first-time owner; less room for heavy logic.
+      <ul><li>Everything new in A, edited in place instead of in an inspector</li><li>Library page with every product’s forms and their numbers</li><li>Logic and rules open under the question they belong to</li><li>Closest to how Settings pages already look</li></ul></div>
+  </div>
+</div>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

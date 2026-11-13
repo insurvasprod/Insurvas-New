@@ -2,6 +2,9 @@ import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { normalizePreview, signalBreakdown, type QueuePreview } from "@/lib/scoring/preview";
+import { cohortDays, dayInZone, daysBetween, sumDays, type CohortDay, type DecisionRow } from "@/lib/scoring/series";
+import { getWorkspaceTimezone } from "@/lib/agencyProfile/timezone";
+import { allRows } from "@/lib/ingestion/pages";
 
 type Result<T> = { data: T; error: { message: string; code?: string } | null };
 type Query<T> = PromiseLike<Result<T>> & {
@@ -9,6 +12,7 @@ type Query<T> = PromiseLike<Result<T>> & {
   eq(column: string, value: unknown): Query<T>;
   in(column: string, values: readonly unknown[]): Query<T>;
   not(column: string, operator: string, value: unknown): Query<T>;
+  gte(column: string, value: unknown): Query<T>;
   order(column: string, options?: { ascending?: boolean }): Query<T>;
   upsert(value: unknown, options?: unknown): Query<T>;
   delete(): Query<T>;
@@ -76,6 +80,12 @@ export type ScoringOverview = {
   periodSupported: boolean;
   /** Per-vendor contact rate, from the counters the scorer reads — only vendors with 30+ dials. */
   vendorRates: Array<{ vendorId: string; name: string; attempts: number; contacts: number; ratePct: number }>;
+  /**
+   * Reports round 7 (3·B): the comparison by day in the agency's zone, each arm's rate to date (lib/scoring/series.ts).
+   * The last 14 days for "14d"; the last SERIES_ALL_DAYS for all time, carried from the older history so the last
+   * point is the all-time figure. Empty when there are no dials.
+   */
+  daily: CohortDay[];
 };
 
 type CohortRow = ScoringOverview["cohorts"][number];
@@ -135,10 +145,53 @@ async function readVendorRates(db: Db, tenantId: string): Promise<ScoringOvervie
     .sort((a, b) => b.ratePct - a.ratePct || b.attempts - a.attempts);
 }
 
+/** How far back the all-time comparison's daily line reaches (the history before it is carried in, not drawn). */
+export const SERIES_ALL_DAYS = 60;
+
+/**
+ * The comparison by day: ONE read of the window's serves (served_at, cohort, contacted_at) from
+ * tenant_scoring_decisions on its (tenant_id, served_at) index, bucketed in TypeScript. No RPC, nothing per row.
+ * It runs beside the other reads; `daily(cohorts)` then draws the days. A failed read is an empty series (the
+ * cards and the comparison still stand), never a failed page.
+ */
+async function readDaily(db: Db, tenantId: string, period: ScoringPeriod) {
+  const span = period === "14d" ? SCORING_PERIOD_DAYS : SERIES_ALL_DAYS;
+  const now = Date.now();
+  const from = new Date(now - span * 86_400_000).toISOString();
+  const [zone, read] = await Promise.all([
+    getWorkspaceTimezone(tenantId).catch(() => null),
+    allRows(() => db.from("tenant_scoring_decisions").select("served_at, cohort, contacted_at").eq("tenant_id", tenantId).in("cohort", ["scored", "control"]).gte("served_at", from).order("served_at", { ascending: true }), 20_000),
+  ]);
+  const timeZone = zone ?? "UTC";
+  const rows: DecisionRow[] = read.error ? [] : (read.rows as Array<Record<string, unknown>>).map((row) => ({
+    servedAt: text(row.served_at),
+    cohort: row.cohort === "control" ? "control" : "scored",
+    contacted: row.contacted_at !== null && row.contacted_at !== undefined,
+  }));
+  return (cohorts: CohortRow[], shown: ScoringPeriod): CohortDay[] => {
+    if (rows.length === 0) return [];
+    // From the first day with a dial in the window (a quiet start draws nothing), to today.
+    const first = dayInZone(rows[0].servedAt, timeZone);
+    const today = dayInZone(new Date(now).toISOString(), timeZone);
+    // All time: what came before the window is carried in from the arms' totals, so the line ends on their rate.
+    const drawn = sumDays(rows);
+    const arm = (name: string) => cohorts.find((cohort) => cohort.cohort === name);
+    const carry = shown === "all"
+      ? {
+        scoredServed: Math.max(0, (arm("scored")?.served ?? 0) - drawn.scoredServed),
+        scoredContacted: Math.max(0, (arm("scored")?.contacted ?? 0) - drawn.scoredContacted),
+        controlServed: Math.max(0, (arm("control")?.served ?? 0) - drawn.controlServed),
+        controlContacted: Math.max(0, (arm("control")?.contacted ?? 0) - drawn.controlContacted),
+      }
+      : undefined;
+    return cohortDays(rows, daysBetween(first, today, span + 1), timeZone, carry);
+  };
+}
+
 export async function scoringOverview(tenantId: string, period: ScoringPeriod = "14d"): Promise<ScoringOverview> {
   const db = getSupabaseServiceClient() as unknown as Db;
 
-  const [settings, effective, overrides, cohortRead, defaults, vendorRates] = await Promise.all([
+  const [settings, effective, overrides, cohortRead, defaults, vendorRates, dailyFor] = await Promise.all([
     db.from("tenant_scoring_settings").select("enabled, holdout_pct").eq("tenant_id", tenantId).maybeSingle(),
     // The EFFECTIVE weights, defaults merged with this tenant's overrides — the same function the
     // scorer itself reads, so the screen cannot show one number while the queue uses another.
@@ -148,6 +201,7 @@ export async function scoringOverview(tenantId: string, period: ScoringPeriod = 
     // The platform defaults, so a weight's Reset returns it to a real value rather than a guess.
     db.rpc("default_scoring_weights"),
     readVendorRates(db, tenantId),
+    readDaily(db, tenantId, period),
   ]);
 
   if (settings.error) throw new Error(`Could not load scoring settings: ${settings.error.message}`);
@@ -167,6 +221,7 @@ export async function scoringOverview(tenantId: string, period: ScoringPeriod = 
   );
 
   const row = (settings.data ?? {}) as { enabled?: boolean; holdout_pct?: number };
+  const daily = dailyFor(cohortRead.cohorts, cohortRead.period);
   return {
     // Off by default, and the coalesce is the reason criterion 4 holds for a tenant row that does
     // not exist yet.
@@ -185,6 +240,7 @@ export async function scoringOverview(tenantId: string, period: ScoringPeriod = 
     periodFrom: cohortRead.periodFrom,
     periodSupported: cohortRead.periodSupported,
     vendorRates,
+    daily,
   };
 }
 

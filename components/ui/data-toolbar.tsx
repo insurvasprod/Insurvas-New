@@ -165,7 +165,7 @@ export function ActiveFilters({ filters, onClear, className, inline = false }: {
             type="button"
             onClick={filter.onRemove}
             aria-label={`Remove ${filter.label}: ${filter.value}`}
-            className="grid size-5 place-items-center rounded text-muted-foreground outline-none hover:bg-[var(--surface-alt)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+            className="grid size-5 place-items-center rounded text-muted-foreground outline-none hover:bg-[var(--hover-wash)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
           >
             <X className="size-3.5" aria-hidden="true" />
           </button>

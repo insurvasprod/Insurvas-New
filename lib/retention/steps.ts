@@ -12,17 +12,29 @@
 /** The Retention menu collapsed or open, remembered for a year; read on the server so the page draws at the right width. */
 export const RETENTION_RAIL_COOKIE = "insurvas_retention_rail";
 
-export type RetentionStep = "cases" | "save" | "servicing" | "reinstatement";
+export type RetentionStep = "cases" | "save" | "servicing" | "reinstatement" | "scorecard" | "results";
 
 type StepItem = { key: RetentionStep; label: string; href: string; icon: string };
 /** `icon`: the sidebar's own icon for the page. */
 // Since the critique of 2026-11-05 (E): Cases is the one place to work; Servicing is what waits on the carrier;
 // the reinstatement step is Win-back (a lapse inside its window is worked on its case, step 3).
+// Round 7 (owner pick 0·A, 2026-11-10; docs/la4/mockups-r7/retention.html): one rail, work then measure. The
+// scorecard (LA-5.8) and results (LA-5.9) joined the work from Reports, which keeps two rows opening them.
 export const RETENTION_STEPS: StepItem[] = [
   { key: "cases", label: "Cases", href: "/app/retention", icon: "life-buoy" },
   { key: "servicing", label: "Waiting on the carrier", href: "/app/servicing", icon: "wrench" },
   { key: "reinstatement", label: "Win-back", href: "/app/reinstatement", icon: "heart-handshake" },
+  { key: "scorecard", label: "Scorecard", href: "/app/retention-scorecard", icon: "chart-no-axes-combined" },
+  { key: "results", label: "Results", href: "/app/retention-results", icon: "chart-line" },
 ];
+/** What each rail badge counts (/api/app/retention/steps), one and many: the one warning per step. */
+export const RETENTION_WAITING: Record<string, [string, string]> = {
+  cases: ["case past due", "cases past due"],
+  servicing: ["request to check or send", "requests to check or send"],
+  reinstatement: ["client to call now", "clients to call now"],
+};
+/** The rail's foot, for the owner: Retention settings. */
+export const RETENTION_SETTINGS_FOOT = { label: "Retention settings", href: "/app/retention-settings" };
 /** Off the rail, still at their address (owner 2026-11-05: the predictive queue is hidden, not deleted). */
 export const RETIRED_STEPS: StepItem[] = [
   { key: "save", label: "Save queue", href: "/app/save-queue", icon: "life-buoy" },
@@ -35,6 +47,8 @@ const STEP_PATHS: [RegExp, RetentionStep][] = [
   [/^\/app\/save-queue(\/.*)?$/, "save"],
   [/^\/app\/servicing(\/.*)?$/, "servicing"],
   [/^\/app\/reinstatement(\/.*)?$/, "reinstatement"],
+  [/^\/app\/retention-scorecard(\/.*)?$/, "scorecard"],
+  [/^\/app\/retention-results(\/.*)?$/, "results"],
 ];
 
 export function retentionStepOf(pathname: string): RetentionStep | null {

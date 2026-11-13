@@ -1,8 +1,8 @@
 "use client";
 
+import { usePagePathname } from "@/components/ui/page-pathname";
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import {
   BadgePercent,
   BookCheck,
@@ -119,7 +119,7 @@ type Props = { nodes: SidebarNode[]; adminName: string; roleLabel: string; foote
 
 /** One row, drawn with the agent rail's own classes so the two rails cannot drift apart. */
 function NavItemLink({ entry, nested = false, onNavigate }: { entry: SidebarLink; nested?: boolean; onNavigate?: () => void }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const active = isLinkActive(entry.href, pathname);
   const Icon = ICONS[entry.icon];
 
@@ -156,7 +156,7 @@ function NavList({
   /** In the collapsed rail a group has no room for its pages, so choosing it opens the rail. */
   onGroupFromCollapsed?: () => void;
 }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const activeGroupId = groupIdForPath(nodes, pathname);
   const [openGroups, setOpenGroups] = useState<string[]>(() => (activeGroupId ? [activeGroupId] : []));
 

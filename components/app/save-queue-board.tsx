@@ -4,13 +4,13 @@ import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
 import { ActiveFilters, ClearFiltersButton, DataToolbar, FilterButton, FilterField, FilterPanel, RefreshButton, ToolbarSearch, toolbarControl, type ActiveFilter } from "@/components/ui/data-toolbar";
 import { MoreMenu } from "@/components/ui/more-menu";
 import { personName } from "@/lib/format/personName";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip, type StatusTone } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { fileDay } from "@/lib/ingestion/constants";
@@ -34,8 +34,18 @@ const phoneText = (raw: string) => {
 const breakdownText = (card: SaveCard) =>
   ["A prediction from the chargeback radar, not something the carrier reported.", ...card.contributions.map((c) => `${SIGNAL_LABELS[c.signal]}: +${c.contribution}`), `Score ${card.score}`].join("\n");
 
-const BAND_INK: Record<Band, string> = { critical: "text-[var(--error-ink)]", high: "text-[var(--warning-ink)]", medium: "text-[var(--info-ink)]", low: "text-muted-foreground" };
+/** The risk band is the row's one chip (owner 2026-11-11: colour only in a chip). */
+const BAND_TONE: Record<Band, StatusTone> = { critical: "danger", high: "warning", medium: "info", low: "neutral" };
+/** Why, in a few words: a fix the file doesn't show, else the sign that added the most. The sentence is its tooltip. */
+const whyShort = (card: SaveCard) => {
+  if (card.failedFix) return "Fix not in the file";
+  const top = [...card.contributions].sort((a, b) => b.contribution - a.contribution)[0];
+  return top ? SIGNAL_LABELS[top.signal] : "Scored at risk";
+};
 const capital = (s: string) => s[0].toUpperCase() + s.slice(1);
+/** How sure the prediction is (2026-11-02 tidy: "predicted" and the signal count stay with the risk). */
+const predictedText = (card: SaveCard) =>
+  `predicted · ${card.signalsAvailable} of 7 signals. Predicted, ${card.confidence} confidence.${card.missing.length ? ` Not known: ${card.missing.map((m) => MISSING_LABELS[m as Signal] ?? m).join(", ")}.` : " Every signal is known."}`;
 
 /** What a card still needs before it can be worked well (owner 2026-11-02: "help the agent if there's things to fix"). */
 type Need = "failed" | "phone" | "income";
@@ -84,7 +94,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
   const needle = search.trim().toLowerCase();
   const visible = useMemo(() => cards.filter((c) => (!band || c.band === band) && (!carrier || c.carrierId === carrier) && (!need || needsOf(c).includes(need))
     && (!needle || [c.clientName, c.policyNumber, c.phone, c.carrierName].some((v) => v?.toLowerCase().includes(needle)))), [cards, band, carrier, need, needle]);
-  const pageSize = useFittingPageSize(480, 57);
+  const pageSize = useFittingPageSize(480, 45);
   const shown = paginate(visible, page, pageSize);
   const { stats } = queue;
   const chips: ActiveFilter[] = [
@@ -108,10 +118,11 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
       {/* Every tile opens its slice of the queue (owner rule: figures are links). */}
       {stats.scored > 0 && <StatStrip label="Save queue">
         <StatTile label="In the queue" href={pathname} value={queue.total.toLocaleString("en-US")} footnote={queue.total > cards.length ? `first ${cards.length} shown` : `of ${stats.scored.toLocaleString("en-US")} scored`} />
-        <StatTile label="Critical" href={hrefWith({ band: "critical" })} value={stats.queueCritical.toLocaleString("en-US")} valueTone={stats.queueCritical ? "danger" : undefined} labelTitle="Critical cards on the queue. Across the book, past-due and worked policies included, the radar scores more; past-due ones are in Lapse risk." footnote={`${stats.critical.toLocaleString("en-US")} across the book`} />
+        <StatTile label="Critical" href={hrefWith({ band: "critical" })} value={stats.queueCritical.toLocaleString("en-US")} labelTitle="Critical cards on the queue. Across the book, past-due and worked policies included, the radar scores more; past-due ones are in Lapse risk."
+          footnote={stats.queueCritical ? <StatusChip tone="danger">{`${stats.critical.toLocaleString("en-US")} across the book`}</StatusChip> : `${stats.critical.toLocaleString("en-US")} across the book`} />
         {/* When most of the queue has no advance on file, the unknown leads: "$0" alone read as nothing at stake. */}
-        <StatTile label="Advance at risk" href={hrefWith({ sort: "exposure" })} value={!cards.length ? "—" : known === 0 ? "Not on file" : stats.atRiskUnknown > known ? `${stats.atRiskUnknown} unknown` : money(stats.atRiskCents)} valueTone={cards.length && stats.atRiskUnknown > known ? "warning" : undefined}
-          footnote={!cards.length ? "nothing in the queue" : known === 0 ? "no advance from these carriers yet" : stats.atRiskUnknown > known ? `${money(stats.atRiskCents)} on the ${known} with an advance` : stats.atRiskUnknown ? `${stats.atRiskUnknown} with no advance on file` : "unearned, in the queue"} />
+        <StatTile label="Advance at risk" href={hrefWith({ sort: "exposure" })} value={!cards.length ? "—" : known === 0 ? "Not on file" : stats.atRiskUnknown > known ? `${stats.atRiskUnknown} unknown` : money(stats.atRiskCents)}
+          footnote={!cards.length ? "nothing in the queue" : known === 0 ? "no advance from these carriers yet" : stats.atRiskUnknown > known ? <StatusChip tone="warning">{`${money(stats.atRiskCents)} on the ${known} with an advance`}</StatusChip> : stats.atRiskUnknown ? `${stats.atRiskUnknown} with no advance on file` : "unearned, in the queue"} />
         <StatTile label="Too little known" href="/app/retention-settings" value={queue.lowConfidence.toLocaleString("en-US")} labelTitle="High or critical, but scored on under half the signals. They stay off the queue until more is known: income, the carrier's grace rule, a second carrier file, the draft day." footnote={queue.lowConfidence ? "kept off the queue" : "every score rests on enough"} />
         <StatTile label="Income known" href={hrefWith({ need: "income" })} value={`${stats.incomeKnown.toLocaleString("en-US")} of ${stats.scored.toLocaleString("en-US")}`} labelTitle={coverageText(stats.incomeKnown, stats.scored, stats.affordabilityWeight)} footnote={`worth up to ${stats.affordabilityWeight} points`} />
       </StatStrip>}
@@ -148,7 +159,7 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
         </>}
         footer={visible.length ? (
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-sm text-muted-foreground">
               {queue.usedMedium ? "Nothing is high risk: medium shown · " : ""}
               {queue.heldOut ? `${queue.heldOut.toLocaleString("en-US")} held back for the holdout · ` : ""}
               {queue.computedAt ? `Scored ${fileDay(queue.computedAt.slice(0, 10))}` : null}
@@ -166,11 +177,11 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
             <thead>
               <tr>
                 <th>Client</th>
-                <th className="w-[130px]">Risk</th>
-                <th>Why, and the fix</th>
+                <th>Risk</th>
+                <th>Why</th>
                 {showWorth && <th className="w-[96px] text-right" title="Unearned advance the carrier takes back if this policy dies (from the commission ledger)">Worth</th>}
                 {showDraft && <th className="w-[96px] text-right">Next draft</th>}
-                <th className="w-[160px] text-right"><span className="sr-only">Work the card</span></th>
+                <th>Next step</th>
               </tr>
             </thead>
             <tbody className="m-seq">
@@ -182,46 +193,28 @@ export function SaveQueueBoard({ queue, sort, readOnly, canStartFix }: { queue: 
                 const href = cardHref(card);
                 return (
                   <tr key={card.key} className="m-row">
-                    <td>
-                      <Link href={href} className="block max-w-[220px] truncate font-semibold text-foreground underline-offset-2 hover:underline" title={queue.showOwners && card.owner ? `Owner: ${card.owner.name}` : undefined}>{name}</Link>
-                      <span className="block max-w-[220px] truncate text-xs text-muted-foreground" title={`${card.carrierName} ${card.policyNumber}`}>
-                        {card.phone ? <span className="select-all tabular-nums text-foreground" title="Check the calling window and do-not-call list before dialling">{phoneText(card.phone)}</span> : "No phone"}
-                        {" · "}
-                        <Link href={`/app/policies/carrier/${card.carrierId}/${encodeURIComponent(card.policyNumber)}`} className="hover:underline">{card.carrierName} {card.policyNumber}</Link>
-                      </span>
+                    {/* One line per row (owner 2026-11-11): the phone, the policy and the owner are the name's tooltip. */}
+                    <td className="whitespace-nowrap font-medium text-foreground" title={[card.phone ? phoneText(card.phone) : "No phone", `${card.carrierName} ${card.policyNumber}`, queue.showOwners && card.owner ? `Owner: ${card.owner.name}` : null].filter(Boolean).join(" · ")}>
+                      <Link href={href} className="underline-offset-2 hover:underline">{name}</Link>
                     </td>
                     <td>
-                      <span className={`inline-flex items-baseline gap-1 rounded-full border border-dashed border-current px-2.5 py-0.5 text-xs font-semibold tabular-nums ${BAND_INK[card.band]}`} title={breakdownText(card)}>
-                        {card.score} · {capital(card.band)}
-                      </span>
-                      <span className="mt-1 block text-xs text-muted-foreground" title={`Predicted, ${card.confidence} confidence.${card.missing.length ? ` Not known: ${card.missing.map((m) => MISSING_LABELS[m as Signal] ?? m).join(", ")}.` : " Every signal is known."}`}>
-                        predicted · {card.signalsAvailable} of 7 signals
-                      </span>
+                      {/* A prediction, and it says so: the breakdown, the signals it rests on and how sure it is. */}
+                      <StatusChip tone={BAND_TONE[card.band]} dot={false} className="border border-dashed border-current" title={`${breakdownText(card)}\n${predictedText(card)}`}>{card.score} · {capital(card.band)}</StatusChip>
                     </td>
-                    <td className="text-foreground">
-                      <span className="line-clamp-2 whitespace-normal" title={card.explanation}>
-                        {card.failedFix && <span className="font-semibold text-[var(--error-ink)]">Fix not in the file: {card.failedFix}. </span>}
-                        {card.explanation}
-                      </span>
-                      {card.openRequests.length > 0 ? (
-                        <span className="mt-1 block truncate text-xs text-muted-foreground">In progress: {card.openRequests.map((r) => `${REQUEST_LABELS[r.type]} (${STATUS_LABELS[r.status].toLowerCase()})`).join(", ")}</span>
-                      ) : first ? (
-                        <span className="mt-1 block truncate text-xs text-[var(--accent-ink)]" title={first.reason}>→ {first.label}{fixes.length > 1 ? <span className="text-muted-foreground"> · +{fixes.length - 1} more</span> : null}</span>
-                      ) : null}
-                    </td>
-                    {showWorth && <td className="text-right tabular-nums">{money(card.atRiskCents) ?? <span className="text-muted-foreground" title="No advance from this carrier on file yet">—</span>}</td>}
+                    <td className="whitespace-nowrap" title={[card.failedFix ? `Fix not in the file: ${card.failedFix}.` : null, card.explanation, card.openRequests.length ? `In progress: ${card.openRequests.map((r) => `${REQUEST_LABELS[r.type]} (${STATUS_LABELS[r.status].toLowerCase()})`).join(", ")}` : null].filter(Boolean).join(" ")}>{whyShort(card)}</td>
+                    {showWorth && <td className="whitespace-nowrap text-right tabular-nums">{money(card.atRiskCents) ?? <span className="text-muted-foreground" title="No advance from this carrier on file yet">—</span>}</td>}
                     {showDraft && (
-                      <td className="text-right tabular-nums">
+                      <td className="whitespace-nowrap text-right tabular-nums">
                         {card.nextDraftDays === null ? <span className="text-muted-foreground" title="The draft day is known only for sales written in the app">—</span> : card.nextDraftDays === 0 ? "Today" : `${card.nextDraftDays} ${card.nextDraftDays === 1 ? "day" : "days"}`}
                       </td>
                     )}
-                    <td className="text-right">
-                      {!readOnly && (
-                        <span className="inline-flex items-center justify-end gap-1">
-                          {/* The fix is the row's job (spec card: [Call] [Start the fix]); without one, the call. */}
+                    <td className="whitespace-nowrap">
+                      {readOnly ? <Link href={href} className="text-foreground hover:underline">Open ›</Link> : (
+                        <span className="inline-flex items-center gap-1">
+                          {/* The fix is the row's job (spec card: [Call] [Start the fix]); without one, the call. A short verb, the fix named in its tooltip. */}
                           {firstType
-                            ? <Button asChild size="sm"><Link href={`${href}?tab=fix&fix=${firstType}`}>Start the fix</Link></Button>
-                            : <Button asChild size="sm" variant="outline"><Link href={`${href}?tab=calls`}>Log call</Link></Button>}
+                            ? <Link href={`${href}?tab=fix&fix=${firstType}`} className="text-foreground hover:underline" title={`Start the fix: ${first!.label}${fixes.length > 1 ? ` (+${fixes.length - 1} more)` : ""}`}>Fix ›</Link>
+                            : <Link href={`${href}?tab=calls`} className="text-foreground hover:underline" title={first ? `Log call · then ${first.label}` : "Log call"}>Call ›</Link>}
                           <MoreMenu row label={`More for ${name}`} items={[
                             ...fixes.slice(1).map((f) => { const type = startable(card, f.action); return type ? { label: `Start: ${f.label}`, href: `${href}?tab=fix&fix=${type}` } : null; }),
                             firstType && { label: "Log call", href: `${href}?tab=calls` },

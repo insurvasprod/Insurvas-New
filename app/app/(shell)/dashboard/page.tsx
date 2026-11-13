@@ -100,7 +100,7 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
   const header = (
     <PageHeader
       title={`${greeting(serverNow, zone)}${name}`}
-      lead={views.length > 1 ? <ViewTabs label="Dashboard view" value={view} tabs={views.map((item) => ({ key: item.key, label: item.label, href: item.href }))} /> : undefined}
+      tabs={views.length > 1 ? <ViewTabs label="Dashboard view" value={view} tabs={views.map((item) => ({ key: item.key, label: item.label, href: item.href }))} /> : undefined}
       actions={
         <>
           {callbacksHref && (
@@ -109,7 +109,8 @@ export default async function AgentDashboardPage({ searchParams }: { searchParam
             </Suspense>
           )}
           {secondary.map((action) => (
-            <Button key={action.href} asChild variant="outline"><Link href={action.href}>{action.label}</Link></Button>
+            // The page's one gold feature button (the third brand colour, 2026-11-12): getting on the phone.
+            <Button key={action.href} asChild variant={/^start calling$/i.test(action.label) ? "highlight" : "outline"}><Link href={action.href}>{action.label}</Link></Button>
           ))}
           {primary && <Button asChild><Link href={primary.href}>{primary.label}</Link></Button>}
         </>

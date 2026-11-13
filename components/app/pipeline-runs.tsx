@@ -75,7 +75,7 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
           {canRun && available && <Button type="button" variant="outline" disabled={busy} onClick={() => void runNow()}>{busy ? "Running…" : "Run now"}</Button>}
           <RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />
         </>}>
-          <span className="text-sm text-muted-foreground">Each file goes through {FILE_STAGES.map((s) => STAGE_LABELS[s]).join(", ")}, then the day is analysed</span>
+          <span className="text-sm text-foreground">Each file goes through {FILE_STAGES.map((s) => STAGE_LABELS[s]).join(", ")}, then the day is analysed</span>
         </DataToolbar>
       }
       footer={available && runs.length ? <Pager page={shown.current} pageSize={pageSize} total={runs.length} noun="runs" onPage={setPage} /> : undefined}
@@ -84,16 +84,17 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
         : runs.length === 0 ? <EmptyState title="No run yet" hint="A run starts when a file arrives, every five minutes for anything waiting, or with Run now." />
         : (
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-            <thead><tr><th className="w-[170px]">Started</th><th className="w-[140px]">Why</th><th className="w-[120px]">Result</th><th className="w-[160px] text-right">Files</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Started</th><th>Why</th><th>Result</th><th className="text-right">Files</th><th>Took</th></tr></thead>
             <tbody>
               {shown.rows.map((run) => (
                 <Fragment key={run.id}>
                   <tr>
-                    <td className="font-semibold text-foreground"><button type="button" className="text-left hover:underline" aria-expanded={open === run.id} onClick={() => setOpen(open === run.id ? null : run.id)}>{when(run.startedAt)}</button></td>
-                    <td>{TRIGGER_WORD[run.trigger] ?? run.trigger}</td>
-                    <td><StatusChip tone={RUN_TONE[run.status] ?? "neutral"}>{run.status === "running" ? "Running" : run.status[0].toUpperCase() + run.status.slice(1)}</StatusChip></td>
-                    <td className="text-right tabular-nums">{run.total ? `${run.succeeded} of ${run.total} through` : "none waiting"}{run.failed ? <span className="block text-xs text-[var(--warning-ink)]">{run.failed} stopped</span> : null}</td>
-                    <td className="text-xs text-muted-foreground">{run.error ?? (run.finishedAt ? `Took ${duration(Date.parse(run.finishedAt) - Date.parse(run.startedAt))}` : "")}</td>
+                    {/* One line per run (owner 2026-11-11): how many stopped and the run's error are the result chip's tooltip. */}
+                    <td className="whitespace-nowrap font-medium text-foreground"><button type="button" className="text-left hover:underline" aria-expanded={open === run.id} onClick={() => setOpen(open === run.id ? null : run.id)}>{when(run.startedAt)}</button></td>
+                    <td className="whitespace-nowrap">{TRIGGER_WORD[run.trigger] ?? run.trigger}</td>
+                    <td><StatusChip tone={RUN_TONE[run.status] ?? "neutral"} title={[run.failed ? `${run.failed} stopped` : null, run.error].filter(Boolean).join(" · ") || undefined}>{run.status === "running" ? "Running" : run.status[0].toUpperCase() + run.status.slice(1)}</StatusChip></td>
+                    <td className="whitespace-nowrap text-right tabular-nums">{run.total ? `${run.succeeded} of ${run.total} through` : "none waiting"}</td>
+                    <td className="whitespace-nowrap tabular-nums">{run.finishedAt ? duration(Date.parse(run.finishedAt) - Date.parse(run.startedAt)) : <span className="text-muted-foreground">—</span>}</td>
                   </tr>
                   {open === run.id && (
                     <tr>
@@ -101,12 +102,12 @@ export function PipelineRuns({ runs, available, canRun }: { runs: RunRow[]; avai
                         <ul className="m-0 grid list-none gap-2 p-0 py-1">
                           {run.files.map((file) => (
                             <li key={file.fileId} className="grid gap-1">
-                              <span className="text-sm font-semibold text-foreground">{file.name}</span>
+                              <span className="text-sm font-medium text-foreground">{file.name}</span>
                               <span className="flex flex-wrap gap-1">{file.stages.map((stage) => <StageChip key={stage.stage} stage={stage} />)}</span>
-                              {file.stages.filter((s) => s.status === "failed" || s.status === "blocked").map((s) => <span key={s.stage} className="text-xs text-[var(--warning-ink)]">{STAGE_LABELS[s.stage as keyof typeof STAGE_LABELS]}: {s.error}</span>)}
+                              {file.stages.filter((s) => s.status === "failed" || s.status === "blocked").map((s) => <span key={s.stage} className="text-sm text-foreground">{STAGE_LABELS[s.stage as keyof typeof STAGE_LABELS]}: {s.error}</span>)}
                             </li>
                           ))}
-                          {run.analyse && <li className="flex flex-wrap items-center gap-2"><StageChip stage={run.analyse} /><span className="text-xs text-muted-foreground">{run.analyse.note}</span></li>}
+                          {run.analyse && <li className="flex flex-wrap items-center gap-2"><StageChip stage={run.analyse} /><span className="text-sm text-foreground">{run.analyse.note}</span></li>}
                         </ul>
                       </td>
                     </tr>
@@ -154,19 +155,22 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
           : visible.length === 0 ? <NoMatches noun="problems" onClear={clear} />
           : (
             <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
-              <thead><tr><th className="w-[160px]">Agent</th><th>What it saw</th><th className="w-[110px]">Severity</th><th className="w-[130px]">When</th><th className="w-[200px] text-right">Was it right?</th></tr></thead>
+              <thead><tr><th>Agent</th><th>What it saw</th><th>File</th><th>Severity</th><th>When</th><th>Next step</th></tr></thead>
               <tbody>
                 {shown.rows.map((f) => (
                   <ClickRow key={f.id} href={findingHref(f.id)} label={`Open the problem: ${f.reasoning}`}>
-                    <td><span className="block font-semibold text-foreground">{f.agentLabel}</span><span className="block text-xs text-muted-foreground">{f.modelId ? `${f.modelId} · prompt ${f.promptVersion}` : "No model: a fixed check"}</span></td>
-                    <td><span className="block text-foreground">{f.reasoning}</span>{f.fileName && <span className="block text-xs text-muted-foreground">{f.fileName}</span>}{f.confidence !== null && <span className="block text-xs text-muted-foreground">Confidence {Math.round(f.confidence * 100)}%</span>}</td>
+                    {/* One line per problem (owner 2026-11-11): the model is the agent's tooltip, the whole sentence and the
+                        confidence are the reasoning's; the file is its own column. */}
+                    <td className="whitespace-nowrap font-medium text-foreground" title={f.modelId ? `${f.modelId} · prompt ${f.promptVersion}` : "No model: a fixed check"}>{f.agentLabel}</td>
+                    <td className="max-w-[420px] truncate whitespace-nowrap" title={`${f.reasoning}${f.confidence !== null ? ` · Confidence ${Math.round(f.confidence * 100)}%` : ""}`}>{f.reasoning}</td>
+                    <td className="whitespace-nowrap">{f.fileName ?? <span className="text-muted-foreground">—</span>}</td>
                     <td><StatusChip tone={SEVERITY_TONE[f.severity] ?? "neutral"}>{f.severity === "blocking" ? "Blocking" : f.severity === "warning" ? "Warning" : "Note"}</StatusChip></td>
-                    <td className="text-xs tabular-nums">{when(f.createdAt)}</td>
+                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{when(f.createdAt)}</td>
                     {/* Round 5 (walk 2026-11-03): the question is on the problem's own page; the list only links to it. */}
-                    <td className="text-right">
+                    <td className="whitespace-nowrap">
                       {f.status === "open" && canReview
-                        ? <Link href={findingHref(f.id)} className="font-medium text-[var(--accent-ink)] hover:underline">Review</Link>
-                        : <span className="text-xs text-muted-foreground">{STATUS_WORD[f.status] ?? f.status}</span>}
+                        ? <Link href={findingHref(f.id)} className="hover:underline">Review ›</Link>
+                        : <>{STATUS_WORD[f.status] ?? f.status}</>}
                     </td>
                   </ClickRow>
                 ))}
@@ -178,15 +182,15 @@ export function AgentFindings({ findings, accuracy, available, canReview }: { fi
       {available && accuracy.length > 0 && (
         <TableCard title="Accuracy by week" description="Of the findings people marked, how many were right. Unmarked and self-resolved findings don't count.">
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-            <thead><tr><th>Week of</th><th>Agent</th><th className="text-right">Right</th><th className="text-right">Wrong</th><th className="text-right">Accuracy</th></tr></thead>
+            <thead><tr><th>Agent</th><th>Week of</th><th className="text-right">Right</th><th className="text-right">Wrong</th><th className="text-right">Accuracy</th></tr></thead>
             <tbody>
               {accuracy.map((a) => (
                 <tr key={`${a.agent}-${a.week}`}>
-                  <td className="tabular-nums">{a.week}</td>
-                  <td className="font-semibold text-foreground">{AGENT_INFO[a.agent as AgentName]?.label ?? a.agent}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{AGENT_INFO[a.agent as AgentName]?.label ?? a.agent}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{a.week}</td>
                   <td className="text-right tabular-nums">{a.approved}</td>
                   <td className="text-right tabular-nums">{a.rejected}</td>
-                  <td className="text-right font-semibold tabular-nums">{a.accuracyPct}%</td>
+                  <td className="text-right tabular-nums">{a.accuracyPct}%</td>
                 </tr>
               ))}
             </tbody>

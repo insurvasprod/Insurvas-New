@@ -62,10 +62,12 @@ export type InvoiceListRow = {
   periodStart: string | null;
   periodEnd: string | null;
   dueDate: string | null;
+  subtotalCents: number;
   totalCents: number;
   status: InvoiceStatus;
   paidOn: string | null;
   flagged: boolean;
+  /** Our figure less the bill (negative: billed more than you got). Stored at approval; read live before it (listBills). */
   differenceCents: number | null;
   hasDocument: boolean;
 };
@@ -109,6 +111,7 @@ const toListRow = (r: Loose, n: Map<string, string>): InvoiceListRow => ({
   periodStart: r.period_start,
   periodEnd: r.period_end,
   dueDate: r.due_date,
+  subtotalCents: Number(r.subtotal_cents ?? 0),
   totalCents: Number(r.total_cents),
   status: r.status,
   paidOn: r.paid_on,
@@ -117,7 +120,7 @@ const toListRow = (r: Loose, n: Map<string, string>): InvoiceListRow => ({
   hasDocument: !!r.document_path,
 });
 
-const LIST_COLUMNS = "id, vendor_id, partner_id, invoice_number, invoice_date, period_start, period_end, due_date, total_cents, status, paid_on, flagged, difference_cents, document_path";
+const LIST_COLUMNS = "id, vendor_id, partner_id, invoice_number, invoice_date, period_start, period_end, due_date, subtotal_cents, total_cents, status, paid_on, flagged, difference_cents, document_path";
 
 export async function listInvoices(tenantId: string, opts: { status?: InvoiceStatus | "open"; sourceId?: string } = {}): Promise<InvoiceListRow[]> {
   let q = db().from("vendor_invoice").select(LIST_COLUMNS).eq("tenant_id", tenantId);
@@ -127,6 +130,26 @@ export async function listInvoices(tenantId: string, opts: { status?: InvoiceSta
   const [{ data, error }, n] = await Promise.all([q.order("invoice_date", { ascending: false }).order("id").limit(500), names(tenantId)]);
   if (error) fail(error);
   return ((data ?? []) as Loose[]).map((r) => toListRow(r, n.map));
+}
+
+/** Most bills still waiting that the list compares live; past it, a bill shows its count on its own page. */
+const LIVE_COUNT_LIMIT = 25;
+
+/**
+ * Vendor bills' list (round 7, 2·A): every bill, with "Our count" on each row. An approved, paid or void bill
+ * carries the difference stored at approval; a bill still waiting is compared now, the newest
+ * LIVE_COUNT_LIMIT of them at once, so the red "Our count" and the "Billed more than you got" chip are true
+ * before anyone approves. Nothing is written.
+ */
+export async function listBills(tenantId: string): Promise<InvoiceListRow[]> {
+  const [rows, tol] = await Promise.all([listInvoices(tenantId), tolerance(tenantId)]);
+  const waiting = rows.filter((r) => EDITABLE.includes(r.status)).slice(0, LIVE_COUNT_LIMIT);
+  const live = await Promise.all(waiting.map((r) => comparison(tenantId, r.id).then((c) => [r.id, comparisonSummary(c, tol)] as const, () => null)));
+  const byId = new Map(live.filter((x): x is NonNullable<typeof x> => x !== null));
+  return rows.map((r) => {
+    const s = byId.get(r.id);
+    return s ? { ...r, differenceCents: s.differenceCents, flagged: s.flagged } : r;
+  });
 }
 
 async function comparison(tenantId: string, id: string): Promise<ComparisonRow[]> {

@@ -103,7 +103,7 @@ export default async function SaveCardPage({ params, searchParams }: { params: P
             <div className="grid gap-1.5">
               <h2 className="m-0 text-xs font-semibold text-muted-foreground">Why</h2>
               <p className="m-0 text-sm text-foreground">
-                {card.failedFix && <span className="font-semibold text-[var(--error-ink)]">Fix not in the file: {card.failedFix}. </span>}
+                {card.failedFix && <><StatusChip tone="danger" className="mr-1.5">Fix not in the file</StatusChip>{card.failedFix}. </>}
                 {card.explanation}
               </p>
             </div>
@@ -115,9 +115,9 @@ export default async function SaveCardPage({ params, searchParams }: { params: P
                     const type = fixes.find((x) => x.action === f.action)?.type;
                     return (
                       <li key={f.action} className="flex items-baseline gap-3">
-                        <span className="font-semibold text-[var(--accent-ink)] tabular-nums">{i + 1}</span>
+                        <span className="tabular-nums text-foreground">{i + 1}</span>
                         <span className="min-w-0 flex-1 text-foreground" title={f.reason}>{f.label}</span>
-                        {type && canWork && canStartFix && !readOnly ? <Link href={`${base}?tab=fix&fix=${type}`} className="shrink-0 text-xs font-semibold text-[var(--accent-ink)] hover:underline">Start this fix</Link> : null}
+                        {type && canWork && canStartFix && !readOnly ? <Link href={`${base}?tab=fix&fix=${type}`} className="shrink-0 text-foreground hover:underline" title="Start this fix">Start ›</Link> : null}
                       </li>
                     );
                   })}
@@ -148,9 +148,9 @@ export default async function SaveCardPage({ params, searchParams }: { params: P
                   const known = knownBy.get(signal);
                   return (
                     <tr key={signal}>
-                      <td className="text-foreground">{SIGNAL_LABELS[signal]}</td>
-                      <td className={known ? "text-foreground" : "text-muted-foreground"}>{known ? known.explanation : card.missing.includes(signal) ? `Not known: ${MISSING_LABELS[signal]}` : "Not known"}</td>
-                      <td className="text-right font-semibold tabular-nums">{known ? `+${known.contribution}` : "—"}</td>
+                      <td className="whitespace-nowrap font-medium text-foreground">{SIGNAL_LABELS[signal]}</td>
+                      <td className="whitespace-nowrap">{known ? known.explanation : card.missing.includes(signal) ? `Not known: ${MISSING_LABELS[signal]}` : "Not known"}</td>
+                      <td className="whitespace-nowrap text-right tabular-nums">{known ? `+${known.contribution}` : <span className="text-muted-foreground">—</span>}</td>
                     </tr>
                   );
                 })}

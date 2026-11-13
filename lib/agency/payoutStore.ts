@@ -34,12 +34,17 @@ export type PreviewRow = {
 };
 
 export async function payoutPreview(tenantId: string, from: string, to: string): Promise<PreviewRow[]> {
-  await agencyRpc<number>("agency_ledger_sync", { p_tenant_id: tenantId });
-  // Salary, application bonuses and save fees owed up to the month's end (Team pay plans). Before that update the
-  // function is missing and the run is commission only, as it was.
-  await agencyRpc<number>("sync_producer_pay", { p_tenant_id: tenantId, p_to: to }).catch((error: unknown) => {
-    if (!(error instanceof Error && "code" in error && (error as { code: string }).code === "schema_pending")) throw error;
-  });
+  // The two syncs write different ledger lines (commission shares by commission_entry_id; pay plans by
+  // pay_source_key) and neither reads what the other writes, so they run side by side (perf pass 2026-11-09);
+  // the preview still reads only after both have landed.
+  await Promise.all([
+    agencyRpc<number>("agency_ledger_sync", { p_tenant_id: tenantId }),
+    // Salary, application bonuses and save fees owed up to the month's end (Team pay plans). Before that update the
+    // function is missing and the run is commission only, as it was.
+    agencyRpc<number>("sync_producer_pay", { p_tenant_id: tenantId, p_to: to }).catch((error: unknown) => {
+      if (!(error instanceof Error && "code" in error && (error as { code: string }).code === "schema_pending")) throw error;
+    }),
+  ]);
   const rows = await agencyRpc<Array<Record<string, unknown>>>("agency_payout_preview", { p_tenant_id: tenantId, p_from: from, p_to: to });
   return (rows ?? []).map((r) => ({
     producerUserId: r.producer_user_id as string,
@@ -107,16 +112,24 @@ export type RunRow = {
   paidOn: string | null;
   paidMethod: string | null;
   paymentReference: string | null;
+  /** Only when read with `includeVoid` (Team payouts › Runs, round 7): when it was voided and why. */
+  voidedAt?: string | null;
+  voidReason?: string | null;
 };
 
-export async function readRuns(tenantId: string, producerUserId?: string): Promise<RunRow[]> {
+/**
+ * The payout runs, newest first. Void runs are left out, except for Team payouts › Runs (round 7, owner
+ * 2026-11-10: a Void chip there), which passes `includeVoid`.
+ */
+export async function readRuns(tenantId: string, producerUserId?: string, options: { includeVoid?: boolean } = {}): Promise<RunRow[]> {
+  const columns = "id, producer_user_id, period_start, period_end, status, net_cents, withheld_cents, balance_before_cents, balance_after_cents, decision_mode, decision_reason, paid_on, paid_method, payment_reference";
   let query = db()
     .from("producer_payout_run")
-    .select("id, producer_user_id, period_start, period_end, status, net_cents, withheld_cents, balance_before_cents, balance_after_cents, decision_mode, decision_reason, paid_on, paid_method, payment_reference")
+    .select(options.includeVoid ? `${columns}, voided_at, void_reason` : columns)
     .eq("tenant_id", tenantId)
-    .neq("status", "void")
     .order("period_end", { ascending: false })
-    .limit(500);
+    .limit(options.includeVoid ? 1000 : 500);
+  if (!options.includeVoid) query = query.neq("status", "void");
   if (producerUserId) query = query.eq("producer_user_id", producerUserId);
   const { data, error } = await query;
   if (error) throw new Error(`readRuns: ${error.message}`);
@@ -135,7 +148,46 @@ export async function readRuns(tenantId: string, producerUserId?: string): Promi
     paidOn: (r.paid_on as string | null) ?? null,
     paidMethod: (r.paid_method as string | null) ?? null,
     paymentReference: (r.payment_reference as string | null) ?? null,
+    ...(options.includeVoid ? { voidedAt: (r.voided_at as string | null) ?? null, voidReason: (r.void_reason as string | null) ?? null } : {}),
   }));
+}
+
+/** Each team member's producer record id by their user id: a name on Team payouts opens /app/producers/<id>. */
+export async function producerRecordIds(tenantId: string): Promise<Map<string, string>> {
+  const { data, error } = await db().from("producer").select("id, user_id").eq("tenant_id", tenantId);
+  if (error) throw new Error(`producerRecordIds: ${error.message}`);
+  return new Map(((data ?? []) as Array<{ id: string; user_id: string }>).map((r) => [r.user_id, r.id]));
+}
+
+/**
+ * A producer statement's surroundings (round 7, owner 2026-11-10, commissions.html 7·1): whether and why the run
+ * was voided, the producer's record, and the runs either side of it — for the owner, the other people paid for the
+ * same period (by name); for the producer, his own runs (by period). Void runs are kept, so a void statement keeps
+ * its place.
+ */
+export async function statementSurroundings(tenantId: string, run: { id: string; producerUserId: string; periodStart: string }, scope: "month" | "person") {
+  let query = db().from("producer_payout_run").select("id, producer_user_id, period_start, period_end, status, voided_at, void_reason").eq("tenant_id", tenantId).limit(500);
+  query = scope === "month" ? query.eq("period_start", run.periodStart) : query.eq("producer_user_id", run.producerUserId);
+  const [{ data, error }, people] = await Promise.all([
+    query,
+    db().from("producer").select("id, user_id, display_name").eq("tenant_id", tenantId),
+  ]);
+  if (error) throw new Error(`statementSurroundings: ${error.message}`);
+  const rows = (data ?? []) as Array<Record<string, unknown>>;
+  const who = new Map(((people.data ?? []) as Array<{ id: string; user_id: string; display_name: string | null }>).map((p) => [p.user_id, p]));
+  const self = rows.find((r) => r.id === run.id);
+  const order = rows
+    .map((r) => ({ id: r.id as string, producerUserId: r.producer_user_id as string, name: who.get(r.producer_user_id as string)?.display_name ?? "Team member", periodStart: r.period_start as string, periodEnd: r.period_end as string, status: r.status as string }))
+    // A month's people by name; a person's months oldest first, so ‹ is the month before.
+    .sort((a, b) => (scope === "month" ? a.name.localeCompare(b.name) || a.id.localeCompare(b.id) : a.periodStart.localeCompare(b.periodStart) || a.id.localeCompare(b.id)));
+  const at = order.findIndex((r) => r.id === run.id);
+  return {
+    voidedAt: (self?.voided_at as string | null | undefined) ?? null,
+    voidReason: (self?.void_reason as string | null | undefined) ?? null,
+    producerRecordId: who.get(run.producerUserId)?.id ?? null,
+    previous: at > 0 ? order[at - 1] : null,
+    next: at >= 0 && at < order.length - 1 ? order[at + 1] : null,
+  };
 }
 
 /** Settings › Accounting's rule for anyone below zero: the draft's default choice and its share. */

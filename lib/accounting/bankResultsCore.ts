@@ -143,3 +143,109 @@ export function closestDeposit<T extends { postedOn: string; amountCents: number
   inRange.sort((a, b) => Math.abs(a.amountCents - paidCents) - Math.abs(b.amountCents - paidCents) || a.postedOn.localeCompare(b.postedOn));
   return inRange[0] ?? null;
 }
+
+// ─── Round 7 (owner 2026-11-10, docs/la4/mockups-r7/accounting.html § 1, direction B "Two questions") ──────────
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** "Sep 5, 2026" for an ISO day (a calendar day: no time zone moves it); anything else as given. */
+export function readableDay(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!m) return iso ?? "—";
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}, ${m[1]}`;
+}
+/** "Sep 5" for an ISO day. */
+export function shortDay(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  if (!m) return iso ?? "—";
+  return `${MONTHS[Number(m[2]) - 1]} ${Number(m[3])}`;
+}
+
+/** The two questions' tabs: Payments (did the carrier pay right?), Deposits (is every bank line explained?), Accounts. */
+export type BankTab = "payments" | "deposits" | "accounts";
+/** The Payments chips. Waiting holds "deposit to confirm" and "waiting for the bank"; All holds every verdict. */
+export const PAYMENT_FILTERS = ["all", "missing_money", "bad_math", "waiting", "all_good"] as const;
+export type PaymentFilter = (typeof PAYMENT_FILTERS)[number];
+/** The Deposits chips. */
+export const DEPOSIT_FILTERS = ["to_match", "matched", "ignored", "all"] as const;
+export type DepositFilter = (typeof DEPOSIT_FILTERS)[number];
+
+/**
+ * Where an address from before round 7 lands now, or null when it is already current: Results → Payments,
+ * To match and Not explained → Deposits on To match (they were the same deposits in two states), Not received →
+ * Payments on Missing money.
+ */
+export function legacyBankAddress(q: { view?: string; show?: string; period?: string }): string | null {
+  const keep = (extra: Record<string, string | undefined>) => {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v);
+    return `/app/bank?${p.toString()}`;
+  };
+  if (q.view === "results") return keep({ view: "payments", period: q.period, show: q.show });
+  if (q.view === "queue" || q.view === "unexplained") return keep({ view: "deposits", show: "to_match" });
+  if (q.view === "not_received") return keep({ view: "payments", period: q.period, show: "missing_money" });
+  return null;
+}
+
+export function inPaymentFilter(verdict: PaymentVerdict, filter: PaymentFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "waiting") return verdict === "to_confirm" || verdict === "waiting";
+  return verdict === filter;
+}
+
+/** The Payments list's order, worst first: missing money, bad math, then the rest; newest first within each. */
+export function orderPayments<T extends { verdict: PaymentVerdict; statementDate: string; id: string }>(rows: readonly T[]): T[] {
+  return [...rows].sort((a, b) => VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict) || b.statementDate.localeCompare(a.statementDate) || a.id.localeCompare(b.id));
+}
+
+/** The Payments list's "Next step", in words: the step is taken on the payment's page, never in the row. */
+export function paymentNextStep(r: { verdict: PaymentVerdict; carrierName: string; dueBy: string; shortPolicies: number }): string | null {
+  if (r.verdict === "missing_money") return `Ask ${r.carrierName} where it went`;
+  if (r.verdict === "bad_math") return `Review ${r.shortPolicies} short ${r.shortPolicies === 1 ? "policy" : "policies"}`;
+  if (r.verdict === "to_confirm") return "Confirm the deposit";
+  if (r.verdict === "waiting") return `Due in the bank by ${shortDay(r.dueBy)}`;
+  if (r.verdict === "rate_missing") return "Add the rate to your rate card";
+  return null;
+}
+
+/** Where a bank line stands on the Deposits tab. */
+export function depositFilterOf(status: "unmatched" | "suggested" | "matched" | "partially_matched" | "ignored"): Exclude<DepositFilter, "all"> {
+  if (status === "matched") return "matched";
+  if (status === "ignored") return "ignored";
+  return "to_match";
+}
+
+/** The Deposits list's "Next step", in words. */
+export function depositNextStep(t: { status: "unmatched" | "suggested" | "matched" | "partially_matched" | "ignored"; pending: number }): string | null {
+  if (t.status === "matched" || t.status === "ignored") return null;
+  if (t.pending > 0) return t.pending === 1 ? "Confirm the match" : `Confirm ${t.pending} matches`;
+  if (t.status === "partially_matched") return "Match the rest";
+  return "Match it, or mark it not carrier money";
+}
+
+/** "$1,234.56" from whole cents, by string (no float). */
+function dollars(cents: number): string {
+  const d = String(Math.abs(cents)).padStart(3, "0");
+  return `${cents < 0 ? "-" : ""}$${Number(d.slice(0, -2)).toLocaleString("en-US")}.${d.slice(-2)}`;
+}
+
+/** A manual match's amount: whole cents, more than nothing, and never more than the deposit still has open. */
+export function manualAmountProblem(amountCents: number | null, openCents: number): string | null {
+  if (amountCents === null || amountCents <= 0) return "Enter the amount.";
+  if (amountCents > openCents) return `More than the deposit (${dollars(openCents)}).`;
+  return null;
+}
+
+/** The Payments list's own address (period and chip), handed to a payment page as `?from=` so its ‹ › walk the same list. */
+export function paymentsFrom(period: string, filter: PaymentFilter): string {
+  const p = new URLSearchParams({ period });
+  if (filter !== "all") p.set("show", filter);
+  return p.toString();
+}
+/** Read `?from=` back: the period and chip of the list a payment page was opened from (defaults: 90 days, All). */
+export function readPaymentsFrom(from: string | undefined): { period: string; filter: PaymentFilter } {
+  const p = new URLSearchParams(from ?? "");
+  const period = ["30", "90", "365"].find((x) => x === p.get("period")) ?? "90";
+  return { period, filter: PAYMENT_FILTERS.find((f) => f === p.get("show")) ?? "all" };
+}
+/** A payment page's address, carrying the list it was opened from. */
+export const paymentHref = (id: string, from: string, extra = "") => `/app/bank/payments/${id}?from=${encodeURIComponent(from)}${extra}`;

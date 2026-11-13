@@ -98,7 +98,7 @@ const DRIFT_PAGE = 1000;
  */
 async function queueStageRows(client: Db, tenantId: string, scope: ProducerScope): Promise<Result & { tooMany: boolean }> {
   const page = (from: number) =>
-    scopeQuery(client.from("lead_queue").select("lead_id, stage_id", from === 0 ? { count: "exact" } : undefined).eq("tenant_id", tenantId), "owner_user_id", scope)
+    scopeQuery(client.from("lead_queue").select("lead_id, stage_id, disposition", from === 0 ? { count: "exact" } : undefined).eq("tenant_id", tenantId), "owner_user_id", scope)
       .order("status").order("queued_at").order("lead_id").range(from, from + DRIFT_PAGE - 1);
   const first = await page(0);
   if (first.error) return { ...first, tooMany: false };
@@ -112,6 +112,10 @@ async function queueStageRows(client: Db, tenantId: string, scope: ProducerScope
 
 export async function pipelineViewContext(tenantId: string, scope: ProducerScope = null): Promise<PipelineViewContext> {
   const client = db();
+  // The arrivals need none of the reads below, so they start with them rather than after.
+  const arrivalsRead = stageArrivals(client, tenantId);
+  // Awaited below; this only keeps an early throw from leaving it unobserved.
+  arrivalsRead.catch(() => undefined);
   const [stagesWithRules, pipelines, mappings, dispositions, queueStages, own] = await Promise.all([
     client.from("tenant_pipeline_stages").select("id, pipeline_id, time_allowed_minutes, counts_as_worked, tenant_pipelines!inner(tenant_id)").eq("tenant_pipelines.tenant_id", tenantId),
     client.from("tenant_pipelines").select("id, status").eq("tenant_id", tenantId),
@@ -165,7 +169,13 @@ export async function pipelineViewContext(tenantId: string, scope: ProducerScope
   // How often each unmapped outcome was recorded, off the work item both the dialer and the
   // outcome wizard stamp. Counted only for the unmapped ones, so the read stays small.
   const unmappedKeys = [...active.keys()].filter((key) => !mappedKeys.has(key));
-  const usesRead = Promise.all(
+  // When the drift read already holds every work item in scope (the same tenant and scope filter),
+  // the uses are counted from those rows: one head count per outcome is a round trip each.
+  const queueRows = rows(queueStages);
+  const wholeQueue = !queueStages.error && !queueStages.tooMany;
+  const usesRead = wholeQueue
+    ? Promise.resolve(unmappedKeys.map((key) => [key, queueRows.filter((row) => row.disposition === key).length] as const))
+    : Promise.all(
     unmappedKeys.map(async (key) => {
       const result = await scopeQuery(client.from("lead_queue").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("disposition", key), "owner_user_id", scope);
       return [key, (result as unknown as { count: number | null }).count ?? 0] as const;
@@ -175,7 +185,6 @@ export async function pipelineViewContext(tenantId: string, scope: ProducerScope
   // Drift: a lead's stage is stored on its own row and on its work item; count the disagreements.
   // The lead pages are read side by side, and beside the use counts above: none needs another's answer.
   // (They were one after another — up to seven round trips for a 1,000-row queue.)
-  const queueRows = rows(queueStages);
   const driftRead = (async (): Promise<number | null> => {
     if (queueStages.error || queueStages.tooMany || queueRows.length === 0) return null;
     const ids = queueRows.map((row) => text(row.lead_id));
@@ -187,7 +196,7 @@ export async function pipelineViewContext(tenantId: string, scope: ProducerScope
     }
     return queueRows.filter((row) => leadStage.has(text(row.lead_id)) && leadStage.get(text(row.lead_id)) !== text(row.stage_id)).length;
   })();
-  const [uses, stageDrift, arrivals] = await Promise.all([usesRead, driftRead, stageArrivals(client, tenantId)]);
+  const [uses, stageDrift, arrivals] = await Promise.all([usesRead, driftRead, arrivalsRead]);
   const useCount = new Map(uses);
 
   return {

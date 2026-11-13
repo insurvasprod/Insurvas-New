@@ -135,8 +135,8 @@ export function TenantAuthWorkspace({
     }
   }, []);
 
-  function rememberEmail() {
-    try { window.localStorage.setItem(LAST_EMAIL_KEY, loginEmail.trim()); } catch { /* storage blocked */ }
+  function rememberEmail(email: string) {
+    try { window.localStorage.setItem(LAST_EMAIL_KEY, email.trim()); } catch { /* storage blocked */ }
   }
 
   function openReset() {
@@ -182,61 +182,94 @@ export function TenantAuthWorkspace({
     }
   }
 
+  // One sign-in at a time. State updates land a render later, so a second click or Enter in the same
+  // moment would still see `loginLoading` false; the ref does not wait for a render.
+  const inFlight = useRef(false);
+
+  /**
+   * Opens the app and keeps the button pending until it is here (2026-11-13, "you have to double click
+   * the sign in button"). The button used to come back as "Sign in" the moment the answer arrived, while
+   * the first app screen was still on its way, so the click looked lost and people pressed it again.
+   * The sign-in page unmounts when the app arrives, so nothing needs to set it back.
+   */
+  function openApp(redirectTo: string | undefined) {
+    markShellEntrance(); router.replace(redirectTo ?? "/app/dashboard");
+  }
+
   /** The password, or the emailed link, goes to the same sign-in route. */
   async function submitSignIn(payload: Record<string, unknown>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setLoginError(null);
     setLoginLoading(true);
+    let opening = false;
     try {
       const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...payload, remember }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setLoginError(signInError(response, body, "Something went wrong")); return; }
       if (body?.twoFactor) { setLinkToken(null); setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
-      markShellEntrance(); router.replace(body?.redirectTo ?? "/app/dashboard");
+      opening = true;
+      openApp(body?.redirectTo);
     } catch {
       setLoginError("Could not sign in. Check your connection and try again.");
     } finally {
-      setLoginLoading(false);
+      if (!opening) { inFlight.current = false; setLoginLoading(false); }
     }
   }
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (inFlight.current) return;
+    // Read what is in the fields, not what React last heard: a browser that autofills the password
+    // shows it but only fires its change once the page is touched, so on the first click the state
+    // could still be empty and the sign-in was refused until a second click.
+    const form = event.currentTarget;
+    const email = (form.elements.namedItem("email") as HTMLInputElement | null)?.value ?? loginEmail;
+    const password = (form.elements.namedItem("password") as HTMLInputElement | null)?.value ?? loginPassword;
+    if (email !== loginEmail) setLoginEmail(email);
+    if (password !== loginPassword) setLoginPassword(password);
+    inFlight.current = true;
     setLoginError(null);
     setLoginLoading(true);
+    let opening = false;
     try {
-      const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: loginEmail, password: loginPassword, remember }) });
+      const response = await fetch("/api/app/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password, remember }) });
       const body = await response.json().catch(() => null);
       if (!response.ok) { setLoginError(signInError(response, body, "Something went wrong")); return; }
-      rememberEmail();
+      rememberEmail(email);
       if (body?.twoFactor) { setTwoFactorStep(true); setTwoFactorCode(""); setUseRecoveryCode(false); return; }
       // Straight to the landing page, once. The old push("/app") + refresh() rendered the landing page
       // twice and bounced through /app's redirect — the slowest part of "11 seconds after login".
       // Nothing above the shell reads the session, so no refresh is needed for the new cookie.
-      markShellEntrance(); router.replace(body?.redirectTo ?? "/app/dashboard");
+      opening = true;
+      openApp(body?.redirectTo);
     } catch {
       setLoginError("Could not sign in. Check your connection and try again.");
     } finally {
-      setLoginLoading(false);
+      if (!opening) { inFlight.current = false; setLoginLoading(false); }
     }
   }
 
   async function handleTwoFactor(event: FormEvent<HTMLFormElement> | null, typed?: string) {
     event?.preventDefault();
     const code = typed ?? twoFactorCode;
-    if (loginLoading || !code.trim()) return;
+    if (inFlight.current || loginLoading || !code.trim()) return;
+    inFlight.current = true;
     setLoginError(null);
     setLoginLoading(true);
+    let opening = false;
     try {
       const payload = useRecoveryCode ? { recoveryCode: code.trim(), trust: trustDevice } : { code: code.replace(/\s/g, ""), trust: trustDevice };
       const response = await fetch("/api/app/auth/verify-2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json().catch(() => null);
       if (response.status === 401 && /Sign in again/.test(body?.error ?? "")) { setTwoFactorStep(false); setLoginError(body.error); return; }
       if (!response.ok) { setLoginError(signInError(response, body, "That code is not right.")); if (!useRecoveryCode) setTwoFactorCode(""); return; }
-      markShellEntrance(); router.replace(body?.redirectTo ?? "/app/dashboard");
+      opening = true;
+      openApp(body?.redirectTo);
     } catch {
       setLoginError("Could not check the code. Check your connection and try again.");
     } finally {
-      setLoginLoading(false);
+      if (!opening) { inFlight.current = false; setLoginLoading(false); }
     }
   }
 
@@ -269,6 +302,7 @@ export function TenantAuthWorkspace({
           <AuthInput
             ref={emailRef}
             id="tenant-login-email"
+            name="email"
             type="email"
             inputMode="email"
             autoComplete="username"
@@ -294,6 +328,7 @@ export function TenantAuthWorkspace({
             <AuthInput
               ref={passwordRef}
               id="tenant-login-password"
+              name="password"
               type={showLoginPassword ? "text" : "password"}
               autoComplete="current-password"
               required
@@ -321,7 +356,7 @@ export function TenantAuthWorkspace({
         {maintenance?.level === "locked" && <AuthAlert title="Sign in is temporarily unavailable">{maintenance.message}</AuthAlert>}
         {loginError && <AuthAlert>{loginError}</AuthAlert>}
 
-        <AuthSubmit className="mt-1" disabled={loginLoading || maintenance?.level === "locked"}>
+        <AuthSubmit className="mt-1" pending={loginLoading} disabled={maintenance?.level === "locked"}>
           {loginLoading ? "Signing in…" : "Sign in"}
         </AuthSubmit>
       </form>
@@ -426,7 +461,7 @@ export function TenantAuthWorkspace({
           Trust this device for {TRUSTED_DEVICE_DAYS} days
         </label>
         {loginError && <AuthAlert>{loginError}</AuthAlert>}
-        <AuthSubmit className="mt-1" disabled={loginLoading || !twoFactorCode.trim()}>
+        <AuthSubmit className="mt-1" pending={loginLoading} disabled={!twoFactorCode.trim()}>
           {loginLoading ? "Checking…" : "Verify and sign in"}
         </AuthSubmit>
       </form>
@@ -517,7 +552,7 @@ export function TenantAuthWorkspace({
       <div className="flex flex-col gap-4">
         {rememberBox}
         {loginError && <AuthAlert>{loginError}</AuthAlert>}
-        <AuthSubmit type="button" autoFocus disabled={loginLoading || maintenance?.level === "locked"} onClick={() => void submitSignIn({ link: linkToken })}>
+        <AuthSubmit type="button" autoFocus pending={loginLoading} disabled={maintenance?.level === "locked"} onClick={() => void submitSignIn({ link: linkToken })}>
           {loginLoading ? "Signing in…" : "Sign in"}
         </AuthSubmit>
       </div>

@@ -270,7 +270,7 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
                   className={cn("relative grid size-10 shrink-0 place-items-center rounded-lg transition-colors hover:bg-[var(--surface-alt)] focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]", channel.id === selectedId && "bg-[var(--primary-soft)]")}
                 >
                   <ChannelIcon channel={channel} />
-                  {channel.unreadCount > 0 && <span className="absolute right-1 top-1 size-2.5 rounded-full bg-[var(--primary)] ring-2 ring-[var(--surface)]" aria-hidden="true" />}
+                  {channel.unreadCount > 0 && <span className="absolute right-1 top-1 size-2.5 rounded-full bg-[var(--highlight)] ring-2 ring-[var(--surface)]" aria-hidden="true" />}
                 </button>
               ))}
             </div>
@@ -316,12 +316,12 @@ export function PartnerChatPanel({ sample }: { sample?: PartnerChatSample }) {
                   <span className="min-w-0 flex-1">
                     <span className="flex items-baseline justify-between gap-2">
                       <span className={cn("truncate text-sm text-foreground", channel.unreadCount > 0 ? "font-semibold" : "font-medium")}>{channel.name}</span>
-                      <time className={cn("shrink-0 text-xs tabular-nums", channel.unreadCount > 0 ? "font-semibold text-[var(--accent-ink)]" : "text-muted-foreground")}>{newest ? clockTime(newest.createdAt, zone, "12h") : ""}</time>
+                      <time className={cn("shrink-0 text-xs tabular-nums", channel.unreadCount > 0 ? "font-semibold text-[var(--highlight-ink)]" : "text-muted-foreground")}>{newest ? clockTime(newest.createdAt, zone, "12h") : ""}</time>
                     </span>
                     <span className={cn("mt-0.5 block truncate text-xs", channel.unreadCount > 0 ? "text-[var(--body)]" : "text-muted-foreground")}>{channelPreview(channel)}</span>
                   </span>
                   {channel.unreadCount > 0 && (
-                    <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-[var(--primary)] px-1 text-xs font-semibold leading-none text-[var(--primary-foreground)]" aria-label={`${channel.unreadCount} unread`}>
+                    <span className="grid size-[18px] shrink-0 place-items-center rounded-full bg-[var(--highlight)] px-1 text-xs font-semibold leading-none text-[var(--on-highlight)]" aria-label={`${channel.unreadCount} unread`}>
                       {channel.unreadCount}
                     </span>
                   )}

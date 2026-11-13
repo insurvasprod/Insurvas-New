@@ -1,6 +1,6 @@
 // Pure partner-quality arithmetic, shared by the service (server) and the workspaces (client).
 // No imports that pull in server code: the list and detail pages are client components.
-import type { PartnerQualityDailyRow, PartnerQualityDisposition, PartnerQualityDispositionBreakdown, PartnerQualityEvidence, PartnerQualityPeriod, PartnerQualityPeriodMetrics, PartnerQualityReport, PartnerQualityRow, PartnerQualityScreening, PartnerQualitySummary } from "./types";
+import type { PartnerQualityDailyRow, PartnerQualityDisposition, PartnerQualityDispositionBreakdown, PartnerQualityEvidence, PartnerQualityPeriod, PartnerQualityPeriodMetrics, PartnerQualityReport, PartnerQualityRow, PartnerQualityScreening, PartnerQualitySummary, PartnerQualityWeek } from "./types";
 
 // Product decision: reporting is fixed EST (UTC-5), not the reader's timezone and not a
 // daylight-saving-aware New York clock. Keep this value aligned with the database functions.
@@ -106,6 +106,34 @@ export function dailyVolume(evidence: PartnerQualityEvidence[], from: string, to
   });
 }
 
+const WEEK_LABEL = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+/**
+ * Per reporting week (Monday to Sunday) touching [from, to], oldest first, including weeks with nothing sent:
+ * the series behind the weekly charts and the tiles' sparklines. Each week is clipped to the period.
+ */
+export function weeklyVolume(evidence: PartnerQualityEvidence[], from: string, to: string, max = 120): PartnerQualityWeek[] {
+  const weekday = new Date(`${from}T00:00:00Z`).getUTCDay();
+  const weeks: PartnerQualityWeek[] = [];
+  for (let monday = shiftDate(from, -((weekday + 6) % 7)); monday <= to && weeks.length < max; monday = shiftDate(monday, 7)) {
+    const sunday = shiftDate(monday, 6);
+    const start = monday < from ? from : monday;
+    const end = sunday > to ? to : sunday;
+    weeks.push({ key: monday, label: WEEK_LABEL.format(new Date(`${monday}T00:00:00Z`)), from: start, to: end, partial: start !== monday || end !== sunday, sent: 0, submitted: 0, flagged: 0, disqualified: 0, duplicates: 0 });
+  }
+  for (const row of evidence) {
+    const week = weeks.find((entry) => row.lead_date >= entry.from && row.lead_date <= entry.to);
+    if (!week) continue;
+    week.sent += 1;
+    if (row.submitted) week.submitted += 1;
+    // Counted as screeningFlags counts them (the pass rate's rule), so a week's rate adds up to the tile's.
+    week.flagged += Number(isTcpa(row)) + Number(isDnc(row)) + Number(isInvalid(row));
+    if (isDisqualified(row)) week.disqualified += 1;
+    if (row.duplicate) week.duplicates += 1;
+  }
+  return weeks;
+}
+
 /** The first day of the current reporting month (partner_quality_report's default "from"). */
 export function partnerQualityMonthStart(now = new Date()): string {
   return `${partnerQualityToday(now).slice(0, 8)}01`;
@@ -150,7 +178,20 @@ export function buildPartnerQualityReport(
     .map(([partner_id, evidence]) => ({ partner_id, dispositions: dispositionBreakdown(evidence).sort((a, b) => a.key.localeCompare(b.key)) }))
     .filter((entry) => entry.dispositions.length > 0)
     .sort((a, b) => a.partner_id.localeCompare(b.partner_id));
-  return { ...period, rows, dispositions, summary: summaryOf(periodMetrics(current)), previous_summary: summaryOf(periodMetrics(previous)) };
+  return { ...period, weeks: weeklyVolume(current, period.from, period.to), rows, dispositions, summary: summaryOf(periodMetrics(current)), previous_summary: summaryOf(periodMetrics(previous)) };
+}
+
+/**
+ * The list's order (most sent first, then by name): the chart's bars and a partner page's ‹ › neighbours. Partners
+ * that sent nothing are left out unless `withEmpty` (the "All partners" tab, or a partner page for an idle partner).
+ */
+export function partnersBySent<T extends { partner_id: string; partner_name: string; sent: number }>(rows: readonly T[], withEmpty = false): T[] {
+  return rows.filter((row) => withEmpty || row.sent > 0).sort((a, b) => b.sent - a.sent || a.partner_name.localeCompare(b.partner_name) || a.partner_id.localeCompare(b.partner_id));
+}
+
+/** A rate per week (percent, one decimal), over the weeks that sent something: a tile's sparkline. */
+export function weeklyRate(weeks: readonly PartnerQualityWeek[], part: (week: PartnerQualityWeek) => number): number[] {
+  return weeks.filter((week) => week.sent > 0).map((week) => percentOf(part(week), week.sent) ?? 0);
 }
 
 /** Percent change from `previous` to `current`, rounded; null when there is no base to compare with. */

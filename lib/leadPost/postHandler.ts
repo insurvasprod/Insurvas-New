@@ -1,8 +1,9 @@
 import "server-only";
 
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { acceptPostedLead } from "./service";
+import { sendStatusCallback } from "./statusCallback";
 
 /**
  * The HTTP half of a vendor post, shared by both ways a vendor can present its key:
@@ -54,6 +55,10 @@ export async function handleLeadPost(request: NextRequest, key: string | null, o
   const headers: Record<string, string> = {};
   if (outcome.retryAfterSeconds) headers["retry-after"] = String(outcome.retryAfterSeconds);
 
+  // Round 8: the vendor's status address hears the outcome after this reply has gone.
+  const callback = outcome.callback;
+  if (callback) after(() => sendStatusCallback(callback));
+
   return NextResponse.json(
     {
       accepted: outcome.outcome === "accepted",
@@ -62,6 +67,8 @@ export async function handleLeadPost(request: NextRequest, key: string | null, o
       // Returned on a duplicate as well as an acceptance: a vendor that reposted needs to know
       // which lead it already is, not merely that it exists.
       lead_id: outcome.leadId,
+      // Only on a key in test mode, so a vendor's test can tell itself apart from a real post.
+      ...(outcome.test ? { test: true } : {}),
     },
     { status: outcome.status, headers },
   );

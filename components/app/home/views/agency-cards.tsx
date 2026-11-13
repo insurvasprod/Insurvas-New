@@ -61,7 +61,7 @@ export function premiumCard({ rows, apps, today, zone, policiesHref }: { rows: r
       />
       <dl className="m-0 mt-2 grid shrink-0 grid-cols-2 gap-2 2xl:grid-cols-4 @container">
         {facts.map((fact) => (
-          <div key={fact.label} title={`${fact.label}: ${fact.value}`} className="min-w-0 overflow-hidden rounded-xl bg-[var(--surface-alt)] px-3 py-2">
+          <div key={fact.label} title={`${fact.label}: ${fact.value}`} className="min-w-0 overflow-hidden rounded-xl bg-[var(--surface-tile)] shadow-[inset_0_0_0_1px_var(--tile-edge)] px-3 py-2">
             <dt className="truncate text-[0.6875rem] text-muted-foreground">{fact.label}</dt>
             <dd className="m-0 truncate text-[0.8125rem] font-semibold tabular-nums text-foreground">{fact.value}</dd>
           </div>
@@ -119,6 +119,8 @@ export function goalCard({ rows, apps, month, previous, zone, policiesHref, appl
       size={150}
       title={`${monthName(month)} goal`}
       link={monthHref ? { label: "Policies", href: monthHref } : undefined}
+      // Gold when the goal is reached (the third brand colour: a record, never a status).
+      tone={share >= 100 ? "highlight" : "primary"}
       value={share}
       center={`${share}%`}
       label={`${share}% of the ${monthName(month)} goal, ${monthName(previous)}'s issued premium`}

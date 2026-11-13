@@ -85,7 +85,7 @@ export async function UpgradePrompt({
                   : `${currentPlan}, your current plan, does not include it. Talk to your account manager about adding it.`}
             </p>
             <div className="portal-gate-actions">
-              <Button asChild>
+              <Button asChild variant="highlight">
                 <Link href="/pricing">Compare plans</Link>
               </Button>
               <Button asChild variant="outline">

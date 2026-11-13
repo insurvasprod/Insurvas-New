@@ -2,8 +2,9 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { audit } from "@/lib/audit/log";
-import { BOOKING_REFUSALS, appointmentFacts, bookAppointment, bookableContext, confirmAppointment, rebookAppointment, redactBlocksForSetter, rescheduleAppointment } from "@/lib/appointments/booking";
+import { BOOKING_REFUSALS, appointmentFacts, bookAppointment, bookableContext, changeAppointmentLength, confirmAppointment, rebookAppointment, redactBlocksForSetter, rescheduleAppointment } from "@/lib/appointments/booking";
 import { SCHEMA_GAP_MESSAGE, SchemaGapError } from "@/lib/appointments/schemaGap";
+import { scheduleCalendarMirror } from "@/lib/appointments/calendarMirror";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { guardLead } from "@/lib/agency/guards";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -47,6 +48,13 @@ const rebookSchema = z.object({
   appointment_id: z.string().uuid(),
   starts_at_utc: z.string().datetime(),
   agent_user_id: z.string().uuid().nullable().optional(),
+}).strict();
+
+// One meeting's length, changed on its own (owner, 2026-11-13). Same people as a move.
+const lengthSchema = z.object({
+  action: z.literal("length"),
+  appointment_id: z.string().uuid(),
+  duration_minutes: z.number().int().min(5).max(480),
 }).strict();
 
 // booked -> confirmed (LA-2.11-5, 20260929202000). The agent, or the setter who booked it.
@@ -161,6 +169,8 @@ export async function POST(request: NextRequest) {
       },
       request,
     });
+    // Onto the agent's linked Google Calendar, after the answer (lib/appointments/calendarMirror.ts).
+    scheduleCalendarMirror([booked.appointmentId]);
     return NextResponse.json({ appointment: booked }, { status: 201 });
   } catch (error) {
     return refusal(error);
@@ -194,6 +204,27 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  if (action === "length") {
+    const length = lengthSchema.safeParse(body);
+    if (!length.success) return NextResponse.json({ error: "Choose a length between 5 minutes and 8 hours." }, { status: 400 });
+    const hidden = await guardAppointment(auth.context, length.data.appointment_id, await scopeFor(auth.context));
+    if (hidden) return hidden;
+    try {
+      const mine = await notTheSettersOwn(auth.context.role, auth.context.tenantId, auth.context.userId, length.data.appointment_id);
+      if (mine) return mine;
+      await changeAppointmentLength({ tenantId: auth.context.tenantId, appointmentId: length.data.appointment_id, durationMinutes: length.data.duration_minutes });
+      await audit({
+        actorType: "tenant", actorId: auth.context.userId, action: "tenant.appointment_rescheduled",
+        targetType: "tenant_appointment", targetId: length.data.appointment_id,
+        metadata: { durationMinutes: length.data.duration_minutes, change: "length" }, request,
+      });
+      scheduleCalendarMirror([length.data.appointment_id]);
+      return NextResponse.json({ ok: true, durationMinutes: length.data.duration_minutes });
+    } catch (error) {
+      return refusal(error);
+    }
+  }
+
   if (action === "rebook") {
     const rebook = rebookSchema.safeParse(body);
     if (!rebook.success)
@@ -219,6 +250,7 @@ export async function PATCH(request: NextRequest) {
         metadata: { rebookedFrom: rebook.data.appointment_id, startsAtUtc: booked.startsAtUtc, agentUserId: rebook.data.agent_user_id ?? null },
         request,
       });
+      scheduleCalendarMirror([booked.appointmentId]);
       return NextResponse.json({ appointment: booked }, { status: 201 });
     } catch (error) {
       if (error instanceof SchemaGapError) return NextResponse.json({ error: SCHEMA_GAP_MESSAGE, code: "schema_pending" }, { status: 503 });
@@ -246,6 +278,8 @@ export async function PATCH(request: NextRequest) {
       targetType: "tenant_appointment", targetId: parsed.data.appointment_id,
       metadata: { startsAtUtc: parsed.data.starts_at_utc }, request,
     });
+    // The old appointment's meeting comes off and its successor's goes on (mirrorAppointments follows rescheduled_from).
+    scheduleCalendarMirror([parsed.data.appointment_id]);
     return NextResponse.json({ ok: true });
   } catch (error) {
     return refusal(error);

@@ -9,6 +9,9 @@ import { PageHeader } from "@/components/ui/page-header";
  * sentence at most.
  *
  * `backHref` is the detail-page shape: the page it came from is the trail above the title.
+ *
+ * `tabs` is the page's sub-page bar, on the title's line like every other page in the service
+ * (UI-CONSISTENCY §8b, owner 2026-11-09).
  */
 export function AdminPageHeader({
   title,
@@ -16,6 +19,7 @@ export function AdminPageHeader({
   backHref,
   backLabel,
   actions,
+  tabs,
 }: {
   title: string;
   subtitle?: string;
@@ -24,6 +28,8 @@ export function AdminPageHeader({
   backHref?: string;
   backLabel?: string;
   actions?: React.ReactNode;
+  /** The page's sub-pages or views (`ViewTabs`), on the title's line. */
+  tabs?: React.ReactNode;
 }) {
   // The way back is the trail above the title (owner 2026-10-30), as on every other page.
   return (
@@ -31,6 +37,7 @@ export function AdminPageHeader({
       title={title}
       description={subtitle || undefined}
       actions={actions}
+      tabs={tabs}
       breadcrumbs={backHref ? [{ label: backLabel ?? "Back", href: backHref }, { label: title }] : undefined}
     />
   );

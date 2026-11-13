@@ -5,6 +5,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
 import { agencyToday } from "./agencyDay";
+import { allRows } from "./pages";
 import { ageOn, coverage, expectedFor, firstDraftDate, resolveRate, triggerOccurredOn, type AdvanceRule, type ExpectedRow, type Schedule, type Trigger } from "./expectedCommission";
 
 /**
@@ -26,15 +27,10 @@ export class RateCardError extends Error {
 
 export const EXPECTED_PENDING_MESSAGE = "Expected commission needs a database update (20261008230000).";
 
+/** Every row, up to `max`: the shared pager (pages.ts), which reads past the first page three at a time. */
 async function everyRow(build: () => Loose, max = 50_000): Promise<{ rows: Loose[]; error: Loose }> {
-  const rows: Loose[] = [];
-  for (let from = 0; from < max; from += 1000) {
-    const { data, error } = await build().range(from, from + 999);
-    if (error) return { rows, error };
-    rows.push(...(data ?? []));
-    if (!data || data.length < 1000) break;
-  }
-  return { rows, error: null };
+  const { rows, error } = await allRows(build, max);
+  return { rows, error };
 }
 
 const chunks = <T,>(items: T[], size: number) => Array.from({ length: Math.ceil(items.length / size) }, (_, i) => items.slice(i * size, i * size + size));

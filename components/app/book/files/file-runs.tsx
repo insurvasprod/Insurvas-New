@@ -92,19 +92,17 @@ export function FileRuns({ runs, available, fileId, fileType }: { runs: RunRow[]
                   <Fragment key={run.id}>
                     <tr className="bg-[var(--surface-alt)]">
                       <td colSpan={2}>
-                        <button type="button" aria-expanded={isOpen} onClick={() => toggle(run.id)} className="inline-flex items-center gap-2 text-left font-semibold text-foreground hover:underline">
+                        <button type="button" aria-expanded={isOpen} onClick={() => toggle(run.id)} className="inline-flex items-center gap-2 whitespace-nowrap text-left font-medium text-foreground hover:underline">
                           {isOpen ? <ChevronDown aria-hidden="true" className="size-4 text-muted-foreground" /> : <ChevronRight aria-hidden="true" className="size-4 text-muted-foreground" />}
                           {when(run.startedAt)}
-                          <span className="font-normal text-muted-foreground">· {TRIGGER_WORD[run.trigger] ?? run.trigger}</span>
+                          <span className="font-normal">· {TRIGGER_WORD[run.trigger] ?? run.trigger}</span>
                         </button>
                       </td>
                       <td className="text-right tabular-nums text-foreground">{run.status === "running" ? "…" : took(ms)}</td>
                       <td className="text-right tabular-nums text-foreground">{steps.reduce((sum, s) => sum + (s.stage.findings ?? 0), 0) || "—"}</td>
                       <td>
-                        <span className="inline-flex flex-wrap items-center gap-2">
-                          <StatusChip tone={RUN_TONE[run.status] ?? "neutral"}>{run.status === "running" ? "Running" : run.status[0].toUpperCase() + run.status.slice(1)}</StatusChip>
-                          {run.error && <span className="truncate text-xs text-[var(--error-ink)]" title={run.error}>{run.error}</span>}
-                        </span>
+                        {/* One line, one chip (owner 2026-11-11): the run's error is the chip's tooltip. */}
+                        <StatusChip tone={RUN_TONE[run.status] ?? "neutral"} title={run.error ?? undefined}>{run.status === "running" ? "Running" : run.status[0].toUpperCase() + run.status.slice(1)}</StatusChip>
                       </td>
                     </tr>
                     {isOpen && steps.map((step) => {
@@ -113,18 +111,14 @@ export function FileRuns({ runs, available, fileId, fileType }: { runs: RunRow[]
                       const why = s.error ?? s.note ?? "";
                       return (
                         <tr key={`${run.id}:${step.key}`}>
-                          <td className="pl-10 text-foreground" title={`${step.inner} in the pipeline`}>{step.name}</td>
+                          <td className="whitespace-nowrap pl-10 text-foreground" title={`${step.inner} in the pipeline`}>{step.name}</td>
                           <td className="text-right tabular-nums text-foreground">{step.rows}</td>
-                          <td className="text-right tabular-nums text-muted-foreground">{took(s.ms)}</td>
+                          <td className="text-right tabular-nums">{took(s.ms)}</td>
                           <td className="text-right tabular-nums text-foreground">{s.findings || "—"}</td>
                           <td>
-                            {ok ? <span title={why || undefined} className="inline-flex items-center gap-1.5 text-muted-foreground"><Check aria-hidden="true" className="size-4 text-[var(--success-ink)]" /><span className="sr-only">Succeeded</span></span>
-                              : (
-                                <span className="inline-flex min-w-0 items-center gap-2">
-                                  <StatusChip tone={STEP_TONE[s.status] ?? "neutral"}>{STEP_WORD[s.status] ?? s.status}</StatusChip>
-                                  {why && <span className="truncate text-xs text-muted-foreground" title={why}>{why}</span>}
-                                </span>
-                              )}
+                            {/* A step that worked is a plain tick; one that didn't says so in its chip, the reason its tooltip. */}
+                            {ok ? <span title={why || undefined} className="inline-flex items-center gap-1.5 text-muted-foreground"><Check aria-hidden="true" className="size-4" /><span className="sr-only">Succeeded</span></span>
+                              : <StatusChip tone={STEP_TONE[s.status] ?? "neutral"} title={why || undefined}>{STEP_WORD[s.status] ?? s.status}</StatusChip>}
                           </td>
                         </tr>
                       );

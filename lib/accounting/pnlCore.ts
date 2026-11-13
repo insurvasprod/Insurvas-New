@@ -39,10 +39,24 @@ export function periodRange(kind: Exclude<PeriodKind, "custom">, anchor: string,
   return { from, to: addMonths(from, 3), label: `Q${q + 1} ${fyStartMonth === 1 ? from.slice(0, 4) : `of the year from ${MONTHS[fyStartMonth - 1]} ${fyStart.slice(0, 4)}`}` };
 }
 
+const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** A date as people read it: "Aug 15, 2026" (round 7: dates readable, never 2026-08-15 on screen). */
+export function readableDate(ymdText: string): string {
+  const [y, m, d] = ymdText.slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return ymdText;
+  return `${SHORT_MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+/** "Nov 2026", for a month column or a six-month row. */
+export function shortMonth(ym: string): string {
+  return `${SHORT_MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+}
+
 export function customRange(from: string, toInclusive: string): Range | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(toInclusive) || toInclusive < from) return null;
   const to = new Date(Date.parse(`${toInclusive}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
-  return { from, to, label: `${from} to ${toInclusive}` };
+  return { from, to, label: `${readableDate(from)} to ${readableDate(toInclusive)}` };
 }
 
 /** The period before, of the same length in months (or days, for a custom range), and the same period a year earlier. */
@@ -88,6 +102,161 @@ export function statement(lines: PnlLine[]): Statement {
   const paidIn = inLines.filter((l) => !held.includes(l));
   const s = { in: paidIn, held, acquisition, overhead, splits, inCents: sum(paidIn), heldCents: sum(held), acquisitionCents: sum(acquisition), overheadCents: sum(overhead), splitsCents: sum(splits) };
   return { ...s, netProfitCents: s.inCents + s.acquisitionCents + s.overheadCents + s.splitsCents };
+}
+
+/**
+ * Round 7 (owner 2026-11-10, mockups-r7/accounting.html 5·A): a full statement. Every line is filled across the
+ * periods — this one, the one before, the same one last year — so a line is identified apart from its amount,
+ * and the three periods' lines are merged on that identity. A line on one period only reads "—" in the others.
+ */
+export type PnlSection = PnlLine["section"];
+export const SECTIONS: readonly PnlSection[] = ["in", "held", "acquisition", "overhead", "splits"];
+
+/** A line's identity: its section, entry type and source (an expense line by its category). */
+export function lineKey(l: Pick<PnlLine, "section" | "entryType" | "sourceType" | "sourceId" | "sourceName">): string {
+  return [l.section, l.entryType, l.sourceType ?? "", l.sourceId ?? "", l.sourceType === "expense_category" ? l.sourceName ?? "" : ""].join("|");
+}
+
+/** What "In the bank" says for one line: an amount, "Not imported" (money in with no bank file), or "—" (it cannot be told honestly). */
+export type InBank = { kind: "cents"; cents: number; paid: number; of: number } | { kind: "not_imported" } | { kind: "gap" };
+export type StatementRow = { key: string; line: PnlLine; cur: number | null; prev: number | null; lastYear: number | null; bank: InBank };
+export type StatementRows = Record<PnlSection, StatementRow[]>;
+
+function sectioned(ls: PnlLine[]): Record<PnlSection, Map<string, PnlLine>> {
+  const s = statement(ls);
+  const out = Object.fromEntries(SECTIONS.map((k) => [k, new Map<string, PnlLine>()])) as Record<PnlSection, Map<string, PnlLine>>;
+  for (const section of SECTIONS) {
+    for (const l of s[section]) {
+      // Held is its own section whatever an old reader filed it under.
+      const line = { ...l, section };
+      const key = lineKey(line);
+      const had = out[section].get(key);
+      // Two rows of one line (an expense booked against a partner) are one line here.
+      out[section].set(key, had ? { ...had, amountCents: had.amountCents + line.amountCents, entries: had.entries + line.entries } : line);
+    }
+  }
+  return out;
+}
+
+/**
+ * The three periods' lines merged into one statement, in the statement's order: this period's lines as it sorts
+ * them, then a line found only in the period before or last year, largest first. `bank` is filled by `inBankFor`.
+ */
+export function mergeStatement(cur: PnlLine[], prev: PnlLine[], lastYear: PnlLine[]): StatementRows {
+  const [c, p, y] = [sectioned(cur), sectioned(prev), sectioned(lastYear)];
+  const out = {} as StatementRows;
+  for (const section of SECTIONS) {
+    const rows: StatementRow[] = [];
+    const seen = new Set<string>();
+    for (const [key, line] of c[section]) { seen.add(key); rows.push({ key, line, cur: line.amountCents, prev: p[section].get(key)?.amountCents ?? null, lastYear: y[section].get(key)?.amountCents ?? null, bank: { kind: "gap" } }); }
+    const rest: StatementRow[] = [];
+    for (const source of [p[section], y[section]]) {
+      for (const [key, line] of source) {
+        if (seen.has(key)) continue;
+        seen.add(key);
+        rest.push({ key, line: { ...line, amountCents: 0, entries: 0 }, cur: null, prev: p[section].get(key)?.amountCents ?? null, lastYear: y[section].get(key)?.amountCents ?? null, bank: { kind: "gap" } });
+      }
+    }
+    if (section === "in" || section === "held") rest.sort((a, b) => ORDER_IN.indexOf(a.line.entryType) - ORDER_IN.indexOf(b.line.entryType));
+    else rest.sort((a, b) => (a.prev ?? a.lastYear ?? 0) - (b.prev ?? b.lastYear ?? 0));
+    out[section] = [...rows, ...rest];
+  }
+  return out;
+}
+
+/** Every line of the statement, top to bottom: the order ‹ › walks on a line's entries page. */
+export function statementOrder(rows: StatementRows): StatementRow[] {
+  return SECTIONS.flatMap((s) => rows[s]);
+}
+
+/** This period less the period before; a missing side counts as nothing, both missing is no change to show. */
+export function changeOf(cur: number | null, prev: number | null): number | null {
+  if (cur === null && prev === null) return null;
+  return (cur ?? 0) - (prev ?? 0);
+}
+
+/**
+ * The change's colour. Costs are negative, so one rule fits every line: up is good (income grew, a cost shrank),
+ * down is bad (a cost grew, income fell). A per-policy cost is positive, so it reads the other way (`costUp`).
+ */
+export function changeTone(delta: number | null, costUp = false): "good" | "bad" | "none" {
+  if (!delta) return "none";
+  const up = delta > 0;
+  return up !== costUp ? "good" : "bad";
+}
+
+/** One paid cost entry, as cost_entry and its expense hold it: enough to place it on its statement line. */
+export type PaidCost = { entryType: string; amountCents: number; vendorId: string | null; partnerId: string | null; expenseId: string | null; expenseCategory: string | null; expenseAcquisition: boolean | null };
+
+/** The statement line a cost entry is on: public.pnl_section and pnl_lines' source rules, the same cases in the same order. */
+export function costLineOf(c: PaidCost): Pick<PnlLine, "section" | "entryType" | "sourceType" | "sourceId" | "sourceName"> {
+  const section: PnlSection = c.entryType === "producer_split" ? "splits"
+    : c.expenseId ? (c.expenseAcquisition === true ? "acquisition" : "overhead")
+    : ["lead_cost", "partner_payout", "platform_fee", "tool_subscription"].includes(c.entryType) ? "acquisition"
+    : c.entryType === "refund" && (c.vendorId || c.partnerId) ? "acquisition"
+    : "overhead";
+  const sourced = section === "acquisition" && ["lead_cost", "partner_payout", "refund"].includes(c.entryType);
+  const sourceType = sourced && c.partnerId ? "partner" : sourced && c.vendorId ? "vendor" : c.expenseId ? "expense_category" : null;
+  return { section, entryType: c.entryType, sourceType, sourceId: sourced ? c.partnerId ?? c.vendorId : null, sourceName: c.expenseId ? c.expenseCategory : null };
+}
+
+/** The paid entries of a period, summed per statement line. */
+export function paidByLine(costs: PaidCost[]): Map<string, { cents: number; count: number }> {
+  const out = new Map<string, { cents: number; count: number }>();
+  for (const c of costs) {
+    const key = lineKey(costLineOf(c));
+    const had = out.get(key) ?? { cents: 0, count: 0 };
+    out.set(key, { cents: had.cents + c.amountCents, count: had.count + 1 });
+  }
+  return out;
+}
+
+/**
+ * "In the bank" for one line this period (5·A: commission received and costs paid; never $0 for no bank file).
+ * Money in: the bank matches whole carrier statements, not entry types, so a line has no honest share of it —
+ * "—" on the line (the total sits on Net commission), or "Not imported" when no bank file covers the period.
+ * A cost on cash basis is the cost itself (cash counts the day it was paid); on accrual it is the paid part of
+ * the line's entries, or "—" when the paid entries could not be read.
+ */
+export function inBankFor(row: Pick<StatementRow, "key" | "line" | "cur">, basis: Basis, received: MoneyIn["received"], paid: Map<string, { cents: number; count: number }> | null): InBank {
+  if (row.line.section === "in" || row.line.section === "held") return received.imported ? { kind: "gap" } : { kind: "not_imported" };
+  if (row.cur === null) return { kind: "gap" };
+  if (basis === "cash") return { kind: "cents", cents: row.cur, paid: row.line.entries, of: row.line.entries };
+  if (!paid) return { kind: "gap" };
+  const p = paid.get(row.key) ?? { cents: 0, count: 0 };
+  return { kind: "cents", cents: p.cents, paid: p.count, of: row.line.entries };
+}
+
+/** A section's "In the bank" total, or null when any of its lines cannot say. */
+export function inBankTotal(rows: StatementRow[]): number | null {
+  let total = 0;
+  for (const r of rows) {
+    if (r.cur === null) continue;
+    if (r.bank.kind !== "cents") return null;
+    total += r.bank.cents;
+  }
+  return total;
+}
+
+/** The words for one period's kind: "month" → "This month" / "Month before" / "the month before". */
+export function periodWords(kind: PeriodKind): { current: string; previous: string; before: string } {
+  if (kind === "custom") return { current: "This period", previous: "Period before", before: "the period before" };
+  const cap = kind[0].toUpperCase() + kind.slice(1);
+  return { current: `This ${kind}`, previous: `${cap} before`, before: `the ${kind} before` };
+}
+
+/** The last-year column's heading: the period's own name a year back ("Nov 2025", "Q4 2025", "2025"). */
+export function lastYearLabel(kind: PeriodKind, lastYear: Range, fyStartMonth = 1): string {
+  if (kind === "month") return shortMonth(lastYear.from);
+  if (kind === "custom") return "Last year";
+  return periodRange(kind, lastYear.from, fyStartMonth).label;
+}
+
+/** A comparison period by its own name ("October 2026", "Q3 2026", "Jul 29, 2026 to Aug 14, 2026"), never "Previous period". */
+export function namedRange(kind: PeriodKind, r: Range, fyStartMonth = 1): string {
+  if (kind !== "custom") return periodRange(kind, r.from, fyStartMonth).label;
+  const last = new Date(Date.parse(`${r.to}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  return `${readableDate(r.from)} to ${readableDate(last)}`;
 }
 
 /** Integer division rounding half up (cents ÷ policies). No float. */

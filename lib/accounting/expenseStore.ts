@@ -53,13 +53,17 @@ export type ExpenseRow = {
   acquisitionOverridden: boolean;
   voidReason: string | null;
   hasReceipt: boolean;
+  /** Round 7 (the expense page): the payment's reference, the receipt's file name, when the row was made. */
+  paymentReference: string | null;
+  documentName: string | null;
+  createdAt: string | null;
 };
 
 const toRow = (r: Loose): ExpenseRow => ({
   id: r.id, category: r.category, vendorName: r.vendor_name, description: r.description, amountCents: Number(r.amount_cents), incurredOn: r.incurred_on,
   paidOn: r.paid_on, paidMethod: r.paid_method, recurrence: r.recurrence, recurrenceEndOn: r.recurrence_end_on, parentExpenseId: r.parent_expense_id,
   status: r.status, isAcquisitionCost: !!r.is_acquisition_cost, acquisitionOverridden: !!r.acquisition_overridden, voidReason: r.void_reason,
-  hasReceipt: !!r.document_path,
+  hasReceipt: !!r.document_path, paymentReference: r.payment_reference ?? null, documentName: r.document_name ?? null, createdAt: r.created_at ?? null,
 });
 
 export async function acquisitionDefaults(tenantId: string) {

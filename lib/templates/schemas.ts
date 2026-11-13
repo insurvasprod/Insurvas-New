@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 import {
+  TEMPLATE_DEFINITION_FORMAT,
+  TEMPLATE_RULE_OPS,
   TEMPLATE_FIELD_TYPES,
   TEMPLATE_KEY_PATTERN,
   TEMPLATE_KEY_RULE,
@@ -23,7 +25,20 @@ export const templateFieldSchema = z.object({
     min_length: z.number().int().min(0).max(10000).optional(), max_length: z.number().int().min(0).max(10000).optional(),
     pattern: z.string().max(200).optional(), age_min: z.number().int().min(0).max(130).optional(), age_max: z.number().int().min(0).max(130).optional(),
     digit_length: z.number().int().min(1).max(40).optional(), format_mask: z.string().max(80).optional(), placeholder: z.string().max(120).optional(),
+    no_future: z.boolean().optional(), message: z.string().max(300).optional(),
   }).default({}),
+});
+
+// Form definition format 2 (lib/templates/logic.ts): rules joined by AND / OR, one level of groups.
+const ruleSchema = z.object({
+  field_key: key,
+  op: z.enum(TEMPLATE_RULE_OPS),
+  value: z.string().max(120).optional(),
+  values: z.array(z.string().max(120)).max(60).optional(),
+});
+const logicSchema = z.object({
+  match: z.enum(["all", "any"]),
+  rules: z.array(z.union([ruleSchema, z.object({ match: z.enum(["all", "any"]), rules: z.array(ruleSchema).max(20) })])).max(20),
 });
 
 export const templateStageSchema = z.object({
@@ -43,6 +58,7 @@ const formFieldSchema = z.object({
     .default(null),
   conditional_on: z.object({ field_key: key, equals: z.string().trim().max(120) }).nullable().optional(),
   width: z.enum(["half", "full"]).optional(),
+  logic: logicSchema.nullable().optional(),
 });
 
 const formSectionSchema = z.object({
@@ -50,9 +66,11 @@ const formSectionSchema = z.object({
   label: z.string().trim().min(1).max(120),
   fields: z.array(formFieldSchema).max(100),
   sort_order: z.number().int().min(0).max(9999),
+  skip_when: logicSchema.nullable().optional(),
 });
 
 export const formDefinitionSchema = z.object({
+  format: z.number().int().min(1).max(TEMPLATE_DEFINITION_FORMAT).optional(),
   sections: z.array(formSectionSchema).max(50),
 });
 

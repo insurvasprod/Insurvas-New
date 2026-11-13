@@ -73,6 +73,7 @@ import { FILL_CARD, useFittingRows } from "@/components/app/use-fitting-rows";
 import { PARTNER_LIMIT_KEYS } from "@/lib/partners/limits";
 import { partnerLimitMessage } from "@/lib/partnerLimits/copy";
 import { cn } from "@/lib/utils";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 type Term = {
   id: string;
@@ -125,6 +126,17 @@ type Product = {
   sort_order: number;
 };
 type PartnerProduct = Product & { approved: boolean };
+/** The directory's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws the last answer at once. */
+const PARTNERS_KEY = "/api/app/partners";
+type PartnersBody = { partners?: Partner[]; limits?: Partial<CapacityLimits> | null; usage?: CapacityUsage | null };
+const EMPTY_USAGE: CapacityUsage = { publishers: 0, marketing: 0, affiliates: 0, partnerUsers: 0 };
+const limitsOf = (body: PartnersBody): CapacityLimits => ({
+  max_publishers: body.limits?.max_publishers ?? null,
+  max_marketing_partners: body.limits?.max_marketing_partners ?? null,
+  max_affiliates: body.limits?.max_affiliates ?? null,
+  max_buffer_seats: body.limits?.max_buffer_seats ?? null,
+  max_partner_users: body.limits?.max_partner_users ?? null,
+});
 type PartnerDraft = {
   name: string;
   partner_type: PartnerType;
@@ -348,11 +360,13 @@ export function PartnersWorkspace({
   messageHref?: string | null;
 }) {
   const router = useRouter();
-  const [partners, setPartners] = useState<Partner[]>([]);
+  // The kept answer on a client navigation (nothing while hydrating a fresh document; the mount effect fills it in).
+  const [seeded] = useState(() => seed<PartnersBody>(PARTNERS_KEY, true)?.data ?? null);
+  const [partners, setPartners] = useState<Partner[]>(() => seeded?.partners ?? []);
   const [draft, setDraft] = useState<PartnerDraft>(emptyDraft);
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !seeded);
   const [termFor, setTermFor] = useState<string | null>(null);
   const [termModel, setTermModel] =
     useState<PartnerPayoutModel>("per_transfer");
@@ -369,19 +383,8 @@ export function PartnersWorkspace({
     Record<string, PartnerProduct[]>
   >({});
   const [productsVersion, setProductsVersion] = useState(0);
-  const [limits, setLimits] = useState<CapacityLimits>({
-    max_publishers: null,
-    max_marketing_partners: null,
-    max_affiliates: null,
-    max_buffer_seats: null,
-    max_partner_users: null,
-  });
-  const [usage, setUsage] = useState<CapacityUsage>({
-    publishers: 0,
-    marketing: 0,
-    affiliates: 0,
-    partnerUsers: 0,
-  });
+  const [limits, setLimits] = useState<CapacityLimits>(() => limitsOf(seeded ?? {}));
+  const [usage, setUsage] = useState<CapacityUsage>(() => seeded?.usage ?? EMPTY_USAGE);
   const [selectedId, setSelectedIdState] = useState<string | null>(initialSelectedId);
   const setSelectedId = (
     value: string | null | ((current: string | null) => string | null),
@@ -427,23 +430,21 @@ export function PartnersWorkspace({
 
   // After the first load, a reload (Refresh, or the re-read after every write) keeps the page drawn:
   // swapping it for the page skeleton unmounted the detail panels and lost their unsaved edits.
-  const hasLoaded = useRef(false);
+  const hasLoaded = useRef(seeded !== null);
   const [refreshing, setRefreshing] = useState(false);
-  const load = useCallback(async () => {
+  // The directory's read goes through the app's cache (speed pass 2026-11-09): `fresh` after a change.
+  const load = useCallback(async (fresh = false) => {
     if (hasLoaded.current) setRefreshing(true);
     else setLoading(true);
     try {
-      const [response, productResponse] = await Promise.all([
-        fetch("/api/app/partners", { cache: "no-store" }),
+      const [body, productResponse] = await Promise.all([
+        (fresh ? loadResource<PartnersBody>(PARTNERS_KEY, { persist: true }) : readResource<PartnersBody>(PARTNERS_KEY, { persist: true }))
+          .catch((reason: unknown) => { notify.block(reason instanceof Error ? reason.message : "Could not load partners"); return null; }),
         canManageProductConfig
           ? fetch("/api/app/products", { cache: "no-store" })
           : Promise.resolve(null),
       ]);
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        notify.block(body?.error ?? "Could not load partners");
-        return;
-      }
+      if (!body) return;
       const loadedPartners = body.partners ?? [];
       setPartners(loadedPartners);
       setSelectedId((current) =>
@@ -452,21 +453,8 @@ export function PartnersWorkspace({
           ? current
           : null,
       );
-      setLimits({
-        max_publishers: body.limits?.max_publishers ?? null,
-        max_marketing_partners: body.limits?.max_marketing_partners ?? null,
-        max_affiliates: body.limits?.max_affiliates ?? null,
-        max_buffer_seats: body.limits?.max_buffer_seats ?? null,
-        max_partner_users: body.limits?.max_partner_users ?? null,
-      });
-      setUsage(
-        body.usage ?? {
-          publishers: 0,
-          marketing: 0,
-          affiliates: 0,
-          partnerUsers: 0,
-        },
-      );
+      setLimits(limitsOf(body));
+      setUsage(body.usage ?? EMPTY_USAGE);
       if (canManageProductConfig && productResponse) {
         const productBody = await productResponse.json().catch(() => null);
         if (productResponse.ok) setProducts(productBody.products ?? []);
@@ -492,11 +480,11 @@ export function PartnersWorkspace({
   // count) without the product fan-out `load` does and without redrawing the page.
   const refreshCapacity = useCallback(async () => {
     try {
-      const response = await fetch("/api/app/partners", { cache: "no-store" });
-      const body = await response.json().catch(() => null);
-      if (!response.ok || !body) return;
+      const body = await loadResource<PartnersBody>(PARTNERS_KEY, { persist: true });
+      if (!body) return;
       if (Array.isArray(body.partners)) setPartners(body.partners);
-      if (body.limits) setLimits((current) => ({ ...current, max_partner_users: body.limits.max_partner_users ?? null }));
+      const seats = body.limits;
+      if (seats) setLimits((current) => ({ ...current, max_partner_users: seats.max_partner_users ?? null }));
       if (body.usage) setUsage(body.usage);
     } catch {
       // The panel already re-read its own rows; stale seat figures correct on the next page load.
@@ -523,6 +511,16 @@ export function PartnersWorkspace({
   // The API is the source of truth; refresh after every write so status and effective terms are
   // visible immediately without requiring a re-login or a full page refresh.
   useEffect(() => {
+    // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+    const kept = peek<PartnersBody>(PARTNERS_KEY, true);
+    if (kept?.data && !hasLoaded.current) {
+      const body = kept.data;
+      setPartners((current) => (current.length ? current : body.partners ?? []));
+      setLimits(limitsOf(body));
+      setUsage(body.usage ?? EMPTY_USAGE);
+      setLoading(false);
+      hasLoaded.current = true;
+    }
     // Initial client hydration fetch; load owns the corresponding loading state.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load();
@@ -547,7 +545,7 @@ export function PartnersWorkspace({
         return false;
       }
       notify.done(success);
-      await load();
+      await load(true);
       return true;
     } catch (reason) {
       notify.fail(
@@ -606,7 +604,7 @@ export function PartnersWorkspace({
       }
       if (result.activationRefused) notify.warn(`${draft.name} was added as a draft`, { detail: friendlyActivation(result.activationRefused) });
       else notify.done(`${draft.name} added`);
-      await load();
+      await load(true);
       setNewRate("");
       setNewPay(DEFAULT_PAY[emptyDraft.partner_type]);
       if (guiding) {
@@ -788,6 +786,17 @@ export function PartnersWorkspace({
       <PageHeader
         visible
         hideTitle={!detailOnly}
+        // A partner's sections are the page's sub-page bar, on the title's line (UI-CONSISTENCY §8b).
+        tabs={detailOnly && selectedPartner ? (
+          <ViewTabs
+            label="Partner record"
+            value={detailTab}
+            onChange={setDetailTab}
+            idPrefix="partner-detail-tab"
+            controls="partner-detail-view"
+            tabs={shownTabs.map((tab) => ({ key: tab, label: detailTabLabel(tab) }))}
+          />
+        ) : undefined}
         title={detailOnly ? (selectedPartner?.name ?? "Publisher") : "Publishers"}
         // The list's one line is an explanation, so it goes behind the (i) and gives the row back to
         // the table (owner, 2026-10-29). A partner's own line is not: it says which partner and whose
@@ -870,7 +879,7 @@ export function PartnersWorkspace({
           toolbar={<>
             <DataToolbar actions={<>
               {!selectedPartner && <FilterButton open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} count={activeListFilters.length} controls="publishers-filters" />}
-              <RefreshButton onClick={() => void load()} refreshing={refreshing} />
+              <RefreshButton onClick={() => void load(true)} refreshing={refreshing} />
             </>}>
               <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setListPage(1); }} placeholder="Search publishers" />
             </DataToolbar>
@@ -1046,14 +1055,6 @@ export function PartnersWorkspace({
           <div className="flex min-w-0 flex-col gap-6" aria-label={`${selectedPartner.name} details`}>
 
             <div className="flex min-w-0 flex-col gap-6">
-              <ViewTabs
-                label="Partner record"
-                value={detailTab}
-                onChange={setDetailTab}
-                idPrefix="partner-detail-tab"
-                controls="partner-detail-view"
-                tabs={shownTabs.map((tab) => ({ key: tab, label: detailTabLabel(tab) }))}
-              />
               <section className="m-glass rounded-xl border border-border min-w-0 overflow-visible">
             {/* The selected section, as the tab panel: it fades in when the tab changes (2026-10-09).
                 It does NOT scroll inside itself: penning a long tab into a short box looked worse than
@@ -1531,7 +1532,7 @@ export function PartnersWorkspace({
               >
                 {justAdded ? "Done" : "Cancel"}
               </Button>
-              <Button type="submit" disabled={busy !== null || createAtLimit || emailLooksWrong}>
+              <Button type="submit" data-guide="publisher-submit" disabled={busy !== null || createAtLimit || emailLooksWrong}>
                 {busy ? "Saving…" : editing ? "Save" : justAdded ? "Add another" : "Add publisher"}
               </Button>
             </DialogFooter>

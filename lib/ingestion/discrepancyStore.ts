@@ -27,7 +27,7 @@ import { entrySources, untraceableDiscrepancies } from "./traceStore";
 type Loose = any;
 const db = (): Loose => getSupabaseServiceClient();
 
-export const DISCREPANCIES_PENDING_MESSAGE = "Discrepancies from carrier files need a database update (20261008250000).";
+export const DISCREPANCIES_PENDING_MESSAGE = "Pay issues from carrier files are not switched on for this account yet.";
 
 export class DiscrepancyError extends Error {
   constructor(message: string, readonly status: number) {

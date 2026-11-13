@@ -9,7 +9,6 @@ import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { fillLine } from "@/components/ui/table-card-layout";
 import { MAX_ROWS } from "@/components/ui/use-fitting-page-size";
-import { cn } from "@/lib/utils";
 
 /** One row of a file as the table shows it: every word already chosen on the server. */
 export type FileRowLine = {
@@ -82,43 +81,41 @@ export function FileRowsTable({ rows: all, toolbar, empty, pageKey = "" }: { row
   const { rows, current } = paginate(all, page, size);
   // A column of dashes says nothing: Changed shows only when a row on this page changed something.
   const changed = rows.some((row) => row.detail !== "—");
+  const moved = rows.some((row) => row.card !== "—");
 
   return (
     <div ref={holder} className="contents">
     <TableCard toolbar={toolbar} footer={!empty && all.length ? <Pager page={current} pageSize={size} total={all.length} noun="rows" onPage={setPage} /> : undefined}>
     {empty ?? (
-    <table className="portal-lead-table w-full min-w-[980px] text-left text-sm">
+    <table className="portal-lead-table w-full text-left text-sm">
       <thead>
         <tr>
-          {/* Every column carries its own fact, so the even spread (§6b) never leaves one standing empty: the row
-              number is the policy's second line, the client its own column. */}
+          {/* One line per row (owner 2026-11-11): the row number is the policy's tooltip (the value when the row made no
+              policy), how the client was linked is the client's. Changed and Card show only when this page has one. */}
           <th>Policy</th>
           <th>Client</th>
           <th>Outcome</th>
           {changed && <th>Changed</th>}
-          <th>Linked</th>
-          <th>Card</th>
-          <th className="text-right"><span className="sr-only">Next step</span></th>
+          {moved && <th>Card</th>}
+          <th>Next step</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((row) => (
-          <tr key={row.rowNumber} data-line="" className="group cursor-pointer" onClick={() => router.push(row.rowHref)}>
-            <td>
-              {row.policyHref ? <Link href={row.policyHref} onClick={(event) => event.stopPropagation()} className="block truncate font-semibold text-foreground hover:underline">{row.policyNumber}</Link>
-                : <span className="block truncate font-semibold text-foreground">{row.policyNumber ?? "—"}</span>}
-              <span className="block text-xs tabular-nums text-muted-foreground">Row {row.rowNumber}</span>
+          <tr key={row.rowNumber} data-line="" className="cursor-pointer" onClick={() => router.push(row.rowHref)}>
+            <td className="whitespace-nowrap font-medium tabular-nums text-foreground" title={`Row ${row.rowNumber}`}>
+              {row.policyHref ? <Link href={row.policyHref} onClick={(event) => event.stopPropagation()} className="hover:underline">{row.policyNumber}</Link>
+                : row.policyNumber ?? `Row ${row.rowNumber}`}
             </td>
-            <td className={cn("truncate", row.clientName ? "text-foreground" : "text-muted-foreground")} title={row.clientName ?? undefined}>{row.clientName ?? (row.policyNumber ? "No client yet" : "—")}</td>
-            <td><span title={row.chipTitle}><StatusChip tone={row.tone}>{row.chip}</StatusChip></span></td>
-            {changed && <td><span className="block truncate" title={row.detail}>{row.detail}</span></td>}
-            <td className="truncate text-muted-foreground" title={row.linkedTitle}>{row.linked}</td>
-            <td className="truncate text-muted-foreground" title={row.card}>{row.card}</td>
-            <td className="text-right">
+            <td className="whitespace-nowrap" title={`Linked: ${row.linkedTitle}`}>{row.clientName ?? <span className="text-muted-foreground">—</span>}</td>
+            <td><StatusChip tone={row.tone} title={row.chipTitle}>{row.chip}</StatusChip></td>
+            {changed && <td className="max-w-[360px] truncate whitespace-nowrap" title={row.detail}>{row.detail === "—" ? <span className="text-muted-foreground">—</span> : row.detail}</td>}
+            {moved && <td className="whitespace-nowrap">{row.card === "—" ? <span className="text-muted-foreground">—</span> : row.card}</td>}
+            <td className="whitespace-nowrap">
               {row.reviewHref ? (
-                <Link href={row.reviewHref} onClick={(event) => event.stopPropagation()} className="font-semibold text-[var(--accent-ink)] hover:underline">Review</Link>
+                <Link href={row.reviewHref} onClick={(event) => event.stopPropagation()} className="hover:underline">Review ›</Link>
               ) : (
-                <Link href={row.rowHref} aria-label={`Open row ${row.rowNumber}`} className="text-muted-foreground group-hover:text-foreground">›</Link>
+                <Link href={row.rowHref} aria-label={`Open row ${row.rowNumber}`} onClick={(event) => event.stopPropagation()} className="hover:underline">Open ›</Link>
               )}
             </td>
           </tr>

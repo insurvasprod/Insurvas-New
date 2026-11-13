@@ -4,147 +4,159 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
-import { toolbarControl } from "@/components/ui/data-toolbar";
-import { Input } from "@/components/ui/input";
+import { confirmAction } from "@/components/ui/confirm-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import type { CarrierChoice } from "@/lib/ingestion/path";
 import type { SenderRow } from "@/lib/ingestion/registry";
+import { notify } from "@/lib/notify";
 
-async function send(url: string, init: RequestInit): Promise<void> {
+export async function sendInbound(url: string, init: RequestInit): Promise<void> {
   const response = await fetch(url, init);
   const data = (await response.json().catch(() => ({}))) as { error?: string };
   if (!response.ok) throw new Error(data.error ?? "That did not work; try again.");
 }
 
+const UNKNOWN_SENDER = "A file from an unknown sender still arrives, but waits until its carrier is known.";
+
 /**
- * LA-4.1 (Notion sprint) · the email door: the agency's own address, and the carriers' known senders
- * that tell the pipeline which carrier an emailed file is from (exact address, or a whole @domain).
- * The bucket has its own tab since 2026-10-09 (carrier-bucket.tsx).
+ * LA-4.1 (Notion sprint) · the email door: the agency's own address, and the carriers' known senders that tell the
+ * pipeline which carrier an emailed file is from (exact address, or a whole @domain).
+ *
+ * r7 4·1 (owner 2026-11-10): Files in's Email tab. The address heads the card; the senders are the table. Adding a
+ * sender is a dialog from the title line (files-in-email-actions.tsx), not a form in the toolbar. An agency sender's
+ * row opens a small dialog with its carrier and Remove, and Remove asks first (it removed at once before).
+ * Insurvas's senders are kept by Insurvas and do not open. Errors are toasts, not a red box above the table.
  */
 export function CarrierFileDoors({
   address,
   addressConfigured,
   senders,
-  carriers,
   canWrite,
   writeBlockedReason,
 }: {
   address: string | null;
   addressConfigured: boolean;
   senders: SenderRow[];
-  carriers: CarrierChoice[];
   canWrite: boolean;
   writeBlockedReason: string | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [carrierId, setCarrierId] = useState("");
-  const [sender, setSender] = useState("");
-  const [copied, setCopied] = useState<string | null>(null);
+  const [open, setOpen] = useState<SenderRow | null>(null);
 
-  async function copy(value: string) {
+  async function createAddress() {
+    setBusy("address");
     try {
-      await navigator.clipboard.writeText(value);
-      setCopied(value);
-      window.setTimeout(() => setCopied(null), 1500);
-    } catch {
-      setCopied(null);
-    }
-  }
-
-  async function run(key: string, action: () => Promise<void>) {
-    setBusy(key);
-    setProblem(null);
-    try {
-      await action();
+      await sendInbound("/api/app/carrier-files/inbound", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_address" }) });
+      notify.done("Address created. Give it to each carrier.");
       router.refresh();
     } catch (reason) {
-      setProblem(reason instanceof Error ? reason.message : "That did not work; try again.");
+      notify.block(reason instanceof Error ? reason.message : "That did not work; try again.");
     } finally {
       setBusy(null);
     }
   }
 
-  return (
-    <div className="flex flex-col gap-6">
-      {problem && <p role="alert" className="rounded-lg border border-border border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] px-4 py-3 text-sm text-[var(--error-ink)]">{problem}</p>}
+  async function remove(row: SenderRow) {
+    setOpen(null);
+    const yes = await confirmAction({ title: `Remove ${row.sender}?`, description: "Files from it still arrive, but wait until their carrier is known.", confirmLabel: "Remove", cancelLabel: "Keep it" });
+    if (!yes) return;
+    setBusy(`remove-${row.id}`);
+    try {
+      await sendInbound(`/api/app/carrier-files/inbound?sender_id=${row.id}`, { method: "DELETE" });
+      notify.done(`Removed ${row.sender}.`);
+      router.refresh();
+    } catch (reason) {
+      notify.block(reason instanceof Error ? reason.message : "That did not work; try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
+  const head = (
+    <div className="grid gap-0.5 px-4 py-3">
+      {address ? (
+        <>
+          <span className="break-all font-mono text-sm text-foreground">{address}</span>
+          <span className="text-xs text-muted-foreground">Forward carrier files here. Each CSV, Excel or PDF attachment is received as its own file.</span>
+        </>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <>
       <PagedTableCard
         total={senders.length}
         noun="senders"
-        title="Email"
-        description={
-          !addressConfigured
-            ? "Email-in is not switched on for this workspace yet."
-            : address
-              ? `Forward carrier files to ${address}. Each CSV, Excel or PDF attachment is received as its own file.`
-              : "Give the agency its own address, then forward carrier files to it."
-        }
-        action={
-          address ? (
-            <Button type="button" variant="outline" onClick={() => void copy(address)}>{copied === address ? "Copied" : "Copy address"}</Button>
-          ) : addressConfigured ? (
-            <Button type="button" disabled={!canWrite || busy !== null} title={writeBlockedReason ?? undefined} onClick={() => void run("address", () => send("/api/app/carrier-files/inbound", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create_address" }) }))}>
-              {busy === "address" ? "Creating…" : "Create address"}
-            </Button>
-          ) : undefined
-        }
-        toolbar={
-          <form
-            className="flex flex-wrap items-center gap-2 px-4 py-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!carrierId) return setProblem("Choose the carrier this sender is.");
-              void run("add", async () => {
-                await send("/api/app/carrier-files/inbound", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "add_sender", carrier_id: carrierId, sender }) });
-                setSender("");
-                setCarrierId("");
-              });
-            }}
-          >
-            <select aria-label="Carrier" className={toolbarControl} value={carrierId} disabled={!canWrite} onChange={(event) => setCarrierId(event.target.value)}>
-              <option value="">Carrier</option>
-              {carriers.map((carrier) => <option key={carrier.id} value={carrier.id}>{carrier.name}</option>)}
-            </select>
-            <Input aria-label="Sender address or @domain" className="h-9 w-72" placeholder="commissions@carrier.com or @carrier.com" value={sender} disabled={!canWrite} onChange={(event) => setSender(event.target.value)} />
-            <Button type="submit" variant="outline" disabled={!canWrite || busy !== null || !sender.trim()} title={writeBlockedReason ?? undefined}>{busy === "add" ? "Adding…" : "Add sender"}</Button>
-          </form>
+        suffix={UNKNOWN_SENDER}
+        toolbar={address ? head : undefined}
+        footer={
+          <div className="flex w-full flex-wrap items-center gap-3 text-sm text-muted-foreground">
+            <span>{UNKNOWN_SENDER}</span>
+            <span className="ml-auto tabular-nums">{senders.length.toLocaleString("en-US")} {senders.length === 1 ? "sender" : "senders"}</span>
+          </div>
         }
       >
-        {senders.length === 0 ? (
-          <EmptyState title="No known carrier senders" hint="An emailed file from an unknown sender is still received, and is marked failed until its carrier is known." />
-        ) : (
+        {!address ? (
+          addressConfigured ? (
+            <EmptyState
+              title="No address yet"
+              hint="Give the agency its own address, then forward carrier files to it."
+              action={<Button type="button" disabled={!canWrite || busy !== null} title={writeBlockedReason ?? undefined} onClick={() => void createAddress()}>{busy === "address" ? "Creating…" : "Create address"}</Button>}
+            />
+          ) : (
+            <EmptyState title="Email-in is not switched on yet" hint="Email-in is not switched on for this workspace yet. Upload files, or have them dropped in the bucket, meanwhile." />
+          )
+        ) : null}
+        {address && senders.length === 0 ? (
+          <EmptyState title="No known carrier senders" hint="Add each carrier's sending address, so its files are recognised. A file from an unknown sender is still received, and waits until its carrier is known." />
+        ) : senders.length > 0 ? (
           <table className="portal-lead-table w-full text-left text-sm">
             <thead>
               <tr>
                 <th>Sender</th>
                 <th>Carrier</th>
                 <th className="w-[140px]">Added by</th>
-                <th className="w-[110px] text-right"><span className="sr-only">Actions</span></th>
+                <th className="w-[150px]">Next step</th>
               </tr>
             </thead>
             <PagedBody>
               {senders.map((row) => (
-                <tr key={row.id}>
-                  <td className="font-semibold text-foreground">{row.sender}</td>
-                  <td>{row.carrierName ?? "—"}</td>
-                  <td className="text-muted-foreground">{row.platform ? "Insurvas" : "This agency"}</td>
-                  <td className="text-right">
-                    {!row.platform && (
-                      <Button type="button" variant="outline" size="sm" disabled={!canWrite || busy !== null} title={writeBlockedReason ?? undefined} onClick={() => void run(`remove-${row.id}`, () => send(`/api/app/carrier-files/inbound?sender_id=${row.id}`, { method: "DELETE" }))}>
-                        {busy === `remove-${row.id}` ? "Removing…" : "Remove"}
-                      </Button>
-                    )}
+                <tr key={row.id} className={row.platform ? undefined : "cursor-pointer"} onClick={row.platform ? undefined : () => setOpen(row)}>
+                  <td className="whitespace-nowrap font-medium text-foreground">
+                    {row.platform ? <span>{row.sender}</span>
+                      : <button type="button" className="text-left font-medium hover:underline" onClick={(e) => { e.stopPropagation(); setOpen(row); }}>{row.sender}</button>}
+                  </td>
+                  <td className="whitespace-nowrap">{row.carrierName ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap">{row.platform ? "Insurvas" : "This agency"}</td>
+                  <td className="whitespace-nowrap">
+                    {row.platform ? <span className="text-muted-foreground" title="Kept by Insurvas">—</span> : busy === `remove-${row.id}` ? "Removing…" : "Open ›"}
                   </td>
                 </tr>
               ))}
             </PagedBody>
           </table>
-        )}
+        ) : null}
       </PagedTableCard>
 
-    </div>
+      <Dialog open={open !== null} onOpenChange={(next) => { if (!next) setOpen(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="break-all">{open?.sender}</DialogTitle>
+            <DialogDescription>Files sent from it are read as {open?.carrierName ?? "its carrier"}&apos;s.</DialogDescription>
+          </DialogHeader>
+          <dl className="m-0 grid grid-cols-[minmax(0,120px)_minmax(0,1fr)] gap-x-4 gap-y-2 text-sm">
+            <dt className="text-xs text-muted-foreground">Carrier</dt><dd className="m-0 text-[var(--body)]">{open?.carrierName ?? "—"}</dd>
+            <dt className="text-xs text-muted-foreground">Added by</dt><dd className="m-0 text-[var(--body)]">This agency</dd>
+          </dl>
+          <DialogFooter>
+            <Button type="button" variant="outline" className="text-[var(--error-ink)] sm:mr-auto" disabled={!canWrite || busy !== null} title={writeBlockedReason ?? undefined} onClick={() => { if (open) void remove(open); }}>Remove</Button>
+            <Button type="button" onClick={() => setOpen(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

@@ -17,18 +17,28 @@ export async function GET() {
   if (auth instanceof NextResponse) return auth;
   const headers = { "Cache-Control": "no-store" };
   try {
-    const entitlement = await getEntitlement(auth.context.tenantId);
-    const [available, scope, solo] = await Promise.all([effectiveFeatures(entitlement.features, auth.context.tenantId), scopeFor(auth.context), isSoloWorkspace(auth.context.tenantId)]);
-    const counts = await readStepCounts({
-      tenantId: auth.context.tenantId,
-      roles: contextRoles(auth.context),
-      available,
-      narrow: scope !== null,
-      hidden: auth.context.hiddenPages ?? [],
-      solo,
-    });
-    // Where Review opens: the newest staged file, only for someone the review count was read for.
-    const reviewBatch = counts.review ? await readLatestReviewBatch(auth.context.tenantId).catch(() => null) : null;
+    // The scope and solo reads need no entitlement, so the three go out together; only the kill
+    // switches wait for the entitlement's features.
+    const [available, scope, solo] = await Promise.all([
+      getEntitlement(auth.context.tenantId).then((entitlement) => effectiveFeatures(entitlement.features, auth.context.tenantId)),
+      scopeFor(auth.context),
+      isSoloWorkspace(auth.context.tenantId),
+    ]);
+    // Where Review opens: the newest staged file, read beside the counts (a narrow session never gets a
+    // review count, so it is not read for one) and used only for someone the review count was read for.
+    const reviewRead = scope === null ? readLatestReviewBatch(auth.context.tenantId).catch(() => null) : Promise.resolve(null);
+    const [counts, latestBatch] = await Promise.all([
+      readStepCounts({
+        tenantId: auth.context.tenantId,
+        roles: contextRoles(auth.context),
+        available,
+        narrow: scope !== null,
+        hidden: auth.context.hiddenPages ?? [],
+        solo,
+      }),
+      reviewRead,
+    ]);
+    const reviewBatch = counts.review ? latestBatch : null;
     return NextResponse.json({ counts, reviewHref: reviewBatch ? `/app/import/review/${reviewBatch}` : null }, { headers });
   } catch {
     return NextResponse.json({ counts: {} }, { headers });

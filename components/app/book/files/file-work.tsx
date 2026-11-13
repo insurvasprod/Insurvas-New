@@ -16,7 +16,7 @@ export function FileWaiting({ total, parts, reviewHref, reviewCount }: { total: 
   if (!parts.length) return null;
   return (
     <section aria-label="Waiting on you" data-slot="card" className="m-glass flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border px-4 py-3">
-      <span className="text-2xl font-bold tabular-nums text-[var(--warning-ink)]">{n(total)}</span>
+      <span className="text-2xl font-bold tabular-nums text-foreground">{n(total)}</span>
       <span className="min-w-0 flex-1">
         <span className="block font-semibold text-foreground">Waiting on you before this file is done</span>
         <span className="block text-sm text-muted-foreground">

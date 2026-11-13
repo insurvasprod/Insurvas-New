@@ -1,9 +1,9 @@
 import { StatusChip } from "@/components/ui/status-chip";
-import Link from "next/link";
 
 import { subscriptionTone, type StatusTone } from "@/components/admin/status-chip";
 import { type PillTone, pillTone } from "@/lib/ui/pillTone";
 import { PageHeader } from "@/components/ui/page-header";
+import { ViewTabs } from "@/components/ui/view-tabs";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TenantSuspensionControl } from "@/components/admin/tenant-record/suspension-control";
 import { TENANT_TABS, type TenantTabKey } from "@/components/admin/tenant-record/types";
@@ -12,7 +12,6 @@ import { SUBSCRIPTION_STATUS_LABELS } from "@/lib/subscriptions/access";
 import type { TenantRecordFrame as FrameData } from "@/lib/tenants/recordFrame";
 import { recordDate, sentenceCase } from "@/lib/tenants/recordFormat";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
-import { cn } from "@/lib/utils";
 
 const FACT = "block truncate text-lg leading-[1.33]";
 
@@ -73,6 +72,8 @@ export function TenantRecordFrame({
         <PageHeader
           title={tenant.name}
           breadcrumbs={[{ label: "Customers" }, { label: "Tenants", href: "/admin/tenants" }, { label: tenant.name }]}
+          // The record's sub-pages, on the title's line (UI-CONSISTENCY §8b): one sub-page bar for the whole service.
+          tabs={<ViewTabs label="Tenant record" value={activeTab} tabs={TENANT_TABS.map((tab) => ({ key: tab.key, label: tab.label, href: tab.key === "overview" ? base : `${base}?tab=${tab.key}` }))} />}
           actions={
             <>
               <span role="group" className="flex flex-wrap items-center gap-2" aria-label="Agency state">
@@ -120,30 +121,6 @@ export function TenantRecordFrame({
         <StatTile label="Joined" value={<span className={FACT}>{recordDate(tenant.createdAt)}</span>} reserveFootnote />
       </StatStrip>
 
-      <nav aria-label="Tenant record" className="min-w-0 overflow-x-auto">
-        <ul className="m-0 flex w-max min-w-full list-none gap-6 border-b border-[var(--border)] p-0">
-          {TENANT_TABS.map((tab) => {
-            const active = tab.key === activeTab;
-            return (
-              <li key={tab.key}>
-                <Link
-                  href={tab.key === "overview" ? base : `${base}?tab=${tab.key}`}
-                  aria-current={active ? "page" : undefined}
-                  scroll={false}
-                  className={cn(
-                    "inline-flex h-10 items-center border-b-2 px-1 text-sm leading-[1.43] font-semibold tracking-[-0.01em] whitespace-nowrap no-underline transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-                    active
-                      ? "border-[var(--primary)] text-[var(--ink)]"
-                      : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",
-                  )}
-                >
-                  {tab.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
     </>
   );
 }

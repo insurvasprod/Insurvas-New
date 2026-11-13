@@ -79,6 +79,20 @@ export const SETUP_MENU_ITEM = {
   built: true,
 } as const;
 
+/**
+ * Docs (owner, 2026-11-13): help getting set up in insurance and in Insurvas, for everyone. Added by the shell
+ * beside Get set up rather than in AGENT_MENU, as no plan grants it and no role is refused it.
+ */
+export const DOCS_MENU_ITEM = {
+  key: "home.docs",
+  label: "Docs",
+  navLabel: "Docs",
+  path: "/app/docs",
+  icon: "book-open",
+  section: "Home",
+  built: true,
+} as const;
+
 export type ViewerSetup = {
   audience: SetupAudience;
   checklist: SetupChecklist;

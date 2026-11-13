@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { RebookButton } from "@/components/app/appointment-rebook";
 import { SettersTabs } from "@/components/app/setters/setters-tabs";
@@ -85,28 +86,34 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
   if (await isSoloWorkspace(guard.context.tenantId))
     return <RoleGateNotice reason="solo" featureLabel="Appointments & setters" detail="You work alone, so nobody books appointments for you." action={{ href: "/app/calendar", label: "Open the calendar" }} />;
 
-  const tab = parseSettersTab((await searchParams).tab);
+  const asked = (await searchParams).tab;
+  // The Calendar tab is gone (owner 2026-11-09); an old ?tab=calendar link opens the Calendar page.
+  if (asked === "calendar") redirect("/app/calendar");
+  const tab = parseSettersTab(asked);
   const view = await getSettersOverview({ tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role });
   const t = view.tiles;
   const showRate = t.closedThisMonth ? (t.showedThisMonth / t.closedThisMonth) * 100 : null;
   const booked = view.day.filter((row) => row.kind === "booked");
   const noShows = booked.filter((row) => row.detail?.status === "no_show");
+  const team = view.setters.reduce((sum, row) => ({ booked: sum.booked + row.booked, showed: sum.showed + row.showed, closed: sum.closed + row.showed + row.noShow }), { booked: 0, showed: 0, closed: 0 });
+  const teamRate = team.closed ? (team.showed / team.closed) * 100 : null;
 
   // On the dashboard's static stage backdrop, its cards frosted over it (owner ask 2026-10-26).
   const overview = (
     <>
-      <StatStrip label="Appointment totals">
-        <StatTile label="Booked today" value={t.bookedToday} footnote={[t.nextAt ? `next at ${t.nextAt}` : "nothing still to come", t.shownToday || t.noShowToday ? `${t.shownToday} shown · ${t.noShowToday} no-show` : null].filter(Boolean).join(" · ")} />
-        <StatTile label="Open slots left" value={t.openLeft} footnote={`of ${t.slotsToday} today`} />
-        <StatTile label="Show rate this month" value={showRate === null ? "—" : showRate.toFixed(1)} unit={showRate === null ? undefined : "%"} valueTone={showRate === null ? undefined : showRate >= SHOW_TARGET ? "good" : "warning"} footnote={`${t.showedThisMonth} of ${t.closedThisMonth} closed out · target ${SHOW_TARGET}%`} />
-        <StatTile label="Sold from appointments" value={t.sold} valueTone={t.sold ? "good" : undefined} footnote={t.showedForSold ? `${((t.sold / t.showedForSold) * 100).toFixed(1)}% of shown · 30 days` : "30 days"} />
-        <StatTile label="Double-bookings" value={t.doubleBookings} valueTone={t.doubleBookings ? "danger" : "good"} footnote={t.doubleBookingAllowed ? "double booking is on in Settings" : "not possible"} />
+      {/* Setters A (Set4A): the setters' last 30 days as one strip — booked, showed, show rate against the target, sold. */}
+      <StatStrip label="Setter totals, last 30 days">
+        <StatTile label="Booked" value={team.booked} footnote="last 30 days" />
+        <StatTile label="Showed" value={team.showed} footnote={`${team.closed} closed out`} />
+        <StatTile label="Show rate" value={teamRate === null ? "—" : teamRate.toFixed(0)} unit={teamRate === null ? undefined : "%"} valueTone={teamRate === null ? undefined : teamRate >= SHOW_TARGET ? "good" : "warning"} footnote={showRate === null ? "nothing closed out this month" : `${showRate.toFixed(1)}% this month`} />
+        <StatTile label="Target" value={SHOW_TARGET} unit="%" footnote="show rate to beat" />
+        <StatTile label="Sold" value={t.sold} valueTone={t.sold ? "good" : undefined} footnote={t.showedForSold ? `${((t.sold / t.showedForSold) * 100).toFixed(1)}% of shown` : "from appointments"} />
       </StatStrip>
 
       {!view.bookable && (
         <p role="status" className="rounded-lg border border-[var(--warning)]/30 bg-[var(--warning-surface)] px-4 py-2.5 text-sm text-[var(--warning-ink)]">
           <strong className="font-semibold">Add your working hours so setters can book you.</strong>{" "}
-          <Link className="font-semibold underline underline-offset-2" href="/app/setters?tab=setup">Open Settings › Calendar</Link>
+          <Link className="font-semibold underline underline-offset-2" href="/app/setters?tab=setup">Open the Setup tab</Link>
         </p>
       )}
 
@@ -115,7 +122,7 @@ export default async function SettersPage({ searchParams }: { searchParams: Prom
 
       <TableCard
         title={`Your hours today · ${view.dateLabel}`}
-        description={`All times your local · ${booked.length} booked · ${view.day.filter((row) => row.kind === "open").length} open`}
+        description={[`All times your local`, `${t.bookedToday} booked`, `${t.openLeft} of ${t.slotsToday} open`, t.nextAt ? `next at ${t.nextAt}` : null, t.shownToday || t.noShowToday ? `${t.shownToday} shown · ${t.noShowToday} no-show` : null, t.doubleBookings ? `${t.doubleBookings} double-booked` : null].filter(Boolean).join(" · ")}
         action={<Button variant="outline" size="sm" asChild><Link href="/app/setters?tab=setup">Edit hours &amp; blocks</Link></Button>}
       >
         {view.day.length === 0 ? <EmptyState title="Nothing today" hint="No hours set and nothing booked." action={<Button asChild variant="outline"><Link href="/app/setters?tab=setup">Set availability</Link></Button>} /> : (

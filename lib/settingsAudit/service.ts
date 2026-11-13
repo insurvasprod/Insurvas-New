@@ -49,12 +49,16 @@ function toEntry(row: Row, who: Map<string, string>): SettingsAuditEntry {
 
 export const SETTINGS_AUDIT_MAX_ROWS = 5000;
 
-/** Newest first. `onlyActor` pins the log to one person (a non-admin's own entries). */
-export async function listSettingsAudit(tenantId: string, filter: SettingsAuditFilter, options: { onlyActor?: string; limit?: number } = {}): Promise<SettingsAuditEntry[]> {
+/**
+ * Newest first. `onlyActor` pins the log to one person (a non-admin's own entries); `settingKey`
+ * narrows to one setting (the change sheet's "Earlier changes to this setting").
+ */
+export async function listSettingsAudit(tenantId: string, filter: SettingsAuditFilter, options: { onlyActor?: string; limit?: number; settingKey?: string } = {}): Promise<SettingsAuditEntry[]> {
   let query = db().from("settings_audit").select(COLUMNS).eq("tenant_id", tenantId);
   const actor = options.onlyActor ?? filter.actor ?? null;
   if (actor) query = query.eq("actor_user_id", actor);
   if (filter.section) query = query.eq("section_key", filter.section);
+  if (options.settingKey) query = query.eq("setting_key", options.settingKey);
   if (filter.changeType) query = query.eq("change_type", filter.changeType);
   if (filter.from) query = query.gte("occurred_at", `${filter.from}T00:00:00Z`);
   if (filter.to) query = query.lt("occurred_at", new Date(Date.parse(`${filter.to}T00:00:00Z`) + 86_400_000).toISOString());
@@ -88,6 +92,35 @@ export async function lastSettingsChange(tenantId: string, sectionKey: string): 
   const row = ((result.data ?? []) as Row[])[0];
   if (!row) return null;
   return toEntry(row, await names([row.actor_user_id]));
+}
+
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+
+/**
+ * Names for the ids inside stored values (a purge's recipients, the stage an outcome moves a lead
+ * to), so the history says "Dana Ruiz" or "Qualified", never an id. Only this agency's people and
+ * stages are named; anything else, or a failed read, simply stays unnamed ("another stage").
+ */
+export async function settingsAuditIdNames(tenantId: string, entries: readonly SettingsAuditEntry[]): Promise<Record<string, string>> {
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    for (const value of [entry.oldValue, entry.newValue]) for (const id of value?.match(UUID) ?? []) ids.add(id.toLowerCase());
+    if (ids.size >= 200) break;
+  }
+  if (!ids.size) return {};
+  const list = [...ids];
+  const out: Record<string, string> = {};
+  try {
+    const [people, stages] = await Promise.all([
+      db().from("tenant_users").select("user_id, users!tenant_users_user_id_fkey(name)").eq("tenant_id", tenantId).in("user_id", list),
+      db().from("pipeline_stages").select("id, name, pipelines!inner(tenant_id)").in("id", list).eq("pipelines.tenant_id", tenantId),
+    ]);
+    for (const row of (people.data ?? []) as Array<{ user_id: string; users: { name: string | null } | null }>) if (row.users?.name) out[row.user_id.toLowerCase()] = row.users.name;
+    for (const row of (stages.data ?? []) as Array<{ id: string; name: string }>) if (row.name) out[row.id.toLowerCase()] = row.name;
+  } catch (error) {
+    console.error("[settings-audit] could not name ids", error instanceof Error ? error.message : error);
+  }
+  return out;
 }
 
 /** The people who appear in the log, for the "changed by" filter. */

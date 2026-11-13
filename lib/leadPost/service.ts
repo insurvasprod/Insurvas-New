@@ -33,6 +33,8 @@ import { captureConsentFromValues } from "@/lib/consent/capture";
 import { applyFieldMap } from "./fieldMap";
 import { isMissingSchema } from "./schemaGap";
 import { consentIpOf, consentTextOf, LEGACY_LOG_CODE, parseUsDateOfBirth, type ValidationReasonCode } from "./validation";
+import { describeHours, readPostingHours, startOfDayIn, withinPostingHours } from "./board";
+import { chooseProductTemplate, type TemplateCandidate } from "@/lib/agentTemplates/templateChoice";
 
 // The field map's reader lives in a plain module so the settings screen reads a map exactly the way
 // this path applies it — including maps stored backwards by the old mint dialog. See fieldMap.ts.
@@ -51,6 +53,9 @@ export type PostReasonCode =
   | "scrub_unavailable"
   | "rate_limited"
   | "unauthorised"
+  // Round 8: a vendor's daily cap and posting hours.
+  | "daily_cap_reached"
+  | "outside_posting_hours"
   // The Lead posting board's four (validation.ts): text, IP, date of birth, licence.
   | ValidationReasonCode;
 
@@ -62,6 +67,10 @@ export type PostOutcome = {
   /** Plain-language, for a vendor engineer reading a 4xx at 2am. */
   message: string;
   retryAfterSeconds?: number;
+  /** True for a post on a key in test mode: every check ran, nothing was created or charged. */
+  test?: boolean;
+  /** The vendor's status callback for this outcome, if it asked for one. */
+  callback?: StatusCallback;
 };
 
 /** Keys are shown once, at creation. Only the hash is stored. */
@@ -89,7 +98,22 @@ type KeyRow = {
   is_active: boolean;
   /** Bound campaign, if any. Absent until migration 20260924130000 is applied. */
   campaign_id?: string | null;
+  // Round 8 (20261112100100); absent until it is applied, and then every one is "off".
+  test_mode?: boolean | null;
+  daily_cap?: number | null;
+  posting_hours?: unknown;
+  status_callback_url?: string | null;
+  status_callback_events?: string[] | null;
+  grace_until?: string | null;
 };
+
+const KEY_COLUMNS_R8 = "id, tenant_id, vendor_id, field_map, is_active, campaign_id, test_mode, daily_cap, posting_hours, status_callback_url, status_callback_events, grace_until";
+
+/** The older codes the round-8 reasons are logged under until 20261112100100 teaches the log's check. */
+const R8_LEGACY_LOG_CODE: Record<string, string> = { daily_cap_reached: "campaign_not_accepting", outside_posting_hours: "campaign_not_accepting" };
+
+/** Where the vendor's status callback goes, when it asked for this outcome. Sent after the reply (postHandler). */
+export type StatusCallback = { url: string; keyId: string; body: Record<string, unknown> };
 
 /**
  * The whole post path.
@@ -119,21 +143,27 @@ export async function acceptPostedLead(input: {
     input.vendorKey
       ? supabase.from("tenant_vendor_post_keys").select(columns).eq("tenant_id", input.vendorKey.tenantId).eq("vendor_id", input.vendorKey.vendorId).eq("is_active", true).maybeSingle<KeyRow>()
       : supabase.from("tenant_vendor_post_keys").select(columns).eq("key_hash", hash).maybeSingle<KeyRow>();
-  let { data: keyRow, error: keyError } = await readKey("id, tenant_id, vendor_id, field_map, is_active, campaign_id");
+  let { data: keyRow, error: keyError } = await readKey(KEY_COLUMNS_R8);
+  // Before round 8's columns exist no key is in test mode, capped, timed or in a grace window.
+  if (isMissingSchema(keyError)) ({ data: keyRow, error: keyError } = await readKey("id, tenant_id, vendor_id, field_map, is_active, campaign_id"));
   // Before the campaign-binding column exists every key is unbound, which is what it was.
   if (isMissingSchema(keyError)) ({ data: keyRow, error: keyError } = await readKey("id, tenant_id, vendor_id, field_map, is_active"));
 
   if (keyError) {
     return { status: 500, outcome: "error", reasonCode: "unauthorised", leadId: null, message: "The key could not be checked." };
   }
-  if (!keyRow || !keyRow.is_active) {
+  // A rotated-out key keeps working through the grace window the owner chose when rotating it.
+  const inGrace = Boolean(keyRow && !keyRow.is_active && keyRow.grace_until && keyRow.grace_until > new Date().toISOString() && !input.vendorKey);
+  if (!keyRow || (!keyRow.is_active && !inGrace)) {
     // Same answer for "no such key" and "key disabled": telling the caller which one would let
     // somebody enumerate valid keys.
     if (input.vendorKey) return { status: 422, outcome: "rejected", reasonCode: "unauthorised", leadId: null, message: "That vendor has no active posting key. Create one in Settings › Lead posting." };
     return { status: 401, outcome: "rejected", reasonCode: "unauthorised", leadId: null, message: "That posting key is not valid." };
   }
 
-  const log = async (outcome: PostOutcome, extra: { campaignId?: string | null } = {}) => {
+  const testMode = keyRow.test_mode === true;
+  const log = async (given: PostOutcome, extra: { campaignId?: string | null } = {}) => {
+    const outcome: PostOutcome = testMode ? { ...given, test: true } : given;
     const row = {
       tenant_id: keyRow.tenant_id,
       vendor_id: keyRow.vendor_id,
@@ -153,15 +183,34 @@ export async function acceptPostedLead(input: {
     // Which key the post arrived on, so the settings screen can count posts per key. Retried
     // without it until the column exists: losing the key id is fine, losing the log row is not —
     // it is what the vendor's invoice is disputed against.
-    let { error } = await supabase.from("tenant_lead_post_log").insert({ ...row, key_id: keyRow.id } as never);
+    // A test-mode key's posts are kept apart (is_test exists whenever test_mode does).
+    const keyed = { ...row, key_id: keyRow.id, ...(testMode ? { is_test: true } : {}) };
+    let { error } = await supabase.from("tenant_lead_post_log").insert(keyed as never);
     if (isMissingSchema(error)) ({ error } = await supabase.from("tenant_lead_post_log").insert(row));
     // The four newer reason codes need 20260924240000 in the log's check constraint. Until then the
     // row is kept under the nearest older code; the vendor was still answered with the precise one.
-    const legacy = LEGACY_LOG_CODE[outcome.reasonCode as ValidationReasonCode];
+    const legacy = LEGACY_LOG_CODE[outcome.reasonCode as ValidationReasonCode] ?? R8_LEGACY_LOG_CODE[outcome.reasonCode];
     if (error?.code === "23514" && legacy) {
       const older = { ...row, reason_code: legacy };
-      ({ error } = await supabase.from("tenant_lead_post_log").insert({ ...older, key_id: keyRow.id } as never));
-      if (isMissingSchema(error)) await supabase.from("tenant_lead_post_log").insert(older);
+      ({ error } = await supabase.from("tenant_lead_post_log").insert({ ...keyed, reason_code: legacy } as never));
+      if (isMissingSchema(error)) await supabase.from("tenant_lead_post_log").insert(older as never);
+    }
+    // The vendor's status address, for the outcomes it asked about (round 8). Sent after the reply.
+    const event = outcome.outcome === "accepted" ? "accepted" : outcome.outcome === "rejected" ? "refused" : null;
+    if (keyRow.status_callback_url && event && (keyRow.status_callback_events ?? []).includes(event) && outcome.status !== 429) {
+      outcome.callback = {
+        url: keyRow.status_callback_url,
+        keyId: keyRow.id,
+        body: {
+          event,
+          accepted: outcome.outcome === "accepted",
+          reason_code: outcome.reasonCode,
+          lead_id: outcome.leadId,
+          idempotency_key: input.idempotencyKey,
+          test: testMode,
+          at: new Date().toISOString(),
+        },
+      };
     }
     return outcome;
   };
@@ -251,6 +300,26 @@ export async function acceptPostedLead(input: {
     return log({ status: 422, outcome: "rejected", reasonCode: "invalid_date_of_birth", leadId: null, message: "The date of birth could not be read. Send MM/DD/YYYY or YYYY-MM-DD, a real date in the past." });
   }
 
+  // ── round 8: the vendor's posting hours and daily cap (never for a test post) ──
+  const hours = readPostingHours(keyRow.posting_hours);
+  if (!testMode && hours && !withinPostingHours(hours, new Date())) {
+    return log({ status: 422, outcome: "rejected", reasonCode: "outside_posting_hours", leadId: null, message: `Leads are taken ${describeHours(hours)} (${hours.timeZone}). Post again inside those hours.` });
+  }
+  if (!testMode && typeof keyRow.daily_cap === "number" && keyRow.daily_cap > 0) {
+    const dayStart = startOfDayIn(hours?.timeZone ?? "America/Chicago").toISOString();
+    const { count: acceptedToday } = await supabase
+      .from("tenant_lead_post_log")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", keyRow.tenant_id)
+      .eq("vendor_id", keyRow.vendor_id)
+      .eq("outcome", "accepted")
+      .eq("is_test" as never, false as never)
+      .gte("received_at", dayStart);
+    if ((acceptedToday ?? 0) >= keyRow.daily_cap) {
+      return log({ status: 409, outcome: "rejected", reasonCode: "daily_cap_reached", leadId: null, message: `Today's cap of ${keyRow.daily_cap} leads is reached. Post again tomorrow.` });
+    }
+  }
+
   // ── the campaign must be accepting ───────────────────────────────────────
   // campaigns_servable carries LA-2.3's scrub gate as well as the active check, so an unscrubbed
   // campaign cannot take real-time leads either. One gate, read from one place.
@@ -259,11 +328,11 @@ export async function acceptPostedLead(input: {
   // vendor's accepting campaign, as every key did before binding existed.
   let campaignQuery = supabase
     .from("campaigns_servable")
-    .select("id")
+    .select("id, product_code")
     .eq("tenant_id", keyRow.tenant_id)
     .eq("vendor_id", keyRow.vendor_id);
   if (keyRow.campaign_id) campaignQuery = campaignQuery.eq("id", keyRow.campaign_id);
-  const { data: campaign, error: campaignError } = await campaignQuery.limit(1).maybeSingle<{ id: string }>();
+  const { data: campaign, error: campaignError } = await campaignQuery.limit(1).maybeSingle<{ id: string; product_code: string | null }>();
 
   if (campaignError) {
     return log({ status: 503, outcome: "error", reasonCode: "campaign_not_accepting", leadId: null, message: "The campaign could not be checked." });
@@ -326,6 +395,17 @@ export async function acceptPostedLead(input: {
     }, { campaignId: campaign.id });
   }
 
+  // ── round 8: a test-mode key stops here ─────────────────────────────────────
+  // Every check that costs nothing has run; the metered litigator/registry screening, the lead, the
+  // queue and the charge do not happen. The duplicate check is a read, so it is answered honestly.
+  if (testMode) {
+    const { data: seenLead } = await supabase.from("agent_leads").select("id").eq("tenant_id", keyRow.tenant_id).eq("values->>phone", phone).limit(1).maybeSingle<{ id: string }>();
+    if (seenLead) {
+      return log({ status: 409, outcome: "rejected", reasonCode: "duplicate", leadId: null, message: "Test post: this person is already in the system, so a real post would be refused as a duplicate." }, { campaignId: campaign.id });
+    }
+    return log({ status: 200, outcome: "accepted", reasonCode: "accepted", leadId: null, message: "Test post accepted: a real post like this would become a lead. Nothing was created or charged." }, { campaignId: campaign.id });
+  }
+
   // ── the vendor scrub: litigator and federal/state DNC ──────────────────────
   //
   // is_phone_suppressed above reads only the tenant's own lists. A litigator or registry DNC number
@@ -382,7 +462,9 @@ export async function acceptPostedLead(input: {
   // defines its fields. A posted lead has no template of its own, so it takes the tenant's active
   // one for the product — which is also what makes the lead openable in the workspace, since the
   // form renders from that template.
-  const productLine = typeof values.product_line === "string" ? values.product_line : "term_life";
+  // The vendor may name the product; otherwise the campaign's product decides the intake form
+  // (round 8: "Which campaign do their leads go to?" shows that form), and term life as before.
+  let productLine = typeof values.product_line === "string" ? values.product_line : campaign.product_code || "term_life";
 
   // Taken from the tenant's existing leads rather than from a template query.
   //
@@ -390,14 +472,28 @@ export async function acceptPostedLead(input: {
   // is already settled by whatever created its other leads. Re-deriving it here would be a second
   // opinion about the same question, and the two would diverge the first time a template was
   // versioned. Reading the answer the tenant is already using cannot diverge.
-  const { data: template } = await supabase
-    .from("agent_leads")
-    .select("template_id, template_version")
-    .eq("tenant_id", keyRow.tenant_id)
-    .eq("product_line", productLine)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{ template_id: string; template_version: number }>();
+  const templateFor = async (product: string) => {
+    const { data: used } = await supabase
+      .from("agent_leads")
+      .select("template_id, template_version")
+      .eq("tenant_id", keyRow.tenant_id)
+      .eq("product_line", product)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ template_id: string; template_version: number }>();
+    if (used) return used;
+    // Round 8: a product's active intake form, for the first lead of a product the agency has
+    // never had one of — the same choice every other intake path makes (templateChoice.ts).
+    const { data: candidates } = await supabase.from("templates").select("id, name, product_code, version, is_active, updated_at, created_at").eq("product_code", product).eq("is_active", true);
+    const chosen = chooseProductTemplate((candidates ?? []) as TemplateCandidate[]);
+    return chosen ? { template_id: chosen.id, template_version: chosen.version } : null;
+  };
+  let template = await templateFor(productLine);
+  // A campaign's product that has no form yet falls back to the old default rather than refusing.
+  if (!template && typeof values.product_line !== "string" && productLine !== "term_life") {
+    template = await templateFor("term_life");
+    if (template) productLine = "term_life";
+  }
 
   if (!template) {
     // Refused rather than invented. A lead attached to no template is a lead no screen can open,

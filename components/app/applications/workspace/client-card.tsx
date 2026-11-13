@@ -55,7 +55,7 @@ export function ClientCard({ name }: { name: string }) {
   return (
     <aside aria-label="The client and what is left" className="m-glass flex flex-col gap-3 rounded-xl border border-[color-mix(in_srgb,var(--primary)_30%,var(--border))] p-4 lg:sticky lg:top-[calc(var(--top-bar-h)+16px)]">
       <div className="flex items-center gap-3">
-        <span aria-hidden="true" className="inline-grid size-11 shrink-0 place-items-center rounded-[12px] bg-[var(--primary-soft)] text-sm font-bold text-[var(--accent-ink)]">{initials || "?"}</span>
+        <span aria-hidden="true" className="inline-grid size-11 shrink-0 place-items-center rounded-[12px] bg-[var(--highlight-soft)] text-sm font-bold text-[var(--highlight-ink)]">{initials || "?"}</span>
         <span className="min-w-0">
           <strong className="block truncate text-base font-semibold text-[var(--ink)]">{name}{state ? `, ${state}` : ""}</strong>
           <span className="text-xs text-[var(--muted)]">{onInterview ? "Builds itself from the answers" : "What we know"}</span>

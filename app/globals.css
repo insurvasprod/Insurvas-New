@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Mockup boards (docs/design/**) are standalone HTML with their own CSS; never scan them for classes (2026-11-12). */
+@source not "../docs";
 
 /*
  * Tailwind v4 has no `dark:` variant until one is declared. ThemeProvider puts `class="dark"` on
@@ -20,7 +22,7 @@
   --color-secondary-foreground: var(--color-text-dark);
   --color-muted: var(--color-row-bg);
   --color-muted-foreground: var(--color-text-muted);
-  --color-accent: var(--surface-alt);
+  --color-accent: var(--hover-wash);
   --color-accent-foreground: var(--color-text-dark);
   --color-destructive: var(--color-danger);
   --color-destructive-foreground: var(--color-on-danger);
@@ -98,27 +100,36 @@
   /* The guide's pressed shade (#008769) under ink text is 2.5:1; this keeps 4.5:1 while pressed. */
   --accent-pressed: #08ba8d;
 
-  /* Text. Ink is the brand's deep olive (11:1 on white). */
+  /* Text. Ink is the brand's deep olive (11:1 on white). Body and muted carry the brand's green hue
+     (light theme v1, Sage, owner 2026-11-12): the old blue-greys (~220°) fought the green (~165°). */
   --ink:   #0d4037;
-  --body:  #2f343c;
-  --muted: #59606b;
+  --body:  #26332e;
+  --muted: #4d5f58;
 
-  /* Surfaces */
-  /* The ramp is the whole reason the product read as one flat sheet. canvas was #fcfcfd against
-     a #ffffff card — 1.03:1, which is invisible: a card could not be seen against the page it sat
-     on. The page is a real grey (1.11:1 behind a card) and the grouped band a real step (1.23:1),
-     so depth comes from the ramp before a single shadow is spent. */
-  --canvas:         #f1f3f7;
+  /* Surfaces. "C · White + olive lines" (docs/design/light-v1/mockup.html; owner 2026-11-12, after
+     trying A · Sage: "this isn't much difference"). A near-white page; the structure is carried by
+     green-tinted lines and olive-tinted header bands, not by grey fills or shadows. Every neutral
+     takes the brand's green hue, the same family as the dark theme's olive. */
+  --canvas:         #fbfcfb;
   --surface:        #ffffff;
-  --surface-alt:    #e4e8ee;
-  --surface-sunken: #dbe0e8;
+  /* The olive band: table heads, a card's head, a chip's ground. Never a slab inside a card. */
+  --surface-alt:    #e9f2ee;
+  --surface-sunken: #dfe9e4;
+  /* A tile inside a card: white, outlined by --tile-edge. A hover: a faint green wash. */
+  --surface-tile:   #ffffff;
+  --tile-edge:      #d9e5df;
+  --hover-wash:     #f1f7f4;
+  /* The line between table rows: visible on white, quieter than a card's edge. */
+  --rule:           #dbe6e1;
+  /* What sits behind a dialog or a drawer. */
+  --backdrop:       rgba(13, 40, 34, .38);
   /* The soft green ground: the rail's active chip, action chips, a selected row. */
   --primary-soft:   #dcfaf0;
-  --developer-bg:   #eaedf2;
+  --developer-bg:   #eef4f1;
 
   /* Lines. --border is a rule; --border-strong is the edge that says "type here" (3:1, WCAG 1.4.11). */
-  --border:        #d5dbe3;
-  --border-strong: #7a828e;
+  --border:        #cbd8d2;
+  --border-strong: #6d7f77;
 
   /* The focus ring: mid green, 4.6:1 on white and 3.6:1 on the grey band (>= 3:1 for a ring). */
   --ring-color:    #008769;
@@ -126,12 +137,13 @@
   /* Semantic. Success is a deeper, yellower green than the brand so "approved" never reads as
      "brand"; info is blue so "in progress" never reads as either. */
   --success: #117a3d;
-  --warning: #a35200;
+  /* Burnt orange since gold became the third brand colour (2026-11-12), so "needs action" never reads as gold. */
+  --warning: #b04400;
   --error:   #c62828;
   --info:    #2563b8;
 
   --success-surface: #e0f3e7;
-  --warning-surface: #fcefdf;
+  --warning-surface: #fde8dc;
   --error-surface:   #fdeaea;
   --info-surface:    #e3edfa;
 
@@ -143,12 +155,24 @@
   /* Brand-coloured TEXT on a light surface — a link, an active label. */
   --accent-ink: #00735a;
 
+  /* The third brand colour: gold (owner pick 2026-11-12, docs/design/accent-v1/mockup.html). Green acts, olive frames,
+     gold HIGHLIGHTS: a number that went up, the second line on a chart, people (avatars), what is new and the counts on
+     the bell and the rail, and at most one feature button a page. Never a status and never an everyday button.
+     --highlight is a fill (1.9:1 on white, like the bright green: never text); text in gold is --highlight-ink. */
+  --highlight:      #f2b33d;
+  --on-highlight:   #0d4037;
+  --highlight-ink:  #8a5a00;
+  --highlight-soft: #fdf2d9;
+  /* Gold as a mark on white (a chart line, a dot): deep enough to read as a line. */
+  --highlight-mark: #c98a12;
+
   /* The only shadows in the product. --shadow-brand is the guide's feature-card hover, for
      clickable marketing cards only; data tables never lift. */
-  --shadow-rest:    0 1px 2px rgba(13, 64, 55, .06);
-  --shadow-hover:   0 4px 16px rgba(0, 0, 0, .12);
+  /* Light shadows are olive, not black. A resting card has only a hairline under it: its edge does the work. */
+  --shadow-rest:    0 1px 0 rgba(13, 64, 55, .04);
+  --shadow-hover:   0 2px 4px rgba(13, 64, 55, .06), 0 14px 32px -14px rgba(13, 64, 55, .26);
   --shadow-brand:   0 4px 16px rgba(7, 214, 160, .15);
-  --shadow-overlay: 0 24px 64px rgba(0, 0, 0, .24);
+  --shadow-overlay: 0 2px 6px rgba(13, 64, 55, .08), 0 28px 60px -12px rgba(13, 64, 55, .28);
 
   /* v3 gloss (UI-CONSISTENCY.md §4a): the metric-card surface. Read only through the stat card and
      the dashboard metric cards; never paint a page or a table with it. A soft top-lit gradient with
@@ -157,14 +181,14 @@
   --gloss-top:          #ffffff;
   --gloss-bottom:       #f6f9f8;
   --gloss-sheen:        rgba(7, 214, 160, .08);
-  --gloss-edge:         #d9dfe6;
+  --gloss-edge:         #cbd8d2;
   --gloss-rim:          rgba(255, 255, 255, .95);
   --gloss-highlight:    #ffffff;
   --gloss-glare:        rgba(255, 255, 255, .75);
   --gloss-shadow:       0 1px 1px rgba(13, 64, 55, .04), 0 2px 4px -1px rgba(13, 64, 55, .05), 0 14px 30px -18px rgba(13, 64, 55, .24);
   --gloss-shadow-hover: 0 1px 1px rgba(13, 64, 55, .04), 0 6px 10px -4px rgba(13, 64, 55, .08), 0 24px 40px -20px rgba(13, 64, 55, .32);
-  --gloss-foot:         rgba(228, 232, 238, .55);
-  --gloss-divider:      #e1e6ec;
+  --gloss-foot:         rgba(230, 238, 234, .55);
+  --gloss-divider:      #e3ebe7;
   /* The glossy icon tile at the top-left of a stat card. */
   --stat-icon-top:       #eafbf4;
   --stat-icon-bottom:    #c9f2e2;
@@ -174,16 +198,16 @@
 
   /* The semantic fills, again as TEXT (4.5:1 on every light ground). */
   --success-ink: #0c6633;
-  --warning-ink: #8a4600;
+  --warning-ink: #9a3d00;
   --error-ink:   #ab1f1f;
   --info-ink:    #1d4f9a;
   /* Data hues: six series colours, 3:1 on surface. Charts only — never status or chrome. Series 1 is
      the brand's mid green (the bright green fails 3:1 as a mark on white). */
   --data-1: #0a8769;
-  --data-2: #4457c7;
+  --data-2: #c98a12;
   --data-3: #e04e00;
   --data-4: #b02a9b;
-  --data-5: #8a5a00;
+  --data-5: #4457c7;
   --data-6: #0091a8;
 
   /* And the glyph that sits ON one of those fills. */
@@ -210,10 +234,10 @@
 
   /* Categorical data, fixed order, never cycled; never reused for status. */
   --cat-1: #0a8769;
-  --cat-2: #4457c7;
+  --cat-2: #c98a12;
   --cat-3: #e04e00;
   --cat-4: #b02a9b;
-  --cat-5: #8a5a00;
+  --cat-5: #4457c7;
   --cat-6: #0091a8;
 
   /* Card network marks (Payment step): the networks' own colours, the same in both themes. */
@@ -248,7 +272,7 @@
   --color-text-mid:       var(--body);
   --color-text-muted:     var(--muted);
   --color-border:         var(--border);
-  --color-border-light:   #f0f1f3;
+  --color-border-light:   #e9f2ee;
   --color-danger:         var(--error);
   --color-success:        var(--success);
   --color-warning:        var(--warning);
@@ -317,18 +341,24 @@
   --surface-sunken: #040a08;
   --primary-soft:   #0f3a30;
   --developer-bg:   #0c1613;
+  /* Light theme v1 tokens, set to what dark already drew so dark does not change. */
+  --surface-tile:   #16241f;
+  --tile-edge:      transparent;
+  --hover-wash:     #16241f;
+  --rule:           #16241f;
+  --backdrop:       rgba(10, 12, 16, .55);
 
   --border:        #22342e;
   --border-strong: #5f7a71;
   --ring-color:    #07d6a0;
 
   --success: #45c07d;
-  --warning: #e2973a;
+  --warning: #f08a4b;
   --error:   #f0837c;
   --info:    #7fb0ff;
 
   --success-surface: #11291d;
-  --warning-surface: #2b1e0d;
+  --warning-surface: #2e180c;
   --error-surface:   #2d1412;
   --info-surface:    #10203a;
 
@@ -337,6 +367,13 @@
   --on-dark:    #fcfcfd;
 
   --accent-ink: #4fe3bb;
+
+  /* The third brand colour, gold: the fill does not shift; gold text lightens so it reads on the dark grounds. */
+  --highlight:      #f2b33d;
+  --on-highlight:   #0d4037;
+  --highlight-ink:  #f5c562;
+  --highlight-soft: #2b2210;
+  --highlight-mark: #f2b33d;
 
   /* A black shadow all but disappears on a dark canvas, so they are deepened rather than reused. */
   --shadow-rest:    0 1px 2px rgba(0, 0, 0, .55);
@@ -363,14 +400,14 @@
   --stat-icon-ring:      rgba(7, 214, 160, .22);
 
   --success-ink: #45c07d;
-  --warning-ink: #e2973a;
+  --warning-ink: #f08a4b;
   --error-ink:   #f0837c;
   --info-ink:    #7fb0ff;
   --data-1: #2fd6a6;
-  --data-2: #6a72db;
+  --data-2: #f2b33d;
   --data-3: #f2610d;
   --data-4: #c452b0;
-  --data-5: #b0821f;
+  --data-5: #6a72db;
   --data-6: #1ba3bd;
 
   --on-success: #08150e;
@@ -391,10 +428,10 @@
   --logo-gray: #6b7480;
 
   --cat-1: #2fd6a6;
-  --cat-2: #6a72db;
+  --cat-2: #f2b33d;
   --cat-3: #f2610d;
   --cat-4: #c452b0;
-  --cat-5: #b0821f;
+  --cat-5: #6a72db;
   --cat-6: #1ba3bd;
 
   --brand-50:  #0f2a23;
@@ -565,6 +602,8 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 @keyframes m-rise  { from { opacity: .72; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes m-fade  { from { opacity: 0; } to { opacity: 1; } }
 @keyframes m-grow  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* A slow ring round a "listening" icon (Inbound with nobody in line): grows and fades, loops; motion-safe only. */
+@keyframes m-ring  { from { opacity: .45; transform: scale(.88); } to { opacity: 0; transform: scale(1.25); } }
 /* A chart bar rising from its baseline (the dashboard's Today chart). */
 @keyframes m-grow-y { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .m-bar { transform-origin: bottom; animation: m-grow-y 600ms var(--e-out) both; }
@@ -610,6 +649,27 @@ select:not([multiple]):not([size]):disabled { cursor: not-allowed; }
 .m-chart-tween circle { transition: stroke-dasharray var(--t-data) var(--e-out), stroke-dashoffset var(--t-data) var(--e-out); }
 @keyframes m-sweep { from { transform: rotate(-90deg) scale(.92); opacity: 0; } to { transform: rotate(0) scale(1); opacity: 1; } }
 .m-sweep { transform-origin: center; animation: m-sweep 700ms var(--e-out) both; }
+/* Chart load (Reports round 7 foundation, 2026-11-11; owner: "short animations, smooth, that seems premium"). Every
+   chart in components/ui/chart.tsx and StatTile's trend animates in once, when it mounts: bars grow from their zero
+   line (m-chart-y up, m-chart-y-down below it, m-chart-x across), lines draw left to right (m-chart-reveal, a clip,
+   for a stretched drawing whose non-scaling dash Chrome measures on screen; m-chart-line, by the dash offset of a path
+   with pathLength="1", for a line drawn at its own size), areas fade in under them (m-chart-fade), and a line's end
+   dot lands last (m-chart-dot). 600ms on the ease-out; rows and bars 30ms apart by their --m-i (the kit caps it at 12), so a
+   chart is whole within a second. Transform, opacity and dash offset only. `backwards`, never `both`: a held
+   transform would make each bar a containing block. Reduced motion stands all of it still (below). */
+:root { --t-chart: 600ms; }
+@keyframes m-chart-x { from { transform: scaleX(0); } }
+@keyframes m-chart-y { from { transform: scaleY(0); } }
+.m-chart-x { transform-origin: left; animation: m-chart-x var(--t-chart) var(--e-out) backwards; animation-delay: calc(var(--m-i, 0) * 30ms); }
+.m-chart-y { transform-origin: bottom; animation: m-chart-y var(--t-chart) var(--e-out) backwards; animation-delay: calc(var(--m-i, 0) * 30ms); }
+.m-chart-y-down { transform-origin: top; animation: m-chart-y var(--t-chart) var(--e-out) backwards; animation-delay: calc(var(--m-i, 0) * 30ms); }
+.m-chart-reveal { animation: m-reveal-x var(--t-chart) var(--e-out) backwards; }
+.m-chart-line { stroke-dasharray: 1; animation: m-draw var(--t-chart) var(--e-out) backwards; animation-delay: calc(var(--m-i, 0) * 60ms); }
+.m-chart-fade { animation: m-fade var(--t-chart) var(--e-out) backwards; animation-delay: calc(80ms + var(--m-i, 0) * 60ms); }
+.m-chart-dot { animation: m-fade 200ms var(--e-out) backwards; animation-delay: calc(var(--t-chart) - 120ms); }
+@media (prefers-reduced-motion: reduce) {
+  .m-chart-x, .m-chart-y, .m-chart-y-down, .m-chart-reveal, .m-chart-line, .m-chart-fade, .m-chart-dot { animation: none; }
+}
 @keyframes m-sheen { from { background-position: -640px 0; } to { background-position: 640px 0; } }
 @keyframes m-pulse {
   0%   { box-shadow: 0 0 0 0 rgba(7, 214, 160, .42); }
@@ -727,7 +787,11 @@ main:has([data-nav-pending]) [data-page-content] { opacity: .6; transition-delay
 @keyframes m-vt-from-left { from { opacity: .72; transform: translateX(-12px); } }
 /* The stamp is put only on what is on screen as the page arrives (portal-page-transition.tsx): the page's root, or
    a merged page's step column. A page with its own m-stagger is not raised a second time on an `area` move. */
-.portal-page-transition [data-enter="area"] { animation: m-vt-rise var(--t-page) var(--e-out) backwards; }
+/* The calm cascade (owner 2026-11-12): an `area` page's sections each rise in turn, 50ms apart (--enter-i, capped at
+   four steps), so the title line, the strip and each card arrive one at a time and all is settled by about 0.4s.
+   Content that replaces a skeleton later settles in place (data-settle), in the same rhythm, never sliding again. */
+.portal-page-transition [data-enter="area"] { animation: m-vt-rise var(--t-page) var(--e-out) backwards; animation-delay: calc(var(--enter-i, 0) * 50ms); }
+.portal-page-transition [data-settle] { animation: m-content-in var(--t-page) var(--e-out) backwards; animation-delay: calc(var(--enter-i, 0) * 50ms); }
 .portal-page-transition [data-enter="forward"] { animation: m-vt-from-right var(--t-page) var(--e-out) backwards; }
 .portal-page-transition [data-enter="back"] { animation: m-vt-from-left var(--t-page) var(--e-out) backwards; }
 /* React <ViewTransition> (the motion lab's step demo, and any Transition-driven swap): the same three moves. */
@@ -756,17 +820,35 @@ body:has([data-nav-pending])::before {
   animation: m-nav-progress 2400ms var(--e-out) 150ms both;
 }
 
+/* Pending button (2026-11-13, `pending` on components/ui/button.tsx; first on Sign in): the same hairline, inside the
+   button along its foot, from the moment it is pressed until the answer or the next page is here. The button holds
+   its colour and its label says what is happening; it settles back from the press once, and nothing else moves. */
+@keyframes m-pending-press { from { transform: scale(.98); } }
+[data-slot="button"][data-pending] { position: relative; overflow: hidden; animation: m-pending-press var(--t-panel) var(--e-out); }
+[data-slot="button"][data-pending]::after {
+  content: ""; position: absolute; inset: auto 0 0 0; height: 2px; pointer-events: none;
+  background: currentColor; opacity: .5; transform-origin: left;
+  animation: m-nav-progress 2400ms var(--e-out) both;
+}
+
 /* Indicator (2026-11-09, components/ui/tab-track.tsx): in a segmented row the chosen look is one pill that slides
    between tabs; the tabs themselves sit over it with no fill of their own. */
 [data-tab-pill] {
   position: absolute; top: 0; left: 0; z-index: 0; pointer-events: none;
   border: 1px solid var(--color-border); border-radius: var(--radius-md, 6px);
-  background: var(--color-card); box-shadow: 0 1px 2px rgba(16, 20, 26, .06);
+  background: var(--color-card); box-shadow: 0 1px 2px rgba(13, 64, 55, .08);
 }
 [data-tab-pill="glide"] { transition: transform var(--t-panel) var(--e-out), width var(--t-panel) var(--e-out); }
 [data-tab-track="pill"] > [role="tab"] { position: relative; z-index: 1; }
 [data-tab-track="pill"] > [role="tab"][aria-selected="true"],
 [data-tab-track="pill"] > [role="tab"]:has(> [data-nav-pending]) { background: transparent; border-color: transparent; box-shadow: none; }
+/* The sub-page bar (owner 2026-11-09, UI-CONSISTENCY §8): the same slide, as the 2px green line under the chosen tab. */
+[data-tab-pill][data-tab-indicator="underline"] { border: 0; border-radius: 1px; background: var(--primary); box-shadow: none; }
+[data-tab-track="underline"] > [role="tab"][aria-selected="true"],
+[data-tab-track="underline"] > [role="tab"]:has(> [data-nav-pending]) { border-bottom-color: transparent; }
+/* A clicked sub-page tab reads chosen at once: bright text and the green line, never a pill. */
+[data-tab-track="underline"] > [role="tab"]:has(> [data-nav-pending]) { background: transparent; color: var(--color-foreground); }
+[data-tab-track=""] > [role="tab"]:has(> [data-nav-pending]) { background: transparent; border-color: transparent; border-bottom-color: var(--primary); }
 
 /* The tab that was clicked looks chosen at once, before its view arrives. */
 [role="tab"]:has(> [data-nav-pending]) { color: var(--color-foreground); background: var(--color-card); border-color: var(--color-border); }
@@ -807,7 +889,9 @@ html.shell-enter .portal-agent main > :last-child { animation: m-rise 480ms var(
 
 /* Signing out (Wave 8): the workspace dims and settles back while the sign-in page comes; never to blank. */
 .portal-agent { transition: opacity var(--t-page) var(--e), transform var(--t-page) var(--e); }
-html.shell-leave .portal-agent { opacity: .55; transform: scale(.99); pointer-events: none; }
+/* Only the workspace dims: the agent sign-in page wears `portal-agent` too (auth-layout.tsx), and dimming it left a
+   grey page nobody could click until a reload (owner, 2026-11-13). */
+html.shell-leave .portal-agent:not(.portal-tenant-auth-shell) { opacity: .55; transform: scale(.99); pointer-events: none; }
 
 /* Sign-up steps (Wave 8, components/portal/auth-layout.tsx): from step to step the bars hold still and only the
    step's own content slides in from the right, as the funnel moves on. A door without bars keeps its rise. */
@@ -850,6 +934,8 @@ html.shell-leave .portal-agent { opacity: .55; transform: scale(.99); pointer-ev
    marks a row you are about to act on. */
 .m-row { transition: background-color var(--t-micro) var(--e); }
 .m-row:hover { background: color-mix(in srgb, var(--primary), transparent 95%); }
+/* Light: 5% green vanished on white; 8% reads as "this row" without shouting. */
+:root:not(.dark) .m-row:hover { background: color-mix(in srgb, var(--primary), transparent 92%); }
 
 /* 11 · The arrow that moves toward what it opens. */
 .m-arrow svg { transition: transform var(--t-micro) var(--e); }
@@ -942,9 +1028,11 @@ html.shell-leave .portal-agent { opacity: .55; transform: scale(.99); pointer-ev
   min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
   display: inline-flex; align-items: center; justify-content: center;
   border: 2px solid var(--surface); border-radius: 999px;
-  background: var(--error); color: var(--on-error);
-  font-size: 10px; font-weight: 600; line-height: 1;
+  /* Gold (the third brand colour, 2026-11-12): a count of new things. Red is kept for the alert badge below. */
+  background: var(--highlight); color: var(--on-highlight);
+  font-size: 10px; font-weight: 700; line-height: 1;
 }
+.portal-top-badge.is-alert { background: var(--error); color: var(--on-error); }
 /* Must be done now (owner 2026-11-02): one bell for notifications and alerts; the urgent item counts on
    its badge and is the Inbox's pinned first row. */
 .portal-top-urgent-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 4px; }
@@ -966,8 +1054,9 @@ html.shell-leave .portal-agent { opacity: .55; transform: scale(.99); pointer-ev
 @media (max-width: 1099px) { .portal-top-account-name { display: none; } }
 .portal-top-avatar {
   display: inline-flex; width: 26px; height: 26px; align-items: center; justify-content: center;
-  border-radius: 999px; background: var(--primary-soft); color: var(--accent-ink);
-  font-size: 11px; font-weight: 600; line-height: 1;
+  /* People are gold (the third brand colour, 2026-11-12), so a person never reads as a status or an action. */
+  border-radius: 999px; background: var(--highlight); color: var(--on-highlight);
+  font-size: 11px; font-weight: 700; line-height: 1;
 }
 .portal-top-avatar-lg { width: 34px; height: 34px; font-size: .875rem; flex-shrink: 0; }
 
@@ -1099,6 +1188,11 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-agent [data-slot="card"],
 .portal-partner [data-slot="card"] {
   border-color: var(--portal-line);
+}
+/* Light theme v1 (2026-11-12): a light card keeps --shadow-rest (a hairline under it on the white page); dark cards
+   carry their glass edge instead. */
+.dark .portal-agent [data-slot="card"],
+.dark .portal-partner [data-slot="card"] {
   box-shadow: none;
 }
 
@@ -1130,7 +1224,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-toggle { position: relative; display: inline-flex; cursor: pointer; }
 .portal-toggle input { position: absolute; opacity: 0; }
 .portal-toggle span { display: block; width: 2.5rem; height: 1.5rem; border-radius: 999px; background: var(--border-strong); transition: background-color 150ms ease; }
-.portal-toggle span::after { content: ""; display: block; width: 1.125rem; height: 1.125rem; margin: .1875rem; border-radius: 999px; background: white; transition: transform 150ms ease; }
+.portal-toggle span::after { content: ""; display: block; width: 1.125rem; height: 1.125rem; margin: .1875rem; border-radius: 999px; background: var(--surface); box-shadow: 0 1px 2px rgba(13, 64, 55, .25); transition: transform 150ms ease; }
 .portal-toggle input:checked + span { background: var(--portal-primary); }
 .portal-toggle input:checked + span::after { transform: translateX(1rem); }
 .portal-toggle input:focus-visible + span { outline: 3px solid color-mix(in srgb, var(--portal-primary), transparent 65%); outline-offset: 2px; }
@@ -1456,7 +1550,7 @@ a.portal-top-foot-action { text-decoration: none; }
 .portal-team-member-name > span:last-child { display: grid; min-width: 0; gap: .18rem; }
 .portal-team-member-name strong { overflow: hidden; color: var(--portal-ink); font-size: .77rem; text-overflow: ellipsis; white-space: nowrap; }
 .portal-team-member-name small { overflow: hidden; color: var(--portal-muted); font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }
-.portal-team-member-avatar { display: inline-grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: 8px; background: var(--surface-alt); color: var(--ink); font-size: .7rem; font-weight: 600; }
+.portal-team-member-avatar { display: inline-grid; width: 2rem; height: 2rem; flex: 0 0 2rem; place-items: center; border-radius: 8px; background: var(--highlight-soft); color: var(--highlight-ink); font-size: .7rem; font-weight: 600; }
 .portal-team-email, .portal-team-parent { max-width: 13rem; overflow: hidden; color: var(--portal-muted); font-size: .72rem; text-overflow: ellipsis; white-space: nowrap; }
 .portal-team-role { display: inline-flex; align-items: center; gap: .35rem; color: var(--portal-ink); font-size: .72rem; white-space: nowrap; }
 .portal-team-role svg { width: .85rem; height: .85rem; color: var(--portal-muted); }
@@ -2635,6 +2729,10 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent-nav-business-group .portal-agent-nav-icon { width: 1rem; height: 1rem; }
 .portal-agent-nav-business-group .portal-agent-nav-sublist-nested { margin-left: 0 !important; padding-left: 0 !important; }
 .portal-agent-nav-settings { margin-top: .125rem !important; }
+/* The rail's foot (owner 2026-11-13): Docs above Settings, pinned to the bottom of the rail. */
+.portal-agent-nav { min-height: 100%; grid-template-rows: auto; align-content: start; }
+.portal-agent-nav:has(> .portal-agent-nav-foot) { display: flex; flex-direction: column; }
+.portal-agent-nav-foot { margin-top: auto; padding-top: .75rem; display: grid; gap: .125rem; }
 .portal-agent-sidebar-desktop.is-collapsed { width: 76px; padding-inline: .55rem; }
 .portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-brand { padding-inline: .15rem; }
 .portal-agent-sidebar-desktop.is-collapsed .portal-agent-sidebar-brand > div { justify-content: center; }
@@ -2826,7 +2924,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-callback-table tbody tr,
 .portal-campaigns-table tbody tr,
 .portal-lead-table tbody tr,
-.portal-team-table tbody tr { border-bottom: 1px solid var(--surface-alt); }
+.portal-team-table tbody tr { border-bottom: 1px solid var(--rule); }
 
 /* ==========================================================================
  * The rail, as drawn.
@@ -3254,7 +3352,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 
 /* Partner Team review (p-par-team-review): a date range with Apply, four figures against the
    previous period, the trend beside Team pulse, then one table of the team. */
-.portal-partner-review-backdrop { position: fixed; z-index: 39; inset: 0; background: rgba(15, 18, 22, .16); pointer-events: none; }
+.portal-partner-review-backdrop { position: fixed; z-index: 39; inset: 0; background: color-mix(in srgb, var(--backdrop) 42%, transparent); pointer-events: none; }
 
 /* Gates (p-gate-404, p-gate-feature, p-gate-role): one 620px card on the canvas — a 52px icon,
    a 24px title, the reason in two sentences, the way out — then the facts and a tinted note. */
@@ -3279,7 +3377,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-gate-facts dd { margin: 4px 0 0; color: var(--ink); font-size: 14px; line-height: 1.5; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
 .portal-gate-reach { margin-top: 24px; }
 .portal-gate-reach table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 14px; line-height: 1.5; letter-spacing: -.02em; }
-.portal-gate-reach th, .portal-gate-reach td { padding: 8px 12px; border-top: 1px solid var(--surface-alt); text-align: left; color: var(--body); font-weight: 400; }
+.portal-gate-reach th, .portal-gate-reach td { padding: 8px 12px; border-top: 1px solid var(--rule); text-align: left; color: var(--body); font-weight: 400; }
 .portal-gate-reach thead th { height: 32px; border-top: 0; background: var(--surface-alt); color: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
 .portal-gate-reach tbody th { color: var(--ink); font-weight: 600; }
 .portal-gate-reach tr.is-current { background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
@@ -3307,7 +3405,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-callbacks-settled > summary::-webkit-details-marker { display: none; }
 .portal-callbacks-settled > summary h2::after { content: " \25BE"; color: var(--muted); }
 .portal-callbacks-settled[open] > summary h2::after { content: " \25B4"; }
-.portal-callbacks-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--surface-alt); }
+.portal-callbacks-row { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-top: 1px solid var(--rule); }
 .portal-callbacks-panel-bar + .portal-callbacks-row { border-top: 0; }
 .portal-callbacks-row.is-selected { background: color-mix(in srgb, var(--primary) 6%, var(--surface)); }
 .portal-callbacks-who { flex: 1 1 0; min-width: 140px; }
@@ -3375,7 +3473,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-campaigns-row.is-open { background: color-mix(in srgb, var(--primary) 8%, var(--surface)); }
 .portal-campaigns-name { border: 0; background: none; padding: 0; color: var(--ink); font: inherit; font-size: 14px; font-weight: 600; text-align: left; cursor: pointer; }
 .portal-campaigns-detail-row > td { padding: 0; white-space: normal; }
-.portal-campaigns-detail { display: flex; flex-direction: column; gap: 14px; padding: 16px; border-top: 1px solid var(--surface-alt); background: var(--canvas); }
+.portal-campaigns-detail { display: flex; flex-direction: column; gap: 14px; padding: 16px; border-top: 1px solid var(--rule); background: var(--canvas); }
 .portal-campaigns-detail dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 12px 24px; margin: 0; }
 .portal-campaigns-detail dt { color: var(--muted); font-size: 12px; line-height: 1.33; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
 .portal-campaigns-detail dd { margin: 4px 0 0; color: var(--ink); font-size: 14px; line-height: 1.5; font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -3516,7 +3614,7 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
    flat, a blur would do nothing, and it is left off to keep long tables cheap to scroll.
    In the components layer, so a caller's own bg-* or shadow-* utility still wins. */
 :root {
-  --glass-alpha: 88%;
+  --glass-alpha: 100%;
   --glass-highlight: color-mix(in srgb, white 75%, transparent);
   --ambient-opacity: .2;
 }
@@ -3563,6 +3661,10 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
   .m-glass-head { background-color: color-mix(in srgb, var(--surface-alt) 45%, transparent); }
   /* A tile or row inside a glass card: lighter, so it reads as a layer of the card. */
   .m-glass-inset { background-color: color-mix(in srgb, var(--color-card) 40%, transparent); }
+  /* Light: a solid card under it, so the inset is a white tile with an olive-tinted edge, not a grey slab. */
+  :root:not(.dark) .m-glass-inset { background-color: var(--surface-tile); box-shadow: inset 0 0 0 1px var(--tile-edge); }
+  /* Light: the card's head is the full olive band (the structure of White + olive lines). */
+  :root:not(.dark) .m-glass-head { background-color: var(--surface-alt); }
 }
 
 /* Foundation v3, 2026-10-27: every app, console and partner page sits on one stage, drawn by the
@@ -3837,7 +3939,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .m-ribbon { position: sticky; top: var(--top-bar-h, 56px); display: block; width: 100%; height: calc(100vh - var(--top-bar-h, 56px)); }
 /* 55%: the see-through card the owner chose for Settings (2026-10-26), now on every page. Set on the
    stage itself since the ribbon left the app (main, 2026-10-28: a quiet canvas), so the glass stays. */
-.m-stage, .m-stage--ribbon { --glass-alpha: 55%; }
+/* Light theme v1 (owner 2026-11-12): light cards are solid white; the see-through card stays dark's. */
+.m-stage, .m-stage--ribbon { --glass-alpha: 100%; }
 .dark .m-stage, .dark .m-stage--ribbon { --glass-alpha: 55%; }
 
 /* Launchpad tiles and the lead-to-money map (components/ui/launch-tile*, lead-flow-map; 2026-10-25). */
@@ -3984,7 +4087,8 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-nav-pinned { padding-bottom: 6px; border-bottom: 1px solid var(--nav-line); margin-bottom: 4px; }
 .portal-nav-count {
   flex: none; display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; box-sizing: border-box;
-  border-radius: 6px; background: color-mix(in srgb, var(--nav-success), transparent 82%); color: var(--nav-success);
+  /* Counts on the rail are gold (the third brand colour): what is waiting, not what is chosen (green). */
+  border-radius: 6px; background: color-mix(in srgb, var(--highlight), transparent 82%); color: var(--highlight);
   font-size: .75rem; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums;
 }
 .portal-nav-link[aria-current="page"] .portal-nav-count { background: color-mix(in srgb, var(--nav-active-icon), transparent 80%); color: var(--nav-active-ink); }
@@ -4194,17 +4298,21 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 .portal-agent .portal-agent-nav.is-collapsed .portal-agent-nav-icon { transition: none; transform: none !important; }
 }
 
-/* Merged pages (StepFrame, Compliance, Reports, Leads in; UI-CONSISTENCY §8a, owner 2026-11-02): the
-   title's column is the rail's width, so the step's tabs start on the cards' left edge. A collapsed rail
-   (72px) is narrower than any title, so the tabs follow the title instead, set off by a hairline. */
+/* The sub-page bar on the title line (UI-CONSISTENCY §8b, owner 2026-11-09, second ask): from lg up one hairline runs
+   from the first tab to the line's end, under the buttons too, and the buttons stand above it with a small gap
+   (PageHeader `SubpageLine`). The tabs' own hairline is dropped inside it, so there is one line, not two. A line whose
+   slot has no tabs yet draws no hairline. SettingsSectionHeader draws the same line. */
+@media (min-width: 1024px) {
+  [data-subpage-line] [data-subpage-tabs], [data-subpage-line] [role="tablist"] { border-bottom-width: 0; }
+  [data-subpage-line]:not(:has([data-page-tabs] [role="tab"])) { border-bottom-width: 0; align-items: center; }
+  [data-subpage-line]:not(:has([data-page-tabs] [role="tab"])) > [data-page-actions] { margin-bottom: 0; }
+}
+/* Merged pages (StepFrame, Compliance, Reports, Leads in): the rail's width, read by the frame's own layout. The bar
+   no longer follows it — it sits 16px after the title whether the rail is open or collapsed (owner 2026-11-09). */
 [data-step-frame] { --frame-rail-w: 248px; }
 [data-step-frame]:has(> * > nav[data-collapsed]) { --frame-rail-w: 72px; }
-@media (min-width: 1024px) {
-  [data-step-frame]:has(> * > nav[data-collapsed]) [data-page-lead]:has(button, a, [role="tab"]) {
-    border-left: 1px solid var(--border);
-    padding-left: 1rem;
-  }
-}
+/* A tabs row whose slot has nothing in it yet (a client screen portals its tabs in) takes no room. */
+[data-page-tabs]:not(:has([role="tab"], button, a, input, select, [role="combobox"], [data-tabs-room])) { display: none; }
 
 /* A carrier file's stages fill up in order, once (owner 2026-11-02): the bar grows from its left, the
    step's mark pops in after the line that reaches it. Never loops (§17); off under reduced motion. */
@@ -4451,3 +4559,16 @@ html.theme-reveal::view-transition-new(root) { z-index: 1; }
 }
 /* The field draws one frame and holds it under reduced motion (wave-field.tsx), which is why the
    panel carries no pause button (owner, 2026-11-12). */
+
+/* Light theme v1, "C · White + olive lines" (owner 2026-11-12): on the white page a table's head is the full olive band,
+   so the structure reads from lines and bands; dark keeps its see-through head. */
+:root:not(.dark) :is(
+    .portal-activity-table,
+    .portal-callback-table,
+    .portal-campaigns-table,
+    .portal-lead-table,
+    .portal-partner-pipeline-page,
+    .portal-partner-quality-page,
+    .portal-partners-page > div.grid > [data-slot="card"],
+    .portal-team-table
+  ) thead th { background: var(--surface-alt); }

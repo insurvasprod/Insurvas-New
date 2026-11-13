@@ -10,16 +10,16 @@ import { agencyStepLabel, type AgencyStep } from "@/lib/agency/steps";
  * on the dashboard instead, and its pages trail back "Home › Agency › Producers". Each page keeps its own address and
  * its own route's gate (`/app/agency`, `/app/producers`, `/app/producers/<id>`, `/app/producers/invite`).
  *
- * Everything above the page is on the title line: `lead` holds its tabs, `actions` at most two buttons and a More
+ * Everything above the page is on the title line: `tabs` holds its sub-page bar, `actions` at most two buttons and a More
  * menu, `info` the page's (i). A record (a producer) passes its `title`, its status `chip` and one line of `facts`.
  */
-export function AgencyPage({ step, title, info, chip, facts, lead, actions, children }: {
+export function AgencyPage({ step, title, info, chip, facts, tabs, actions, children }: {
   step: AgencyStep;
   title?: string;
   info?: ReactNode;
   chip?: ReactNode;
   facts?: ReactNode;
-  lead?: ReactNode;
+  tabs?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
@@ -31,7 +31,7 @@ export function AgencyPage({ step, title, info, chip, facts, lead, actions, chil
         titleInfo={info || chip ? <>{info ? <InfoTip label={`About ${shown}`} side="right">{info}</InfoTip> : null}{chip}</> : undefined}
         // The facts wrap in the title's column, at least 360px wide, so a long line cannot squeeze the tabs at 1280.
         meta={facts ? <p className="mt-1 text-sm text-muted-foreground lg:min-w-[360px] lg:[contain:inline-size]">{facts}</p> : undefined}
-        lead={lead}
+        tabs={tabs}
         actions={actions}
         className="lg:pb-2"
       />

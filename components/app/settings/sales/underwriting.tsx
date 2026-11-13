@@ -1,61 +1,57 @@
 "use client";
 
 /**
- * Settings › Sales › Underwriting templates (LA-3.1). Reads and writes
- * /api/app/settings/sales/templates?kind=underwriting; `?preview=sample` (outside production) renders
- * the design fixtures and saves nothing.
+ * Settings › Sales process › Health questions (was Underwriting templates, LA-3.1). Reads and writes
+ * /api/app/settings/sales/templates?kind=underwriting; `?preview=sample` (outside production) renders the design
+ * fixtures and saves nothing.
  *
- * Round 2, owner pick B (2026-10-30, canvas page settings-uw-templates-r2): one list grouped by
- * product line, each group saying which template a call loads now (the interview's own ladder,
- * lib/salesSettings/templateCoverage.ts); each row says what it is for and who changed it last.
- * The editor has one primary action (Publish, or Copy to my agency), the rest under ⋯, and the save
- * bar at the bottom naming what the edit changes. Tabs: Questions (with the bank), Try it (the
- * preview, asked as a client of an age and tobacco use) and Versions. Saving a draft changes it in
- * place; saving an edit to a live version makes version N + 1 as a draft, and interviews already
- * started keep the version they began on.
+ * Settings round 8 (owner pick A, sales-process board "1 · Health questions", 2026-11-12): three cards side by
+ * side — the question sets (one per carrier × product), the open set's questions in the order the Interview asks
+ * them, and Try it beside them. A question opens in a right sheet. One save model: every edit goes into the set's
+ * draft as it is made (a live set's first edit starts version N + 1 as a draft), and Publish vN puts the draft
+ * live after a review of what it changes. Interviews already started keep the version they began on.
+ *
+ * Knockouts rule a carrier out; the board's other outcomes (Rate up, Graded only, Postpone, a decline reason
+ * code) are not in the stored template, so they are not offered here.
  */
 
-import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Check, Plus, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, RotateCcw } from "lucide-react";
 
-import { DefaultChip, ResetToDefault } from "@/components/app/settings/defaults";
-import { Callout, SettingsStack, st } from "@/components/app/settings/primitives";
+import { resetConfirmOptions } from "@/components/app/settings/defaults";
+import { control, SettingsSectionHeader } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
-import { ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { EmptyState, NoMatches } from "@/components/ui/page-states";
-import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { InfoTip } from "@/components/ui/info-tip";
-import { ViewTabs } from "@/components/ui/view-tabs";
+import { LeaveGuard } from "@/components/ui/leave-guard";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
+import { Sheet } from "@/components/ui/sheet";
+import { StatusChip } from "@/components/ui/status-chip";
 import { dayMonth, viewerTimeZone } from "@/lib/format/dates";
 import { notify } from "@/lib/notify";
-import { changesSummary, inUseNow, scopeOf, templateChanges, usesOf, type ProductUse } from "@/lib/salesSettings/templateCoverage";
-import { definitionFromDraft, draftFromDefinition, knockoutCount, questionCount, type UwDraft } from "@/lib/salesSettings/templateDefinition";
+import { agoText } from "@/lib/salesSettings/salesProcess";
+import { changesSummary, inUseNow, templateChanges, usesOf } from "@/lib/salesSettings/templateCoverage";
+import { definitionFromDraft, draftFromDefinition, questionCount, type UwDraft } from "@/lib/salesSettings/templateDefinition";
 import { definitionProblem } from "@/lib/salesSettings/templateSchemas";
 import type { TemplateRowView } from "@/lib/salesSettings/views";
 import { cn } from "@/lib/utils";
 
-import {
-  LifecyclePill, plural, ReadOnlyNotice, RowAction, RowMenu, SalesLoadError, SalesLoading, SalesPanelTop, SalesSetupPending, VersionPill, WithReason,
-  warnUnsaved,
-} from "./shared";
+import { GoldCount, Pane, SelectRow, StatusLine, TabBody, TabFrame, ThreeWay, useDraftAutosave, WIDE_SHEET, type StatusTone } from "../sales-process/parts";
+import { LifecyclePill, RowMenu, SalesDialog, DialogActions, SalesPanelTop, WithReason } from "./shared";
+import { QuestionBank } from "./question-bank";
 import { QuestionBuilder } from "./templates-builder";
-import { lineageKey, liveOf, tableRows, useSalesTemplates } from "./templates-data";
-import { PairDialog, RetireDialog, type PairChoice } from "./templates-dialogs";
+import { lineageKey, liveOf, useSalesTemplates } from "./templates-data";
+import { PairDialog, RetireDialog } from "./templates-dialogs";
 import { TemplatePreview } from "./templates-preview";
-import { AgentTemplatesView, ReviewPanel, VersionsPanel } from "./templates-review";
-import { NewTemplateDialog, StartPanel, type NewTemplateInit } from "./templates-start";
-import { LeaveGuard } from "@/components/ui/leave-guard";
+import { ReviewPanel, VersionsPanel } from "./templates-review";
+import { NewTemplateDialog, type NewTemplateInit } from "./templates-start";
 
 type Dialog =
   | { kind: "new"; init: NewTemplateInit }
   | { kind: "duplicate"; source: TemplateRowView }
   | { kind: "retire"; template: TemplateRowView }
+  | { kind: "rename" }
   | null;
-
-type Filter = "all" | "live" | "draft" | "retired" | "insurvas";
-type EditorTab = "questions" | "preview" | "versions";
+type Side = "bank" | "versions" | "review" | "preview" | null;
 
 const normalised = (t: TemplateRowView) => JSON.stringify(definitionFromDraft(draftFromDefinition(t.definition)));
 
@@ -63,144 +59,86 @@ function StatusPill({ t }: { t: TemplateRowView }) {
   return <LifecyclePill state={!t.tenantOwned ? "platform" : t.status === "published" ? "live" : t.status === "draft" ? "draft" : "retired"} />;
 }
 
-/** "Final Expense — our intake v3", bold, for the group lines. */
-const named = (t: TemplateRowView) => <b className="font-semibold text-[var(--ink)]">{t.name} v{t.version}</b>;
-
-/** The group's line: which template a call for this product line loads now. */
-function InUseLine({ use }: { use: ProductUse | undefined }) {
-  if (!use) return <>Not sold. Switch it on in Products to use it.</>;
-  if (!use.general && use.carriers.length === 0) return <>Nothing published: calls for {use.productName} have no health questions.</>;
-  const parts: ReactNode[] = [];
-  if (use.general) {
-    parts.push(
-      <Fragment key="general">
-        {named(use.general)}{!use.general.tenantOwned && <> <DefaultChip className="align-middle" /></>} for {use.carriers.length ? "every other carrier" : "every carrier"}
-        {use.fallback && ` — ${use.productName} has none of its own`}
-      </Fragment>,
-    );
-  }
-  for (const c of use.carriers) parts.push(<Fragment key={c.carrierId}>{named(c.template)} for {c.carrierName}</Fragment>);
-  return <>In use now: {parts.map((p, i) => <Fragment key={i}>{i > 0 && " · "}{p}</Fragment>)}</>;
+/** One row per set (carrier × product): its open draft, else its live version, else what is left of it. */
+function setRows(all: TemplateRowView[]): TemplateRowView[] {
+  const byLineage = new Map<string, TemplateRowView[]>();
+  for (const t of all) byLineage.set(lineageKey(t), [...(byLineage.get(lineageKey(t)) ?? []), t]);
+  const pick = (list: TemplateRowView[]) => {
+    const newest = (s: TemplateRowView["status"]) => list.filter((t) => t.status === s).sort((a, b) => b.version - a.version)[0];
+    return newest("draft") ?? newest("published") ?? [...list].sort((a, b) => b.version - a.version)[0];
+  };
+  const own = [...byLineage.values()].map(pick).filter(Boolean);
+  // A platform set the agency already has its own of is not listed twice.
+  return own
+    .filter((t) => t.tenantOwned || !all.some((x) => x.tenantOwned && x.status !== "retired" && x.productCode === t.productCode && (x.carrierId ?? null) === (t.carrierId ?? null)))
+    .sort((a, b) => Number(b.tenantOwned) - Number(a.tenantOwned) || (a.carrierName ?? "").localeCompare(b.carrierName ?? "") || a.productName.localeCompare(b.productName));
 }
 
-const STEPS = ["Pick a product", "Choose the questions", "Publish"] as const;
-
-/**
- * The page's three steps as one progress bar (owner 2026-10-30): done steps ticked and filled,
- * the current one lit, the rest waiting. The list is step 1 (2 once a product is picked), the
- * editor step 2, the review before publishing step 3.
- */
-function StepsBar({ current }: { current: 0 | 1 | 2 }) {
-  return (
-    <ol aria-label="Steps" className="m-0 grid list-none grid-cols-3 gap-2 p-0 sm:gap-3">
-      {STEPS.map((label, i) => {
-        const done = i < current;
-        const now = i === current;
-        return (
-          <li key={label} aria-current={now ? "step" : undefined} className="flex min-w-0 flex-col gap-2">
-            <span className="h-1.5 overflow-hidden rounded-full bg-[var(--surface-alt)]">
-              <span className={cn("block h-full rounded-full bg-[var(--primary)] transition-[width] duration-500 ease-out", done ? "w-full" : now ? "w-1/2" : "w-0")} />
-            </span>
-            <span className="flex min-w-0 items-center gap-2 text-sm leading-[1.5] font-semibold tracking-[-0.02em] text-[var(--ink)]">
-              <span aria-hidden="true" className={cn("inline-grid size-6 shrink-0 place-items-center rounded-full text-xs transition-colors duration-300", done || now ? "bg-[var(--primary)] text-[var(--on-primary)]" : "bg-[var(--surface-alt)] text-[var(--ink)]")}>
-                {done ? <Check className="size-3.5" /> : i + 1}
-              </span>
-              <span className="min-w-0 truncate"><span className="sr-only">Step {i + 1}{done ? ", done" : now ? ", now" : ""}: </span>{label}</span>
-            </span>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-export function SalesUnderwritingTemplates() {
+export function SalesUnderwritingTemplates({ focus = null }: { focus?: string | null } = {}) {
   const api = useSalesTemplates("underwriting");
   const { payload, sample } = api;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<UwDraft | null>(null);
   const [name, setName] = useState("");
   const [questionKey, setQuestionKey] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
-  const [editorTab, setEditorTab] = useState<EditorTab>("questions");
-  // S8: the review of a draft before it goes live replaces the tabs until it is published or left.
-  const [reviewing, setReviewing] = useState(false);
-  const [filter, setFilter] = useState<Filter>("all");
-  // Front page (owner 2026-10-30, after the Quotation page): one product at a time, or All.
-  const [product, setProduct] = useState<string>("all");
-  const [searchOpen, setSearchOpen] = useState(false);
-  const searchRef = useRef<HTMLSpanElement>(null);
+  const [side, setSide] = useState<Side>(null);
   const [query, setQuery] = useState("");
-  // The editor's own tabs move between views of the same unsaved draft: the leave guard lets them through.
-  const editorRef = useRef<HTMLElement>(null);
-  const saveErrorRef = useRef<string | null>(null);
+  const [renameText, setRenameText] = useState("");
+  const zone = useMemo(() => viewerTimeZone(), []);
 
   const all = useMemo(() => payload?.templates ?? [], [payload]);
   const uses = useMemo(() => inUseNow(all, payload?.productLines ?? [], payload?.carriers ?? []), [all, payload]);
+  const rows = useMemo(() => setRows(all), [all]);
   const selected = all.find((t) => t.id === selectedId) ?? null;
   const canEdit = Boolean(payload?.canEdit);
   const readOnly = !canEdit || !selected?.tenantOwned;
   const definition = useMemo(() => (draft ? definitionFromDraft(draft) : null), [draft]);
-  const dirty = Boolean(selected && definition && (JSON.stringify(definition) !== normalised(selected) || name.trim() !== selected.name));
+  const dirty = Boolean(selected && definition && (JSON.stringify(definition) !== normalised(selected) || (name.trim() && name.trim() !== selected.name)));
   const problem = definition && !readOnly ? definitionProblem("underwriting", definition) : null;
-  const zone = useMemo(() => viewerTimeZone(), []);
+  const ownerOnly = canEdit ? null : "Only an owner can change health questions.";
 
-  // ── the list ──
-  const isLive = (t: TemplateRowView) => t.tenantOwned && t.status === "published" && liveOf(all, t)?.id === t.id;
-  const byFilter: Record<Filter, TemplateRowView[]> = useMemo(() => {
-    const live = (t: TemplateRowView) => t.tenantOwned && t.status === "published" && liveOf(all, t)?.id === t.id;
-    return {
-      all: tableRows(all),
-      live: all.filter(live),
-      draft: all.filter((t) => t.tenantOwned && t.status === "draft"),
-      // Every version that is no longer loaded: retired ones, and an older published one a newer replaced.
-      retired: all.filter((t) => t.tenantOwned && (t.status === "retired" || (t.status === "published" && !live(t)))),
-      insurvas: all.filter((t) => !t.tenantOwned),
-    };
-  }, [all]);
-  const needle = query.trim().toLowerCase();
-  const matches = (t: TemplateRowView) => !needle || [t.name, t.productName, t.carrierName ?? ""].some((s) => s.toLowerCase().includes(needle));
-  const lineOrder = (code: string) => {
-    const i = (payload?.productLines ?? []).findIndex((p) => p.code === code);
-    return i < 0 ? 999 : i;
-  };
-  const shown = byFilter[filter].filter(matches).sort((a, b) => lineOrder(a.productCode) - lineOrder(b.productCode) || a.productCode.localeCompare(b.productCode)
-    || Number(b.tenantOwned) - Number(a.tenantOwned) || Number(Boolean(a.carrierId)) - Number(Boolean(b.carrierId)) || (a.carrierName ?? "").localeCompare(b.carrierName ?? "")
-    || a.name.localeCompare(b.name) || b.version - a.version);
-  // The product chips: every line the agency sells, plus any line it has a template for; a count of
-  // the templates the status filter shows in it.
-  const productTabs = (() => {
-    const codes = [...new Set([...uses.map((u) => u.productCode), ...byFilter[filter].map((t) => t.productCode)])].sort((a, b) => lineOrder(a) - lineOrder(b));
-    return codes.map((code) => ({
-      code,
-      name: (payload?.productLines ?? []).find((p) => p.code === code)?.name ?? all.find((t) => t.productCode === code)?.productName ?? code,
-      count: byFilter[filter].filter((t) => t.productCode === code).length,
-      use: uses.find((u) => u.productCode === code),
-    }));
-  })();
-  const picked = product === "all" ? null : productTabs.find((t) => t.code === product) ?? null;
-  const rows = shown.filter((t) => !picked || t.productCode === picked.code);
-  const counts: Record<Filter, number> = { all: byFilter.all.length, live: byFilter.live.length, draft: byFilter.draft.length, retired: byFilter.retired.length, insurvas: byFilter.insurvas.length };
-
-  const open = (t: TemplateRowView) => {
-    if (dirty && t.id !== selectedId) return warnUnsaved(selected?.name ?? "This template");
+  const load = (t: TemplateRowView) => {
     setSelectedId(t.id);
     setDraft(draftFromDefinition(t.definition));
     setName(t.name);
     setQuestionKey(null);
     setSaveError(null);
-    setReviewing(false);
   };
-  /** Back to the list (unless there are unsaved edits). */
-  const close = () => {
-    if (dirty) return warnUnsaved(selected?.name ?? "This template");
-    setSelectedId(null);
-    setDraft(null);
-    setEditorTab("questions");
-    setReviewing(false);
+  const autosave = useDraftAutosave({
+    signature: JSON.stringify({ id: selected ? lineageKey(selected) : null, name: name.trim(), definition }),
+    dirty,
+    enabled: Boolean(selected && !readOnly && !problem && !sample),
+    save: async () => {
+      if (!selected || !definition) return false;
+      const { saved, error } = await api.save(selected.id, { name: name.trim() || selected.name, definition: definition as Record<string, unknown> });
+      setSaveError(error);
+      // The edits in hand stay on screen: a save only moves the page onto the version it stored.
+      if (saved) setSelectedId(saved.template.id);
+      return Boolean(saved);
+    },
+  });
+  const open = (t: TemplateRowView) => {
+    if (t.id === selectedId) return;
+    autosave.reset();
+    load(t);
   };
+
+  // The first set opens by itself (a wide screen never shows an empty middle); a link may name one ("set.<id>").
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!payload) return;
+    const named = focus?.startsWith("set.") ? all.find((t) => t.id === focus.slice(4)) : null;
+    if (named) { opened.current = true; const t = window.setTimeout(() => load(named), 0); return () => window.clearTimeout(t); }
+    if (opened.current || selectedId || !rows.length) return;
+    opened.current = true;
+    const t = window.setTimeout(() => load(rows[0]), 0);
+    return () => window.clearTimeout(t);
+    // load reads the same state; it is rebuilt each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [payload, focus]);
+
   /** Delete a version, after a confirm. One already used by interviews is refused by the server and kept. */
   const remove = async (t: TemplateRowView) => {
     const ok = await confirmAction({
@@ -208,85 +146,30 @@ export function SalesUnderwritingTemplates() {
       description: t.status === "draft"
         ? `It's a draft no call has loaded. Its ${questionCount(t.definition)} questions are removed for good.`
         : "It is removed for good. A version interviews already used can't be deleted: it stays for their records, so retire it instead.",
-      confirmLabel: "Delete template",
+      confirmLabel: t.status === "draft" ? "Discard draft" : "Delete version",
     });
     if (!ok) return;
-    if (await api.remove(t.id) && t.id === selectedId) { setSelectedId(null); setDraft(null); }
+    if (await api.remove(t.id) && t.id === selectedId) {
+      const live = liveOf(all.filter((x) => x.id !== t.id), t);
+      if (live) load(live); else { setSelectedId(null); setDraft(null); }
+    }
   };
-  const discard = () => { if (selected) { setDraft(draftFromDefinition(selected.definition)); setName(selected.name); setSaveError(null); } };
-
-  const save = async () => {
-    if (!selected || !definition) return;
-    setSaving(true);
-    const { saved, error } = await api.save(selected.id, { name: name.trim() || selected.name, definition: definition as Record<string, unknown> });
-    setSaving(false);
-    setSaveError(error);
-    saveErrorRef.current = error;
-    if (saved) { setSelectedId(saved.template.id); setDraft(draftFromDefinition(saved.template.definition)); setName(saved.template.name); }
-  };
-
-  const tenantLineageExists = (c: PairChoice) => all.some((x) => x.tenantOwned && x.productCode === c.productCode && (x.carrierId ?? null) === c.carrierId);
   const copyPlatform = async (t: TemplateRowView) => {
     const mine = all.find((x) => x.tenantOwned && x.status === "draft" && x.productCode === t.productCode && (x.carrierId ?? null) === (t.carrierId ?? null));
-    if (mine) { notify.block("Your agency already has a draft of this template", { detail: `Open ${mine.name} v${mine.version} to keep editing it.` }); return; }
+    if (mine) { load(mine); return; }
     const copied = await api.copy(t.id, {});
-    if (copied) open(copied);
+    if (copied) load(copied);
   };
 
-  const ownerOnly = canEdit ? null : "Only an owner can change templates.";
-  const lastChanged = (t: TemplateRowView) => (t.tenantOwned ? `${t.editedBy ?? "Someone"} · ${dayMonth(t.updatedAt, zone)}` : "Insurvas");
-  const rowMenu = (t: TemplateRowView, isOpen: boolean) => (
-    <RowMenu
-      label={`${t.name} v${t.version}`}
-      items={!t.tenantOwned ? [
-        { label: "Copy to my agency", onSelect: () => { void copyPlatform(t); }, disabled: !canEdit, reason: ownerOnly },
-      ] : [
-        t.status === "draft" && !isOpen && { label: "Review & publish", onSelect: () => { open(t); setReviewing(true); }, disabled: !canEdit, reason: ownerOnly },
-        !t.carrierId && t.status !== "retired" && { label: "Different questions for one carrier", onSelect: () => setDialog({ kind: "new", init: { productCode: t.productCode, carrierId: null, startFrom: "copy", sourceId: t.id, forCarrier: true } }), disabled: !canEdit, reason: ownerOnly },
-        t.status === "published" && { label: "Retire", onSelect: () => setDialog({ kind: "retire", template: t }), disabled: !canEdit || (isOpen && dirty), reason: isOpen && dirty ? "Save or discard your changes first." : ownerOnly },
-        { label: "Duplicate", onSelect: () => setDialog({ kind: "duplicate", source: t }), disabled: !canEdit, reason: ownerOnly },
-        { label: "Delete", onSelect: () => { void remove(t); }, disabled: !canEdit, reason: ownerOnly, danger: true },
-      ]}
-    />
-  );
-  /**
-   * A group's one action, when a call loads something the agency cannot change: the Insurvas
-   * default made for this line is copied to the agency; a line borrowing another line's template
-   * gets a new one of its own.
-   */
-  const groupAction = (use: ProductUse | undefined) => {
-    if (!canEdit || !use) return null;
-    if (!use.general || use.fallback) {
-      return <Button type="button" variant="outline" size="sm" onClick={() => setDialog({ kind: "new", init: { ...newInit(), productCode: use.productCode } })}><Plus aria-hidden="true" />New {use.productName} template</Button>;
-    }
-    if (!use.general.tenantOwned) return <Button type="button" variant="outline" size="sm" onClick={() => { void copyPlatform(use.general!); }}>Make it yours</Button>;
-    // The agency's own general template is live and Insurvas has one for this line: the way back.
-    if (all.some((t) => !t.tenantOwned && t.status === "published" && t.productCode === use.productCode && !t.carrierId)) {
-      return <ResetToDefault variant="outline" what={`the ${use.productName} health questions`} kept={`Your versions are retired, not deleted: interviews already started keep theirs. Carrier-specific templates stay.`} onReset={() => api.resetToDefault(use.productCode, null)} />;
-    }
-    return null;
-  };
-  /** A row's sub-line: what it is for, and for a draft that replaces a live version, which. */
-  const rowSub = (t: TemplateRowView) => {
-    const live = t.tenantOwned && t.status === "draft" ? liveOf(all, t) : null;
-    const loaded = usesOf(t, uses);
-    return [t.carrierId ? `only ${t.carrierName ?? "one carrier"}` : "every carrier", live ? `replaces v${live.version} when published` : null, !live && t.status === "draft" ? "not used until published" : null, loaded.length && !t.tenantOwned ? "in use now" : null].filter(Boolean).join(" · ");
-  };
-
-  /** Where a new template starts: the first line the agency sells, from Insurvas's default. */
-  const newInit = (): NewTemplateInit => ({ productCode: (payload?.productLines.find((p) => p.sold !== false) ?? payload?.productLines[0])?.code ?? "final_expense", carrierId: null, startFrom: "insurvas" });
-  const hasOwn = all.some((t) => t.tenantOwned);
-  const firstLine = uses[0];
-
-  /** Which calls load `t` once it is live, in words (S8). */
+  /** Which calls load `t` once it is live, in words. */
   const publishImpact = (t: TemplateRowView) => {
     const base = liveOf(all, t);
     const live = { ...t, status: "published" as const };
     const after = inUseNow([...all.filter((x) => x.id !== base?.id && x.id !== t.id), live], payload?.productLines ?? [], payload?.carriers ?? []);
     const loads = usesOf(live, after).map((u) => u.replace(" · every other carrier", " calls with every carrier but the ones with their own").replace(" · every carrier", " calls with every carrier").replace(/^(.+) · (.+)$/, "$1 calls with $2"));
-    return `${loads.length ? `New ${loads.join(", ")} load it.` : "No call loads it: another template takes these calls first."} Interviews already started keep the version they began on.${base ? ` v${base.version} is retired.` : ""}`;
+    return `${loads.length ? `New ${loads.join(", ")} load it.` : "No call loads it: another set takes these calls first."} Interviews already started keep the version they began on.${base ? ` v${base.version} is retired.` : ""}`;
   };
-  /** What calls fall back to once `t` is retired (S12). */
+  /** What calls fall back to once `t` is retired. */
   const retireImpact = (t: TemplateRowView) => {
     if (!usesOf(t, uses).length) return null;
     const after = inUseNow(all.filter((x) => x.id !== t.id), payload?.productLines ?? [], payload?.carriers ?? []);
@@ -303,7 +186,7 @@ export function SalesUnderwritingTemplates() {
     });
     return parts.length ? `${parts.join("; ")}.` : null;
   };
-  /** S10: an older version's questions become the next draft (into the open draft, after a confirm). */
+  /** An older version's questions become the next draft (into the open draft, after a confirm). */
   const restore = async (v: TemplateRowView) => {
     const openDraft = all.find((x) => lineageKey(x) === lineageKey(v) && x.status === "draft");
     if (openDraft) {
@@ -312,293 +195,186 @@ export function SalesUnderwritingTemplates() {
     }
     const { saved, error } = await api.save(openDraft?.id ?? v.id, { definition: v.definition as Record<string, unknown> });
     if (error) notify.block(error);
-    if (saved) { setSelectedId(saved.template.id); setDraft(draftFromDefinition(saved.template.definition)); setName(saved.template.name); setEditorTab("questions"); }
+    if (saved) { load(saved.template); setSide(null); }
   };
   const publishNow = async (t: TemplateRowView) => {
     const ok = await api.publish(t.id, true, `${t.name} v${t.version} is live`, publishImpact(t));
-    if (ok) { setReviewing(false); setSelectedId(null); setDraft(null); setEditorTab("questions"); }
+    if (ok) { setSide(null); const live = { ...t, status: "published" as const }; autosave.reset(); load(live); }
   };
 
-  // ── the editor ──
   const lineage = selected ? all.filter((x) => lineageKey(x) === lineageKey(selected)).sort((a, b) => b.version - a.version) : [];
-  const nextVersion = lineage.length ? lineage[0].version + 1 : 1;
-  // Against the saved version read the way the builder reads it, so only the owner's edits count.
-  const saveSummary = selected && definition ? changesSummary(templateChanges(definitionFromDraft(draftFromDefinition(selected.definition)), definition)) : "";
+  const live = selected ? liveOf(all, selected) : null;
   const publishBase = (t: TemplateRowView) => liveOf(all, t) ?? all.filter((x) => lineageKey(x) === lineageKey(t) && x.version < t.version).sort((a, b) => b.version - a.version)[0] ?? null;
-  const selectedUses = selected ? usesOf(selected, uses) : [];
-  const editorNote = !selected ? "" : selectedUses.length ? `In use now for ${[...new Set(selectedUses.map((u) => u.replace(/ · every (other )?carrier$/, "")))].join(", ")}` : selected.status === "draft" ? "Not used until it is published" : selected.status === "retired" ? "Retired: kept for the interviews that used it" : !selected.tenantOwned ? "Not in use: copy it to your agency to change and use it" : "Not in use";
+  const pair = selected ? `${selected.carrierId ? selected.carrierName ?? "One carrier" : "Every carrier"} · ${selected.productName}` : "";
+  const changed = selected && definition && live && live.id !== selected.id ? changesSummary(templateChanges(definitionFromDraft(draftFromDefinition(live.definition)), definition)) : "";
+  const newInit = (): NewTemplateInit => ({ productCode: (payload?.productLines.find((p) => p.sold !== false) ?? payload?.productLines[0])?.code ?? "final_expense", carrierId: null, startFrom: "insurvas" });
+  const drafts = rows.filter((t) => t.tenantOwned && t.status === "draft").length;
+  const lastChanged = (t: TemplateRowView) => (t.tenantOwned ? `${t.editedBy ?? "Someone"} · ${dayMonth(t.updatedAt, zone)}` : "Insurvas");
+
+  // ── the status line: where the open set stands ──
+  const status: { tone: StatusTone; text: string } = !payload ? { tone: "muted", text: "Reading your health questions" }
+    : !selected ? { tone: rows.length ? "muted" : "warn", text: rows.length ? "Pick a question set" : "No health questions yet" }
+    : saveError ? { tone: "bad", text: `${pair} · couldn't save to the draft: ${saveError}` }
+    : dirty && problem ? { tone: "warn", text: `${pair} · not saved yet: ${problem}` }
+    : autosave.state === "saving" || dirty ? { tone: "muted", text: `${pair} · saving to the draft` }
+    : !selected.tenantOwned ? { tone: "muted", text: `${pair} · the Insurvas set${canEdit ? ", read-only: copy it to your agency to change it" : ""}` }
+    : selected.status === "draft" ? { tone: "warn", text: `${pair} · v${selected.version} draft, not live${live ? ` · agents still see v${live.version}` : " · no call loads it yet"}${changed ? ` · ${changed}` : ""} · edited by ${selected.editedBy ?? "someone"} ${agoText(selected.updatedAt)}` }
+    : selected.status === "retired" ? { tone: "muted", text: `${pair} · v${selected.version} retired, kept for the interviews that used it` }
+    : { tone: "ok", text: `${pair} · v${selected.version} live · edited by ${selected.editedBy ?? "someone"} ${agoText(selected.updatedAt)}${canEdit ? " · a change starts a draft" : ""}` };
+
+  const needle = query.trim().toLowerCase();
+  const listed = rows.filter((t) => !needle || `${t.carrierName ?? "every carrier"} ${t.productName} ${t.name}`.toLowerCase().includes(needle));
+
+  const menu = selected && canEdit && (
+    <RowMenu
+      label={`${pair} health questions`}
+      items={!selected.tenantOwned ? [
+        { label: "Versions", onSelect: () => setSide("versions") },
+      ] : [
+        { label: "Rename", onSelect: () => { setRenameText(name); setDialog({ kind: "rename" }); } },
+        { label: "Versions", onSelect: () => setSide("versions") },
+        !selected.carrierId && selected.status !== "retired" && { label: "Different questions for one carrier", onSelect: () => setDialog({ kind: "new", init: { productCode: selected.productCode, carrierId: null, startFrom: "copy", sourceId: selected.id, forCarrier: true } }) },
+        { label: "Duplicate for another product or carrier", onSelect: () => setDialog({ kind: "duplicate", source: selected }) },
+        live && live.tenantOwned && !selected.carrierId && all.some((t) => !t.tenantOwned && t.status === "published" && t.productCode === selected.productCode && !t.carrierId)
+          && { label: "Reset to the Insurvas set", danger: true, onSelect: () => { void (async () => { if (await confirmAction(resetConfirmOptions(`the ${selected.productName} health questions`, "Your versions are retired, not deleted: interviews already started keep theirs. Carrier-specific sets stay."))) await api.resetToDefault(selected.productCode, null); })(); } },
+        live && { label: `Retire v${live.version}`, danger: true, onSelect: () => setDialog({ kind: "retire", template: live }) },
+        selected.status === "draft" && { label: `Discard draft v${selected.version}`, danger: true, onSelect: () => { void remove(selected); } },
+      ]}
+    />
+  );
+
+  const primary = !selected ? (
+    canEdit && payload ? <Button type="button" variant="outline" onClick={() => setDialog({ kind: "new", init: newInit() })}><Plus aria-hidden="true" />New question set</Button> : null
+  ) : (
+    <>
+      {!readOnly && <Button type="button" variant="outline" onClick={() => setSide("bank")}>Question bank</Button>}
+      {menu}
+      {!selected.tenantOwned ? (
+        <WithReason reason={ownerOnly}><Button type="button" disabled={!canEdit} onClick={() => { void copyPlatform(selected); }}>Copy to my agency</Button></WithReason>
+      ) : selected.status === "draft" && canEdit ? (
+        <WithReason reason={dirty ? "Saving to the draft — a moment." : problem}>
+          <Button type="button" disabled={dirty || Boolean(problem)} onClick={() => setSide("review")}>Publish v{selected.version}</Button>
+        </WithReason>
+      ) : null}
+    </>
+  );
 
   return (
-    <SettingsStack>
-      {/* With a template open (owner 2026-10-28): the section title, then → the template's name, its
-          version and state, and its one primary action on that line; the rest under ⋯. */}
-      <SalesPanelTop
-        sample={sample}
-        trail={selected && draft ? (
-          <>
-            <Button type="button" variant="ghost" size="icon" aria-label="Back to templates" title="Back to templates" onClick={close}>
-              <ArrowLeft aria-hidden="true" />
-            </Button>
-            {readOnly ? (
-              <span className="min-w-0 truncate text-title-sm font-semibold text-[var(--ink)]">{selected.name}</span>
-            ) : (
-              <input
-                aria-label="Template name"
-                className="min-w-[8ch] max-w-[24ch] flex-none [field-sizing:content] rounded-md border border-transparent bg-transparent px-2 py-1 text-title-sm font-semibold text-[var(--ink)] outline-none transition-colors hover:border-[var(--border)] focus:border-[var(--ring-color)]"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            )}
-            {/* Owner 2026-10-30: the template's views sit beside its name, not on a row of their own. */}
-            {!reviewing && (
-              <span className="hidden shrink-0 sm:block">
-              <ViewTabs
-                label="Template"
-                value={editorTab}
-                onChange={setEditorTab}
-                tabs={[
-                  { key: "questions", label: "Questions", count: questionCount(definition ?? selected.definition) },
-                  { key: "preview", label: "Try it" },
-                  { key: "versions", label: "Versions", count: lineage.length },
-                ]}
-              />
-              </span>
-            )}
-          </>
-        ) : undefined}
-        actions={selected && draft ? (<>
-          <span className="hidden max-w-[30ch] truncate text-sm text-[var(--body)] xl:inline" title={`${scopeOf(selected)} · ${editorNote}`}>{scopeOf(selected)} · {editorNote}</span>
-          <VersionPill version={selected.version} live={isLive(selected)} />
-          <StatusPill t={selected} />
-          {!selected.tenantOwned ? (
-            <WithReason reason={ownerOnly}>
-              <Button type="button" disabled={!canEdit} onClick={() => { void copyPlatform(selected); }}>Copy to my agency</Button>
-            </WithReason>
-          ) : canEdit ? (
-            <>
-              {rowMenu(selected, true)}
-              {selected.status === "draft" && (
-                <WithReason reason={dirty ? "Save your changes before publishing." : problem}>
-                  <Button type="button" onClick={() => setReviewing(true)} disabled={dirty || Boolean(problem) || reviewing}>Review & publish</Button>
-                </WithReason>
-              )}
-            </>
-          ) : undefined}
-        </>) : canEdit && payload ? (
-          <Button type="button" onClick={() => setDialog({ kind: "new", init: picked ? { ...newInit(), productCode: picked.code } : newInit() })}><Plus aria-hidden="true" />New template</Button>
-        ) : undefined}
-      />
-
+    <TabFrame>
+      <SettingsSectionHeader actions={primary} />
+      <SalesPanelTop sample={sample} />
       {api.schemaPending ? (
-        <SalesSetupPending what="Underwriting templates" />
-      ) : api.loading && !payload ? (
-        <SalesLoading label="Loading templates" columns={6} />
+        <StatusLine tone="warn">Health questions need a database update. Ask your Insurvas admin to apply the latest migrations.</StatusLine>
       ) : api.error && !payload ? (
-        <SalesLoadError message={api.error} onRetry={() => { void api.reload(); }} />
+        <StatusLine tone="bad" action={<Button type="button" variant="outline" size="sm" onClick={() => { void api.reload(); }}>Try again</Button>}>{api.error}</StatusLine>
       ) : (
-        <>
-          {(saveError ?? (dirty ? problem : null)) && <Callout tone="error" title={(saveError ?? problem)!} />}
-          {!canEdit && <ReadOnlyNotice what="underwriting templates" />}
+        <StatusLine tone={status.tone}>{status.text}{!canEdit && payload ? " · read only: only an owner changes health questions" : ""}</StatusLine>
+      )}
 
-          {selected && draft ? (
-            <section ref={editorRef} aria-label={`Edit ${selected.name}`} className="flex flex-col gap-4">
-              {!readOnly && <StepsBar current={reviewing ? 2 : 1} />}
-              {/* A phone: the title row has no room for the tabs, so they lead the editor. */}
-              {!reviewing && (
-                <div className="sm:hidden">
-                  <ViewTabs
-                    label="Template"
-                    value={editorTab}
-                    onChange={setEditorTab}
-                    tabs={[
-                      { key: "questions", label: "Questions", count: questionCount(definition ?? selected.definition) },
-                      { key: "preview", label: "Try it" },
-                      { key: "versions", label: "Versions", count: lineage.length },
-                    ]}
-                  />
-                </div>
-              )}
-              {/* Below xl the scope line has no room on the title row: it sits here, one line. */}
-              <p className="m-0 text-sm text-[var(--body)] xl:hidden">{scopeOf(selected)} · {editorNote}</p>
-
-              {reviewing && selected.status === "draft" ? (
-                <ReviewPanel draft={selected} base={publishBase(selected)} impact={publishImpact(selected)} problem={problem} onBack={() => setReviewing(false)} onPublish={() => publishNow(selected)} />
-              ) : editorTab === "questions" ? (
-                <QuestionBuilder
-                  title="Questions"
-                  bank={{ templateName: selected.name, carrierName: selected.carrierId ? selected.carrierName ?? "this carrier" : null }}
-                  draft={draft}
-                  onChange={setDraft}
-                  readOnly={readOnly}
-                  selectedKey={questionKey}
-                  onSelect={setQuestionKey}
-                />
-              ) : editorTab === "preview" ? (
-                definition && <TemplatePreview key={selected.id} definition={definition} sample={sample} name={name.trim() || selected.name} version={selected.version} />
-              ) : (
-                <VersionsPanel
-                  lineage={lineage}
-                  current={selected}
-                  isLive={isLive}
-                  lastChanged={lastChanged}
-                  canRestore={!canEdit ? ownerOnly : dirty ? "Save or discard your changes first." : null}
-                  onOpen={(v) => { open(v); setEditorTab("questions"); }}
-                  onRestore={(v) => { void restore(v); }}
-                />
-              )}
-
-              {!readOnly && (
-                <SettingsSaveBar visible={dirty} note={`${saveSummary || "Unsaved changes"}${selected.status === "draft" ? "" : ` — saving makes version ${nextVersion}, a draft`}`}>
-                  <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>
-                  <WithReason reason={problem}>
-                    <Button type="button" onClick={() => { void save(); }} disabled={saving || Boolean(problem)}>
-                      {saving ? "Saving…" : selected.status === "draft" ? "Save draft" : `Save as draft v${nextVersion}`}
-                    </Button>
-                  </WithReason>
-                </SettingsSaveBar>
-              )}
-            </section>
-          ) : !canEdit ? (
-            <AgentTemplatesView uses={uses} onOpen={open} />
-          ) : (
+      <TabBody>
+        <Pane
+          className="lg:w-[260px] lg:shrink-0"
+          title="Question sets"
+          actions={canEdit && payload ? <Button type="button" variant="ghost" size="sm" onClick={() => setDialog({ kind: "new", init: newInit() })}><Plus aria-hidden="true" />New</Button> : <GoldCount value={drafts} label={`${drafts} drafts`} />}
+        >
+          {!payload ? <SectionLoading rows={6} columns={1} label="Loading question sets" /> : (
             <>
-            {!hasOwn && firstLine && <StartPanel all={all} productCode={firstLine.productCode} productName={firstLine.productName} canEdit={canEdit} onStart={(init) => setDialog({ kind: "new", init })} />}
-            <PagedTableCard
-              key={product}
-              total={rows.length}
-              noun="templates"
-              toolbar={
-                /* One row (owner 2026-11-04): search (an icon until it is used), then status and product as dropdowns;
-                   the product chips became a menu. */
-                <div className="flex w-full flex-wrap items-center gap-2 sm:flex-nowrap">
-                  {searchOpen || query ? (
-                    <span ref={searchRef} className="w-full shrink-0 sm:w-48" onBlur={(e) => { if (!query && !e.currentTarget.contains(e.relatedTarget as Node | null)) setSearchOpen(false); }}>
-                      <ToolbarSearch value={query} onChange={setQuery} placeholder={picked ? `Search ${picked.name}` : "Search templates"} className="sm:w-full" />
-                    </span>
-                  ) : (
-                    <Button type="button" variant="outline" size="icon" aria-label="Search templates" title="Search templates" className="shrink-0" onClick={() => { setSearchOpen(true); requestAnimationFrame(() => searchRef.current?.querySelector("input")?.focus()); }}>
-                      <Search aria-hidden="true" />
-                    </Button>
-                  )}
-                  <select aria-label="Status" className={cn(toolbarControl, "w-full shrink-0 sm:w-auto")} value={filter} onChange={(e) => setFilter(e.target.value as Filter)}>
-                    <option value="all">Any status · {counts.all}</option>
-                    <option value="live">Live · {counts.live}</option>
-                    <option value="draft">Drafts · {counts.draft}</option>
-                    <option value="retired">Retired · {counts.retired}</option>
-                    <option value="insurvas">Insurvas · {counts.insurvas}</option>
-                  </select>
-                  <select aria-label="Product" className={cn(toolbarControl, "w-full shrink-0 sm:w-auto")} value={picked ? picked.code : "all"} onChange={(e) => setProduct(e.target.value)}>
-                    <option value="all">All products · {byFilter[filter].length}</option>
-                    {productTabs.map((t) => <option key={t.code} value={t.code}>{t.name} · {t.count}</option>)}
-                  </select>
-                  <InfoTip label="About these templates" className="ml-auto" side="bottom">
-                    A call loads the template made for its product and carrier, else the product&apos;s own, else Insurvas&apos;s: the same choice the interview makes. An interview keeps the version it started on.
-                  </InfoTip>
-                </div>
-              }
-            >
-              {/* The picked product's line: what its calls load now, and the one way to change that. */}
-              {picked && (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border)] bg-[var(--primary-soft)] px-4 py-3 text-sm leading-[1.5] text-[var(--ink)]">
-                  <span className="min-w-0 flex-1"><InUseLine use={picked.use} /></span>
-                  {groupAction(picked.use)}
+              {rows.length > 6 && (
+                <div className="border-b border-[var(--border)] px-3 py-2">
+                  <input type="search" aria-label="Find a set" placeholder="Find a carrier or product" className={cn(control, "mt-0")} value={query} onChange={(e) => setQuery(e.target.value)} />
                 </div>
               )}
-              {all.length === 0 ? (
-                <EmptyState
-                  title="No underwriting templates yet"
-                  hint="Create one so agents run a health interview before they quote."
-                  action={canEdit ? <Button type="button" onClick={() => setDialog({ kind: "new", init: newInit() })}><Plus aria-hidden="true" />New template</Button> : undefined}
+              {listed.map((t) => (
+                <SelectRow
+                  key={t.id}
+                  selected={selected ? lineageKey(selected) === lineageKey(t) : false}
+                  onClick={() => open(t)}
+                  title={t.carrierId ? t.carrierName ?? "One carrier" : "Every carrier"}
+                  sub={`${t.productName} · v${t.version}${t.status === "draft" ? " draft" : t.status === "retired" ? " retired" : ""}${t.tenantOwned ? "" : " · Insurvas"}`}
+                  end={questionCount(t.definition)}
                 />
-              ) : rows.length === 0 ? (
-                needle || filter !== "all" ? (
-                  <NoMatches noun="templates" by={needle && filter === "all" ? "search" : "filters"} onClear={() => { setQuery(""); setFilter("all"); }} />
-                ) : (
-                  <EmptyState
-                    title={`No ${picked?.name ?? ""} template of your own yet`}
-                    hint="Until you make one, its calls load the template named above."
-                    action={canEdit && picked ? <Button type="button" onClick={() => setDialog({ kind: "new", init: { ...newInit(), productCode: picked.code } })}><Plus aria-hidden="true" />New {picked.name} template</Button> : undefined}
-                  />
-                )
-              ) : (
-                <>
-                  <table className={cn(st.table, "hidden sm:table", picked ? "min-w-[680px]" : "min-w-[780px]")}>
-                    <thead>
-                      <tr className={st.headRow}>
-                        <th scope="col" className={st.th}>Template</th>
-                        {!picked && <th scope="col" className={cn(st.th, "w-[130px]")}>Product</th>}
-                        <th scope="col" className={cn(st.th, "w-[150px]")}>Status</th>
-                        <th scope="col" className={cn(st.th, picked ? "w-[170px]" : "w-[140px]")}>Last changed</th>
-                        <th scope="col" className={cn(st.th, "w-[1%] text-right")}><span className="sr-only">Actions</span></th>
-                      </tr>
-                    </thead>
-                    <PagedBody className="m-seq">
-                      {rows.map((t) => (
-                            <tr key={t.id} className="m-row cursor-pointer" onClick={(event) => { if (!(event.target as HTMLElement).closest("button, a, [role=menu]")) open(t); }}>
-                              <td className={st.td}>
-                                <span className={cn(st.strong, "block")}>{t.name}</span>
-                                <span className={st.sub}>{`v${t.version} · ${plural(questionCount(t.definition), "question")} · ${plural(knockoutCount(t.definition), "knockout")} · ${rowSub(t)}`}</span>
-                              </td>
-                              {!picked && (
-                                <td className={st.td}>
-                                  <button type="button" className="rounded-[6px] text-left text-[var(--ink)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-[var(--ring-color)]" onClick={() => setProduct(t.productCode)}>{t.productName}</button>
-                                </td>
-                              )}
-                              <td className={st.td}><StatusPill t={t} /></td>
-                              <td className={cn(st.td, "whitespace-nowrap")}>{lastChanged(t)}</td>
-                              <td className={cn(st.td, "whitespace-nowrap text-right")}>
-                                <span className="inline-flex gap-2">
-                                  <RowAction onClick={() => open(t)} label={`${canEdit && t.tenantOwned ? "Edit" : "View"} ${t.name} v${t.version}`}>
-                                    {canEdit && t.tenantOwned ? "Edit" : "View"}
-                                  </RowAction>
-                                  {rowMenu(t, false)}
-                                </span>
-                              </td>
-                            </tr>
-                      ))}
-                    </PagedBody>
-                  </table>
-
-                  {/* A phone: the same rows stacked; under All each row names its product. */}
-                  <PagedBody as="ul" className="m-0 list-none p-0 sm:hidden">
-                    {rows.map((t) => (
-                          <li key={t.id} className="flex items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
-                            <span className="min-w-0 flex-1">
-                              <span className={cn(st.strong, "block text-sm")}>{t.name}</span>
-                              <span className={st.sub}>{picked ? rowSub(t) : `${t.productName} · ${rowSub(t)}`}</span>
-                              <span className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-[var(--body)]">
-                                <StatusPill t={t} />
-                                <VersionPill version={t.version} live={isLive(t)} />
-                                <span>{plural(questionCount(t.definition), "question")} · {plural(knockoutCount(t.definition), "knockout")}</span>
-                              </span>
-                            </span>
-                            <RowAction onClick={() => open(t)} label={`${canEdit && t.tenantOwned ? "Edit" : "View"} ${t.name} v${t.version}`}>
-                              {canEdit && t.tenantOwned ? "Edit" : "View"}
-                            </RowAction>
-                            {rowMenu(t, false)}
-                          </li>
-                    ))}
-                  </PagedBody>
-                </>
-              )}
-            </PagedTableCard>
+              ))}
+              {rows.length > 0 && listed.length === 0 && <p className="m-0 px-4 py-3 text-sm text-[var(--muted)]">No set matches.</p>}
             </>
           )}
+        </Pane>
 
-          <LeaveGuard dirty={Boolean(selected && !readOnly && dirty)} scope={editorRef} onSave={async () => { await save(); return !saveErrorRef.current; }} onDiscard={discard} what="this underwriting template" />
-        </>
+        <Pane
+          className="lg:flex-1"
+          title="Asked on the Interview, in this order"
+          sub={selected ? `${questionCount(definition ?? selected.definition)} questions` : undefined}
+          actions={selected ? <StatusPill t={selected} /> : undefined}
+          footer={selected?.tenantOwned && selected.status === "draft" && canEdit ? (
+            <>
+              <span className="min-w-0 flex-1">Draft v{selected.version}{changed ? ` · ${changed} from v${live!.version}` : live ? ` · same questions as v${live.version}` : " · not published yet"}</span>
+              {live && <Button type="button" variant="ghost" size="sm" onClick={() => setSide("review")}>See changes</Button>}
+              <Button type="button" variant="outline" size="sm" onClick={() => { void remove(selected); }}>Discard draft</Button>
+            </>
+          ) : undefined}
+        >
+          {!payload ? <SectionLoading rows={7} columns={2} label="Loading questions" /> : all.length === 0 ? (
+            <EmptyState
+              title="No health questions yet"
+              hint="Start from the Insurvas set for Final Expense, or build your own."
+              action={canEdit ? <Button type="button" onClick={() => setDialog({ kind: "new", init: newInit() })}><Plus aria-hidden="true" />New question set</Button> : undefined}
+            />
+          ) : selected && draft ? (
+            <QuestionBuilder
+              layout="sheet"
+              title="Questions"
+              bank={{ templateName: selected.name, carrierName: selected.carrierId ? selected.carrierName ?? "this carrier" : null }}
+              draft={draft}
+              onChange={(next) => { setDraft(next); setSaveError(null); }}
+              readOnly={readOnly}
+              selectedKey={questionKey}
+              onSelect={setQuestionKey}
+            />
+          ) : <p className="m-0 px-4 py-6 text-sm text-[var(--muted)]">Pick a question set.</p>}
+        </Pane>
+
+        <Pane
+          className="lg:w-[320px] lg:shrink-0"
+          title="Try it"
+          sub="as the agent sees it"
+          actions={selected && definition ? <Button type="button" variant="ghost" size="sm" onClick={() => setSide("preview")}>Full preview</Button> : undefined}
+        >
+          {selected && draft ? <TryKnockouts key={selected.id} draft={draft} carrier={selected.carrierId ? selected.carrierName ?? "this carrier" : `the ${selected.productName} carrier being quoted`} /> : <p className="m-0 px-4 py-6 text-sm text-[var(--muted)]">Open a set to try its questions.</p>}
+        </Pane>
+      </TabBody>
+
+      <LeaveGuard dirty={Boolean(selected && !readOnly && dirty)} onSave={async () => { if (!selected || !definition) return false; const { saved, error } = await api.save(selected.id, { name: name.trim() || selected.name, definition: definition as Record<string, unknown> }); setSaveError(error); return Boolean(saved); }} onDiscard={() => { if (selected) load(selected); }} what="this question set" />
+
+      {side === "bank" && selected && draft && (
+        <Sheet title="Question bank" subtitle={`Tick a question to ask it on ${pair}. It joins this draft.`} onClose={() => setSide(null)} className={WIDE_SHEET}>
+          <QuestionBank draft={draft} onChange={(next) => setDraft(next)} readOnly={readOnly} templateName={selected.name} />
+        </Sheet>
+      )}
+      {side === "versions" && selected && (
+        <Sheet title="Versions" subtitle={`${pair} · a published version never changes`} onClose={() => setSide(null)} className={WIDE_SHEET}>
+          <VersionsPanel
+            lineage={lineage}
+            current={selected}
+            isLive={(t) => t.tenantOwned && t.status === "published" && liveOf(all, t)?.id === t.id}
+            lastChanged={lastChanged}
+            canRestore={!canEdit ? ownerOnly : dirty ? "Saving to the draft — a moment." : null}
+            onOpen={(v) => { setSide(null); autosave.reset(); load(v); }}
+            onRestore={(v) => { void restore(v); }}
+          />
+        </Sheet>
+      )}
+      {side === "review" && selected && selected.status === "draft" && (
+        <Sheet title={`Publish ${selected.name} v${selected.version}`} subtitle={pair} onClose={() => setSide(null)} className={WIDE_SHEET}>
+          <ReviewPanel draft={selected} base={publishBase(selected)} impact={publishImpact(selected)} problem={problem} onBack={() => setSide(null)} onPublish={() => publishNow(selected)} />
+        </Sheet>
+      )}
+      {side === "preview" && selected && definition && (
+        <Sheet title="The Interview, as the agent sees it" subtitle={`${pair} · v${selected.version}${dirty ? ", with edits not yet saved" : ""}`} onClose={() => setSide(null)} className={WIDE_SHEET}>
+          <TemplatePreview key={selected.id} definition={definition} sample={sample} name={name.trim() || selected.name} version={selected.version} />
+        </Sheet>
       )}
 
       {dialog?.kind === "new" && payload && (
-        <NewTemplateDialog
-          init={dialog.init}
-          all={all}
-          carriers={payload.carriers}
-          productLines={payload.productLines}
-          api={api}
-          onClose={() => setDialog(null)}
-          onCreated={(t) => { setDialog(null); open(t); }}
-        />
+        <NewTemplateDialog init={dialog.init} all={all} carriers={payload.carriers} productLines={payload.productLines} api={api} onClose={() => setDialog(null)} onCreated={(t) => { setDialog(null); autosave.reset(); load(t); }} />
       )}
       {dialog?.kind === "duplicate" && payload && (
         <PairDialog
@@ -609,27 +385,65 @@ export function SalesUnderwritingTemplates() {
           productLines={payload.productLines}
           allowGeneral
           initial={{ productCode: dialog.source.productCode, carrierId: dialog.source.carrierId, name: `${dialog.source.name} (copy)` }}
-          problem={(c) => (c.productCode === dialog.source.productCode && c.carrierId === dialog.source.carrierId ? "Choose a different product line or carrier. To change this template, edit it." : tenantLineageExists(c) ? "Your agency already has a template for this product and carrier." : null)}
+          problem={(c) => (c.productCode === dialog.source.productCode && c.carrierId === dialog.source.carrierId ? "Choose a different product line or carrier. To change this set, edit it." : all.some((x) => x.tenantOwned && x.productCode === c.productCode && (x.carrierId ?? null) === c.carrierId) ? "Your agency already has a set for this product and carrier." : null)}
           onClose={() => setDialog(null)}
           onSubmit={async (c) => {
             const t = await api.copy(dialog.source.id, { product_code: c.productCode, carrier_id: c.carrierId, name: c.name }, "Duplicated as a draft");
             setDialog(null);
-            if (t) open(t);
+            if (t) { autosave.reset(); load(t); }
           }}
         />
       )}
       {dialog?.kind === "retire" && (
-        <RetireDialog
-          name={dialog.template.name}
-          version={dialog.template.version}
-          impact={retireImpact(dialog.template)}
-          onClose={() => setDialog(null)}
-          onConfirm={async () => {
-            await api.retire(dialog.template.id);
-            setDialog(null);
-          }}
-        />
+        <RetireDialog name={dialog.template.name} version={dialog.template.version} impact={retireImpact(dialog.template)} onClose={() => setDialog(null)} onConfirm={async () => { await api.retire(dialog.template.id); setDialog(null); }} />
       )}
-    </SettingsStack>
+      {dialog?.kind === "rename" && selected && (
+        <SalesDialog open onOpenChange={(o) => { if (!o) setDialog(null); }} title="Rename this set" description="The name agents see at the foot of the Interview. It goes into the draft.">
+          <input aria-label="Set name" className={control} value={renameText} maxLength={120} onChange={(e) => setRenameText(e.target.value)} />
+          <DialogActions>
+            <Button type="button" variant="outline" onClick={() => setDialog(null)}>Cancel</Button>
+            <Button type="button" disabled={!renameText.trim()} onClick={() => { setName(renameText.trim()); setDialog(null); }}>Rename</Button>
+          </DialogActions>
+        </SalesDialog>
+      )}
+    </TabFrame>
+  );
+}
+
+/**
+ * Try it (the board's right card): answer the set's yes / no questions as a client would, and see whether this
+ * carrier can still be quoted or a knockout rules it out, and why. Nothing is saved.
+ */
+function TryKnockouts({ draft, carrier }: { draft: UwDraft; carrier: string }) {
+  const [answers, setAnswers] = useState<Record<string, "true" | "false">>({});
+  const asked = draft.questions.filter((q) => q.type === "boolean" && !q.showWhen).slice(0, 12);
+  const hits = draft.questions.filter((q) => q.knockout && answers[q.key] === q.knockout.when);
+  const number = new Map(draft.questions.map((q, i) => [q.key, i + 1]));
+  if (!asked.length) return <p className="m-0 px-4 py-6 text-sm text-[var(--muted)]">This set has no yes / no question to try.</p>;
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-[var(--muted)]">Answers</span>
+        <Button type="button" variant="ghost" size="sm" onClick={() => setAnswers({})}><RotateCcw aria-hidden="true" />Reset</Button>
+      </div>
+      <ul className="m-0 flex list-none flex-col gap-2 p-0">
+        {asked.map((q) => (
+          <li key={q.key} className="flex items-center justify-between gap-2 text-sm text-[var(--ink)]">
+            <span className="min-w-0 truncate" title={q.label}>{number.get(q.key)} · {q.label}</span>
+            <ThreeWay label={q.label} value={answers[q.key] ?? ("" as "true")} onChange={(v) => setAnswers((a) => ({ ...a, [q.key]: v }))} options={[{ key: "true", label: "Yes" }, { key: "false", label: "No" }]} />
+          </li>
+        ))}
+      </ul>
+      <div className="flex flex-col gap-1.5 rounded-[10px] border border-[var(--border)] p-3">
+        <span className="text-xs text-[var(--muted)]">With these answers</span>
+        <span className="flex items-center justify-between gap-2 text-sm text-[var(--ink)]">
+          <span className="min-w-0 truncate">{carrier}</span>
+          {hits.length ? <StatusChip tone="danger">Ruled out</StatusChip> : <StatusChip tone="good">Can quote</StatusChip>}
+        </span>
+        <span className="text-xs text-[var(--muted)]">
+          {hits.length ? `Ruled out by question ${hits.map((q) => number.get(q.key)).join(", ")}${hits[0].knockout?.note ? `: ${hits[0].knockout.note}` : ""}. ` : ""}Nothing is saved.
+        </span>
+      </div>
+    </div>
   );
 }

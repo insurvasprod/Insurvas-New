@@ -4,6 +4,7 @@ import { z } from "zod";
 import { audit } from "@/lib/audit/log";
 import { appointmentFacts } from "@/lib/appointments/booking";
 import { listCloseOutAppointments, markCloseOutOutcome } from "@/lib/appointments/closeOut";
+import { scheduleCalendarMirror } from "@/lib/appointments/calendarMirror";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
 import { guardAppointment } from "@/lib/appointments/scope";
@@ -60,6 +61,8 @@ export async function POST(request: NextRequest) {
       if (Date.parse(facts.startsAtUtc) > Date.now()) return failure(new Error("APPOINTMENT_NOT_YET_HELD"));
     }
     await markCloseOutOutcome({ tenantId: auth.context.tenantId, appointmentId: parsed.data.appointment_id, actorId: auth.context.userId, outcome: parsed.data.outcome });
+    // A cancellation comes off the agent's linked Google Calendar; showed / no-show leave it as it was.
+    if (parsed.data.outcome === "cancelled") scheduleCalendarMirror([parsed.data.appointment_id]);
     await audit({ actorType: "tenant", actorId: auth.context.userId, action: "tenant.appointment_outcome_recorded", targetType: "tenant_appointment", targetId: parsed.data.appointment_id, metadata: { outcome: parsed.data.outcome }, request });
     return NextResponse.json({ ok: true });
   } catch (error) {

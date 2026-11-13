@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { EmptyState } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { SelectMenu } from "@/components/ui/select-menu";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ageDays, ageLabel, ageTone, OWNER_ROLE_LABELS, OWNER_ROLES, QUEUE_LABELS, QUEUE_TYPES, RESOLUTION_LABELS, RESOLUTIONS, type OwnerRole, type QueueRule, type QueueType, type Resolution } from "@/lib/ingestion/exceptionQueues";
 import type { QueueItemRow } from "@/lib/ingestion/exceptionQueuesStore";
@@ -21,27 +22,40 @@ import { fileDay } from "@/lib/ingestion/constants";
 import { notify } from "@/lib/notify";
 
 export type ExceptionsTab = "open" | "closed" | "owners";
-const TONE_CLASS = { fresh: "text-muted-foreground", aging: "text-[var(--warning-ink)]", escalated: "text-[var(--error-ink)]" } as const;
+/** The one chip on an open row (owner 2026-11-11): its age's tone, said in words, never a coloured number. */
+const AGE_CHIP = { fresh: { tone: "neutral", text: "Open" }, aging: { tone: "warning", text: "Aging" }, escalated: { tone: "danger", text: "Escalated" } } as const;
+/** A row's action: a short verb and ›, plain, the same weight on every row (owner 2026-11-11). */
+const ROW_ACTION = "whitespace-nowrap text-sm text-foreground hover:underline";
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toFixed(2)}`);
 
-function Client({ person }: { person: { name: string; provisional: boolean } | null }) {
+/** `plain`: in a table row, "(provisional)" in words, since the row's one chip is its state (owner 2026-11-11). */
+function Client({ person, plain = false }: { person: { name: string; provisional: boolean } | null; plain?: boolean }) {
   if (!person) return <span className="text-muted-foreground">—</span>;
+  if (plain) return <>{person.name}{person.provisional ? " (provisional)" : ""}</>;
   return <span className="inline-flex flex-wrap items-center gap-1.5">{person.name}{person.provisional && <ProvisionalBadge />}</span>;
 }
 
-/** What the item is about, in one line. */
-function subject(item: QueueItemRow) {
+/** The whole account of an existing book's import, for the dialog and the row's tooltip. */
+function importSentence(item: QueueItemRow) {
+  const p = item.payload ?? {};
+  return `${item.carrierName ?? p.carrier_name} · ${Number(p.policies ?? 0).toLocaleString("en-US")} policies imported, ${Number(p.provisional ?? 0).toLocaleString("en-US")} provisional clients created${Number(p.existing ?? 0) ? `, ${Number(p.existing).toLocaleString("en-US")} matched to clients on file` : ""}${Number(p.blocked ?? 0) ? `, ${Number(p.blocked).toLocaleString("en-US")} without a client` : ""}`;
+}
+
+/** What the item is about, in one line. `plain`: a table cell's one line, one colour, no badge. */
+function subject(item: QueueItemRow, plain = false) {
   if (item.queueType === "no_policy") return <span>{item.deal?.insuredName ?? "—"} · {item.carrierName ?? item.deal?.carrier ?? "—"} · {dollars(item.deal?.premiumCents)} a month</span>;
   if (item.queueType === "initial_import") {
     const p = item.payload ?? {};
-    return <span>{item.carrierName ?? p.carrier_name} · {Number(p.policies ?? 0).toLocaleString("en-US")} policies imported, {Number(p.provisional ?? 0).toLocaleString("en-US")} provisional clients created{Number(p.existing ?? 0) ? `, ${Number(p.existing).toLocaleString("en-US")} matched to clients on file` : ""}{Number(p.blocked ?? 0) ? `, ${Number(p.blocked).toLocaleString("en-US")} without a client` : ""}</span>;
+    if (plain) return <span title={importSentence(item)}>{item.carrierName ?? p.carrier_name} · {Number(p.policies ?? 0).toLocaleString("en-US")} policies imported</span>;
+    return <span>{importSentence(item)}</span>;
   }
   if (item.queueType === "orphan_commission") {
     const p = item.payload ?? {};
     const cents = Number(p.amount_cents ?? 0);
-    return <span><span className="font-medium tabular-nums">{item.policyNumber}</span> · {item.carrierName ?? "—"} · {Number(p.lines ?? 0).toLocaleString("en-US")} commission {Number(p.lines ?? 0) === 1 ? "line" : "lines"}, {cents < 0 ? "−" : ""}{dollars(Math.abs(cents))}, since {String(p.first_seen ?? "")}</span>;
+    return <span><span className={plain ? "tabular-nums" : "font-medium tabular-nums"}>{item.policyNumber}</span> · {item.carrierName ?? "—"} · {Number(p.lines ?? 0).toLocaleString("en-US")} commission {Number(p.lines ?? 0) === 1 ? "line" : "lines"}, {cents < 0 ? "−" : ""}{dollars(Math.abs(cents))}, since {String(p.first_seen ?? "")}</span>;
   }
-  if (item.queueType === "multi_policy") return <span className="inline-flex flex-wrap items-center gap-1"><Client person={item.contact} /> and <Client person={item.related} /></span>;
+  if (item.queueType === "multi_policy") return plain ? <span><Client person={item.contact} plain /> and <Client person={item.related} plain /></span> : <span className="inline-flex flex-wrap items-center gap-1"><Client person={item.contact} /> and <Client person={item.related} /></span>;
+  if (plain) return <span><span className="tabular-nums">{item.policyNumber}</span> · {item.carrierName} · <Client person={item.contact} plain /></span>;
   return <span className="inline-flex flex-wrap items-center gap-1.5"><span className="font-medium tabular-nums">{item.policyNumber}</span> · {item.carrierName} · <Client person={item.contact} /></span>;
 }
 
@@ -90,7 +104,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
   }
 
   const needs = (r: Resolution | null) => r === "link_existing_client" ? !fields.contact : r === "found_the_sale" ? !fields.deal : r === "found_the_policy" ? !fields.policy : r === "never_submitted" ? !(fields.reason ?? "").trim() : r === "resubmitted_elsewhere" ? !fields.application : r === "raised_with_carrier" ? !(fields.note ?? "").trim() : false;
-  const toolbar = <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-muted-foreground">Oldest first</span></DataToolbar>;
+  const toolbar = <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}><span className="text-sm text-foreground">Oldest first</span></DataToolbar>;
 
   return (
     <>
@@ -110,17 +124,20 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
               <p className="m-0 mt-0.5 text-xs text-muted-foreground">{QUEUE_LABELS[type].why}</p>
             </div>
             <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-              <thead><tr><th className="w-[110px]" title="From the sale's date for unsubmitted sales, otherwise from when the item appeared">Age</th><th>What</th><th className="w-[200px]">Owner</th><th className="w-[110px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+              {/* Owner 2026-11-11: one line per row, the subject first; the age is a plain period and its tone the row's one chip; the owner's role is the name's tooltip. */}
+              <thead><tr><th>What</th><th>Owner</th><th title="From the sale's date for unsubmitted sales, otherwise from when the item appeared">Age</th><th>Status</th><th>Next step</th></tr></thead>
               <tbody>
                 {shown.rows.map((item) => {
                   const age = ageDays(item.ageFrom, today);
-                  const tone = ageTone(age, rules[type], item.escalated);
+                  const chip = AGE_CHIP[ageTone(age, rules[type], item.escalated)];
+                  const openIt = () => { setCurrent(item); setChoice(null); setFields({}); };
                   return (
-                    <tr key={item.id}>
-                      <td><span className={`text-base font-semibold tabular-nums ${TONE_CLASS[tone]}`}>{ageLabel(age)}</span>{tone === "escalated" && <span className="block text-xs text-[var(--error-ink)]">escalated</span>}</td>
-                      <td>{subject(item)}</td>
-                      <td>{item.assigneeName}<span className="block text-xs text-muted-foreground">{OWNER_ROLE_LABELS[item.assignedRole]}</span></td>
-                      <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => { setCurrent(item); setChoice(null); setFields({}); }}>{readOnly ? "Open" : "Resolve"}</Button></td>
+                    <tr key={item.id} className="cursor-pointer" onClick={openIt}>
+                      <td className="whitespace-nowrap font-medium text-foreground">{subject(item, true)}</td>
+                      <td className="whitespace-nowrap" title={OWNER_ROLE_LABELS[item.assignedRole]}>{item.assigneeName}</td>
+                      <td className="whitespace-nowrap tabular-nums text-muted-foreground">{ageLabel(age)}</td>
+                      <td><StatusChip tone={chip.tone}>{chip.text}</StatusChip></td>
+                      <td><button type="button" className={ROW_ACTION} onClick={(event) => { event.stopPropagation(); openIt(); }}>{readOnly ? "Open" : "Resolve"} ›</button></td>
                     </tr>
                   );
                 })}
@@ -138,11 +155,12 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
               <tbody>
                 {closedShown.rows.map((item) => (
                   <tr key={item.id}>
-                    <td>{QUEUE_LABELS[item.queueType].title}</td>
-                    <td>{subject(item)}</td>
-                    <td>{item.resolution && item.resolution in RESOLUTION_LABELS ? RESOLUTION_LABELS[item.resolution as Resolution] : item.resolution === "auto_linked" ? "Answered by a policy link" : item.resolution}{item.resolutionNote ? <span className="block text-xs text-muted-foreground">{item.resolutionNote}</span> : null}</td>
-                    <td>{item.resolvedByName ?? "—"}</td>
-                    <td className="tabular-nums">{fileDay(item.resolvedAt?.slice(0, 10) ?? null)}</td>
+                    <td className="whitespace-nowrap font-medium text-foreground">{QUEUE_LABELS[item.queueType].title}</td>
+                    <td className="whitespace-nowrap">{subject(item, true)}</td>
+                    {/* The resolution's note was a grey second line; it is the cell's tooltip now. */}
+                    <td className="whitespace-nowrap" title={item.resolutionNote ?? undefined}>{item.resolution && item.resolution in RESOLUTION_LABELS ? RESOLUTION_LABELS[item.resolution as Resolution] : item.resolution === "auto_linked" ? "Answered by a policy link" : item.resolution}</td>
+                    <td className="whitespace-nowrap">{item.resolvedByName ?? <span className="text-muted-foreground">—</span>}</td>
+                    <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(item.resolvedAt?.slice(0, 10) ?? null)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -152,7 +170,7 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
       )}
 
       {tab === "owners" && isOwner && (
-        <TableCard toolbar={<DataToolbar><span className="text-sm text-muted-foreground">A role with nobody in it falls back to you, so no item is ever unowned.</span></DataToolbar>}>
+        <TableCard toolbar={<DataToolbar><span className="text-sm text-foreground">A role with nobody in it falls back to you, so no item is ever unowned.</span></DataToolbar>}>
           <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
             <thead><tr><th>Queue</th><th className="w-[230px]">Owner</th><th className="w-[130px]">Raise after (days)</th><th className="w-[130px]">Escalate after (days)</th><th className="w-[230px]">Escalate to</th><th className="w-[90px] text-right"><span className="sr-only">Save</span></th></tr></thead>
             <tbody>
@@ -162,9 +180,9 @@ export function ExceptionQueues({ open, closed, rules, isOwner, today, readOnly,
                 const num = (value: string) => (value.trim() === "" ? null : Number(value.replace(/\D/g, "")));
                 return (
                   <tr key={type}>
-                    <td className="font-semibold text-foreground">{QUEUE_LABELS[type].title}</td>
+                    <td className="whitespace-nowrap font-medium text-foreground">{QUEUE_LABELS[type].title}</td>
                     <td><select aria-label={`Owner of ${QUEUE_LABELS[type].title}`} className={`${toolbarControl} w-full`} value={rule.ownerRole} onChange={(e) => set({ ownerRole: e.target.value as OwnerRole })}>{OWNER_ROLES.map((role) => <option key={role} value={role}>{OWNER_ROLE_LABELS[role]}</option>)}</select></td>
-                    <td>{type === "no_policy" ? <Input aria-label="Raise after days" inputMode="numeric" value={rule.openAfterDays ?? ""} onChange={(e) => set({ openAfterDays: num(e.target.value) })} /> : <span className="text-muted-foreground">at once</span>}</td>
+                    <td>{type === "no_policy" ? <Input aria-label="Raise after days" inputMode="numeric" value={rule.openAfterDays ?? ""} onChange={(e) => set({ openAfterDays: num(e.target.value) })} /> : <span className="whitespace-nowrap">at once</span>}</td>
                     <td><Input aria-label="Escalate after days" inputMode="numeric" value={rule.escalateAfterDays ?? ""} onChange={(e) => set({ escalateAfterDays: num(e.target.value) })} /></td>
                     <td><select aria-label="Escalate to" className={`${toolbarControl} w-full`} value={rule.escalateToRole ?? ""} onChange={(e) => set({ escalateToRole: (e.target.value || null) as OwnerRole | null })}><option value="">Show it as escalated</option>{OWNER_ROLES.map((role) => <option key={role} value={role}>{OWNER_ROLE_LABELS[role]}</option>)}</select></td>
                     <td className="text-right"><Button type="button" size="sm" disabled={busy || readOnly} onClick={() => void post({ action: "save_rule", queue_type: type, owner_role: rule.ownerRole, open_after_days: type === "no_policy" ? rule.openAfterDays : null, escalate_after_days: rule.escalateAfterDays, escalate_to_role: rule.escalateToRole }, "Saved.")}>Save</Button></td>

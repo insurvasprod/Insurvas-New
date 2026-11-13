@@ -108,6 +108,22 @@ export async function phonesFor(tenantId: string, scope: { contactId: string } |
   return [...new Set(events.map((e) => e.phoneDigits))];
 }
 
+/** The last nightly reconciliations for a tenant, newest first (Settings › Gate & reports › Index checks, round 7). */
+export async function listReconciliations(tenantId: string, limit = 14): Promise<{ ranAt: string; missing: number; stale: number; unkeyed: number }[]> {
+  const { data, error } = await db()
+    .from("compliance_index_reconciliation")
+    .select("ran_at, missing_count, stale_count, unkeyed_count")
+    .eq("tenant_id", tenantId)
+    .order("ran_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    if (isSchemaGap(error)) return [];
+    throw new Error(error.message);
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ((data ?? []) as any[]).map((r) => ({ ranAt: r.ran_at as string, missing: Number(r.missing_count), stale: Number(r.stale_count), unkeyed: Number(r.unkeyed_count) }));
+}
+
 /** The latest nightly reconciliation for a tenant: a non-zero missing count is a bug. */
 export async function latestReconciliation(tenantId: string) {
   const { data, error } = await db()

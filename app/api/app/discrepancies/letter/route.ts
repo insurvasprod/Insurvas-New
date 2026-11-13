@@ -19,8 +19,8 @@ import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 const roles = ["owner", "bookkeeper"] as const;
 
 const bodySchema = z.object({
-  carrier: z.string().refine(isRecordId, "Choose one carrier's discrepancies"),
-  ids: z.array(z.string().refine(isRecordId, "That discrepancy is not in this workspace")).min(1, "Choose at least one discrepancy").max(200),
+  carrier: z.string().refine(isRecordId, "Choose one carrier's pay issues"),
+  ids: z.array(z.string().refine(isRecordId, "That pay issue is not in this workspace")).min(1, "Choose at least one pay issue").max(200),
 }).strict();
 
 export async function POST(request: NextRequest) {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
   try {
     const list = await listDiscrepancies(tenantId, { ids: body.data.ids });
     const items = letterItems(list.items, body.data.carrier, body.data.ids);
-    if (!items.length) return NextResponse.json({ error: "None of those discrepancies can go on a letter to that carrier." }, { status: 404 });
+    if (!items.length) return NextResponse.json({ error: "None of those pay issues can go on a letter to that carrier." }, { status: 404 });
     const totalCents = items.reduce((sum, item) => sum + item.owedCents, 0);
     await audit({
       actorType: "tenant",

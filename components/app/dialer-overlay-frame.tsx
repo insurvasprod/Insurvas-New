@@ -45,7 +45,7 @@ export function OverlayFrame({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className={cn("fixed inset-0 z-50 flex items-start justify-center overflow-hidden bg-[rgba(10,12,16,0.55)] px-4 pt-4", TOP[top])}>
+        <DialogPrimitive.Overlay className={cn("fixed inset-0 z-50 flex items-start justify-center overflow-hidden bg-[var(--backdrop)] px-4 pt-4", TOP[top])}>
           <DialogPrimitive.Content
             className={cn(
               "m-swap flex max-h-[calc(100dvh-32px)] w-full min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_24px_64px_rgba(0,0,0,0.28)] outline-none",

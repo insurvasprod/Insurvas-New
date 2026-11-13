@@ -183,10 +183,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error instanceof Error ? error.message : "Could not preview routing" }, { status: 500 });
     }
   }
-  const auth = await requireFeatureRole("outbound_dialing", allRoles);
+  // The page's own read: the scope is fetched alongside the entitlement, and the two agency checks run
+  // side by side (the routing refusal still wins), as the list preview above does.
+  const auth = await requireFeatureRole("outbound_dialing", allRoles, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   // AG-0.10 · in an agency the owner (or an admin) routes; a producer works his own queue.
-  const agencyRefusal = await refuseRouting(auth.context);
+  const [routingRefusal, scopeRefusal] = await Promise.all([refuseRoutingInAgency(auth.context), refuseNarrowInAgency(auth.context, "Lead routing")]);
+  const agencyRefusal = routingRefusal ?? scopeRefusal;
   if (agencyRefusal) return agencyRefusal;
   try {
     const workspace = await getAssignmentWorkspace(auth.context.tenantId);

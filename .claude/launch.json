@@ -22,6 +22,17 @@
       "port": 3000
     },
     {
+      "name": "dev-3002",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "next",
+        "dev",
+        "-p",
+        "3002"
+      ],
+      "port": 3002
+    },
+    {
       "name": "dev-attach",
       "url": "http://localhost:3000",
       "port": 3000

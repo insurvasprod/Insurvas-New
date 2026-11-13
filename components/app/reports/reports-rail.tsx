@@ -9,6 +9,12 @@ import { IntentLink } from "@/components/ui/nav-pending";
 import { rememberReports } from "@/components/app/step-frame/frame-memory";
 import { REPORTS_RAIL_COOKIE, REPORTS_VIEWS, sharedPeriod, type ReportsView } from "@/lib/reports/views";
 import { cn } from "@/lib/utils";
+import { peek, readResource, seed } from "@/lib/client/resource-cache";
+
+/** The appointments waiting for an outcome, as the app's cache keys them (lib/client/resource-cache.ts). */
+const CLOSE_OUT_KEY = "/api/app/appointments/close-out";
+type CloseOutBody = { appointments?: unknown[] } | null;
+const countOf = (body: CloseOutBody | undefined) => (Array.isArray(body?.appointments) ? body.appointments.length : 0);
 
 const ICONS: Record<ReportsView, LucideIcon> = { sales: ChartColumn, activity: Activity, scoring: Brain, book: Gauge, cpa: BadgeDollarSign, partner: Award, retention: ChartNoAxesCombined, retentionResults: ChartLine, producers: UserRoundCheck, hierarchy: Network };
 
@@ -28,7 +34,7 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
   const params = useSearchParams();
   const period = sharedPeriod(params);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
-  const [closeOuts, setCloseOuts] = useState(0);
+  const [closeOuts, setCloseOuts] = useState(() => countOf(seed<CloseOutBody>(CLOSE_OUT_KEY)?.data));
 
   const views = useMemo(() => {
     const keys = new Set((menu ?? []).flatMap((section) => section.items).map((item) => item.key));
@@ -38,12 +44,15 @@ export function ReportsRail({ view, initialCollapsed = false }: { view: ReportsV
 
   useEffect(() => {
     if (!hasActivity) return;
-    const controller = new AbortController();
-    fetch("/api/app/appointments/close-out", { cache: "no-store", signal: controller.signal })
-      .then((response) => (response.ok ? response.json() : null))
-      .then((body: { appointments?: unknown[] } | null) => { if (Array.isArray(body?.appointments)) setCloseOuts(body.appointments.length); })
+    let live = true;
+    const kept = peek<CloseOutBody>(CLOSE_OUT_KEY)?.data;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+    if (Array.isArray(kept?.appointments)) setCloseOuts((current) => current || countOf(kept));
+    // Through the app's cache (lib/client/resource-cache.ts): asked again on each view, the kept count shown meanwhile.
+    readResource<CloseOutBody>(CLOSE_OUT_KEY)
+      .then((body) => { if (live && Array.isArray(body?.appointments)) setCloseOuts(body.appointments.length); })
       .catch(() => {});
-    return () => controller.abort();
+    return () => { live = false; };
   }, [hasActivity, view]);
 
   // Remembered for the shell's loading state, which redraws this menu while the next view loads (frame-memory.ts).

@@ -83,7 +83,7 @@ function SetterPanel({ setter, onClose }: { setter: Setter; onClose: () => void 
       mode="split"
       splitFrom="xl"
       title={setter.name}
-      subtitle={[setter.place, "last 30 days"].filter(Boolean).join(" · ")}
+      subtitle={["Setter", setter.place, "last 30 days"].filter(Boolean).join(" · ")}
       status={<StatusChip tone={VERDICT_TONE[setter.verdict]} dot>{VERDICT_LABEL[setter.verdict]}</StatusChip>}
       onClose={onClose}
       bodyClassName="flex flex-col gap-4 p-4"
@@ -157,15 +157,14 @@ export function SetterRanking({ setters, target, scope }: { setters: Setter[]; t
       >
         {setters.length === 0 ? <EmptyState title="No setter activity" hint="No dials or bookings in the last 30 days." /> : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] border-collapse text-sm">
+            {/* data-even off: the even spread is measured with the panel shut and kept when the panel opens, which pushed Show rate and Verdict out of the card. */}
+            <table data-even="off" className="w-full min-w-[560px] border-collapse text-sm">
               <thead><tr className="border-b border-border">
                 <th scope="col" className={th}>Setter</th>
-                <th scope="col" className={`${th} text-right`}>Dials</th>
-                <th scope="col" className={`${th} text-right`}>Contacts</th>
                 <th scope="col" className={`${th} text-right`}>Booked</th>
                 <th scope="col" className={`${th} text-right`}>Showed</th>
                 <th scope="col" className={`${th} text-right`}>Sold</th>
-                <th scope="col" className={`${th} w-[26%]`}>Show rate</th>
+                <th scope="col" className={`${th} w-[32%]`}>Show rate</th>
                 <th scope="col" className={th}><span className="inline-flex items-center gap-1">Verdict<InfoTip label="About the verdict" side="left">Booking noise: a show rate under {NOISE_BELOW_PCT}% over at least {VERDICT_MIN_CLOSED} closed-out appointments. Appointments waiting to be closed out never count against a setter.</InfoTip></span></th>
               </tr></thead>
               <tbody>
@@ -175,12 +174,10 @@ export function SetterRanking({ setters, target, scope }: { setters: Setter[]; t
                     <tr key={row.userId} onClick={() => setOpenId(on ? null : row.userId)} className={cn("m-row cursor-pointer border-b border-border last:border-b-0", on && "bg-[var(--primary-soft)] shadow-[inset_3px_0_0_var(--primary)]")}>
                       <td className="px-4 py-3">
                         <button type="button" aria-pressed={on} onClick={(event) => { event.stopPropagation(); setOpenId(on ? null : row.userId); }} className="flex items-center gap-3 text-left">
-                          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--primary-soft)] text-xs font-bold text-[var(--accent-ink)]">{initials(row.name)}</span>
+                          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-[var(--highlight-soft)] text-xs font-bold text-[var(--highlight-ink)]">{initials(row.name)}</span>
                           <span className="min-w-0"><span className="block truncate font-semibold text-[var(--ink)]">{row.name}</span>{row.place && <span className="block truncate text-xs text-muted-foreground">{row.place}</span>}</span>
                         </button>
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.dials.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right tabular-nums">{row.contacts.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{row.booked}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{row.showed}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{row.sold}</td>

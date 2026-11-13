@@ -18,6 +18,7 @@ import { outboundLimitSnapshot } from "@/lib/metering/outbound";
 import { fetchTenantSeatsHeld } from "@/lib/subscriptions/tenantBilling";
 import { listPartners } from "@/lib/partners/service";
 import { planPriceCents, previewPlanChange, settleMidPeriodPlanChange, type PlanChangePreview } from "@/lib/billing/planChange";
+import { planComparison, type PlanComparison } from "@/lib/billing/planCompare";
 import { rebuildEntitlement } from "@/lib/entitlements/rebuild";
 import { buildProvider } from "@/lib/payments/registry";
 import { WhopProvider } from "@/lib/payments/whop/provider";
@@ -25,7 +26,8 @@ import { cancelledRetentionDays, meterWarnThreshold } from "@/lib/settings/queri
 import type { BillingCycle } from "@/lib/money";
 import type { Entitlement } from "@/lib/entitlements/types";
 import type { SubscriptionStatus } from "@/lib/subscriptions/access";
-import type { InvoiceStatus } from "@/lib/invoices/constants";
+import { INVOICE_LINE_KIND_LABELS, type InvoiceStatus } from "@/lib/invoices/constants";
+import { fetchInvoiceDetail } from "@/lib/invoices/queries";
 import {
   BILLING_STATE_COPY,
   dunningView,
@@ -154,7 +156,13 @@ export type BillingView = {
    * Until a new-plan checkout exists, its plan changes go through support.
    */
   planChangeBySupport: boolean;
+  /**
+   * The plans a live subscription can move to, priced on its cycle. A card-billed agency sees them too
+   * (to compare, and to ask support to move it); the change itself is still refused to it here.
+   */
   options: PlanOption[];
+  /** Compare plans (Settings round 8, A2): the current plan and every option, limit by limit. */
+  compare: PlanComparison;
 };
 
 async function featureLabels(keys: string[]): Promise<Map<string, string>> {
@@ -270,7 +278,7 @@ export async function loadBillingView(tenantId: string, entitlement: Entitlement
 
   const base = { schemaReady, limits, warnPercent: Math.round(warn * 100), invoices: invoiceRows };
   if (!sub) {
-    return { ...base, subscription: null, plan: null, dunning: null, retention: { days: retentionDays, endsAt: null }, actions: null, cardOnFile: false, planChangeBySupport: false, options: [] };
+    return { ...base, subscription: null, plan: null, dunning: null, retention: { days: retentionDays, endsAt: null }, actions: null, cardOnFile: false, planChangeBySupport: false, options: [], compare: { plans: [], featureLabels: {} } };
   }
 
   const [planRow, pendingRow, priceCents, addonRows, options] = await Promise.all([
@@ -278,8 +286,10 @@ export async function loadBillingView(tenantId: string, entitlement: Entitlement
     sub.pending_plan_id ? db().from("plans").select("name").eq("id", sub.pending_plan_id).maybeSingle<{ name: string }>() : Promise.resolve({ data: null }),
     planPriceCents(sub.plan_id, sub.billing_cycle),
     db().from("subscription_addons").select("addons(name, price_cents, billing_cycle)").eq("subscription_id", sub.id).is("detached_at", null),
-    !sub.whop_membership_id && (sub.status === "trialing" || sub.status === "active" || sub.status === "past_due") ? planOptions(sub) : Promise.resolve([]),
+    // Card-billed (Whop) agencies are offered the plans too, to compare and ask support; selfChangePlan still refuses them.
+    sub.status === "trialing" || sub.status === "active" || sub.status === "past_due" ? planOptions(sub) : Promise.resolve([]),
   ]);
+  const compare = options.length ? await planComparison([sub.plan_id, ...options.map((o) => o.id)], limits.map((l) => l.key)).catch(() => ({ plans: [], featureLabels: {} })) : { plans: [], featureLabels: {} };
   const featureKeys = entitlement.features ?? [];
   const labels = await featureLabels(featureKeys);
   const ends = sub.status === "cancelled" ? sub.cancelled_at : sub.status === "cancelling" ? sub.current_period_end : null;
@@ -314,6 +324,7 @@ export async function loadBillingView(tenantId: string, entitlement: Entitlement
     cardOnFile: Boolean(sub.whop_membership_id),
     planChangeBySupport: Boolean(sub.whop_membership_id),
     options,
+    compare,
   };
 }
 
@@ -509,6 +520,60 @@ export async function selfCancel(tenantId: string, reason: string, pauseDeclined
   const providerWarning = await onProvider(tenantId, sub.whop_membership_id, (p, id) => p.setCancelAtPeriodEnd(id, true));
   const retentionDays = await cancelledRetentionDays();
   return { subscriptionId: sub.id, from: sub.status, effectiveAt: result.effective_at, retentionEndsAt: retentionEndsAt(result.effective_at, retentionDays), providerWarning };
+}
+
+/* ── one invoice, for the invoice sheet (Settings round 8, A7) ──────────── */
+
+export type BillingInvoiceDocument = {
+  id: string;
+  number: string;
+  status: InvoiceStatus;
+  issuedAt: string | null;
+  dueAt: string | null;
+  paidAt: string | null;
+  periodStart: string | null;
+  periodEnd: string | null;
+  subtotalCents: number;
+  discountCents: number;
+  taxCents: number;
+  totalCents: number;
+  currency: string;
+  billedTo: string;
+  billedAddress: string | null;
+  lines: { id: string; label: string; kind: string; quantity: number; amountCents: number }[];
+};
+
+/**
+ * The document /app/billing/invoices/[id] prints, as data: the agency's own invoices only, never a
+ * draft. Null when it is not theirs or does not exist.
+ */
+export async function invoiceDocument(tenantId: string, invoiceId: string): Promise<BillingInvoiceDocument | null> {
+  const detail = await fetchInvoiceDetail(invoiceId);
+  if (!detail || detail.invoice.tenant_id !== tenantId || detail.invoice.status === "draft") return null;
+  const { invoice, lines } = detail;
+  // Loosely typed: agency_profiles is not in the generated types yet.
+  type Profiles = { from(table: string): { select(columns: string): { eq(column: string, value: unknown): { maybeSingle<T>(): PromiseLike<{ data: T | null }> } } } };
+  const profile = await (getSupabaseServiceClient() as unknown as Profiles)
+    .from("agency_profiles").select("legal_name, principal_address").eq("tenant_id", tenantId)
+    .maybeSingle<{ legal_name: string | null; principal_address: string | null }>();
+  return {
+    id: invoice.id,
+    number: invoice.number,
+    status: invoice.status,
+    issuedAt: invoice.issued_at,
+    dueAt: invoice.due_at,
+    paidAt: invoice.paid_at,
+    periodStart: invoice.period_start,
+    periodEnd: invoice.period_end,
+    subtotalCents: invoice.subtotal_cents,
+    discountCents: invoice.discount_cents,
+    taxCents: invoice.tax_cents,
+    totalCents: invoice.total_cents,
+    currency: invoice.currency,
+    billedTo: profile.data?.legal_name?.trim() || invoice.tenant_name,
+    billedAddress: profile.data?.principal_address?.replace(/\r?\n/g, ", ").trim() || null,
+    lines: lines.map((l) => ({ id: l.id, label: l.label, kind: INVOICE_LINE_KIND_LABELS[l.kind] ?? l.kind, quantity: Number(l.quantity), amountCents: l.amount_cents })),
+  };
 }
 
 /** Whop's own page for the card on this agency's membership, or null when there is none. */

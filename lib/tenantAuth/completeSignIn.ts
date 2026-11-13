@@ -100,11 +100,19 @@ export async function completeTenantSignIn({ request, authUserId, email, remembe
 
   // No tenant is known yet at this point, so the profile lookup must run unscoped through the
   // service-role client. The auth user id is the only identity accepted from Supabase Auth.
-  const { data: user } = await supabase
-    .from("users")
-    .select("id, status, session_version, last_login_at")
-    .eq("id", authUserId)
-    .maybeSingle<{ id: string; status: string; session_version: number; last_login_at: string | null }>();
+  // Everything keyed only by that id is read in the same trip (sign-in speed, 2026-11-13: each trip
+  // is ~170ms and they used to go one after another). They are reads; every check below still runs
+  // in its old order on their answers.
+  const [{ data: user }, isPartnerAccount, { data: memberships }, enabledAt] = await Promise.all([
+    supabase
+      .from("users")
+      .select("id, status, session_version, last_login_at")
+      .eq("id", authUserId)
+      .maybeSingle<{ id: string; status: string; session_version: number; last_login_at: string | null }>(),
+    holdsPartnerMembership(authUserId),
+    supabase.from("tenant_users").select("tenant_id, role, accepted_at").eq("user_id", authUserId),
+    twoFactorEnabledAt(authUserId).catch(() => null),
+  ]);
 
   if (!user) {
     return fail("no_membership", authUserId, NextResponse.json(GENERIC_ERROR, { status: 401 }));
@@ -140,10 +148,6 @@ export async function completeTenantSignIn({ request, authUserId, email, remembe
 
   // A partner organisation's account never gets an agent session (lib/auth/planeSeparation.ts).
   // Past the password, so naming the right door reveals nothing the caller could not know.
-  const [isPartnerAccount, { data: memberships }] = await Promise.all([
-    holdsPartnerMembership(user.id),
-    supabase.from("tenant_users").select("tenant_id, role, accepted_at").eq("user_id", user.id),
-  ]);
   if (isPartnerAccount) {
     return fail(
       "no_membership",
@@ -196,15 +200,19 @@ export async function completeTenantSignIn({ request, authUserId, email, remembe
   // LA-8.2: with two-factor on, the password is only the first step. Nothing is recorded as a
   // successful sign-in until the code is (POST /api/app/auth/verify-2fa); a short-lived cookie,
   // which can never act as a session, carries the person there.
-  const enabledAt = await twoFactorEnabledAt(user.id).catch(() => null);
+  // `enabledAt` was read with the user row above.
   const enrolled = Boolean(enabledAt);
   // "Trust this device for 30 days": a cookie from an earlier code step on this browser, for this
   // person, at this session version and this authenticator, stands in for the code.
-  const trusted = enabledAt ? await trustedDeviceFor(request, user.id, user.session_version, enabledAt) : null;
   // A role that can reveal an SSN or bank details, without two-factor, is sent to set it up — prompted,
   // not locked out: everything but those reveals keeps working (lib/tenantAuth/twoFactor.ts).
   // An invited member's first sign-in opens their walkthrough (Get set up, 2026-10-21); null for the owner.
-  const landing = (await firstLoginLanding(membership.tenant_id, user.id, membership.role)) ?? "/app/dashboard";
+  // The two are independent, so they go out together.
+  const [trusted, firstLanding] = await Promise.all([
+    enabledAt ? trustedDeviceFor(request, user.id, user.session_version, enabledAt) : Promise.resolve(null),
+    firstLoginLanding(membership.tenant_id, user.id, membership.role),
+  ]);
+  const landing = firstLanding ?? "/app/dashboard";
   const redirectTo = signupDestination({ userStatus: user.status, onboardingState: tenant.onboarding_state })
     ?? (!enrolled && requiresTwoFactor(membership.role) ? "/app/settings?two_factor=required#my-profile/security" : landing);
   if (enrolled && !trusted) {
@@ -217,20 +225,19 @@ export async function completeTenantSignIn({ request, authUserId, email, remembe
   }
 
   // Only a successful login moves last_login_at — failures must never touch it (SA-1.5).
-  // Three independent writes, so they go out together rather than as three trips in a row.
-  await Promise.all([
+  // Independent writes, and the session row with them, so they go out together rather than as trips
+  // in a row. Role is intentionally not baked into the token — it's resolved per request (SA-1.3). The
+  // token names its session row, which every request checks (LA-8.2). A trusted device carries the
+  // time its code was last typed, so the session counts as having passed the second factor exactly as
+  // a fresh code would.
+  const [{ token: sessionToken }] = await Promise.all([
+    issueTenantSession({ userId: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, request, remember, twoFactorAt: trusted?.verifiedAt ?? null }),
     clearLoginFailures("user", email, request),
     recordLastLogin("user", user.id),
     recordLoginEvent({ request, email, success: true, userId: user.id, actorType: "user" }),
     via === "link" ? recordSecurityEvent({ userId: user.id, tenantId: membership.tenant_id, type: "signed_in_with_link", request }) : Promise.resolve(),
     via === "google" ? recordSecurityEvent({ userId: user.id, tenantId: membership.tenant_id, type: "signed_in_with_google", request }) : Promise.resolve(),
   ]);
-
-  // Role is intentionally not baked into the token — it's resolved per request (SA-1.3). The token
-  // names its session row, which every request checks (LA-8.2).
-  // A trusted device carries the time its code was last typed, so the session counts as having passed
-  // the second factor exactly as a fresh code would.
-  const { token: sessionToken } = await issueTenantSession({ userId: user.id, tenantId: membership.tenant_id, sessionVersion: user.session_version, request, remember, twoFactorAt: trusted?.verifiedAt ?? null });
   const response = NextResponse.json({ ok: true, redirectTo });
   response.cookies.set(TENANT_SESSION_COOKIE, sessionToken, tenantSessionCookie(remember));
   // A successful agent login switches the browser to the agent identity plane. Clear any stale

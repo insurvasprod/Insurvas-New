@@ -92,7 +92,7 @@ to today.
 `components/app/deal-flow-workspace.tsx` is the reference: the same header row, the same four
 figures with the same icons and Show actions, the worked-date range at the header's right and
 search in the table toolbar, the same inline filter panel, the same 40px head and 44px rows (`st` from
-[`settings/primitives`](../app/settings/primitives.tsx)), the same `PremiumBar`, the same pager.
+[`settings/primitives`](../app/settings/primitives.tsx)), the same plain annualised premium column (one line, no bar, 2026-11-11), the same pager.
 **Change one and look at the other.**
 
 Two differences, both the owner's own earlier decisions rather than design choices:

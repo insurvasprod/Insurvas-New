@@ -9,6 +9,7 @@ import { MoreMenu } from "@/components/ui/more-menu";
 import { EmptyState, NoMatches } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
 import { StatStrip, StatTile } from "@/components/ui/stat";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -105,7 +106,7 @@ export function CarrierLedger({ entries, scoped, initialSource = "", initialType
       {entries.length > 0 && <StatStrip label={source === "hand" ? "Commission from statements imported by hand" : source === "carrier" ? "Commission from carrier files" : "Commission, every source"}>
         <StatTile label="Advanced" value={whole(sum.advancedCents)} footnote="paid ahead of earning" href={tileHref("advance")} />
         <StatTile label="Earned" value={whole(sum.earnedCents)} footnote={sum.overrideCents ? `plus ${whole(sum.overrideCents)} overrides` : "from premiums paid"} href={tileHref("earned")} />
-        <StatTile label="Charged back" value={whole(sum.chargedBackCents)} valueTone={sum.chargedBackCents ? "danger" : undefined} footnote="unearned advance taken back" href={tileHref("chargeback")} />
+        <StatTile label="Charged back" value={whole(sum.chargedBackCents)} footnote={sum.chargedBackCents ? <span title="Unearned advance taken back"><StatusChip tone="danger">Taken back</StatusChip></span> : "unearned advance taken back"} href={tileHref("chargeback")} />
         <StatTile label="Net received" value={whole(sum.netReceivedCents)} footnote={sum.feeCents || sum.interestCents ? `after ${whole(Math.abs(sum.feeCents + sum.interestCents))} of fees and interest` : "everything but held"} href={tileHref("")} />
         <StatTile label="Held" value={whole(sum.heldCents)} footnote="earned, not paid yet" href={tileHref("held")} />
       </StatStrip>}
@@ -165,33 +166,29 @@ export function CarrierLedger({ entries, scoped, initialSource = "", initialType
                 {anyPayee && <th className="w-[90px]">Payee</th>}
                 {/* Owner 2026-11-10: the statement's file is its own column at the end, not a line under the date. */}
                 <th className="w-[230px]">File</th>
-                <th className="w-[36px]"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 // The whole row opens its line (board 10); the policy and the file's row are links of their own.
                 <tr key={row.id} className="cursor-pointer" onClick={() => router.push(lineHref(row))}>
-                  {/* Owner 2026-11-10: every cell on one line; what doesn't fit ends in "…", the whole text in the tooltip. */}
-                  <td className="max-w-[250px]" title={`${fileDay(row.statementDate ?? row.transactionDate)} · ${row.carrierName}`}>
-                    <span className="block truncate text-foreground"><span className="tabular-nums">{fileDay(row.statementDate ?? row.transactionDate)}</span> · {row.carrierName}</span>
+                  {/* Owner 2026-11-11: one line, one colour, the statement whole. A line's description is its Entry's
+                      tooltip, "Policy not seen yet" its Policy's; a held line says so in the File column's one chip,
+                      its file and row that chip's tooltip. Amounts are plain: a minus sign, no red. */}
+                  <td className="whitespace-nowrap font-medium text-foreground"><span className="tabular-nums">{fileDay(row.statementDate ?? row.transactionDate)}</span> · {row.carrierName}</td>
+                  <td className="whitespace-nowrap tabular-nums" title={row.orphan ? "Policy not seen yet: no policy file has shown this policy. The line joins it the moment it arrives." : undefined}>{row.account ? <span className="font-sans" title="Money the carrier moved on the agency's account, naming no policy">Account-level</span> : <Link href={policyHref(row)} onClick={(event) => event.stopPropagation()} className="text-foreground hover:underline">{row.policyNumber}</Link>}</td>
+                  {anyClient && <td className="whitespace-nowrap">{row.clientName ?? ""}</td>}
+                  <td className="whitespace-nowrap" title={[ENTRY_LABELS[kindOf(row) as EntryType]?.meaning, row.description].filter(Boolean).join(" · ") || undefined}>{typeWord(row)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums" title={row.type === "held" ? "Held: not part of net received" : undefined}>{signed(row.amountCents)}</td>
+                  {anyAgent && <td className="whitespace-nowrap">{row.agentName ? row.agentName : row.agentIdentifier ? <span title="No producer is mapped to this writing number yet">{row.agentIdentifier}</span> : null}</td>}
+                  {anyPayee && <td className="whitespace-nowrap">{payeeWord(row) ?? ""}</td>}
+                  <td className="whitespace-nowrap" title={row.fileName ? `${row.fileName}, ${row.source === "hand" ? "line" : "row"} ${row.rowNumber}` : undefined}>
+                    {row.heldByStatement ? <StatusChip tone="warning">Held: its statement doesn&apos;t add up</StatusChip> : (
+                      <Link href={row.href ?? rowHref(row.fileId, row.rowNumber)} onClick={(event) => event.stopPropagation()} className="text-foreground hover:underline">
+                        {row.fileName ?? "The file"} · {row.source === "hand" ? `line ${row.rowNumber}` : `row ${row.rowNumber}`}
+                      </Link>
+                    )}
                   </td>
-                  <td className="tabular-nums">{row.account ? <span className="font-sans text-muted-foreground" title="Money the carrier moved on the agency's account, naming no policy">Account-level</span> : <Link href={policyHref(row)} onClick={(event) => event.stopPropagation()} className="font-semibold text-foreground hover:underline">{row.policyNumber}</Link>}{row.orphan && <span className="block font-sans text-xs text-muted-foreground" title="No policy file has shown this policy yet. The line joins it the moment it arrives.">Policy not seen yet</span>}</td>
-                  {anyClient && <td className="max-w-[180px]" title={row.clientName ?? undefined}><span className="block truncate text-foreground">{row.clientName ?? ""}</span></td>}
-                  <td title={ENTRY_LABELS[kindOf(row) as EntryType]?.meaning}>
-                    <span className="text-foreground">{typeWord(row)}</span>
-                    {row.description && <span className="block max-w-[120px] truncate text-xs text-muted-foreground" title={row.description}>{row.description}</span>}
-                    {row.heldByStatement && <span className="block text-xs text-[var(--warning-ink)]">Held out of totals: its statement doesn&apos;t add up</span>}
-                  </td>
-                  <td className={`text-right font-semibold tabular-nums ${row.type === "held" ? "text-muted-foreground" : row.amountCents < 0 ? "text-[var(--error-ink)]" : "text-foreground"}`} title={row.type === "held" ? "Held: not part of net received" : undefined}>{signed(row.amountCents)}</td>
-                  {anyAgent && <td>{row.agentName ? <span className="text-foreground">{row.agentName}</span> : row.agentIdentifier ? <span className="text-muted-foreground" title="No producer is mapped to this writing number yet">{row.agentIdentifier}</span> : null}</td>}
-                  {anyPayee && <td>{payeeWord(row) ?? ""}</td>}
-                  <td title={row.fileName ? `${row.fileName}, ${row.source === "hand" ? "line" : "row"} ${row.rowNumber}` : undefined}>
-                    <Link href={row.href ?? rowHref(row.fileId, row.rowNumber)} onClick={(event) => event.stopPropagation()} className="block max-w-[260px] truncate text-muted-foreground hover:text-[var(--accent-ink)] hover:underline">
-                      {row.fileName ?? "The file"} · {row.source === "hand" ? `line ${row.rowNumber}` : `row ${row.rowNumber}`}
-                    </Link>
-                  </td>
-                  <td className="text-right text-muted-foreground" aria-hidden="true">›</td>
                 </tr>
               ))}
             </tbody>

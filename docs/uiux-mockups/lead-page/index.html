@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Page Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+<style>
+/* Leads › Lead workspace › a lead (/app/leads/[id]) — three directions, round 1, 2026-11-10.
+   Static: open it straight from disk. Tokens are the app's dark theme (owner's look). */
+:root {
+  --ground: #080d0b; --canvas: #0d1412; --surface: #151e1b; --raised: #1d2824; --hi: #24322d;
+  --text: #f2f6f4; --muted: #9fb0a7; --faint: #6f8079; --border: #2a3631; --border-strong: #38463f;
+  --primary: #35d6aa; --pfg: #0b2119; --psoft: #173a30; --pline: #1f5a49;
+  --good: #6be3c1; --goodbg: #173a30; --info: #a4c0f8; --infobg: #172a4a;
+  --warn: #f3c266; --warnbg: #3a2b0c; --bad: #f7a1a1; --badbg: #3f1a1a;
+  --stage: #e08a2c;
+  --shadow: 0 14px 40px rgba(0,0,0,.55);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--ground); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+p, h1, h2, h3, h4, ol, ul, dl, dd { margin: 0; }
+ol, ul { padding: 0; list-style: none; }
+.num { font-variant-numeric: tabular-nums; }
+.m { color: var(--muted); } .f { color: var(--faint); }
+svg.i { width: 16px; height: 16px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+svg.i.s { width: 13px; height: 13px; }
+
+/* document */
+.doc { max-width: 1560px; margin: 0 auto; padding: 28px 16px 96px; }
+.mast h1 { font-size: 28px; font-weight: 700; letter-spacing: -.02em; }
+.mast p { color: var(--muted); max-width: 92ch; margin-top: 8px; }
+.toc { position: sticky; top: 0; z-index: 30; display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0; margin: 18px 0 8px; background: color-mix(in srgb, var(--ground) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+.toc a { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; font-size: 13px; color: var(--muted); font-weight: 500; }
+.toc a:hover { color: var(--text); background: var(--raised); }
+section.dir { padding-top: 52px; }
+.dh { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: baseline; }
+.letter { font: 700 13px/1 Inter; width: 26px; height: 26px; border-radius: 7px; display: inline-grid; place-items: center; background: var(--primary); color: var(--pfg); align-self: center; }
+.dh h2 { font-size: 22px; font-weight: 700; letter-spacing: -.02em; }
+.dh .tag { font-size: 13px; color: var(--muted); }
+.lede { color: var(--muted); max-width: 100ch; margin: 6px 0 16px; }
+.lede b { color: var(--text); font-weight: 600; }
+.cap { display: flex; gap: 10px; align-items: baseline; margin: 26px 0 10px; }
+.cap b { font-size: 13px; font-weight: 700; color: var(--primary); white-space: nowrap; }
+.cap span { color: var(--muted); font-size: 13px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-top: 22px; }
+.note { border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; background: var(--canvas); font-size: 13px; color: var(--muted); }
+.note h4 { font-size: 13px; color: var(--text); font-weight: 600; margin-bottom: 6px; }
+.note ul { list-style: disc; padding-left: 18px; }
+.note li { margin: 4px 0; }
+.note b { color: var(--text); font-weight: 600; }
+.note code { font: 12px ui-monospace, Consolas, monospace; background: var(--raised); padding: 1px 5px; border-radius: 4px; color: var(--text); }
+.surfaces { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.surf { background: var(--canvas); border: 1px solid var(--border); border-radius: 16px; padding: 16px; min-width: 0; overflow-x: auto; }
+.surf > h4 { font-size: 13px; font-weight: 600; color: var(--muted); margin-bottom: 12px; }
+.surf > h4 b { color: var(--text); }
+.crit { width: 100%; border-collapse: collapse; background: var(--canvas); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; font-size: 13px; }
+.crit th, .crit td { text-align: left; padding: 9px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.crit th { color: var(--muted); font-weight: 600; font-size: 12px; background: var(--surface); }
+.crit td:first-child { width: 36px; color: var(--faint); }
+.scroll-x { overflow-x: auto; }
+
+/* app frame */
+.frame { background: var(--canvas); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+.app { display: grid; grid-template-columns: 64px minmax(0, 1fr); min-height: 860px; }
+.rail { border-right: 1px solid var(--border); background: #0a120f; display: flex; flex-direction: column; align-items: center; gap: 14px; padding-top: 16px; }
+.rail i { width: 30px; height: 30px; border-radius: 8px; background: var(--raised); display: block; }
+.rail i.on { background: var(--psoft); outline: 1px solid var(--pline); }
+.main { min-width: 0; display: flex; flex-direction: column; }
+.topbar { height: 56px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; padding: 0 20px; color: var(--muted); }
+.topbar .search { height: 34px; width: 340px; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 13px; color: var(--faint); margin-right: auto; }
+.topbar .dot { width: 30px; height: 30px; border-radius: 8px; background: var(--raised); }
+.page { padding: 18px 24px 24px; display: flex; flex-direction: column; gap: 16px; min-width: 0; flex: 1; }
+.trail { font-size: 12px; color: var(--muted); }
+.trail b { color: var(--text); font-weight: 600; }
+.tline { display: flex; align-items: flex-end; gap: 16px; min-width: 0; flex-wrap: wrap; }
+.ttl { display: flex; align-items: center; gap: 10px; padding-bottom: 8px; min-width: 0; }
+.ttl h1 { font-size: 24px; font-weight: 600; letter-spacing: -.02em; white-space: nowrap; }
+.subbar { flex: 1; min-width: 0; display: flex; gap: 22px; border-bottom: 1px solid var(--border); overflow: hidden; }
+.subbar span { padding: 0 0 10px; font-size: 14px; font-weight: 500; color: var(--muted); white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.subbar span.on { color: var(--text); border-bottom-color: var(--primary); }
+.subbar small { font-size: 12px; color: var(--faint); margin-left: 6px; }
+.subbar small.w { color: var(--warn); }
+.acts { display: flex; gap: 8px; transform: translateY(50%); }
+.btn { font: inherit; display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-weight: 500; font-size: 14px; white-space: nowrap; }
+.btn.p { background: var(--primary); color: var(--pfg); border-color: var(--primary); font-weight: 600; }
+.btn.sm { height: 32px; padding: 0 10px; font-size: 13px; }
+.btn.icon { width: 36px; padding: 0; justify-content: center; }
+.btn.sm.icon { width: 32px; }
+.btn.g { background: none; border-color: transparent; color: var(--muted); }
+.btn.w { width: 100%; justify-content: center; }
+.card { background: color-mix(in srgb, var(--surface) 82%, transparent); border: 1px solid var(--border); border-radius: 16px; min-width: 0; }
+.ch { display: flex; align-items: center; gap: 10px; padding: 14px 16px 0; }
+.ch h3 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.ch .sp { flex: 1; }
+.ch a.lk { font-size: 13px; color: var(--muted); font-weight: 500; }
+.cb { padding: 12px 16px 16px; }
+
+/* chips */
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 2px 8px; white-space: nowrap; line-height: 18px; }
+.st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.st.plain::before { display: none; }
+.t-good { color: var(--good); background: var(--goodbg); } .t-info { color: var(--info); background: var(--infobg); }
+.t-warn { color: var(--warn); background: var(--warnbg); } .t-bad { color: var(--bad); background: var(--badbg); }
+.t-z { color: var(--muted); background: var(--raised); }
+.stagechip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 2px 8px; line-height: 18px; color: var(--text); background: color-mix(in srgb, var(--stage) 22%, transparent); border: 1px solid color-mix(in srgb, var(--stage) 45%, transparent); white-space: nowrap; }
+.stagechip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--stage); }
+
+/* the figure strip */
+.strip { display: grid; border: 1px solid var(--border); border-radius: 16px; background: color-mix(in srgb, var(--surface) 82%, transparent); overflow: hidden; }
+.strip > a, .strip > div { padding: 12px 16px; border-right: 1px solid var(--border); min-width: 0; display: block; }
+.strip > :last-child { border-right: 0; }
+.strip > a:hover { background: var(--raised); }
+.strip .l { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; white-space: nowrap; }
+.strip .v { font-size: 17px; font-weight: 700; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.strip .v.warn { color: var(--warn); } .strip .v.good { color: var(--good); }
+.strip .fn { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* rows */
+.rows > div { display: grid; grid-template-columns: minmax(0, 9.5rem) minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.rows > div:last-child { border-bottom: 0; }
+.rows dt { color: var(--muted); font-size: 13px; }
+.rows dd { font-weight: 500; min-width: 0; overflow-wrap: anywhere; }
+.rows dd.no { color: var(--faint); font-weight: 400; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0 28px; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 28px; }
+.sect { font-size: 12px; font-weight: 600; color: var(--muted); margin: 16px 0 2px; }
+.sect:first-child { margin-top: 0; }
+
+/* readiness */
+.ready { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.q { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 10px; padding: 7px 8px 7px 12px; font-size: 13px; min-width: 0; }
+.q span.t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.yn { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; flex-shrink: 0; }
+.yn b { font-size: 12px; font-weight: 600; padding: 4px 9px; color: var(--muted); border-right: 1px solid var(--border); }
+.yn b:last-child { border-right: 0; }
+.yn b.y { background: var(--goodbg); color: var(--good); } .yn b.n { background: var(--badbg); color: var(--bad); }
+.meter { display: flex; gap: 3px; }
+.meter i { width: 18px; height: 6px; border-radius: 3px; background: var(--raised); display: block; }
+.meter i.on { background: var(--primary); } .meter i.no { background: var(--bad); }
+.vq { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.vq:last-child { border-bottom: 0; }
+.vq .t { flex: 1; }
+
+/* feed */
+.feed li { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; padding: 11px 0; border-bottom: 1px solid var(--border); position: relative; }
+.feed li:last-child { border-bottom: 0; }
+.feed .ic { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--raised); color: var(--muted); }
+.feed .ic.call { color: var(--info); background: var(--infobg); } .feed .ic.cb { color: var(--warn); background: var(--warnbg); }
+.feed .ic.note { color: var(--good); background: var(--goodbg); } .feed .ic.stage { color: var(--text); background: color-mix(in srgb, var(--stage) 25%, transparent); }
+.feed b { font-weight: 600; font-size: 14px; }
+.feed p { font-size: 13px; color: var(--muted); margin-top: 1px; }
+.feed time { font-size: 12px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.feed .body { margin-top: 6px; padding: 8px 10px; border-radius: 8px; background: var(--canvas); border: 1px solid var(--border); color: var(--text); font-size: 13px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 11px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-weight: 600; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.chip.on { border-color: var(--primary); background: var(--psoft); color: var(--text); }
+.chip .c { font-size: 12px; color: var(--faint); }
+.composer { border: 1px solid var(--border-strong); border-radius: 12px; background: var(--canvas); }
+.composer .ta { padding: 10px 12px; min-height: 58px; color: var(--faint); font-size: 14px; }
+.composer .bar { display: flex; align-items: center; gap: 8px; padding: 8px; border-top: 1px solid var(--border); }
+.composer .bar .sp { flex: 1; }
+.seg { display: inline-flex; padding: 3px; gap: 2px; background: var(--raised); border-radius: 8px; }
+.seg span { font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 6px; color: var(--muted); }
+.seg span.on { background: var(--surface); color: var(--text); box-shadow: 0 0 0 1px var(--border); }
+
+/* tables */
+table.t { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.t th { text-align: left; font-size: 13px; font-weight: 500; color: var(--muted); height: 40px; padding: 0 12px; border-bottom: 1px solid var(--border); }
+table.t td { height: 44px; padding: 0 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+table.t tr:last-child td { border-bottom: 0; }
+
+/* path (C) */
+.path { display: flex; gap: 4px; min-width: 0; overflow-x: auto; padding-bottom: 2px; }
+.step { position: relative; flex: 1 0 auto; min-width: 118px; padding: 8px 18px 8px 22px; background: var(--raised); color: var(--muted); font-size: 13px; font-weight: 600; clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%, 12px 50%); white-space: nowrap; }
+.step:first-child { clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 50%, calc(100% - 12px) 100%, 0 100%); border-radius: 10px 0 0 10px; padding-left: 14px; }
+.step small { display: block; font-size: 11px; font-weight: 500; color: var(--faint); }
+.step.done { background: color-mix(in srgb, var(--primary) 16%, var(--raised)); color: var(--text); }
+.step.cur { background: var(--stage); color: #1d1205; }
+.step.cur small { color: #3b2408; }
+.step.end { flex: 0 0 auto; min-width: 0; }
+.step.drop { outline: 2px dashed var(--primary); outline-offset: -4px; }
+
+/* overlays */
+.pop { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); padding: 6px; }
+.pop .ph { padding: 8px 10px 4px; font-size: 12px; color: var(--muted); }
+.pop .o { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 7px; font-size: 14px; }
+.pop .o.on { background: var(--raised); }
+.pop .o small { margin-left: auto; color: var(--faint); font-size: 12px; }
+.pop .o.d { color: var(--bad); }
+.pop .sep { height: 1px; background: var(--border); margin: 6px 2px; }
+.dlg { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); }
+.dlg .dh2 { padding: 16px 18px 10px; display: flex; gap: 10px; align-items: flex-start; }
+.dlg .dh2 h3 { font-size: 17px; font-weight: 600; }
+.dlg .dh2 p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.dlg .db { padding: 0 18px 16px; }
+.dlg .df { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 18px; border-top: 1px solid var(--border); }
+.opt { border: 1px solid var(--border-strong); border-radius: 10px; padding: 10px 12px; font-weight: 600; font-size: 14px; }
+.opt.on { border-color: var(--primary); background: var(--psoft); }
+.opt small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.toast { display: inline-flex; gap: 10px; align-items: center; background: var(--raised); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; font-weight: 500; box-shadow: var(--shadow); font-size: 14px; }
+.toast a { color: var(--primary); font-weight: 600; }
+.input { height: 36px; border: 1px solid var(--border-strong); border-radius: 8px; background: var(--canvas); display: flex; align-items: center; gap: 8px; padding: 0 10px; font-size: 14px; color: var(--faint); }
+.live { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; border-radius: 6px; padding: 2px 8px; color: var(--good); background: var(--goodbg); }
+.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
+.ro { font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border); border-radius: 6px; padding: 2px 8px; }
+
+/* phone */
+.phones { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+.phones > div { max-width: 100%; min-width: 0; }
+.phone { width: 375px; max-width: 100%; border: 1px solid var(--border); border-radius: 28px; background: var(--canvas); padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.phone .subbar { gap: 18px; overflow-x: auto; }
+.pcap { font-size: 12px; color: var(--muted); text-align: center; margin-top: 6px; }
+.hs { display: flex; gap: 8px; overflow-x: auto; }
+
+.cols { display: grid; gap: 16px; min-width: 0; align-items: start; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); } .rail { display: none; }
+  .cols { grid-template-columns: minmax(0, 1fr) !important; }
+  .acts { transform: none; }
+  .grid3, .grid2, .ready { grid-template-columns: minmax(0, 1fr); }
+  .topbar .search { width: auto; flex: 1; }
+}
+</style>
+</head>
+<body>
+<div class="doc">
+  <header class="mast">
+    <h1>Leads › a lead's page — three directions</h1>
+    <p>Round 1, 10 Nov 2026, for the owner's pick. Drawn on a real lead from the demo agency: Hayden Thomas, Marketing Leads, stage “Pickup - Needs Callback”.
+      Every direction keeps everything the page can do today (claim, call outcome, hand-off, nudge, put back, unassign, reopen, verification, application, stage, existing-customer check, notes, attempts, callbacks, nurture, timeline, source and cost).
+      It changes where those things live and how they read. The lead's fields, stage, screening, vendor and campaign are real. The note text, the partner message, the cost, the call length, the nurture rows and the earlier-lead match are sample text, there to show the layout. Nothing is built yet.</p>
+  </header>
+  <nav class="toc" aria-label="Sections">
+    <a href="#today">Today and what's wrong</a><a href="#a">A · Record, tidied</a><a href="#b">B · Call cockpit</a><a href="#c">C · Stage path</a><a href="#shared">Shared surfaces</a><a href="#pick">Compare and edit map</a>
+  </nav>
+
+  <section class="dir" id="today">
+    <div class="dh"><span class="letter" style="background:var(--raised);color:var(--muted)">·</span><h2>Today, and what's wrong with it</h2></div>
+    <p class="lede">From your screenshot of Hayden Thomas. Each point names the house rule it breaks; every direction fixes all of them.</p>
+    <div class="scroll-x"><table class="crit">
+      <tr><th>#</th><th>What the page does</th><th>Why it's wrong</th></tr>
+      <tr><td>1</td><td>No buttons on the title line. The actions are a stack of full-width buttons in a side card called “Actions”.</td><td>One primary button on the title line, with ⋯ last (owner rule). Today you hunt for what to do next.</td></tr>
+      <tr><td>2</td><td>A big identity card with an empty “— verified” ring, and the phone as raw digits (2052337210).</td><td>The ring says nothing until verification starts; it takes the best spot on the page. Numbers aren't formatted.</td></tr>
+      <tr><td>3</td><td>Seven separate fact boxes (Lead, Submitted, Owner, Verification, Quoted, Attempts, Next action).</td><td>A wall of boxes, not a strip. Two say nothing (Next action “—”, Lead ID). None links anywhere.</td></tr>
+      <tr><td>4</td><td>Seven tabs inside a card, under the boxes.</td><td>The sub-page bar belongs on the title line (§8b). Attempts, Callbacks and Timeline are three views of one history.</td></tr>
+      <tr><td>5</td><td>“A callback is booked. When it comes due the lead is back in the queue…” and “Insurvas has not checked this lead… Policy matching is not included yet”.</td><td>Explanation paragraphs on the page (no notice cards, §3).</td></tr>
+      <tr><td>6</td><td>A Stage dropdown in the side card that changes the stage without an outcome.</td><td>Stage is the lead's headline fact; it belongs by the name, and a move should read like the board.</td></tr>
+      <tr><td>7</td><td>“Not provided” six times in the form.</td><td>Empty fields shout as loud as real ones.</td></tr>
+      <tr><td>8</td><td>Content held to a centre column with dark bands either side.</td><td>Fluid full width (owner rule, 6 Nov).</td></tr>
+      <tr><td>9</td><td>“Can they finish on this call?” as six big Yes / No / Not asked rows mid-form.</td><td>It's the agent's checklist for the next step, not part of what was submitted.</td></tr>
+    </table></div>
+  </section>
+
+  <section class="dir" id="a">
+    <div class="dh"><span class="letter">A</span><h2>Record, tidied</h2><span class="tag">today's layout, every rule applied — the least change</span></div>
+    <p class="lede">Same two columns as today, cleaned up. <b>The title line does the work:</b> the name, the stage and screening chips, the sections as the sub-page bar, then <b>Call</b>, the one primary button (here <b>Claim</b>) and ⋯.
+      One figure strip replaces the seven boxes, and every figure opens its tab. The side card “Actions” goes: its buttons move to the primary button and ⋯. The right column keeps only real content: what happens next, source and cost, and the existing-customer check as one line.</p>
+    <div class="cap"><b>A1 · The page</b><span>Details tab, owner view, lead unclaimed.</span></div>
+    <div class="frame" data-render="A-page"><div class="app"><nav class="rail"><i></i><i></i><i class="on"></i><i></i><i></i><i></i></nav><div class="main">
+    <div class="topbar"><span class="search"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search or jump to…</span><span class="btn p sm">+ New</span><span class="dot"></span><span class="dot"></span></div>
+    <div class="page"><div class="trail">Leads › Lead workspace › <b>Hayden Thomas</b></div>
+    <div class="tline">
+      <div class="ttl"><h1>Hayden Thomas</h1><span class="stagechip">Pickup - Needs Callback</span><span class="st t-good">Screening clear</span></div>
+      <div class="subbar"><span class="on">Details</span><span class="">Activity<small class="">4</small></span><span class="">Conversation<small class="">1</small></span><span class="">Nurture</span><span class="">Verification</span><span class="">Application</span></div>
+      <div class="acts"><span class="btn"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>Call</span><span class="btn p">Claim</span><span class="btn icon" title="More"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+    </div><div class="strip" style="grid-template-columns:repeat(7,minmax(0,1fr))"><a><div class="l">Phone</div><div class="v ">(205) 233-7210</div><div class="fn">OH · 3:12 pm there</div></a><a><div class="l">Owner</div><div class="v ">Unclaimed</div><div class="fn">Submitted by Demo Agent</div></a><a><div class="l">In stage</div><div class="v warn">10d 22h</div><div class="fn">Pickup - Needs Callback</div></a><a><div class="l">Next callback</div><div class="v ">Thu 4:30 pm</div><div class="fn">their time · booked by Demo Agent</div></a><a><div class="l">Attempts</div><div class="v ">1</div><div class="fn">last 25 Sep, Busy</div></a><a><div class="l">Quoted</div><div class="v ">—</div><div class="fn">no quote yet</div></a><a><div class="l">Verified</div><div class="v ">Not started</div></a></div>
+  <div class="cols" style="grid-template-columns:minmax(0,1fr) 380px">
+    <div style="display:grid;gap:16px;min-width:0">
+      <div class="card"><div class="ch"><h3>As submitted</h3><span class="m" style="font-size:12px">form version 7 · Term Life</span><span class="sp"></span><a class="lk">Edit</a></div><div class="cb"><div class="grid3">
+        <dl class="rows"><div><dt>First name</dt><dd class="">Hayden</dd></div><div><dt>Last name</dt><dd class="">Thomas</dd></div><div><dt>Date of birth</dt><dd class="no">—</dd></div><div><dt>State</dt><dd class="">Ohio (OH)</dd></div></dl><dl class="rows"><div><dt>Phone</dt><dd class="">(205) 233-7210</dd></div><div><dt>Email</dt><dd class="">hayden.thomas@example.test</dd></div><div><dt>Coverage amount</dt><dd class="no">—</dd></div><div><dt>Tobacco use</dt><dd class="no">—</dd></div></dl><dl class="rows"><div><dt>ZIP code</dt><dd class="">43215</dd></div><div><dt>Time zone</dt><dd class="no">—</dd></div><div><dt>Language</dt><dd class="no">—</dd></div></dl></div></div></div>
+      <div class="card"><div class="ch"><h3>Can they finish on this call?</h3><span class="sp"></span><span class="meter"><i></i><i></i><i></i><i></i><i></i><i></i></span><span class="m num" style="font-size:12px">0 of 6 asked</span></div>
+    <div class="cb"><div class="ready"><div class="q"><span class="t">Can receive a text</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="q"><span class="t">Has the phone with them</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="q"><span class="t">Can open email</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="q"><span class="t">Can stay on the line</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="q"><span class="t">Can e-sign now</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="q"><span class="t">Banking details to hand</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div></div></div></div>
+      <div class="card"><div class="ch"><h3>Notes</h3><span class="m" style="font-size:12px">2</span><span class="sp"></span><a class="lk">All in Conversation ›</a></div><div class="cb" style="display:grid;gap:10px">
+    <div class="composer"><div class="ta">Write a note… type @ to mention someone</div><div class="bar"><span class="seg"><span class="on">Internal</span><span>Shared with partner</span></span><span class="sp"></span><span class="btn sm">Add note</span></div></div>
+    <ul class="feed">
+      <li><span class="ic note"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><div><b>Demo Agent</b><div class="body">Picked up, asked for a call back Thursday after 4. Has an existing term policy through work.</div></div><time>25 Sep, 5:40 pm</time></li>
+    </ul></div></div>
+    </div>
+    <div style="display:grid;gap:16px;min-width:0"><div class="card"><div class="ch"><h3>What happens next</h3></div><div class="cb"><dl class="rows">
+    <div><dt>Next</dt><dd>Callback Thu 4:30 pm EDT <span class="m" style="font-weight:400">· in 2 days</span></dd></div>
+    <div><dt>Then</dt><dd>Back in the queue for whoever claims it</dd></div>
+    <div><dt>Work item</dt><dd>Completed · Callback scheduled</dd></div></dl></div></div><div class="card"><div class="ch"><h3>Source and cost</h3></div><div class="cb"><dl class="rows">
+    <div><dt>Vendor</dt><dd><a style="text-decoration:underline;text-underline-offset:3px">Redwood Direct</a></dd></div>
+    <div><dt>Campaign</dt><dd><a style="text-decoration:underline;text-underline-offset:3px">Redwood Live</a></dd></div>
+    <div><dt>Source</dt><dd>List import</dd></div><div><dt>Cost</dt><dd class="num">$18.00 · 25 Sep</dd></div></dl></div></div><div class="card" style="padding:12px 16px;display:flex;align-items:center;gap:10px"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span style="flex:1;font-size:14px">Not checked against earlier leads <span class="m" title="Checks earlier leads and contacts. Policy matching is not included yet."><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></span></span><span class="btn sm">Check now</span></div></div>
+  </div></div></div></div></div>
+    <div class="cap"><b>A2 · Other tabs</b><span>Activity (attempts, callbacks and timeline in one list) and Conversation.</span></div>
+    <div class="surfaces" data-render="A-tabs">
+  <div class="surf"><h4><b>Activity</b>: attempts, callbacks and the timeline in one list, with a filter</h4><div class="chips" style="margin-bottom:8px"><span class="chip on">All <span class="c">5</span></span><span class="chip">Calls <span class="c">1</span></span><span class="chip">Callbacks <span class="c">1</span></span><span class="chip">Stage <span class="c">1</span></span><span class="chip">System <span class="c">2</span></span></div><ul class="feed">
+    <li><span class="ic cb"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><div><b>Callback booked for Thu 4:30 pm EDT</b><p>by Demo Agent · goes back to the queue when due</p></div><time>25 Sep, 5:41 pm</time></li>
+    <li><span class="ic stage"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><div><b>Moved to Pickup - Needs Callback</b><p>Outcome “Callback scheduled” · dialer call</p></div><time>25 Sep, 5:41 pm</time></li>
+    <li><span class="ic call"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg></span><div><b>Attempt 1 · picked up · 3m 12s</b><p>Demo Agent · screening clear · number clicked 5:37 pm</p></div><time>25 Sep, 5:37 pm</time></li>
+    <li><span class="ic"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><div><b>Screening clear</b><p>No litigator, DNC or duplicate match</p></div><time>25 Sep, 5:33 pm</time></li>
+    <li><span class="ic"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span><div><b>Lead arrived</b><p>List import · Redwood Direct · Redwood Live</p></div><time>25 Sep, 5:32 pm</time></li></ul></div>
+  <div class="surf"><h4><b>Conversation</b>: internal notes and the partner's channel</h4><div class="chips" style="margin-bottom:10px"><span class="chip on">All</span><span class="chip">Internal</span><span class="chip">Shared with partner</span></div>
+    <div class="composer" style="margin-bottom:10px"><div class="ta">Write a note…</div><div class="bar"><span class="seg"><span class="on">Internal</span><span>Shared</span></span><span style="flex:1"></span><span class="btn sm">Add note</span></div></div>
+    <ul class="feed"><li><span class="ic note"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><div><b>Demo Agent <span class="st plain t-z">Internal</span></b><div class="body">Picked up, asked for a call back Thursday after 4.</div></div><time>25 Sep, 5:40 pm</time></li>
+    <li><span class="ic"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><div><b>Redwood Direct <span class="st plain t-info">Partner</span></b><div class="body">Lead confirmed interest on our side; prefers afternoons.</div></div><time>25 Sep, 5:34 pm</time></li></ul></div>
+  <div class="surf"><h4><b>Nurture</b>: the attempt plan (today's table, unchanged)</h4><table class="t"><tr><th>Attempt</th><th>Due</th><th>Preferred</th><th>State</th></tr><tr><td>2</td><td class="num">Thu 27 Sep, 4:30 pm</td><td>Afternoon</td><td><span class="st t-info">Booked</span></td></tr><tr><td>3</td><td class="num">Mon 1 Oct, 10:00 am</td><td>Morning</td><td><span class="st t-z">Planned</span></td></tr></table></div>
+  <div class="surf"><h4><b>Verification</b>: not started</h4><p class="m" style="font-size:14px;margin-bottom:12px">Starts on the call, once the lead is claimed.</p><span class="btn">Open verification</span></div>
+  <div class="surf"><h4><b>Application</b>: none yet</h4><p class="m" style="font-size:14px;margin-bottom:12px">Starts from this lead once it is claimed.</p><span class="btn">Start application</span></div></div>
+    <div class="cap"><b>A3 · Phone (375)</b></div>
+    <div class="phones" data-render="A-phone"><div><div class="phone"><div class="trail">Lead workspace › <b>Hayden Thomas</b></div>
+    <div style="display:flex;align-items:center;gap:8px"><h1 style="font-size:20px;font-weight:600;flex:1">Hayden Thomas</h1><span class="btn sm icon"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg></span><span class="btn p sm">Claim</span><span class="btn sm icon"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="stagechip">Pickup - Needs Callback</span><span class="st t-good">Screening clear</span></div>
+    <div class="subbar"><span class="on">Details</span><span class="">Activity</span><span class="">Conversation</span><span class="">Nurture</span><span class="">Verification</span><span class="">Application</span></div>
+  <div class="strip" style="grid-template-columns:1fr 1fr"><a><div class="l">Phone</div><div class="v">(205) 233-7210</div><div class="fn">3:12 pm there</div></a><a><div class="l">In stage</div><div class="v warn">10d 22h</div></a></div>
+  <div class="strip" style="grid-template-columns:1fr 1fr"><a><div class="l">Next callback</div><div class="v">Thu 4:30 pm</div></a><a><div class="l">Owner</div><div class="v">Unclaimed</div></a></div>
+  <div class="card"><div class="ch"><h3>As submitted</h3></div><div class="cb"><dl class="rows"><div><dt>First name</dt><dd class="">Hayden</dd></div><div><dt>Last name</dt><dd class="">Thomas</dd></div><div><dt>Date of birth</dt><dd class="no">—</dd></div><div><dt>State</dt><dd class="">Ohio (OH)</dd></div><div><dt>Phone</dt><dd class="">(205) 233-7210</dd></div><div><dt>Email</dt><dd class="">hayden.thomas@example.test</dd></div></dl></div></div>
+  <div class="card"><div class="ch"><h3>Can they finish on this call?</h3><span class="sp"></span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><span class="m num" style="font-size:12px">2 of 6</span></div>
+    <div class="cb"><div class="vq"><span class="t">Can receive a text</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Has the phone with them</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can open email</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can stay on the line</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can e-sign now</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Banking details to hand</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div></div></div></div><p class="pcap">Details</p></div></div>
+    <div class="notes">
+      <div class="note"><h4>What changes</h4><ul>
+        <li>Title line: chips in <code>lead</code>, sections in <code>tabs</code>, and Call, the primary button and ⋯ in <code>actions</code>.</li>
+        <li>Tabs go from 7 to 6: <b>Details · Activity · Conversation · Nurture · Verification · Application</b>. Attempts, Callbacks and Timeline merge into Activity.</li>
+        <li>The primary button is the next step for this lead: Claim → Record call outcome → Start application → Open application.</li>
+      </ul></div>
+      <div class="note"><h4>Cost</h4><ul><li><b>Small:</b> about 1–2 days. No new data. Everything is read today already.</li></ul></div>
+      <div class="note"><h4>Edit map</h4><ul>
+        <li><code>components/app/lead-detail-workspace.tsx</code>: header, strip, columns; the Actions card becomes <code>LeadPrimaryAction</code> + <code>LeadMoreMenu</code> (<code>DropdownMenu</code>).</li>
+        <li><code>components/app/lead-record-tabs.tsx</code>: <code>LeadActivityTab</code> merges the three lists.</li>
+        <li><code>same-person-prompt.tsx</code>: a one-line variant; the explanation moves behind its (i).</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section class="dir" id="b">
+    <div class="dh"><span class="letter">B</span><h2>Call cockpit</h2><span class="tag">three columns, like Close and HubSpot records: person · activity · next step</span></div>
+    <p class="lede">Built for the agent on the phone. <b>Left</b> is the person: phone with Call and Text, their local time, contact and coverage facts, the source. <b>Centre</b> is one activity stream: calls, callbacks, notes, partner messages, stage moves and screening, newest first, with the note box on top.
+      <b>Right</b> is the next step: the stage and how long the lead has been there, the next callback, the six “can they finish?” questions as a short checklist, then the one primary button. The tabs shrink to three because the stream holds the rest.</p>
+    <div class="cap"><b>B1 · The page</b><span>Overview tab, the agent who owns the lead, a callback booked.</span></div>
+    <div class="frame" data-render="B-page"><div class="app"><nav class="rail"><i></i><i></i><i class="on"></i><i></i><i></i><i></i></nav><div class="main">
+    <div class="topbar"><span class="search"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search or jump to…</span><span class="btn p sm">+ New</span><span class="dot"></span><span class="dot"></span></div>
+    <div class="page"><div class="trail">Leads › Lead workspace › <b>Hayden Thomas</b></div>
+    <div class="tline">
+      <div class="ttl"><h1>Hayden Thomas</h1><span class="stagechip">Pickup - Needs Callback</span><span class="st t-good">Screening clear</span></div>
+      <div class="subbar"><span class="on">Overview</span><span class="">Verification</span><span class="">Nurture</span></div>
+      <div class="acts"><span class="btn p">Record call outcome</span><span class="btn icon" title="More"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+    </div>
+  <div class="cols" style="grid-template-columns:320px minmax(0,1fr) 360px">
+    <div style="display:grid;gap:16px;min-width:0">
+      <div class="card"><div class="cb" style="padding-top:16px;display:grid;gap:12px">
+        <div><div style="font-size:22px;font-weight:700;letter-spacing:-.01em" class="num">(205) 233-7210</div><div class="m" style="font-size:13px">3:12 pm in Columbus, OH · Eastern</div></div>
+        <div style="display:flex;gap:8px"><span class="btn" style="flex:1;justify-content:center"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>Call</span><span class="btn" style="flex:1;justify-content:center"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Text</span></div>
+        <dl class="rows"><div><dt>Email</dt><dd>hayden.thomas@example.test <span class="m"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span></dd></div><div><dt>State · ZIP</dt><dd>Ohio · 43215</dd></div><div><dt>Date of birth</dt><dd class="no">—</dd></div><div><dt>Coverage</dt><dd class="no">—</dd></div><div><dt>Tobacco</dt><dd class="no">—</dd></div><div><dt>Product</dt><dd>Term life</dd></div></dl>
+        <a class="m" style="font-size:13px">All 11 submitted fields ›</a></div></div>
+      <div class="card"><div class="ch"><h3>Source and cost</h3></div><div class="cb"><dl class="rows">
+    <div><dt>Vendor</dt><dd><a style="text-decoration:underline;text-underline-offset:3px">Redwood Direct</a></dd></div>
+    <div><dt>Campaign</dt><dd><a style="text-decoration:underline;text-underline-offset:3px">Redwood Live</a></dd></div>
+    <div><dt>Source</dt><dd>List import</dd></div><div><dt>Cost</dt><dd class="num">$18.00 · 25 Sep</dd></div></dl></div></div><div class="card" style="padding:12px 16px;display:flex;align-items:center;gap:10px"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span style="flex:1;font-size:14px">Not checked against earlier leads <span class="m" title="Checks earlier leads and contacts. Policy matching is not included yet."><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></span></span><span class="btn sm">Check now</span></div>
+    </div>
+    <div class="card" style="min-width:0"><div class="ch"><h3>Activity</h3><span class="sp"></span><div class="chips"><span class="chip on">All <span class="c">6</span></span><span class="chip">Calls <span class="c">1</span></span><span class="chip">Notes <span class="c">1</span></span><span class="chip">Callbacks <span class="c">1</span></span><span class="chip">Partner <span class="c">1</span></span><span class="chip">Stage <span class="c">1</span></span></div></div>
+      <div class="cb"><div class="composer" style="margin-bottom:6px"><div class="ta">Write a note… type @ to mention someone</div><div class="bar"><span class="seg"><span class="on">Internal</span><span>Shared with partner</span></span><span class="sp"></span><span class="btn sm">Add note</span></div></div>
+      <ul class="feed">
+        <li><span class="ic cb"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span><div><b>Callback booked · Thu 4:30 pm EDT</b><p>by Demo Agent · in 2 days</p></div><time>25 Sep, 5:41 pm</time></li>
+        <li><span class="ic note"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><div><b>Demo Agent wrote</b><div class="body">Picked up, asked for a call back Thursday after 4. Has an existing term policy through work.</div></div><time>25 Sep, 5:40 pm</time></li>
+        <li><span class="ic stage"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span><div><b>Moved to Pickup - Needs Callback</b><p>from No Pickup - Needs Connection · outcome “Callback scheduled”</p></div><time>25 Sep, 5:41 pm</time></li>
+        <li><span class="ic call"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg></span><div><b>Call · attempt 1 · picked up · 3m 12s</b><p>Demo Agent · number clicked 5:37 pm</p></div><time>25 Sep, 5:37 pm</time></li>
+        <li><span class="ic"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span><div><b>Redwood Direct wrote</b><div class="body">Lead confirmed interest on our side; prefers afternoons.</div></div><time>25 Sep, 5:34 pm</time></li>
+        <li><span class="ic"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg></span><div><b>Lead arrived · screening clear</b><p>List import · Redwood Direct · Redwood Live</p></div><time>25 Sep, 5:32 pm</time></li>
+      </ul></div></div>
+    <div style="display:grid;gap:16px;min-width:0">
+      <div class="card"><div class="ch"><h3>Next step</h3></div><div class="cb" style="display:grid;gap:12px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span class="stagechip">Pickup - Needs Callback</span><span class="m num" style="font-size:13px">for 10d 22h</span><span style="flex:1"></span><a class="m" style="font-size:13px">Move ›</a></div>
+        <div style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:10px;background:var(--warnbg);color:var(--warn)"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span style="font-weight:600">Callback Thu 4:30 pm EDT</span><span style="flex:1"></span><span style="font-size:12px">in 2 days</span></div>
+        <dl class="rows"><div><dt>Owner</dt><dd>Demo Agent</dd></div><div><dt>Quoted</dt><dd class="no">No quote yet</dd></div><div><dt>Verified</dt><dd class="no">Not started</dd></div></dl>
+      </div></div>
+      <div class="card"><div class="ch"><h3>Can they finish on this call?</h3><span class="sp"></span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><span class="m num" style="font-size:12px">2 of 6</span></div>
+    <div class="cb"><div class="vq"><span class="t">Can receive a text</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Has the phone with them</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can open email</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can stay on the line</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can e-sign now</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Banking details to hand</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div></div></div>
+      <div class="card" style="padding:14px 16px;display:grid;gap:8px"><span class="btn w">Start application</span></div>
+    </div>
+  </div></div></div></div></div>
+    <div class="cap"><b>B2 · States</b><span>On a live call, read-only, a lead nobody owns, filters on the stream.</span></div>
+    <div class="surfaces" data-render="B-states">
+  <div class="surf"><h4><b>On a live call</b>: the chip joins the title line; the primary becomes the outcome</h4>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:18px">Hayden Thomas</b><span class="stagechip">Pickup - Needs Callback</span><span class="live num">On a call · 4:12 · Demo Agent</span></div>
+    <div style="display:flex;gap:8px;margin-top:12px"><span class="btn"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>Hang up</span><span class="btn p">Record call outcome</span><span class="btn icon"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div></div>
+  <div class="surf"><h4><b>Read-only account</b>: one chip; actions show but are off</h4>
+    <div style="display:flex;gap:8px;align-items:center"><b style="font-size:18px">Hayden Thomas</b><span class="ro">Read-only</span></div>
+    <div style="display:flex;gap:8px;margin-top:12px;opacity:.5"><span class="btn"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>Call</span><span class="btn p">Claim</span><span class="btn icon"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div></div>
+  <div class="surf"><h4><b>Nobody owns it</b>: the next-step card says so and Claim is the primary</h4><div class="card"><div class="cb" style="padding-top:14px;display:grid;gap:10px"><div style="display:flex;gap:8px;align-items:center"><span class="stagechip">Pickup - Needs Callback</span><span class="m" style="font-size:13px">for 10d 22h</span></div><dl class="rows"><div><dt>Owner</dt><dd style="color:var(--warn)">Unclaimed · in the queue</dd></div></dl><span class="btn p w">Claim</span></div></div></div>
+  <div class="surf"><h4><b>The stream filtered to Calls</b>: today's Attempts table, as rows</h4><div class="chips" style="margin-bottom:8px"><span class="chip">All <span class="c">6</span></span><span class="chip on">Calls <span class="c">1</span></span><span class="chip">Notes</span><span class="chip">Callbacks</span></div>
+    <table class="t"><tr><th>#</th><th>When</th><th>By</th><th>Outcome</th><th>Length</th></tr><tr><td>1</td><td class="num">25 Sep, 5:37 pm</td><td>Demo Agent</td><td>Callback scheduled</td><td class="num">3m 12s</td></tr></table></div></div>
+    <div class="cap"><b>B3 · Phone (375)</b><span>One column: next step first, then the stream, then the person.</span></div>
+    <div class="phones" data-render="B-phone"><div><div class="phone"><div class="trail">Lead workspace › <b>Hayden Thomas</b></div>
+    <div style="display:flex;align-items:center;gap:8px"><h1 style="font-size:20px;font-weight:600;flex:1">Hayden Thomas</h1><span class="btn sm icon"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg></span><span class="btn p sm">Outcome</span><span class="btn sm icon"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="stagechip">Pickup - Needs Callback</span><span class="st t-good">Screening clear</span></div>
+    <div class="subbar"><span class="on">Overview</span><span class="">Verification</span><span class="">Nurture</span></div>
+  <div class="card"><div class="cb" style="padding-top:14px;display:grid;gap:10px"><div style="display:flex;align-items:center;gap:8px"><span class="stagechip">Pickup - Needs Callback</span><span class="m" style="font-size:13px">10d 22h</span></div>
+  <div style="display:flex;gap:10px;align-items:center;padding:9px 12px;border-radius:10px;background:var(--warnbg);color:var(--warn)"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><b>Callback Thu 4:30 pm</b></div></div></div>
+  <div class="card"><div class="ch"><h3>Can they finish on this call?</h3><span class="sp"></span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><span class="m num" style="font-size:12px">2 of 6</span></div>
+    <div class="cb"><div class="vq"><span class="t">Can receive a text</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Has the phone with them</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can open email</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can stay on the line</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can e-sign now</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Banking details to hand</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div></div></div>
+  <div class="card"><div class="ch"><h3>Activity</h3></div><div class="cb"><ul class="feed"><li><span class="ic note"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><div><b>Demo Agent wrote</b><div class="body">Picked up, call back Thu after 4.</div></div><time>5:40 pm</time></li><li><span class="ic call"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg></span><div><b>Call · picked up</b><p>3m 12s</p></div><time>5:37 pm</time></li></ul></div></div>
+  </div><p class="pcap">Overview</p></div></div>
+    <div class="notes">
+      <div class="note"><h4>What changes</h4><ul>
+        <li>Tabs: <b>Overview · Verification · Nurture</b>. The stream replaces Attempts, Callbacks, Conversation and Timeline. Each has a filter chip, so nothing is lost.</li>
+        <li>The figure strip goes: its facts live where they're used (owner and stage on the right, attempts on the stream).</li>
+        <li>The customer's local time beside the phone (from the lead's time zone or state).</li>
+      </ul></div>
+      <div class="note"><h4>Cost</h4><ul><li><b>Medium:</b> about 3–4 days. One merged read for the stream (notes, attempts, callbacks, events, partner lines); each is read today but separately. No database change.</li></ul></div>
+      <div class="note"><h4>Edit map</h4><ul>
+        <li><code>lead-detail-workspace.tsx</code> becomes three parts: <code>lead-person.tsx</code>, <code>lead-stream.tsx</code>, <code>lead-next-step.tsx</code>.</li>
+        <li><code>lib/leadWorkspace/stream.ts</code> (pure, tested): one sorted list from five sources.</li>
+        <li><code>lead-signature-readiness.tsx</code>: a compact checklist variant.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section class="dir" id="c">
+    <div class="dh"><span class="letter">C</span><h2>Stage path</h2><span class="tag">Salesforce's path across the top, then the record</span></div>
+    <p class="lede">The lead's pipeline drawn as a path under the title: every open stage in order, the ones it has passed in green, where it is now in its stage colour with the time there, and the closed stages as one end cap.
+      <b>Click a stage on the path to move the lead there</b>, the same way a board drop works: no pop-up, and a toast says “from … to …”. Under the path: the figure strip, then the details in labelled groups beside a right column with the next step and notes.</p>
+    <div class="cap"><b>C1 · The page</b><span>Details tab.</span></div>
+    <div class="frame" data-render="C-page"><div class="app"><nav class="rail"><i></i><i></i><i class="on"></i><i></i><i></i><i></i></nav><div class="main">
+    <div class="topbar"><span class="search"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search or jump to…</span><span class="btn p sm">+ New</span><span class="dot"></span><span class="dot"></span></div>
+    <div class="page"><div class="trail">Leads › Lead workspace › <b>Hayden Thomas</b></div>
+    <div class="tline">
+      <div class="ttl"><h1>Hayden Thomas</h1><span class="st t-good">Screening clear</span></div>
+      <div class="subbar"><span class="on">Details</span><span class="">Activity<small class="">4</small></span><span class="">Conversation<small class="">1</small></span><span class="">Nurture</span><span class="">Verification</span><span class="">Application</span></div>
+      <div class="acts"><span class="btn"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg>Call</span><span class="btn p">Claim</span><span class="btn icon" title="More"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+    </div><div class="path"><div class="step done ">Form Lead<small>5 min</small></div><div class="step done ">Call Lead<small>1d 02h</small></div><div class="step done ">No Pickup - Needs Connection<small>2h 10m</small></div><div class="step cur ">Pickup - Needs Callback<small>10d 22h here</small></div><div class="step  ">Qualified - Needs Conversion<small>&nbsp;</small></div><div class="step  ">Converted<small>&nbsp;</small></div><div class="step end" style="background:var(--raised)">Closed · 2 stages<small>Disqualified · Do not call</small></div></div><div class="strip" style="grid-template-columns:repeat(7,minmax(0,1fr))"><a><div class="l">Phone</div><div class="v ">(205) 233-7210</div><div class="fn">OH · 3:12 pm there</div></a><a><div class="l">Owner</div><div class="v ">Unclaimed</div><div class="fn">Submitted by Demo Agent</div></a><a><div class="l">In stage</div><div class="v warn">10d 22h</div><div class="fn">Pickup - Needs Callback</div></a><a><div class="l">Next callback</div><div class="v ">Thu 4:30 pm</div><div class="fn">their time · booked by Demo Agent</div></a><a><div class="l">Attempts</div><div class="v ">1</div><div class="fn">last 25 Sep, Busy</div></a><a><div class="l">Quoted</div><div class="v ">—</div><div class="fn">no quote yet</div></a><a><div class="l">Verified</div><div class="v ">Not started</div></a></div>
+  <div class="cols" style="grid-template-columns:minmax(0,1fr) 380px">
+    <div class="card"><div class="ch"><h3>As submitted</h3><span class="m" style="font-size:12px">form version 7 · Term Life</span><span class="sp"></span><a class="lk">Edit</a></div><div class="cb"><div class="grid3">
+      <div><p class="sect">Contact</p><dl class="rows"><div><dt>Phone</dt><dd class="">(205) 233-7210</dd></div><div><dt>Email</dt><dd class="">hayden.thomas@example.test</dd></div><div><dt>State</dt><dd class="">Ohio (OH)</dd></div><div><dt>ZIP code</dt><dd class="">43215</dd></div><div><dt>Time zone</dt><dd class="no">—</dd></div></dl></div>
+      <div><p class="sect">Coverage</p><dl class="rows"><div><dt>Product</dt><dd class="">Term life</dd></div><div><dt>Coverage amount</dt><dd class="no">—</dd></div><div><dt>Tobacco use</dt><dd class="no">—</dd></div></dl></div>
+      <div><p class="sect">About them</p><dl class="rows"><div><dt>First name</dt><dd class="">Hayden</dd></div><div><dt>Last name</dt><dd class="">Thomas</dd></div><div><dt>Date of birth</dt><dd class="no">—</dd></div><div><dt>Language</dt><dd class="no">—</dd></div></dl></div></div></div></div>
+    <div style="display:grid;gap:16px;min-width:0"><div class="card"><div class="ch"><h3>What happens next</h3></div><div class="cb"><dl class="rows">
+    <div><dt>Next</dt><dd>Callback Thu 4:30 pm EDT <span class="m" style="font-weight:400">· in 2 days</span></dd></div>
+    <div><dt>Then</dt><dd>Back in the queue for whoever claims it</dd></div>
+    <div><dt>Work item</dt><dd>Completed · Callback scheduled</dd></div></dl></div></div><div class="card"><div class="ch"><h3>Can they finish on this call?</h3><span class="sp"></span><span class="meter"><i class="on"></i><i class="on"></i><i></i><i></i><i></i><i></i></span><span class="m num" style="font-size:12px">2 of 6</span></div>
+    <div class="cb"><div class="vq"><span class="t">Can receive a text</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Has the phone with them</span><span class="yn"><b class="y">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can open email</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can stay on the line</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Can e-sign now</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div><div class="vq"><span class="t">Banking details to hand</span><span class="yn"><b class="">Yes</b><b class="">No</b></span></div></div></div><div class="card"><div class="ch"><h3>Source and cost</h3></div><div class="cb"><dl class="rows">
+    <div><dt>Vendor</dt><dd><a style="text-decoration:underline;text-underline-offset:3px">Redwood Direct</a></dd></div>
+    <div><dt>Campaign</dt><dd><a style="text-decoration:underline;text-underline-offset:3px">Redwood Live</a></dd></div>
+    <div><dt>Source</dt><dd>List import</dd></div><div><dt>Cost</dt><dd class="num">$18.00 · 25 Sep</dd></div></dl></div></div><div class="card" style="padding:12px 16px;display:flex;align-items:center;gap:10px"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span style="flex:1;font-size:14px">Not checked against earlier leads <span class="m" title="Checks earlier leads and contacts. Policy matching is not included yet."><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg></span></span><span class="btn sm">Check now</span></div></div>
+  </div></div></div></div></div>
+    <div class="cap"><b>C2 · The path in use</b><span>Hover, a click that moves, the closed end cap, a stage only a call can reach.</span></div>
+    <div class="surfaces" data-render="C-path">
+  <div class="surf" style="grid-column:1/-1"><h4><b>Hover a stage</b>: it shows what a click records (the outcome mapped to it)</h4><div class="path"><div class="step done ">Form Lead<small>5 min</small></div><div class="step done ">Call Lead<small>1d 02h</small></div><div class="step done ">No Pickup - Needs Connection<small>2h 10m</small></div><div class="step cur ">Pickup - Needs Callback<small>10d 22h here</small></div><div class="step  drop">Qualified - Needs Conversion<small>&nbsp;</small></div><div class="step  ">Converted<small>&nbsp;</small></div><div class="step end" style="background:var(--raised)">Closed · 2 stages<small>Disqualified · Do not call</small></div></div>
+    <div class="pop" style="width:300px;margin:10px 0 0 auto"><div class="ph">Click to move to <b style="color:var(--text)">Qualified - Needs Conversion</b></div><div class="o">Records “Interested · needs quote”</div></div></div>
+  <div class="surf"><h4><b>After the click</b>: moved at once, toast from → to</h4><div class="toast"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Hayden Thomas moved from Pickup - Needs Callback to Qualified - Needs Conversion <a>Undo</a></div></div>
+  <div class="surf"><h4><b>The closed end cap</b>: opens the closed stages</h4><div class="pop" style="width:280px"><div class="ph">Close this lead as</div><div class="o">Disqualified - Not interested</div><div class="o">Disqualified - Bad number</div><div class="sep"></div><div class="o" style="color:var(--faint)">Do not call <small>from a call only</small></div></div></div>
+  <div class="surf"><h4><b>A stage only a call can reach</b>: refused with the reason</h4><div class="toast" style="border-color:var(--bad)"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>Only a call can move a lead to Callback scheduled. Record it from the dialer.</div></div></div>
+    <div class="cap"><b>C3 · Phone (375)</b></div>
+    <div class="phones" data-render="C-phone"><div><div class="phone"><div class="trail">Lead workspace › <b>Hayden Thomas</b></div>
+    <div style="display:flex;align-items:center;gap:8px"><h1 style="font-size:20px;font-weight:600;flex:1">Hayden Thomas</h1><span class="btn sm icon"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/></svg></span><span class="btn p sm">Claim</span><span class="btn sm icon"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></span></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><span class="stagechip">Pickup - Needs Callback</span><span class="st t-good">Screening clear</span></div>
+    <div class="subbar"><span class="on">Details</span><span class="">Activity</span><span class="">Conversation</span><span class="">Nurture</span><span class="">Verification</span><span class="">Application</span></div>
+  <div class="path" style="gap:3px"><div class="step done" style="min-width:120px">No Pickup<small>&nbsp;</small></div><div class="step cur" style="min-width:120px">Pickup<small>10d 22h</small></div><div class="step " style="min-width:120px">Qualified<small>&nbsp;</small></div></div>
+  <div class="strip" style="grid-template-columns:1fr 1fr"><a><div class="l">Phone</div><div class="v">(205) 233-7210</div></a><a><div class="l">Next callback</div><div class="v">Thu 4:30 pm</div></a></div>
+  <div class="card"><div class="ch"><h3>Contact</h3></div><div class="cb"><dl class="rows"><div><dt>Email</dt><dd class="">hayden.thomas@example.test</dd></div><div><dt>State</dt><dd class="">Ohio (OH)</dd></div><div><dt>ZIP code</dt><dd class="">43215</dd></div></dl></div></div>
+  </div><p class="pcap">The path scrolls sideways</p></div></div>
+    <div class="notes">
+      <div class="note"><h4>What changes</h4><ul>
+        <li>The stage dropdown goes. The path is the move, using the outcome mapped to the stage (as the board does now).</li>
+        <li>The form is grouped: <b>Contact · Coverage · About them</b> (from the field keys, no setup).</li>
+        <li>Tabs as A: <b>Details · Activity · Conversation · Nurture · Verification · Application</b>.</li>
+      </ul></div>
+      <div class="note"><h4>Cost</h4><ul><li><b>Small to medium:</b> about 2–3 days. The path needs the pipeline's stages, which the page reads already, and each stage's time from the stage history.</li></ul></div>
+      <div class="note"><h4>Edit map</h4><ul>
+        <li><code>components/app/lead-stage-path.tsx</code> (new); the move calls the board's direct move (shared helper out of <code>lead-workspace.tsx</code>).</li>
+        <li><code>lib/leadWorkspace/fieldGroups.ts</code> (pure, tested).</li>
+        <li>Header, strip and More menu as A.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section class="dir" id="shared">
+    <div class="dh"><span class="letter" style="background:var(--raised);color:var(--text)">+</span><h2>Shared surfaces</h2><span class="tag">the same in every direction</span></div>
+    <p class="lede">Every pop-up, menu and edit the page can open, drawn once.</p>
+    <div class="surfaces" data-render="shared">
+  <div class="surf"><h4><b>⋯ More</b>: everything that isn't the one next step</h4><div class="pop" style="width:270px">
+    <div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 11V6a2 2 0 0 0-4 0v5"/><path d="M14 10V4a2 2 0 0 0-4 0v6"/><path d="M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-5.9-2.2l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"/></svg>Hand off to a licensed agent…</div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Nudge the team</div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Put back in the queue</div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>Unassign</div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>Reopen in the queue <small>when expired</small></div>
+    <div class="sep"></div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>Check for an existing customer</div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Move to another stage…</div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Copy lead ID <small>D84E218B</small></div><div class="o"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>Show on the board</div></div></div>
+  <div class="surf"><h4><b>Hand off</b>: a picker under the menu</h4><div class="pop" style="width:300px"><div class="ph">Hand off to a licensed agent</div><div class="input" style="margin:4px 6px 6px"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>Search agents</div>
+    <div class="o on">Kayla Brooks <small>Producer · licensed OH</small></div><div class="o">Marcus Lee <small>Producer · licensed OH</small></div><div class="o" style="color:var(--faint)">Sam Patel <small>not licensed in OH</small></div>
+    <div class="sep"></div><div style="display:flex;justify-content:flex-end;gap:8px;padding:4px 6px"><span class="btn sm">Cancel</span><span class="btn p sm">Offer hand-off</span></div></div></div>
+  <div class="surf"><h4><b>Put back / Unassign</b>: asks first (today's question, unchanged)</h4><div class="dlg" style="width:100%"><div class="dh2"><div><h3>Put Hayden Thomas back in the queue?</h3><p>The next agent who claims it resumes the verification where it stopped.</p></div></div><div class="df"><span class="btn">Keep it</span><span class="btn p">Put back in the queue</span></div></div></div>
+  <div class="surf" style="grid-column:span 2"><h4><b>Record call outcome</b>: the existing call-path dialog, opened in place</h4><div class="dlg"><div class="dh2"><div style="flex:1"><h3>Record call outcome</h3><p>Hayden Thomas · (205) 233-7210</p></div><span class="btn g icon sm"><svg class="i s" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></span></div>
+    <div class="db" style="display:grid;grid-template-columns:220px 1fr;gap:16px"><div><p class="sect" style="margin:0 0 6px">Answered so far</p><div class="vq"><span class="t">Did they pick up?</span><b>Yes</b></div><div class="vq"><span class="t">Interested?</span><b>Later</b></div></div>
+    <div><p style="font-weight:600;margin-bottom:10px">When should we call back?</p><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><div class="opt on">Thu 4:30 pm<small>their time, EDT</small></div><div class="opt">Pick a time…<small>within their calling window</small></div></div></div></div>
+    <div class="df"><span class="btn">Back</span><span class="btn p">Save outcome</span></div></div></div>
+  <div class="surf"><h4><b>Existing customer found</b>: the one line becomes the match</h4><div class="card" style="padding:12px 16px;border-color:var(--warn)"><div style="display:flex;gap:10px;align-items:center"><span style="color:var(--warn)"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><b style="flex:1;color:var(--warn)">Same person?</b><span class="btn sm">Re-check</span></div>
+    <dl class="rows" style="margin-top:8px"><div><dt>Earlier lead</dt><dd>Hayden Thomas · 12 Aug · Final expense · Not interested</dd></div><div><dt>Matched on</dt><dd>Phone, last name, ZIP</dd></div></dl>
+    <div style="display:flex;gap:8px;margin-top:10px"><span class="btn sm">Open the earlier lead</span><span class="btn sm">Not the same person</span></div></div></div>
+  <div class="surf"><h4><b>Edit a submitted field</b>: a small dialog, with the reason kept</h4><div class="dlg"><div class="dh2"><div><h3>Edit date of birth</h3><p>The form version stays; the change is in the timeline.</p></div></div><div class="db" style="display:grid;gap:10px"><div class="input" style="color:var(--text)">05 / 08 / 1950</div><div class="input">Why: corrected on the call</div></div><div class="df"><span class="btn">Discard</span><span class="btn p">Save</span></div></div></div>
+  <div class="surf"><h4><b>A note with a mention</b>: the composer's list</h4><div class="composer"><div class="ta" style="color:var(--text)">@Kay</div><div class="bar"><span class="seg"><span class="on">Internal</span><span>Shared</span></span><span style="flex:1"></span><span class="btn sm">Add note</span></div></div>
+    <div class="pop" style="width:240px;margin-top:6px"><div class="o on">Kayla Brooks <small>Producer</small></div><div class="o">Kayla Ortiz <small>Assistant</small></div></div></div>
+  <div class="surf"><h4><b>Toasts</b>: what the actions say</h4><div style="display:grid;gap:8px"><div class="toast"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Claimed: Hayden Thomas is yours</div><div class="toast"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Hand-off offered to Kayla Brooks</div><div class="toast"><svg class="i " viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Team nudged about Hayden Thomas</div></div></div></div>
+  </section>
+
+  <section class="dir" id="pick">
+    <div class="dh"><span class="letter" style="background:var(--raised);color:var(--text)">=</span><h2>Compare</h2></div>
+    <div class="scroll-x"><table class="crit">
+      <tr><th></th><th>A · Record, tidied</th><th>B · Call cockpit</th><th>C · Stage path</th></tr>
+      <tr><td></td><td>Closest to today; one primary + ⋯; strip; 6 tabs</td><td>Three columns; one activity stream; 3 tabs</td><td>Path across the top that moves the stage; grouped details</td></tr>
+      <tr><td></td><td>Best for: owners and managers reviewing</td><td>Best for: agents working the phone</td><td>Best for: seeing where a lead is in its life</td></tr>
+      <tr><td></td><td>1–2 days, no new data</td><td>3–4 days, one merged read</td><td>2–3 days, stage times from history</td></tr>
+    </table></div>
+    <div class="notes">
+      <div class="note"><h4>Recommendation</h4><ul><li><b>B</b>: the page is opened mostly by the agent about to call, and B puts the phone, the history and the next step side by side. <b>C's path</b> can sit on top of B later; they don't conflict.</li></ul></div>
+      <div class="note"><h4>In every direction</h4><ul>
+        <li>Fluid full width. Every figure and chip links (stage → the board on that stage, campaign → its list, owner → their leads).</li>
+        <li>No notices on the page; explanations sit behind (i).</li>
+        <li>No avatars for the lead; staff are names.</li>
+        <li>Everything today's page can do is still reachable: the primary button, ⋯ or a tab.</li>
+      </ul></div>
+    </div>
+  </section>
+</div>
+
+
+</body>
+</html>

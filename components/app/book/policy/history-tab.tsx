@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
@@ -40,23 +41,23 @@ export function PolicyHistoryTab({ rows, policyNumber, truncated }: { rows: Poli
         <EmptyState title="No changes yet" hint="Each carrier file that changes a field of this policy adds a row here, with the file and row that changed it. Each move of the lead's card between stages adds one too." />
       ) : (
         <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-          <thead><tr><th className="w-[120px]">Date</th><th className="w-[180px]">Field</th><th>Change</th><th>Because of</th><th className="w-8"><span className="sr-only">Open</span></th></tr></thead>
+          <thead><tr><th className="w-[120px]">Date</th><th className="w-[180px]">Field</th><th>Change</th><th>Because of</th></tr></thead>
           <PagedBody>
             {shown.map((row, index) => {
               const cells = (
                 <>
-                  <td className="tabular-nums text-muted-foreground">{fileDay(row.date)}</td>
-                  <td>{row.fieldLabel}</td>
-                  <td>{row.from !== null && <span className="text-muted-foreground">{row.from} → </span>}<strong className="font-semibold text-foreground">{row.to}</strong></td>
-                  <td className="max-w-[360px] truncate text-muted-foreground" title={row.source?.fileName ?? row.note ?? undefined}>
-                    {row.source ? <>{row.source.fileName ?? "The file"}{row.source.rowNumber ? ` · row ${row.source.rowNumber}` : ""}</> : row.note || "—"}
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(row.date)}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground">{row.fieldLabel}</td>
+                  <td className="whitespace-nowrap">{row.from !== null ? `${row.from} → ${row.to}` : row.to}</td>
+                  <td className="max-w-[360px] truncate" title={row.source?.fileName ?? row.note ?? undefined}>
+                    {row.source ? <Link href={row.source.rowNumber ? rowHref(row.source.fileId, row.source.rowNumber) : fileHref(row.source.fileId)} className="hover:underline">{row.source.fileName ?? "The file"}{row.source.rowNumber ? ` · row ${row.source.rowNumber}` : ""}</Link> : row.note || <span className="text-muted-foreground">—</span>}
                   </td>
                 </>
               );
               const key = `${row.date}-${row.field}-${index}`;
               return row.source
-                ? <ClickRow key={key} href={row.source.rowNumber ? rowHref(row.source.fileId, row.source.rowNumber) : fileHref(row.source.fileId)} label={`Open ${row.source.fileName ?? "the file"}${row.source.rowNumber ? `, row ${row.source.rowNumber}` : ""}`}>{cells}</ClickRow>
-                : <tr key={key}>{cells}<td /></tr>;
+                ? <ClickRow key={key} href={row.source.rowNumber ? rowHref(row.source.fileId, row.source.rowNumber) : fileHref(row.source.fileId)} label={`Open ${row.source.fileName ?? "the file"}${row.source.rowNumber ? `, row ${row.source.rowNumber}` : ""}`} chevron={false}>{cells}</ClickRow>
+                : <tr key={key}>{cells}</tr>;
             })}
           </PagedBody>
         </table>

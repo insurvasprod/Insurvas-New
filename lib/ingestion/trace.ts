@@ -41,7 +41,9 @@ export const TRACE_SCREENS: Record<string, { label: string; sources: TracedSourc
   "app/app/(shell)/policies/carrier/[carrierId]/[policyNumber]/client/page.tsx": { label: "Policy › Change client", sources: ["policy_current", "commission_entry"] },
   "app/app/(shell)/ledger/page.tsx": { label: "Commission ledger", sources: ["commission_entry"] },
   "app/app/(shell)/rate-card/page.tsx": { label: "Rate card", sources: ["expected_commission"] },
-  "app/app/(shell)/discrepancies/page.tsx": { label: "Discrepancies", sources: ["commission_discrepancy", "commission_entry", "expected_commission"] },
+  "app/app/(shell)/discrepancies/page.tsx": { label: "Pay issues", sources: ["commission_discrepancy", "commission_entry", "expected_commission"] },
+  // Commissions round 7 (2026-11-10): Who gets the credit's Agent codes tab reads the unmapped codes, as Setup › Agent codes.
+  "app/app/(shell)/attribution/page.tsx": { label: "Who gets the credit", sources: ["policy_current"] },
   "app/app/(shell)/lapse-risk/page.tsx": { label: "Lapse risk", sources: ["policy_current", "commission_entry"] },
   "app/app/(shell)/save-queue/page.tsx": { label: "Save queue", sources: ["policy_current", "commission_entry"] },
   "app/app/(shell)/servicing/page.tsx": { label: "Servicing", sources: ["policy_current"] },

@@ -75,7 +75,8 @@ type Payload = {
 type Linked = { available: boolean; providers: CalendarProviderView[]; connections: CalendarConnectionView[] };
 
 const CONNECT_OUTCOMES: Record<string, string> = {
-  connected: "Calendar linked. Its busy time now removes slots.",
+  connected: "Calendar linked. Its busy time now removes slots, and meetings booked here are added to it.",
+  connected_read_only: "Calendar linked for busy time only: Google was not allowed to add meetings. Press Reconnect and tick every box Google shows.",
   declined: "The calendar was not linked: consent was declined.",
   failed: "The calendar could not be linked. Try again.",
   invalid: "That calendar link was incomplete. Start again.",
@@ -192,8 +193,10 @@ export function CalendarAvailabilitySettings() {
 
   const members = useMemo(() => data?.members ?? [], [data]);
   const active = useMemo(
-    () => members.find((member) => member.userId === selected) ?? members[0],
-    [members, selected],
+    // Your own calendar first (2026-11-13): opening on the first name in the list linked an owner's
+    // Google account to a producer's calendar, so the owner's bookings never reached it.
+    () => members.find((member) => member.userId === selected) ?? members.find((member) => member.userId === data?.selfUserId) ?? members[0],
+    [members, selected, data?.selfUserId],
   );
 
   const draft = useMemo(() => (active ? edits[active.userId] ?? active : null), [active, edits]);
@@ -360,7 +363,8 @@ export function CalendarAvailabilitySettings() {
   return (
     <div ref={rootRef} className="contents">
     <SettingsStack>
-      {header}
+      {/* The calendar's sub-pages: the sub-page bar on the title's line (UI-CONSISTENCY §8b). */}
+      <SettingsSectionHeader tabs={<ViewTabs label="Calendar settings" tabs={tabs} value={view} onChange={setTab} idPrefix="calendar-tab" controls="calendar-panel" />} />
 
       {saveError && <Callout tone="error" title={saveError} />}
 
@@ -386,8 +390,6 @@ export function CalendarAvailabilitySettings() {
           Only an owner can edit somebody else&rsquo;s calendar.
         </Callout>
       )}
-
-      <ViewTabs label="Calendar settings" tabs={tabs} value={view} onChange={setTab} idPrefix="calendar-tab" controls="calendar-panel" />
 
       <div id="calendar-panel" role="tabpanel" aria-labelledby={`calendar-tab-${view}`}>
         {view === "hours" && (
@@ -778,7 +780,7 @@ function LinkedCalendarRow({
       title="Linked calendars"
       help={
         <>
-          <span className="block">Connect your Google or Outlook calendar and the meetings there block those times here, updated automatically.</span>
+          <span className="block">Connect your Google or Outlook calendar and the meetings there block those times here, updated automatically. Meetings booked here are added to your Google Calendar.</span>
           {connected.length > 0 && !member.policy.honourLinkedCalendars && (
             <span className="mt-1.5 flex flex-wrap items-center gap-2 text-[var(--warning-ink)]">
               Busy time from linked calendars is switched off.
@@ -790,13 +792,16 @@ function LinkedCalendarRow({
         </>
       }
     >
-      <div className="flex w-[320px] max-w-full flex-col gap-2">
+      {/* Side by side (owner, 2026-11-13); they wrap under each other only when the row is too narrow. */}
+      <div className="flex max-w-full flex-wrap justify-end gap-2">
         {CALENDARS.map(({ id, name, Mark }) => {
           const connection = connected.find((item) => item.provider === id) ?? null;
           const configured = (linked?.providers ?? []).some((item) => item.id === id && item.configured);
           const failed = connection?.status === "error";
+          // Linked before 2026-11-13: it reads busy time but was never allowed to add meetings.
+          const readOnly = Boolean(connection && id === "google" && !connection.writesEvents);
           return (
-            <div key={id} className="flex items-center gap-2.5 rounded-lg border border-[var(--border)] m-glass-inset px-3 py-2">
+            <div key={id} className="flex w-[300px] max-w-full items-center gap-2.5 rounded-lg border border-[var(--border)] m-glass-inset px-3 py-2">
               <Mark />
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-semibold text-[var(--ink)]">{name}</span>
@@ -804,7 +809,9 @@ function LinkedCalendarRow({
                   {connection
                     ? failed
                       ? `Needs attention${connection.lastError ? `: ${connection.lastError}` : ""}`
-                      : `${connection.accountEmail ?? "Connected"} · ${connection.lastSyncedAt ? `updated ${dateTime(connection.lastSyncedAt, viewerTimeZone(), { clock: "12h" })}` : "reading now"}`
+                      : readOnly
+                        ? `${connection.accountEmail ?? "Connected"} · reconnect to add meetings`
+                        : `${connection.accountEmail ?? "Connected"} · ${connection.lastSyncedAt ? `updated ${dateTime(connection.lastSyncedAt, viewerTimeZone(), { clock: "12h" })}` : "reading now"}`
                     : !ready
                       ? "Available after a pending database update"
                       : configured
@@ -814,6 +821,11 @@ function LinkedCalendarRow({
               </span>
               {editable && connection && (
                 <span className="inline-flex shrink-0 gap-1">
+                  {readOnly && (
+                    <Button type="button" variant="outline" size="sm" disabled={Boolean(working) || !configured} onClick={() => onAction("connect", id)}>
+                      {working === `connect:${id}` ? "Opening…" : "Reconnect"}
+                    </Button>
+                  )}
                   <Button type="button" variant="ghost" size="sm" disabled={Boolean(working)} onClick={() => onAction("sync", connection.id)}>
                     {working === `sync:${connection.id}` ? "…" : "Refresh"}
                   </Button>

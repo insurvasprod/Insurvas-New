@@ -5,6 +5,8 @@ import Link, { useLinkStatus } from "next/link";
 import { useRouter } from "next/navigation";
 import type { ComponentProps } from "react";
 
+import { prefetchRoute } from "@/lib/client/route-resources";
+
 /**
  * Moving between views without reloading the page (2026-11-08, "feel instant"). Three kinds of switch, one rule each:
  *
@@ -66,8 +68,13 @@ const INTENT_MS = 80;
  * navigation that never lands (a slow page abandoned) is cleared after a while so a later page does not replay it.
  */
 let navMarkTimer: ReturnType<typeof setTimeout> | undefined;
+/** When the last navigation was asked for (performance.now()), for BackgroundRefresh: a page that lands within a
+ *  frame or two of the click came from the router's cache, and is refreshed behind what it shows. */
+let navAskedAt = -Infinity;
+export const lastNavAskedAt = () => navAskedAt;
 export function markNavDirection(types?: readonly string[]) {
   if (typeof document === "undefined") return;
+  navAskedAt = performance.now();
   document.documentElement.dataset.nav = types?.includes("nav-forward") ? "forward" : types?.includes("nav-back") ? "back" : "area";
   clearTimeout(navMarkTimer);
   navMarkTimer = setTimeout(clearNavDirection, 10_000);
@@ -89,13 +96,15 @@ export function IntentLink({ children, onMouseEnter, onMouseLeave, onFocus, onCl
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   const off = prefetch === false;
+  // Resting on the link also warms what the page reads from the browser (route-resources.ts), so it draws with data.
+  const warm = () => { setIntent(true); if (typeof props.href === "string") prefetchRoute(props.href); };
   return (
     <Link
       {...props}
       prefetch={intent && !off ? true : prefetch}
-      onMouseEnter={(event) => { onMouseEnter?.(event); if (timer.current) clearTimeout(timer.current); if (!off) timer.current = setTimeout(() => setIntent(true), INTENT_MS); }}
+      onMouseEnter={(event) => { onMouseEnter?.(event); if (timer.current) clearTimeout(timer.current); if (!off) timer.current = setTimeout(warm, INTENT_MS); }}
       onMouseLeave={(event) => { onMouseLeave?.(event); if (timer.current) clearTimeout(timer.current); }}
-      onFocus={(event) => { onFocus?.(event); if (!off) setIntent(true); }}
+      onFocus={(event) => { onFocus?.(event); if (!off) warm(); }}
       onClick={(event) => {
         onClick?.(event);
         // A plain click that navigates here (not a new tab, not a click the caller cancelled) marks its direction.

@@ -1,59 +1,54 @@
 "use client";
 
 /**
- * Settings › Sales › Disclosures (LA-3.10 + LA-2.23; board A of the 2026-10-30 round, with its "every
- * action and state" boards). Reads and writes /api/app/settings/sales/disclosures; `?preview=sample`
- * renders the design fixtures and saves nothing.
+ * Settings › Sales process › Disclosures (LA-3.10 + LA-2.23). Reads and writes /api/app/settings/sales/disclosures;
+ * `?preview=sample` renders the design fixtures and saves nothing.
  *
- * Four tabs: Documents (the library — one row per document, its live version, a draft waiting), When
- * they are required (every live rule, read top to bottom), Read on the call (the per-state wording the
- * dialer shows, read-only — Insurvas maintains it) and Try a case (which documents an application with
- * these answers would carry). Above them, the few things that need the owner. Each row has one button
- * and a menu with the rest; Add a document starts blank, from an Insurvas document, or as a duplicate.
+ * Settings round 8 (owner pick A, sales-process board "5 · Disclosures", 2026-11-12): one list of documents, one
+ * line each (what it is, when it is required, where it applies, its version, one status chip). A document opens
+ * as a right sheet with sections — Wording · When required · Call scripts · Versions — never a second row of
+ * tabs. What used to be the Needs you, When they are required, Read on the call and Try a case tabs are the status
+ * line, the Required when column, the Call scripts sheet and the Try a case sheet.
  *
- * A document opens in place: Wording, Where and when, Versions, with the wording as the agent sees it
- * and what this draft changes beside them. REPLACEMENT_NOTICE and 1035_EXCHANGE are Insurvas platform
- * rows: read-only until copied to the agency. A version is superseded, never overwritten: editing a
- * published or retired one saves version N + 1 as a draft (that is how an old version is restored), and
- * publishing it retires the one before, so an application acknowledged on version N keeps it. The PDF
+ * REPLACEMENT_NOTICE and 1035_EXCHANGE are Insurvas platform rows: read-only until copied to the agency. A version
+ * is superseded, never overwritten (Draft → Publish): editing a published or retired one saves version N + 1 as a
+ * draft, and publishing it retires the one before, so an application acknowledged on version N keeps it. The PDF
  * is private and opens through a short-lived signed link. Owners edit; producers read.
+ *
+ * Not in the stored model, so not drawn: the step a document is acknowledged on, how the client agrees, and
+ * per-document call scripts (call wording is per state and product, maintained by Insurvas).
  */
 
 import { StatusChip } from "@/components/ui/status-chip";
 import { LeaveGuard } from "@/components/ui/leave-guard";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Copy, Plus } from "lucide-react";
 import { notify } from "@/lib/notify";
 
 import { ReviewChip } from "@/components/app/settings/defaults";
-import { Callout, Field, SettingsCard, SettingsStack, control, st, pillTone } from "@/components/app/settings/primitives";
+import { Field, SettingsSectionHeader, control, st } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog, confirmAction } from "@/components/ui/confirm-dialog";
 import { ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState } from "@/components/ui/page-states";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
+import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { TableCard } from "@/components/ui/table-card";
-import { UnderlineTabs, ViewTabs } from "@/components/ui/view-tabs";
+import { Sheet } from "@/components/ui/sheet";
 import { DISCLOSURES, SALES_CARRIERS } from "@/lib/applications/settingsFixtures";
-import { attention as needsYou, callCoverage, docMatches, documents, duplicateCode, readAloudLine, searchDocs, versionChanges, wordDiff, type CallProduct, type DocFilter, type LibraryDoc } from "@/lib/salesSettings/disclosureLibrary";
+import { attention as needsYou, callCoverage, docMatches, documents, duplicateCode, searchDocs, versionChanges, wordDiff, type CallProduct, type DocFilter, type LibraryDoc } from "@/lib/salesSettings/disclosureLibrary";
 import type { Clause } from "@/lib/salesSettings/editing";
 import type { DisclosureInput, DisclosureItem, DisclosureLibrary } from "@/lib/salesSettings/disclosures";
 import { US_STATES } from "@/lib/signup/constants";
 import { cn } from "@/lib/utils";
 
+import { SheetAnchors, SheetSection, StatusLine, TabFrame, WIDE_SHEET } from "../sales-process/parts";
 import { CallWording, callsNeedingWork } from "./disclosures-calls";
 import { ScopeFields, WordingFields, ruleSentence, toDraft, toInput, type DisclosureDraft, type PdfUpload } from "./disclosures-editor";
 import { TryACase } from "./disclosures-try";
-import {
-  BackButton, DiscardSave, LifecyclePill, NOT_SAVED, ReadOnlyNotice, RowAction, RowMenu, SalesLoadError, SalesLoading, SalesPanelTop,
-  SalesSetupPending, WithReason, shortDay, useSalesSample, type Lifecycle, type RowMenuItem,
-} from "./shared";
+import { LifecyclePill, NOT_SAVED, RowMenu, SalesPanelTop, WithReason, shortDay, useSalesSample, type Lifecycle, type RowMenuItem } from "./shared";
 
 const API = "/api/app/settings/sales/disclosures";
 
-type Tab = "documents" | "needs" | "rules" | "calls" | "try";
 type EditorTab = "wording" | "where" | "versions";
 type Confirm = "discard" | "retire" | "publish" | "removePdf" | "deleteDoc";
 type AddMode = "blank" | "platform" | "duplicate";
@@ -92,11 +87,11 @@ function lifecycleOf(item: DisclosureItem): Lifecycle {
 }
 
 function StatusCell({ doc }: { doc: LibraryDoc }) {
-  if (doc.live && !doc.live.platform) return <LifecyclePill state="live" />;
+  // One chip a row (round 8): what applies now, or what waits.
+  if (doc.draft) return <StatusChip tone="info">{doc.live ? "Draft waiting" : "Draft"}</StatusChip>;
+  if (doc.live && !doc.live.platform) return doc.live.rules.length ? <LifecyclePill state="live" /> : <StatusChip tone="warning">Live, no rule</StatusChip>;
   // Insurvas wording is a starting point, never final legal text (docs/settings/DEFAULTS.md §2.5).
-  if (doc.shown.platform) return <span className="flex flex-col items-start gap-1"><LifecyclePill state="platform" /><span className="text-xs text-[var(--muted)]">Needs legal review</span></span>;
-  if (doc.draft && !doc.live) return <LifecyclePill state="draft" />;
-  if (doc.draft && doc.live?.platform) return <span className="flex flex-wrap items-center gap-2"><LifecyclePill state="draft" /><span className="text-xs text-[var(--muted)]">Insurvas v{doc.live.version} in use</span></span>;
+  if (doc.shown.platform) return <StatusChip tone="warning">Needs legal review</StatusChip>;
   return <LifecyclePill state="retired" />;
 }
 
@@ -175,14 +170,15 @@ function CompareDialog({ pair, onClose, scope }: { pair: [DisclosureItem, Disclo
   );
 }
 
-export function SalesDisclosures() {
+export function SalesDisclosures({ focus = null }: { focus?: string | null } = {}) {
   const sample = useSalesSample();
   const [library, setLibrary] = useState<DisclosureLibrary | null>(sample ? sampleLibrary() : null);
   const [loading, setLoading] = useState(!sample);
   const [error, setError] = useState<{ text: string; pending: boolean } | null>(null);
   const [calls, setCalls] = useState<CallProduct[] | null>(sample ? sampleCalls() : null);
   const [callsError, setCallsError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("documents");
+  /** A sheet beside the list: Try a case, or the call scripts. */
+  const [panel, setPanel] = useState<"try" | "calls" | null>(null);
   const [filter, setFilter] = useState<DocFilter>("all");
   const [query, setQuery] = useState("");
   /** The open version: an id, "new", or null for the list. */
@@ -246,7 +242,6 @@ export function SalesDisclosures() {
   const docs = useMemo(() => documents(library?.items ?? []), [library]);
   const shownDocs = useMemo(() => searchDocs(docs, query).filter((d) => docMatches(d, filter)), [docs, query, filter]);
   const needs = useMemo(() => needsYou(docs), [docs]);
-  const liveRules = useMemo(() => docs.flatMap((d) => (d.live ? d.live.rules.map((rule, i) => ({ doc: d, item: d.live!, rule, i })) : [])), [docs]);
   const open = openId && openId !== "new" ? library?.items.find((i) => i.id === openId) ?? null : null;
   const openDoc = open ? docs.find((d) => d.code === open.code) ?? null : null;
   const callsOpen = callsNeedingWork(calls);
@@ -484,7 +479,7 @@ export function SalesDisclosures() {
       canEdit && latestOld && { label: `Start a draft from v${latestOld.version}`, onSelect: () => draftFrom(latestOld), disabled: busy },
       canEdit && { label: "Duplicate as a new document", onSelect: () => startDuplicate(d.draft ?? d.live ?? d.shown), disabled: busy },
       d.versions.length > 0 && { label: "Versions", onSelect: () => openItem(d.draft ?? d.live ?? d.shown, "versions") },
-      d.live && { label: "Try it on a case", onSelect: () => setTab("try") },
+      d.live && { label: "Try it on a case", onSelect: () => setPanel("try") },
       (d.live ?? d.shown).hasAttachment && { label: "Open its PDF", onSelect: () => openPdf(d.live ?? d.shown) },
       // With an Insurvas version of the same code behind it, retiring is the way back to the default.
       canEdit && ownLive && { label: d.platform ? "Reset to default…" : `Retire v${ownLive.version}…`, onSelect: () => openAndAsk(ownLive, "retire"), danger: true, disabled: busy },
@@ -492,15 +487,6 @@ export function SalesDisclosures() {
       canEdit && d.own.length > 0 && { label: "Delete document…", onSelect: () => openAndAsk(d.own[0], "deleteDoc"), danger: true, disabled: busy || carried(d) > 0, reason: carried(d) > 0 ? inUse(d) : null },
     ];
   }
-
-  // One width for Edit and View, so the column lines up; which draft opens is in the menu and the editor.
-  const rowButton = (d: LibraryDoc) => (
-    <span className="inline-flex [&_button]:w-[72px]">
-      <RowAction onClick={() => openItem(d.draft && canEdit ? d.draft : d.shown)} label={`Open ${d.shown.title}`}>
-        {canEdit && !d.shown.platform && (d.draft || d.shown.status === "published") ? "Edit" : "View"}
-      </RowAction>
-    </span>
-  );
 
   const dialogs = library && (
     <>
@@ -577,7 +563,30 @@ export function SalesDisclosures() {
     </>
   );
 
-  /* ── editor ── */
+  // A link names a document ("doc.<code>"): open it once the library is here.
+  const focused = useRef<string | null>(null);
+  useEffect(() => {
+    if (!library || !focus?.startsWith("doc.") || focused.current === focus) return;
+    focused.current = focus;
+    const doc = docs.find((d) => d.code === focus.slice(4));
+    if (!doc) return;
+    const t = window.setTimeout(() => openItem(doc.draft && library.canEdit ? doc.draft : doc.shown), 0);
+    return () => window.clearTimeout(t);
+    // openItem reads the same state; it is rebuilt each render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [library, focus]);
+
+  // The sheet opens on the section asked for (a rule to add opens on When required).
+  useEffect(() => {
+    if (!openId) return;
+    const id = editorTab === "where" ? "dc-when" : editorTab === "versions" ? "dc-versions" : null;
+    if (!id) return;
+    const t = window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: "start" }), 120);
+    return () => window.clearTimeout(t);
+  }, [openId, editorTab]);
+
+  /* ── the document's sheet ── */
+  let sheet: ReactNode = null;
   if (library && draft && openId) {
     const readOnly = !canEdit || Boolean(open?.platform) || open?.status === "retired";
     const baseline = toDraft(open, library);
@@ -595,183 +604,114 @@ export function SalesDisclosures() {
     };
     const state: Lifecycle | null = open === null ? null : lifecycleOf(open);
     const revert = () => { setDraft(baseline); setClauseErrors({}); setSaveError(null); };
-    // What this draft (or these unsaved edits) changes against what applications attach now.
     const live = openDoc?.live && openDoc.live.id !== open?.id ? openDoc.live : open?.status === "published" ? open : null;
     const changes = live && !readOnly && (isDraft || dirty) ? versionChanges(live, draftAsItem(draft, library, Boolean(open?.hasAttachment))) : null;
     const versions = openDoc?.versions ?? [];
     const previewRules = toInput(draft, library).input.rules.filter((r) => r.clauses.every((c) => c.value !== ""));
     const publishLabel = `Publish v${next ?? 1}`;
-    // Say what is still needed instead of letting Save or Publish fail on it.
     const needed = [!/^[A-Z0-9][A-Z0-9_]{1,63}$/.test(draft.code) && "a code", !draft.title.trim() && "a title", !draft.body.trim() && "the wording"].filter(Boolean) as string[];
     const neededReason = needed.length ? `Give it ${needed.join(", ").replace(/, ([^,]*)$/, " and $1")} first.` : null;
     const retiring = openDoc?.live && !openDoc.live.platform && openDoc.live.id !== open?.id ? openDoc.live : null;
-    // An older version, open to read: say so, and offer Compare and a new draft from it.
     const older = open && openDoc && open.status === "retired" ? open : null;
     const draftBlock = openDoc?.draft ? `Draft v${openDoc.draft.version} already exists. Open it, or delete it first.` : null;
     const openVersion = (v: DisclosureItem) => (dirty && !readOnly ? leave().then(() => openItem(v, "versions")) : openItem(v, "versions"));
+    const subtitle = !open ? "New document · applies to nothing until you publish it"
+      : open.status === "published" ? `v${open.version} live · ${apps(open.acknowledged)} acknowledged it`
+      : open.status === "retired" ? `v${open.version} retired · kept for the ${apps(open.acknowledged)} that acknowledged it`
+      : open.platform ? `Insurvas v${open.version} · read-only until copied to your agency`
+      : `v${open.version} draft${live ? ` · v${live.version}${live.platform ? " (Insurvas)" : ""} stays in use until you publish` : " · applies to nothing until you publish it"}`;
 
-    return (
-      <SettingsStack>
-        <SalesPanelTop sample={sample} />
-        {/* A click away from an unsaved document asks first, like Back does (foundation v3). */}
-        <LeaveGuard dirty={dirty && !readOnly} onDiscard={revert} what={open?.title || "this document"} />
-        <BackButton onClick={leave}>All documents</BackButton>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <h2 className="m-0 min-w-0 text-title-sm leading-[1.28] font-semibold tracking-[-0.015em] text-[var(--ink)]">{draft.title.trim() || (open ? open.title : "New document")}</h2>
-          {open && <StatusChip dot={false} tone={pillTone(open.platform ? "neutral" : "brand")}>v{open.version}</StatusChip>}
-          <LifecyclePill state={state ?? "draft"} />
-          {open?.platform && <ReviewChip />}
-          <span className="text-sm text-[var(--muted)]">
-            {!open ? "Applies to nothing until you publish it"
-              : open.status === "published" ? `${apps(open.acknowledged)} acknowledged it`
-              : open.status === "retired" ? `Kept for the ${apps(open.acknowledged)} that acknowledged it`
-              : live ? `v${live.version}${live.platform ? " (Insurvas)" : ""} stays in use until you publish`
-              : "Applies to nothing until you publish it"}
-          </span>
-          <span className="ml-auto flex shrink-0 items-center gap-2">
-            {open?.platform && canEdit && (
-              <WithReason reason={draftBlock}>
-                <Button type="button" variant="outline" disabled={busy || Boolean(openDoc?.draft)} onClick={() => copyToAgency(open)}><Copy aria-hidden="true" />Copy to my agency</Button>
-              </WithReason>
-            )}
-            {state === "live" && canEdit && (
-              <WithReason reason={dirty ? "Save or discard your changes first." : null}>
-                <Button type="button" variant="outline" disabled={busy || dirty} onClick={() => setConfirm("retire")}>Retire this version</Button>
-              </WithReason>
-            )}
-            {canEdit && openDoc && openDoc.own.length > 0 && !open?.platform && (
-              <WithReason reason={carried(openDoc) > 0 ? inUse(openDoc) : null}>
-                <Button type="button" variant="ghost" disabled={busy || carried(openDoc) > 0} onClick={() => setConfirm("deleteDoc")} className="text-[var(--error-ink)]">Delete document</Button>
-              </WithReason>
-            )}
-          </span>
-        </div>
-
-        {saveError && <Callout tone="error" title={saveError} />}
-        {!canEdit && <ReadOnlyNotice what="disclosures" />}
-        {open?.platform && canEdit && <Callout tone="info" title="This is Insurvas wording. Copy it to your agency to change it; the copy applies once you publish it." />}
-        {older && (
-          <div className="m-glass-inset flex flex-wrap items-center gap-3 rounded-lg border border-[var(--border)] px-4 py-3">
-            <span className="min-w-0 flex-1 text-sm text-[var(--body)]">You&apos;re viewing <strong className="font-semibold text-[var(--ink)]">v{older.version}</strong>{older.createdBy ? ` by ${older.createdBy}` : ""}, retired. The {apps(older.acknowledged)} that acknowledged it keep it. It can&apos;t be edited.</span>
-            {live && <Button type="button" variant="outline" size="sm" onClick={() => setComparing([older, live])}>Compare with live v{live.version}</Button>}
-            {canEdit && (
-              <WithReason reason={draftBlock}>
-                <Button type="button" size="sm" disabled={busy || Boolean(draftBlock)} onClick={() => draftFrom(older)}>Start a draft from this version</Button>
-              </WithReason>
-            )}
-          </div>
-        )}
-
-        <UnderlineTabs<EditorTab>
-          label="Document"
-          value={editorTab}
-          onChange={setEditorTab}
-          tabs={[
-            { key: "wording", label: "Wording" },
-            // A count only when a condition needs fixing, so the tab says where the problem is.
-            { key: "where", label: "Where and when", count: Object.keys(clauseErrors).length || null, tone: "danger" },
-            { key: "versions", label: "Versions", count: versions.length || null },
-          ]}
-        />
-
-        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="flex min-w-0 flex-col gap-4">
-            {editorTab === "wording" && (
-              <WordingFields item={open} draft={draft} setDraft={setDraft} readOnly={readOnly} onUpload={uploadPdf} onOpenPdf={() => openPdf()} onRemovePdf={() => setConfirm("removePdf")} busy={busy} />
-            )}
-            {editorTab === "where" && (
-              <ScopeFields draft={draft} setDraft={setDraft} library={library} readOnly={readOnly} clauseErrors={clauseErrors} />
-            )}
-            {editorTab === "versions" && (
-              <TableCard>
-                {versions.length === 0 ? (
-                  <EmptyState title="Not saved yet" hint="Save the draft and it becomes version 1." />
-                ) : (
-                  <table className={cn(st.table, "min-w-[640px]")}>
-                    <thead>
-                      <tr className={st.headRow}>
-                        <th scope="col" className={st.th}>Version</th>
-                        <th scope="col" className={st.th}>Status</th>
-                        <th scope="col" className={st.th}>Changed</th>
-                        <th scope="col" className={st.th}>Acknowledged on it</th>
-                        <th scope="col" className={cn(st.th, "text-right")}><span className="sr-only">Actions</span></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {versions.map((v) => (
-                        <tr key={v.id} className={cn(v.id === open?.id && "bg-[var(--surface-alt)]/40")}>
-                          <td className={st.td}>v{v.version}{v.platform ? " (Insurvas)" : ""}{v.id === open?.id ? " · open" : ""}</td>
-                          <td className={st.td}><LifecyclePill state={lifecycleOf(v)} /></td>
-                          <td className={st.td}>{shortDay(v.updatedAt)}{v.createdBy ? ` · ${v.createdBy}` : v.platform ? " · Insurvas" : ""}</td>
-                          <td className={st.td}>{v.status === "draft" ? "—" : apps(v.acknowledged)}</td>
-                          <td className={cn(st.td, "whitespace-nowrap text-right")}>
-                            <span className="inline-flex gap-2">
-                              {v.id !== open?.id && <RowAction onClick={() => openVersion(v)} label={`Open v${v.version}`}>{canEdit && !v.platform && v.status === "draft" ? "Edit" : "View"}</RowAction>}
-                              <RowMenu
-                                label={`v${v.version}`}
-                                items={[
-                                  live && v.id !== live.id && v.status !== "draft" && { label: `Compare with live v${live.version}`, onSelect: () => setComparing(v.version < live.version ? [v, live] : [live, v]) },
-                                  live && v.status === "draft" && { label: `Compare with live v${live.version}`, onSelect: () => setComparing([live, v]) },
-                                  canEdit && v.status === "retired" && !v.platform && { label: `Start a draft from v${v.version}`, onSelect: () => draftFrom(v), disabled: busy || Boolean(draftBlock), reason: draftBlock },
-                                  v.hasAttachment && { label: "Open its PDF", onSelect: () => openPdf(v) },
-                                ]}
-                              />
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+    sheet = (
+      <Sheet
+        title={draft.title.trim() || (open ? open.title : "New document")}
+        subtitle={subtitle}
+        status={<><LifecyclePill state={state ?? "draft"} />{open?.platform && <ReviewChip />}</>}
+        actions={canEdit && open ? (
+          <RowMenu
+            label={open.title}
+            items={[
+              live && open.id !== live.id && { label: `Compare with live v${live.version}`, onSelect: () => setComparing(open.version < live.version ? [open, live] : [live, open]) },
+              (open.hasAttachment) && { label: "Open its PDF", onSelect: () => openPdf(open) },
+              state === "live" && { label: `Retire v${open.version}…`, onSelect: () => setConfirm("retire"), disabled: busy || dirty, reason: dirty ? "Save or discard your changes first." : null, danger: true },
+              openDoc && openDoc.own.length > 0 && !open.platform && { label: "Delete document…", onSelect: () => setConfirm("deleteDoc"), disabled: busy || carried(openDoc) > 0, reason: carried(openDoc) > 0 ? inUse(openDoc) : null, danger: true },
+            ]}
+          />
+        ) : undefined}
+        onClose={() => { void leave(); }}
+        className={WIDE_SHEET}
+        footer={
+          readOnly ? (
+            <span className="flex w-full flex-wrap items-center gap-2">
+              {older && live && <Button type="button" variant="outline" onClick={() => setComparing([older, live])}>Compare with live v{live.version}</Button>}
+              <span className="ml-auto flex gap-2">
+                {open?.platform && canEdit && (
+                  <WithReason reason={draftBlock}><Button type="button" disabled={busy || Boolean(openDoc?.draft)} onClick={() => copyToAgency(open)}><Copy aria-hidden="true" />Copy to my agency</Button></WithReason>
                 )}
-              </TableCard>
-            )}
+                {older && canEdit && (
+                  <WithReason reason={draftBlock}><Button type="button" disabled={busy || Boolean(draftBlock)} onClick={() => draftFrom(older)}>Start a draft from this version</Button></WithReason>
+                )}
+                {!canEdit && <Button type="button" variant="outline" onClick={close}>Close</Button>}
+              </span>
+            </span>
+          ) : isDraft ? (
+            <span className="flex w-full flex-wrap items-center gap-2">
+              {open && <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirm("discard")} className="text-[var(--error-ink)]">Delete draft</Button>}
+              <span className="ml-auto flex gap-2">
+                {dirty && open && <Button type="button" variant="ghost" disabled={busy} onClick={revert}>Discard</Button>}
+                <WithReason reason={!dirty && open !== null ? "No changes to save." : neededReason}>
+                  <Button type="button" variant="outline" disabled={busy || (!dirty && open !== null) || Boolean(neededReason)} onClick={() => saveDraft(false)}>Save draft</Button>
+                </WithReason>
+                <WithReason reason={neededReason}>
+                  <Button type="button" disabled={busy || Boolean(neededReason)} onClick={() => { if (prepared()) setConfirm("publish"); }}>{open?.platform === false && live?.platform ? `Mark reviewed & ${publishLabel.toLowerCase()}` : publishLabel}</Button>
+                </WithReason>
+              </span>
+            </span>
+          ) : (
+            <span className="flex w-full flex-wrap items-center justify-end gap-2">
+              {dirty ? (
+                <>
+                  <Button type="button" variant="ghost" disabled={busy} onClick={revert}>Discard</Button>
+                  <Button type="button" disabled={busy} onClick={() => saveDraft(false)}>Save as draft v{next}</Button>
+                </>
+              ) : <span className="text-sm text-[var(--muted)]">A change starts draft v{next}; v{open?.version} stays live until you publish it.</span>}
+            </span>
+          )
+        }
+      >
+        <SheetAnchors items={[{ id: "dc-wording", label: "Wording" }, { id: "dc-when", label: "When required" }, { id: "dc-scripts", label: "Call scripts" }, { id: "dc-versions", label: "Versions" }]} />
+        {saveError && <StatusLine tone="bad">{saveError}</StatusLine>}
+        {neededReason && !readOnly && dirty && <StatusLine tone="warn">To save it, {neededReason.charAt(0).toLowerCase()}{neededReason.slice(1)}</StatusLine>}
+        <SheetSection id="dc-wording" title="Wording" sub="The text the client receives and agrees to, as the agent reads or sends it.">
+          <WordingFields bare item={open} draft={draft} setDraft={setDraft} readOnly={readOnly} onUpload={uploadPdf} onOpenPdf={() => openPdf()} onRemovePdf={() => setConfirm("removePdf")} busy={busy} />
+        </SheetSection>
+        <SheetSection id="dc-when" title="When required" sub={previewRules.length ? `Required when ${previewRules.map((r) => ruleSentence(r.clauses as Clause[], library)).join(", or when ")}.` : "No rule means never required."}>
+          <ScopeFields bare draft={draft} setDraft={setDraft} library={library} readOnly={readOnly} clauseErrors={clauseErrors} />
+        </SheetSection>
+        <SheetSection id="dc-scripts" title="Call scripts" sub="What the agent reads aloud before pressing Call, by state and product. Insurvas compliance maintains it.">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-[var(--body)]">{callsOpen ? `${callsOpen} ${callsOpen === 1 ? "state is" : "states are"} not compliance-approved yet.` : calls ? "Every state's wording is approved." : "Read on the call, per state."}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => setPanel("calls")}>Open scripts</Button>
           </div>
+        </SheetSection>
+        <SheetSection id="dc-versions" title="Versions" sub={changes ? (changes.length ? `This draft changes ${changes.join(", ").toLowerCase()} from v${live!.version}.` : `Nothing changed from v${live!.version} yet.`) : "A version is never overwritten: applications keep the version they acknowledged."}>
+          {versions.length === 0 ? (
+            <p className="m-0 text-sm text-[var(--muted)]">Not saved yet. Save the draft and it becomes version 1.</p>
+          ) : (
+            <ul className="m-0 flex list-none flex-col p-0">
+              {versions.map((v) => (
+                <li key={v.id} className={cn("flex flex-wrap items-center gap-2 border-t border-[var(--border)] py-2 first:border-t-0", v.id === open?.id && "font-semibold")}>
+                  <LifecyclePill state={lifecycleOf(v)} />
+                  <span className="min-w-0 flex-1 truncate text-sm text-[var(--body)]">v{v.version}{v.platform ? " (Insurvas)" : ""} · {shortDay(v.updatedAt)}{v.createdBy ? ` · ${v.createdBy}` : ""}{v.status === "draft" ? "" : ` · ${apps(v.acknowledged)}`}{v.id === open?.id ? " · open" : ""}</span>
+                  {v.id !== open?.id && <Button type="button" variant="ghost" size="sm" onClick={() => { void openVersion(v); }}>Open</Button>}
+                  {live && v.id !== live.id && <Button type="button" variant="ghost" size="sm" onClick={() => setComparing(v.version < live.version ? [v, live] : [live, v])}>Compare</Button>}
+                  {canEdit && v.status === "retired" && !v.platform && <Button type="button" variant="ghost" size="sm" disabled={busy || Boolean(draftBlock)} title={draftBlock ?? undefined} onClick={() => draftFrom(v)}>Start a draft</Button>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </SheetSection>
 
-          <aside className="flex min-w-0 flex-col gap-4" aria-label="Preview">
-            <SettingsCard title="As the agent sees it" info="The application's Disclosures panel shows this wording when a rule holds. The agent reads it aloud, emails or mails it, and records how.">
-              <div className="flex flex-col gap-3">
-                <p className="m-0 text-sm font-semibold text-[var(--ink)]">{draft.title.trim() || "Untitled document"}</p>
-                {draft.body.trim()
-                  ? <p className="m-0 max-h-[320px] overflow-y-auto whitespace-pre-line text-base leading-[1.7] text-[var(--ink)]">{draft.body.trim()}</p>
-                  : <p className="m-0 text-sm text-[var(--muted)]">The wording shows here as you type it.</p>}
-                <p className="m-0 text-xs text-[var(--muted)]">{readAloudLine(draft.body)}</p>
-                <div className="border-t border-[var(--border)] pt-3 text-sm leading-[1.5] text-[var(--body)]">
-                  <div>{scopeLine({ states: toInput(draft, library).input.states, carrierIds: draft.carrierIds })}</div>
-                  {previewRules.length
-                    ? previewRules.map((r, i) => <div key={i} className="text-[var(--muted)]">{i > 0 ? "or " : "Required when "}{ruleSentence(r.clauses as Clause[], library)}</div>)
-                    : <div className="text-[var(--warning-ink)]">No rule: never required.</div>}
-                </div>
-              </div>
-            </SettingsCard>
-            {changes && (
-              <SettingsCard title={`Changed from v${live!.version}${live!.platform ? " (Insurvas)" : ""}`} action={changes.length && open && open.id !== live!.id ? <Button type="button" variant="ghost" size="sm" onClick={() => setComparing([live!, open])}>Compare</Button> : undefined}>
-                {changes.length ? (
-                  <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm text-[var(--body)]">{changes.map((c) => <li key={c}>{c}</li>)}</ul>
-                ) : <p className="m-0 text-sm text-[var(--muted)]">Nothing yet — it matches v{live!.version}.</p>}
-              </SettingsCard>
-            )}
-          </aside>
-        </div>
-
-        {!readOnly && isDraft && (
-          <SettingsSaveBar note={neededReason ? `To save it, ${neededReason.charAt(0).toLowerCase()}${neededReason.slice(1, -7)}.` : dirty || open === null ? "Unsaved changes — a draft applies to nothing until it is published · Ctrl+S saves" : `Draft v${open.version} is saved — publish it to use it`}>
-            {open && <Button type="button" variant="ghost" disabled={busy} onClick={() => setConfirm("discard")} className="text-[var(--error-ink)]">Delete draft</Button>}
-            {dirty && <Button type="button" variant="outline" disabled={busy} onClick={open ? revert : close}>Discard</Button>}
-            <WithReason reason={!dirty && open !== null ? "No changes to save." : neededReason}>
-              <Button type="button" variant="outline" disabled={busy || (!dirty && open !== null) || Boolean(neededReason)} onClick={() => saveDraft(false)}>Save draft</Button>
-            </WithReason>
-            <WithReason reason={neededReason}>
-              <Button type="button" disabled={busy || Boolean(neededReason)} onClick={() => { if (prepared()) setConfirm("publish"); }}>{publishLabel}</Button>
-            </WithReason>
-          </SettingsSaveBar>
-        )}
-        {!readOnly && !isDraft && (
-          <SettingsSaveBar visible={dirty} note={`Unsaved changes — saving makes version ${next}, a draft`}>
-            <DiscardSave saving={busy} onDiscard={revert} onSave={() => saveDraft(false)} saveLabel={`Save as draft v${next}`} />
-          </SettingsSaveBar>
-        )}
-
+        <LeaveGuard dirty={dirty && !readOnly} onDiscard={revert} what={open?.title || "this document"} />
         <ConfirmDialog
           open={confirm === "publish"}
           onOpenChange={(o) => setConfirm(o ? "publish" : null)}
@@ -833,222 +773,119 @@ export function SalesDisclosures() {
           cancelLabel="Keep it"
           onConfirm={removePdf}
         />
-        {dialogs}
-      </SettingsStack>
+      </Sheet>
     );
   }
 
-  /* ── list ── */
+  /* ── the list ── */
   const addReason = canEdit ? null : "Only an owner can add a document.";
-  const needCount = needs.noRule.length + needs.drafts.length + (callsOpen ? 1 : 0);
   const startAdding = () => setAdding({ mode: "blank", platformCode: platformDocs[0]?.code ?? "", ownCode: ownDocs[0]?.code ?? "" });
+  const liveCount = docs.filter((d) => d.live).length;
+  const statusParts = [
+    `${docs.length} ${docs.length === 1 ? "document" : "documents"}`,
+    `${liveCount} live`,
+    needs.drafts.length ? `${needs.drafts.length} ${needs.drafts.length === 1 ? "draft waits" : "drafts wait"} to be reviewed and published` : null,
+    needs.noRule.length ? `${needs.noRule.length} live with no rule, so never required` : null,
+    callsOpen ? `call wording for ${callsOpen} ${callsOpen === 1 ? "state" : "states"} not approved yet` : null,
+  ].filter(Boolean);
+  const attention = needs.drafts.length + needs.noRule.length + (callsOpen ? 1 : 0);
 
   return (
-    <SettingsStack>
-      <SalesPanelTop
-        sample={sample}
+    <TabFrame>
+      <SettingsSectionHeader
         actions={library && (
-          <WithReason reason={addReason}>
-            <Button type="button" disabled={!canEdit} onClick={startAdding}><Plus aria-hidden="true" />Add a document</Button>
-          </WithReason>
+          <>
+            <Button type="button" variant="outline" onClick={() => setPanel("calls")}>Call scripts</Button>
+            <Button type="button" variant="outline" onClick={() => setPanel("try")}>Try a case</Button>
+            <WithReason reason={addReason}>
+              <Button type="button" disabled={!canEdit} onClick={startAdding}><Plus aria-hidden="true" />Add a document</Button>
+            </WithReason>
+          </>
         )}
       />
-      {loading && !library ? <SalesLoading label="Loading disclosures" columns={5} /> : error ? (
-        error.pending
-          ? <SalesSetupPending what="The disclosure library" />
-          : <SalesLoadError message={error.text} onRetry={load} />
-      ) : library && (
-        <>
-          {!canEdit && <ReadOnlyNotice what="disclosures" />}
+      <SalesPanelTop sample={sample} />
+      {loading && !library ? <StatusLine tone="muted">Reading your disclosures</StatusLine>
+        : error ? (error.pending
+          ? <StatusLine tone="warn">The disclosure library needs a database update. Ask your Insurvas admin to apply the latest migrations.</StatusLine>
+          : <StatusLine tone="bad" action={<Button type="button" variant="outline" size="sm" onClick={load}>Try again</Button>}>{error.text}</StatusLine>)
+        : <StatusLine tone={attention ? "warn" : "ok"}>{statusParts.join(" · ")}{!canEdit ? " · read only: only an owner changes disclosures" : ""}</StatusLine>}
 
-          <ViewTabs<Tab>
-            label="Disclosures"
-            value={tab}
-            onChange={setTab}
-            tabs={[
-              { key: "documents", label: "Documents", count: docs.length },
-              { key: "needs", label: "Needs you", count: needCount || null, tone: "danger" },
-              { key: "rules", label: "When they are required", count: liveRules.length },
-              { key: "calls", label: "Read on the call", count: callsOpen, tone: "danger" },
-              { key: "try", label: "Try a case" },
-            ]}
+      <PagedTableCard
+        className="min-h-0 flex-1"
+        total={shownDocs.length}
+        noun="documents"
+        toolbar={library && docs.length > 0 ? (
+          <>
+            <ToolbarSearch value={query} onChange={setQuery} placeholder="Search title or wording" />
+            <select aria-label="Show" className={toolbarControl} value={filter} onChange={(e) => setFilter(e.target.value as DocFilter)}>
+              <option value="all">All · {docs.length}</option>
+              <option value="live">Live · {docs.filter((d) => docMatches(d, "live")).length}</option>
+              <option value="draft">Drafts · {needs.drafts.length}</option>
+              <option value="platform">Insurvas · {docs.filter((d) => docMatches(d, "platform")).length}</option>
+              <option value="retired">Retired · {docs.filter((d) => docMatches(d, "retired")).length}</option>
+            </select>
+          </>
+        ) : undefined}
+      >
+        {!library ? <SectionLoading rows={7} columns={5} label="Loading disclosures" /> : docs.length === 0 ? (
+          <EmptyState
+            title="No disclosures yet"
+            hint="Add the documents an application must carry, and the rules that decide which ones."
+            action={canEdit ? <Button type="button" onClick={startAdding}><Plus aria-hidden="true" />Add a document</Button> : undefined}
           />
+        ) : shownDocs.length === 0 ? (
+          <EmptyState
+            title={query.trim() ? `No document matches "${query.trim()}"` : "No document here"}
+            hint={filter === "retired" ? "Nothing has been retired." : "Retired documents are under Retired."}
+            action={<Button type="button" variant="outline" onClick={() => { setQuery(""); setFilter("all"); }}>Clear search</Button>}
+          />
+        ) : (
+          <table data-guide="disclosures-table" className={cn(st.table, "min-w-[760px]")}>
+            <thead>
+              <tr className={st.headRow}>
+                <th scope="col" className={cn(st.th, "min-w-[220px]")}>Document</th>
+                <th scope="col" className={st.th}>Required when</th>
+                <th scope="col" className={cn(st.th, "w-[170px]")}>Applies to</th>
+                <th scope="col" className={cn(st.th, "w-[110px]")}>Version</th>
+                <th scope="col" className={cn(st.th, "w-[170px]")}>Status</th>
+                <th scope="col" className={cn(st.th, "w-[1%]")}><span className="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <PagedBody className="m-seq">
+              {shownDocs.map((d) => {
+                const ref = d.live ?? d.shown;
+                const rules = ref.rules;
+                return (
+                  // One line a row: the row opens the document; the menu keeps its own click.
+                  <tr key={d.code} className="m-row cursor-pointer" onClick={(e) => { if (!(e.target as HTMLElement).closest("button, a, [role=menu], [role=menuitem]")) openItem(d.draft && canEdit ? d.draft : d.shown); }}>
+                    <td className={cn(st.td, "max-w-[320px] truncate font-semibold text-[var(--ink)]")} title={d.shown.title}>{d.shown.title}{d.shown.hasAttachment ? " · PDF" : ""}</td>
+                    <td className={cn(st.td, "max-w-[360px] truncate")} title={rules.map((r) => ruleSentence(r.clauses, library)).join(" · or ")}>
+                      {rules.length === 0 ? (d.live ? "Never: no rule" : "No rule") : rules.map((r) => ruleSentence(r.clauses, library)).join(" · or ")}
+                    </td>
+                    <td className={cn(st.td, "max-w-[200px] truncate")} title={scopeLine(ref)}>{scopeLine(ref)}</td>
+                    <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>v{ref.version}{d.draft && d.draft.id !== ref.id ? ` · v${d.draft.version} draft` : ""}</td>
+                    <td className={cn(st.td, "whitespace-nowrap")}><StatusCell doc={d} /></td>
+                    <td className={cn(st.td, "whitespace-nowrap text-right")}><RowMenu label={d.shown.title} items={rowMenu(d)} /></td>
+                  </tr>
+                );
+              })}
+            </PagedBody>
+          </table>
+        )}
+      </PagedTableCard>
 
-          {tab === "needs" && (
-            <TableCard info="What stands between this library and every application carrying the right documents.">
-              {needCount === 0 ? (
-                <EmptyState title="Nothing needs you" hint="Every live document has a rule, no draft is waiting and the call wording is approved." />
-              ) : (
-              <ul className="m-0 list-none p-0">
-                {needs.noRule.map((d) => (
-                  <li key={`r-${d.code}`} className="m-row flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
-                    <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--warning)]" />
-                    <span className="min-w-0 flex-1 text-sm text-[var(--body)]"><strong className="font-semibold text-[var(--ink)]">{d.live!.title}</strong> is live but never required: it has no rule.</span>
-                    <Button type="button" variant="outline" size="sm" onClick={() => openItem(d.draft ?? d.live!, "where")}>{canEdit ? "Add a rule" : "Open"}</Button>
-                  </li>
-                ))}
-                {needs.drafts.map((d) => (
-                  <li key={`d-${d.code}`} className="m-row flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
-                    <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--warning)]" />
-                    <span className="min-w-0 flex-1 text-sm text-[var(--body)]"><strong className="font-semibold text-[var(--ink)]">{d.draft!.title}</strong> has draft v{d.draft!.version} waiting to be published.</span>
-                    <Button type="button" variant="outline" size="sm" onClick={() => openItem(d.draft!)}>Review draft</Button>
-                    {canEdit && <Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => openAndAsk(d.draft!, "publish")}>Publish v{d.draft!.version}</Button>}
-                  </li>
-                ))}
-                {callsOpen ? (
-                  <li className="m-row flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-4 py-3 first:border-t-0">
-                    <span aria-hidden="true" className="size-2 shrink-0 rounded-full bg-[var(--error)]" />
-                    <span className="min-w-0 flex-1 text-sm text-[var(--body)]">Call wording for <strong className="font-semibold text-[var(--ink)]">{callsOpen} {callsOpen === 1 ? "state" : "states"}</strong> is not compliance-approved yet.</span>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setTab("calls")}>See states</Button>
-                  </li>
-                ) : null}
-              </ul>
-              )}
-            </TableCard>
-          )}
-
-          {tab === "documents" && (
-            <PagedTableCard
-              total={shownDocs.length}
-              noun="documents"
-              toolbar={
-                <>
-                  <ToolbarSearch value={query} onChange={setQuery} placeholder="Search title, code or wording" />
-                  <select aria-label="Show" className={toolbarControl} value={filter} onChange={(e) => setFilter(e.target.value as DocFilter)}>
-                    <option value="all">All · {docs.length}</option>
-                    <option value="live">Live · {docs.filter((d) => docMatches(d, "live")).length}</option>
-                    <option value="draft">Drafts · {needs.drafts.length}</option>
-                    <option value="platform">Insurvas · {docs.filter((d) => docMatches(d, "platform")).length}</option>
-                    <option value="retired">Retired · {docs.filter((d) => docMatches(d, "retired")).length}</option>
-                  </select>
-                </>
-              }
-            >
-              {docs.length === 0 ? (
-                <EmptyState
-                  title="No disclosures yet"
-                  hint="Add the documents an application must carry, and the rules that decide which ones."
-                  action={canEdit ? <Button type="button" onClick={startAdding}><Plus aria-hidden="true" />Add a document</Button> : undefined}
-                />
-              ) : shownDocs.length === 0 ? (
-                <EmptyState
-                  title={query.trim() ? `No document matches "${query.trim()}"` : "No document here"}
-                  hint={filter === "retired" ? "Nothing has been retired." : "Retired documents are under Retired."}
-                  action={<Button type="button" variant="outline" onClick={() => { setQuery(""); setFilter("all"); }}>Clear search</Button>}
-                />
-              ) : (
-                <>
-                  {/* Phone: one card per document, its one button and the same menu. */}
-                  <PagedBody as="ul" className="m-0 flex list-none flex-col gap-2 p-3 md:hidden">
-                    {shownDocs.map((d) => {
-                      const ref = d.live ?? d.shown;
-                      return (
-                        <li key={d.code} className="m-glass-inset flex flex-col gap-1.5 rounded-lg border border-[var(--border)] p-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <span className="min-w-0 text-sm font-semibold text-[var(--ink)]">{d.shown.title}</span>
-                            {ref.rules.length === 0 && d.live ? <StatusChip tone="warning" dot={false}>No rule</StatusChip> : <StatusCell doc={d} />}
-                          </div>
-                          <span className="font-mono text-xs text-[var(--muted)]">{d.code} · v{ref.version}{d.draft && d.live ? ` · draft v${d.draft.version} waiting` : ""}{d.live ? ` · ${d.live.acknowledged} acknowledged` : ""}</span>
-                          <span className="text-xs text-[var(--body)]">{scopeLine(ref)}{ref.rules.length ? ` · ${ruleSentence(ref.rules[0].clauses, library)}` : ""}</span>
-                          <span className="mt-1 flex items-center gap-2 [&>*:first-child]:flex-1 [&>*:first-child>button]:w-full">
-                            {rowButton(d)}
-                            <RowMenu label={d.shown.title} items={rowMenu(d)} />
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </PagedBody>
-                  <table className={cn(st.table, "hidden min-w-[900px] md:table")}>
-                    <thead>
-                      <tr className={st.headRow}>
-                        <th scope="col" className={cn(st.th, "min-w-[300px]")}>Document</th>
-                        <th scope="col" className={cn(st.th, "w-[170px]")}>Applies to</th>
-                        <th scope="col" className={cn(st.th, "w-[230px]")}>Required when</th>
-                        <th scope="col" className={cn(st.th, "w-[170px]")}>Status</th>
-                        <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Acknowledged</th>
-                        <th scope="col" className={cn(st.th, "w-[170px] text-right")}><span className="sr-only">Actions</span></th>
-                      </tr>
-                    </thead>
-                    <PagedBody className="m-seq">
-                      {shownDocs.map((d) => {
-                        const ref = d.live ?? d.shown;
-                        const rules = ref.rules;
-                        return (
-                          // The whole row opens the document; its buttons and menu keep their own clicks.
-                          <tr key={d.code} className="m-row cursor-pointer" onClick={(e) => { if (!(e.target as HTMLElement).closest("button, a, [role=menu], [role=menuitem]")) openItem(d.draft && canEdit ? d.draft : d.shown); }}>
-                            <td className={st.td}>
-                              <span className={cn(st.strong, "block")}>{d.shown.title}</span>
-                              <span className={st.sub}><span className="font-mono">{d.code}</span>{d.shown.hasAttachment ? " · PDF" : ""} · v{ref.version}{d.draft && d.live ? ` · draft v${d.draft.version} waiting` : ""} · changed {shortDay(d.shown.updatedAt)}</span>
-                            </td>
-                            <td className={cn(st.td, "text-sm")}>{scopeLine(ref)}</td>
-                            <td className={cn(st.td, "text-sm")}>
-                              {rules.length === 0
-                                ? <span className="text-[var(--muted)]">{d.live ? "Never required: no rule" : "No rule"}</span>
-                                : <span className="line-clamp-2">{rules.map((r) => ruleSentence(r.clauses, library)).join(" · or ")}</span>}
-                            </td>
-                            <td className={st.td}><StatusCell doc={d} /></td>
-                            <td className={cn(st.td, "text-right tabular-nums")}>{d.live ? d.live.acknowledged.toLocaleString("en-US") : "—"}</td>
-                            <td className={cn(st.td, "whitespace-nowrap text-right")}>
-                              <span className="inline-flex gap-2">
-                                {rowButton(d)}
-                                <RowMenu label={d.shown.title} items={rowMenu(d)} />
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </PagedBody>
-                  </table>
-                </>
-              )}
-            </PagedTableCard>
-          )}
-
-          {tab === "rules" && (
-            <PagedTableCard total={liveRules.length + needs.noRule.length} noun="rules" info="Read top to bottom against each application. Every condition in a rule must hold; a document named twice is attached once.">
-              {liveRules.length === 0 && needs.noRule.length === 0 ? (
-                <EmptyState title="No rules yet" hint="No published document has a rule, so none is required on its own. Open a document to add one." />
-              ) : (
-                <PagedBody as="ol" className="m-0 list-none p-0">
-                  {[
-                    ...liveRules.map(({ doc, item, rule, i }) => (
-                      <li key={`${item.id}-${i}`} className="border-t border-[var(--border)] px-4 py-3 first:border-t-0">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <span className="min-w-0 flex-1 text-sm leading-[1.5] text-[var(--body)]">
-                            If {ruleSentence(rule.clauses, library)}
-                            <span className="text-[var(--muted)]"> → </span>
-                            <strong className="font-semibold text-[var(--ink)]">{item.title}</strong>
-                          </span>
-                          <StatusChip dot={false} tone="danger">Required</StatusChip>
-                          <RowAction onClick={() => openItem(doc.draft ?? item, "where")} label={`Open ${item.title}`}>Open</RowAction>
-                        </div>
-                        <div className="text-xs leading-[1.5] text-[var(--muted)]">
-                          {item.states.length ? `Only in ${item.states.join(", ")}` : "Every state"} · {item.carrierIds.length ? `only ${item.carrierIds.map(carrierName).join(", ")}` : "every carrier"} · v{item.version}{item.platform ? " (Insurvas)" : ""}
-                          {doc.draft ? ` · draft v${doc.draft.version} waiting to be published` : ""}
-                        </div>
-                      </li>
-                    )),
-                    ...needs.noRule.map((d) => (
-                      <li key={`n-${d.code}`} className="border-t border-[var(--border)] px-4 py-3 first:border-t-0">
-                        <div className="flex flex-wrap items-center justify-between gap-4">
-                          <span className="min-w-0 flex-1 text-sm leading-[1.5] text-[var(--body)]">No rule <span className="text-[var(--muted)]">→</span> <strong className="font-semibold text-[var(--ink)]">{d.live!.title}</strong></span>
-                          <StatusChip dot={false} tone="warning">Never required</StatusChip>
-                          <RowAction onClick={() => openItem(d.draft ?? d.live!, "where")} label={`Open ${d.live!.title}`}>{canEdit ? "Add a rule" : "Open"}</RowAction>
-                        </div>
-                      </li>
-                    )),
-                  ]}
-                </PagedBody>
-              )}
-            </PagedTableCard>
-          )}
-
-          {tab === "calls" && <CallWording products={calls} error={callsError} onRetry={loadCalls} />}
-
-          {tab === "try" && <TryACase docs={docs} library={library} onOpen={(item) => openItem(item, "where")} />}
-          {dialogs}
-        </>
+      {sheet}
+      {panel === "try" && library && (
+        <Sheet title="Try a case" subtitle="Answer as a client would; see which documents the application would carry. Nothing is saved." onClose={() => setPanel(null)} className={WIDE_SHEET}>
+          <TryACase docs={docs} library={library} onOpen={(item) => { setPanel(null); openItem(item, "where"); }} />
+        </Sheet>
       )}
-    </SettingsStack>
+      {panel === "calls" && (
+        <Sheet title="Read on the call · by state" subtitle="The wording an agent reads before pressing Call. Insurvas compliance maintains it." onClose={() => setPanel(null)} className={WIDE_SHEET}>
+          <CallWording products={calls} error={callsError} onRetry={loadCalls} />
+        </Sheet>
+      )}
+      {dialogs}
+    </TabFrame>
   );
 }

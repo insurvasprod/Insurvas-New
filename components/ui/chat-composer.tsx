@@ -166,7 +166,7 @@ export function ChatComposer({
       <div className="flex min-w-0 items-end gap-2">
         <label
           className={cn(
-            "grid size-9 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--surface-alt)] hover:text-foreground focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]",
+            "grid size-9 shrink-0 cursor-pointer place-items-center rounded-md text-muted-foreground transition-colors hover:bg-[var(--hover-wash)] hover:text-foreground focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[var(--ring-color)]",
             (disabled || files.length >= maxFiles) && "pointer-events-none opacity-50",
           )}
         >

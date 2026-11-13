@@ -9,19 +9,19 @@ import { ToggleChip } from "./toggle-chip";
 import { titleCaseNode } from "@/components/ui/title-case";
 
 /**
- * A page's views, as segmented tabs on the row under its header: one view at a time instead of
- * stacked tables (the 2026-10-06 redesign), with the page's actions on the right of the same row.
+ * THE sub-page bar (owner 2026-11-09, "the foundation of every single design"; UI-CONSISTENCY §8): a row of plain
+ * text tabs, the chosen one in bright text over a 2px green (`--primary`) line, the others muted, and a hairline
+ * under the whole row. It is the bar Appointments & setters drew first (Overview · Calendar · Setup, 2026-11-05),
+ * now the one way any page shows its sub-pages or views — the pill tabs on the title's line were "a bit hidden and
+ * hard for the eyes to catch". On a page it goes in `PageHeader tabs`, on the title's line between the title and the buttons.
  *
- * One component (2026-10-09). The redesign had grown four copies of this markup that were drifting
- * apart — a missing focus ring here, a count that could not go red there.
- *
- * A tab is a button (the page keeps the view in state) or, on a server page, a link (`href`). No
- * hooks, so a server component can draw link tabs; `TabbedPanels` (view-tabs-panels.tsx) is the
- * client island for server pages that hand in rendered sections.
+ * Two doors to one look: `ViewTabs` (no hooks, so a server page can draw link tabs; `href`) and `UnderlineTabs`
+ * (a client island that also moves with the arrow keys). `TabbedPanels` (view-tabs-panels.tsx) is the client island
+ * for server pages that hand in rendered sections.
  *
  * A link tab is an `IntentLink` (2026-11-08, "feel instant"): it fetches its view once the pointer rests on it, and
  * from the click until the view is here it looks chosen and the page's content dims (nav-pending.tsx) — the title,
- * the tabs and the rest of the frame never leave the screen.
+ * the tabs and the rest of the frame never leave the screen. The green line slides to the chosen tab (TabTrack).
  */
 export type ViewTab<K extends string> = {
   key: K;
@@ -32,19 +32,20 @@ export type ViewTab<K extends string> = {
   tone?: "danger";
   /** Server pages: the tab is a link to this URL instead of a button. */
   href?: string;
-  /** UnderlineTabs only: drawn before the label, e.g. a step's number or a done tick. */
+  /** Drawn before the label, e.g. a step's number or a done tick. */
   marker?: ReactNode;
-  /** UnderlineTabs only: read after the label by screen readers, e.g. "(done)". */
+  /** Read after the label by screen readers, e.g. "(done)". */
   srSuffix?: string;
 };
 
-const TRACK = "inline-flex h-9 w-fit max-w-full gap-0.5 overflow-x-auto rounded-md bg-[var(--canvas)] p-0.5";
+/** The row: full width where it stands alone (a hairline across the page), content-wide inside a toolbar row. */
+const TRACK = "flex min-w-0 max-w-full gap-5 overflow-x-auto overflow-y-hidden";
+const RULE = "border-b border-border";
 
-const item = (selected: boolean, padding = "px-3") =>
+const item = (selected: boolean) =>
   cn(
-    "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border text-sm font-semibold tracking-[-0.01em] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring",
-    padding,
-    selected ? "border-border bg-card text-foreground shadow-[0_1px_2px_rgba(16,20,26,.06)]" : "border-transparent text-muted-foreground hover:text-foreground",
+    "inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-0.5 text-sm font-medium tracking-[-0.01em] outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+    selected ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
   );
 
 function Count({ value, tone }: { value: number | null | undefined; tone?: "danger" }) {
@@ -56,6 +57,10 @@ function Count({ value, tone }: { value: number | null | undefined; tone?: "dang
   );
 }
 
+function Body<K extends string>({ tab }: { tab: ViewTab<K> }) {
+  return <>{tab.marker}{titleCaseNode(tab.label)}{tab.srSuffix && <span className="sr-only"> {tab.srSuffix}</span>}<Count value={tab.count} tone={tab.tone} /></>;
+}
+
 export function ViewTabs<K extends string>({
   label,
   tabs,
@@ -64,51 +69,49 @@ export function ViewTabs<K extends string>({
   actions,
   idPrefix,
   controls,
+  className,
 }: {
   /** Accessible name of the tab list. */
   label: string;
   tabs: ReadonlyArray<ViewTab<K>>;
   value: K;
   onChange?: (key: K) => void;
-  /** Right-aligned on the same row: the page's actions, primary last. Without it, just the tabs. */
+  /** Right-aligned on the same row, over the same hairline: the view's actions, primary last. */
   actions?: ReactNode;
   /** Gives each tab an id (`${idPrefix}-${key}`) for a tabpanel's aria-labelledby. */
   idPrefix?: string;
   /** The id of the panel the tabs switch, when there is one; a function when each tab has its own panel. */
   controls?: string | ((key: K) => string);
+  /** Layout only (margins). */
+  className?: string;
 }) {
   const list = (
-    <TabTrack role="tablist" aria-label={label} className={TRACK} data-page-lead={actions ? undefined : ""}>
+    <TabTrack role="tablist" aria-label={label} data-subpage-tabs="" className={cn(TRACK, !actions && RULE, !actions && className)}>
       {tabs.map((tab) => {
         const selected = tab.key === value;
-        const body = <>{titleCaseNode(tab.label)}<Count value={tab.count} tone={tab.tone} /></>;
         const panel = typeof controls === "function" ? controls(tab.key) : controls;
         const id = idPrefix ? `${idPrefix}-${tab.key}` : panel ? `${panel}-tab-${tab.key}` : undefined;
         return tab.href ? (
-          <IntentLink key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={panel} scroll={false} className={item(selected)}>{body}</IntentLink>
+          <IntentLink key={tab.key} id={id} href={tab.href} role="tab" aria-selected={selected} aria-controls={panel} scroll={false} className={item(selected)}><Body tab={tab} /></IntentLink>
         ) : (
-          <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={panel} onClick={() => onChange?.(tab.key)} className={item(selected)}>{body}</button>
+          <button key={tab.key} id={id} type="button" role="tab" aria-selected={selected} aria-controls={panel} onClick={() => onChange?.(tab.key)} className={item(selected)}><Body tab={tab} /></button>
         );
       })}
     </TabTrack>
   );
   if (!actions) return list;
   return (
-    // data-page-lead: right after a PageHeader, the page's actions join this row (page-header.tsx).
-    <div data-page-lead className="flex flex-wrap items-center justify-between gap-3">
+    <div className={cn("flex flex-wrap items-center justify-between gap-x-3", RULE, className)}>
       {list}
-      <div className="ml-auto flex flex-wrap items-center gap-2">{actions}</div>
+      <div className="ml-auto flex flex-wrap items-center gap-2 py-1">{actions}</div>
     </div>
   );
 }
 
 /**
- * The sections of one record (foundation v3, 2026-10-27): underline tabs, for a lead's or a case's
- * parts and a sheet's sections, where segmented tabs would read as page views. A 2px brand line
- * under the chosen one, 13/500 labels, an optional count. The row draws its own bottom rule.
- *
- * The tab pattern's keys: the chosen tab is the one stop in the Tab order, and the arrow keys
- * (Home and End too) move to and choose another.
+ * The same bar for a client screen that keeps the tab in state, with the tab pattern's keys: the chosen tab is the
+ * one stop in the Tab order, and the arrow keys (Home and End too) move to and choose another. Used for a page's
+ * sub-pages (Appointments & setters) and for a record's sections (a lead's or a case's parts, a sheet's sections).
  */
 export function UnderlineTabs<K extends string>({
   label,
@@ -139,10 +142,10 @@ export function UnderlineTabs<K extends string>({
     event.preventDefault();
     onChange(tabs[to].key);
     const row = event.currentTarget.parentElement;
-    (row?.children[to] as HTMLElement | undefined)?.focus();
+    row?.querySelectorAll<HTMLElement>(':scope > [role="tab"]')[to]?.focus();
   };
   return (
-    <div role="tablist" aria-label={label} data-page-lead className={cn("flex max-w-full gap-4 overflow-x-auto overflow-y-hidden border-b border-border", className)}>
+    <TabTrack role="tablist" aria-label={label} data-subpage-tabs="" className={cn(TRACK, RULE, className)}>
       {tabs.map((tab, index) => {
         const selected = tab.key === value;
         return (
@@ -156,19 +159,13 @@ export function UnderlineTabs<K extends string>({
             aria-selected={selected}
             aria-controls={typeof controls === "function" ? controls(tab.key) : controls}
             tabIndex={selected ? 0 : -1}
-            className={cn(
-              "-mb-px inline-flex h-10 shrink-0 items-center gap-1.5 whitespace-nowrap border-b-2 px-1 text-label outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-              selected ? "border-[var(--primary)] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-            )}
+            className={item(selected)}
           >
-            {tab.marker}
-            {titleCaseNode(tab.label)}
-            {tab.srSuffix && <span className="sr-only"> {tab.srSuffix}</span>}
-            <Count value={tab.count} tone={tab.tone} />
+            <Body tab={tab} />
           </button>
         );
       })}
-    </div>
+    </TabTrack>
   );
 }
 
@@ -198,6 +195,19 @@ export function Segmented<K extends string>({
   );
 }
 
+/**
+ * The boxed switch's look, shared by IconViewSwitch and the Reports "Table · Chart" ViewSwitch
+ * (components/ui/view-switch.tsx): a 36px bordered box on the card colour, the chosen option tinted brand.
+ */
+export const SWITCH_FRAME = "inline-flex h-9 items-center rounded-md border border-border bg-card p-0.5";
+export function switchOption(selected: boolean, className?: string) {
+  return cn(
+    className,
+    "rounded-[5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+    selected ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "text-muted-foreground hover:bg-[var(--hover-wash)] hover:text-foreground",
+  );
+}
+
 /** Compact two-view switch for dense list and board pages. */
 export function IconViewSwitch<K extends string>({
   label,
@@ -212,7 +222,7 @@ export function IconViewSwitch<K extends string>({
   onChange: (key: K) => void;
   disabled?: boolean;
 }) {
-  return <div role="group" aria-label={label} className="inline-flex h-9 items-center rounded-md border border-border bg-card p-0.5">
+  return <div role="group" aria-label={label} className={SWITCH_FRAME}>
     {options.map((option) => {
       const Icon = option.icon === "grid" ? LayoutGrid : List;
       const selected = value === option.key;
@@ -223,10 +233,7 @@ export function IconViewSwitch<K extends string>({
         aria-pressed={selected}
         disabled={disabled}
         onClick={() => onChange(option.key)}
-        className={cn(
-          "grid size-8 place-items-center rounded-[5px] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
-          selected ? "bg-[var(--primary-soft)] text-[var(--accent-ink)]" : "text-muted-foreground hover:bg-[var(--surface-alt)] hover:text-foreground",
-        )}
+        className={switchOption(selected, "grid size-8 place-items-center")}
       ><Icon aria-hidden="true" className="size-4" /></button>;
     })}
   </div>;

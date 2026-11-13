@@ -49,6 +49,7 @@ import { cn } from "@/lib/utils";
 import { draftFromRule, pinFallbacks, roleLabel, serialise, titleCase, type RuleDraft } from "@/components/app/assignment/model";
 import { PreviewWhy, RuleEditor } from "@/components/app/assignment/rule-editor";
 import { useAssignmentWorkspace } from "@/components/app/assignment/use-assignment-workspace";
+import { load as loadResource, readResource, seed } from "@/lib/client/resource-cache";
 import { UnassignedPool } from "@/components/app/agency/unassigned-pool";
 import { LeadsInSlot, useInLeadsFrame } from "@/components/app/lead-sources/leads-in-slot";
 import { NextUp, type NextUpTone } from "@/components/app/lead-sources/next-up";
@@ -93,6 +94,14 @@ function nobodyCause(row: PreviewRow): "no_state" | "licence" | "full" | "no_one
 type NextMove = { tone: NextUpTone; text: ReactNode; action?: ReactNode; more?: ReactNode; handOut?: boolean };
 /** The strip's figures plus the oldest lead's age, worked out once when they arrive. */
 type Stats = RouteStats & { oldestDays: number | null };
+/** The tiles' read, as the app's cache keys it (lib/client/resource-cache.ts). */
+const STATS_KEY = "/api/app/assignments?view=stats";
+/** The stats with the oldest waiting lead's age in whole days. */
+function withOldest(next: RouteStats | null | undefined): Stats | null {
+  if (!next) return null;
+  const oldestDays = next.oldestAt ? Math.max(0, Math.floor((Date.now() - new Date(next.oldestAt).getTime()) / 86_400_000)) : null;
+  return { ...next, oldestDays: Number.isFinite(oldestDays) ? oldestDays : null };
+}
 
 export function AssignmentWorkspace({ canManage, pool = false }: { canManage: boolean; /** The agency's unassigned pool, as a second view (owner and admins). */ pool?: boolean }) {
   const { workspace, loading, busy, preview, drafts, setDrafts, openKey, setOpenKey, dragKey, setDragKey, publishError, moveNotice, campaignFilter, setCampaignFilter, editingMember, setEditingMember, memberForm, setMemberForm, memberError, setMemberError, editingRest, setEditingRest, restForm, setRestForm, restError, restCardRef, restInputRef, workItemId, setWorkItemId, returnReason, setReturnReason, reassignWorkItemId, setReassignWorkItemId, reassignTargetUserId, setReassignTargetUserId, reassignReason, setReassignReason, adopt, loadPreview, refresh, members, memberById, publishedOrder, dirty, problems, sinceLabel, post, publish, saveMember, saveRest, saveAutoRoute, openRestEditor, updateDraft, moveDraft, dropOn, handleKeys, addCondition, restore, routedFor, topCapacitySkip, ruleSkipLine, personSkipLine, warnable, ceilingChip, valueChip, assigneeSummary } = useAssignmentWorkspace(canManage);
@@ -105,7 +114,7 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
   // The right card's two tabs. "Who has room" first (the board's card); the Pool and its next-up preview beside it.
   const [side, setSide] = useState<"people" | "pool">("people");
   const [poolKey, setPoolKey] = useState(0);
-  const [stats, setStats] = useState<Stats | null>(null);
+  const [stats, setStats] = useState<Stats | null>(() => withOldest(seed<RouteStats>(STATS_KEY)?.data));
   const [statsKey, setStatsKey] = useState(0);
   // "Hand out N now": how many have gone so far, while it runs; Stop sets the ref.
   const [handing, setHanding] = useState<number | null>(null);
@@ -117,12 +126,11 @@ export function AssignmentWorkspace({ canManage, pool = false }: { canManage: bo
 
   useEffect(() => {
     let active = true;
-    void fetch("/api/app/assignments?view=stats", { cache: "no-store" })
-      .then(async (response) => (response.ok ? ((await response.json()) as RouteStats) : null))
+    // Read again (fresh) after each hand-out; the first read may use the kept answer.
+    void (statsKey > 0 ? loadResource<RouteStats>(STATS_KEY) : readResource<RouteStats>(STATS_KEY))
       .then((next) => {
         if (!active) return;
-        const oldestDays = next?.oldestAt ? Math.max(0, Math.floor((Date.now() - new Date(next.oldestAt).getTime()) / 86_400_000)) : null;
-        setStats(next ? { ...next, oldestDays: Number.isFinite(oldestDays) ? oldestDays : null } : null);
+        setStats(withOldest(next));
       })
       .catch(() => { if (active) setStats(null); });
     return () => { active = false; };

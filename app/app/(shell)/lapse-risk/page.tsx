@@ -54,8 +54,13 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
     />
   );
 
+  // Round 7 (owner pick 4·A, 2026-11-10; docs/la4/mockups-r7/retention.html): signals are cases. Once the ladder's
+  // tables exist this address opens Cases; a signal a person heard is a New case ("Opened by a person"). The old
+  // board stays reachable only while it still holds signals recorded before (nothing recorded is hidden).
+  const ladder = await ladderAvailable(guard.context.tenantId);
   if (view === "signals") {
     const legacy = await getLapseRisk(guard.context);
+    if (ladder && legacy.policies.length === 0) redirect("/app/retention?step=paperwork&by=person");
     return (
       <DataInPage step="needs-you" title="Lapse risk" tabs={tabs()} actions={readOnly || legacy.policies.length === 0 ? undefined : <RecordLapseSignal />}>
         {legacy.policies.length === 0
@@ -67,7 +72,7 @@ export default async function LapseRiskPage({ searchParams }: { searchParams: Pr
 
   // The call list became Retention › Cases (owner 2026-11-05: Retention is what the files say), once its
   // tables exist; the recorded signals above stay here.
-  if (await ladderAvailable(guard.context.tenantId)) redirect("/app/retention");
+  if (ladder) redirect("/app/retention");
   const viewer = { tenantId: guard.context.tenantId, userId: guard.context.userId, role: guard.role, scope: await scopeFor(guard.context) };
   const [board, rates] = await Promise.all([loadBoard(viewer), loadSaveRates(viewer)]);
   return (

@@ -8,5 +8,6 @@ export default async function LeadDetailPage({ params }: { params: Promise<{ id:
   if (!guard.entitled) return <FeatureGateNotice guard={guard} featureLabel="Lead workspace" description="Open the submitted application, verification history, and every lead event in one place." />;
   if (!actAsPage(guard, ["owner", "producer", "assistant"])) return <RoleGateNotice featureLabel="Lead workspace" detail="Only owners, producers, and assistants can open lead workspaces." />;
   // Leads A3 (2026-10-25): on the shell's stage (one per page, drawn by the layout).
-  return <><div className="portal-lead-detail-page"><LeadDetailWorkspace leadId={(await params).id} /></div></>;
+  // Fluid full width (owner 2026-11-06): no wrapper capping the page (the old .portal-lead-detail-page held it at 1440px).
+  return <LeadDetailWorkspace leadId={(await params).id} />;
 }

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -6,6 +6,7 @@ import { Breadcrumbs, type Crumb } from "./breadcrumbs";
 import { PageTrail } from "./page-trail";
 import { InfoTip } from "@/components/ui/info-tip";
 import { PageAlertSlot } from "@/components/ui/page-alerts";
+import { GuideMe } from "@/components/app/setup/guide-me";
 
 /**
  * The top of every page, in one shape (owner 2026-10-30, the Partner Chat header everywhere):
@@ -17,8 +18,8 @@ import { PageAlertSlot } from "@/components/ui/page-alerts";
  *                                                       (owner 2026-11-09, UI-CONSISTENCY §8b). A status or a step
  *                                                       bar that belongs on the line is `lead`.
  *
- * The top bar no longer names the page. `description` sits behind the (i) by default
- * (`infoDescription={false}` shows it as one line under the title). The header never grows the page
+ * The top bar no longer names the page. `description` sits behind the (i); nothing is drawn under the title
+ * (owner 2026-11-10), so `infoDescription` and `meta` are accepted and ignored. The header never grows the page
  * past the window: it is one row plus the trail, and the content under it takes what is left.
  *
  * `size`, `eyebrow` and `visible` are kept so no caller has to change.
@@ -32,8 +33,6 @@ export function PageHeader({
   tabs,
   size = "page",
   breadcrumbs,
-  meta,
-  infoDescription = true,
   hideTitle = false,
   className,
 }: {
@@ -42,13 +41,13 @@ export function PageHeader({
    * actions beside it. The <h1> stays for screen readers and the document outline.
    */
   hideTitle?: boolean;
-  /** The description behind an (i) beside the title (default) rather than a line under it. */
+  /** Accepted and ignored (owner 2026-11-10: no text under a title): the description is always behind the (i). */
   infoDescription?: boolean;
   /** Accepted and ignored (2026-10-30): every header shows its title now. */
   visible?: boolean;
   /** The trail above the title, the last one this page. Left out, the menu draws it. */
   breadcrumbs?: Crumb[];
-  /** One quiet line under the title (Settings: who last changed something here). */
+  /** Accepted and ignored (owner 2026-11-10: "if there is text under the title, please remove it"). */
   meta?: ReactNode;
   /** Accepted and ignored (2026-09-28 review): one title per page. */
   eyebrow?: string;
@@ -78,6 +77,7 @@ export function PageHeader({
             <div className="flex items-center gap-1.5">
               {breadcrumbs ? <Breadcrumbs crumbs={breadcrumbs} /> : <PageTrail title={title} />}
               {description && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+              <Suspense fallback={null}><GuideMe /></Suspense>
             </div>
             <PageAlertSlot />
           </div>
@@ -90,7 +90,6 @@ export function PageHeader({
           )}
         </div>
         <h1 data-page-title data-size={size} className="sr-only">{title}</h1>
-        {meta}
       </header>
     );
   }
@@ -113,16 +112,16 @@ export function PageHeader({
               <h1 data-page-title data-size={size} className="m-0 min-w-0 font-[family-name:var(--font-display)] text-page text-[var(--ink)]">{title}</h1>
               {/* To the right of the (i), not under it (owner, 2026-10-29): below the title it spills back across
                   the heading and the trail. */}
-              {description && infoDescription && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
+              {description && <InfoTip label={`About ${title}`} side="right">{description}</InfoTip>}
               {titleInfo}
+              {/* Guided setup (owner 2026-11-13): "Guide me" beside the (i) on a page that holds one of the reader's setup steps. */}
+              <Suspense fallback={null}><GuideMe /></Suspense>
             </div>
             {/* The shell's alerts (an overdue complaint, a payment problem) on the title's line, never a
                 banner above the page (owner 2026-11-02: the banner pushed every page into a scroll). With
                 tabs they follow the tabs instead, so the title column stays the rail's width. */}
             {!inline && <PageAlertSlot />}
           </div>
-          {description && !infoDescription && <p className="mt-1 text-sm leading-normal text-muted-foreground">{description}</p>}
-          {meta}
         </div>
         {lead && (
           <div data-page-lead className={cn("flex min-w-0 flex-wrap items-center gap-x-6 gap-y-2 max-lg:w-full", !tabs && "lg:flex-1")}>

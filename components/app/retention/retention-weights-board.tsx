@@ -1,26 +1,30 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 
-import { SettingsSectionHeader, SettingsTableCard, st } from "@/components/app/settings/primitives";
+import { retentionTabs, tabHref } from "@/components/app/retention/retention-settings-board";
+import { SettingsTableCard, st } from "@/components/app/settings/primitives";
+import { SectionTabs } from "@/components/app/settings/setting-row";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { inputControl } from "@/components/ui/field";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { MoreMenu } from "@/components/ui/more-menu";
+import { StatusChip } from "@/components/ui/status-chip";
 import { SIGNAL_LABELS, SIGNALS, type Weights } from "@/lib/retention/constants";
 import { weightTotal } from "@/lib/retention/settingsHub";
 import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 /**
- * LA-5.11 · the scoring weights, on their own page under Settings › Retention (Money & compliance
- * redesign A, 2026-11-03). A save is a new weight version; scores already made keep theirs, so
- * Retention results can compare versions. Save waits for a preview of these exact weights: how many
- * policies would change band, worked out on the server against today's book.
+ * LA-5.11 · the scoring weights, on their own page under Settings › Retention › Radar. A save is a new weight
+ * version; scores already made keep theirs, so Retention results can compare versions. Save waits for a preview of
+ * these exact weights: how many policies would change band, worked out on the server against today's book.
+ *
+ * Round 7 (owner pick 7·A, 2026-11-10; docs/la4/mockups-r7/retention.html 7·1): the section's own title line, its
+ * five tabs leading back (Radar chosen), Save as a new version on that line beside More; Reset to Insurvas weights
+ * asks first. Preview sits with its result under the table.
  */
 type Preview = { moved: number; up: number; down: number; intoCritical: number; total: number };
 
@@ -31,8 +35,18 @@ async function post(body: Record<string, unknown>) {
   return json;
 }
 const count = (v: number) => v.toLocaleString("en-US");
+const RADAR = tabHref("radar");
 
-export function RetentionWeightsBoard({ weights: initial, version, isPlatform, platformWeights, canEdit }: { weights: Weights; version: number; isPlatform: boolean; platformWeights: Weights; canEdit: boolean }) {
+export function RetentionWeightsBoard({ weights: initial, version, isPlatform, platformWeights, canEdit, off, reps }: {
+  weights: Weights;
+  version: number;
+  isPlatform: boolean;
+  platformWeights: Weights;
+  canEdit: boolean;
+  /** The section tabs' counts: facts switched off, retention reps. */
+  off: number;
+  reps: number | null;
+}) {
   const router = useRouter();
   const [weights, setWeights] = useState<Weights>(initial);
   const [preview, setPreview] = useState<{ for: string; result: Preview } | null>(null);
@@ -57,7 +71,7 @@ export function RetentionWeightsBoard({ weights: initial, version, isPlatform, p
       notify.done(done);
       setPreview(null);
       setResetting(false);
-      router.push("/app/retention-settings#weights");
+      router.push(RADAR);
       router.refresh();
       return true;
     } catch (e) {
@@ -68,43 +82,50 @@ export function RetentionWeightsBoard({ weights: initial, version, isPlatform, p
     }
   };
 
+  const tabs = retentionTabs({ off, reps }).map((tab) => ({ ...tab, href: tabHref(tab.key) }));
   return (
-    <div className="flex flex-col gap-6">
-      <SettingsSectionHeader
-        trail={<span className="flex min-w-0 items-center gap-2 text-sm"><Link className="text-[var(--muted)] hover:text-[var(--ink)]" href="/app/retention-settings#weights">Start here</Link><ChevronRight aria-hidden="true" className="size-4 text-[var(--muted)]" /><span className="font-semibold text-[var(--ink)]">Scoring weights</span><span className="text-[var(--muted)]">· version {version}{isPlatform ? ", Insurvas's" : ", yours"}</span></span>}
-        actions={canEdit ? (
+    <div className="flex min-h-0 flex-grow flex-col gap-4">
+      <SectionTabs label="Retention settings" tabs={tabs} value="radar" onChange={() => undefined}
+        actions={(
           <>
-            <MoreMenu items={[{ label: "Reset to Insurvas weights", onSelect: () => setResetting(true) }, { label: "History", href: "/app/settings?history=retention#settings-history" }, { label: "Retention results", href: "/app/retention-results" }]} />
-            <Button variant="outline" disabled={busy !== null || total !== 100 || !dirty} onClick={() => void runPreview()}>{busy === "preview" ? "Previewing…" : "Preview"}</Button>
-            <Button disabled={busy !== null || total !== 100 || !previewed || !dirty} onClick={() => void save({ action: "save_weights", weights }, `Saved as version ${version + 1}`)}>{busy === "save" ? "Saving…" : `Save as version ${version + 1}`}</Button>
+            <MoreMenu items={[
+              canEdit && !isPlatform && { label: "Reset to Insurvas weights", onSelect: () => setResetting(true) },
+              { label: "History", href: "/app/settings?history=retention#settings-history" },
+              { label: "Results", href: "/app/retention-results" },
+            ]} />
+            {canEdit && <Button disabled={busy !== null || total !== 100 || !previewed || !dirty} onClick={() => void save({ action: "save_weights", weights }, `Saved as version ${version + 1}`)}>{busy === "save" ? "Saving…" : `Save as version ${version + 1}`}</Button>}
           </>
-        ) : undefined}
-      />
+        )} />
       <LeaveGuard dirty={dirty} onDiscard={() => setWeights(initial)} what="the scoring weights" />
 
-      <SettingsTableCard title="Signals" actions={<span className="text-sm text-[var(--muted)]">Each signal&apos;s share of a policy&apos;s risk score</span>}>
+      <SettingsTableCard title={`Scoring weights · version ${version}${isPlatform ? ", Insurvas's" : ", yours"}`} actions={<span className="text-sm text-[var(--muted)]">Each signal&apos;s share of a policy&apos;s risk score</span>}>
         <table className={st.table}>
           <thead><tr className={st.headRow}><th className={st.th}>Signal</th><th className={cn(st.th, "text-right")}>Weight</th><th className={cn(st.th, "text-right")}>Insurvas</th></tr></thead>
           <tbody>
             {SIGNALS.map((s) => (
               <tr key={s}>
-                <td className={cn(st.td, "text-[var(--ink)]")}>{SIGNAL_LABELS[s]}</td>
-                <td className={cn(st.td, "text-right")}><input aria-label={`${SIGNAL_LABELS[s]} weight`} className={cn(inputControl, "ml-auto w-24 text-right tabular-nums")} disabled={dis} type="number" min={0} max={100} value={weights[s]} onChange={(e) => setWeights({ ...weights, [s]: Math.round(Number(e.target.value)) || 0 })} /></td>
-                <td className={cn(st.td, st.num, "text-[var(--muted)]")}>{platformWeights[s]}</td>
+                <td className={cn(st.td, "whitespace-nowrap font-medium text-[var(--ink)]")}>{SIGNAL_LABELS[s]}</td>
+                <td className={cn(st.td, "text-right")}>{dis ? <span className="tabular-nums">{weights[s]}</span> : <input aria-label={`${SIGNAL_LABELS[s]} weight`} className={cn(inputControl, "ml-auto w-24 text-right tabular-nums")} type="number" min={0} max={100} value={weights[s]} onChange={(e) => setWeights({ ...weights, [s]: Math.round(Number(e.target.value)) || 0 })} />}</td>
+                <td className={cn(st.td, st.num)}>{platformWeights[s]}</td>
               </tr>
             ))}
             <tr>
-              <td className={cn(st.td, st.strong)}>Total</td>
-              <td className={cn(st.td, st.num, st.strong, total !== 100 && "text-[var(--error-ink)]")}>{total}</td>
-              <td className={cn(st.td, st.num, "text-[var(--muted)]")}>100</td>
+              <td className={cn(st.td, "whitespace-nowrap font-medium text-[var(--ink)]")}>Total</td>
+              <td className={cn(st.td, st.num, "whitespace-nowrap")}>{total !== 100 ? <StatusChip tone="danger">{total} · must be 100</StatusChip> : total}</td>
+              <td className={cn(st.td, st.num)}>100</td>
             </tr>
           </tbody>
         </table>
-        <div className="border-t border-[var(--border)] px-4 py-3 text-sm" aria-live="polite">
-          {total !== 100 ? <p role="alert" className="m-0 text-[var(--error-ink)]">The weights add up to {total}. They must add up to 100 to preview or save.</p>
-            : previewed && preview ? <p className="m-0 text-[var(--ink)]">Against today&apos;s book: <strong className="tabular-nums">{count(preview.result.moved)}</strong> of {count(preview.result.total)} policies change band ({count(preview.result.up)} up, {count(preview.result.down)} down; <strong className="tabular-nums">{count(preview.result.intoCritical)}</strong> newly critical). Scores already made keep version {version}.</p>
-            : <p className="m-0 text-[var(--muted)]">{dirty ? "Preview to see how many policies change band, then save as a new version." : `Scoring with version ${version}. Change a weight to make a new version.`}</p>}
-        </div>
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--border)] px-4 py-3 text-sm" aria-live="polite">
+            <span className="min-w-0 flex-1">
+              {total !== 100 ? <span role="alert" className="text-[var(--error-ink)]">The weights add up to {total}. They must add up to 100 to preview or save.</span>
+                : previewed && preview ? <span className="text-[var(--ink)]">Against today&apos;s book: <strong className="tabular-nums">{count(preview.result.moved)}</strong> of {count(preview.result.total)} policies change band ({count(preview.result.up)} up, {count(preview.result.down)} down; <strong className="tabular-nums">{count(preview.result.intoCritical)}</strong> newly critical). Scores already made keep version {version}.</span>
+                : <span className="text-[var(--body)]">{dirty ? "Preview to see how many policies change band, then save as a new version." : `Scoring with version ${version}. Change a weight to make a new version.`}</span>}
+            </span>
+            <Button variant="outline" size="sm" disabled={busy !== null || total !== 100 || !dirty || previewed} onClick={() => void runPreview()}>{busy === "preview" ? "Previewing…" : "Preview"}</Button>
+          </div>
+        )}
       </SettingsTableCard>
 
       <ConfirmDialog open={resetting} onOpenChange={setResetting} busy={busy === "reset"} destructive={false}

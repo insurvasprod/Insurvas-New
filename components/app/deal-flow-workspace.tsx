@@ -13,8 +13,13 @@
  *
  * 2026-10-06 redesign: Deals, the dial funnel and the partner summary are tabs under the title with
  * Export and Add deal update on the right of the same row. A deal opens in a side panel (X or Esc
- * closes it) and the table drops its Campaign and Vendor columns while it is open; adding and
+ * closes it) and the table drops its Campaign column while it is open; adding and
  * editing a deal open in dialogs instead of cards pushed into the page.
+ *
+ * One-line rule (owner 2026-11-11): every row is one line in one text colour, with colour only in the
+ * Status chip. Six columns at most: Lead, Campaign, Owner, Annualised premium, Status, Next step. The
+ * customer's state rides on the Lead tooltip and the vendor on the Campaign tooltip (both are in the
+ * deal panel too); the premium is a plain figure (no bar); "Open lead" is the short "Open ›" link.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
@@ -51,9 +56,9 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 import { Pager } from "@/components/ui/pager";
 // Shared with the partner portal's Daily deal flow, so the two draw the same column.
-import { PremiumBar } from "@/components/ui/premium-bar";
 import { StatCard, StatRow } from "@/components/ui/stat-card";
 import { productName, useSoldProducts } from "@/components/app/products/use-sold-products";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 type Data = DealFlowReport & { readOnly: boolean };
 type Filters = { from: string; to: string; partner_id: string; product_line: string; agent_id: string; stage_type: string; status: string };
@@ -225,6 +230,13 @@ function CopyId({ leadId }: { leadId: string }) {
   );
 }
 
+/**
+ * The report's read, as the app's cache keys it (lib/client/resource-cache.ts): a repeat visit draws the last answer
+ * at once and the fresh one replaces it. Today's first page, unfiltered, is the one kept across a reload.
+ */
+const dealFlowKey = (qs: string) => `/api/app/deal-flow?${qs}`;
+const todaysFilters = (today: string): Filters => ({ from: today, to: today, partner_id: "", product_line: "", agent_id: "", stage_type: "", status: "" });
+
 function queryFor(active: Filters, search: string, page: number | null, focusLeadId: string | null) {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(active)) if (value) params.set(key, value);
@@ -238,14 +250,14 @@ function queryFor(active: Filters, search: string, page: number | null, focusLea
 export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadId?: string | null; timeZone?: string | null }) {
   const today = todayFor(timeZone);
   const focus = focusLeadId ?? null;
-  const [filters, setFilters] = useState<Filters>({ from: today, to: today, partner_id: "", product_line: "", agent_id: "", stage_type: "", status: "" });
+  const [filters, setFilters] = useState<Filters>(() => todaysFilters(today));
   const [active, setActive] = useState<Filters>(filters);
   // null asks the report for the page that holds the focused deal.
   const [page, setPage] = useState<number | null>(focus ? null : 1);
   const [searchTerm, setSearchTerm] = useState("");
   const [search, setSearch] = useState("");
-  const [data, setData] = useState<Data | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<Data | null>(() => seed<Data>(dealFlowKey(queryFor(todaysFilters(today), "", focus ? null : 1, focus)), !focus)?.data ?? null);
+  const [loading, setLoading] = useState(() => !seed(dealFlowKey(queryFor(todaysFilters(today), "", focus ? null : 1, focus)), !focus)?.data);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
@@ -263,20 +275,34 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
   const scrolledRef = useRef(false);
 
   const query = useMemo(() => queryFor(active, search, page, focus), [active, search, page, focus]);
-  const load = useCallback(async (qs: string) => {
+  // Today's first page, unfiltered: the read kept across a reload.
+  const defaultQuery = useMemo(() => queryFor(todaysFilters(today), "", 1, null), [today]);
+  // `fresh` after a change and on Refresh, so the answer is never the one from before it.
+  const load = useCallback(async (qs: string, fresh = false) => {
     const id = ++requestRef.current;
     setLoading(true);
     setError("");
-    const response = await fetch(`/api/app/deal-flow?${qs}`, { cache: "no-store" }).catch(() => null);
-    const body = response ? await response.json().catch(() => null) : null;
+    const persist = qs === defaultQuery;
+    let body: Data | null = null;
+    let failure = "";
+    try {
+      body = await (fresh ? loadResource<Data>(dealFlowKey(qs), { persist }) : readResource<Data>(dealFlowKey(qs), { persist }));
+    } catch (reason) {
+      failure = reason instanceof Error && "status" in reason ? reason.message : "Could not load daily deal flow";
+    }
     if (id !== requestRef.current) return;
-    if (!response || !response.ok) setError(body?.error ?? "Could not load daily deal flow");
-    else setData(body as Data);
+    if (failure || !body) setError(failure || "Could not load daily deal flow");
+    else setData(body);
     setLoading(false);
-  }, []);
+  }, [defaultQuery]);
   // The report refetches whenever the applied filters, search or page change.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(query); }, [query, load]);
+  useEffect(() => {
+    // A fresh document (a reload) starts from the kept answer as soon as it has hydrated, then asks again.
+    const kept = peek<Data>(dealFlowKey(query), query === defaultQuery)?.data;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+    if (kept) setData((current) => current ?? kept);
+    void load(query);
+  }, [query, load, defaultQuery]);
 
   // Search runs in the report, a moment after typing stops.
   useEffect(() => {
@@ -355,7 +381,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     if (!response || !response.ok) { notify.block(body?.error ?? "Could not save deal"); return; }
     notify.done("Deal saved");
     cancelEdit();
-    void load(query);
+    void load(query, true);
   }
   async function createManual(event: FormEvent) {
     event.preventDefault();
@@ -370,7 +396,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
     notify.done("Deal added to the flow");
     setShowManual(false);
     setManual({ ...manual, insured_name: "", phone: "", carrier: "", product_type: "", monthly_premium: "", face_amount: "", draft_date: "", initial_quote: "", notes: "" });
-    void load(query);
+    void load(query, true);
   }
 
   const header = <PageHeader title="Daily deal flow" description="Every deal worked today, with what it is worth." />;
@@ -391,7 +417,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
         {header}
         <Alert tone="error">
           Daily deal flow did not load: {error}{" "}
-          <button type="button" className="font-semibold underline underline-offset-2" onClick={() => void load(query)}>Try again</button>
+          <button type="button" className="font-semibold underline underline-offset-2" onClick={() => void load(query, true)}>Try again</button>
         </Alert>
       </div>
     );
@@ -418,29 +444,29 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
   const rangeProblem = !filters.from || !filters.to ? "Choose both a From and a To date" : filters.from > filters.to ? "From must be on or before To" : null;
   const showPanel = panelOpen && tab === "deals" && selectedRow !== null;
   const editingRow = editing && draft ? tableRows.find((row) => row.id === editing) ?? null : null;
-  const columns = showPanel ? 6 : 8;
-  const premiumMax = Math.max(0, ...tableRows.map((row) => (row.monthly_premium_cents ?? 0) * 12));
+  const columns = showPanel ? 5 : 6;
 
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
-      {/* Leads A2: the title on the left; the views and the page's actions on the right. */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <PageHeader title="Daily deal flow" description="Every deal worked today, with what it is worth." />
-        <div className="flex flex-wrap items-center gap-2">
-        <ViewTabs
-          label="Deal flow views"
-          active={tab}
-          onChange={setTab}
-          controls="deal-flow-panel"
-          tabs={[
-            { key: "deals", label: "Deals", count: data.total },
-            { key: "funnel", label: "Dial funnel" },
-            { key: "partners", label: "By partner", count: data.summary.length },
-          ]}
-        />
-        {pageActions}
-        </div>
-      </div>
+      {/* The title, the views as the sub-page bar, then the page's actions, all on the title's line (UI-CONSISTENCY §8b). */}
+      <PageHeader
+        title="Daily deal flow"
+        description="Every deal worked today, with what it is worth."
+        tabs={
+          <ViewTabs
+            label="Deal flow views"
+            active={tab}
+            onChange={setTab}
+            controls="deal-flow-panel"
+            tabs={[
+              { key: "deals", label: "Deals", count: data.total },
+              { key: "funnel", label: "Dial funnel" },
+              { key: "partners", label: "By partner", count: data.summary.length },
+            ]}
+          />
+        }
+        actions={pageActions}
+      />
 
       {data.readOnly && <Alert tone="warning">Read-only: you can review and export, not add or edit deals.</Alert>}
       {data.schemaPending && <Alert tone="warning">Disposition history and issued policies are not available yet.</Alert>}
@@ -449,7 +475,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
       {error && (
         <Alert tone="error">
           The latest refresh failed: {error}{" "}
-          <button type="button" className="font-semibold underline underline-offset-2" onClick={() => void load(query)}>Try again</button>
+          <button type="button" className="font-semibold underline underline-offset-2" onClick={() => void load(query, true)}>Try again</button>
         </Alert>
       )}
 
@@ -458,16 +484,20 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
           card's footer narrows the list to its deals; In progress turns amber when a deal is days old. */}
       {/* The Dial funnel tab has its own row of cards; one row of figures per screen (§4a). */}
       {tab !== "funnel" && <StatRow label="Deal flow summary">
+        {/* One-line rule (owner 2026-11-11): plain figures and footnotes; the one problem (an open deal two or more
+            days old) is said in a single chip under In progress instead of an amber figure. */}
         <StatCard icon={Handshake} label="Deals worked" period={periodText} value={kpis.deals_worked}
-          fact={topPartner ? { label: "Most from", value: `${topPartner.partner_name} · ${topPartner.total}` } : { label: "No deals in this range" }} />
+          fact={{ label: topPartner ? `Most from ${topPartner.partner_name} · ${topPartner.total}` : "No deals in this range" }} />
         <StatCard icon={BadgeCheck} label="Won" period={periodText} value={kpis.won}
-          fact={{ label: "Annualised", value: `${formatCentsAsCurrency(kpis.won_annualised_cents)}${kpis.won_unpriced > 0 ? ` · ${kpis.won_unpriced} unpriced` : ""}` }}
+          fact={{ label: `${formatCentsAsCurrency(kpis.won_annualised_cents)} annualised${kpis.won_unpriced > 0 ? ` · ${kpis.won_unpriced} unpriced` : ""}` }}
           action={kpis.won > 0 && active.stage_type !== "won" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "won" })}>Show</button> : undefined} />
-        <StatCard icon={Hourglass} label="In progress" period={periodText} value={kpis.in_progress} tone={oldest != null && oldest >= 2 ? "warn" : "default"}
-          fact={{ label: "Oldest", value: kpis.in_progress === 0 ? "none open" : oldest == null ? "not recorded" : oldest < 1 ? "under a day" : `${oldest} ${oldest === 1 ? "day" : "days"}` }}
+        <StatCard icon={Hourglass} label="In progress" period={periodText} value={kpis.in_progress}
+          fact={{ label: kpis.in_progress > 0 && oldest != null && oldest >= 2
+            ? <StatusChip tone="warning">Oldest {oldest} days</StatusChip>
+            : `Oldest ${kpis.in_progress === 0 ? "none open" : oldest == null ? "not recorded" : oldest < 1 ? "under a day" : `${oldest} ${oldest === 1 ? "day" : "days"}`}` }}
           action={kpis.in_progress > 0 && active.stage_type !== "open" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "open" })}>Show</button> : undefined} />
         <StatCard icon={XCircle} label="Lost" period={periodText} value={kpis.lost}
-          fact={{ label: "Of deals worked", value: kpis.deals_worked ? `${Math.round((kpis.lost / kpis.deals_worked) * 100)}%` : "—" }}
+          fact={{ label: `${kpis.deals_worked ? `${Math.round((kpis.lost / kpis.deals_worked) * 100)}%` : "—"} of deals worked` }}
           action={kpis.lost > 0 && active.stage_type !== "lost" ? <button type="button" className="hover:underline" onClick={() => applyFilter({ stage_type: "lost" })}>Show</button> : undefined} />
       </StatRow>}
 
@@ -480,7 +510,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
             toolbar={
               // Foundation v3 §6a: search, the day range (the page's scope), one Filters button; the
               // facets open inline under the toolbar and show as chips while closed.
-              <DataToolbar actions={<RefreshButton onClick={() => void load(query)} refreshing={loading} />}>
+              <DataToolbar actions={<RefreshButton onClick={() => void load(query, true)} refreshing={loading} />}>
                 <ToolbarSearch value={searchTerm} onChange={setSearchTerm} placeholder="Customer, phone, campaign, ID…" label="Search deals" />
                 <input type="date" aria-label="From" title={dayTitle} className={toolbarControl} value={filters.from} max={filters.to || undefined} onChange={(event) => setDate("from", event.target.value)} />
                 <input type="date" aria-label="To" title={dayTitle} className={toolbarControl} value={filters.to} min={filters.from || undefined} onChange={(event) => setDate("to", event.target.value)} />
@@ -525,18 +555,16 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
               <Pager page={data.page} total={data.total} pageSize={data.pageSize} noun={data.total === 1 ? "deal" : "deals"} suffix={!loading && focusedRow ? `focused on ${customerName(focusedRow)}` : undefined} disabled={loading} onPage={setPage} />
             </>}
           >
-            {loading ? <SectionLoading rows={6} columns={7} label="Loading deals" /> : (
-              <table className={cn(st.table, showPanel ? "min-w-[760px]" : "min-w-[1060px]")}>
+            {loading ? <SectionLoading rows={6} columns={columns} label="Loading deals" /> : (
+              <table className={cn(st.table, showPanel ? "min-w-[640px]" : "min-w-[880px]")}>
                 <thead>
                   <tr className={st.headRow}>
-                    <th scope="col" className={cn(st.th, "w-[210px]")}>Lead</th>
-                    {!showPanel && <th scope="col" className={cn(st.th, "w-[170px]")}>Campaign</th>}
-                    {!showPanel && <th scope="col" className={cn(st.th, "w-[150px]")}>Vendor</th>}
-                    <th scope="col" className={cn(st.th, "w-[60px]")}>State</th>
-                    <th scope="col" className={cn(st.th, "w-[170px]")}>Status</th>
-                    <th scope="col" className={cn(st.th, "w-[130px]")}>Owner</th>
-                    <th scope="col" className={cn(st.th, "w-[160px]")}>Annualised premium</th>
-                    <th scope="col" className={cn(st.th, "w-[110px] text-right")}>Actions</th>
+                    <th scope="col" className={st.th}>Lead</th>
+                    {!showPanel && <th scope="col" className={st.th}>Campaign</th>}
+                    <th scope="col" className={st.th}>Owner</th>
+                    <th scope="col" className={cn(st.th, "text-right")}>Annualised premium</th>
+                    <th scope="col" className={st.th}>Status</th>
+                    <th scope="col" className={cn(st.th, "w-[110px]")}>Next step</th>
                   </tr>
                 </thead>
                 <tbody className="m-seq">
@@ -552,26 +580,19 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                         onClick={() => openRow(row)}
                         className={cn("m-row cursor-pointer", isFocused ? "portal-deal-flow-focused-row bg-[var(--brand-50)]" : isSelected ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--surface-alt)]")}
                       >
-                        <td className={cn(st.td, "max-w-[220px]")}>
-                          <button type="button" onClick={(event) => { event.stopPropagation(); openRow(row); }} title={isPinned ? `${customerName(row)} · outside these filters` : customerName(row)} className="block max-w-full truncate rounded-[4px] text-left text-inherit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+                        <td className={cn(st.td, "whitespace-nowrap")}>
+                          <button type="button" onClick={(event) => { event.stopPropagation(); openRow(row); }} title={[customerName(row), row.customer_state, isPinned ? "outside these filters, pinned because you came from it" : null].filter(Boolean).join(" · ")} className="rounded-[4px] text-left font-medium text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
                             {customerName(row)}
                           </button>
                         </td>
-                        {!showPanel && <td className={cn(st.td, "max-w-[170px] truncate")} title={row.campaign_name ?? undefined}>{row.campaign_name ?? "—"}</td>}
-                        {!showPanel && <td className={cn(st.td, "max-w-[150px] truncate")} title={row.vendor_name ?? undefined}>{row.vendor_name ?? "—"}</td>}
-                        <td className={st.td}>{row.customer_state ?? "—"}</td>
-                        <td className={st.td}>
-                          <span className="inline-flex items-center gap-1.5">
-                            <StagePill row={row} />
-                            {isPinned && <StatusChip tone="neutral" title="This deal is outside the filters; it is pinned because you came from it.">Outside filters</StatusChip>}
-                          </span>
-                        </td>
+                        {!showPanel && <td className={cn(st.td, "whitespace-nowrap")} title={row.vendor_name ? `Vendor · ${row.vendor_name}` : undefined}>{row.campaign_name ?? <span className="text-muted-foreground">—</span>}</td>}
                         <td className={cn(st.td, "whitespace-nowrap")}>{shortPerson(row.agent_name)}</td>
-                        <td className={st.td}><PremiumBar monthlyCents={row.monthly_premium_cents} max={premiumMax} /></td>
-                        <td className={cn(st.td, "text-right")}>
-                          <Button asChild variant="outline" size="sm">
-                            <Link href={`/app/leads/${row.lead_id}`} onClick={(event) => event.stopPropagation()}>Open lead</Link>
-                          </Button>
+                        <td className={cn(st.td, "whitespace-nowrap text-right tabular-nums")}>{row.monthly_premium_cents == null ? <span className="text-muted-foreground" title="No premium quoted yet">—</span> : formatCentsAsCurrency(row.monthly_premium_cents * 12)}</td>
+                        <td className={cn(st.td, "whitespace-nowrap")}>
+                          <StagePill row={row} />
+                        </td>
+                        <td className={cn(st.td, "whitespace-nowrap")}>
+                          <Link href={`/app/leads/${row.lead_id}`} onClick={(event) => event.stopPropagation()} className="hover:underline" title={`Open ${customerName(row)}'s lead`}>Open ›</Link>
                         </td>
                       </tr>
                     );
@@ -636,7 +657,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
                 <div className="mt-1 text-sm font-semibold text-[var(--ink)]">{dispositionLabel(selectedRow) ?? "No call outcome recorded yet"}</div>
                 {selectedRow.notes && <p className="mt-1 mb-0 text-sm break-words text-[var(--body)]">{selectedRow.notes}</p>}
               </div>
-              <IssuedPolicyPanel dealId={selectedRow.id} defaultCarrier={selectedRow.carrier} readOnly={data.readOnly} onChanged={() => void load(query)} />
+              <IssuedPolicyPanel dealId={selectedRow.id} defaultCarrier={selectedRow.carrier} readOnly={data.readOnly} onChanged={() => void load(query, true)} />
               <details className="group border-t border-border pt-3">
                 <summary className="cursor-pointer list-none text-xs font-semibold text-[var(--muted)]">Submission timeline</summary>
                 <div className="mt-3"><Timeline items={timelineFor(selectedRow, timeZone)} /></div>
@@ -651,7 +672,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
       {tab === "partners" && (
         <TableCard
           className="flex min-h-[calc(100dvh-var(--top-bar-h)-392px)] flex-col [&>.overflow-x-auto]:flex-1"
-          toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load(query)} refreshing={loading} />}><span className="text-sm text-muted-foreground">{isToday ? "Today" : rangeText(active.from, active.to)}</span></DataToolbar>}
+          toolbar={<DataToolbar actions={<RefreshButton onClick={() => void load(query, true)} refreshing={loading} />}><span className="text-sm text-muted-foreground">{isToday ? "Today" : rangeText(active.from, active.to)}</span></DataToolbar>}
           footer={<span>{data.summary.length.toLocaleString("en-US")} {data.summary.length === 1 ? "partner" : "partners"} · the deals in the Deals tab&rsquo;s range and filters</span>}
         >
           {data.summary.length === 0 ? (
@@ -670,7 +691,7 @@ export function DealFlowWorkspace({ focusLeadId, timeZone = null }: { focusLeadI
               <tbody>
                 {data.summary.map((item) => (
                   <tr key={item.partner_id ?? "none"}>
-                    <td className={cn(st.td, st.strong)}>{item.partner_name}</td>
+                    <td className={cn(st.td, "whitespace-nowrap font-medium text-foreground")}>{item.partner_name}</td>
                     <td className={cn(st.td, st.num)}>{item.total}</td>
                     <td className={cn(st.td, st.num)}>{item.won}</td>
                     <td className={cn(st.td, st.num)}>{item.in_progress}</td>

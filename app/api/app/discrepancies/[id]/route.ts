@@ -21,14 +21,14 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const auth = await requireFeatureRole("discrepancy_report", roles);
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
-  if (!isRecordId(id)) return NextResponse.json({ error: "That discrepancy is not in this workspace" }, { status: 404 });
+  if (!isRecordId(id)) return NextResponse.json({ error: "That pay issue is not in this workspace" }, { status: 404 });
   try {
     const item = await getDiscrepancy(auth.context.tenantId, id);
-    if (!item) return NextResponse.json({ error: "That discrepancy is not in this workspace" }, { status: 404 });
+    if (!item) return NextResponse.json({ error: "That pay issue is not in this workspace" }, { status: 404 });
     return NextResponse.json({ ok: true, item }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("[discrepancies] one", error);
-    return NextResponse.json({ error: "Could not load the discrepancy" }, { status: 500 });
+    return NextResponse.json({ error: "Could not load the pay issue" }, { status: 500 });
   }
 }
 
@@ -41,7 +41,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   const auth = await requireFeatureRole("discrepancy_report", roles, { write: true });
   if (auth instanceof NextResponse) return auth;
   const { id } = await params;
-  if (!isRecordId(id)) return NextResponse.json({ error: "That discrepancy is not in this workspace" }, { status: 404 });
+  if (!isRecordId(id)) return NextResponse.json({ error: "That pay issue is not in this workspace" }, { status: 404 });
   const body = bodySchema.safeParse(await request.json().catch(() => null));
   if (!body.success) return NextResponse.json({ error: body.error.issues[0]?.message ?? "Check the request and try again" }, { status: 400 });
   try {

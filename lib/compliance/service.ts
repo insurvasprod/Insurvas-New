@@ -75,6 +75,50 @@ export async function listComplianceVendors(): Promise<ComplianceVendor[]> {
   return Promise.all(((data ?? []) as VendorRow[]).map(async (row) => safe(row, await health(row.id))));
 }
 
+/** One enabled feed's health: the dial gate's 24-hour counts and its latest real answer. */
+export type FeedHealth = Pick<ComplianceVendor, "id" | "name" | "vendor_type" | "available" | "last_success_at" | "calls_24h" | "failures_24h">;
+
+const FEED_MEMO_MS = 30_000;
+let feedMemo: { at: number; key: string; value: Promise<FeedHealth[]> } | null = null;
+
+/**
+ * The enabled vendors of these types with their health, for the TCPA feed panel and the dashboards
+ * (speed pass 2026-11-10). `listComplianceVendors` reads four health queries for every vendor on the
+ * platform, enabled or not, which came to 76 requests on each Dashboard load. This reads the enabled
+ * ones only, three queries each, with the same counts the dial gate uses. The answer is the platform's
+ * (the same for every agency) and is shared for 30 seconds; the gate itself (`getDncDialingStatus`)
+ * still reads afresh.
+ */
+export function enabledFeedHealth(types: readonly ComplianceVendorType[]): Promise<FeedHealth[]> {
+  const key = [...types].sort().join(",");
+  if (feedMemo && feedMemo.key === key && Date.now() - feedMemo.at < FEED_MEMO_MS) return feedMemo.value;
+  const value = (async () => {
+    const db = getSupabaseServiceClient();
+    const { data, error } = await db.from("compliance_vendors").select("id, name, vendor_type, last_success_at")
+      .eq("is_enabled", true).in("vendor_type", [...types]).order("vendor_type").order("priority").order("name");
+    if (error) throw new Error(`Could not load compliance vendors: ${error.message}`);
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    return Promise.all(((data ?? []) as Array<Pick<VendorRow, "id" | "name" | "vendor_type" | "last_success_at">>).map(async (row): Promise<FeedHealth> => {
+      const [counts, latestOk] = await Promise.all([
+        callCounts(row.id, since),
+        db.from("provider_calls").select("ts").eq("provider", providerCode(row.id)).gte("ts", since).eq("status", "ok")
+          .neq("method", FALLBACK_METHOD).neq("method", TEST_CONNECTION_METHOD).order("ts", { ascending: false }).limit(1).maybeSingle<{ ts: string }>(),
+      ]);
+      if (latestOk.error) throw new Error(`Could not load compliance vendor health: ${latestOk.error.message}`);
+      return {
+        id: row.id, name: row.name, vendor_type: row.vendor_type,
+        available: vendorAvailable(counts),
+        last_success_at: latestOk.data?.ts ?? row.last_success_at,
+        calls_24h: counts.calls24h, failures_24h: counts.failures24h,
+      };
+    }));
+  })();
+  // A failed read is not kept: the next request asks again.
+  value.catch(() => { if (feedMemo?.value === value) feedMemo = null; });
+  feedMemo = { at: Date.now(), key, value };
+  return value;
+}
+
 export async function createComplianceVendor(input: {
   name: string; vendor_type: ComplianceVendorType; endpoint: string; credentials?: string | null;
   is_enabled: boolean; priority: number; cost_per_lookup_cents: number;

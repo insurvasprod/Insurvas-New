@@ -272,11 +272,14 @@ export type ServicingList = {
 };
 
 /** Every request this viewer may see, newest first, after checking the open ones against the latest files. */
-export async function loadServicing(viewer: Viewer): Promise<ServicingList | { available: false }> {
-  try {
-    await runServicingVerification(viewer.tenantId);
-  } catch (error) {
-    console.error("[servicing] verification could not run", error);
+export async function loadServicing(viewer: Viewer, opts: { verify?: boolean } = {}): Promise<ServicingList | { available: false }> {
+  // A request page reads the list only for its ‹ › (round 7, 2·1): its own loadRequest has just checked the files.
+  if (opts.verify !== false) {
+    try {
+      await runServicingVerification(viewer.tenantId);
+    } catch (error) {
+      console.error("[servicing] verification could not run", error);
+    }
   }
   const { data, error } = await db().from("servicing_request").select(ROW_COLUMNS).eq("tenant_id", viewer.tenantId).order("created_at", { ascending: false }).limit(1000);
   if (error) {

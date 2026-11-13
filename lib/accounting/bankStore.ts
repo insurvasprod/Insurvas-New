@@ -88,7 +88,7 @@ export async function suggest(tenantId: string): Promise<number> {
 
 export type QueueRow = {
   id: string; accountId: string; postedOn: string; amountCents: number; descriptionRaw: string; reference: string | null; status: MatchStatus; ignoredReason: string | null;
-  matches: { id: string; statementId: string; carrierName: string; statementDate: string; amountAppliedCents: number; confidence: string; confirmed: boolean; reason: string | null }[];
+  matches: { id: string; statementId: string; carrierName: string; statementDate: string; amountAppliedCents: number; confidence: string; confirmed: boolean; confirmedAt: string | null; reason: string | null }[];
 };
 
 /** Deposits to review: suggestions to confirm, partial matches, and lines nothing explains. */
@@ -100,14 +100,14 @@ export async function matchQueue(tenantId: string, view: "open" | "all" = "open"
   const txns = (data ?? []) as Loose[];
   const ids = txns.map((t) => t.id);
   const [matches, carriers] = await Promise.all([
-    ids.length ? db().from("deposit_match").select("id, bank_transaction_id, carrier_account_statement_id, amount_applied_cents, confidence, confirmed_by, reason, carrier_account_statement!inner(carrier_id, statement_date)").in("bank_transaction_id", ids) : Promise.resolve({ data: [] }),
+    ids.length ? db().from("deposit_match").select("id, bank_transaction_id, carrier_account_statement_id, amount_applied_cents, confidence, confirmed_by, confirmed_at, reason, carrier_account_statement!inner(carrier_id, statement_date)").in("bank_transaction_id", ids) : Promise.resolve({ data: [] }),
     db().from("carriers").select("id, name"),
   ]);
   const name = new Map<string, string>(((carriers.data ?? []) as Loose[]).map((c) => [c.id, c.name]));
   const byTxn = new Map<string, QueueRow["matches"]>();
   for (const m of (matches.data ?? []) as Loose[]) {
     const list = byTxn.get(m.bank_transaction_id) ?? [];
-    list.push({ id: m.id, statementId: m.carrier_account_statement_id, carrierName: name.get(m.carrier_account_statement?.carrier_id) ?? "Carrier", statementDate: m.carrier_account_statement?.statement_date, amountAppliedCents: Number(m.amount_applied_cents), confidence: m.confidence, confirmed: !!m.confirmed_by, reason: m.reason });
+    list.push({ id: m.id, statementId: m.carrier_account_statement_id, carrierName: name.get(m.carrier_account_statement?.carrier_id) ?? "Carrier", statementDate: m.carrier_account_statement?.statement_date, amountAppliedCents: Number(m.amount_applied_cents), confidence: m.confidence, confirmed: !!m.confirmed_by, confirmedAt: (m.confirmed_at as string | null) ?? null, reason: m.reason });
     byTxn.set(m.bank_transaction_id, list);
   }
   return txns.map((t) => ({ id: t.id, accountId: t.bank_account_id, postedOn: t.posted_on, amountCents: Number(t.amount_cents), descriptionRaw: t.description_raw, reference: (t.reference as string | null) ?? null, status: t.match_status, ignoredReason: t.ignored_reason, matches: byTxn.get(t.id) ?? [] }));
@@ -322,4 +322,41 @@ export async function setIgnored(tenantId: string, transactionId: string, reason
   if (error) fail(error);
   if (!(data as Loose[] | null)?.length) throw new BankError("That deposit isn't in this agency.", 404);
   if (!reason) await db().rpc("refresh_bank_match_status", { p_transaction_id: transactionId });
+}
+
+// ─── Round 7 (owner 2026-11-10, mockups-r7/accounting.html § 1): reads only ───────────────────────────────
+
+export type AccountFacts = { accountId: string; linesReach: string | null; deposits: number; lastImport: { at: string; rows: number } | null };
+
+/** Per account: how far its lines reach (Missing money is only called once they reach the due date), how many
+ *  deposits it holds, and its last import. Head reads and one-row reads, one set per account. */
+export async function accountFacts(tenantId: string, accountIds: string[]): Promise<AccountFacts[]> {
+  return Promise.all(accountIds.map(async (accountId) => {
+    const [latest, count, imported] = await Promise.all([
+      db().from("bank_transaction").select("posted_on").eq("tenant_id", tenantId).eq("bank_account_id", accountId).order("posted_on", { ascending: false }).limit(1),
+      db().from("bank_transaction").select("id", { count: "exact", head: true }).eq("tenant_id", tenantId).eq("bank_account_id", accountId).gt("amount_cents", 0),
+      db().from("bank_import").select("imported_at, rows_total").eq("tenant_id", tenantId).eq("bank_account_id", accountId).order("imported_at", { ascending: false }).limit(1),
+    ]);
+    if (latest.error) fail(latest.error);
+    const last = ((imported.data ?? []) as Loose[])[0];
+    return {
+      accountId,
+      linesReach: ((latest.data ?? []) as Loose[])[0]?.posted_on ?? null,
+      deposits: Number(count.count ?? 0),
+      lastImport: last ? { at: String(last.imported_at).slice(0, 10), rows: Number(last.rows_total ?? 0) } : null,
+    };
+  }));
+}
+
+export type PaymentLetter = { id: string; createdAt: string; status: string; totalCents: number; items: number };
+
+/** The dispute letters (LA-4.15) drafted from this payment's findings, newest first. */
+export async function paymentLetters(tenantId: string, findingIds: string[]): Promise<PaymentLetter[]> {
+  if (!findingIds.length) return [];
+  const { data, error } = await db().from("commission_dispute").select("id, created_at, status, total_cents, discrepancy_ids").eq("tenant_id", tenantId).overlaps("discrepancy_ids", findingIds).order("created_at", { ascending: false }).limit(50);
+  if (error) {
+    if (isSchemaGap(error)) return [];
+    fail(error);
+  }
+  return ((data ?? []) as Loose[]).map((d) => ({ id: d.id, createdAt: String(d.created_at).slice(0, 10), status: d.status, totalCents: Number(d.total_cents ?? 0), items: Array.isArray(d.discrepancy_ids) ? d.discrepancy_ids.length : 0 }));
 }

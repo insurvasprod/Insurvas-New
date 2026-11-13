@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
 import { SETTINGS_CHANGE_TYPES, settingsAuditCsv } from "@/lib/settingsAudit/constants";
-import { SettingsAuditPendingError, listSettingsAudit, settingsAuditActors } from "@/lib/settingsAudit/service";
+import { SettingsAuditPendingError, listSettingsAudit, settingsAuditActors, settingsAuditIdNames } from "@/lib/settingsAudit/service";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 
 /**
@@ -21,6 +21,9 @@ const querySchema = z.object({
   to: z.string().regex(DATE).optional(),
   mine: z.literal("1").optional(),
   format: z.enum(["json", "csv"]).optional(),
+  // One setting's own history (the change sheet's "Earlier changes"): keys look like
+  // "invoice_tolerance_cents", "member:<id>.role", "complaint_deadlines.CA".
+  setting: z.string().min(1).max(200).regex(/^[A-Za-z0-9_.:\-]+$/).optional(),
 });
 
 export async function GET(request: NextRequest) {
@@ -34,14 +37,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const filter = { section: q.section, actor: q.actor, changeType: q.type, from: q.from, to: q.to };
-    const entries = await listSettingsAudit(auth.context.tenantId, filter, { onlyActor: q.mine ? auth.context.userId : undefined });
+    const entries = await listSettingsAudit(auth.context.tenantId, filter, { onlyActor: q.mine ? auth.context.userId : undefined, settingKey: q.setting, limit: q.setting ? 50 : undefined });
     if (q.format === "csv") {
       return new NextResponse(settingsAuditCsv(entries), {
         headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="settings-history-${new Date().toISOString().slice(0, 10)}.csv"`, "Cache-Control": "no-store" },
       });
     }
-    const actors = owner && !q.mine ? await settingsAuditActors(auth.context.tenantId) : [];
-    return NextResponse.json({ entries, actors }, { headers: { "Cache-Control": "no-store" } });
+    // Names for ids inside values (people, stages), so the screen never shows one.
+    const [actors, names] = await Promise.all([
+      owner && !q.mine && !q.setting ? settingsAuditActors(auth.context.tenantId) : Promise.resolve([]),
+      settingsAuditIdNames(auth.context.tenantId, entries),
+    ]);
+    return NextResponse.json({ entries, actors, names }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof SettingsAuditPendingError) return NextResponse.json({ error: error.message, code: "schema_pending" }, { status: 503 });
     console.error("[settings-audit] read failed", error instanceof Error ? error.message : error);

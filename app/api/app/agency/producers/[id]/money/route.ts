@@ -6,6 +6,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { guardProducer } from "@/lib/agency/guards";
 import { readBalances, readProducerEntries, syncLedger } from "@/lib/agency/ledgerStore";
 import { readRuns } from "@/lib/agency/payoutStore";
+import { teamMember } from "@/lib/agency/payPlanStore";
 import { NO_STORE, refuseManagerMoney } from "@/lib/agency/http";
 
 /**
@@ -27,10 +28,12 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const refused = refuseManagerMoney(auth.context, producer.user_id);
   if (refused) return refused;
   await syncLedger(auth.context.tenantId).catch(() => 0);
-  const [balances, entries, runs] = await Promise.all([
+  // The pay plan is the strip's last figure (round 7, 4·1); a plan that can't be read is "Contract level", never a failure.
+  const [balances, entries, runs, member] = await Promise.all([
     readBalances(auth.context),
     readProducerEntries(auth.context.tenantId, producer.user_id),
     readRuns(auth.context.tenantId, producer.user_id),
+    teamMember(auth.context.tenantId, producer.user_id).catch(() => null),
   ]);
-  return NextResponse.json({ balances: balances.rows.filter((b) => b.producerUserId === producer.user_id), entries, runs }, { headers: NO_STORE });
+  return NextResponse.json({ balances: balances.rows.filter((b) => b.producerUserId === producer.user_id), entries, runs, plan: member?.plan ?? null }, { headers: NO_STORE });
 }

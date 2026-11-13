@@ -56,7 +56,6 @@ import { TableCard } from "@/components/ui/table-card";
 const NOT_IN_SHOWN = 200;
 const cents = (n: number) => `${n < 0 ? "−" : ""}$${(Math.abs(n) / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const n = (value: number) => value.toLocaleString("en-US");
-const link = "font-semibold text-[var(--accent-ink)] hover:underline";
 
 const PAGE_SIZE = 25;
 
@@ -298,7 +297,7 @@ async function FileBody({ tenantId, head, rows, notIn, carriers, readOnly, searc
               <OutcomeFilter value={active.key} options={filters.map((f) => ({ key: f.key, label: f.label, warn: f.warn, count: all.filter(f.test).length, href: query(f.key) }))} />
               {kindFilter && <RemoveChip label={GROUP_WORDS[kindFilter]?.label ?? KIND_META[kindFilter].label} href={query(active.key, null)} />}
             </>}
-            actions={notInCount > 0 ? <Button asChild variant="outline"><Link href={`${base}?tab=changes`} title="The policies the previous file had and this one doesn't: watched, never lapsed">Not in file<span className="tabular-nums text-[var(--warning-ink)]">{n(notInCount)}</span></Link></Button> : undefined}
+            actions={notInCount > 0 ? <Button asChild variant="outline"><Link href={`${base}?tab=changes`} title="The policies the previous file had and this one doesn't: watched, never lapsed">Not in file<span className="tabular-nums">{n(notInCount)}</span></Link></Button> : undefined}
           />
         ) : undefined}
         empty={head.rowCount === null ? <EmptyState title="No rows kept yet" hint={head.fileKind === "pdf" ? "A PDF is read with its carrier's PDF layout: its rows are kept once one is published." : "The rows are kept once the file is read."} />
@@ -337,18 +336,19 @@ async function SentRows({ tenantId, head, page }: { tenantId: string; head: File
           <thead>
             <tr>
               <th className="sticky left-0 z-[2] w-[76px] bg-[var(--surface-alt)] text-right">Row</th>
-              {file.headers.map((h) => <th key={h} className="max-w-[180px] truncate" title={h}>{h}</th>)}
-              <th className="w-[200px]">Became</th>
+              {file.headers.map((h) => <th key={h} className="whitespace-nowrap" title={h}>{h}</th>)}
+              <th>Became</th>
             </tr>
           </thead>
           <tbody>
             {file.rows.map((r) => (
               <tr key={r.rowNumber} className="group">
                 <td className="sticky left-0 z-[1] bg-[var(--surface)] text-right group-hover:bg-[var(--surface-alt)]">
-                  <Link href={rowHref(file.id, r.rowNumber)} className={`${link} tabular-nums`} aria-label={`Open row ${r.rowNumber}`}>{r.rowNumber}</Link>
+                  <Link href={rowHref(file.id, r.rowNumber)} className="font-medium tabular-nums text-foreground hover:underline" aria-label={`Open row ${r.rowNumber}`}>{r.rowNumber}</Link>
                 </td>
-                {r.preview.map((v, i) => <td key={i} className="max-w-[180px] truncate font-mono text-xs" title={v}>{v === "" ? <span className="font-sans text-muted-foreground">—</span> : v}</td>)}
-                <td className="text-xs">{r.produced ? <StatusChip tone={r.produced.startsWith("Policy") ? "good" : "info"}>{r.produced}</StatusChip> : <StatusChip tone="neutral">Held, or not read</StatusChip>}</td>
+                {/* A raw-file table keeps every column; each row is one line, plain, its colour in the one chip (owner 2026-11-11). */}
+                {r.preview.map((v, i) => <td key={i} className="whitespace-nowrap">{v === "" ? <span className="text-muted-foreground">—</span> : v}</td>)}
+                <td className="whitespace-nowrap">{r.produced ? <StatusChip tone={r.produced.startsWith("Policy") ? "good" : "info"}>{r.produced}</StatusChip> : <StatusChip tone="neutral">Held, or not read</StatusChip>}</td>
               </tr>
             ))}
           </tbody>
@@ -380,14 +380,17 @@ function ChangesTab({ head, rows, notIn, search }: { head: FileHead; rows: FileR
       >
         {notIn.policies.length === 0 ? <EmptyState title={notIn.comparedWith ? "Every policy is still here" : "Nothing to compare with"} hint={notIn.comparedWith ? "Each policy in the previous file is in this one too." : "The next file of this carrier and type is compared with this one."} /> : (
           <table className="portal-lead-table w-full min-w-[640px] text-left text-sm">
-            <thead><tr><th>Policy</th><th className="w-[220px]">Last seen</th><th className="w-[160px]">What happens</th><th className="w-[90px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+            <thead><tr><th>Policy</th><th>Client</th><th>Last seen</th><th>Last status</th><th>What happens</th><th>Next step</th></tr></thead>
             <tbody>
+              {/* One line per row (owner 2026-11-11): the client and the last status are their own columns. */}
               {notIn.policies.slice(0, 200).map((p) => (
                 <tr key={p.policyNumber}>
-                  <td><span className="block font-semibold text-foreground">{p.policyNumber}</span><span className="block text-xs text-muted-foreground">{p.clientName ?? "No client yet"}</span></td>
-                  <td className="text-muted-foreground">{fileDay(p.lastSeen)}{p.lastStatus ? ` · ${p.lastStatus.replaceAll("_", " ")}` : ""}</td>
+                  <td className="whitespace-nowrap font-medium tabular-nums text-foreground">{carrierId ? <Link href={policyHref(carrierId, p.policyNumber)} className="hover:underline">{p.policyNumber}</Link> : p.policyNumber}</td>
+                  <td className="whitespace-nowrap">{p.clientName ?? <span className="text-muted-foreground" title="No client yet">—</span>}</td>
+                  <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(p.lastSeen)}</td>
+                  <td className="whitespace-nowrap capitalize">{p.lastStatus ? p.lastStatus.replaceAll("_", " ") : <span className="text-muted-foreground">—</span>}</td>
                   <td><StatusChip tone="neutral">Watched</StatusChip></td>
-                  <td className="text-right">{carrierId ? <Button asChild variant="outline" size="sm"><Link href={policyHref(carrierId, p.policyNumber)}>Open</Link></Button> : null}</td>
+                  <td className="whitespace-nowrap">{carrierId ? <Link href={policyHref(carrierId, p.policyNumber)} className="hover:underline">Open ›</Link> : <span className="text-muted-foreground">—</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -404,14 +407,16 @@ function ChangesTab({ head, rows, notIn, search }: { head: FileHead; rows: FileR
       >
         {list.length === 0 ? <EmptyState title="This file changed nothing" hint={head.previous ? "Every policy reads as it did in the previous file." : "The first file of a carrier and type is where each policy's history starts."} /> : (
           <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
-            <thead><tr><th className="w-[200px]">Policy</th><th className="w-[160px]">Field</th><th>Change</th><th className="w-[110px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+            <thead><tr><th>Policy</th><th>Client</th><th>Field</th><th>Change</th><th>Next step</th></tr></thead>
             <tbody>
+              {/* One line per row, one text colour (owner 2026-11-11): the client is its own column, the change plain. */}
               {list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((c) => (
                 <tr key={c.key}>
-                  <td><span className="block font-semibold text-foreground">{c.row.policyNumber}</span><span className="block text-xs text-muted-foreground">{c.row.clientName ?? `Row ${c.row.rowNumber}`}</span></td>
-                  <td>{c.field}</td>
-                  <td>{c.isNew ? <span className="font-semibold text-foreground">New</span> : <><span className="text-muted-foreground">{c.from}</span> → <span className="font-semibold text-foreground">{c.to}</span></>}</td>
-                  <td className="text-right">{carrierId && c.row.policyNumber ? <Button asChild variant="outline" size="sm"><Link href={policyHref(carrierId, c.row.policyNumber, "history")}>History</Link></Button> : null}</td>
+                  <td className="whitespace-nowrap font-medium tabular-nums text-foreground">{c.row.policyNumber}</td>
+                  <td className="whitespace-nowrap">{c.row.clientName ?? <span className="text-muted-foreground">Row {c.row.rowNumber}</span>}</td>
+                  <td className="whitespace-nowrap">{c.field}</td>
+                  <td className="whitespace-nowrap">{c.isNew ? "New" : `${c.from} → ${c.to}`}</td>
+                  <td className="whitespace-nowrap">{carrierId && c.row.policyNumber ? <Link href={policyHref(carrierId, c.row.policyNumber, "history")} className="hover:underline">History ›</Link> : <span className="text-muted-foreground">—</span>}</td>
                 </tr>
               ))}
             </tbody>
@@ -450,7 +455,7 @@ async function CommissionsTab({ tenantId, head, search }: { tenantId: string; he
         <StatTile label="Statement says" value={checked ? cents(money.linesCents) : "Not stated"} valueSize={checked ? "figure" : "text"} footnote={checked ? "its stated total, checked when read" : "this file states no total"} />
         <StatTile label="Balance" value={checked ? "Matches" : "Not checked"} valueSize="text" footnote={checked ? "a statement that doesn't balance is never posted" : "only a PDF statement states one"} />
         <StatTile label="Posted" value={`${n(money.postedRows)} of ${n(head.rowCount ?? 0)}`} valueSize="text" footnote="rows in the ledger" />
-        <StatTile label="Waiting" value={n(money.waiting)} valueTone={money.waiting ? "warning" : undefined} footnote="lines whose policy no file has yet" />
+        <StatTile label="Waiting" value={n(money.waiting)} footnote={money.waiting ? <StatusChip tone="warning" title="Lines whose policy no file has yet">No policy yet</StatusChip> : "lines whose policy no file has yet"} />
       </StatStrip>
       <TableCard
         title={`Lines · ${n(money.groups.reduce((sum, g) => sum + g.lines, 0))}`}
@@ -459,20 +464,21 @@ async function CommissionsTab({ tenantId, head, search }: { tenantId: string; he
       >
         {shown.length === 0 ? <EmptyState title="No line here" hint="Choose another filter." /> : (
           <table className="portal-lead-table w-full min-w-[860px] text-left text-sm">
-            <thead><tr><th className="w-[200px]">Policy</th><th className="w-[170px]">Line</th><th className="w-[110px] text-right">Paid</th><th className="w-[110px] text-right">Expected</th><th>Result</th><th className="w-[80px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+            <thead><tr><th>Policy</th><th>Client</th><th>Line</th><th className="text-right">Paid</th><th className="text-right">Expected</th><th>Result</th><th>Next step</th></tr></thead>
             <tbody>
+              {/* A statement-like table keeps its columns; each row is one line (owner 2026-11-11): the client is its own column. */}
               {shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((g) => (
                 <tr key={g.key}>
-                  <td>
-                    {g.account ? <span className="block font-semibold text-foreground">Account line</span>
-                      : head.carrierId && g.policyNumber ? <Link href={policyHref(head.carrierId, g.policyNumber, "commissions")} className="block font-semibold text-foreground hover:underline">{g.policyNumber}</Link> : <span className="block font-semibold">{g.policyNumber}</span>}
-                    <span className="block truncate text-xs text-muted-foreground">{g.account ? g.description ?? "The carrier's own account" : g.clientName ?? "Policy not seen yet"}</span>
+                  <td className="whitespace-nowrap font-medium tabular-nums text-foreground">
+                    {g.account ? "Account line"
+                      : head.carrierId && g.policyNumber ? <Link href={policyHref(head.carrierId, g.policyNumber, "commissions")} className="hover:underline">{g.policyNumber}</Link> : g.policyNumber}
                   </td>
-                  <td className="capitalize">{g.types.join(", ")}{g.lines > 1 ? ` ×${g.lines}` : ""}</td>
-                  <td className="text-right tabular-nums">{cents(g.paidCents)}</td>
-                  <td className="text-right tabular-nums text-muted-foreground">{g.expectedCents === null ? "—" : cents(g.expectedCents)}</td>
+                  <td className="whitespace-nowrap">{g.account ? g.description ?? "The carrier's own account" : g.clientName ?? <span className="text-muted-foreground" title="Policy not seen yet">—</span>}</td>
+                  <td className="whitespace-nowrap capitalize">{g.types.join(", ")}{g.lines > 1 ? ` ×${g.lines}` : ""}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{cents(g.paidCents)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{g.expectedCents === null ? <span className="text-muted-foreground">—</span> : cents(g.expectedCents)}</td>
                   <td><StatusChip tone={g.result.tone}>{g.result.label}</StatusChip></td>
-                  <td className="text-right"><Button asChild variant="outline" size="sm"><Link href={rowHref(head.id, g.rowNumber)} aria-label={`Open row ${g.rowNumber}`}>Open</Link></Button></td>
+                  <td className="whitespace-nowrap"><Link href={rowHref(head.id, g.rowNumber)} className="hover:underline" aria-label={`Open row ${g.rowNumber}`}>Open ›</Link></td>
                 </tr>
               ))}
             </tbody>

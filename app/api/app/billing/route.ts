@@ -7,6 +7,7 @@ import { getEntitlement } from "@/lib/entitlements/get";
 import {
   BillingActionError,
   currentSubscription,
+  invoiceDocument,
   loadBillingView,
   planChangeImpact,
   selfCancel,
@@ -35,6 +36,7 @@ import { recordSettingsChanges, type SettingsChange } from "@/lib/settingsAudit/
  *   GET                 the view
  *   GET ?plan=<id>      what moving to that plan costs now and takes away (features, with the
  *                       agency's own record counts, and limits it would be over)
+ *   GET ?invoice=<id>   one of the agency's own invoices as a document, for the invoice sheet
  *   POST                { action: change_plan | pause | resume | cancel }, with an Idempotency-Key
  */
 export async function GET(request: NextRequest) {
@@ -42,6 +44,13 @@ export async function GET(request: NextRequest) {
   if (auth instanceof NextResponse) return auth;
   const { tenantId } = auth.context;
   try {
+    const invoice = request.nextUrl.searchParams.get("invoice");
+    if (invoice !== null) {
+      if (!z.string().uuid().safeParse(invoice).success) return NextResponse.json({ error: "That invoice was not found" }, { status: 404 });
+      const doc = await invoiceDocument(tenantId, invoice);
+      if (!doc) return NextResponse.json({ error: "That invoice was not found" }, { status: 404 });
+      return NextResponse.json(doc, { headers: { "Cache-Control": "no-store" } });
+    }
     const entitlement = await getEntitlement(tenantId);
     const plan = request.nextUrl.searchParams.get("plan");
     if (plan !== null) {

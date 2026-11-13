@@ -441,7 +441,7 @@ export function PipelinesOutcomesSettings() {
                     <td className={st.td}>{PARTNER_TYPES.find((type) => type.value === item.partner_type)?.label ?? "No partner type"}</td>
                     <td className={cn(st.td, "text-right tabular-nums")}>{live.length}</td>
                     <td className={cn(st.td, "text-right tabular-nums")}>{leads.toLocaleString("en-US")}</td>
-                    <td className={cn(st.td, "text-right")}><Button type="button" variant="outline" size="sm" onClick={() => open(item.id)}>Set up</Button></td>
+                    <td className={cn(st.td, "text-right")}><Button type="button" data-guide="pipeline-setup" variant="outline" size="sm" onClick={() => open(item.id)}>Set up</Button></td>
                   </tr>
                 );
               })}
@@ -489,10 +489,10 @@ export function PipelinesOutcomesSettings() {
         </span>
       </div>
 
-      <div className={cn(cardSurface, "flex min-h-0 flex-1 flex-col px-4 pt-3 pb-3.5")}>
+      <div data-guide="pipeline-outcomes" className={cn(cardSurface, "flex min-h-0 flex-1 flex-col px-4 pt-3 pb-3.5")}>
         <div className="mb-2 grid shrink-0 grid-cols-[minmax(0,280px)_minmax(96px,1fr)_minmax(0,280px)] items-center border-b border-[var(--border)] pb-1.5">
           <span className="flex min-w-0 items-center justify-between gap-2">
-            <span data-guide="pipeline-outcomes" className={KICKER}>Outcomes · {draft.outcomes.filter((o) => o.active).length}<Hint id="hint-outcomes" label="About outcomes" text="What an agent can pick after a call." /></span>
+            <span className={KICKER}>Outcomes · {draft.outcomes.filter((o) => o.active).length}<Hint id="hint-outcomes" label="About outcomes" text="What an agent can pick after a call." /></span>
             <Button type="button" variant="outline" size="sm" onClick={addOutcome}><Plus className="size-4" aria-hidden="true" />Add outcome</Button>
           </span>
           {/* The map's title is behind the (i); the legend sits on the one line (owner 2026-11-03: it took too much room). */}

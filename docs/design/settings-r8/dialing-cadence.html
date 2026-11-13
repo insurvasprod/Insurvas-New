@@ -1,0 +1,893 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dialing Cadence</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Board-only extras, built from kit tokens. No raw colour values. */
+.input.sm{height:32px;font-size:14px;cursor:default}
+.input.sm .chip{height:20px}
+.side{width:330px;flex:none}
+.sum{font-size:16px;color:var(--ink);margin:0 0 4px;line-height:1.4}
+.sum .g{color:var(--hl-ink);font-weight:600}
+.sub{font-size:12px;color:var(--muted);margin:0 0 14px}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:8px;height:32px;overflow:hidden;background:var(--card);flex:none}
+.stepper span{width:30px;text-align:center;color:var(--muted);font-size:16px;line-height:30px}
+.stepper b{min-width:34px;text-align:center;font-size:14px;color:var(--ink);border-left:1px solid var(--border);border-right:1px solid var(--border);line-height:30px}
+.lbl{font-size:12px;color:var(--muted);font-weight:600}
+.lk{color:var(--accent-ink);font-weight:500;font-size:14px}
+.lk.s{font-size:12px}
+.wtx{color:var(--warn);font-size:12px}
+.badtx{color:var(--bad);font-size:12px}
+.menu.wide{width:340px}
+.menu .k{font-size:12px;color:var(--muted)}
+.menu .a{color:var(--accent-ink);font-weight:500}
+
+/* timeline (A) */
+.tl{display:grid;grid-template-columns:92px repeat(14,minmax(0,1fr));border:1px solid var(--rule);border-radius:12px;background:var(--card);overflow:hidden}
+.tl.sm{grid-template-columns:76px repeat(14,minmax(0,1fr))}
+.tl .c{border-left:1px solid var(--rule);border-top:1px solid var(--rule);position:relative;min-height:58px;display:grid;place-items:center}
+.tl.sm .c{min-height:40px}
+.tl .c.h{min-height:42px;border-top:0;text-align:center;font-size:12px;color:var(--muted);line-height:1.25;background:var(--band)}
+.tl.sm .c.h{min-height:28px}
+.tl .c.h b{display:block;color:var(--ink);font-weight:600;font-size:12px}
+.tl .c.lab{border-left:0;place-items:center start;padding:0 10px;font-size:12px;color:var(--muted);line-height:1.25;background:var(--band)}
+.tl .c.lab b{display:block;color:var(--ink);font-weight:600}
+.tl .c.blk{background:repeating-linear-gradient(135deg,var(--band) 0 6px,transparent 6px 12px)}
+.tl .c.h.blk{color:var(--muted)}
+.tl .c.part{background:repeating-linear-gradient(135deg,var(--warn-s) 0 6px,transparent 6px 12px)}
+.tl .c.w{min-height:34px;font-size:12px;color:var(--muted);line-height:1.2;text-align:center}
+.tl .why{font-size:12px;color:var(--muted)}
+.tl .stack{display:flex;gap:2px}
+.d{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--primary);color:var(--on-primary);box-shadow:0 0 0 3px var(--card);cursor:grab;position:relative}
+.tl.sm .d{width:22px;height:22px}
+.d.mv{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--warn)}
+.d.gh{background:transparent;color:var(--muted);border:1.5px dashed var(--border-strong);box-shadow:none}
+.d.sel{box-shadow:0 0 0 3px var(--card),0 0 0 5px var(--ring)}
+.d.drag{box-shadow:0 0 0 3px var(--card),var(--overlay);transform:translate(10px,-4px)}
+.d.vm{background:var(--info-s);color:var(--info)}
+.tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:var(--ink);color:var(--card);font-size:12px;font-weight:500;padding:5px 9px;border-radius:7px;white-space:nowrap;z-index:2}
+.lg{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--muted);margin-top:10px;align-items:center}
+.lg span{display:inline-flex;align-items:center;gap:6px}
+.lg .d{width:16px;height:16px;font-size:0;box-shadow:none;cursor:default}
+.lg .d.mv{box-shadow:0 0 0 2px var(--warn)}
+.sw{width:16px;height:16px;border-radius:4px;border:1px solid var(--rule);display:inline-block;background:repeating-linear-gradient(135deg,var(--band) 0 4px,var(--card) 4px 8px)}
+.sw.p{background:repeating-linear-gradient(135deg,var(--warn-s) 0 4px,var(--card) 4px 8px)}
+
+/* popover */
+.pop{position:absolute;z-index:6;width:330px;left:640px;top:220px;background:var(--card);border:1px solid var(--card-border);border-radius:14px;box-shadow:var(--overlay)}
+.pop-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--rule)}
+.pop-h b{font-size:16px}
+.pop-h .x{margin-left:auto;color:var(--muted)}
+.pop-b{padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.pop-b .l{margin:6px 0 0}
+.pop-f{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--rule)}
+.pop-f .sp{flex:1}
+.ck{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--body);padding:3px 0}
+.ck .end{margin-left:auto}
+
+/* what happens list */
+.wh{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--rule);font-size:14px}
+.wh .d{width:24px;height:24px;cursor:default}
+.wh b{font-weight:600;color:var(--ink);font-size:14px}
+.wh small{display:block;font-size:12px;color:var(--muted)}
+.wh .end{margin-left:auto}
+.wh.done{background:var(--band)}
+
+/* sentence steps (B) */
+.sc{display:flex;align-items:center;gap:12px;padding:10px 14px;border:1px solid var(--tile-edge);border-radius:12px;background:var(--tile);margin-bottom:8px;font-size:14px;color:var(--body)}
+.sc .n{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-size:12px;font-weight:700;flex:none}
+.sc p{margin:0;line-height:2}
+.sc b{color:var(--ink)}
+.sc .when{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;white-space:nowrap}
+.sc .more{color:var(--muted);font-size:16px;padding:0 2px}
+.sc.lock{background:var(--band)}
+.sc.add{border-style:dashed;justify-content:center;color:var(--accent-ink);font-weight:500;background:transparent}
+.sc.diff{box-shadow:inset 3px 0 0 var(--info)}
+.sc.sel{box-shadow:0 0 0 2px var(--ring)}
+.dd{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 8px;border-radius:7px;border:1px solid var(--border);background:var(--card);color:var(--accent-ink);font-weight:600;line-height:1}
+.dd::after{content:"▾";font-size:12px;color:var(--muted)}
+.dd.open{outline:2px solid var(--ring);outline-offset:1px}
+.grp-h{font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 6px}
+.grp-h:first-child{margin-top:0}
+
+/* day density strip (B) */
+.dens{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;align-items:end;height:64px;margin:6px 0 4px}
+.dens i{display:block;border-radius:4px 4px 0 0;background:var(--primary)}
+.dens i.z{background:var(--rule);height:3px}
+.dens i.b{background:repeating-linear-gradient(135deg,var(--rule) 0 4px,transparent 4px 8px);height:100%}
+.dens-x{display:grid;grid-template-columns:repeat(14,1fr);gap:4px;font-size:12px;color:var(--muted);text-align:center}
+
+/* calendar (C) */
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.cal .dh{padding:6px 10px;font-size:12px;color:var(--muted);background:var(--band);border-left:1px solid var(--rule);font-weight:600}
+.cal .dh:nth-child(7n+1){border-left:0}
+.cal .cd{min-height:132px;padding:8px;border-left:1px solid var(--rule);border-top:1px solid var(--rule);display:flex;flex-direction:column;gap:5px;min-width:0}
+.cal .cd.f{border-left:0}
+.cal.sm .cd{min-height:64px;padding:6px}
+.cal .cd.blk{background:repeating-linear-gradient(135deg,var(--band) 0 6px,transparent 6px 12px)}
+.cal .dn{font-size:12px;font-weight:600;color:var(--ink);display:flex;justify-content:space-between;gap:6px}
+.cal .dn span{color:var(--muted);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ev{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 7px;border-radius:7px;background:var(--primary-soft);color:var(--accent-ink);font-weight:500;cursor:grab;white-space:nowrap;overflow:hidden}
+.ev b{width:18px;height:18px;border-radius:50%;display:grid;place-items:center;background:var(--primary);color:var(--on-primary);font-size:12px;flex:none}
+.ev.gh{background:transparent;border:1px dashed var(--border-strong);color:var(--muted);cursor:default}
+.ev.gh b{background:transparent;color:var(--muted);border:1px dashed var(--border-strong)}
+.ev.mv{background:var(--warn-s);color:var(--warn)}
+.ev.mv b{background:var(--warn);color:var(--card)}
+.ev.ans{background:var(--ok-s);color:var(--ok)}
+.ev.ans b{background:var(--ok);color:var(--card)}
+.ev.vm{background:var(--info-s);color:var(--info)}
+.ev.vm b{background:var(--info);color:var(--card)}
+.ev.sel{outline:2px solid var(--ring);outline-offset:1px}
+.ev.off{opacity:.45;cursor:default}
+.ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+
+/* versions */
+.vr{display:flex;gap:12px;padding:12px 14px;border:1px solid var(--tile-edge);border-radius:12px;margin-bottom:8px;background:var(--tile)}
+.vr.on{box-shadow:0 0 0 2px var(--ring)}
+.vr .meta{flex:1;min-width:0}
+.vr b{font-size:14px;color:var(--ink)}
+.vr small{display:block;font-size:12px;color:var(--muted)}
+.vr .acts{display:flex;gap:6px;align-items:flex-start}
+.chg{margin:8px 0 0;padding:0;list-style:none;font-size:12px;color:var(--body)}
+.chg li{padding:3px 0 3px 16px;position:relative}
+.chg li::before{content:"";position:absolute;left:2px;top:9px;width:6px;height:6px;border-radius:50%;background:var(--info)}
+.chg li.add::before{background:var(--ok)}
+.chg li.del::before{background:var(--bad)}
+
+.snip{display:grid;grid-template-columns:1.4fr 1fr;gap:12px;margin-bottom:20px}
+.kbd{display:inline-block;font-size:12px;padding:0 6px;border-radius:5px;border:1px solid var(--border);background:var(--band);color:var(--ink);font-weight:600}
+@media (max-width:1100px){.snip{grid-template-columns:1fr}.side{width:260px}}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Dialing cadence</h1>
+  <p class="lead">Dialing cadence decides when the outbound dialer calls a lead again after a call that did not connect: how long it waits, which part of the day it tries, after which outcomes, and when it gives up. Today it is a table of numbered rules ("attempt N is the wait before dial N"), a bare campaign picker, and up to four notices stacked above it. You cannot see the shape of the schedule, and you cannot see where Sundays, holidays or state limits will move a call.</p>
+  <div class="notes">
+    <div><b>1 · The numbering needs a lesson</b>Rule N is "the wait before dial N", attempt 1 is a locked row with no wait, and a rule past max attempts is stored but never read. People think in calls on days, not attempt numbers.</div>
+    <div><b>2 · A table hides the shape</b>The stat strip says "4 · 2 · 2 spread", but nothing shows that half the calls land in the first three days or that call 6 falls on a Sunday.</div>
+    <div><b>3 · Calling windows are invisible</b>No Sunday, federal holidays, Florida's three-calls-in-24-hours and per-campaign hours live on another page. The cadence promises calls the dialer will quietly move.</div>
+    <div><b>4 · Four notices push the editor down</b>Save errors, max-attempts errors, read-only and "pending update" are Callout cards. Owner rule: those belong in the status line or on the row they are about.</div>
+    <div><b>5 · Scope is a bare select</b>"Every campaign (tenant default)" versus a campaign name, with no sign which campaigns run their own cadence, and switching drops your edits.</div>
+    <div><b>6 · Outcomes are snake_case scopes</b>"no_answer", "callback" per row, with duplicate-rule errors. Owners only want to say "after a voicemail, wait longer".</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · Visual timeline</button><button data-opt-btn="B">B · Plain sentences</button><button data-opt-btn="C">C · Simulator first</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ════════════════════════ OPTION A · VISUAL TIMELINE ════════════════════════ -->
+  <template id="A-main">
+    <div class="main">
+      <div class="crumb">Settings › Leads &amp; calling</div>
+      <div class="head"><h3>Dialing cadence</h3>
+        <nav class="tabs"><a class="on">No answer</a><a>Voicemail<span class="c">2 differ</span></a><a>Busy</a><a>Hung up<span class="c">1 differs</span></a></nav>
+        <div class="acts"><span class="input sm" data-k="scope"><span class="muted">Applies to</span> Every campaign <span class="chip ok">Yours</span> ▾</span><span class="btn g">History</span><span class="btn o">Reset to default</span></div></div>
+      <div class="status warn"><span class="dot"></span>Yours is in force on 3 of 4 campaigns (Medicare · FL runs its own) · 2 calls move: Sun 22 is a no-call day, Thu 26 is Thanksgiving · saved by Dana Alvarez 2 days ago</div>
+      <div class="body">
+        <div class="card flex1">
+          <div class="card-h"><b>Agency cadence</b>
+            <span class="seg"><span>Gentle</span><span>Balanced</span><span>Persistent</span><span class="on">Custom</span></span>
+            <div class="r"><span class="lbl">Max calls</span><span class="stepper"><span>−</span><b>8</b><span>+</span></span></div></div>
+          <div class="scroll"><div class="card-b">
+            <p class="sum">A lead that never answers gets <span class="g">8 calls over 13 days</span>, mostly in the afternoon. Half of them come in the first 3 days.</p>
+            <p class="sub">Example lead arriving Mon 16 Nov, 9:40am, in Texas. Drag a call sideways to change its wait; click it to edit.</p>
+            <div class="tl" data-tl='{"calls":[[1,1,"m","now"],[2,1,"a","+3h"],[3,2,"e","+1d"],[4,3,"m","+1d"],[5,5,"a","+2d"],[6,8,"m","→ Mon","mv"],[7,12,"a","→ Fri","mv"],[8,13,"a","+1d"]],"gh":[[6,7,"m"],[7,11,"a"]],"blk":{"7":"Sunday","11":"Holiday","14":"Sunday"}}'></div>
+            <div class="lg"><span><i class="d"></i>Call</span><span><i class="d mv"></i>Moved by calling windows</span><span><i class="d gh"></i>Where the rule wanted it</span><span><i class="sw"></i>No calls (Sunday, federal holiday)</span><span class="lk s">Calling windows ↗</span></div>
+          </div></div>
+          <div class="savebar">1 change not saved · call 5 now waits 2 days (was 1)<span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save cadence</span></div>
+        </div>
+        <div class="card side">
+          <div class="card-h"><b>What happens</b><div class="r"><span class="seg"><span class="on">Never answers</span><span>Voicemail</span></span></div></div>
+          <div class="scroll">
+            <div class="wh"><span class="d">1</span><div><b>Mon 16 · 9:40am</b><small>As soon as the lead arrives</small></div></div>
+            <div class="wh"><span class="d">2</span><div><b>Mon 16 · 12:40pm</b><small>3 hours later, any time</small></div></div>
+            <div class="wh"><span class="d">3</span><div><b>Tue 17 · 6:15pm</b><small>Next day, evening</small></div></div>
+            <div class="wh"><span class="d">4</span><div><b>Wed 18 · 10:05am</b><small>Next day, morning</small></div></div>
+            <div class="wh"><span class="d">5</span><div><b>Fri 20 · 2:30pm</b><small>2 days later, afternoon</small></div></div>
+            <div class="wh"><span class="d mv">6</span><div><b>Mon 23 · 9:30am</b><small>Wanted Sun 22, a no-call day</small></div><span class="end chip warn">Moved</span></div>
+            <div class="wh"><span class="d mv">7</span><div><b>Fri 27 · 1:45pm</b><small>Wanted Thu 26, Thanksgiving</small></div><span class="end chip warn">Moved</span></div>
+            <div class="wh"><span class="d">8</span><div><b>Sat 28 · 3:10pm</b><small>Last call, then the lead goes to Nurture</small></div></div>
+            <div class="wh done"><div><small>Texas: no calls before noon or after 9pm on Sunday. Your agency hours (9am–8pm, Mon–Sat) are tighter, so they win.</small></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <div class="opt A">
+    <div class="sec"><h2>A · Main screen</h2><span>The timeline is the cadence. Presets, max calls and a live sentence above it; moved calls shown on the timeline and in the status line, never a notice card.</span></div>
+    <div class="app" data-shell><div data-use="A-main"></div></div>
+
+    <div class="sec"><h2>A · Edit a call</h2><span>Click a dot: a small popover with wait, part of the day and which outcomes it follows. Arrow keys move the selected call one day.</span></div>
+    <div class="app" data-shell data-sel="5"><div data-use="A-main"></div>
+      <div class="pop" data-anchor='.tl [data-n="5"]'>
+        <div class="pop-h"><span class="d sel" style="cursor:default">5</span><b>Call 5</b><span class="muted small">Fri 20 in the example</span><span class="x">✕</span></div>
+        <div class="pop-b">
+          <label class="l">Wait after call 4</label>
+          <div class="row"><span class="stepper"><span>−</span><b>2</b><span>+</span></span><span class="seg"><span>minutes</span><span>hours</span><span class="on">days</span></span></div>
+          <label class="l">Part of the day</label>
+          <span class="seg"><span>Any</span><span>Morning</span><span class="on">Afternoon</span><span>Evening</span></span>
+          <label class="l">Make this call after</label>
+          <div class="ck"><span class="check on"></span>No answer</div>
+          <div class="ck"><span class="check on"></span>Voicemail</div>
+          <div class="ck"><span class="check on"></span>Busy</div>
+          <div class="ck"><span class="check"></span>Hung up<span class="end lk s">Hung up waits 4 days instead</span></div>
+          <div class="help">Lands Fri 20, 2:30pm in the example · inside your hours and Texas rules.</div>
+        </div>
+        <div class="pop-f"><span class="btn danger sm">Remove call</span><span class="sp"></span><span class="btn p sm">Done</span></div>
+      </div>
+    </div>
+    <div class="snip">
+      <div class="card"><div class="card-h"><b>Dragging a call</b><span class="muted small">The wait follows the dot; the tooltip says what it becomes</span></div>
+        <div class="card-b"><div class="tl sm" data-drag="4" data-tip="Wait 2 days after call 3 · Thu 19, morning" data-tl='{"calls":[[1,1,"m"],[2,1,"a"],[3,2,"e"],[4,4,"m",0,"drag"],[5,6,"a"],[6,8,"m",0,"mv"],[7,12,"a",0,"mv"],[8,13,"a"]],"gh":[[4,3,"m"]],"blk":{"7":"Sun","11":"Hol.","14":"Sun"}}'></div>
+        <p class="help">Calls after it slide with it, so their own waits stay the same. Dropping on a striped day is allowed; the dot snaps to the next allowed time and turns orange.</p></div></div>
+      <div class="card"><div class="card-h"><b>Keyboard and touch</b></div>
+        <div class="card-b small">
+          <div class="ck"><span class="kbd">Tab</span>moves between calls in order</div>
+          <div class="ck"><span class="kbd">← →</span>one day shorter or longer wait</div>
+          <div class="ck"><span class="kbd">↑ ↓</span>morning, afternoon, evening</div>
+          <div class="ck"><span class="kbd">Enter</span>opens the popover</div>
+          <div class="ck"><span class="kbd">Delete</span>removes the call (undo in the toast)</div>
+          <p class="help">On a phone the timeline turns into the "What happens" list, and each row opens the same popover as a bottom sheet.</p>
+        </div></div>
+    </div>
+
+    <div class="sec"><h2>A · Pick a scope</h2><span>The picker says what each campaign runs. Editing "Every campaign" changes every campaign marked Agency.</span></div>
+    <div class="app" data-shell><div data-use="A-main"></div>
+      <div class="menu wide pop" style="padding:4px" data-anchor='[data-k="scope"]' data-side="below">
+        <div class="h"><span>Every campaign</span><span class="chip ok">Yours · 8 calls</span></div>
+        <hr>
+        <div><span>Final Expense · TX</span><span class="k">Agency cadence</span></div>
+        <div><span>Final Expense · GA</span><span class="k">Agency cadence</span></div>
+        <div><span>Medicare · FL</span><span class="chip info">Own · 5 calls</span></div>
+        <div><span>Aged leads · Nationwide</span><span class="k">Agency cadence</span></div>
+        <hr>
+        <div class="a">Give a campaign its own cadence…</div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A · Campaign override sheet</h2><span>"This campaign uses its own cadence": same timeline, with the campaign's narrower hours and Florida's limits drawn in.</span></div>
+    <div class="app" data-shell><div data-use="A-main"></div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Medicare · FL</b><span class="chip info">Own cadence</span><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <label class="l">Which cadence does this campaign run?</label>
+          <div class="ck"><span class="radio"></span>Use the agency cadence <span class="muted small">8 calls over 13 days</span></div>
+          <div class="ck"><span class="radio on"></span><b>This campaign uses its own cadence</b></div>
+          <p class="help" style="margin:0 0 12px 24px">It replaces the agency cadence completely for this campaign. The two never mix.</p>
+          <div class="row" style="margin-bottom:6px"><span class="seg"><span class="on">Gentle</span><span>Balanced</span><span>Persistent</span><span>Custom</span></span><span class="sp" style="flex:1"></span><span class="lbl">Max calls</span><span class="stepper"><span>−</span><b>5</b><span>+</span></span></div>
+          <p class="wtx" style="margin:0 0 12px">Persistent would put 4 calls on day 1. Florida allows 3 in 24 hours, so the 4th would move to day 2.</p>
+          <p class="sum">A Medicare lead that never answers gets <span class="g">5 calls over 10 days</span>, mornings and afternoons.</p>
+          <div class="tl sm" data-tl='{"calls":[[1,1,"m"],[2,1,"a"],[3,3,"a"],[4,6,"m"],[5,10,"a"]],"blk":{"7":"Sun","11":"Hol.","14":"Sun"},"part":{"e":"after 6pm"}}'></div>
+          <div class="lg"><span><i class="sw p"></i>Outside this campaign's hours (10am–6pm)</span><span><i class="sw"></i>No calls</span></div>
+          <div class="grp-h" style="margin-top:16px">Rules that shape this campaign</div>
+          <div class="li"><div><b>Campaign hours 10am–6pm</b><small>Narrower than your agency hours · from Calling windows</small></div><span class="end chip ok">Fits</span></div>
+          <div class="li"><div><b>Florida: 8am–8pm, at most 3 calls in 24 hours</b><small>Busiest day has 2 calls</small></div><span class="end chip ok">Fits</span></div>
+          <div class="li"><div><b>No Sundays, no federal holidays</b><small>Nothing planned on those days</small></div><span class="end chip ok">Fits</span></div>
+          <p class="help"><span class="lk s">Edit calling windows ↗</span></p>
+        </div>
+        <div class="sheet-f"><span class="btn g">Cancel</span><span class="btn p">Save Medicare · FL cadence</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A · History</h2><span>Every save is a version with what changed in words. View draws it on the timeline; Restore makes it the draft.</span></div>
+    <div class="app" data-shell><div data-use="A-main"></div><div class="scrim"></div><div data-use="versions"></div></div>
+
+    <div class="sec"><h2>A · Reset to the Insurvas default</h2><span>Says exactly what changes and that nothing is lost.</span></div>
+    <div class="app" data-shell><div data-use="A-main"></div><div class="scrim"></div><div data-use="reset"></div></div>
+
+    <div class="sec"><h2>A · Loading, empty, error</h2><span>Inside the card, never a notice above it</span></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Agency cadence</b></div><div class="card-b"><div class="skel" style="width:70%;height:16px"></div><div class="skel" style="width:40%"></div><div class="skel" style="height:120px;border-radius:12px"></div></div></div>
+      <div class="card"><div class="empty"><span class="ic">◷</span><b>No cadence of your own yet</b><p>The Insurvas default is in force: 7 calls over 12 days, front-loaded.</p><span class="btn p">Copy it and edit</span></div></div>
+      <div class="card"><div class="empty"><span class="ic" style="background:var(--bad-s);color:var(--bad)">!</span><b>Couldn't load the cadence</b><p>The dialer keeps using the last saved cadence. Check your connection.</p><span class="btn o">Try again</span></div></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════ OPTION B · PLAIN SENTENCES ════════════════════════ -->
+  <template id="B-main">
+    <div class="main">
+      <div class="crumb">Settings › Leads &amp; calling</div>
+      <div class="head"><h3>Dialing cadence</h3>
+        <nav class="tabs"><a class="on">No answer</a><a>Voicemail<span class="c">2 differ</span></a><a>Busy</a><a>Hung up<span class="c">1 differs</span></a></nav>
+        <div class="acts"><span class="input sm"><span class="muted">Applies to</span> Every campaign <span class="chip ok">Yours</span> ▾</span><span class="btn g">History</span><span class="btn o">Reset to default</span></div></div>
+      <div class="status warn"><span class="dot"></span>Yours is in force on 3 of 4 campaigns · steps 6 and 7 often land on a no-call day and move to the next allowed time · saved by Dana Alvarez 2 days ago</div>
+      <div class="body">
+        <div class="card flex1">
+          <div class="card-h"><b>When a call doesn't connect</b><span class="muted small">Showing: no answer</span>
+            <div class="r"><span class="btn o sm">Copy to Voicemail…</span><span class="lbl">Max calls</span><span class="stepper"><span>−</span><b>8</b><span>+</span></span></div></div>
+          <div class="scroll"><div class="card-b">
+            <div class="grp-h">First 3 days</div>
+            <div class="sc lock"><span class="n">1</span><p>Call <b>as soon as the lead arrives</b>, at any time we're allowed to.</p><span class="when">Mon 9:40am</span></div>
+            <div class="sc"><span class="n">2</span><p>If no answer, call again after <span class="dd" data-k="w2">3 hours</span> <span class="dd">any time</span>.</p><span class="when">Mon 12:40pm</span><span class="more">⋯</span></div>
+            <div class="sc"><span class="n">3</span><p>If still no answer, call again after <span class="dd">1 day</span> in the <span class="dd">evening</span>.</p><span class="when">Tue 6:15pm</span><span class="more">⋯</span></div>
+            <div class="sc"><span class="n">4</span><p>If still no answer, call again after <span class="dd">1 day</span> in the <span class="dd">morning</span>.</p><span class="when">Wed 10:05am</span><span class="more">⋯</span></div>
+            <div class="grp-h">Rest of the first week</div>
+            <div class="sc"><span class="n">5</span><p>If still no answer, call again after <span class="dd">2 days</span> in the <span class="dd">afternoon</span>.</p><span class="when">Fri 2:30pm</span><span class="more">⋯</span></div>
+            <div class="sc"><span class="n">6</span><p>If still no answer, call again after <span class="dd">2 days</span> in the <span class="dd">morning</span>.</p><span class="when"><span class="chip warn">Sun → Mon 9:30am</span></span><span class="more">⋯</span></div>
+            <div class="grp-h">Week 2</div>
+            <div class="sc"><span class="n">7</span><p>If still no answer, call again after <span class="dd">3 days</span> in the <span class="dd">afternoon</span>.</p><span class="when"><span class="chip warn">Holiday → Fri 1:45pm</span></span><span class="more">⋯</span></div>
+            <div class="sc"><span class="n">8</span><p>If still no answer, make a last call after <span class="dd">1 day</span> in the <span class="dd">afternoon</span>, then <span class="dd">move the lead to Nurture</span>.</p><span class="when">Sat 3:10pm</span><span class="more">⋯</span></div>
+            <div class="sc add">+ Add a step</div>
+          </div></div>
+          <div class="savebar">1 change not saved · step 5 now waits 2 days (was 1)<span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save cadence</span></div>
+        </div>
+        <div class="card side">
+          <div class="card-h"><b>What happens</b></div>
+          <div class="scroll"><div class="card-b">
+            <p class="sum">A lead that never answers gets <span class="g">8 calls over 13 days</span>.</p>
+            <p class="sub" style="margin-bottom:6px">Calls per day, example lead arriving Mon 16 Nov</p>
+            <div class="dens"><i style="height:100%"></i><i style="height:50%"></i><i style="height:50%"></i><i class="z"></i><i style="height:50%"></i><i class="z"></i><i class="b"></i><i style="height:50%"></i><i class="z"></i><i class="z"></i><i class="b"></i><i style="height:50%"></i><i style="height:50%"></i><i class="b"></i></div>
+            <div class="dens-x"><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>9</span><span>10</span><span>11</span><span>12</span><span>13</span><span>14</span></div>
+            <div class="grp-h" style="margin-top:16px">How the other outcomes differ</div>
+            <div class="li"><div><b>Voicemail</b><small>Steps 2 and 3 wait longer (1 day, 2 days)</small></div><span class="end chip info">2 differ</span></div>
+            <div class="li"><div><b>Busy</b><small>Same as no answer</small></div></div>
+            <div class="li"><div><b>Hung up</b><small>Step 2 waits 4 days</small></div><span class="end chip info">1 differs</span></div>
+            <div class="grp-h" style="margin-top:16px">Limits the dialer respects</div>
+            <div class="li"><div><b>Agency hours 9am–8pm, Mon–Sat</b><small>No Sundays, no federal holidays</small></div></div>
+            <div class="li"><div><b>Texas</b><small>Sunday only noon–9pm (your hours are tighter)</small></div></div>
+            <p class="help"><span class="lk s">Calling windows ↗</span></p>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <div class="opt B">
+    <div class="sec"><h2>B · Main screen</h2><span>Each step reads as a sentence with the choices inline. One tab per outcome; a step that differs from No answer gets a blue edge.</span></div>
+    <div class="app" data-shell><div data-use="B-main"></div></div>
+
+    <div class="sec"><h2>B · Edit a step</h2><span>Every underlined choice is a small dropdown. The menu says when the call would land.</span></div>
+    <div class="app" data-shell><div data-use="B-main"></div>
+      <div class="menu wide pop" style="padding:4px;width:300px" data-anchor='[data-k="w2"]' data-side="below">
+        <div><span>30 minutes</span><span class="k">Mon 10:10am</span></div>
+        <div><span>1 hour</span><span class="k">Mon 10:40am</span></div>
+        <div class="h"><span><b>3 hours</b></span><span class="k">Mon 12:40pm ✓</span></div>
+        <div><span>4 hours</span><span class="k">Mon 1:40pm</span></div>
+        <hr>
+        <div><span>Next day</span><span class="k">Tue</span></div>
+        <div><span>2 days</span><span class="k">Wed</span></div>
+        <div><span>3 days</span><span class="k">Thu</span></div>
+        <hr>
+        <div class="a">Something else…</div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B · Voicemail tab</h2><span>Same steps; the ones that differ are marked, with a one-click way back to No answer's setting.</span></div>
+    <div class="app" data-shell>
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Dialing cadence</h3><nav class="tabs"><a>No answer</a><a class="on">Voicemail<span class="c">2 differ</span></a><a>Busy</a><a>Hung up<span class="c">1 differs</span></a></nav><div class="acts"><span class="input sm"><span class="muted">Applies to</span> Every campaign <span class="chip ok">Yours</span> ▾</span><span class="btn g">History</span><span class="btn o">Reset to default</span></div></div>
+        <div class="status"><span class="dot"></span>After a voicemail, 2 steps wait longer than after no answer · saved</div>
+        <div class="body"><div class="card flex1"><div class="card-h"><b>When the call goes to voicemail</b><div class="r"><span class="lbl">Max calls</span><span class="stepper"><span>−</span><b>8</b><span>+</span></span></div></div>
+          <div class="scroll"><div class="card-b">
+            <div class="sc lock"><span class="n">1</span><p>Call <b>as soon as the lead arrives</b>.</p><span class="when">Mon 9:40am</span></div>
+            <div class="sc diff"><span class="n">2</span><p>If it goes to voicemail, call again after <span class="dd">1 day</span> <span class="dd">any time</span>.</p><span class="when"><span class="chip info">No answer: 3 hours</span> <span class="lk s">Match</span></span></div>
+            <div class="sc diff"><span class="n">3</span><p>If voicemail again, call again after <span class="dd">2 days</span> in the <span class="dd">evening</span>.</p><span class="when"><span class="chip info">No answer: 1 day</span> <span class="lk s">Match</span></span></div>
+            <div class="sc"><span class="n">4</span><p>Then follow the no-answer steps from step 4 on.</p><span class="when muted">Same as No answer</span></div>
+            <div class="sc add">+ Make another step different</div>
+          </div></div></div></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B · Campaign override sheet</h2><span>A list of campaigns, each saying which cadence it runs. Turning one on copies the agency steps to start from.</span></div>
+    <div class="app" data-shell><div data-use="B-main"></div><div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Campaign cadences</b><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="li"><div><b>Final Expense · TX</b><small>Agency cadence · 8 calls over 13 days</small></div><span class="end switch"></span></div>
+          <div class="li"><div><b>Final Expense · GA</b><small>Agency cadence · 8 calls over 13 days</small></div><span class="end switch"></span></div>
+          <div class="li on"><div><b>Medicare · FL</b><small>This campaign uses its own cadence · 5 calls over 10 days</small></div><span class="end switch on"></span></div>
+          <div style="padding:12px 0 6px 12px">
+            <div class="sc lock"><span class="n">1</span><p>Call <b>as soon as the lead arrives</b>, between 10am and 6pm.</p></div>
+            <div class="sc"><span class="n">2</span><p>If no answer, call again after <span class="dd">4 hours</span> <span class="dd">any time</span>.</p></div>
+            <div class="sc"><span class="n">3</span><p>If still no answer, call again after <span class="dd">2 days</span> in the <span class="dd">afternoon</span>.</p></div>
+            <div class="sc"><span class="n">4</span><p>If still no answer, call again after <span class="dd">3 days</span> in the <span class="dd">morning</span>.</p></div>
+            <div class="sc"><span class="n">5</span><p>Last call after <span class="dd">4 days</span> in the <span class="dd">afternoon</span>, then <span class="dd">move to Nurture</span>.</p><span class="when"><span class="chip warn">Thanksgiving → Fri</span></span></div>
+            <p class="help">Florida allows 3 calls in 24 hours; the busiest day has 2. Campaign hours 10am–6pm, so "evening" isn't offered here.</p>
+          </div>
+          <div class="li"><div><b>Aged leads · Nationwide</b><small>Agency cadence · 8 calls over 13 days</small></div><span class="end switch"></span></div>
+        </div>
+        <div class="sheet-f"><span class="btn g">Cancel</span><span class="btn p">Save campaign cadences</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>B · History</h2><span>Same versions sheet as A</span></div>
+    <div class="app" data-shell><div data-use="B-main"></div><div class="scrim"></div><div data-use="versions"></div></div>
+
+    <div class="sec"><h2>B · Reset to the Insurvas default</h2></div>
+    <div class="app" data-shell><div data-use="B-main"></div><div class="scrim"></div><div data-use="reset"></div></div>
+
+    <div class="sec"><h2>B · Loading, empty, error</h2></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>When a call doesn't connect</b></div><div class="card-b"><div class="skel" style="height:40px;border-radius:12px"></div><div class="skel" style="height:40px;border-radius:12px"></div><div class="skel" style="height:40px;border-radius:12px;width:80%"></div></div></div>
+      <div class="card"><div class="empty"><span class="ic">◷</span><b>You're on the Insurvas default</b><p>7 calls over 12 days. Copy the steps to change them.</p><span class="btn p">Copy the steps</span></div></div>
+      <div class="card"><div class="empty"><span class="ic" style="background:var(--bad-s);color:var(--bad)">!</span><b>Couldn't load the steps</b><p>The dialer keeps using the last saved cadence.</p><span class="btn o">Try again</span></div></div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════ OPTION C · SIMULATOR FIRST ════════════════════════ -->
+  <template id="C-main">
+    <div class="main">
+      <div class="crumb">Settings › Leads &amp; calling</div>
+      <div class="head"><h3>Dialing cadence</h3>
+        <nav class="tabs"><a class="on">Simulator</a><a>Rule list</a></nav>
+        <div class="acts"><span class="btn g">History</span><span class="btn o">Reset to default</span></div></div>
+      <div class="status warn"><span class="dot"></span>Final Expense · TX runs your agency cadence · in this example 2 calls move to the next allowed day · saved by Dana Alvarez 2 days ago</div>
+      <div class="body">
+        <div class="card flex1">
+          <div class="card-h"><b>What the dialer will do</b><div class="r"><span class="muted small">Drag a call to another day, click it to edit</span></div></div>
+          <div class="scroll"><div class="card-b">
+            <div class="ctl">
+              <span class="input sm" data-k="camp"><span class="muted">Campaign</span> Final Expense · TX <span class="chip ok">Agency cadence</span> ▾</span>
+              <span class="seg"><span class="on">Never answers</span><span>Voicemail every time</span><span>Answers on call 4</span></span>
+              <span class="input sm"><span class="muted">Arrives</span> Mon 16 Nov, 9:40am ▾</span>
+            </div>
+            <div class="cal" data-cal='{"ev":[[1,"9:40a",1],[1,"12:40p",2],[2,"6:15p",3],[3,"10:05a",4],[5,"2:30p",5],[7,"9:30a",6,"gh"],[8,"9:30a",6,"mv"],[11,"1:45p",7,"gh"],[12,"1:45p",7,"mv"],[13,"3:10p",8]],"blk":{"7":"No calls · Sunday","11":"Thanksgiving","14":"No calls · Sunday"},"note":{"13":"Last call → Nurture"}}'></div>
+            <p class="sum" style="margin-top:12px">This lead gets <span class="g">8 calls over 13 days</span>. Calls 6 and 7 move off a Sunday and Thanksgiving.</p>
+          </div></div>
+        </div>
+        <div class="card side">
+          <div class="card-h"><b>The rules</b><span class="chip ok">Yours</span><div class="r"><span class="lbl">Max calls</span><span class="stepper"><span>−</span><b>8</b><span>+</span></span></div></div>
+          <div class="scroll">
+            <div class="wh"><span class="d">1</span><div><b>On arrival</b><small>Any allowed time</small></div></div>
+            <div class="wh"><span class="d">2</span><div><b>3 hours later</b><small>Any time</small></div></div>
+            <div class="wh"><span class="d">3</span><div><b>Next day</b><small>Evening</small></div></div>
+            <div class="wh"><span class="d">4</span><div><b>Next day</b><small>Morning</small></div></div>
+            <div class="wh" data-row="5"><span class="d">5</span><div><b>2 days later</b><small>Afternoon</small></div></div>
+            <div class="wh"><span class="d mv">6</span><div><b>2 days later</b><small>Morning</small></div><span class="end chip warn">Often Sunday</span></div>
+            <div class="wh"><span class="d mv">7</span><div><b>3 days later</b><small>Afternoon</small></div><span class="end chip warn">Holiday here</span></div>
+            <div class="wh"><span class="d">8</span><div><b>Next day</b><small>Afternoon · then Nurture</small></div></div>
+            <div class="wh"><span class="lk">+ Add a call</span></div>
+          </div>
+          <div class="savebar">1 change not saved<span class="sp"></span><span class="btn g sm">Discard</span><span class="btn p sm">Save</span></div>
+        </div>
+      </div>
+    </div>
+  </template>
+
+  <div class="opt C">
+    <div class="sec"><h2>C · Main screen</h2><span>Pick a campaign and a pattern of outcomes; a two-week calendar shows exactly what the dialer would do. Rules sit in the side panel.</span></div>
+    <div class="app tall" data-shell><div data-use="C-main"></div></div>
+
+    <div class="sec"><h2>C · Edit from the calendar</h2><span>Click a call: the popover talks about the rule behind it, and warns that it changes every lead, not only this example.</span></div>
+    <div class="app tall" data-shell data-sel="5"><div data-use="C-main"></div>
+      <div class="pop" data-anchor='.cal [data-n="5"]'>
+        <div class="pop-h"><span class="d sel" style="cursor:default">5</span><b>Call 5 · Fri 20, 2:30pm</b><span class="x">✕</span></div>
+        <div class="pop-b">
+          <label class="l">Waits after call 4</label>
+          <div class="row"><span class="stepper"><span>−</span><b>2</b><span>+</span></span><span class="seg"><span>hours</span><span class="on">days</span></span></div>
+          <label class="l">Part of the day</label>
+          <span class="seg"><span>Any</span><span>Morning</span><span class="on">Afternoon</span><span>Evening</span></span>
+          <label class="l">Only after</label>
+          <div class="row"><span class="tog on">No answer</span><span class="tog on">Voicemail</span><span class="tog on">Busy</span><span class="tog">Hung up</span></div>
+          <div class="help">This changes rule 5 for every lead on the agency cadence (3 campaigns), not just this example.</div>
+        </div>
+        <div class="pop-f"><span class="btn danger sm">Remove call</span><span class="sp"></span><span class="btn p sm">Apply</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C · Outcome pattern: answers on call 4</h2><span>The simulator also shows what stops: once the lead answers, the remaining calls are greyed out.</span></div>
+    <div class="app tall" data-shell>
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Dialing cadence</h3><nav class="tabs"><a class="on">Simulator</a><a>Rule list</a></nav><div class="acts"><span class="btn g">History</span><span class="btn o">Reset to default</span></div></div>
+        <div class="status"><span class="dot"></span>Final Expense · TX runs your agency cadence · saved</div>
+        <div class="body"><div class="card flex1"><div class="card-h"><b>What the dialer will do</b></div>
+          <div class="scroll"><div class="card-b">
+            <div class="ctl"><span class="input sm"><span class="muted">Campaign</span> Final Expense · TX <span class="chip ok">Agency cadence</span> ▾</span><span class="seg"><span>Never answers</span><span>Voicemail every time</span><span class="on">Answers on call 4</span></span><span class="input sm"><span class="muted">Arrives</span> Mon 16 Nov, 9:40am ▾</span></div>
+            <div class="cal" data-cal='{"ev":[[1,"9:40a",1,"vm","Voicemail"],[1,"12:40p",2],[2,"6:15p",3,"vm","Voicemail"],[3,"10:05a",4,"ans","Answered"],[5,"2:30p",5,"off"],[8,"9:30a",6,"off"],[12,"1:45p",7,"off"],[13,"3:10p",8,"off"]],"blk":{"7":"No calls · Sunday","11":"Thanksgiving","14":"No calls · Sunday"},"note":{"3":"Cadence stops"}}'></div>
+            <p class="sum" style="margin-top:12px">The lead answers on call 4, <span class="g">2 days</span> after arriving. Calls 5–8 never happen.</p>
+          </div></div></div>
+          <div class="card side"><div class="card-h"><b>Outcome per call</b></div><div class="scroll">
+            <div class="wh"><span class="d vm">1</span><div><b>Voicemail</b><small>So call 2 follows the voicemail rule</small></div></div>
+            <div class="wh"><span class="d">2</span><div><b>No answer</b></div></div>
+            <div class="wh"><span class="d vm">3</span><div><b>Voicemail</b></div></div>
+            <div class="wh"><span class="d" style="background:var(--ok);color:var(--card)">4</span><div><b>Answered</b><small>Cadence stops; the agent's disposition takes over</small></div></div>
+            <div class="wh"><span class="lk">Change the pattern…</span></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C · Campaign override sheet</h2><span>Opened from the campaign picker: "This campaign uses its own cadence", with its own mini calendar.</span></div>
+    <div class="app tall" data-shell><div data-use="C-main"></div><div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><b>Medicare · FL</b><span class="chip info">Own cadence</span><span class="x">✕</span></div>
+        <div class="sheet-b">
+          <div class="ck"><span class="switch on"></span><b>This campaign uses its own cadence</b></div>
+          <p class="help" style="margin:0 0 12px">Replaces the agency cadence completely for Medicare · FL. Turn off to go back to it.</p>
+          <div class="row" style="margin-bottom:12px"><span class="lbl">Start from</span><span class="seg"><span>Agency cadence</span><span class="on">Gentle</span><span>Balanced</span></span><span style="flex:1"></span><span class="lbl">Max calls</span><span class="stepper"><span>−</span><b>5</b><span>+</span></span></div>
+          <div class="cal sm" data-cal='{"ev":[[1,"10:00a",1],[1,"2:00p",2],[3,"3:15p",3],[6,"11:00a",4],[11,"2:30p",5,"gh"],[12,"2:30p",5,"mv"]],"blk":{"7":"Sunday","11":"Holiday","14":"Sunday"}}'></div>
+          <p class="sum" style="margin-top:12px">A Medicare lead that never answers gets <span class="g">5 calls over 12 days</span>.</p>
+          <div class="li"><div><b>Campaign hours 10am–6pm</b><small>All 5 calls inside</small></div><span class="end chip ok">Fits</span></div>
+          <div class="li"><div><b>Florida: at most 3 calls in 24 hours</b><small>Busiest day has 2</small></div><span class="end chip ok">Fits</span></div>
+          <div class="li"><div><b>Call 5 lands on Thanksgiving</b><small>Moves to Fri 27, 2:30pm</small></div><span class="end chip warn">Moves</span></div>
+        </div>
+        <div class="sheet-f"><span class="btn g">Cancel</span><span class="btn p">Save Medicare · FL cadence</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>C · History</h2><span>Same versions sheet; View replays that version in the simulator.</span></div>
+    <div class="app tall" data-shell><div data-use="C-main"></div><div class="scrim"></div><div data-use="versions"></div></div>
+
+    <div class="sec"><h2>C · Reset to the Insurvas default</h2></div>
+    <div class="app tall" data-shell><div data-use="C-main"></div><div class="scrim"></div><div data-use="reset"></div></div>
+
+    <div class="sec"><h2>C · Loading, empty, error</h2></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>What the dialer will do</b></div><div class="card-b"><div class="skel" style="width:60%"></div><div class="skel" style="height:110px;border-radius:12px"></div></div></div>
+      <div class="card"><div class="empty"><span class="ic">◷</span><b>No campaigns to simulate yet</b><p>Create a campaign, or simulate the Insurvas default on its own.</p><span class="btn p">Simulate the default</span></div></div>
+      <div class="card"><div class="empty"><span class="ic" style="background:var(--bad-s);color:var(--bad)">!</span><b>Couldn't run the simulator</b><p>Calling windows didn't load. The dialer still enforces them.</p><span class="btn o">Try again</span></div></div>
+    </div>
+  </div>
+
+  <!-- shared overlays -->
+  <template id="versions">
+    <aside class="sheet wide">
+      <div class="sheet-h"><b>Cadence history</b><span class="muted small">Every campaign</span><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="vr"><div class="meta"><b>Version 4</b> <span class="chip ok">In force</span><small>8 calls over 13 days · Dana Alvarez · Tue 10 Nov, 4:12pm</small></div></div>
+        <div class="vr on"><div class="meta"><b>Version 3</b><small>7 calls over 12 days · Marcus Reed · Fri 2 Oct, 11:03am</small>
+          <ul class="chg"><li class="add">Version 4 added call 8: 1 day after call 7, afternoon</li><li>Call 5 waits 2 days (was 1 day)</li><li>Call 3 in the evening (was any time)</li></ul></div>
+          <div class="acts"><span class="btn o sm">View</span><span class="btn o sm">Restore</span></div></div>
+        <div class="vr"><div class="meta"><b>Version 2</b><small>7 calls over 12 days · Dana Alvarez · Fri 18 Sep</small></div><div class="acts"><span class="btn o sm">View</span><span class="btn o sm">Restore</span></div></div>
+        <div class="vr"><div class="meta"><b>Version 1</b><small>Copied from the Insurvas default · Dana Alvarez · Mon 14 Sep</small></div><div class="acts"><span class="btn o sm">View</span><span class="btn o sm">Restore</span></div></div>
+        <div class="vr"><div class="meta"><b>Insurvas default</b><small>7 calls over 12 days · before 14 Sep</small></div><div class="acts"><span class="btn o sm">View</span></div></div>
+        <p class="help">Restore loads a version as your draft. Nothing changes for the dialer until you save.</p>
+      </div>
+      <div class="sheet-f"><span class="btn g">Close</span><span class="btn p">Restore version 3</span></div>
+    </aside>
+  </template>
+  <template id="reset">
+    <div class="dialog">
+      <h4>Go back to the Insurvas default?</h4>
+      <p>Final Expense · TX, Final Expense · GA and Aged leads · Nationwide go back to 7 calls over 12 days. Medicare · FL keeps its own cadence.</p>
+      <p class="small muted">Leads already mid-cadence keep their next scheduled call. Your version 4 stays in History, so you can restore it.</p>
+      <div class="row" style="justify-content:flex-end"><span class="btn g">Cancel</span><span class="btn danger">Reset to default</span></div>
+    </div>
+  </template>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose</span></div>
+  <div class="pick">
+    <div class="rec"><b>A · Visual timeline (recommended)</b>The cadence becomes a 14-day timeline with calls as dots in morning, afternoon and evening rows. Drag to change a wait, click to edit, presets plus a max-calls stepper, and a sentence that reads the result back.
+      <ul><li>New vs today: no attempt numbering to learn. Call 1 is just the first dot.</li><li>New: Sundays, holidays and campaign hours drawn as striped areas; moved calls turn orange on the timeline and in the status line, not as notice cards.</li><li>New: Gentle / Balanced / Persistent presets, outcome tabs (Voicemail differs…), and a "What happens" list beside the timeline.</li><li>New: scope picker that shows which campaigns run their own cadence; history with changes in words; a reset dialog that says who is affected.</li></ul></div>
+    <div><b>B · Rules in plain sentences</b>Each step is a sentence ("If still no answer, call again after 2 days in the afternoon") with inline dropdowns, one tab per outcome, and a calls-per-day bar strip.
+      <ul><li>New vs today: reads like a policy; nothing to decode.</li><li>Closest to today's data model, so the cheapest build.</li><li>Weaker: you still read the shape rather than see it; moved calls appear only as chips on a step.</li></ul></div>
+    <div><b>C · Simulator first</b>Pick a campaign and an outcome pattern, see a two-week calendar of exactly what the dialer does, and edit from the calendar; rules sit in a side panel.
+      <ul><li>New vs today: answers "what will happen to my leads" directly, including when the cadence stops on an answer.</li><li>Best for checking calling-window conflicts per campaign.</li><li>Weaker: editing one example lead changes the rule for every lead, which can surprise people; needs the warning in the popover.</li></ul></div>
+  </div>
+</div>
+<script>
+/* Board-only helpers: stamp the shell, include templates, draw timelines and calendars, place popovers. */
+(function () {
+  var guard = 0;
+  while (document.querySelector("[data-use]") && guard++ < 10) {
+    document.querySelectorAll("[data-use]").forEach(function (el) {
+      var t = document.getElementById(el.getAttribute("data-use"));
+      el.replaceWith(t.content.cloneNode(true));
+    });
+  }
+  var SHELL =
+    '<div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>' +
+    '<div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>' +
+    '<nav class="srail"><div class="find">Search settings</div>' +
+    '<h5>Your agency</h5><a>Profile</a><a>Team &amp; roles</a>' +
+    '<h5>Leads &amp; calling</h5><a>Lead posting <small>3</small></a><a class="on">Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a>' +
+    '<h5>Sales</h5><a>Pipelines &amp; outcomes</a><a>Products</a>' +
+    '<h5>Money &amp; compliance</h5><a>Carriers</a><a>Disclosures</a></nav>';
+  document.querySelectorAll(".app[data-shell]").forEach(function (a) { a.insertAdjacentHTML("afterbegin", SHELL); });
+
+  var DAYS = ["Mon 16", "Tue 17", "Wed 18", "Thu 19", "Fri 20", "Sat 21", "Sun 22", "Mon 23", "Tue 24", "Wed 25", "Thu 26", "Fri 27", "Sat 28", "Sun 29"];
+  var BANDS = [["m", "Morning", "9am–noon"], ["a", "Afternoon", "noon–5pm"], ["e", "Evening", "5–8pm"]];
+  document.querySelectorAll("[data-tl]").forEach(function (el) {
+    var c = JSON.parse(el.getAttribute("data-tl")), sm = el.classList.contains("sm"), blk = c.blk || {}, part = c.part || {}, h = '<div class="c h lab"></div>', d;
+    for (d = 1; d <= 14; d++) h += '<div class="c h' + (blk[d] ? " blk" : "") + '"><b>' + (sm ? d : "Day " + d) + "</b>" + (sm ? "" : DAYS[d - 1]) + "</div>";
+    BANDS.forEach(function (b) {
+      h += '<div class="c lab"><span><b>' + b[1] + "</b>" + (sm ? (part[b[0]] || "") : (part[b[0]] || b[2])) + "</span></div>";
+      for (d = 1; d <= 14; d++) {
+        var cls = "c" + (blk[d] ? " blk" : part[b[0]] ? " part" : ""), inner = "";
+        (c.gh || []).forEach(function (k) { if (k[1] === d && k[2] === b[0]) inner += '<span class="d gh">' + k[0] + "</span>"; });
+        (c.calls || []).forEach(function (k) { if (k[1] === d && k[2] === b[0]) inner += '<span class="d' + (k[4] ? " " + k[4] : "") + '" data-n="' + k[0] + '">' + k[0] + "</span>"; });
+        if (blk[d] && b[0] === "a" && !inner) inner = '<span class="why">' + blk[d] + "</span>";
+        h += '<div class="' + cls + '">' + inner + "</div>";
+      }
+    });
+    if (!sm) {
+      h += '<div class="c w lab"><b>Wait</b></div>';
+      for (d = 1; d <= 14; d++) {
+        var w = (c.calls || []).filter(function (k) { return k[1] === d && k[3]; }).map(function (k) { return k[3]; });
+        h += '<div class="c w">' + w.join("<br>") + "</div>";
+      }
+    }
+    el.innerHTML = h;
+    if (el.dataset.drag) {
+      var dot = el.querySelector('[data-n="' + el.dataset.drag + '"]');
+      if (dot) dot.insertAdjacentHTML("beforeend", '<span class="tip">' + el.dataset.tip + "</span>");
+    }
+  });
+
+  document.querySelectorAll("[data-cal]").forEach(function (el) {
+    var c = JSON.parse(el.getAttribute("data-cal")), blk = c.blk || {}, note = c.note || {}, sm = el.classList.contains("sm");
+    var h = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(function (n) { return '<div class="dh">' + n + "</div>"; }).join("");
+    for (var d = 1; d <= 14; d++) {
+      var evs = c.ev.filter(function (e) { return e[0] === d; }).map(function (e) {
+        return '<span class="ev ' + (e[3] || "") + '" data-n="' + e[2] + '"><b>' + e[2] + "</b>" + (e[4] || e[1]) + "</span>";
+      }).join("");
+      var label = blk[d] || note[d] || (sm ? "" : "Day " + d);
+      h += '<div class="cd' + ((d - 1) % 7 === 0 ? " f" : "") + (blk[d] ? " blk" : "") + '"><div class="dn">' + (15 + d) + (d === 1 ? " Nov" : "") + "<span>" + label + "</span></div>" + evs + "</div>";
+    }
+    el.innerHTML = h;
+  });
+
+  document.querySelectorAll(".app[data-sel]").forEach(function (a) {
+    var n = a.getAttribute("data-sel");
+    a.querySelectorAll('.tl [data-n="' + n + '"], .cal [data-n="' + n + '"]').forEach(function (x) { x.classList.add("sel"); });
+    var row = a.querySelector('[data-row="' + n + '"]');
+    if (row) row.style.background = "var(--primary-soft)";
+  });
+
+  function place() {
+    document.querySelectorAll("[data-anchor]").forEach(function (p) {
+      var app = p.closest(".app"), a = app && app.querySelector(p.getAttribute("data-anchor"));
+      if (!a || !a.offsetParent) return;
+      var ar = app.getBoundingClientRect(), r = a.getBoundingClientRect(), x, y;
+      if (p.getAttribute("data-side") === "below") { x = r.right - ar.left - p.offsetWidth; y = r.bottom - ar.top + 6; }
+      else { x = r.right - ar.left + 14; y = r.top - ar.top - 24; if (x + p.offsetWidth > ar.width - 12) x = r.left - ar.left - p.offsetWidth - 14; }
+      x = Math.max(12, Math.min(x, ar.width - p.offsetWidth - 12));
+      y = Math.max(60, Math.min(y, ar.height - p.offsetHeight - 12));
+      p.style.left = x + "px"; p.style.top = y + "px";
+    });
+  }
+  new MutationObserver(function () { requestAnimationFrame(place); }).observe(document.body, { attributes: true });
+  window.addEventListener("resize", place);
+  window.addEventListener("load", place);
+  requestAnimationFrame(place);
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

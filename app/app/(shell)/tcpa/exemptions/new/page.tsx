@@ -17,7 +17,7 @@ export default async function NewExemptionPage() {
   if ((await scopeFor(guard.context)) !== null) return <RoleGateNotice reason="agency" featureLabel="DNC exemptions" detail="In an agency, the owner and admins keep the DNC exemptions." />;
   if (guard.entitlement.access === "read_only") return <RoleGateNotice featureLabel="DNC exemptions" detail="This plan is read-only here: exemptions can be seen, not recorded." />;
   return (
-    <ComplianceFlowPage step="dnc" title="Record a DNC exemption">
+    <ComplianceFlowPage step="dnc" title="Record an exemption">
       <TcpaExemptionForm />
     </ComplianceFlowPage>
   );

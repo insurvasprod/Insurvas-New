@@ -1,6 +1,6 @@
 import { COST_ENTRY_LABELS, type Basis, type CostEntryType } from "./costLedgerCore";
 import { EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "./expensesCore";
-import { IN_LABELS, type PeriodKind, type PnlLine } from "./pnlCore";
+import { IN_LABELS, type PeriodKind, type PnlLine, type Range } from "./pnlCore";
 
 /**
  * Profit & loss addresses (foundation pass 2026-11-03): the step's two tabs on the title line and each line's
@@ -39,14 +39,31 @@ export function lineLabel(l: Pick<PnlLine, "section" | "entryType" | "sourceType
   return l.sourceName ? `${kind} — ${l.sourceName}` : l.entryType === "lead_cost" ? "Lead costs — no source" : kind;
 }
 
-/** One line's entries, for this period and basis (/app/pnl/entries); the line's name rides along as its title. */
-export function entriesHref(l: PnlLine, q: PnlQuery) {
+/**
+ * One line's entries, for this period and basis (/app/pnl/entries). Only the line's identity travels; the page
+ * names the line from the statement itself (round 7: the title is never taken from the address).
+ */
+export function entriesHref(l: Pick<PnlLine, "section" | "entryType" | "sourceType" | "sourceId" | "sourceName">, q: PnlQuery) {
   const p = periodParams(q);
   p.set("section", l.section);
   p.set("entry_type", l.entryType);
-  p.set("label", lineLabel(l));
   if (l.sourceType) p.set("source_type", l.sourceType);
   if (l.sourceId) p.set("source_id", l.sourceId);
   if (l.sourceType === "expense_category" && l.sourceName) p.set("category", l.sourceName);
   return `/app/pnl/entries?${p}`;
 }
+
+/** The address of another period (the one before, last year) as the screen asks for it: a custom range ends the day before `to`. */
+export function queryFor(kind: PeriodKind, basis: Basis, r: Range): PnlQuery {
+  if (kind !== "custom") return { kind, anchor: r.from.slice(0, 7), from: "", to: "", basis };
+  const last = new Date(Date.parse(`${r.to}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+  return { kind, anchor: r.from.slice(0, 7), from: r.from, to: last, basis };
+}
+
+/** A month of the six-month view, opened on the Statement. */
+export function monthHref(ym: string, basis: Basis) {
+  return pnlHref({ kind: "month", anchor: ym, from: "", to: "", basis });
+}
+
+/** Bank deposits › Accounts: where a bank file is added, for "Not imported". */
+export const BANK_ACCOUNTS_HREF = "/app/bank?view=accounts";

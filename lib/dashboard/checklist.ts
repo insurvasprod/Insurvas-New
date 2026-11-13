@@ -91,10 +91,10 @@ type StepDefinition = Omit<SetupChecklistStep, "complete" | "skipped" | "group" 
  * "Finish a carrier" were folded into the carrier card's To finish list (MERGED_STEPS).
  */
 const SETUP_STEPS = [
-  { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers", action: "Add carriers", target: "carrier-library-add",
+  { key: "carriers", module: "book", label: "Add your carriers", path: "/app/settings#carriers/carriers-setup", action: "Add carriers", target: "carrier-library-add",
     instruction: "Tick the carriers you are contracted with. Contract level and writing number are optional.",
     why: "Every other step uses your carriers, so this comes first." },
-  { key: "states", module: "book", label: "Add your states", path: "/app/settings#carriers/carriers-states", action: "Add states",
+  { key: "states", module: "book", label: "Add your states", path: "/app/settings#carriers/carriers-setup", action: "Add states",
     instruction: "Choose the states where you are licensed and appointed with each carrier.",
     why: "Insurvas uses your states to check where you can sell and which leads you can work." },
   // The step key stays `lead-sources`: it is stored against every tenant's skipped/done marks, and
@@ -138,13 +138,13 @@ const SETUP_STEPS = [
   { key: "queue-sla", module: "inbound", label: "Set how fast transfers must be claimed", path: "/app/settings#queue-sla", action: "Set claim times", target: "queue-sla-save",
     instruction: "Set when an unclaimed transfer warns, escalates and expires.",
     why: "These times drive the Agent Floor alerts and when the partner is told." },
-  { key: "retention", module: "retention", label: "Set your retention rules", path: "/app/retention-settings", action: "Set retention",
+  { key: "retention", module: "retention", label: "Set your retention rules", path: "/app/retention-settings?tab=radar", action: "Set retention",
     instruction: "Choose which risk bands reach the save queue.",
     why: "The save queue only shows policies at or above the band you choose here." },
-  { key: "compliance", module: "compliance", label: "Set your compliance rules", path: "/app/compliance/settings", action: "Review rules",
+  { key: "compliance", module: "compliance", label: "Set your compliance rules", path: "/app/compliance/settings#retention", action: "Review rules",
     instruction: "Review how long each kind of record is kept.",
     why: "Records are deleted or held on these rules, so check them before your first call." },
-  { key: "accounting", module: "accounting", label: "Set up accounting", path: "/app/accounting-settings", action: "Set up accounting",
+  { key: "accounting", module: "accounting", label: "Set up accounting", path: "/app/accounting-settings?tab=bills", action: "Set up accounting",
     instruction: "Set the invoice tolerance your books should flag.",
     why: "Vendor invoices off by more than this are flagged for review." },
   { key: "hierarchy", module: "agency", label: "Set your hierarchy", path: "/app/hierarchy", action: "Set hierarchy",

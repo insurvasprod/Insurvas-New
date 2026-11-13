@@ -1,43 +1,25 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { cn } from "@/lib/utils";
+import { ViewTabs } from "@/components/ui/view-tabs";
 
-const tabs = [
-  ["/admin/billing", "Overview"],
-  ["/admin/invoices", "Invoices"],
-  ["/admin/coupons", "Coupons"],
-  ["/admin/credit-notes", "Refunds & credits"],
-  ["/admin/revenue", "Revenue"],
+const TABS = [
+  { key: "/admin/billing", label: "Overview" },
+  { key: "/admin/invoices", label: "Invoices" },
+  { key: "/admin/coupons", label: "Coupons" },
+  { key: "/admin/credit-notes", label: "Refunds & credits" },
+  { key: "/admin/revenue", label: "Revenue" },
 ] as const;
 
+type BillingTab = (typeof TABS)[number]["key"];
+
 /**
- * The billing workspace's tabs, drawn as the boards draw them: an underline strip, 40px tall, the
- * current tab in ink with a 2px primary rule. An invoice's own pages count as Invoices.
+ * The billing workspace's sub-pages: the shared sub-page bar (UI-CONSISTENCY §8b), passed as the page header's `tabs`
+ * so it sits on the title's line. Each tab is its own address; an invoice's own pages count as Invoices.
  */
 export function BillingTabs() {
-  const pathname = usePathname();
-
-  return (
-    <nav aria-label="Billing workspace" className="flex gap-6 overflow-x-auto  border-[var(--border)]">
-      {tabs.map(([href, label]) => {
-        const active = pathname === href || (href === "/admin/invoices" && pathname.startsWith("/admin/invoices/"));
-        return (
-          <Link
-            key={href}
-            href={href}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "-mb-px inline-flex h-10 shrink-0 items-center border-b-2 px-1 text-sm leading-[1.43] font-semibold tracking-[-0.01em] no-underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]",
-              active ? "border-[var(--primary)] text-[var(--ink)]" : "border-transparent text-[var(--muted)] hover:text-[var(--ink)]",
-            )}
-          >
-            {label}
-          </Link>
-        );
-      })}
-    </nav>
-  );
+  const pathname = usePathname() ?? "";
+  const value: BillingTab = TABS.find((tab) => pathname === tab.key || (tab.key === "/admin/invoices" && pathname.startsWith("/admin/invoices/")))?.key ?? "/admin/billing";
+  return <ViewTabs label="Billing workspace" value={value} tabs={TABS.map((tab) => ({ ...tab, href: tab.key }))} />;
 }

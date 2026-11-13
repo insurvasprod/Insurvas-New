@@ -125,7 +125,7 @@ function Step({ to, off, current = false, label, hrefFor, onPage, className, chi
     STEP,
     current
       ? "bg-[var(--primary)] text-[var(--on-primary)] shadow-sm"
-      : "border border-border bg-[var(--surface)] text-foreground hover:border-[var(--border-strong)] hover:bg-[var(--surface-alt)]",
+      : "border border-border bg-[var(--surface)] text-foreground hover:border-[var(--border-strong)] hover:bg-[var(--hover-wash)]",
     off && !current && "pointer-events-none opacity-40",
     className,
   );

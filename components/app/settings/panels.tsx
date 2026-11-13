@@ -16,10 +16,8 @@ import { BusinessIdentitySettings } from "@/components/app/settings/business-ide
 import { MyProfileSettings } from "@/components/app/settings/my-profile";
 import { IntegrationsSettings } from "@/components/app/settings/integrations";
 import { SettingsHistory } from "@/components/app/settings/settings-history";
-import {
-  SalesAiAssistant, SalesDisclosures, SalesExtension, SalesFieldSets,
-  SalesPipelineSync, SalesQaPreferences, SalesQuotationTemplates, SalesUnderwritingTemplates, SalesWelcomePack,
-} from "@/components/app/settings/sales";
+import { SalesAiAssistant, SalesExtension, SalesWelcomePack } from "@/components/app/settings/sales";
+import { SalesProcessSettings } from "@/components/app/settings/sales-process/sales-process";
 import type { TeamSnapshot } from "@/lib/tenantTeam/service";
 import type { WorkspaceSnapshot } from "@/lib/settings/workspaceSnapshot";
 
@@ -52,13 +50,10 @@ export const SETTINGS_PANELS: Record<string, (context: SettingsPanelContext) => 
   "lead-posting": () => <LeadPostKeysSettings />,
   pipelines: () => <PipelinesOutcomesSettings />,
   "form-templates": () => <TemplateSettings />,
-  "sales-underwriting": () => <SalesUnderwritingTemplates />,
-  "sales-quotation": () => <SalesQuotationTemplates />,
-  "sales-field-sets": () => <SalesFieldSets />,
-  "sales-disclosures": () => <SalesDisclosures />,
-  "sales-preferences": () => <SalesQaPreferences />,
+  // Round 8 (2026-11-12): the six Selling pages are the header tabs of one section. Only an owner is handed the
+  // workspace snapshot, so its absence means a producer, who reads Health questions only.
+  "sales-process": ({ team, workspace }) => <SalesProcessSettings owner={Boolean(team || workspace)} />,
   "sales-welcome-pack": () => <SalesWelcomePack />,
-  "sales-pipeline-sync": () => <SalesPipelineSync />,
   "sales-ai": () => <SalesAiAssistant />,
   "sales-extension": () => <SalesExtension />,
   integrations: () => <IntegrationsSettings />,

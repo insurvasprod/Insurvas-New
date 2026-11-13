@@ -9,10 +9,11 @@ import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 
 /**
  * POST /api/app/api-keys/:id/rotate — a new key with the same name and scopes; the old one keeps
- * working for the overlap (default 24 hours) and then stops. The new key is in this response once.
+ * working for the overlap (default 24 hours; 0 stops it now) and then stops. The new key is in this response once.
  */
 const schema = z.object({
-  overlapHours: z.union([z.literal(ROTATION_OVERLAP_HOURS[0]), z.literal(ROTATION_OVERLAP_HOURS[1]), z.literal(ROTATION_OVERLAP_HOURS[2])]).default(DEFAULT_ROTATION_OVERLAP_HOURS),
+  // 0 is "stops now", for a key that may have leaked.
+  overlapHours: z.number().refine((hours) => (ROTATION_OVERLAP_HOURS as readonly number[]).includes(hours)).default(DEFAULT_ROTATION_OVERLAP_HOURS),
 }).strict();
 
 export async function POST(request: NextRequest, context: { params: Promise<{ id: string }> }) {
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   const { id } = await context.params;
   if (!/^[0-9a-f-]{36}$/i.test(id)) return NextResponse.json({ error: "Unknown key" }, { status: 404 });
   const parsed = schema.safeParse((await request.json().catch(() => ({}))) ?? {});
-  if (!parsed.success) return NextResponse.json({ error: "Choose an overlap of 1, 24 or 72 hours" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "Choose how long the old key keeps working: stops now, 1 hour, 24 hours or 3 days" }, { status: 400 });
   try {
     const rotated = await rotateApiKey({ tenantId: auth.context.tenantId, userId: auth.context.userId, keyId: id, overlapHours: parsed.data.overlapHours });
     await audit({

@@ -1,10 +1,10 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { ArrowRight, LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { clearResources } from "@/lib/client/resource-cache";
 import { cn } from "@/lib/utils";
 
 /**
@@ -12,7 +12,6 @@ import { cn } from "@/lib/utils";
  * cards use ("Sign out →"); the default is the outlined button for a dark header.
  */
 export function LogoutButton({ variant = "button", className }: { variant?: "button" | "link"; className?: string }) {
-  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,8 +21,10 @@ export function LogoutButton({ variant = "button", className }: { variant?: "but
     try {
       const response = await fetch("/api/app/auth/logout", { method: "POST" });
       if (!response.ok) throw new Error("Sign out could not be completed");
-      router.push("/app/login");
-      router.refresh();
+      // Nothing this person read stays in the tab (lib/client/resource-cache.ts), and the sign-in page
+      // loads as a fresh document, as the account menu's sign-out does (app-top-bar.tsx).
+      clearResources();
+      window.location.replace("/app/login");
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Sign out could not be completed");
       setLoading(false);

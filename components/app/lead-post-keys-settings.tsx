@@ -1,208 +1,97 @@
 "use client";
 
-import Link from "next/link";
-import { StatusChip } from "@/components/ui/status-chip";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, Copy, FlaskConical, Plus, X } from "lucide-react";
+import { Copy, Download, Plus } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { notify } from "@/lib/notify";
-import { dayMonthYear } from "@/lib/format/dates";
 import { Button } from "@/components/ui/button";
-import { DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
-import { SettingsSaveBar } from "@/components/ui/settings-layout";
-import { StatStrip, StatTile } from "@/components/ui/stat";
+import { ErrorState, LoadingRows, SectionLoading } from "@/components/ui/page-states";
 import { TableCard } from "@/components/ui/table-card";
-import { ToggleChip } from "@/components/ui/toggle-chip";
 import { UnderlineTabs } from "@/components/ui/view-tabs";
-import { Callout, control, Field, SettingsCard, SettingsMeter, SettingsSectionHeader, SettingsStack, st, pillTone } from "@/components/app/settings/primitives";
-import { cn } from "@/lib/utils";
-import { dateTime, viewerTimeZone } from "@/lib/format/dates";
-import { canonicalFieldMap, FIELD_RULES, KNOWN_LEAD_FIELDS, OUR_FIELD_PATTERN, readFieldMap } from "@/lib/leadPost/fieldMap";
-import { checkSample, guessFieldMap, NOT_CHECKED_HERE, parseSample } from "@/lib/leadPost/sampleCheck";
-import { REJECTION_LABELS, REJECTION_TONE, type PostActivity, type PostKey, type PostKeysLoaded } from "@/lib/leadPost/types";
+import { SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
+import { notify } from "@/lib/notify";
+import { viewerTimeZone } from "@/lib/format/dates";
+import { REASON_WORDS, type LeadPostBoard, type StatusFilter, type VendorRow } from "@/lib/leadPost/board";
 import type { CampaignSpeedRow } from "@/lib/leadPost/campaignSpeed";
-import { confirmAction } from "@/components/ui/confirm-dialog";
-import { LeaveGuard } from "@/components/ui/leave-guard";
+import type { PostActivity } from "@/lib/leadPost/types";
+import { PostsTable } from "@/components/app/settings/lead-posting/activity";
+import { ConnectWizard } from "@/components/app/settings/lead-posting/connect-wizard";
+import { GuideTab } from "@/components/app/settings/lead-posting/guide-tab";
+import { emailInstructions, tellVendor } from "@/components/app/settings/lead-posting/instructions";
+import { RevealDialog, RevokeDialog, RotateDialog } from "@/components/app/settings/lead-posting/key-dialogs";
+import { RejectionsTab, repeatingReasons, type Refused, type RejectionWindow } from "@/components/app/settings/lead-posting/rejections-tab";
+import { ago, copyText, InlineLink, send, StatusLine } from "@/components/app/settings/lead-posting/shared";
+import { VendorSheet, type SheetTab } from "@/components/app/settings/lead-posting/vendor-sheet";
+import { VendorTable } from "@/components/app/settings/lead-posting/vendor-table";
 
 /**
- * Settings › Lead posting (LA-2.5), owner pick A "Vendors" (canvas settings-lead-posting, 2026-10-30).
+ * Settings › Lead posting — round 8, option A "Vendor list + vendor sheet" (owner pick 2026-11-12,
+ * docs/design/settings-r8/lead-posting.html). Vendors post leads by API the moment someone fills a
+ * form; each post is mapped, scrubbed, de-duplicated and queued at the top, or refused with a reason
+ * — and a refused post is a lead the agency is not billed for.
  *
- * Vendors post leads by API the moment someone fills a form; each post is mapped, scrubbed,
- * de-duplicated and queued at the top, or rejected with a reason — and a rejected post is a lead the
- * agency is not billed for. The page reads top to bottom: where vendors post, the 30-day figures,
- * then one card per key on the left and the picked key's whole story on the right (its key and
- * campaign, its field map, why its posts bounced, its recent posts). Live posts from every vendor
- * sit under the cards. "Connect a vendor" makes a key, shows it once, and checks a sample post.
+ *   Vendors        one figure strip and every vendor on one table; a vendor opens as a right sheet
+ *                  (Setup · Field map · Test · Activity)
+ *   Activity       every post, newest first
+ *   Rejections     refused posts and the reasons that repeat, each with its fix
+ *   Vendor guide   the instructions any vendor can be sent
+ *
+ * "Connect a vendor" (the page's one gold button) walks vendor & campaign → the key, shown once →
+ * instructions → a test post. What needs migration 20261112100100 (test mode, price, cap, hours,
+ * status callback, rotation grace, notes, instructions tracking) is drawn and disabled with "needs a
+ * database update" until it is applied; everything else works today.
  */
 
-// One date form across Settings ("28 Oct 2026"; settings audit P9), in the viewer's own zone.
-const when = (value: string | null) => (value ? dayMonthYear(value, viewerTimeZone()) : null);
-const fmt = (n: number) => n.toLocaleString();
+type PageTab = "vendors" | "activity" | "rejections" | "guide";
+type Reveal = { vendorName: string; key: string; graceUntil: string | null; emailAfter: { keyId: string; to: string } | null };
 
-/** A row of the field-map draft. `id` is local, so React keys survive edits to either name. */
-type DraftRow = { id: string; theirs: string; ours: string; note: string };
-type Tab = "key" | "map" | "rejections" | "posts";
-const TABS: { key: Tab; label: string }[] = [
-  { key: "key", label: "Key & campaign" },
-  { key: "map", label: "Field map" },
-  { key: "rejections", label: "Rejections" },
-  { key: "posts", label: "Recent posts" },
-];
-
-let rowSeq = 0;
-const nextRowId = () => `row-${++rowSeq}`;
-
-function draftFromKey(key: PostKey | null): DraftRow[] {
-  if (!key) return [];
-  const notes = key.fieldNotes ?? {};
-  return readFieldMap(key.fieldMap).map((entry) => ({ id: nextRowId(), theirs: entry.theirs, ours: entry.ours, note: notes[entry.ours] ?? "" }));
-}
-
-function notesOf(rows: DraftRow[]) {
-  return Object.fromEntries(rows.filter((row) => row.ours.trim() && row.note.trim()).map((row) => [row.ours.trim(), row.note.trim()]));
-}
-
-const same = (a: Record<string, string>, b: Record<string, string>) => {
-  const ak = Object.keys(a);
-  const bk = Object.keys(b);
-  return ak.length === bk.length && ak.every((key) => a[key] === b[key]);
-};
-
-/** Code at 14px: the scale has no 13. */
-const code = cn(st.code, "text-sm");
-
-const cellInput =
-  "h-9 w-full min-w-0 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-2.5 text-sm text-[var(--ink)] outline-none focus:border-[var(--primary)] disabled:opacity-60";
-
-async function send(url: string, method: string, body: unknown) {
-  const response = await fetch(url, { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  const json = await response.json().catch(() => null);
-  if (!response.ok) throw new Error(json?.error ?? "Something went wrong");
-  return json;
-}
-
-/** Where a key stands, in a word: posting, never posted (the vendor never finished their side), disabled. */
-function keyState(key: PostKey) {
-  if (!key.isActive) return { label: "Disabled", tone: "neutral" as const };
-  if (!key.lastUsedAt) return { label: "Never posted", tone: "warning" as const };
-  return { label: "Posting", tone: "success" as const };
-}
-
-const seconds = (value: number | null) => {
-  if (value === null) return "—";
-  if (value < 60) return `${Math.round(value)} s`;
-  const minutes = Math.floor(value / 60);
-  return minutes < 60 ? `${minutes} min ${Math.round(value % 60)} s` : `${Math.round(minutes / 60)} h`;
-};
-
-/** The reason's fix, in the panel beside it. Null where there is nothing to do but not pay. */
-type Fix = { label: string; href?: string; tab?: "map"; rotate?: boolean } | null;
-function fixFor(reasonCode: string, key: PostKey | null): Fix {
-  switch (reasonCode) {
-    case "invalid_phone":
-    case "unknown_state":
-    case "missing_required_field":
-    case "invalid_date_of_birth":
-    case "missing_consent_text":
-    case "missing_consent_ip":
-      return { label: "Check the field map", tab: "map" };
-    case "state_not_licensed":
-      return { label: "Add a licence", href: "/app/settings#contracting" };
-    case "campaign_not_accepting":
-      return { label: "Open the campaign", href: key?.campaignId ? `/app/campaigns/${key.campaignId}` : "/app/campaigns" };
-    case "unauthorised":
-      return key ? { label: "Rotate and resend the key", rotate: true } : null;
-    default:
-      return null;
+/** The median first dial across campaigns, each campaign's median weighted by the leads it dialled. */
+function firstDialMedian(rows: CampaignSpeedRow[] | null): number | null {
+  const points = (rows ?? []).filter((row) => row.medianSeconds !== null && row.dialledLeads > 0).sort((a, b) => (a.medianSeconds ?? 0) - (b.medianSeconds ?? 0));
+  const total = points.reduce((sum, row) => sum + row.dialledLeads, 0);
+  let seen = 0;
+  for (const row of points) {
+    seen += row.dialledLeads;
+    if (seen * 2 >= total) return row.medianSeconds;
   }
+  return null;
 }
-
-/** What a reason means for the bill, for the reasons whose fix is not on this screen. */
-const REASON_NOTE: Record<string, string> = {
-  duplicate: "Already yours, so not billed. Send the vendor the count.",
-  suppressed_litigator: "Scrubbed out and not billed.",
-  suppressed_internal: "On your own do-not-call list; not billed.",
-  suppressed_dnc: "On a do-not-call registry; not billed.",
-  scrub_unavailable: "The suppression check was down; the vendor can retry.",
-  rate_limited: "Ask the vendor to post more slowly.",
-};
 
 export function LeadPostKeysSettings() {
-  const [loaded, setLoaded] = useState<PostKeysLoaded | null>(null);
+  const [board, setBoard] = useState<LeadPostBoard | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const [connectStep, setConnectStep] = useState<0 | 1 | 2 | 3>(0);
-  const [mintVendor, setMintVendor] = useState("");
-  const [mintCampaign, setMintCampaign] = useState("");
-  const [mintError, setMintError] = useState<string | null>(null);
-  const [campaignError, setCampaignError] = useState<{ keyId: string; message: string } | null>(null);
-  // Shown once, then gone. Kept in state rather than re-fetchable, because the server cannot
-  // return it again — and a screen that pretended otherwise would be lying about the storage.
-  const [revealed, setRevealed] = useState<{ key: string; vendorName: string } | null>(null);
+  const [tab, setTab] = useState<PageTab>("vendors");
+  const [filter, setFilter] = useState<StatusFilter>("all");
+  const [query, setQuery] = useState("");
+  const [sheet, setSheet] = useState<{ vendorId: string; tab: SheetTab } | null>(null);
+  const [wizard, setWizard] = useState<{ vendorId?: string } | null>(null);
+  const [rotating, setRotating] = useState<VendorRow | null>(null);
+  const [revoking, setRevoking] = useState<VendorRow | null>(null);
+  const [reveal, setReveal] = useState<Reveal | null>(null);
+  const [busy, setBusy] = useState(false);
   const [activity, setActivity] = useState<PostActivity | null>(null);
   const [activityError, setActivityError] = useState<string | null>(null);
-  // Null until read; an empty list when the plan has no dialing (the route answers 403) or it failed.
   const [speed, setSpeed] = useState<CampaignSpeedRow[] | null>(null);
-  const [showOlder, setShowOlder] = useState(false);
-  const [tab, setTab] = useState<Tab>("key");
-  const [sampleFor, setSampleFor] = useState<PostKey | null>(null);
+  const [days, setDays] = useState<RejectionWindow>(1);
+  const [vendorFilter, setVendorFilter] = useState("");
+  const [refused, setRefused] = useState<Refused | null>(null);
+  const [refusedError, setRefusedError] = useState<string | null>(null);
 
-  // Which keys the table lists (owner 2026-11-04): the live ones by default, so a pile of disabled keys stays out of the way.
-  const [keyFilter, setKeyFilter] = useState<"" | "active" | "disabled" | "all">("");
-  const [selectedKeyId, setSelectedKeyIdState] = useState("");
-  // Mirrors selectedKeyId for `load`, which runs from an effect and must not close over state.
-  const selectedRef = useRef("");
-  const setSelectedKeyId = useCallback((id: string) => {
-    selectedRef.current = id;
-    setSelectedKeyIdState(id);
-  }, []);
-  const [draft, setDraft] = useState<DraftRow[]>([]);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [keyQuery, setKeyQuery] = useState("");
-  const [refreshing, setRefreshing] = useState(false);
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
 
-  // A promise chain, not async/await: the effect below calls this on mount and every setState has
-  // to land in a callback rather than anywhere the linter can reach it synchronously.
+  // Promise chains, not async/await: the effect below calls these on mount, and every setState lands
+  // in a callback rather than anywhere the linter can reach synchronously.
   const load = useCallback(
-    (select?: string) =>
-      fetch("/api/app/lead-post-keys", { cache: "no-store" })
-        .then(async (response) => {
-          const body = await response.json().catch(() => null);
-          if (!response.ok) throw new Error(body?.error ?? "Could not load your posting keys");
-          return body as PostKeysLoaded;
-        })
-        .then((body) => {
-          setError(null);
-          setLoaded(body);
-          const wanted = select ?? selectedRef.current;
-          const next = body.keys.find((key) => key.id === wanted) ?? (wanted === "none" ? undefined : body.keys.find((key) => key.isActive) ?? body.keys[0]);
-          setSelectedKeyId(next?.id ?? "");
-          setDraft(draftFromKey(next ?? null));
-          setEditing(false);
-          setSaveError(null);
-        })
-        .catch((cause: unknown) => {
-          setError(cause instanceof Error ? cause.message : "Could not load your posting keys");
-        }),
-    [setSelectedKeyId],
+    () =>
+      send<LeadPostBoard>(`/api/app/lead-post-keys/board?tz=${encodeURIComponent(viewerTimeZone())}`, "GET")
+        .then((body) => { setBoard(body); setError(null); })
+        .catch((cause: unknown) => setError(cause instanceof Error ? cause.message : "Vendors didn't load")),
+    [],
   );
-
-  // Recent posts, rejections per vendor and speed to lead: read beside the keys, never blocking them.
   const loadActivity = useCallback(
     () =>
       Promise.all([
-        fetch("/api/app/lead-post-keys/activity", { cache: "no-store" })
-          .then(async (response) => {
-            const body = await response.json().catch(() => null);
-            if (!response.ok) throw new Error(body?.error ?? "Could not load recent posts");
-            setActivity(body as PostActivity);
-            setActivityError(null);
-          })
-          .catch((cause: unknown) => setActivityError(cause instanceof Error ? cause.message : "Could not load recent posts")),
+        send<PostActivity>("/api/app/lead-post-keys/activity", "GET").then((body) => { setActivity(body); setActivityError(null); }).catch((cause: unknown) => setActivityError(cause instanceof Error ? cause.message : "Posts didn't load")),
+        // An empty list when the plan has no dialing (the route answers 403) or it failed.
         fetch("/api/app/campaigns/speed-to-lead", { cache: "no-store" })
           .then(async (response) => {
             const body = await response.json().catch(() => null);
@@ -212,885 +101,244 @@ export function LeadPostKeysSettings() {
       ]),
     [],
   );
+  const loadRefused = useCallback(
+    (window: RejectionWindow) =>
+      send<Refused>(`/api/app/lead-post-keys/rejections?days=${window}&tz=${encodeURIComponent(viewerTimeZone())}`, "GET")
+        .then((body) => { setRefused(body); setRefusedError(null); })
+        .catch((cause: unknown) => setRefusedError(cause instanceof Error ? cause.message : "Refused posts didn't load")),
+    [],
+  );
 
   useEffect(() => {
     void load();
     void loadActivity();
   }, [load, loadActivity]);
+  useEffect(() => {
+    void loadRefused(days);
+  }, [days, loadRefused]);
 
-  const selectedKey = loaded?.keys.find((key) => key.id === selectedKeyId) ?? null;
+  const reloadAll = useCallback(async () => {
+    await Promise.all([load(), loadActivity()]);
+  }, [load, loadActivity]);
 
-  const draftProblems = useMemo(() => {
-    const problems = new Map<string, string>();
-    const seen = new Set<string>();
-    for (const row of draft) {
-      const ours = row.ours.trim();
-      const theirs = row.theirs.trim();
-      if (!ours && !theirs) continue;
-      if (!theirs) problems.set(row.id, "Enter the name they send.");
-      else if (theirs.length > 120) problems.set(row.id, "Their field name is too long.");
-      else if (!OUR_FIELD_PATTERN.test(ours)) problems.set(row.id, "Your field: lowercase letters, numbers and underscores, starting with a letter.");
-      else if (seen.has(ours)) problems.set(row.id, `${ours} is already mapped above.`);
-      else if (row.note.trim().length > 200) problems.set(row.id, "Keep the note under 200 characters.");
-      seen.add(ours);
-    }
-    return problems;
-  }, [draft]);
+  const vendorOf = useCallback((vendorId: string) => board?.vendors.find((row) => row.vendorId === vendorId) ?? null, [board]);
+  const open = (row: VendorRow, sheetTab: SheetTab = "setup") => setSheet({ vendorId: row.vendorId, tab: sheetTab });
+  const openById = (vendorId: string, sheetTab: SheetTab) => {
+    const row = vendorOf(vendorId);
+    if (row) { setTab("vendors"); open(row, sheetTab); }
+  };
 
-  const draftMap = canonicalFieldMap(draft);
-  const vendorKeys = selectedKey ? (loaded?.keys ?? []).filter((key) => key.vendorId === selectedKey.vendorId) : [];
-  const vendorMapsDiffer = vendorKeys.some((key) => !same(canonicalFieldMap(readFieldMap(key.fieldMap)), canonicalFieldMap(readFieldMap(selectedKey?.fieldMap))));
-  const inverted = selectedKey ? readFieldMap(selectedKey.fieldMap).filter((entry) => entry.inverted).length : 0;
-  // Only the owner's own changes count (owner 2026-11-04): a map stored the wrong way round is read, shown
-  // the right way round and flagged with its own "Fix" button, not announced as an unsaved edit on arrival.
-  const storedMap = selectedKey ? canonicalFieldMap(readFieldMap(selectedKey.fieldMap)) : {};
-  // Notes are kept per field of ours; a note filed under a name that is not in the map is never shown, so it is not a change.
-  const storedNotes = Object.fromEntries(Object.entries(selectedKey?.fieldNotes ?? {}).filter(([field]) => field in storedMap));
-  const dirty = selectedKey !== null && (!same(draftMap, storedMap) || (loaded?.schemaReady === true && !same(notesOf(draft), storedNotes)));
-
-  async function selectKey(id: string) {
-    if (id === selectedKeyId) return;
-    if (dirty && !(await confirmAction({ title: "Discard your field-map changes?", description: "The unsaved changes to this field map are lost.", confirmLabel: "Discard changes", cancelLabel: "Keep editing" }))) return;
-    const key = loaded?.keys.find((item) => item.id === id) ?? null;
-    setSelectedKeyId(id);
-    setDraft(draftFromKey(key));
-    setEditing(false);
-    setSaveError(null);
-  }
-
-  async function closePanel() {
-    if (dirty && !(await confirmAction({ title: "Discard your field-map changes?", description: "The unsaved changes to this field map are lost.", confirmLabel: "Discard changes", cancelLabel: "Keep editing" }))) return;
-    setSelectedKeyId("none");
-    setDraft([]);
-    setEditing(false);
-    setSaveError(null);
-  }
-
-  function discard() {
-    setDraft(draftFromKey(selectedKey));
-    setEditing(false);
-    setSaveError(null);
-  }
-
-  /** True when it saved; the leave guard stays on the page otherwise, with the error shown. */
-  async function save(): Promise<boolean> {
-    if (!selectedKey || draftProblems.size > 0) return false;
-    setSaving(true);
-    setSaveError(null);
+  async function rotate(row: VendorRow, input: { graceHours: number; emailInstructions: boolean }) {
+    setBusy(true);
     try {
-      await send(`/api/app/lead-post-keys/${selectedKey.id}`, "PATCH", {
-        action: "field_map",
-        fieldMap: draftMap,
-        ...(loaded?.schemaReady ? { fieldNotes: notesOf(draft) } : {}),
-      });
-      notify.done(vendorKeys.length > 1 ? `Field map saved to all ${vendorKeys.length} of ${selectedKey.vendorName}'s keys.` : "Field map saved.");
-      await load(selectedKey.id);
-      return true;
+      const body = await send<{ key: string; record: { id: string }; graceUntil: string | null }>(`/api/app/lead-post-keys/${row.key.id}`, "PATCH", { action: "rotate", graceHours: input.graceHours });
+      setRotating(null);
+      setReveal({ vendorName: row.vendorName, key: body.key, graceUntil: body.graceUntil, emailAfter: input.emailInstructions ? { keyId: body.record.id, to: row.settings?.instructionsEmail ?? "" } : null });
+      await reloadAll();
     } catch (cause) {
-      setSaveError(cause instanceof Error ? cause.message : "Could not save the field map");
-      return false;
+      notify.block(cause instanceof Error ? cause.message : "The key could not be rotated.");
     } finally {
-      setSaving(false);
+      setBusy(false);
     }
   }
 
-  async function mint(event: React.FormEvent) {
-    event.preventDefault();
-    setBusy("mint");
-    setMintError(null);
+  async function setActive(row: VendorRow, active: boolean) {
+    setBusy(true);
     try {
-      const body = await send("/api/app/lead-post-keys", "POST", { vendorId: mintVendor, ...(mintCampaign ? { campaignId: mintCampaign } : {}) });
-      setRevealed({ key: body.key, vendorName: body.record.vendorName });
-      setConnectStep(2);
-      setMintVendor("");
-      setMintCampaign("");
-      setTab("key");
-      await load(body.record.id);
+      await send(`/api/app/lead-post-keys/${row.key.id}`, "PATCH", { action: active ? "activate" : "deactivate" });
+      notify.done(active ? `${row.vendorName}'s key works again.` : `${row.vendorName}'s key is revoked. Their posts are refused from now on.`);
+      setRevoking(null);
+      await reloadAll();
     } catch (cause) {
-      setMintError(cause instanceof Error ? cause.message : "Could not create the key");
+      notify.block(cause instanceof Error ? cause.message : "That key could not be changed.");
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   }
 
-  function closeConnect() {
-    setConnectStep(0);
-    setMintError(null);
-    // The key exists only on this screen until the dialog closes; past step 2 it is gone for good.
-    setRevealed(null);
-  }
+  const tell = (vendorId: string, reasonCode: string, count: number) => {
+    const row = vendorOf(vendorId);
+    tellVendor({ to: row?.settings?.instructionsEmail ?? "", vendorName: row?.vendorName ?? "vendor", agencyName: board?.agencyName ?? "us", reasonCode, count, days });
+  };
 
-  // Revoking is confirmed in its own dialog (p-ov-confirm-revoke): the vendor's integration starts
-  // failing the moment it lands, so the owner types the vendor's name rather than clicking through.
-  const [revoking, setRevoking] = useState<PostKey | null>(null);
-  const [revokeTyped, setRevokeTyped] = useState("");
-
-  async function act(key: PostKey, action: "rotate" | "activate" | "deactivate"): Promise<boolean> {
-    if (action === "rotate" && !(await confirmAction({ title: `Rotate ${key.vendorName}'s key?`, description: "Their current key stops working, so send them the new one straight away.", confirmLabel: "Rotate key", cancelLabel: "Keep current key" }))) return false;
-    setBusy(key.id);
-    try {
-      const body = await send(`/api/app/lead-post-keys/${key.id}`, "PATCH", { action });
-      if (action === "rotate") setRevealed({ key: body.key, vendorName: key.vendorName });
-      else notify.done(action === "activate" ? "Key enabled." : `${key.vendorName}'s key revoked.`);
-      await load(action === "rotate" ? body.record.id : key.id);
-      return true;
-    } catch (cause) {
-      notify.block(cause instanceof Error ? cause.message : "Could not change that key");
-      return false;
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  function openRevoke(key: PostKey) {
-    setRevokeTyped("");
-    setRevoking(key);
-  }
-
-  async function confirmRevoke() {
-    if (!revoking || revokeTyped.trim().toLowerCase() !== revoking.vendorName.trim().toLowerCase()) return;
-    if (await act(revoking, "deactivate")) setRevoking(null);
-  }
-
-  async function bindCampaign(key: PostKey, campaignId: string) {
-    if ((key.campaignId ?? "") === campaignId) return;
-    setBusy(key.id);
-    setCampaignError(null);
-    try {
-      await send(`/api/app/lead-post-keys/${key.id}`, "PATCH", { action: "campaign", campaignId: campaignId || null });
-      notify.done(campaignId ? "Key bound to that campaign." : "Key posts to the vendor's accepting campaign.");
-      await load(selectedKeyId);
-    } catch (cause) {
-      setCampaignError({ keyId: key.id, message: cause instanceof Error ? cause.message : "Could not bind that campaign" });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  /** The sample's guessed rows into the editor; the save bar then saves them like any edit. */
-  function applyGuess(key: PostKey, rows: { ours: string; theirs: string }[]) {
-    if (!rows.length) return;
-    const base = key.id === selectedKeyId ? draft : draftFromKey(key);
-    if (key.id !== selectedKeyId) setSelectedKeyId(key.id);
-    setDraft([...base, ...rows.map((row) => ({ id: nextRowId(), theirs: row.theirs, ours: row.ours, note: "" }))]);
-    setEditing(true);
-    setTab("map");
-    notify.done(`${rows.length} ${rows.length === 1 ? "field" : "fields"} added to the map. Save to keep ${rows.length === 1 ? "it" : "them"}.`);
-  }
-
-  async function copy(value: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      notify.done("Copied.");
-    } catch {
-      // Clipboard access can be refused, and a silent no-op would look like a copy that worked.
-      notify.fail("Your browser would not let us copy. Select the text and copy it by hand.");
-    }
-  }
-
-  const origin = typeof window === "undefined" ? "" : window.location.origin;
-  // The older, global URL. Vendors already set up on it (header or key-in-path) keep working.
-  const legacyUrl = `${origin}/api/leads/post`;
-
-  async function refresh() {
-    // Reloading resets the field-map draft, so ask first — the same question switching keys asks.
-    if (dirty && !(await confirmAction({ title: "Discard your field-map changes?", description: "The unsaved changes to this field map are lost.", confirmLabel: "Discard changes", cancelLabel: "Keep editing" }))) return;
-    setRefreshing(true);
-    try { await Promise.all([load(selectedKeyId), loadActivity()]); } finally { setRefreshing(false); }
-  }
+  const sheetRow = sheet ? vendorOf(sheet.vendorId) : null;
+  const firstDial = useMemo(() => firstDialMedian(speed), [speed]);
 
   const connectButton = (
-    <Button type="button" onClick={() => { setMintError(null); setConnectStep(1); }} disabled={!loaded || loaded.vendors.length === 0}>
+    <Button type="button" variant="highlight" disabled={!board} onClick={() => setWizard({})}>
       <Plus aria-hidden="true" />
       Connect a vendor
     </Button>
   );
 
-  if (error) {
-    return (
-      <SettingsStack>
-        <SettingsSectionHeader />
-        <Callout tone="error" title={error} />
-      </SettingsStack>
-    );
-  }
-  if (!loaded) {
-    return (
-      <SettingsStack>
-        <SettingsSectionHeader />
-        <TableCard><SectionLoading label="Loading your posting keys" /></TableCard>
-      </SettingsStack>
-    );
-  }
-
-  // One URL per workspace: the path names this workspace, the key names the vendor and campaign.
-  const headerUrl = `${origin}/api/post/${loaded.workspaceId}`;
-  const statsByKey = new Map(loaded.stats.map((row) => [row.keyId, row]));
-  const campaignsByVendor = (vendorId: string) => loaded.campaigns.filter((campaign) => campaign.vendorId === vendorId);
-  const campaignName = (key: PostKey) => (key.campaignId ? loaded.campaigns.find((item) => item.id === key.campaignId)?.name ?? "A bound campaign" : "Vendor’s accepting campaign");
-  const vendorName = (id: string | null) => loaded.vendors.find((vendor) => vendor.id === id)?.name ?? "Unknown vendor";
-  const totalRejected = loaded.rejections.reduce((sum, row) => sum + row.count, 0);
-  const totalPosts = loaded.stats.reduce((sum, row) => sum + row.posts + row.earlierPosts, 0);
-  const mintCampaigns = campaignsByVendor(mintVendor);
-  const keyNeedle = keyQuery.trim().toLowerCase();
-  const activeKeys = loaded.keys.filter((key) => key.isActive).length;
-  const keysShown = keyFilter || (activeKeys > 0 ? "active" : "all");
-  const shownKeys = loaded.keys.filter((key) => (keysShown === "all" || (keysShown === "active") === key.isActive) && (!keyNeedle || key.vendorName.toLowerCase().includes(keyNeedle) || key.keyPrefix.toLowerCase().includes(keyNeedle)));
-  const posted = (speed ?? []).reduce((sum, row) => sum + row.postedLeads, 0);
-  const within = (speed ?? []).reduce((sum, row) => sum + row.dialledWithin60s, 0);
-  const vendorSpeed = selectedKey ? (speed ?? []).filter((row) => row.vendorId === selectedKey.vendorId && row.postedLeads > 0) : [];
-  const vendorRejections = selectedKey ? (activity?.byVendor ?? []).filter((row) => row.vendorId === selectedKey.vendorId) : [];
-  const vendorRejected = vendorRejections.reduce((sum, row) => sum + row.count, 0);
-  const vendorPosts = selectedKey ? (activity?.recent ?? []).filter((row) => row.vendorId === selectedKey.vendorId) : [];
-
-  const postsTable = (rows: PostActivity["recent"], withVendor: boolean) => (
-    <table className={st.table}>
-      <thead>
-        <tr className={st.headRow}>
-          <th scope="col" className={cn(st.th, "w-[150px]")}>Arrived</th>
-          {withVendor && <th scope="col" className={st.th}>Vendor</th>}
-          <th scope="col" className={st.th}>Outcome</th>
-          <th scope="col" className={cn(st.th, "w-[90px] text-right")}>Took</th>
-          <th scope="col" className={cn(st.th, "w-[110px]")}><span className="sr-only">Lead</span></th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row, index) => (
-          <tr key={`${row.receivedAt}-${index}`}>
-            <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>{dateTime(row.receivedAt, viewerTimeZone())}</td>
-            {withVendor && <td className={cn(st.td, st.strong)}>{vendorName(row.vendorId)}</td>}
-            <td className={st.td}>
-              {row.outcome === "accepted"
-                ? <StatusChip tone="good">Accepted</StatusChip>
-                : <StatusChip tone={row.outcome === "error" ? "warning" : "danger"}>{REJECTION_LABELS[row.reasonCode] ?? row.reasonCode}</StatusChip>}
-            </td>
-            <td className={cn(st.td, st.num)}>{row.processingMs === null ? "—" : `${(row.processingMs / 1000).toFixed(1)} s`}</td>
-            <td className={cn(st.td, "text-right")}>{row.leadId && <Link href={`/app/leads/${row.leadId}`} className="text-sm font-semibold text-[var(--accent-ink)] hover:underline">Open lead</Link>}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  );
-
-  const fixButton = (fix: Fix, key: PostKey | null) => {
-    if (!fix) return null;
-    if (fix.href) return <Button asChild variant="outline" size="sm"><Link href={fix.href}>{fix.label}</Link></Button>;
-    return (
-      <Button type="button" variant="outline" size="sm" onClick={() => {
-        if (fix.rotate && key) void act(key, "rotate");
-        else if (fix.tab) { setTab("map"); setEditing(true); }
-      }}>{fix.label}</Button>
-    );
-  };
-
-  const fact = (label: string, value: React.ReactNode, sub?: React.ReactNode) => (
-    <div className="min-w-0 rounded-[10px] bg-[var(--surface-alt)] px-3 py-2.5">
-      <div className="text-xs text-[var(--muted)]">{label}</div>
-      <div className="mt-0.5 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</div>
-      {sub && <div className="mt-0.5 text-xs text-[var(--muted)]">{sub}</div>}
-    </div>
-  );
-
-  const key = selectedKey;
-  const keyStats = key ? statsByKey.get(key.id) : undefined;
-  const panelState = key ? keyState(key) : null;
-  const keyCampaigns = key ? campaignsByVendor(key.vendorId) : [];
-  const busyKey = key !== null && busy === key.id;
-  const panel = key && panelState && (
-      <SettingsCard
-        title={key.vendorName}
-        sub={<span className="flex flex-wrap items-center gap-2"><StatusChip tone={pillTone(panelState.tone)} dot>{panelState.label}</StatusChip>{campaignName(key)}</span>}
-        action={<Button type="button" variant="ghost" size="icon" aria-label="Close the vendor" onClick={() => void closePanel()}><X aria-hidden="true" /></Button>}
-        className="xl:sticky xl:top-4"
-      >
-        <div className="flex flex-col gap-4">
-          <UnderlineTabs
-            label={`${key.vendorName}'s sections`}
-            tabs={TABS.map((item) => ({ key: item.key, label: item.label, count: item.key === "rejections" && vendorRejected ? vendorRejected : null }))}
-            value={tab}
-            onChange={setTab}
-          />
-
-          {tab === "key" && (
-            <div className="flex flex-col gap-4">
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                {fact("Key", <code className={code}>{key.keyPrefix}&hellip;</code>)}
-                {fact(
-                  `Posts / rejected, ${loaded.windowDays} days`,
-                  `${fmt(keyStats?.posts ?? 0)} / ${fmt(keyStats?.rejected ?? 0)}`,
-                  keyStats?.perVendor ? "All of this vendor’s keys" : keyStats?.earlierPosts ? `+${fmt(keyStats.earlierPosts)} before per-key counts` : undefined,
-                )}
-                {fact("First dial, median", vendorSpeed.length ? seconds(vendorSpeed[0].medianSeconds) : "—", vendorSpeed.length ? `${vendorSpeed[0].dialledWithin60sPct ?? 0}% inside a minute` : "No posted lead dialed yet")}
-              </div>
-              <p className="m-0 text-xs text-[var(--muted)]">
-                Created {when(key.createdAt) ?? "—"}
-                {key.rotatedAt ? ` · retired ${when(key.rotatedAt)}` : ""}
-                {/* "Never used" is worth saying out loud: a key minted three weeks ago that has never
-                    been called means the vendor never finished their side. */}
-                {key.lastUsedAt ? ` · last used ${when(key.lastUsedAt)}` : " · never used"}
-              </p>
-
-              <div className="flex flex-col gap-2">
-                <span className="text-label text-[var(--muted)]">Posts into</span>
-                <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label={`Campaign for ${key.vendorName}’s key`}>
-                  <ToggleChip role="radio" selected={!key.campaignId} disabled={!loaded.schemaReady || busyKey} onClick={() => void bindCampaign(key, "")}>Vendor’s accepting campaign</ToggleChip>
-                  {keyCampaigns.map((campaign) => (
-                    <ToggleChip key={campaign.id} role="radio" selected={key.campaignId === campaign.id} disabled={!loaded.schemaReady || busyKey} onClick={() => void bindCampaign(key, campaign.id)}>
-                      {campaign.name}{campaign.status !== "active" ? ` (${campaign.status})` : ""}
-                    </ToggleChip>
-                  ))}
-                </div>
-                <span className="text-xs text-[var(--muted)]">
-                  {loaded.schemaReady ? "A bound key posts to that campaign only." : "Campaign binding needs a database update that has not been applied yet."}
-                </span>
-                {campaignError?.keyId === key.id && <span role="alert" className="text-xs text-[var(--error-ink)]">{campaignError.message}</span>}
-              </div>
-
-              {vendorSpeed.length > 1 && (
-                <div className="flex flex-col gap-1.5">
-                  <span className="text-label text-[var(--muted)]">Speed to lead by campaign</span>
-                  {vendorSpeed.map((row) => (
-                    <div key={row.campaignId} className="flex items-center justify-between gap-3 text-sm">
-                      <span className="min-w-0 truncate text-[var(--ink)]">{row.campaignName}</span>
-                      <span className="shrink-0 tabular-nums text-[var(--body)]">{seconds(row.medianSeconds)} · {row.dialledWithin60sPct ?? 0}% inside a minute</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" disabled={busyKey} onClick={() => setSampleFor(key)}>
-                  <FlaskConical aria-hidden="true" />
-                  Check a sample post
-                </Button>
-                <Button type="button" variant="outline" disabled={busyKey} onClick={() => void act(key, "rotate")}>Rotate key</Button>
-                {key.isActive ? (
-                  <Button type="button" variant="outline" className="text-[var(--error-ink)]" disabled={busyKey} onClick={() => openRevoke(key)}>Revoke</Button>
-                ) : (
-                  <Button type="button" variant="outline" disabled={busyKey} onClick={() => void act(key, "activate")}>Enable</Button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {tab === "map" && (
-            <div className="flex flex-col gap-3.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="m-0 text-sm text-[var(--muted)]">Their field names on the left, yours on the right.</p>
-                <span className="flex gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setSampleFor(key)}><FlaskConical aria-hidden="true" />Check a sample post</Button>
-                  {!editing && <Button type="button" variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>}
-                </span>
-              </div>
-              {vendorKeys.length > 1 && (
-                <p className="m-0 text-xs text-[var(--muted)]">
-                  {key.vendorName} has {vendorKeys.length} keys. Saving writes this map to all of them.
-                </p>
-              )}
-              {vendorMapsDiffer && (
-                <Callout tone="warning" title={`${key.vendorName}'s keys have different maps — saving applies this one to all of them.`} />
-              )}
-              {inverted > 0 && (
-                <Callout tone="warning" title={`${inverted} ${inverted === 1 ? "field was" : "fields were"} stored the wrong way round.`}>
-                  <Button type="button" variant="outline" size="sm" className="mt-2" disabled={saving || draftProblems.size > 0} onClick={() => void save()}>{saving ? "Saving…" : `Fix ${inverted === 1 ? "it" : "them"}`}</Button>
-                </Callout>
-              )}
-              {saveError && <Callout tone="error" title="The field map was not saved">{saveError}</Callout>}
-              <datalist id="lead-post-our-fields">
-                {KNOWN_LEAD_FIELDS.map((field) => <option key={field} value={field} />)}
-              </datalist>
-              {draft.length === 0 && !editing ? (
-                <p className="m-0 text-sm text-[var(--muted)]">
-                  No fields mapped. Their payload is read as sent, so it must already use your names &mdash; phone, state and a name.
-                </p>
-              ) : (
-                <TableCard>
-                  <table className={st.table}>
-                    <thead>
-                      <tr className={st.headRow}>
-                        <th scope="col" className={cn(st.th, "w-[30%]")}>Their field</th>
-                        <th scope="col" className={cn(st.th, "w-[30%]")}>Your field</th>
-                        <th scope="col" className={st.th}>Note</th>
-                        {editing && <th scope="col" className={st.th}><span className="sr-only">Remove</span></th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {draft.map((row, index) => {
-                        const rule = FIELD_RULES[row.ours.trim()];
-                        const problem = draftProblems.get(row.id);
-                        const update = (patch: Partial<DraftRow>) => setDraft((rows) => rows.map((item) => (item.id === row.id ? { ...item, ...patch } : item)));
-                        return editing ? (
-                          <tr key={row.id}>
-                            <td className={cn(st.td, "align-top")}>
-                              <input aria-label={`Their field, row ${index + 1}`} className={cn(cellInput, "font-mono text-sm")} value={row.theirs} maxLength={120} placeholder="ph1" onChange={(event) => update({ theirs: event.target.value })} />
-                            </td>
-                            <td className={cn(st.td, "align-top")}>
-                              <input aria-label={`Your field, row ${index + 1}`} list="lead-post-our-fields" className={cellInput} value={row.ours} maxLength={80} placeholder="phone" onChange={(event) => update({ ours: event.target.value.toLowerCase() })} aria-invalid={problem ? true : undefined} />
-                            </td>
-                            <td className={cn(st.td, "align-top")}>
-                              <input
-                                aria-label={`Note, row ${index + 1}`}
-                                className={cellInput}
-                                value={row.note}
-                                maxLength={200}
-                                placeholder={rule ?? "Optional"}
-                                disabled={!loaded.schemaReady}
-                                title={loaded.schemaReady ? undefined : "Notes need a database update that has not been applied yet."}
-                                onChange={(event) => update({ note: event.target.value })}
-                              />
-                              {rule && <span className={st.sub}>{rule}</span>}
-                              {problem && <span role="alert" className="mt-1 block text-xs text-[var(--error-ink)]">{problem}</span>}
-                            </td>
-                            <td className={cn(st.td, "align-top")}>
-                              <Button type="button" variant="ghost" size="icon" className="text-[var(--error-ink)]" aria-label={`Remove row ${index + 1}`} onClick={() => setDraft((rows) => rows.filter((item) => item.id !== row.id))}>
-                                <X aria-hidden="true" />
-                              </Button>
-                            </td>
-                          </tr>
-                        ) : (
-                          <tr key={row.id}>
-                            <td className={st.td}><code className={code}>{row.theirs}</code></td>
-                            <td className={cn(st.td, st.strong)}>{row.ours}</td>
-                            <td className={st.td}>
-                              {row.note || rule || "—"}
-                              {row.note && rule && <span className={st.sub}>{rule}</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </TableCard>
-              )}
-              {editing && (
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <Button type="button" variant="outline" onClick={() => setDraft((rows) => [...rows, { id: nextRowId(), theirs: "", ours: "", note: "" }])}>
-                    <Plus aria-hidden="true" /> Add a field
-                  </Button>
-                  {!loaded.schemaReady && <span className="text-xs text-[var(--muted)]">Notes need a database update; the map itself saves.</span>}
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab === "rejections" && (
-            <div className="flex flex-col gap-3">
-              {activityError ? (
-                <Callout tone="error" title={activityError} />
-              ) : !activity ? (
-                <SectionLoading label="Loading rejections" />
-              ) : vendorRejections.length === 0 ? (
-                <p className="m-0 text-sm text-[var(--muted)]">No posts from {key.vendorName} were rejected in the last {activity.windowDays} days.</p>
-              ) : (
-                vendorRejections.map((row) => {
-                  const fix = fixFor(row.reasonCode, key);
-                  return (
-                    <div key={row.reasonCode} className="flex flex-col gap-2 rounded-[10px] bg-[var(--surface-alt)] px-3 py-2.5">
-                      <SettingsMeter
-                        value={row.count}
-                        max={vendorRejected}
-                        tone={REJECTION_TONE[row.reasonCode] ?? "warning"}
-                        label={REJECTION_LABELS[row.reasonCode] ?? row.reasonCode}
-                        valueLabel={fmt(row.count)}
-                        ariaLabel={`${REJECTION_LABELS[row.reasonCode] ?? row.reasonCode}: ${row.count} of ${vendorRejected} rejected posts`}
-                      />
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="text-xs text-[var(--muted)]">{REASON_NOTE[row.reasonCode] ?? "Fix it and their next posts go through."}</span>
-                        {fixButton(fix, key)}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              {activity?.capped && <span className="text-xs text-[var(--muted)]">More than 10,000 rejected posts in the window; these counts are the first 10,000.</span>}
-            </div>
-          )}
-
-          {tab === "posts" && (
-            activityError ? (
-              <Callout tone="error" title={activityError} />
-            ) : !activity ? (
-              <SectionLoading label="Loading recent posts" />
-            ) : vendorPosts.length === 0 ? (
-              <EmptyState title="No posts from this vendor yet" hint="Check a sample post to see what theirs would get, before a real one arrives." />
-            ) : (
-              <TableCard>{postsTable(vendorPosts.slice(0, 25), false)}</TableCard>
-            )
-          )}
-        </div>
-      </SettingsCard>
-  );
-
-  return (
-    <SettingsStack>
-      <SettingsSectionHeader actions={connectButton} />
-
-      <SettingsCard pad={20} bodyClassName="flex flex-col gap-2">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-label text-[var(--muted)]">Vendors post to</span>
-          <code className="min-w-0 flex-1 truncate rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] px-3 py-2 font-mono text-sm text-[var(--ink)]">
-            POST {headerUrl} &nbsp;&middot;&nbsp; Authorization: Bearer &lt;key&gt;
-          </code>
-          <Button type="button" variant="outline" onClick={() => void copy(headerUrl)}><Copy aria-hidden="true" />Copy</Button>
-          <ToggleChip selected={showOlder} onClick={() => setShowOlder((value) => !value)}>Older URLs</ToggleChip>
-        </div>
-        {/* Kept for vendors already posting: the global URL, and the key-in-path form for systems that cannot set a header. */}
-        {showOlder && (
-          <p className="m-0 text-xs leading-[1.5] text-[var(--muted)]">
-            Still accepted for vendors set up before: <span className="font-mono text-[var(--ink)]">{legacyUrl}</span> with the header, or <span className="font-mono text-[var(--ink)]">{legacyUrl}/&lt;key&gt;</span> for systems that cannot set a header.
-          </p>
-        )}
-      </SettingsCard>
-
-      <StatStrip label="Lead posting, last 30 days">
-        <StatTile label={`Posts, ${loaded.windowDays} days`} value={fmt(totalPosts)} footnote={`${loaded.keys.filter((key) => key.isActive).length} live keys`} />
-        <StatTile label="Accepted" value={totalPosts ? `${Math.round(((totalPosts - totalRejected) / totalPosts) * 100)}%` : "—"} valueTone={totalPosts ? "good" : undefined} footnote={`${fmt(Math.max(0, totalPosts - totalRejected))} queued at the top`} />
-        <StatTile label="Rejected, not billed" value={fmt(totalRejected)} valueTone={totalRejected ? "warning" : undefined} footnote={`${loaded.rejections.length} ${loaded.rejections.length === 1 ? "reason" : "reasons"}`} />
-        <StatTile label="Dialed inside a minute" labelTitle="Of every lead a vendor has posted, the share whose first Dial came within 60 seconds of arriving." value={speed === null ? "…" : posted ? `${Math.round((within / posted) * 100)}%` : "—"} valueTone={posted ? "good" : undefined} footnote={posted ? `${fmt(posted)} posted leads` : "No posted lead yet"} />
-      </StatStrip>
-
-      <div className="grid min-w-0 items-start gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,460px)]">
-        <div className="flex min-w-0 flex-col gap-3">
-          <DataToolbar actions={<RefreshButton onClick={() => void refresh()} refreshing={refreshing} labelClassName="sr-only" className="px-2.5" />}>
-            <ToolbarSearch value={keyQuery} onChange={setKeyQuery} placeholder="Search vendors or keys" />
-            <select aria-label="Show keys" className={toolbarControl} value={keysShown} onChange={(event) => setKeyFilter(event.target.value as typeof keyFilter)}>
-              <option value="active">Active · {activeKeys}</option>
-              <option value="disabled">Disabled · {loaded.keys.length - activeKeys}</option>
-              <option value="all">All keys · {loaded.keys.length}</option>
-            </select>
-          </DataToolbar>
-
-          {loaded.vendors.length === 0 ? (
-            <EmptyState title="No vendors yet" hint="A posting key belongs to a vendor, so add one on Vendors & campaigns first." />
-          ) : loaded.keys.length === 0 ? (
-            <EmptyState title="No posting keys yet" hint="Connect a vendor who delivers leads by API. The key is shown once, when it is created." action={connectButton} />
-          ) : shownKeys.length === 0 ? (
-            <NoMatches noun="keys" onClear={() => setKeyQuery("")} />
-          ) : (
-            <TableCard>
-              <table className={st.table} aria-label="Posting keys">
-                <thead>
-                  <tr className={st.headRow}>
-                    <th scope="col" className={st.th}>Vendor</th>
-                    <th scope="col" className={cn(st.th, "w-[78px]")} title={`Posts / rejected, ${loaded.windowDays} days`}>Posts</th>
-                    <th scope="col" className={cn(st.th, "w-[104px]")}>Last post</th>
-                    <th scope="col" className={cn(st.th, "w-[92px]")}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {shownKeys.map((key) => {
-                    const stats = statsByKey.get(key.id);
-                    const state = keyState(key);
-                    const on = key.id === selectedKeyId;
-                    return (
-                      <tr key={key.id} className={cn("cursor-pointer", on && "bg-[var(--primary-soft)]", !key.isActive && "opacity-70")} onClick={() => void selectKey(key.id)}>
-                        <td className={st.td}>
-                          <button type="button" aria-pressed={on} aria-label={`Open ${key.vendorName}`} className="block max-w-full truncate rounded-[4px] text-left font-semibold text-[var(--ink)] outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)]" onClick={(event) => { event.stopPropagation(); void selectKey(key.id); }}>{key.vendorName}</button>
-                          <span className={cn(st.sub, "block truncate")}>{campaignName(key)} · <code className="font-mono">{key.keyPrefix}&hellip;</code></span>
-                        </td>
-                        <td className={cn(st.td, "tabular-nums whitespace-nowrap")}>{fmt(stats?.posts ?? 0)} / {fmt(stats?.rejected ?? 0)}</td>
-                        <td className={cn(st.td, "whitespace-nowrap text-[var(--muted)]")}>{key.lastUsedAt ? when(key.lastUsedAt) : "never used"}</td>
-                        <td className={st.td}><StatusChip tone={pillTone(state.tone)} dot>{state.label}</StatusChip></td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </TableCard>
-          )}
-
-        </div>
-
-        {panel || (
-          <SettingsCard title={`Rejections, last ${loaded.windowDays} days`} info="Across every vendor. Open a vendor for its key, field map and posts." className="xl:sticky xl:top-4">
-            {loaded.rejections.length === 0 ? (
-              <p className="m-0 text-sm text-[var(--muted)]">No posts were rejected in the last {loaded.windowDays} days.</p>
-            ) : (
-              <div className="flex flex-col gap-3.5">
-                {loaded.rejections.map((row) => (
-                  <SettingsMeter
-                    key={row.reasonCode}
-                    value={row.count}
-                    max={totalRejected}
-                    tone={REJECTION_TONE[row.reasonCode] ?? "warning"}
-                    label={REJECTION_LABELS[row.reasonCode] ?? row.reasonCode}
-                    valueLabel={fmt(row.count)}
-                    caption={(() => {
-                      const vendors = (activity?.byVendor ?? []).filter((item) => item.reasonCode === row.reasonCode).map((item) => vendorName(item.vendorId));
-                      return vendors.length ? `From ${vendors.join(", ")}` : undefined;
-                    })()}
-                    ariaLabel={`${REJECTION_LABELS[row.reasonCode] ?? row.reasonCode}: ${row.count} of ${totalRejected} rejected posts`}
-                  />
-                ))}
-              </div>
-            )}
-          </SettingsCard>
-        )}
-      </div>
-
-      <SettingsCard title="Live posts" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details." pad={20}>
-        {activityError ? (
-          <Callout tone="error" title={activityError} />
-        ) : !activity ? (
-          <SectionLoading label="Loading recent posts" />
-        ) : activity.recent.length === 0 ? (
-          <p className="m-0 text-sm text-[var(--muted)]">No vendor has posted yet.</p>
-        ) : (
-          <TableCard>{postsTable(activity.recent.slice(0, 12), true)}</TableCard>
-        )}
-      </SettingsCard>
-
-      {/* Connect a vendor: 1 vendor and campaign, 2 the key shown once, 3 check a sample post. */}
-      <Dialog open={connectStep > 0} onOpenChange={(next) => { if (!next) closeConnect(); }}>
-        <DialogContent className="sm:max-w-[620px]">
-          <DialogHeader>
-            <DialogTitle>Connect a vendor</DialogTitle>
-            <DialogDescription>
-              <span className={cn(connectStep === 1 && "font-semibold text-[var(--ink)]")}>1 Vendor and campaign</span>{" › "}
-              <span className={cn(connectStep === 2 && "font-semibold text-[var(--ink)]")}>2 Copy the key</span>{" › "}
-              <span className={cn(connectStep === 3 && "font-semibold text-[var(--ink)]")}>3 Check a sample post</span>
-            </DialogDescription>
-          </DialogHeader>
-          {connectStep === 1 && (
-            <form onSubmit={mint} className="flex flex-col gap-4">
-              <Field label="Vendor" htmlFor="mint-vendor" required>
-                <select
-                  id="mint-vendor"
-                  required
-                  className={control}
-                  value={mintVendor}
-                  onChange={(event) => { setMintVendor(event.target.value); setMintCampaign(""); }}
-                >
-                  <option value="">Choose a vendor</option>
-                  {loaded.vendors.map((vendor) => (
-                    <option key={vendor.id} value={vendor.id}>{vendor.name}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field
-                label="Campaign"
-                htmlFor="mint-campaign"
-                hint={
-                  loaded.schemaReady
-                    ? "Optional. A bound key posts to this campaign only."
-                    : "Campaign binding needs a database update that has not been applied yet; the key posts to the vendor's accepting campaign."
-                }
-              >
-                <select
-                  id="mint-campaign"
-                  className={control}
-                  value={mintCampaign}
-                  disabled={!loaded.schemaReady || !mintVendor}
-                  onChange={(event) => setMintCampaign(event.target.value)}
-                >
-                  <option value="">Vendor&rsquo;s accepting campaign</option>
-                  {mintCampaigns.map((campaign) => (
-                    <option key={campaign.id} value={campaign.id}>
-                      {campaign.name}{campaign.status !== "active" ? ` (${campaign.status})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              {mintError && <span role="alert" className="text-xs text-[var(--error-ink)]">{mintError}</span>}
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={closeConnect}>Cancel</Button>
-                <Button type="submit" disabled={busy === "mint" || !mintVendor}>
-                  {busy === "mint" ? "Creating…" : "Create key"}
-                </Button>
-              </DialogFooter>
-            </form>
-          )}
-          {connectStep === 2 && revealed && (
-            <>
-              <p className="m-0 text-sm text-[var(--body)]">{revealed.vendorName}&rsquo;s posting key. <strong className="text-[var(--ink)]">This is the only time it is shown</strong>; if it is lost, rotate it.</p>
-              <div className="flex flex-col gap-3">
-                <RevealLine label="Key" value={revealed.key} onCopy={copy} />
-                <RevealLine label="Post to, with Authorization: Bearer <key>" value={headerUrl} onCopy={copy} />
-                <RevealLine label="Or, key in the path (the older URL)" value={`${legacyUrl}/${revealed.key}`} onCopy={copy} />
-              </div>
-              <DialogFooter>
-                <Button type="button" onClick={() => { setRevealed(null); setConnectStep(3); }}>I have copied it</Button>
-              </DialogFooter>
-            </>
-          )}
-          {connectStep === 3 && selectedKey && (
-            <>
-              <SamplePost postKey={selectedKey} onApply={(rows) => { applyGuess(selectedKey, rows); closeConnect(); }} />
-              <DialogFooter>
-                <Button type="button" onClick={closeConnect}>Done</Button>
-              </DialogFooter>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={sampleFor !== null} onOpenChange={(next) => { if (!next) setSampleFor(null); }}>
-        <DialogContent className="sm:max-w-[620px]">
-          <DialogHeader>
-            <DialogTitle>Check a sample post · {sampleFor?.vendorName}</DialogTitle>
-            <DialogDescription>Paste one payload they send. Nothing is posted or saved.</DialogDescription>
-          </DialogHeader>
-          {sampleFor && (
-            <SamplePost
-              postKey={sampleFor.id === selectedKeyId && editing ? { ...sampleFor, fieldMap: draftMap } : sampleFor}
-              onApply={(rows) => { applyGuess(sampleFor, rows); setSampleFor(null); }}
-            />
-          )}
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setSampleFor(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={revoking !== null} onOpenChange={(next) => { if (!next && busy !== revoking?.id) setRevoking(null); }}>
-        <DialogContent className="sm:max-w-[560px]">
-          {revoking && (() => {
-            const stats = statsByKey.get(revoking.id);
-            const posts = stats?.posts ?? 0;
-            const matches = revokeTyped.trim().toLowerCase() === revoking.vendorName.trim().toLowerCase();
-            const factLine = (label: string, value: string) => (
-              <div>
-                <div className="text-xs font-semibold leading-[1.33] text-[var(--muted)]">{label}</div>
-                <div className="mt-1 text-sm font-semibold tabular-nums text-[var(--ink)]">{value}</div>
-              </div>
-            );
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle>Revoke this posting key?</DialogTitle>
-                  <DialogDescription>
-                    {revoking.vendorName} · {campaignName(revoking)} · <code className={code}>{revoking.keyPrefix}&hellip;</code>
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="flex flex-col gap-4">
-                  <div className="rounded-[8px] border-l-[3px] border-l-[var(--error)] bg-[var(--error-surface)] p-4">
-                    <p className="text-sm font-semibold text-[var(--error-ink)]">{revoking.vendorName} stops being able to post the moment you confirm</p>
-                    <p className="mt-1 text-sm leading-normal text-[var(--body)]">
-                      Their integration will start receiving <code className={code}>401 Unauthorized</code>. Nothing warns them first, and there is no grace period.
-                      {" "}{posts ? `${fmt(posts)} ${posts === 1 ? "lead" : "leads"} arrived on this key in the last ${loaded.windowDays} days${stats?.perVendor ? " (counted across this vendor’s keys)" : ""}.` : `No lead arrived on this key in the last ${loaded.windowDays} days.`}
-                    </p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-[8px] bg-[var(--surface-alt)] p-4">
-                    {factLine(`Posts in the last ${loaded.windowDays} days`, fmt(posts))}
-                    {factLine("Last post", revoking.lastUsedAt ? dateTime(revoking.lastUsedAt, viewerTimeZone()) : "Never used")}
-                    {factLine("Campaign", campaignName(revoking))}
-                    {factLine("Created", when(revoking.createdAt) ?? "—")}
-                  </div>
-                  <Field label="Type the vendor name to confirm" htmlFor="revoke-confirm-name" hint={<>Type <strong>{revoking.vendorName}</strong>. The key can be enabled again later.</>}>
-                    <input id="revoke-confirm-name" className={control} autoComplete="off" value={revokeTyped} onChange={(event) => setRevokeTyped(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void confirmRevoke(); } }} />
-                  </Field>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" disabled={busy === revoking.id} onClick={() => setRevoking(null)}>Keep the key</Button>
-                  <Button type="button" variant="destructive" disabled={!matches || busy === revoking.id} onClick={() => void confirmRevoke()}>
-                    {busy === revoking.id ? "Revoking…" : "Revoke the key"}
-                  </Button>
-                </DialogFooter>
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
-
-      {/* A rotated key, shown once. A new vendor's key is shown inside Connect a vendor instead. */}
-      <Dialog open={revealed !== null && connectStep === 0} onOpenChange={(next) => !next && setRevealed(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{revealed?.vendorName}&rsquo;s posting key</DialogTitle>
-            <DialogDescription>This is the only time this key is shown. If it is lost, rotate it.</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3">
-            <RevealLine label="Key" value={revealed?.key ?? ""} onCopy={copy} />
-            <RevealLine label="Post to, with Authorization: Bearer <key>" value={headerUrl} onCopy={copy} />
-            <RevealLine label="Or, key in the path (the older URL)" value={`${legacyUrl}/${revealed?.key ?? ""}`} onCopy={copy} />
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={() => setRevealed(null)}>I have copied it</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {selectedKey && (
-        <SettingsSaveBar visible={dirty} note={vendorKeys.length > 1 ? `Saving writes this map to all ${vendorKeys.length} of ${selectedKey.vendorName}'s keys` : "Unsaved changes to the field map"}>
-          <Button type="button" variant="outline" onClick={discard} disabled={saving}>Discard</Button>
-          <Button type="button" onClick={() => void save()} disabled={saving || draftProblems.size > 0}>{saving ? "Saving…" : "Save changes"}</Button>
-        </SettingsSaveBar>
-      )}
-      <LeaveGuard dirty={dirty} onSave={save} onDiscard={discard} what={selectedKey ? `${selectedKey.vendorName}'s field map` : "this field map"} />
-    </SettingsStack>
-  );
-}
-
-/**
- * Check a sample post: paste one of the vendor's payloads, see the map it suggests and what the post
- * path's field checks would say (lib/leadPost/sampleCheck.ts). Nothing leaves the browser.
- */
-function SamplePost({ postKey, onApply }: { postKey: PostKey; onApply: (rows: { ours: string; theirs: string }[]) => void }) {
-  const [text, setText] = useState("");
-  const [checked, setChecked] = useState<string | null>(null);
-  const parsed = checked === null ? null : parseSample(checked);
-  const existing = readFieldMap(postKey.fieldMap);
-  const payload = parsed && "payload" in parsed ? parsed.payload : null;
-  const guess = payload ? guessFieldMap(payload, existing) : [];
-  // The checks run on the map as it would be with the guess added, so "Add these" is the fix shown.
-  const result = payload ? checkSample(payload, canonicalFieldMap([...existing, ...guess])) : null;
-
-  return (
-    <div className="flex flex-col gap-3">
-      <Field label="Their payload" htmlFor="sample-payload" hint="JSON, or name=value pairs joined with &.">
-        <textarea
-          id="sample-payload"
-          className={cn(control, "h-auto min-h-[120px] py-2 font-mono text-sm")}
-          value={text}
-          spellCheck={false}
-          placeholder={'{"fname":"Ana","lname":"Ruiz","phone1":"(512) 555-0142","st":"TX","consent_text":"…","ip":"203.0.113.9"}'}
-          onChange={(event) => setText(event.target.value)}
+  const header = (
+    <SettingsSectionHeader
+      tabs={
+        <UnderlineTabs
+          label="Lead posting"
+          tabs={[
+            { key: "vendors", label: "Vendors", count: board ? board.vendors.length : null },
+            { key: "activity", label: "Activity" },
+            { key: "rejections", label: "Rejections", count: board ? board.figures.refusedToday || null : null, tone: "danger" },
+            { key: "guide", label: "Vendor guide" },
+          ]}
+          value={tab}
+          onChange={setTab}
         />
-      </Field>
-      <div>
-        <Button type="button" variant="outline" disabled={!text.trim()} onClick={() => setChecked(text)}>Check it</Button>
-      </div>
-      {parsed && "error" in parsed && <Callout tone="error" title={parsed.error} />}
-      {result && (
+      }
+      actions={
         <>
-          {guess.length > 0 && (
-            <div className="flex flex-col gap-2 rounded-[10px] bg-[var(--surface-alt)] px-3 py-2.5">
-              <span className="text-sm font-semibold text-[var(--ink)]">Fields to map</span>
-              <span className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[var(--body)]">
-                {guess.map((row) => <span key={row.theirs}><code className={code}>{row.theirs}</code> → {row.ours}</span>)}
-              </span>
-              <div><Button type="button" size="sm" onClick={() => onApply(guess)}>Add these to the map</Button></div>
-            </div>
+          {tab === "rejections" ? (
+            <Button asChild variant="outline"><a href={`/api/app/lead-post-keys/rejections?days=${days}&tz=${encodeURIComponent(viewerTimeZone())}&format=csv`} download><Download aria-hidden="true" />Export CSV</a></Button>
+          ) : (
+            <Button type="button" variant="outline" disabled={!board} onClick={() => board && void copyText(`${origin}${board.postingPath}`, "Posting address copied.")}><Copy aria-hidden="true" />Copy posting address</Button>
           )}
-          <ul className="m-0 flex list-none flex-col gap-1.5 p-0" aria-label="What a real post would get">
-            {result.checks.map((check) => (
-              <li key={check.label} className="flex items-start gap-2 text-sm">
-                {check.ok
-                  ? <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--success)]" />
-                  : <X aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[var(--error-ink)]" />}
-                <span><strong className="text-[var(--ink)]">{check.label}</strong> <span className="text-[var(--body)]">{check.detail}</span></span>
-              </li>
-            ))}
-          </ul>
-          {result.reasonCode
-            ? <Callout tone="warning" title={`A real post would be rejected: ${REJECTION_LABELS[result.reasonCode] ?? result.reasonCode}.`} />
-            : <Callout tone="success" title="The fields pass." >A real post also checks {NOT_CHECKED_HERE.join(", ")}.</Callout>}
+          {connectButton}
         </>
-      )}
-    </div>
+      }
+    />
   );
-}
 
-function RevealLine({ label, value, onCopy }: { label: string; value: string; onCopy: (value: string) => Promise<void> }) {
+  if (error && !board) {
+    return (
+      <SettingsStack>
+        {header}
+        <StatusLine tone="bad">Vendors didn&rsquo;t load · <InlineLink onClick={() => void load()}>try again</InlineLink></StatusLine>
+        <TableCard title="Vendors">
+          <ErrorState title="Couldn't load your vendors" detail="Posts are still being accepted; only this page failed to load." action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
+        </TableCard>
+      </SettingsStack>
+    );
+  }
+  if (!board) {
+    return (
+      <SettingsStack>
+        {header}
+        <StatusLine tone="muted">Reading your vendors</StatusLine>
+        <TableCard title="Vendors"><SectionLoading label="Loading your vendors" rows={6} columns={6} /></TableCard>
+      </SettingsStack>
+    );
+  }
+
+  // ── the status line ──────────────────────────────────────────────────────────
+  const posting = board.vendors.filter((row) => row.status === "live" || row.status === "needs_you").length;
+  const lastLead = board.vendors.filter((row) => row.lastPostAt && !row.lastPostWasTest).map((row) => row.lastPostAt as string).sort().reverse()[0] ?? null;
+  const worst = board.vendors.filter((row) => row.status === "needs_you").sort((a, b) => b.week.refused - a.week.refused)[0] ?? null;
+  const pending = !board.r8Ready ? " · Test mode, prices, caps, hours and status calls need a database update" : "";
+  let statusTone: "ok" | "warn" | "bad" | "muted" = board.vendors.length ? "ok" : "muted";
+  let statusText: React.ReactNode = board.vendors.length
+    ? <>{posting} {posting === 1 ? "vendor" : "vendors"} posting{lastLead ? ` · last lead ${ago(lastLead)}` : ""}</>
+    : <>No vendors connected yet</>;
+  if (tab === "rejections" && refused) {
+    const top = repeatingReasons(refused.rows)[0];
+    const total = refused.rows.length;
+    statusTone = total ? "warn" : "ok";
+    statusText = total
+      ? <>{total} refused {days === 1 ? "today" : `in ${days} days`}{top && top.count > 1 ? ` · ${top.count} have the same cause, ${top.vendorName}'s ${(REASON_WORDS[top.reasonCode] ?? top.reasonCode).toLowerCase()}` : ""}</>
+      : <>Nothing refused {days === 1 ? "today" : `in ${days} days`}</>;
+  } else if (worst) {
+    statusTone = "warn";
+    statusText = (
+      <>
+        {statusText} · {worst.vendorName} {worst.week.refused ? `refused ${worst.week.refused} of its last ${worst.week.posts} posts` : `has ${worst.needsYou ?? "fields"} not read`} —{" "}
+        <InlineLink onClick={() => openById(worst.vendorId, "map")}>fix its field map</InlineLink>
+      </>
+    );
+  }
+  if (error) {
+    statusTone = "bad";
+    statusText = <>Vendors didn&rsquo;t refresh · <InlineLink onClick={() => void load()}>try again</InlineLink></>;
+  }
+
   return (
-    <div>
-      <span className="text-xs font-semibold text-[var(--muted)]">{label}</span>
-      <div className="mt-1 flex items-center gap-2">
-        <code className="flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-sunken)] p-3 font-mono text-sm break-all text-[var(--ink)]">{value}</code>
-        <Button type="button" variant="outline" size="icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => void onCopy(value)}>
-          <Copy aria-hidden="true" />
-        </Button>
-      </div>
-    </div>
+    <SettingsStack className="gap-4">
+      {header}
+      <StatusLine tone={statusTone}>{statusText}{pending}</StatusLine>
+
+      {tab === "vendors" && (
+        <VendorTable
+          board={board}
+          filter={filter}
+          onFilter={setFilter}
+          query={query}
+          onQuery={setQuery}
+          selectedVendorId={sheet?.vendorId ?? null}
+          onOpen={(row) => open(row)}
+          firstDialSeconds={firstDial}
+          connectButton={connectButton}
+          onGuide={() => setTab("guide")}
+        />
+      )}
+
+      {tab === "activity" && (
+        <TableCard title="Every post" info="Every vendor, newest first. Payloads stay out of sight; open the lead for its details. Test posts are marked and never become leads.">
+          <div className="max-h-[calc(100vh-320px)] min-h-[200px] overflow-y-auto">
+            {activityError ? (
+              <ErrorState title="Posts didn't load" detail={activityError} action={<Button type="button" variant="outline" onClick={() => void loadActivity()}>Try again</Button>} />
+            ) : !activity ? (
+              <LoadingRows rows={6} columns={4} />
+            ) : activity.recent.length === 0 ? (
+              <p className="m-0 px-4 py-8 text-center text-sm text-[var(--muted)]">No vendor has posted yet.</p>
+            ) : (
+              <PostsTable rows={activity.recent} vendorName={(id) => board.vendors.find((row) => row.vendorId === id)?.vendorName ?? board.allVendors.find((vendor) => vendor.id === id)?.name ?? "Unknown vendor"} withVendor label="Every post" />
+            )}
+          </div>
+        </TableCard>
+      )}
+
+      {tab === "rejections" && (
+        <RejectionsTab
+          board={board}
+          days={days}
+          onDays={(next) => { setRefused(null); setDays(next); }}
+          vendorFilter={vendorFilter}
+          onVendorFilter={setVendorFilter}
+          refused={refused}
+          error={refusedError}
+          onRetry={() => void loadRefused(days)}
+          onFixMap={(vendorId) => openById(vendorId, "map")}
+          onTellVendor={tell}
+          onRotate={(vendorId) => { const row = vendorOf(vendorId); if (row) setRotating(row); }}
+        />
+      )}
+
+      {tab === "guide" && <GuideTab board={board} origin={origin} />}
+
+      {sheetRow && sheet && (
+        <VendorSheet
+          key={sheetRow.vendorId}
+          row={sheetRow}
+          board={board}
+          origin={origin}
+          tab={sheet.tab}
+          onTab={(next) => setSheet({ vendorId: sheetRow.vendorId, tab: next })}
+          onClose={() => setSheet(null)}
+          onChanged={reloadAll}
+          onRotate={() => (sheetRow.key.isActive ? setRotating(sheetRow) : setWizard({ vendorId: sheetRow.vendorId }))}
+          onRevoke={() => setRevoking(sheetRow)}
+          onEnable={() => void setActive(sheetRow, true)}
+          activity={activity}
+          activityError={activityError}
+          speed={speed}
+        />
+      )}
+
+      {wizard && <ConnectWizard board={board} origin={origin} presetVendorId={wizard.vendorId} onClose={() => setWizard(null)} onConnected={reloadAll} />}
+      {rotating && <RotateDialog vendorName={rotating.vendorName} r8Ready={board.r8Ready} busy={busy} onCancel={() => setRotating(null)} onRotate={(input) => void rotate(rotating, input)} />}
+      {revoking && <RevokeDialog vendorName={revoking.vendorName} busy={busy} onCancel={() => setRevoking(null)} onRevoke={() => void setActive(revoking, false)} />}
+      {reveal && (
+        <RevealDialog
+          vendorName={reveal.vendorName}
+          value={reveal.key}
+          postingUrl={`${origin}${board.postingPath}`}
+          graceUntil={reveal.graceUntil}
+          onDone={() => {
+            const after = reveal.emailAfter;
+            setReveal(null);
+            if (after) void emailInstructions({ keyId: after.keyId, vendorName: reveal.vendorName, to: after.to, agencyName: board.agencyName, recordSent: board.r8Ready });
+          }}
+        />
+      )}
+    </SettingsStack>
   );
 }

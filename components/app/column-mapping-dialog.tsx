@@ -157,10 +157,10 @@ export function ColumnMappingDialog({
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[rgba(10,12,16,0.55)] px-4 pt-[84px] max-sm:pt-4">
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[var(--backdrop)] px-4 pt-[84px] max-sm:pt-4">
           <DialogPrimitive.Content
             aria-describedby="column-mapping-sub"
-            className="m-swap flex max-h-[calc(100dvh-108px)] w-full max-w-[900px] min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_24px_64px_rgba(0,0,0,0.28)] outline-none max-sm:max-h-[calc(100dvh-32px)]"
+            className="m-swap flex max-h-[calc(100dvh-108px)] w-full max-w-[900px] min-w-0 flex-col overflow-hidden rounded-[12px] border border-[var(--border-strong)] bg-[var(--surface)] shadow-[var(--shadow-overlay)] outline-none max-sm:max-h-[calc(100dvh-32px)]"
           >
             <div className="flex shrink-0 items-start justify-between gap-4 border-b border-[var(--border)] px-[22px] py-[18px]">
               <div className="min-w-0">

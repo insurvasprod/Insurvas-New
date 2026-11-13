@@ -20,13 +20,14 @@
  */
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Plus } from "lucide-react";
 
 import { notify } from "@/lib/notify";
 import { Button } from "@/components/ui/button";
 import { LeaveGuard } from "@/components/ui/leave-guard";
+import { MoreMenu } from "@/components/ui/more-menu";
 import { ClearFiltersButton, DataToolbar, RefreshButton, ToolbarSearch, toolbarControl } from "@/components/ui/data-toolbar";
 import { PageHeader } from "@/components/ui/page-header";
 import { PageLoading } from "@/components/ui/page-loading";
@@ -75,6 +76,7 @@ import {
   type CellStatus,
 } from "@/lib/appointments/readiness";
 import { daysUntilExpiry } from "@/lib/appointments/warnings";
+import { blockerRows, carrierLines, licenceChip, type BlockerRow } from "@/lib/appointments/blockers";
 import { cn } from "@/lib/utils";
 import { licenceExpiryValue, licenceNumberValue } from "@/lib/appointments/tickModel";
 import { agencyCarrierModel, offeredCarriers } from "@/lib/carriers/agencyModel";
@@ -98,12 +100,20 @@ type Vault = {
   carrierTrainings?: CarrierTrainingRow[] | null;
 };
 
-type Dialog = null | "license" | "training" | { carrierId: string; state: string };
+/** `{ carrier }`: one carrier's states (board 7·1, "Aflac appointments"); `{ carrierId, state }`: one cell. */
+type Dialog = null | "license" | "training" | { carrierId: string; state: string } | { carrier: string };
 
-type Tab = "appointments" | "licences" | "cover";
+/** Round 7 (board 7·A): Blockers first. "cover" was Trainings' old key; ?tab=cover still opens it. */
+type Tab = "blockers" | "appointments" | "licences" | "trainings";
+const TABS: Tab[] = ["blockers", "appointments", "licences", "trainings"];
+
+/** A row that opens something: one click anywhere on it; a button inside keeps its own click. */
+const OPENS = "group cursor-pointer hover:bg-[var(--surface-alt)]";
+const FIRST = cn(st.td, "whitespace-nowrap pl-4 font-medium text-foreground");
+const DATE = cn(st.td, "whitespace-nowrap tabular-nums text-muted-foreground");
+const DASH = <span className="text-muted-foreground">&mdash;</span>;
 
 const MUTED = "text-sm leading-normal tracking-[-0.02em] text-[var(--muted)]";
-const TONE: Record<"success" | "warning" | "error" | "neutral", StatusTone> = { success: "good", warning: "warning", error: "danger", neutral: "neutral" };
 
 const CELL_PILL: Record<CellStatus["kind"], { tone: StatusTone; label: (status: CellStatus) => string } | null> = {
   none: null,
@@ -134,6 +144,11 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   const [licenceQuery, setLicenceQuery] = useState("");
   const [carrierPage, setCarrierPage] = useState(1);
   const [licencePage, setLicencePage] = useState(1);
+  const [blockerQuery, setBlockerQuery] = useState("");
+  const [blockerRegion, setBlockerRegion] = useState("");
+  const [blockerPage, setBlockerPage] = useState(1);
+  // Board 7·A2: one line a carrier by default; ⋯ › Show the state grid keeps the 51-column view.
+  const [stateGrid, setStateGrid] = useState(false);
   const pageSize = useFittingPageSize(480, 45);
   const [refreshing, setRefreshing] = useState(false);
   // The tab is the address (foundation pass 2026-11-03), so the figures link to it: "?tab=licences" is where
@@ -141,7 +156,11 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
   // edits licences (2026-10-26); "&state=TX" (Route's "Add a TX licence", 2026-10-30) also opens Add licence
   // on that state for an editor.
   const pathname = usePathname();
-  const { tab, setTab } = useUrlTab<Tab>(["appointments", "licences", "cover"], "appointments");
+  const { tab, setTab: setUrlTab } = useUrlTab<Tab>(TABS, "blockers", "tab", { cover: "trainings" });
+  // Blockers is the default only while there are any; with none, a bare address opens Appointments.
+  const askedTab = useSearchParams().get("tab");
+  const [chosenTab, setChosenTab] = useState(false);
+  const setTab = useCallback((next: Tab) => { setChosenTab(true); setUrlTab(next); }, [setUrlTab]);
   const [licenceState, setLicenceState] = useState<string | null>(null);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -247,16 +266,6 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     return result.ok;
   }
 
-  const connect = isOwner ? (
-    <Button asChild variant="outline">
-      <Link href="/app/settings#carriers">Connect a carrier</Link>
-    </Button>
-  ) : undefined;
-  // Inside Compliance (owner 2026-11-02) the frame draws the title; the button goes to its corner.
-  const header = framed
-    ? (connect ? <ComplianceSlot slot="corner">{connect}</ComplianceSlot> : null)
-    : <PageHeader title="Appointments & licences" description="Whether you may legally write this product in this state today." actions={connect} />;
-
   // Inside Compliance the frame already draws the title, so only the rows wait.
   if (!vault) return framed ? <TableCard><SectionLoading rows={6} columns={5} label="Loading appointments and licences" /></TableCard> : <PageLoading />;
 
@@ -297,8 +306,36 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
 
   const outstanding = trainings ? outstandingTrainings(trainings) : null;
   const overdueTrainings = outstanding ? outstanding.filter((row) => row.due_on < today).length : 0;
-  const cellDialog = dialog && typeof dialog === "object" ? dialog : null;
+  const cellDialog = dialog && typeof dialog === "object" && "state" in dialog ? dialog : null;
+  const carrierDialog = dialog && typeof dialog === "object" && "carrier" in dialog ? dialog.carrier : null;
   const expiringLicences = licenceRows.filter((row) => licenceStatus(row.expires_at, today).tone !== "success").length;
+  const carrierNameOf = (id: string) => tableCarriers.find((carrier) => carrier.id === id)?.name ?? vault.carriers.find((carrier) => carrier.id === id)?.name ?? "Carrier";
+
+  // Board 7·A: the Readiness tile's list, one line each (lib/appointments/blockers.ts).
+  const blockers = blockerRows(readinessInput, today);
+  const blockerNeedle = blockerQuery.trim().toLowerCase();
+  const shownBlockers = blockers.filter((row) =>
+    (!blockerRegion || (row.state !== null && regionOf(row.state) === blockerRegion)) &&
+    (!blockerNeedle || [row.label, row.state, row.state && stateName(row.state), row.carrierLabel].some((value) => value?.toLowerCase().includes(blockerNeedle))),
+  );
+  const blockerPageRows = paginate(shownBlockers, blockerPage, pageSize);
+  const blockerDanger = blockers.some((row) => row.chip.tone === "danger");
+  // Default: Blockers while there are any; a bare address with none opens Appointments.
+  const view: Tab = tab === "blockers" && blockers.length === 0 && !askedTab && !chosenTab ? "appointments" : tab;
+  const openLicence = (state: string | null) => {
+    if (!canEdit) { setTab("licences"); return; }
+    setLicenceState(state);
+    setDialog("license");
+  };
+  const openBlocker = (row: BlockerRow) => {
+    if (row.kind.startsWith("licence-")) openLicence(row.state);
+    else if (row.kind.startsWith("training-")) setTab("trainings");
+    else if (row.carrierId) setDialog({ carrier: row.carrierId });
+  };
+
+  // Board 7·A2: one line a carrier.
+  const lines = carrierLines(shownCarriers.map((carrier) => carrier.id), vault.appointments, vault.licenses, today);
+  const linePageRows = paginate(lines, carrierPage, pageSize);
 
   const closeEditor = () => {
     setEditing(false);
@@ -317,38 +354,181 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
     <EmptyState title="Connect a carrier first" hint="Choose a carrier in Settings › Carrier library before recording appointments." />
   );
 
+  // Board 7·A's corner: Edit appointments · Add a licence (an editor); Connect a carrier moves to the Appointments ⋯.
+  const connect = isOwner ? (
+    <Button asChild variant="outline">
+      <Link href="/app/settings#carriers">Connect a carrier</Link>
+    </Button>
+  ) : null;
+  const cornerButtons = canEdit ? (
+    <>
+      {tableCarriers.length > 0 && <Button type="button" variant="outline" onClick={() => { setTab("appointments"); setStateGrid(true); setEditing(true); }}>Edit appointments</Button>}
+      <Button type="button" variant="outline" onClick={() => openLicence(null)}><Plus aria-hidden="true" />Add a licence</Button>
+    </>
+  ) : connect;
+  // Inside Compliance (owner 2026-11-02) the frame draws the title; the buttons go to its corner.
+  const header = framed
+    ? (cornerButtons ? <ComplianceSlot slot="corner">{cornerButtons}</ComplianceSlot> : null)
+    : <PageHeader title="Appointments & licences" description="Whether you may legally write this product in this state today." actions={cornerButtons ?? undefined} />;
+  const appointmentsMenu = (
+    <MoreMenu
+      row
+      label="More appointment views"
+      items={[
+        { label: stateGrid ? "Show one line a carrier" : "Show the state grid", onSelect: () => { setStateGrid((on) => !on); setCarrierPage(1); } },
+        canEdit && isOwner && { label: "Connect a carrier", href: "/app/settings#carriers" },
+      ]}
+    />
+  );
+
   return (
     <div className="flex w-full min-w-0 flex-col gap-4">
       <LeaveGuard dirty={dirty} onSave={saveGrid} onDiscard={() => setSelected(new Set(saved))} what="the appointments grid" />
       {header}
-      {/* Why editing is off, and every readiness blocker, go to the bell (owner 2026-11-02): never a box on the page. */}
+      {/* Why editing is off goes to the bell (owner 2026-11-02): never a box on the page. The readiness items are
+          the Blockers tab (round 7), so they are no longer bell notices as well. */}
       {readOnlyReason ? <Callout tone="warning" title="Read-only">{readOnlyReason}</Callout>
         : !canEdit ? <Callout tone="info" title="View only">An owner with full access edits appointments and licences.</Callout> : null}
-      {items.map((item) => <Callout key={item.key} tone={item.tone === "error" ? "error" : "warning"} title={item.title}>{item.body}</Callout>)}
 
+      {/* Plain figures; a problem tile says so in one chip (owner 2026-11-11). */}
       <StatStrip label="Readiness">
-        <StatTile label="Readiness" value={summary.label} valueTone={summary.tone === "error" ? "danger" : summary.tone === "warning" ? "warning" : "good"} footnote={`${plural(items.length, "item")} inside ${READINESS_WINDOW_DAYS} days`} href={unlicensedAppointedStates.length || expiringLicences ? `${pathname}?tab=licences` : overdueTrainings ? `${pathname}?tab=cover` : pathname} />
-        <StatTile label="Appointed states" value={appointedStates.size} footnote={plural(activeAppointments.length, "active appointment")} href={pathname} />
-        <StatTile label="Licences" href={`${pathname}?tab=licences`} value={licenceRows.length} valueTone={unlicensedAppointedStates.length ? "danger" : undefined} footnote={unlicensedAppointedStates.length ? `${plural(unlicensedAppointedStates.length, "appointed state")} unlicensed` : expiringLicences ? `${expiringLicences} need attention` : "all current"} />
+        <StatTile label="Readiness" value={summary.label} footnote={items.length ? <StatusChip tone="warning">{`${items.length} inside ${READINESS_WINDOW_DAYS} days`}</StatusChip> : `Nothing inside ${READINESS_WINDOW_DAYS} days`} href={`${pathname}?tab=blockers`} />
+        <StatTile label="Appointed states" value={appointedStates.size} footnote={plural(activeAppointments.length, "active appointment")} href={`${pathname}?tab=appointments`} />
+        <StatTile label="Licences" href={`${pathname}?tab=licences`} value={licenceRows.length} footnote={unlicensedAppointedStates.length ? <StatusChip tone="danger">{`${plural(unlicensedAppointedStates.length, "state")} unlicensed`}</StatusChip> : expiringLicences ? <StatusChip tone="warning">{`${expiringLicences} need attention`}</StatusChip> : "all current"} />
       </StatStrip>
 
       {(() => {
         const tabs = (
           <ViewTabs
             label="Appointment vault views"
-            value={tab}
+            value={view}
             onChange={setTab}
             tabs={[
-              { key: "appointments", label: "Carrier appointments", count: activeAppointments.length },
-              { key: "licences", label: "State licences", count: licenceRows.length },
-              { key: "cover", label: "Carrier trainings" },
+              { key: "blockers", label: "Blockers", count: blockers.length || null, tone: blockerDanger ? "danger" : undefined },
+              { key: "appointments", label: "Appointments", count: activeAppointments.length },
+              { key: "licences", label: "Licences", count: licenceRows.length },
+              { key: "trainings", label: "Trainings" },
             ]}
           />
         );
         return framed ? <ComplianceSlot slot="lead">{tabs}</ComplianceSlot> : tabs;
       })()}
 
-      {tab === "appointments" && (editing && canEdit ? (
+      {view === "blockers" && (
+        <TableCard
+          toolbar={
+            <DataToolbar
+              actions={<>
+                {(blockerQuery || blockerRegion) && <ClearFiltersButton onClick={() => { setBlockerQuery(""); setBlockerRegion(""); setBlockerPage(1); }} />}
+                {refreshButton}
+              </>}
+            >
+              <ToolbarSearch value={blockerQuery} onChange={(value) => { setBlockerQuery(value); setBlockerPage(1); }} placeholder="Search carriers or states" />
+              <select aria-label="Filter blockers by region" className={toolbarControl} value={blockerRegion} onChange={(event) => { setBlockerRegion(event.target.value); setBlockerPage(1); }}>
+                <option value="">Every region</option>
+                {US_REGIONS.map((region) => <option key={region.name} value={region.name}>{region.name}</option>)}
+              </select>
+            </DataToolbar>
+          }
+          footer={blockers.length ? shownBlockers.length > pageSize
+            ? <Pager page={blockerPageRows.current} pageSize={pageSize} total={shownBlockers.length} noun="blockers" onPage={setBlockerPage} suffix="Expired first, then soonest" />
+            : <span>Expired first, then soonest · {plural(shownBlockers.length, "blocker")}</span> : undefined}
+        >
+          {blockers.length === 0 ? (
+            <EmptyState title="Nothing blocks a sale" hint={`Every appointed state has a current licence, and nothing expires inside ${READINESS_WINDOW_DAYS} days.`} />
+          ) : shownBlockers.length === 0 ? (
+            <NoMatches noun="blockers" onClear={() => { setBlockerQuery(""); setBlockerRegion(""); setBlockerPage(1); }} />
+          ) : (
+            <table className={cn(st.table, "min-w-[760px]")}>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={cn(st.th, "pl-4")}>Blocker</th>
+                  <th scope="col" className={st.th}>State</th>
+                  <th scope="col" className={st.th}>Carrier</th>
+                  <th scope="col" className={st.th}>Due</th>
+                  <th scope="col" className={st.th}>Status</th>
+                  <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>
+                </tr>
+              </thead>
+              <tbody className="m-seq">
+                {blockerPageRows.rows.map((row) => {
+                  const next = row.kind.startsWith("licence-") && !canEdit ? "Open" : row.next;
+                  return (
+                    <tr key={row.key} className={OPENS} title={row.detail} onClick={(event) => { if ((event.target as HTMLElement).closest("a, button")) return; openBlocker(row); }}>
+                      <td className={FIRST}>{row.label}</td>
+                      <td className={cn(st.td, "whitespace-nowrap")}>{row.state ? stateName(row.state) : DASH}</td>
+                      <td className={cn(st.td, "max-w-[220px] truncate whitespace-nowrap")}>{row.carrierLabel ?? <span className="text-muted-foreground">every carrier</span>}</td>
+                      <td className={DATE}>{row.due ? shortDate(row.due) : DASH}</td>
+                      <td className={st.td}><StatusChip tone={row.chip.tone}>{row.chip.label}</StatusChip></td>
+                      <td className={cn(st.td, "whitespace-nowrap pr-4")}>
+                        <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={() => openBlocker(row)} title={row.detail}>{next} ›</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </TableCard>
+      )}
+
+      {view === "appointments" && !stateGrid && !editing && (
+        <TableCard
+          toolbar={
+            <DataToolbar
+              actions={<>
+                {carrierQuery && <ClearFiltersButton onClick={() => { setCarrierQuery(""); setCarrierPage(1); }} />}
+                {refreshButton}
+                {appointmentsMenu}
+              </>}
+            >
+              <ToolbarSearch value={carrierQuery} onChange={(value) => { setCarrierQuery(value); setCarrierPage(1); }} placeholder="Search carriers" />
+            </DataToolbar>
+          }
+          footer={tableCarriers.length > 0 ? shownCarriers.length > pageSize
+            ? <Pager page={linePageRows.current} pageSize={pageSize} total={shownCarriers.length} noun="carriers" onPage={setCarrierPage} />
+            : <span>{shownCarriers.length} of {plural(tableCarriers.length, "carrier")}</span> : undefined}
+        >
+          {tableCarriers.length === 0 ? (
+            noCarrier
+          ) : shownCarriers.length === 0 ? (
+            <NoMatches noun="carriers" onClear={() => { setCarrierQuery(""); setCarrierPage(1); }} />
+          ) : (
+            <table className={cn(st.table, "min-w-[760px]")}>
+              <thead>
+                <tr className={st.headRow}>
+                  <th scope="col" className={cn(st.th, "pl-4")}>Carrier</th>
+                  <th scope="col" className={st.th}>Appointed</th>
+                  <th scope="col" className={st.th}>Pending</th>
+                  <th scope="col" className={st.th}>Ended or expired</th>
+                  <th scope="col" className={st.th}>Status</th>
+                  <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>
+                </tr>
+              </thead>
+              <tbody className="m-seq">
+                {linePageRows.rows.map((line) => {
+                  const name = carrierNameOf(line.carrierId);
+                  const open = () => setDialog({ carrier: line.carrierId });
+                  return (
+                    <tr key={line.carrierId} className={OPENS} onClick={(event) => { if ((event.target as HTMLElement).closest("a, button")) return; open(); }}>
+                      <td className={cn(FIRST, "max-w-[260px] truncate")} title={name}>{name}</td>
+                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{plural(line.appointed, "state")}</td>
+                      <td className={cn(st.td, "tabular-nums")}>{line.pending}</td>
+                      <td className={cn(st.td, "tabular-nums")}>{line.endedOrExpired}</td>
+                      <td className={st.td}><StatusChip tone={line.chip.tone}>{line.chip.label}</StatusChip></td>
+                      <td className={cn(st.td, "whitespace-nowrap pr-4")}>
+                        <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={open} title={`${name}: every state, its status and since when`}>Open ›</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </TableCard>
+      )}
+
+      {view === "appointments" && (stateGrid || editing) && (editing && canEdit ? (
         configuredCarriers.length === 0 ? (
           <TableCard toolbar={<DataToolbar actions={<Button type="button" variant="outline" onClick={closeEditor}>Done editing</Button>} />}>
             {noCarrier}
@@ -384,6 +564,7 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                 {canEdit && tableCarriers.length > 0 && <Button type="button" variant="outline" onClick={() => setEditing(true)}>Edit appointments</Button>}
                 {(carrierQuery || regionFilter) && <ClearFiltersButton onClick={() => { setCarrierQuery(""); setRegionFilter(""); setCarrierPage(1); }} />}
                 {refreshButton}
+                {appointmentsMenu}
               </>}
             >
               <ToolbarSearch value={carrierQuery} onChange={(value) => { setCarrierQuery(value); setCarrierPage(1); }} placeholder="Search carriers" />
@@ -457,17 +638,11 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
         </TableCard>
       ))}
 
-      {tab === "licences" && (
+      {view === "licences" && (
         <TableCard
           toolbar={
             <DataToolbar
               actions={<>
-                {canEdit && (
-                  <Button type="button" variant="outline" onClick={() => setDialog("license")}>
-                    <Plus aria-hidden="true" />
-                    Add a licence
-                  </Button>
-                )}
                 {licenceQuery && <ClearFiltersButton onClick={() => { setLicenceQuery(""); setLicencePage(1); }} />}
                 {refreshButton}
               </>}
@@ -475,13 +650,15 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
               <ToolbarSearch value={licenceQuery} onChange={(value) => { setLicenceQuery(value); setLicencePage(1); }} placeholder="Search states, licences" />
             </DataToolbar>
           }
-          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > pageSize ? <Pager page={licencePageRows.current} pageSize={pageSize}total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
+          footer={licenceRows.length + unlicensedAppointedStates.length > 0 ? licenceTotal > pageSize ? <Pager page={licencePageRows.current} pageSize={pageSize} total={licenceTotal} noun="rows" onPage={setLicencePage} suffix={<>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</>} /> : <span>{plural(licenceRows.length, "licence")}{unlicensedAppointedStates.length ? ` · ${plural(unlicensedAppointedStates.length, "appointed state")} without one` : ""}</span> : undefined}
         >
           {licenceRows.length + unlicensedAppointedStates.length === 0 ? (
             <EmptyState title="No licences recorded yet" hint="Until one is, no lead can be assigned to an owner or producer." />
           ) : shownLicences.length + shownUnlicensed.length === 0 ? (
             <NoMatches noun="licences" onClear={() => { setLicenceQuery(""); setLicencePage(1); }} />
           ) : (
+            // One line a licence, one chip a row (owner 2026-11-11): a missing number or line is "—", and what it
+            // means ("No number") is the row's chip, so a licence without a number no longer passes for Current.
             <table className={cn(st.table, "min-w-[760px]")}>
               <thead>
                 <tr className={st.headRow}>
@@ -489,32 +666,49 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
                   <th scope="col" className={st.th}>Licence</th>
                   <th scope="col" className={st.th}>Lines</th>
                   <th scope="col" className={st.th}>Expires</th>
-                  <th scope="col" className={cn(st.th, "pr-4")}>Status</th>
+                  <th scope="col" className={st.th}>Status</th>
+                  {canEdit && <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>}
                 </tr>
               </thead>
               <tbody className="m-seq">
                 {licencePageRows.rows.filter((row): row is LicenseRow => typeof row !== "string").map((row) => {
-                  const status = licenceStatus(row.expires_at, today);
+                  const number = licenceNumberValue(row.license_number);
+                  const expiry = licenceExpiryValue(row.expires_at);
+                  const chip = licenceChip({ expires_at: row.expires_at, number, hasExpiry: Boolean(expiry) }, today, READINESS_WINDOW_DAYS);
+                  const next = chip.tone === "danger" || (chip.tone === "warning" && chip.label !== "No number") ? "Renew" : "Open";
+                  const open = () => openLicence(row.state);
                   return (
-                    <tr key={row.id}>
-                      <td className={cn(st.td, "whitespace-nowrap pl-4")}>{stateName(row.state)}</td>
-                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{licenceNumberValue(row.license_number) || <span className="text-[var(--muted)]">No number yet</span>}</td>
-                      <td className={cn(st.td, "max-w-[320px] truncate")} title={row.lines_of_authority?.join(", ") || undefined}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : <span className="text-[var(--muted)]">Not recorded</span>}</td>
-                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{licenceExpiryValue(row.expires_at) ? shortDate(row.expires_at) : <span className="text-[var(--muted)]">No expiry</span>}</td>
-                      <td className={cn(st.td, "pr-4")}><StatusChip tone={TONE[status.tone]}>{status.label}</StatusChip></td>
+                    <tr key={row.id} className={canEdit ? OPENS : undefined} onClick={canEdit ? (event) => { if ((event.target as HTMLElement).closest("a, button")) return; open(); } : undefined}>
+                      <td className={FIRST}>{stateName(row.state)}</td>
+                      <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{number || DASH}</td>
+                      <td className={cn(st.td, "max-w-[320px] truncate whitespace-nowrap")} title={row.lines_of_authority?.join(", ") || undefined}>{row.lines_of_authority?.length ? row.lines_of_authority.join(", ") : DASH}</td>
+                      <td className={DATE}>{expiry ? shortDate(row.expires_at) : DASH}</td>
+                      <td className={st.td}><StatusChip tone={chip.tone}>{chip.label}</StatusChip></td>
+                      {canEdit && (
+                        <td className={cn(st.td, "whitespace-nowrap pr-4")}>
+                          <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={open} title={`Update the ${stateName(row.state)} licence`}>{next} ›</button>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
-                {licencePageRows.rows.filter((row): row is string => typeof row === "string").map((state) => (
-                  <tr key={`unlicensed-${state}`}>
-                    <td className={cn(st.td, "whitespace-nowrap pl-4")}>{stateName(state)}</td>
-                    {/* The fact itself, on the row: an active carrier appointment here and no licence. */}
-                    <td className={cn(st.td, "text-[var(--error-ink)]")} colSpan={3}>Appointed here with no licence, so no lead in this state can be assigned.</td>
-                    <td className={cn(st.td, "pr-4")}>
-                      <StatusChip tone="danger">Not licensed</StatusChip>
-                    </td>
-                  </tr>
-                ))}
+                {licencePageRows.rows.filter((row): row is string => typeof row === "string").map((state) => {
+                  const open = () => openLicence(state);
+                  return (
+                    <tr key={`unlicensed-${state}`} className={canEdit ? OPENS : undefined} title="Appointed here with no licence, so no lead in this state can be assigned." onClick={canEdit ? (event) => { if ((event.target as HTMLElement).closest("a, button")) return; open(); } : undefined}>
+                      <td className={FIRST}>{stateName(state)}</td>
+                      <td className={st.td}>{DASH}</td>
+                      <td className={st.td}>{DASH}</td>
+                      <td className={st.td}>{DASH}</td>
+                      <td className={st.td}><StatusChip tone="danger">Not licensed</StatusChip></td>
+                      {canEdit && (
+                        <td className={cn(st.td, "whitespace-nowrap pr-4")}>
+                          <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={open} title={`Add the ${stateName(state)} licence`}>Add licence ›</button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -522,8 +716,8 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
       )}
 
       {/* Every carrier training as a row (foundation pass 2026-11-03; was one "N outstanding" line in a half-width
-          card). Recording and completing them stays in the Trainings pop-up. */}
-      {tab === "cover" && (
+          card). Recording and completing them stays in the Trainings pop-up, which a row opens for an editor. */}
+      {view === "trainings" && (
         <TableCard
           toolbar={<DataToolbar actions={<>
             {canEdit && <Button type="button" variant="outline" onClick={() => setDialog("training")}><Plus aria-hidden="true" />Trainings</Button>}
@@ -547,10 +741,10 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
               </thead>
               <tbody className="m-seq">
                 {[...trainings].sort((a, b) => Number(Boolean(a.completed_on)) - Number(Boolean(b.completed_on)) || a.due_on.localeCompare(b.due_on)).map((row) => (
-                  <tr key={row.id}>
-                    <td className={cn(st.td, "max-w-[220px] truncate pl-4")} title={vault.carriers.find((carrier) => carrier.id === row.carrier_id)?.name}>{vault.carriers.find((carrier) => carrier.id === row.carrier_id)?.name ?? "Carrier"}</td>
-                    <td className={cn(st.td, "max-w-[320px] truncate")} title={row.title}>{row.title}</td>
-                    <td className={cn(st.td, "whitespace-nowrap tabular-nums")}>{shortDate(row.due_on)}</td>
+                  <tr key={row.id} className={canEdit ? OPENS : undefined} onClick={canEdit ? () => setDialog("training") : undefined}>
+                    <td className={cn(FIRST, "max-w-[220px] truncate")} title={carrierNameOf(row.carrier_id)}>{carrierNameOf(row.carrier_id)}</td>
+                    <td className={cn(st.td, "max-w-[320px] truncate whitespace-nowrap")} title={row.title}>{row.title}</td>
+                    <td className={DATE}>{shortDate(row.due_on)}</td>
                     <td className={cn(st.td, "pr-4")}>{row.completed_on ? <StatusChip tone="good">{`Done ${shortDate(row.completed_on)}`}</StatusChip> : row.due_on < today ? <StatusChip tone="danger">Overdue</StatusChip> : <StatusChip tone="warning">Outstanding</StatusChip>}</td>
                   </tr>
                 ))}
@@ -602,7 +796,98 @@ export function CarrierAppointmentsPage({ canEdit, isOwner, readOnlyReason = nul
           )}
         </>
       )}
+      {carrierDialog && (
+        <CarrierStatesDialog
+          key={carrierDialog}
+          carrierName={carrierNameOf(carrierDialog)}
+          rows={[...latestByKey.values()].filter((row) => row.carrier_id === carrierDialog)}
+          licences={vault.licenses}
+          canEdit={canEdit}
+          onOpenState={(state) => setDialog({ carrierId: carrierDialog, state })}
+          onClose={() => setDialog(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/* ── one carrier: every state, its status and since when (board 7·1) ───────── */
+
+function CarrierStatesDialog({
+  carrierName,
+  rows,
+  licences,
+  canEdit,
+  onOpenState,
+  onClose,
+}: {
+  carrierName: string;
+  rows: AppointmentRow[];
+  licences: LicenseRow[];
+  canEdit: boolean;
+  onOpenState: (state: string) => void;
+  onClose: () => void;
+}) {
+  const held = new Set(rows.map((row) => row.state));
+  const [adding, setAdding] = useState(() => US_STATES.find(([code]) => !held.has(code))?.[0] ?? "");
+  const licenceByState = new Map(licences.map((row) => [row.state, row]));
+  const ordered = [...rows].sort((a, b) => stateName(a.state).localeCompare(stateName(b.state)));
+  return (
+    <RecordDialog
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose();
+      }}
+      title={`${carrierName} appointments`}
+      description="Every state this carrier has appointed you in. Only an active appointment inside its dates, in a state where you hold a current licence, routes leads."
+    >
+      {ordered.length === 0 ? (
+        <p className={MUTED}>No appointment recorded for this carrier yet.</p>
+      ) : (
+        <table className={st.table}>
+          <thead>
+            <tr className={st.headRow}>
+              <th scope="col" className={cn(st.th, "pl-4")}>State</th>
+              <th scope="col" className={st.th}>Status</th>
+              <th scope="col" className={st.th}>Since</th>
+              {canEdit && <th scope="col" className={cn(st.th, "pr-4")}>Next step</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {ordered.map((row) => {
+              const status = appointmentCellStatus(row, today);
+              const licence = licenceByState.get(row.state);
+              const routes = status.kind === "appointed" || status.kind === "expiring";
+              const unlicensed = routes && (!licence || daysUntilExpiry(licence.expires_at, today) < 0);
+              const pill = CELL_PILL[status.kind];
+              const chip = unlicensed ? { tone: "danger" as StatusTone, label: "Not licensed" } : pill ? { tone: pill.tone, label: pill.label(status) } : null;
+              return (
+                <tr key={row.id} className={canEdit ? OPENS : undefined} onClick={canEdit ? (event) => { if ((event.target as HTMLElement).closest("a, button")) return; onOpenState(row.state); } : undefined}>
+                  <td className={FIRST}>{stateName(row.state)}</td>
+                  <td className={st.td}>{chip ? <StatusChip tone={chip.tone}>{chip.label}</StatusChip> : DASH}</td>
+                  <td className={DATE}>{shortDate(row.effective_from)}</td>
+                  {canEdit && (
+                    <td className={cn(st.td, "whitespace-nowrap pr-4")}>
+                      <button type="button" className="cursor-pointer text-left outline-none focus-visible:underline" onClick={() => onOpenState(row.state)}>Open ›</button>
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {canEdit && adding && (
+        <div className="flex flex-wrap items-end gap-2 border-t border-[var(--border)] pt-4">
+          <Field label="Add a state" htmlFor="carrier-add-state" className="min-w-0 flex-1">
+            <select id="carrier-add-state" className={control} value={adding} onChange={(event) => setAdding(event.target.value)}>
+              {US_STATES.filter(([code]) => !held.has(code)).map(([code, name]) => <option key={code} value={code}>{name}</option>)}
+            </select>
+          </Field>
+          <Button type="button" variant="outline" onClick={() => onOpenState(adding)}>Add</Button>
+        </div>
+      )}
+    </RecordDialog>
   );
 }
 

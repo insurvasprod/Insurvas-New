@@ -13,7 +13,7 @@ import type { SettingsGroup, SettingsItem, SettingsSection } from "./sections";
  */
 
 /** Fixed, in this order. A section moves group by changing its one `group` field. */
-export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["Your account", "Contracting", "Agency", "Sales process", "Workspace setup", "Money & compliance", "Platform"];
+export const SETTINGS_GROUPS: readonly SettingsGroup[] = ["Your account", "Agency", "Selling", "Leads & calling", "Integrations", "Money & compliance", "Records"];
 
 /** The menu's gate: feature AND role. A section that fails either is absent, never greyed out. */
 export function sectionAllowed(section: Pick<SettingsSection, "required_feature" | "required_roles" | "disabled">, granted: ReadonlySet<string>, role: TenantRole): boolean {
@@ -64,13 +64,28 @@ export function itemHref(section: Pick<SettingsSection, "id" | "route">, item: P
  * Carriers section's Field maps tab).
  * Old links, bookmarks and emails keep landing on the right place, on the right step.
  */
-const MOVED_TABS: Record<string, string> = { "carrier-library": "carriers", "states-licences": "carriers/carriers-states", dispositions: "pipelines", alerts: "my-profile/notifications", "sales-carriers": "carriers", "sales-field-maps": "carriers/carriers-maps" };
+const MOVED_TABS: Record<string, string> = {
+  "carrier-library": "carriers", "states-licences": "carriers/carriers-states", dispositions: "pipelines", alerts: "my-profile/notifications", "sales-carriers": "carriers", "sales-field-maps": "carriers/carriers-maps",
+  // Settings round 8 (2026-11-12): six Selling pages became the header tabs of Sales process
+  // (lib/salesSettings/salesProcess.ts OLD_SALES_SECTIONS says the same, for the page itself).
+  "sales-underwriting": "sales-process/health-questions",
+  "sales-quotation": "sales-process/quote-inputs",
+  "sales-field-sets": "sales-process/carrier-application",
+  "sales-preferences": "sales-process/checks",
+  "sales-disclosures": "sales-process/disclosures",
+  "sales-pipeline-sync": "sales-process/stage-moves",
+};
 
-/** A settings hash split into the tab and the control inside it: "sales-preferences/qa-buffer". */
+/**
+ * A settings hash split into the tab and the control inside it: "sales-process/qa-buffer". A moved
+ * section's old link keeps what followed it as the anchor ("#sales-preferences/qa-buffer" opens
+ * Sales process at the buffer); with nothing after it, the new home's own default anchor applies.
+ */
 export function parseSettingsHash(hash: string): { tab: string; anchor: string | null } {
   const given = hash.replace(/^#/, "");
   const [head, ...rest] = given.split("/");
-  const raw = MOVED_TABS[head] ? [MOVED_TABS[head], ...rest].join("/") : given;
+  const moved = MOVED_TABS[head];
+  const raw = !moved ? given : rest.length && rest.join("/") ? `${moved.split("/")[0]}/${rest.join("/")}` : moved;
   const slash = raw.indexOf("/");
   return slash < 0 ? { tab: raw, anchor: null } : { tab: raw.slice(0, slash), anchor: raw.slice(slash + 1) || null };
 }
@@ -137,6 +152,9 @@ export function searchSettings(sections: readonly SettingsSection[], granted: It
     const sectionScore = score(phrase, terms, { label: section.label, keywords: section.search_keywords ?? [], description: section.description });
     if (sectionScore > 0) hits.push({ title: `Settings › ${section.label}`, meta: section.short ?? section.description, href: sectionHref(section), score: sectionScore });
     for (const item of section.items ?? []) {
+      // A section open to several roles may hold settings only some of them reach (Sales process: a producer
+      // reads Health questions, not the checks).
+      if (item.required_roles && !item.required_roles.includes(role)) continue;
       const itemScore = score(phrase, terms, { label: item.label, keywords: item.keywords ?? [], description: "" });
       // A setting is the more precise landing, so it wins a tie with its own section.
       if (itemScore > 0) hits.push({ title: `Settings › ${section.label} › ${item.label}`, meta: section.label, href: itemHref(section, item), score: itemScore + 1 });

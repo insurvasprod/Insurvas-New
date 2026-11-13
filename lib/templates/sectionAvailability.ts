@@ -81,14 +81,22 @@ function holdsPhone(section: TemplateFormSection, fields: Map<string, TemplateFi
  */
 export function effectiveTemplateForm(form: TemplateFormDefinition, fields: TemplateField[]): TemplateFormDefinition {
   const availability = sectionAvailability(form);
-  if (TEMPLATE_SECTION_GROUPS.every((group) => availability[group])) return form;
+  // Format 2: a page's skip rule is copied onto each of its questions (`page_skip`), so a reader that
+  // only sees a question (templateFormFieldVisible) hides it while the page is skipped. The phone's
+  // page is never skipped: every submission is screened on that number.
   const byKey = new Map(fields.map((field) => [field.field_key, field]));
+  const skips = form.sections.some((section) => section.skip_when && section.skip_when.rules.length > 0);
+  if (TEMPLATE_SECTION_GROUPS.every((group) => availability[group]) && !skips) return form;
   return {
     ...form,
-    sections: form.sections.filter((section) => {
-      const group = sectionGroup(section);
-      return !group || availability[group] || holdsPhone(section, byKey);
-    }),
+    sections: form.sections
+      .filter((section) => {
+        const group = sectionGroup(section);
+        return !group || availability[group] || holdsPhone(section, byKey);
+      })
+      .map((section) => (section.skip_when && section.skip_when.rules.length > 0 && !holdsPhone(section, byKey)
+        ? { ...section, fields: section.fields.map((field) => ({ ...field, page_skip: section.skip_when })) }
+        : section)),
   };
 }
 

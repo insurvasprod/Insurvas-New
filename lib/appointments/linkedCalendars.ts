@@ -4,6 +4,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "./schemaGap";
+import { busyFromEvents, canWriteEvents, GOOGLE_EVENTS_SCOPE, GOOGLE_FREEBUSY_SCOPE } from "./calendarMirrorCore";
 import {
   BUSY_HORIZON_DAYS,
   CALENDAR_PROVIDERS,
@@ -50,6 +51,8 @@ export interface BusyTimeSource {
   refresh(refreshToken: string): Promise<Tokens>;
   accountEmail(accessToken: string): Promise<string | null>;
   fetchBusy(accessToken: string, fromIso: string, toIso: string): Promise<BusyInterval[]>;
+  /** Busy time read from the events themselves, so the meetings Insurvas wrote are left out (calendarMirror.ts). */
+  fetchBusyExcludingOurs?(accessToken: string, fromIso: string, toIso: string): Promise<BusyInterval[]>;
 }
 
 export class CalendarProviderNotConfiguredError extends Error {
@@ -131,7 +134,8 @@ const google: BusyTimeSource = {
       client_id: env("GOOGLE_CALENDAR_CLIENT_ID"),
       redirect_uri: redirectUri,
       response_type: "code",
-      scope: "openid email https://www.googleapis.com/auth/calendar.freebusy",
+      // calendar.events (owner, 2026-11-13): meetings booked in Insurvas are written to this calendar.
+      scope: `openid email ${GOOGLE_FREEBUSY_SCOPE} ${GOOGLE_EVENTS_SCOPE}`,
       access_type: "offline",
       prompt: "consent",
       include_granted_scopes: "true",
@@ -165,6 +169,21 @@ const google: BusyTimeSource = {
     return (calendars.primary?.busy ?? [])
       .filter((slot) => slot.start && slot.end)
       .map((slot) => ({ startsAt: new Date(slot.start as string).toISOString(), endsAt: new Date(slot.end as string).toISOString() }));
+  },
+  async fetchBusyExcludingOurs(accessToken, fromIso, toIso) {
+    const events: Array<Record<string, unknown>> = [];
+    let zone = "UTC";
+    let pageToken = "";
+    for (let page = 0; page < 10; page += 1) {
+      const query = new URLSearchParams({ timeMin: fromIso, timeMax: toIso, singleEvents: "true", showDeleted: "false", maxResults: "2500" });
+      if (pageToken) query.set("pageToken", pageToken);
+      const body = await bearerJson(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${query.toString()}`, accessToken);
+      if (typeof body.timeZone === "string") zone = body.timeZone;
+      events.push(...((body.items ?? []) as Array<Record<string, unknown>>));
+      pageToken = typeof body.nextPageToken === "string" ? body.nextPageToken : "";
+      if (!pageToken) break;
+    }
+    return busyFromEvents(events, zone);
   },
 };
 
@@ -241,10 +260,13 @@ type Db = { from(table: string): Query<Row[]>; rpc(name: string, args: Row): Pro
 const db = () => getSupabaseServiceClient() as unknown as Db;
 const text = (value: unknown) => (typeof value === "string" ? value : "");
 
-const COLUMNS = "id, tenant_id, user_id, provider, status, account_email, last_synced_at, last_error";
+const COLUMNS = "id, tenant_id, user_id, provider, status, account_email, last_synced_at, last_error, scopes";
+
+const scopesOf = (row: Row) => (Array.isArray(row.scopes) ? row.scopes.filter((scope): scope is string => typeof scope === "string") : []);
 
 function view(row: Row): CalendarConnectionView {
   return {
+    writesEvents: text(row.provider) === "google" && canWriteEvents(scopesOf(row)),
     id: text(row.id),
     userId: text(row.user_id),
     provider: text(row.provider) as CalendarProviderId,
@@ -301,7 +323,7 @@ export class CalendarWrongWorkspaceError extends Error {
   }
 }
 
-export async function completeCalendarConnection(input: { state: string; code: string; tenantId: string }): Promise<{ tenantId: string; userId: string }> {
+export async function completeCalendarConnection(input: { state: string; code: string; tenantId: string }): Promise<{ tenantId: string; userId: string; readOnly: boolean }> {
   const found = await db()
     .from("tenant_connected_calendars")
     .select(`${COLUMNS}, oauth_state_expires_at`)
@@ -332,7 +354,8 @@ export async function completeCalendarConnection(input: { state: string; code: s
     .eq("id", text(row.id));
   if (updated.error) throw new Error(`Could not save the connection: ${updated.error.message}`);
   await syncCalendarBusy(text(row.id)).catch(() => undefined);
-  return { tenantId: text(row.tenant_id), userId: text(row.user_id) };
+  // Google's consent screen lets the person untick "edit events"; then busy time works but meetings cannot be added.
+  return { tenantId: text(row.tenant_id), userId: text(row.user_id), readOnly: provider === "google" && !canWriteEvents(tokens.scopes) };
 }
 
 export async function disconnectCalendar(tenantId: string, id: string): Promise<{ userId: string } | null> {
@@ -349,7 +372,7 @@ export async function disconnectCalendar(tenantId: string, id: string): Promise<
 export async function syncCalendarBusy(id: string, now = new Date()): Promise<number> {
   const found = await db()
     .from("tenant_connected_calendars")
-    .select("id, provider, status, refresh_token_ciphertext")
+    .select("id, provider, status, refresh_token_ciphertext, scopes")
     .eq("id", id)
     .maybeSingle();
   if (found.error) throw new Error(`Could not read that calendar: ${found.error.message}`);
@@ -359,7 +382,12 @@ export async function syncCalendarBusy(id: string, now = new Date()): Promise<nu
   try {
     const source = busyTimeSource(provider);
     const tokens = await source.refresh(decryptToken(text(row.refresh_token_ciphertext)));
-    const busy = await source.fetchBusy(tokens.accessToken, now.toISOString(), new Date(now.getTime() + BUSY_HORIZON_DAYS * 86_400_000).toISOString());
+    const from = now.toISOString();
+    const to = new Date(now.getTime() + BUSY_HORIZON_DAYS * 86_400_000).toISOString();
+    // A calendar Insurvas writes to holds our own meetings too; read it event by event and leave them out.
+    const busy = canWriteEvents(scopesOf(row)) && source.fetchBusyExcludingOurs
+      ? await source.fetchBusyExcludingOurs(tokens.accessToken, from, to)
+      : await source.fetchBusy(tokens.accessToken, from, to);
     if (tokens.refreshToken) {
       await db().from("tenant_connected_calendars").update({ refresh_token_ciphertext: encryptToken(tokens.refreshToken) }).eq("id", id);
     }

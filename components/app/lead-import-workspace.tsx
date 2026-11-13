@@ -26,6 +26,7 @@ import { IMPORT_CSV_KEY, parseDollarsToCents, parseRecordCount } from "@/lib/age
 import { isXlsxFile, readXlsxAsCsv, XLSX_TYPES } from "@/lib/agentTemplates/xlsx";
 import { TEMPLATE_FIELD_TYPE_LABELS, type TemplateFieldType } from "@/lib/templates/constants";
 import { cn } from "@/lib/utils";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 type SavedMap = { id: string; vendor_id: string; product_code: string; mapping: Record<string, string | null>; updated_at: string; date_order?: ImportDateOrder | null };
 type ImportInfo = { product: { name: string }; productCode: string; products?: Array<{ code: string; name: string }>; fields: Array<{ key: string; label: string; type: TemplateFieldType; required: boolean; options: string[]; sort_order: number }>; stages: Array<{ id: string; name: string }>; campaigns: Array<{ id: string; vendor_id: string; name: string; status: string }>; vendors: Array<{ id: string; name: string; lead_type: string; status: string }>; mappings: SavedMap[]; limits: Array<{ key: string; label: string; usage: number; limit: number | null; hardCap: boolean; allowed: boolean }>; maxRows: number; canCreateCampaigns?: boolean };
@@ -162,25 +163,33 @@ type ImportInfoResult = { ok: true; info: ImportInfo } | { ok: false; status: nu
  * so coming back to the step (or back to a product) draws at once while a fresh read replaces it;
  * a request already on its way is shared rather than sent twice.
  */
-const infoCache = new Map<string, { info: ImportInfo; at: number }>();
-const infoInFlight = new Map<string, Promise<ImportInfoResult>>();
+/** The read's address, as the app's cache keys it (lib/client/resource-cache.ts); the default product's is kept across a reload. */
+const importInfoKey = (product: string) => `/api/app/leads/import${product ? `?product=${encodeURIComponent(product)}` : ""}`;
 /** An answer this young (the module's own early read, say) is used as it is, without a second request. */
 const INFO_FRESH_MS = 5_000;
+/** Kept answers from before this moment are not drawn (a campaign was just made, so they are short of it). */
+let infoClearedAt = 0;
+/** Products the server refused: their kept answer is not drawn again. */
+const refusedInfo = new Set<string>();
+/** The kept answer for a product, when it is still one to draw. */
+function keptImportInfo(product: string): ImportInfo | null {
+  if (refusedInfo.has(product)) return null;
+  const kept = peek<ImportInfo>(importInfoKey(product), product === "");
+  return kept?.data && kept.at >= infoClearedAt ? kept.data : null;
+}
 function requestImportInfo(product: string): Promise<ImportInfoResult> {
-  const pending = infoInFlight.get(product);
-  if (pending) return pending;
-  const cached = infoCache.get(product);
-  if (cached && Date.now() - cached.at < INFO_FRESH_MS) return Promise.resolve({ ok: true, info: cached.info });
-  const request = fetch(`/api/app/leads/import${product ? `?product=${encodeURIComponent(product)}` : ""}`, { cache: "no-store" })
-    .then(async (response): Promise<ImportInfoResult> => {
-      const body = await response.json().catch(() => null);
-      if (!response.ok) return { ok: false, status: response.status, body };
-      infoCache.set(product, { info: body as ImportInfo, at: Date.now() });
-      return { ok: true, info: body as ImportInfo };
-    })
-    .finally(() => infoInFlight.delete(product));
-  infoInFlight.set(product, request);
-  return request;
+  const key = importInfoKey(product);
+  const persist = product === "";
+  const fresh = (peek(key, persist)?.at ?? 0) < infoClearedAt;
+  return (fresh ? loadResource<ImportInfo>(key, { persist }) : readResource<ImportInfo>(key, { persist, freshFor: INFO_FRESH_MS })).then(
+    (info): ImportInfoResult => { refusedInfo.delete(product); return { ok: true, info }; },
+    (error: unknown): ImportInfoResult => {
+      const { status, body } = (error ?? {}) as { status?: number; body?: { error?: string; code?: string } | null };
+      // No status: the request itself failed (offline), reported as it was before.
+      if (typeof status !== "number") throw error;
+      return { ok: false, status, body: body ?? null };
+    },
+  );
 }
 // Started as soon as this module runs on the import step, not after hydration and the first effect.
 if (typeof window !== "undefined" && window.location.pathname === "/app/import") void requestImportInfo("").catch(() => undefined);
@@ -229,7 +238,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
   /** The plan is read-only (paused, suspended, cancelled): the screen shows, the file is not checked. */
   readOnly?: boolean;
 } = {}) {
-  const [info, setInfo] = useState<ImportInfo | null>(null);
+  const [info, setInfo] = useState<ImportInfo | null>(() => seed<ImportInfo>(importInfoKey(""), true)?.data ?? null);
   const [file, setFile] = useState<{ name: string; size: number } | null>(null);
   const [csv, setCsv] = useState("");
   const [saving, setSaving] = useState(false);
@@ -343,7 +352,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
     latestProduct.current = key;
     setLoadFailed(false);
     setNoProducts(null);
-    const cached = infoCache.get(key)?.info ?? null;
+    const cached = keptImportInfo(key);
     if (cached) setInfo(cached);
     void requestImportInfo(key).then((result) => {
       if (latestProduct.current !== key) return;
@@ -355,7 +364,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
       if (result.status === 409 && body?.code === "product_not_sold" && !product) { setNoProducts(body.error ?? "Choose the products your agency sells first."); return; }
       // A product with no lead form yet (or no longer sold): say so and stay on the product already open.
       if (result.status === 409 && product) {
-        infoCache.delete(key);
+        refusedInfo.add(key);
         if (cached && previous) setInfo(previous);
         notify.block(body?.error ?? "That product cannot be imported yet.");
         return;
@@ -497,7 +506,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
       if (!response.ok || !made) { notify.block("Could not set up your own book", { detail: body?.error ?? "The server refused it." }); return; }
       // The import lists drafts, active and paused campaigns; an exhausted one cannot take a list.
       if (made.status === "exhausted") { notify.block(`${made.name} is marked exhausted`, { detail: "Reopen it on Lead sources › Source, then import into it." }); return; }
-      infoCache.clear();
+      infoClearedAt = Date.now();
       setInfo((current) => current ? {
         ...current,
         vendors: current.vendors.some((vendor) => vendor.id === made.vendor_id)
@@ -685,7 +694,7 @@ export function LeadImportWorkspace({ embedded = false, readOnly = false }: {
     : `Checks Do Not Call, litigators, duplicates and phone numbers for ${(validation?.validRows ?? fileRows).toLocaleString()} rows, then opens the review. Nothing is written yet.`;
   const continueControl = <span className="inline-flex items-center" title={continueNote}>
     <span id="import-continue-note" className="sr-only">{continueNote}</span>
-    <Button type="submit" form="lead-import-form" disabled={Boolean(blockedReason) || saving} aria-describedby="import-continue-note">
+    <Button type="submit" data-guide="lead-import-continue" form="lead-import-form" disabled={Boolean(blockedReason) || saving} aria-describedby="import-continue-note">
       {saving ? "Checking…" : <>Continue to Review<ArrowRight aria-hidden /></>}
     </Button>
   </span>;

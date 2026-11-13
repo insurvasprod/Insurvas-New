@@ -4,18 +4,22 @@ import { audit } from "@/lib/audit/log";
 import { ApplicationKeyMissingError } from "@/lib/applications/crypto";
 import { webhookInputSchema } from "@/lib/webhooks/schemas";
 import { WebhookSchemaPendingError, createWebhook, listWebhooks } from "@/lib/webhooks/service";
+import { webhookExtras } from "@/lib/apiKeys/webhookOps";
 import { requireTenant } from "@/lib/tenantAuth/requireTenant";
 import { recordSettingsChanges } from "@/lib/settingsAudit/record";
 
 /**
- * Settings › API keys & webhooks (LA-8.7) — the agency's webhook subscriptions. Owners only. The
+ * Settings › Integrations (LA-8.7) — the agency's webhook subscriptions. Owners only. The
  * signing secret is in the POST response once and never again.
  */
 export async function GET() {
   const auth = await requireTenant(["owner"]);
   if (auth instanceof NextResponse) return auth;
   try {
-    return NextResponse.json({ webhooks: await listWebhooks(auth.context.tenantId) }, { headers: { "Cache-Control": "no-store" } });
+    const webhooks = await listWebhooks(auth.context.tenantId);
+    // Settings › Integrations (round 8): next try, missed events and their last answer, per webhook.
+    const extras = await webhookExtras(auth.context.tenantId, webhooks.map((hook) => ({ id: hook.id, status: hook.status, lastSuccessAt: hook.lastSuccessAt, createdAt: hook.createdAt })));
+    return NextResponse.json({ webhooks, extras }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof WebhookSchemaPendingError) return NextResponse.json({ error: error.message, code: "schema_pending" }, { status: 503 });
     console.error("[webhooks] load failed", error instanceof Error ? error.message : error);
@@ -35,6 +39,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ secret: created.secret, record: created.record }, { status: 201, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof WebhookSchemaPendingError || error instanceof ApplicationKeyMissingError) return NextResponse.json({ error: error.message }, { status: 503 });
+    // The application-form events join the table's list with migration 20261112200000 (Application forms).
+    if (error instanceof Error && /webhook_subscription_events/.test(error.message) && parsed.data.eventTypes.some((event) => event.startsWith("form."))) {
+      return NextResponse.json({ error: "Application form events need a database update first. Pick the other events for now.", code: "schema_pending" }, { status: 503 });
+    }
     return NextResponse.json({ error: error instanceof Error ? error.message : "Could not create the webhook" }, { status: 400 });
   }
 }

@@ -7,7 +7,7 @@ import { isUnreached } from "@/lib/retention/callLog";
 import { advanceAtRisk } from "@/lib/ingestion/retentionStore";
 import type { ActionTaken, ContactOutcome } from "@/lib/retention/constants";
 
-import { CLOSED_DAYS, NEXT_ACTION, OPEN_STATUSES, caseOrder, daysUntil, type CaseStatus, type Reason, type Step } from "./ladder";
+import { CLOSED_DAYS, NEXT_ACTION, OPEN_STATUSES, caseOrder, daysUntil, type CaseStatus, type PersonReason, type Reason, type Step } from "./ladder";
 import { LADDER_PENDING_MESSAGE, loadLadderSettings } from "./sync";
 
 /**
@@ -44,12 +44,17 @@ export type CaseRow = {
 const CASE_COLUMNS = "id, carrier_id, policy_number, contact_id, step, reason, status, priority, deadline, evidence, owner_user_id, contact_attempts, last_contact_at, opened_at, step_changed_at, resolved_at, outcome_reason, servicing_request_id, reinstatement_case_id";
 
 async function everyRow(build: () => Loose, max = 50_000): Promise<Loose[]> {
+  // The first page, then three at a time (perf pass 2026-11-09): the same rows, in order, as one page after another.
   const rows: Loose[] = [];
-  for (let from = 0; from < max; from += 1000) {
-    const { data, error } = await build().range(from, from + 999);
-    if (error) throw error;
-    rows.push(...(data ?? []));
-    if (!data || data.length < 1000) break;
+  for (let from = 0; from < max; ) {
+    const starts = (from === 0 ? [0] : [from, from + 1000, from + 2000]).filter((at) => at < max);
+    const batch = await Promise.all(starts.map((at) => build().range(at, at + 999)));
+    for (const { data, error } of batch) {
+      if (error) throw error;
+      rows.push(...(data ?? []));
+      if (!data || data.length < 1000) return rows;
+    }
+    from += starts.length * 1000;
   }
   return rows;
 }
@@ -165,6 +170,9 @@ export async function loadLadder(viewer: Viewer): Promise<Ladder | { available: 
  */
 export async function loadScoreCases(viewer: Viewer, days: number): Promise<{ cases: CaseRow[]; names: Map<string, string> } | null> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+  // The settings need nothing from the cases, so they are read beside them (perf pass 2026-11-09).
+  const settingsRead = loadLadderSettings(viewer.tenantId);
+  settingsRead.catch(() => undefined);
   let rows: Loose[];
   try {
     rows = await everyRow(() => db().from("retention_case").select(CASE_COLUMNS).eq("tenant_id", viewer.tenantId).or(`status.in.(${OPEN_STATUSES.join(",")}),resolved_at.gte.${since}T00:00:00Z`).order("id"));
@@ -172,7 +180,7 @@ export async function loadScoreCases(viewer: Viewer, days: number): Promise<{ ca
     if (isSchemaGap(error as Loose)) return null;
     throw error;
   }
-  const settings = await loadLadderSettings(viewer.tenantId);
+  const settings = await settingsRead;
   const cases = await hydrate(viewer, rows, agencyToday(), settings.unreachableAfter);
   return { cases, names: new Map(cases.filter((c) => c.ownerId).map((c) => [c.ownerId!, c.ownerName ?? "Someone"])) };
 }
@@ -330,7 +338,7 @@ export async function assignCase(viewer: Viewer, id: string, userId: string) {
 }
 
 /** A case a person opens: a client asking for a new payment date (no file carries that). */
-export async function openManualCase(viewer: Viewer, input: { carrierId: string; policyNumber: string; reason: "payment_date_change"; note: string | null }) {
+export async function openManualCase(viewer: Viewer, input: { carrierId: string; policyNumber: string; reason: PersonReason; note: string | null }) {
   const { data: p } = await db().from("policy_current").select("contact_id, agent_user_id").eq("tenant_id", viewer.tenantId).eq("carrier_id", input.carrierId).eq("policy_number", input.policyNumber).maybeSingle();
   if (!p || (viewer.role === "producer" && p.agent_user_id !== viewer.userId) || !rowVisible(viewer.scope ?? null, p.agent_user_id)) throw new CaseError("That policy isn't in your book.", 404);
   const { data, error } = await db().from("retention_case").insert({

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
+import { complaintIdOf } from "@/lib/compliance/suppressionView";
 import { normalizeDigits, type SuppressionEntry, type SuppressionListType, type SuppressionSource } from "./constants";
 
 /**
@@ -77,6 +78,15 @@ async function leadNameMap(tenantId: string, ids: string[]): Promise<Map<string,
   return map;
 }
 
+/** Who made each complaint that suppressed a number (r7: "Complaint · {complainant}"). Best effort: a miss is "Complaint". */
+async function complaintNameMap(tenantId: string, ids: string[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return new Map();
+  const result = await db().from("complaint").select("id, complainant_name").eq("tenant_id", tenantId).in("id", unique);
+  if (result.error) return new Map();
+  return new Map((result.data ?? []).filter((row) => text(row.complainant_name).trim()).map((row) => [text(row.id), text(row.complainant_name).trim()]));
+}
+
 export async function listSuppressions(input: {
   tenantId: string;
   search?: string | null;
@@ -125,13 +135,15 @@ export async function listSuppressions(input: {
 
   const internalRows = internal.data ?? [];
   const externalRows = external.data ?? [];
-  const [names, leadNames] = await Promise.all([
+  const complaintIds = [...internalRows, ...externalRows].map((row) => complaintIdOf(text(row.reason))).filter((id): id is string => Boolean(id));
+  const [names, leadNames, complaintNames] = await Promise.all([
     nameMap([
       ...internalRows.map((row) => text(row.added_by)),
       ...externalRows.map((row) => text(row.added_by)),
     ]),
     // Only your own list remembers which lead a number came from; screening rows have no lead.
     leadNameMap(input.tenantId, internalRows.map((row) => text(row.lead_id))),
+    complaintNameMap(input.tenantId, complaintIds),
   ]);
 
   const entries: SuppressionEntry[] = [
@@ -147,6 +159,8 @@ export async function listSuppressions(input: {
       addedByName: names.get(text(row.added_by)) ?? null,
       leadId: text(row.lead_id) || null,
       leadName: leadNames.get(text(row.lead_id)) ?? null,
+      complaintId: complaintIdOf(text(row.reason)),
+      complaintName: complaintNames.get(complaintIdOf(text(row.reason)) ?? "") ?? null,
     })),
     ...externalRows.map((row) => ({
       id: text(row.id),
@@ -156,6 +170,8 @@ export async function listSuppressions(input: {
       source: (text(row.source) || null) as SuppressionSource | null,
       addedAt: text(row.added_at),
       addedByName: names.get(text(row.added_by)) ?? null,
+      complaintId: complaintIdOf(text(row.reason)),
+      complaintName: complaintNames.get(complaintIdOf(text(row.reason)) ?? "") ?? null,
     })),
   ].sort((a, b) => b.addedAt.localeCompare(a.addedAt));
 

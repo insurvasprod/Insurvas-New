@@ -5,10 +5,15 @@ import { csvCell as sharedCsvCell } from "@/lib/csv/cell";
 import { keepVisible, scopeQuery, type ProducerScope } from "@/lib/agency/visibility";
 import { mapLimit } from "@/lib/retention/batch";
 import {
+  activityWeekBuckets,
   blockedForPage,
+  contactsOf,
   mayReviewZeroClick,
   type ActivityFlagFilter,
   type ActivityReport,
+  type ActivityWeek,
+  type ActivityWeekAgent,
+  type ActivityWeeks,
   type ActivityRow,
   type BlockedDialRow,
   type RecyclePerformanceRow,
@@ -177,6 +182,65 @@ async function activityReport(tenantId: string, actorId: string, actorRole: stri
   // for anyone else is ever returned.
   const scorecard = agents === null ? data.scorecard as ScorecardRow[] : keepVisible(agents, data.scorecard as ScorecardRow[], (row) => row.agent_user_id);
   return { rows, total, page, page_size: pageSize, export: Boolean(filters.exportAll), scorecard: await withWorked(tenantId, scorecard, await take(workingRead)), recycle_performance: recycle.data as RecyclePerformanceRow[], blocked, blocked_total: blockedTotal };
+}
+
+/**
+ * Team activity's week (Reports round 7, owner pick 2·A, 2026-11-11): the window cut into Monday weeks, and the
+ * same two reads the page makes (tenant_activity_report's scorecard and tenant_recycle_performance) run over each
+ * week, a few at a time. Nothing new in SQL: the tenant, the role (a setter's own rows, pinned in the report itself),
+ * the AG-0.5 scope and the agent, campaign and outcome filters are applied exactly as getActivityReport applies them.
+ * The report is asked for one row only; its scorecard is what is read.
+ */
+export async function getActivityWeeks(tenantId: string, actorId: string, actorRole: string, filters: Pick<ActivityFilters, "agentId" | "campaignId" | "disposition" | "from" | "to">, scope: ProducerScope = null): Promise<ActivityWeeks> {
+  const from = boundary(filters.from, "from date");
+  const to = boundary(filters.to, "to date");
+  if (!from || !to) throw new Error("Choose a from and to date");
+  if (from >= to) throw new Error("From date must be before the to date");
+  const buckets = activityWeekBuckets(from, to);
+  const requested = optionalUuid(filters.agentId, "agent");
+  const campaignId = optionalUuid(filters.campaignId, "campaign");
+  const disposition = filters.disposition?.trim() || null;
+  // As getActivityReport: no scope is today's call; one agent in scope goes through the agent filter; several, the list.
+  let agentId = requested;
+  let agents: readonly string[] | null = null;
+  if (scope !== null) {
+    agents = requested ? (scope.includes(requested) ? [requested] : []) : [...new Set(scope)];
+    agentId = agents.length === 1 ? agents[0] : null;
+  }
+  const agentList = agents !== null && agents.length > 1 ? agents : null;
+  const reviews = mayReviewZeroClick(actorRole);
+  const empty = (bucket: (typeof buckets)[number]): ActivityWeek => ({ ...bucket, served: 0, dials: 0, contacts: 0, zeroClick: reviews ? 0 : null, booked: 0, showed: 0, callbacks: 0, started: 0, submitted: 0, agents: {} });
+  if (agents !== null && agents.length === 0) return { weeks: buckets.map(empty) };
+
+  const weeks = await mapLimit(buckets, 3, async (bucket) => {
+    const args = { p_tenant_id: tenantId, p_actor_user_id: actorId, p_actor_role: actorRole, p_agent_user_id: agentId, p_campaign_id: campaignId, p_disposition: disposition, p_from_at: bucket.from, p_to_at: bucket.to, ...(agentList ? { p_agent_user_ids: agentList } : {}) };
+    const [report, recycle] = await Promise.all([
+      rpc().rpc("tenant_activity_report", { ...args, p_page: 1, p_page_size: 1, p_export: false }),
+      rpc().rpc("tenant_recycle_performance", args),
+    ]);
+    if (agentList && ((report.error && isMissingSignature(report.error)) || (recycle.error && isMissingSignature(recycle.error)))) throw new Error(SCOPED_ACTIVITY_PENDING);
+    if (report.error) throw new Error(`Could not load activity: ${report.error.message}`);
+    if (recycle.error) throw new Error(`Could not load recycle performance: ${recycle.error.message}`);
+    const data = response(report.data);
+    if (!Array.isArray(data.scorecard) || !Array.isArray(recycle.data)) throw new Error("The activity report was incomplete");
+    const lines = agents === null ? data.scorecard as ScorecardRow[] : keepVisible(agents, data.scorecard as ScorecardRow[], (row) => row.agent_user_id);
+    const week = empty(bucket);
+    for (const line of lines) {
+      const agent: ActivityWeekAgent = {
+        served: Number(line.served) || 0, dials: Number(line.clicked) || 0, contacts: contactsOf(line),
+        zeroClick: reviews ? Number(line.zero_click ?? 0) : null,
+        booked: Number(line.appointments_booked) || 0, showed: Number(line.appointments_showed) || 0, callbacks: Number(line.callbacks_booked) || 0,
+        started: Number(line.applications_started) || 0, submitted: Number(line.applications_submitted) || 0,
+      };
+      if (line.agent_user_id) week.agents[line.agent_user_id] = agent;
+      week.served += agent.served; week.dials += agent.dials; week.booked += agent.booked; week.showed += agent.showed;
+      week.callbacks += agent.callbacks; week.started += agent.started; week.submitted += agent.submitted;
+      if (week.zeroClick !== null) week.zeroClick += agent.zeroClick ?? 0;
+    }
+    week.contacts = (recycle.data as RecyclePerformanceRow[]).reduce((sum, row) => sum + (Number(row.contacts) || 0), 0);
+    return week;
+  });
+  return { weeks };
 }
 
 /**

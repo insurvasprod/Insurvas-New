@@ -75,14 +75,15 @@ export function PolicyPicker({ picked, onPick, title = "1 · The policy" }: { pi
       ) : (
         <table className="portal-lead-table w-full text-left text-sm">
           <thead>
-            <tr><th>Client</th><th>Policy</th><th>Phone</th><th className="w-[120px] text-right"><span className="sr-only">Choose</span></th></tr>
+            <tr><th>Client</th><th>Policy</th><th>Status</th><th>Phone</th><th className="w-[120px] text-right"><span className="sr-only">Choose</span></th></tr>
           </thead>
           <tbody>
             {shownResults.map((p) => (
               <tr key={`${p.carrierId}|${p.policyNumber}`} className="m-row">
-                <td className="font-semibold text-foreground">{p.clientName ? personName(p.clientName) : "No client linked"}</td>
-                <td><span className="block text-foreground">{p.carrierName} {p.policyNumber}</span>{p.status && <span className="block text-xs text-muted-foreground">{p.status.replace(/_/g, " ")}</span>}</td>
-                <td className="tabular-nums text-muted-foreground">{p.phone ? phoneText(p.phone) : "—"}</td>
+                <td className="whitespace-nowrap font-medium text-foreground">{p.clientName ? personName(p.clientName) : "No client linked"}</td>
+                <td className="whitespace-nowrap">{p.carrierName} {p.policyNumber}</td>
+                <td className="whitespace-nowrap">{p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1).replace(/_/g, " ") : <span className="text-muted-foreground">—</span>}</td>
+                <td className="whitespace-nowrap tabular-nums">{p.phone ? phoneText(p.phone) : <span className="text-muted-foreground">—</span>}</td>
                 <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => onPick({ carrierId: p.carrierId, policyNumber: p.policyNumber, carrierName: p.carrierName, clientName: p.clientName })}>Choose</Button></td>
               </tr>
             ))}

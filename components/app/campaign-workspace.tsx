@@ -60,6 +60,7 @@ import { confirmAction } from "@/components/ui/confirm-dialog";
 import { LeaveGuard } from "@/components/ui/leave-guard";
 import { StatusChip } from "@/components/ui/status-chip";
 import { UnderlineTabs } from "@/components/ui/view-tabs";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 
 /**
  * Lead sources › 1 · Source (owner pick "A · Vendor first", canvas M2 · Vendors & campaigns,
@@ -98,6 +99,18 @@ type OutboundLimit = { key: string; label: string; usage: number; limit: number 
 /** tenant_campaign_funnel (20260925709800): all-time leads, dialable, dialled and contacted per campaign. */
 type Funnel = { leads_received: number; dialable_leads: number; dialed_leads: number; contacted_leads: number; quoted_leads: number };
 type Consent = { vendor_id: string; leads: number; claimed_certificates: number; any_certificate: number; claimed_coverage_pct: number | null; any_coverage_pct: number | null };
+/** What GET /api/app/campaigns answers. */
+type CampaignsBody = {
+  campaigns?: Campaign[]; progress?: Record<string, CampaignProgress> | null; scrubRuns?: Record<string, ScrubRun> | null;
+  testBatches?: Record<string, boolean> | null; targetStates?: Record<string, string[]> | null; outcomes?: Record<string, Outcome> | null;
+  funnel?: Record<string, Funnel> | null; listCounts?: Record<string, number> | null; canScrub?: boolean; faults?: string[];
+  limits?: OutboundLimit[]; pending?: Pending | null; funnelPending?: Pending | null;
+};
+/** What GET /api/app/vendors answers. */
+type VendorsBody = { vendors?: Vendor[]; rollup?: Rollup[]; speed?: Speed[]; consent?: Consent[]; pending?: Pending[] };
+/** The workspace's reads, as the app's cache keys them (lib/client/route-resources.ts warms them on hover). */
+const CAMPAIGNS_KEY = "/api/app/campaigns";
+const VENDORS_KEY = "/api/app/vendors";
 
 /** Cents to dollars. Costs per record are fractional cents, so they keep three decimal places. */
 function money(cents: number | null | undefined) {
@@ -247,15 +260,25 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
   children?: ReactNode;
 } = {}) {
   const router = useRouter();
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [rollup, setRollup] = useState<Rollup[]>([]);
-  const [speed, setSpeed] = useState<Speed[]>([]);
-  const [consent, setConsent] = useState<Consent[]>([]);
-  const [loading, setLoading] = useState(true);
+  // The kept answers on a client navigation (nothing while hydrating a fresh document): the page draws them at once.
+  const [kept] = useState(() => {
+    const campaignBody = seed<CampaignsBody>(CAMPAIGNS_KEY, true)?.data;
+    const vendorBody = seed<VendorsBody>(VENDORS_KEY, true)?.data;
+    return campaignBody && vendorBody ? { campaigns: campaignBody, vendors: vendorBody } : { campaigns: undefined, vendors: undefined };
+  });
+  const [campaigns, setCampaigns] = useState<Campaign[]>(() => kept.campaigns?.campaigns ?? []);
+  const [vendors, setVendors] = useState<Vendor[]>(() => kept.vendors?.vendors ?? []);
+  const [rollup, setRollup] = useState<Rollup[]>(() => kept.vendors?.rollup ?? []);
+  const [speed, setSpeed] = useState<Speed[]>(() => kept.vendors?.speed ?? []);
+  const [consent, setConsent] = useState<Consent[]>(() => kept.vendors?.consent ?? []);
+  const [loading, setLoading] = useState(() => !kept.campaigns);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [pending, setPending] = useState<Pending[]>([]);
-  const [limits, setLimits] = useState<OutboundLimit[]>([]);
+  const [pending, setPending] = useState<Pending[]>(() => kept.campaigns && kept.vendors ? [
+    ...(Array.isArray(kept.vendors.pending) ? kept.vendors.pending : []),
+    ...(kept.campaigns.pending ? [kept.campaigns.pending] : []),
+    ...(kept.campaigns.funnelPending ? [kept.campaigns.funnelPending] : []),
+  ] : []);
+  const [limits, setLimits] = useState<OutboundLimit[]>(() => kept.campaigns?.limits ?? []);
   const [busy, setBusy] = useState<string | null>(null);
   // Module 2 §5: VENDOR → CAMPAIGN → LIST → LEADS. Without a campaign every imported lead is free,
   // which makes the whole cost analysis empty — so both ends have a form here.
@@ -293,7 +316,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
     try { window.history.replaceState(null, "", tab === "lists" ? window.location.pathname : `?tab=${tab}`); } catch { /* the view still changes */ }
   };
   /** Lists (committed imports) per campaign; null before the campaigns read answers it. */
-  const [listCounts, setListCounts] = useState<Record<string, number> | null>(null);
+  const [listCounts, setListCounts] = useState<Record<string, number> | null>(() => kept.campaigns?.listCounts ?? null);
   /** The vendor whose edit form is open from its scorecard. */
   const [editVendorId, setEditVendorId] = useState<string | null>(null);
   const inFrame = useInLeadsFrame();
@@ -301,15 +324,15 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
   const gridPageSize = useFittingPageSize(360, 57);
   // Campaigns concept audit (LA-2 §5). Each is null when its migration is not applied, and the line
   // that shows it is then left out rather than drawn as a zero.
-  const [progress, setProgress] = useState<Record<string, CampaignProgress> | null>(null);
-  const [scrubRuns, setScrubRuns] = useState<Record<string, ScrubRun> | null>(null);
-  const [testBatches, setTestBatches] = useState<Record<string, boolean> | null>(null);
-  const [targetStates, setTargetStates] = useState<Record<string, string[]> | null>(null);
-  const [outcomes, setOutcomes] = useState<Record<string, Outcome> | null>(null);
+  const [progress, setProgress] = useState<Record<string, CampaignProgress> | null>(() => kept.campaigns?.progress ?? null);
+  const [scrubRuns, setScrubRuns] = useState<Record<string, ScrubRun> | null>(() => kept.campaigns?.scrubRuns ?? null);
+  const [testBatches, setTestBatches] = useState<Record<string, boolean> | null>(() => kept.campaigns?.testBatches ?? null);
+  const [targetStates, setTargetStates] = useState<Record<string, string[]> | null>(() => kept.campaigns?.targetStates ?? null);
+  const [outcomes, setOutcomes] = useState<Record<string, Outcome> | null>(() => kept.campaigns?.outcomes ?? null);
   // LA-2.1-3: leads, dialable and contacts per campaign. Null until its migration is applied.
-  const [funnel, setFunnel] = useState<Record<string, Funnel> | null>(null);
-  const [canScrub, setCanScrub] = useState(false);
-  const [faults, setFaults] = useState<string[]>([]);
+  const [funnel, setFunnel] = useState<Record<string, Funnel> | null>(() => kept.campaigns?.funnel ?? null);
+  const [canScrub, setCanScrub] = useState(() => Boolean(kept.campaigns?.canScrub));
+  const [faults, setFaults] = useState<string[]>(() => Array.isArray(kept.campaigns?.faults) ? kept.campaigns.faults : []);
   /** The campaign whose scrub this window is driving, one batch per request. */
   const [driving, setDriving] = useState<string | null>(null);
   const [scrubError, setScrubError] = useState<{ campaignId: string; message: string } | null>(null);
@@ -318,17 +341,9 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
   const stopScrub = useCallback(() => { stopRequested.current = true; }, []);
   const { facts, factsError } = useVendorCards(rollup);
 
-  const load = useCallback(() => Promise.all([
-    fetch("/api/app/campaigns", { cache: "no-store" }),
-    fetch("/api/app/vendors", { cache: "no-store" }),
-  ]).then(async ([campaignResponse, vendorResponse]) => {
-    const campaignBody = await campaignResponse.json().catch(() => null);
-    const vendorBody = await vendorResponse.json().catch(() => null);
-    // Reported, never swallowed into an empty list. A vendor page that renders "no campaigns"
-    // because `tenant_campaign_costs` is not deployed yet looks exactly like a tenant who has not
-    // bought any leads, and those need different answers.
-    if (!campaignResponse.ok) throw new Error(campaignBody?.error ?? "Could not load campaigns");
-    if (!vendorResponse.ok) throw new Error(vendorBody?.error ?? "Could not load vendors");
+  // Both reads go through the app's cache (lib/client/resource-cache.ts): a repeat visit draws the last answer at
+  // once and the fresh one replaces it (speed pass 2026-11-09). `fresh` after a change, so it is never the old one.
+  const apply = useCallback((campaignBody: CampaignsBody, vendorBody: VendorsBody) => {
     setCampaigns(campaignBody.campaigns ?? []);
     setProgress(campaignBody.progress ?? null);
     setScrubRuns(campaignBody.scrubRuns ?? null);
@@ -353,15 +368,35 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       ...(campaignBody.pending ? [campaignBody.pending] : []),
       ...(campaignBody.funnelPending ? [campaignBody.funnelPending] : []),
     ]);
+  }, []);
+
+  const load = useCallback((fresh = false) => Promise.all([
+    fresh ? loadResource<CampaignsBody>(CAMPAIGNS_KEY, { persist: true }) : readResource<CampaignsBody>(CAMPAIGNS_KEY, { persist: true }),
+    fresh ? loadResource<VendorsBody>(VENDORS_KEY, { persist: true }) : readResource<VendorsBody>(VENDORS_KEY, { persist: true }),
+  ]).then(([campaignBody, vendorBody]) => {
+    // Reported, never swallowed into an empty list. A vendor page that renders "no campaigns"
+    // because `tenant_campaign_costs` is not deployed yet looks exactly like a tenant who has not
+    // bought any leads, and those need different answers (a failed read rejects, with the server's error).
+    apply(campaignBody, vendorBody);
   }).then(() => setLoadError(null)).catch((error: unknown) => {
     const message = error instanceof Error ? error.message : "Could not load this page";
     notify.fail(message);
     // A toast disappears; the body does not. Holding the failure in state is what stops the sections
     // below from going on to assert "No vendors yet".
     setLoadError(message);
-  }).finally(() => setLoading(false)), []);
+  }).finally(() => setLoading(false)), [apply]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    // A fresh document (a reload) starts from the kept answers as soon as it has hydrated, then asks again.
+    const keptCampaigns = peek<CampaignsBody>(CAMPAIGNS_KEY, true)?.data;
+    const keptVendors = peek<VendorsBody>(VENDORS_KEY, true)?.data;
+    if (!kept.campaigns && keptCampaigns && keptVendors) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+      apply(keptCampaigns, keptVendors);
+      setLoading(false);
+    }
+    void load();
+  }, [load, apply, kept]);
 
   // Delete vendor (owner 2026-10-29): one confirm, or two when it has campaigns. The page lets go of
   // the vendor it was showing, then reloads (also after a partial delete, when some campaigns went).
@@ -372,11 +407,11 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       // Deleted from its own page: back to the campaigns.
       if (vendorId === deletedId) { router.push("/app/campaigns"); return; }
     }
-    await load();
+    await load(true);
   });
 
   // Board LirN1 has no Refresh button: "Try again" on a failed read reloads, and every action reloads after it.
-  async function refresh() { await load(); }
+  async function refresh() { await load(true); }
 
   const vendorName = useMemo(() => new Map(vendors.map((vendor) => [vendor.id, vendor.name])), [vendors]);
 
@@ -394,7 +429,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       const result = await response.json().catch(() => null);
       if (!response.ok) { notify.block(result?.error ?? "Could not update this campaign"); return false; }
       notify.done(typeof successMessage === "function" ? successMessage(result ?? {}) : successMessage);
-      await load();
+      await load(true);
       return true;
     } finally {
       setBusy(null);
@@ -425,7 +460,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       setOpenId(null);
       // Deleted from its own page: back to the campaigns, not a "not found" for the one just removed.
       if (focusId === campaign.campaign_id) { router.push("/app/campaigns"); return; }
-      await load();
+      await load(true);
     } finally {
       setBusy(null);
     }
@@ -477,7 +512,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       setScrubError({ campaignId: campaign.campaign_id, message: error instanceof Error ? error.message : "The scrub could not continue" });
     } finally {
       setDriving(null);
-      await load();
+      await load(true);
     }
   }
 
@@ -533,7 +568,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       setOnlyIds(null);
       setPage(0);
       setNewCampaign(null);
-      await load();
+      await load(true);
       openPanel(newId, "numbers");
     } finally { setCreating(false); }
   }
@@ -634,14 +669,14 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
     : !vendors.some((vendor) => vendorTakesCampaigns(vendor.status)) ? "Set a vendor to active first — a retired vendor takes no new campaigns" : null);
   const newCampaignFor = (vendor: Vendor | null, outline = false) => {
     const no = noVendorForCampaign ?? (vendor && !takes(vendor.id) ? `Set ${vendor.name} to active first to add a campaign from it` : null);
-    return <Button type="button" variant={outline ? "outline" : "default"} disabled={no !== null} title={no ?? (vendor ? `A new campaign from ${vendor.name}` : undefined)} onClick={() => openNewCampaign(vendor?.id)}><Plus aria-hidden="true" />New Campaign</Button>;
+    return <Button type="button" data-guide="campaign-new" variant={outline ? "outline" : "default"} disabled={no !== null} title={no ?? (vendor ? `A new campaign from ${vendor.name}` : undefined)} onClick={() => openNewCampaign(vendor?.id)}><Plus aria-hidden="true" />New Campaign</Button>;
   };
   // At the plan's cap, Activate is held here rather than refused by the server after the click.
   const activateBlocked = locked ?? (atActiveLimit && activeLimit ? `Your plan allows ${activeLimit.limit} active campaign${activeLimit.limit === 1 ? "" : "s"}. Pause one, or see plans.` : null);
 
   // The two create actions, just before Refresh in whichever table is showing (owner 2026-10-28). New campaign is the one primary.
   const createActions = <>
-    <Button type="button" variant="outline" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Store aria-hidden="true" />New Vendor</Button>
+    <Button type="button" data-guide="campaign-vendor-new" variant="outline" disabled={locked !== null} title={locked ?? undefined} onClick={openNewVendor}><Store aria-hidden="true" />New Vendor</Button>
     {newCampaignFor(pickedVendor)}
   </>;
 
@@ -935,7 +970,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
         </>)}
 
     {/* A new vendor is picked on the left, so its empty campaign table offers the next step: its first campaign. */}
-    {newVendor && <NewVendorPanel onClose={() => setNewVendor(false)} onCreated={async (created) => { await load(); if (created) { if (vendorsPage) router.push(`/app/campaigns/vendors/${created.id}`); else pickVendor(created.id); } }} />}
+    {newVendor && <NewVendorPanel onClose={() => setNewVendor(false)} onCreated={async (created) => { await load(true); if (created) { if (vendorsPage) router.push(`/app/campaigns/vendors/${created.id}`); else pickVendor(created.id); } }} />}
 
     <Dialog open={newCampaign !== null} onOpenChange={(open) => { if (!open) setNewCampaign(null); }}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl" aria-describedby={undefined}>
@@ -977,7 +1012,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
           </Field>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setNewCampaign(null)}>Cancel</Button>
-            <Button type="button" disabled={!newCampaign.vendor_id || !newCampaign.name.trim() || nameTaken || creating} onClick={() => void createCampaign()}><Plus aria-hidden="true" />{creating ? "Creating…" : "Create campaign"}</Button>
+            <Button type="button" data-guide="campaign-create" disabled={!newCampaign.vendor_id || !newCampaign.name.trim() || nameTaken || creating} onClick={() => void createCampaign()}><Plus aria-hidden="true" />{creating ? "Creating…" : "Create campaign"}</Button>
           </DialogFooter>
         </>}
       </DialogContent>
@@ -1004,7 +1039,7 @@ export function CampaignWorkspace({ embedded = false, readOnly = false, focusId 
       key={vendorPage.id}
       row={vendorPage}
       locked={locked}
-      onSaved={load}
+      onSaved={() => load(true)}
       onDelete={() => deleteVendor(vendorPage.id)}
       deleting={vendorDelete.busy}
     />}

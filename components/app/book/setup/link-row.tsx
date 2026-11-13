@@ -2,13 +2,12 @@
 
 import type { MouseEvent, ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 /**
- * A table row that opens a page (board 10, clickability): one click anywhere on it, a hover tint and a "›" at its
- * end; no Open button. The row's own buttons and links (its next step, a name that opens its own record) keep
+ * A table row that opens a page (board 10, clickability): one click anywhere on it, a hover tint; no Open button
+ * and no ›-only column. The row's own buttons and links (its next step, a name that opens its own record) keep
  * their click. The first cell's link is the keyboard way in, so the row itself takes no tab stop.
  */
 export function LinkRow({ href, children, className }: { href: string; children: ReactNode; className?: string }) {
@@ -22,14 +21,5 @@ export function LinkRow({ href, children, className }: { href: string; children:
     <tr className={cn("group cursor-pointer hover:bg-[var(--primary-soft)]", className)} onClick={open}>
       {children}
     </tr>
-  );
-}
-
-/** The "›" a LinkRow ends with: brighter on hover. */
-export function RowChevron() {
-  return (
-    <td className="w-10 text-right" aria-hidden="true">
-      <ChevronRight className="ml-auto size-4 text-muted-foreground transition-colors group-hover:text-foreground" />
-    </td>
   );
 }

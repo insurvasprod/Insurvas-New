@@ -5,7 +5,6 @@ import { refuseNarrowInAgency } from "@/lib/agency/routeScope";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { QUEUE_TYPES } from "@/lib/ingestion/exceptionQueues";
 import type { DataInStepCounts } from "@/lib/dataIn/steps";
-import { getEntitlement } from "@/lib/entitlements/get";
 import { hasFeature } from "@/lib/entitlements/types";
 import { hiddenOpenFindings, unmappedAgentCodes } from "@/lib/needsYou/store";
 import { countRuleHolds } from "@/lib/pipelineRules/store";
@@ -45,7 +44,8 @@ export async function GET() {
   const narrow = (await refuseNarrowInAgency(auth.context, "Exceptions")) !== null;
 
   // Money and credit count only where their own screens open: the feature on the plan, as their APIs require.
-  const entitlement = keeper ? await getEntitlement(tenantId).catch(() => null) : null;
+  // The entitlement requireFeature already read for this request (perf pass 2026-11-09: not a second trip).
+  const entitlement = keeper ? auth.entitlement : null;
   const money = Boolean(entitlement && hasFeature(entitlement, "discrepancy_report"));
   const credit = Boolean(entitlement && hasFeature(entitlement, "producer_payouts"));
 
@@ -54,7 +54,8 @@ export async function GET() {
     keeper ? head(count("policy_match_review").eq("status", "open")).catch(() => null) : null,
     narrow ? null : head((keeper ? count("queue_item") : count("queue_item").eq("assigned_to_user_id", userId)).eq("status", "open").in("queue_type", QUEUE_TYPES)).catch(() => null),
     // Less the findings the list hides because their trace is broken (LA-4.20), so the badge says what the list shows.
-    keeper && money ? head(count("commission_discrepancy").in("status", WORKING)).then(async (n) => (n === null ? null : Math.max(0, n - (await hiddenOpenFindings(tenantId))))).catch(() => null) : null,
+    // The count and the trace check are read together, not one after the other (perf pass 2026-11-09).
+    keeper && money ? Promise.all([head(count("commission_discrepancy").in("status", WORKING)), hiddenOpenFindings(tenantId)]).then(([n, hidden]) => (n === null ? null : Math.max(0, n - hidden))).catch(() => null) : null,
     keeper && credit ? head(count("agency_attribution_item").eq("status", "open")).catch(() => null) : null,
     keeper ? unmappedAgentCodes(tenantId).then((codes) => codes.length).catch(() => null) : null,
     // Two rules disagree: null before 20261102100000, which adds nothing.

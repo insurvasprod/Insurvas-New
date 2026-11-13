@@ -11,6 +11,7 @@ import { hasFeature } from "@/lib/entitlements/types";
 import { featureKillState } from "@/lib/features/killSwitch";
 import { isTenantSuspended } from "@/lib/tenants/suspension";
 import { checkTenantSession } from "@/lib/tenantAuth/sessionStore";
+import { extensionBlocked } from "./accessCheck";
 import { auditExtension } from "./audit";
 import { GRANT_SCOPE } from "./constants";
 import {
@@ -86,6 +87,7 @@ export async function mintGrant(actor: Actor, input: { applicationId: string; ca
   const app = await applicationHead(actor.tenantId, input.applicationId);
   if (app.status !== "ready") throw new ApplicationError("APPLICATION_NOT_READY", "Mark the application ready on the Review step before filling the carrier's form.", 409);
   if (!app.carrier_id || app.carrier_id !== input.carrierId) throw new ApplicationError("CARRIER_MISMATCH", "That carrier is not the one this application is for.", 409);
+  if (await extensionBlocked(actor.tenantId, actor.userId, app.carrier_id)) throw new ApplicationError("EXTENSION_REVOKED", "An owner has turned the browser extension off for you on this carrier's site.", 403);
   const origin = await carrierOriginFor(actor.tenantId, app.carrier_id);
   if (!origin) throw new ApplicationError("CARRIER_ORIGIN_MISSING", "Insurvas has not added a portal address for this carrier yet. Contact support to have it added.", 409);
 

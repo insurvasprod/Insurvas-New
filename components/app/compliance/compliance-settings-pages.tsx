@@ -1,11 +1,13 @@
 "use client";
 
+import { useRouteSheet } from "@/components/app/route-sheet";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { STATES, SETTINGS_URL, regulatorName, useComplianceBundle, type Bundle } from "@/components/app/compliance/compliance-settings-data";
+import { AffectsList, Facts, HistoryList, SettingSheet, SheetPart, type HistoryItem } from "@/components/app/settings/money/setting-kit";
 import { FormSection, FormSections } from "@/components/app/settings/patterns";
 import { SettingsSectionHeader, SettingsTableCard, st } from "@/components/app/settings/primitives";
 import { LockedNote, SettingRow } from "@/components/app/settings/setting-row";
@@ -16,6 +18,7 @@ import { LeaveGuard } from "@/components/ui/leave-guard";
 import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
+import { Sheet } from "@/components/ui/sheet";
 import { Segmented } from "@/components/ui/view-tabs";
 import { dateTime, viewerTimeZone } from "@/lib/format/dates";
 import { ACTION_LABELS, BASES, BASIS_LABELS, HOLD_REASON_LABELS, HOLD_SCOPE_LABELS, NOT_LEGAL_ADVICE, RECORD_TYPES, describeDays, type HoldReason, type HoldScope, type RetentionAction, type RetentionBasis } from "@/lib/compliance/retention";
@@ -56,6 +59,7 @@ export function DeadlinePage({ regulator, preset, readOnly }: { regulator: strin
 
 function DeadlineForm({ bundle, regulator, preset, readOnly }: { bundle: ReturnType<typeof useComplianceBundle> & { data: Bundle }; regulator: string | null; preset: string | null; readOnly: boolean }) {
   const router = useRouter();
+  const sheet = useRouteSheet();
   const { data, busy, write } = bundle;
   const existing = regulator ? data.deadlines.rows.find((r) => r.regulator === regulator) ?? null : null;
   const set = new Set(data.deadlines.rows.map((r) => r.regulator));
@@ -76,7 +80,8 @@ function DeadlineForm({ bundle, regulator, preset, readOnly }: { bundle: ReturnT
   };
   return (
     <div className="flex flex-col gap-6">
-      <SettingsSectionHeader trail={<Crumbs tab="Complaints" anchor="deadlines" here={existing ? regulatorName(existing.regulator) : "Add a deadline"} />} />
+      {/* In a route sheet the panel names it (route-sheet.tsx). */}
+      {!sheet && <SettingsSectionHeader trail={<Crumbs tab="Complaints" anchor="deadlines" here={existing ? regulatorName(existing.regulator) : "Add a deadline"} />} />}
       <LeaveGuard dirty={dirty && !busy} onSave={valid ? save : undefined} onDiscard={() => undefined} what="this deadline" />
       <FormSections>
         <FormSection title={existing ? "Response deadline" : "A new response deadline"} info="Statutory days to answer a state insurance department or the FTC. Unset means no countdown, never a guessed default.">
@@ -120,7 +125,8 @@ export function RecordTypePage({ recordType, readOnly }: { recordType: string; r
   return <WithBundle>{(b) => <RecordTypeView bundle={b} recordType={recordType} readOnly={readOnly} />}</WithBundle>;
 }
 
-function RecordTypeView({ bundle, recordType, readOnly }: { bundle: ReturnType<typeof useComplianceBundle> & { data: Bundle }; recordType: string; readOnly: boolean }) {
+/** In a sheet over the Records tab (round 8) the sheet names the record type, so the view draws no title line. */
+export function RecordTypeView({ bundle, recordType, readOnly, inSheet = false }: { bundle: ReturnType<typeof useComplianceBundle> & { data: Bundle }; recordType: string; readOnly: boolean; inSheet?: boolean }) {
   const { data, busy, write } = bundle;
   const type = RECORD_TYPES.find((t) => t.key === recordType);
   const platform = data.rules.find((r) => r.tenantId === null && r.recordType === recordType && r.state === null) ?? null;
@@ -130,6 +136,7 @@ function RecordTypeView({ bundle, recordType, readOnly }: { bundle: ReturnType<t
   const [form, setForm] = useState(blank);
   const [removing, setRemoving] = useState<string | null>(null);
   if (!type) return <Missing what="record type" back={`${SETTINGS_URL}#retention`} />;
+  const copy = !readOnly && !isLocked && platform && mine.length === 0 ? <Button variant="outline" disabled={busy} onClick={() => void write("/api/app/compliance/settings", { op: "copy_rule", record_type: recordType }, "Copied to your agency")}>Copy to my agency</Button> : undefined;
   const valid = /^\d+$/.test(form.days) && Number(form.days) >= 30 && Number(form.days) <= 7300;
   const editing = mine.find((r) => (r.state ?? "") === form.state);
   const dirty = JSON.stringify(form) !== JSON.stringify(blank);
@@ -140,7 +147,8 @@ function RecordTypeView({ bundle, recordType, readOnly }: { bundle: ReturnType<t
   };
   return (
     <div className="flex flex-col gap-6">
-      <SettingsSectionHeader trail={<Crumbs tab="Records" anchor="retention" here={type.label} />} actions={!readOnly && !isLocked && platform && mine.length === 0 ? <Button variant="outline" disabled={busy} onClick={() => void write("/api/app/compliance/settings", { op: "copy_rule", record_type: recordType }, "Copied to your agency")}>Copy to my agency</Button> : undefined} />
+      {!inSheet && <SettingsSectionHeader trail={<Crumbs tab="Records" anchor="retention" here={type.label} />} actions={copy} />}
+      {inSheet && copy && <div className="flex justify-end">{copy}</div>}
       <LeaveGuard dirty={dirty && !busy} onSave={valid ? saveRule : undefined} onDiscard={() => setForm(blank)} what="this rule" />
       <FormSections>
         <FormSection title="Insurvas default" info="The period every agency starts with. Your rules beat it.">
@@ -211,6 +219,7 @@ export function NewHoldPage({ readOnly }: { readOnly: boolean }) {
 
 function NewHold({ bundle, readOnly }: { bundle: ReturnType<typeof useComplianceBundle> & { data: Bundle }; readOnly: boolean }) {
   const router = useRouter();
+  const sheet = useRouteSheet();
   const { busy, write } = bundle;
   const [scope, setScope] = useState<HoldScope>("phone_digits");
   const [value, setValue] = useState("");
@@ -226,7 +235,7 @@ function NewHold({ bundle, readOnly }: { bundle: ReturnType<typeof useCompliance
   };
   return (
     <div className="flex flex-col gap-6">
-      <SettingsSectionHeader trail={<Crumbs tab="Holds & deletion" anchor="holds" here="Place a hold" />} />
+      {!sheet && <SettingsSectionHeader trail={<Crumbs tab="Holds & deletion" anchor="holds" here="Place a hold" />} />}
       <LeaveGuard dirty={dirty && !busy} onSave={valid ? place : undefined} onDiscard={() => undefined} what="this hold" />
       <FormSections>
         <FormSection title="A legal hold" info="Records under a hold are never deleted, by the purge or a deletion request, until you release it.">
@@ -271,8 +280,12 @@ function HoldView({ bundle, id, readOnly }: { bundle: ReturnType<typeof useCompl
   return (
     <div className="flex flex-col gap-6">
       <SettingsSectionHeader
-        trail={<Crumbs tab="Holds & deletion" anchor="holds" here={`${HOLD_SCOPE_LABELS[hold.scope]}${hold.scopeValue ? `: ${hold.scopeValue}` : ""}`} aside={hold.releasedAt ? <StatusChip tone="neutral">Released</StatusChip> : <StatusChip tone="info">In force</StatusChip>} />}
-        actions={!readOnly && !hold.releasedAt ? <Button variant="outline" disabled={busy} onClick={() => { setWhy(""); setReleasing(true); }}>Release hold</Button> : undefined} />
+        trail={<Crumbs tab="Holds & deletion" anchor="holds" here={`${HOLD_SCOPE_LABELS[hold.scope]}${hold.scopeValue ? `: ${hold.scopeValue}` : ""}`} aside={hold.releasedAt ? <StatusChip tone="neutral">Released</StatusChip> : hold.sourceOpen ? <StatusChip tone="warning">{hold.reason === "complaint" ? "Complaint open" : "Dispute open"}</StatusChip> : <StatusChip tone="good">In force</StatusChip>} />}
+        // Round 7 (Notion LA-6.6): an automatic hold whose complaint or dispute is still open cannot be released (the
+        // database refuses it), so its button is off and says why instead of failing after the confirm.
+        actions={!readOnly && !hold.releasedAt ? (hold.sourceOpen
+          ? <Button variant="outline" disabled title={`Released automatically when its ${hold.reason === "complaint" ? "complaint" : "dispute"} is closed`}>Release hold</Button>
+          : <Button variant="outline" disabled={busy} onClick={() => { setWhy(""); setReleasing(true); }}>Release hold</Button>) : undefined} />
       <FormSections>
         <FormSection title="This hold" info="Nothing it covers is deleted, by the purge or a deletion request, while it is in force.">
           <dl className="m-0 grid gap-x-6 gap-y-1.5 text-sm @xl:grid-cols-[12rem_minmax(0,1fr)]">
@@ -282,7 +295,7 @@ function HoldView({ bundle, id, readOnly }: { bundle: ReturnType<typeof useCompl
             <dt className="text-[var(--muted)]">Note</dt><dd className="m-0 text-[var(--ink)]">{hold.note ?? "—"}</dd>
             {hold.releasedAt && <><dt className="text-[var(--muted)]">Released</dt><dd className="m-0 text-[var(--ink)]">{dateTime(hold.releasedAt, zone)}{hold.releaseNote ? `: ${hold.releaseNote}` : ""}</dd></>}
           </dl>
-          {hold.automatic && !hold.releasedAt && <LockedNote>An automatic hold is released only once its {hold.reason === "complaint" ? "complaint" : "dispute"} is closed.</LockedNote>}
+          {hold.sourceOpen && <LockedNote>An automatic hold is released only once its {hold.reason === "complaint" ? "complaint" : "dispute"} is closed.</LockedNote>}
         </FormSection>
       </FormSections>
       <ConfirmDialog open={releasing} onOpenChange={setReleasing} busy={busy}
@@ -326,5 +339,205 @@ function RunView({ data, id }: { data: Bundle; id: string }) {
         <p className="m-0 border-t border-[var(--border)] px-4 py-2.5 text-xs text-[var(--muted)]">{run.unruled.length ? `No rule, so nothing deleted: ${run.unruled.map(label).join(", ")}.` : "Every record type had a rule."} Started by {run.triggeredBy === "schedule" ? "the schedule" : run.triggeredBy === "manual" ? "a person" : run.triggeredBy}{run.finishedAt ? `, finished ${dateTime(run.finishedAt, zone)}` : ", still running"}.</p>
       </SettingsTableCard>
     </div>
+  );
+}
+
+/* ── round 8: the same records as right sheets over their tab ──
+ * docs/design/settings-r8/money-compliance-settings.html §7–9 (owner "Build all four", 2026-11-12): a deadline, a
+ * record type's rules, a hold and a purge run open from the right on the settings page, the list staying behind them.
+ * The pages above stay for links from elsewhere; each sheet sends the same write. */
+
+type Loaded = ReturnType<typeof useComplianceBundle> & { data: Bundle };
+
+/** A regulator's response deadline (Add a regulator is the same sheet, empty). */
+export function DeadlineSheet({ bundle, regulator, preset = null, canEdit, history, onClose }: { bundle: Loaded; regulator: string | null; preset?: string | null; canEdit: boolean; history: readonly HistoryItem[]; onClose: () => void }) {
+  const { data, busy, send } = bundle;
+  const existing = regulator ? data.deadlines.rows.find((r) => r.regulator === regulator) ?? null : null;
+  const taken = new Set(data.deadlines.rows.map((r) => r.regulator));
+  const missing = new Set(data.deadlines.coverage.missing);
+  const unsetFtc = !data.deadlines.coverage.ftc;
+  const choices = ["FTC", ...STATES].filter((s) => !taken.has(s)).sort((a, b) => Number(missing.has(b) || (b === "FTC" && unsetFtc)) - Number(missing.has(a) || (a === "FTC" && unsetFtc)));
+  const [pick, setPick] = useState(() => regulator ?? (preset && choices.includes(preset) ? preset : ""));
+  const [days, setDays] = useState(existing ? String(existing.responseDays) : "");
+  const [notes, setNotes] = useState(existing?.notes ?? "");
+  const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const dirty = existing ? days !== String(existing.responseDays) || notes !== (existing.notes ?? "") : Boolean(pick || days || notes);
+  const valid = Boolean(pick) && /^\d+$/.test(days) && Number(days) >= 1 && Number(days) <= 180;
+  const problem = days && !valid && pick ? "Enter 1 to 180 days." : null;
+  const open = pick ? data.openByRegulator?.[pick] ?? null : null;
+  const name = pick ? regulatorName(pick) : "this regulator";
+  const save = async () => {
+    const failed = await send("/api/app/compliance/settings", { op: "deadline", regulator: pick, response_days: Number(days), notes: notes.trim() || null }, existing ? `Saved · ${regulatorName(pick)} deadline` : `Deadline set for ${regulatorName(pick)}`,
+      { undo: existing ? { op: "deadline", regulator: existing.regulator, response_days: existing.responseDays, notes: existing.notes } : undefined });
+    if (failed) setError(failed); else onClose();
+  };
+  return (
+    <>
+      <SettingSheet title={existing ? regulatorName(existing.regulator) : "Add a regulator"} where="Compliance › Complaints › Response deadlines" canEdit={canEdit}
+        heading="Answer within" said="Counted from the day the complaint reaches you. Unset means no countdown, never a guessed default."
+        readValue={existing ? `${existing.responseDays} days` : "Not set"} error={error} busy={busy} saveLabel={existing ? "Save this deadline" : "Add deadline"} saveDisabled={!valid || !dirty}
+        onSave={() => void save()} onClose={onClose}
+        footerStart={existing ? <Button type="button" variant="outline" className="text-[var(--error-ink)]" disabled={busy} onClick={() => setRemoving(true)}>Remove regulator</Button> : undefined}
+        affects={[
+          { label: open === null ? `New ${name} complaints count down from this` : `${open} open ${pick === "FTC" ? "FTC" : pick} complaint${open === 1 ? "" : "s"}; open ones keep their due dates`, where: "Complaints" },
+          { label: "Complaints · Due soon list", where: "Compliance" },
+          { label: "Evidence report · answered on time", where: "Gate & reports" },
+        ]}
+        history={history} historyHref="/app/settings?history=compliance#settings-history" historyEmpty={existing ? "Set before changes were recorded." : "Not set yet."}>
+        {!existing && (
+          <label className="flex flex-col gap-1.5 text-label text-[var(--body)]">Regulator
+            <select aria-label="Regulator" className={cn(inputControl, "mt-0")} value={pick} onChange={(e) => { setPick(e.target.value); setError(null); }}>
+              <option value="">Choose a regulator</option>
+              {choices.map((s) => <option key={s} value={s}>{regulatorName(s)}{missing.has(s) || (s === "FTC" && unsetFtc) ? " · licensed, not set" : ""}</option>)}
+            </select>
+          </label>
+        )}
+        <span className="flex items-center gap-2 text-sm text-[var(--muted)]">
+          <input aria-label="Days to respond" inputMode="numeric" className={cn(inputControl, "mt-0 w-24 tabular-nums", problem && "border-[var(--error)]")} value={days} onChange={(e) => { setDays(e.target.value.replace(/\D/g, "").slice(0, 3)); setError(null); }} />days
+        </span>
+        {existing && <p className="m-0 text-xs text-[var(--muted)]">was {existing.responseDays} days</p>}
+        {problem && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{problem}</p>}
+        <label className="flex flex-col gap-1.5 text-label text-[var(--body)]">Source <span className="font-normal text-[var(--muted)]">Optional: where the number comes from, for whoever checks it next.</span>
+          <input aria-label="Source" className={cn(inputControl, "mt-0")} maxLength={500} placeholder="e.g. 28 TAC §21.2804: 15 days from receipt" value={notes} onChange={(e) => setNotes(e.target.value)} />
+        </label>
+      </SettingSheet>
+      {existing && (
+        <ConfirmDialog open={removing} onOpenChange={setRemoving} busy={busy}
+          title={`Remove the ${regulatorName(existing.regulator)} deadline?`}
+          description={`New complaints from ${existing.regulator === "FTC" ? "the FTC" : existing.regulator} will have no countdown, no amber or red and no daily email. Open complaints keep their due dates.`}
+          confirmLabel="Remove regulator" cancelLabel="Keep deadline"
+          onConfirm={async () => { const failed = await send("/api/app/compliance/settings", { op: "deadline", regulator: existing.regulator, response_days: null }, "Deadline removed"); setRemoving(false); if (failed) setError(failed); else onClose(); }} />
+      )}
+    </>
+  );
+}
+
+/** A record type's rules, wide: Insurvas's default, the agency's rules, and Add a rule. */
+export function RecordTypeSheet({ bundle, recordType, canEdit, onClose }: { bundle: Loaded; recordType: string; canEdit: boolean; onClose: () => void }) {
+  const type = RECORD_TYPES.find((t) => t.key === recordType);
+  return (
+    <Sheet title={type?.label ?? "Record"} subtitle="Compliance › Records › How long records are kept" onClose={onClose} className="lg:w-[640px]"
+      footer={<><span className="flex-1" /><Button type="button" variant="outline" onClick={onClose}>Close</Button></>}>
+      <RecordTypeView bundle={bundle} recordType={recordType} readOnly={!canEdit} inSheet />
+    </Sheet>
+  );
+}
+
+/** Place a legal hold. */
+export function NewHoldSheet({ bundle, canEdit, onClose }: { bundle: Loaded; canEdit: boolean; onClose: () => void }) {
+  const { busy, send } = bundle;
+  const [scope, setScope] = useState<HoldScope>("phone_digits");
+  const [value, setValue] = useState("");
+  const [reason, setReason] = useState<HoldReason>("litigation");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const valid = Boolean(note.trim()) && (scope === "tenant_wide" || Boolean(value.trim()));
+  const place = async () => {
+    const failed = await send("/api/app/compliance/retention/holds", { scope, value: scope === "tenant_wide" ? null : value.trim(), reason, note: note.trim() }, "Hold placed");
+    if (failed) setError(failed); else onClose();
+  };
+  return (
+    <SettingSheet title="New hold" where="Compliance › Holds & deletion" canEdit={canEdit} heading="A legal hold" said="Records under a hold are never deleted, by the purge or a deletion request, until you release it."
+      readValue="Holds can't be placed while the account is read-only." error={error} busy={busy} saveLabel="Place hold" saveDisabled={!valid} onSave={() => void place()} onClose={onClose}
+      affects={[{ label: "Scheduled purge skips what it covers", where: "Records › Runs" }, { label: "Deletion requests for it wait", where: "Deletions" }]}>
+      <div className="flex flex-col gap-1.5 text-label text-[var(--body)]">Covers
+        <Segmented label="Covers" value={scope} onChange={setScope} options={(["phone_digits", "policy_number", "tenant_wide"] as const).map((key) => ({ key, label: HOLD_SCOPE_LABELS[key] }))} />
+      </div>
+      {scope !== "tenant_wide" && (
+        <label className="flex flex-col gap-1.5 text-label text-[var(--body)]">{scope === "phone_digits" ? "Phone number" : "Policy number"}
+          <input aria-label={scope === "phone_digits" ? "Phone number" : "Policy number"} className={cn(inputControl, "mt-0")} value={value} onChange={(e) => setValue(e.target.value)} />
+        </label>
+      )}
+      <div className="flex flex-col gap-1.5 text-label text-[var(--body)]">Why
+        <Segmented label="Why" value={reason} onChange={setReason} options={(["litigation", "regulator_inquiry", "manual"] as const).map((key) => ({ key, label: HOLD_REASON_LABELS[key] }))} />
+      </div>
+      <label className="flex flex-col gap-1.5 text-label text-[var(--body)]">Note <span className="font-normal text-[var(--muted)]">Required. Nothing this hold covers is deleted until you release it.</span>
+        <input aria-label="Note" className={cn(inputControl, "mt-0")} maxLength={500} placeholder="e.g. Demand letter received 1 Nov" value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+    </SettingSheet>
+  );
+}
+
+/** One legal hold: what it covers, what it stops, its history, Release now. */
+export function HoldSheet({ bundle, id, canEdit, onClose }: { bundle: Loaded; id: string; canEdit: boolean; onClose: () => void }) {
+  const { data, busy, send } = bundle;
+  const hold = data.holds.find((h) => h.id === id);
+  const [releasing, setReleasing] = useState(false);
+  const [why, setWhy] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  if (!hold) return null;
+  const zone = viewerTimeZone();
+  const placedBy = data.team.find((t) => t.id === hold.placedBy)?.name ?? (hold.automatic ? "Insurvas" : "Someone");
+  const covers = `${HOLD_SCOPE_LABELS[hold.scope]}${hold.scopeValue ? `: ${hold.scopeValue}` : ""}`;
+  const days = Math.max(0, Math.round((Date.parse(hold.releasedAt ?? new Date().toISOString()) - Date.parse(hold.placedAt)) / 86_400_000));
+  const history: HistoryItem[] = [
+    ...(hold.releasedAt ? [{ key: "released", who: "Someone", at: hold.releasedAt, line: <>Released the hold{hold.releaseNote ? `: ${hold.releaseNote}` : ""}</> }] : []),
+    { key: "placed", who: placedBy, at: hold.placedAt, line: <>Placed the hold{hold.automatic ? ` automatically, for its ${hold.reason === "complaint" ? "complaint" : "dispute"}` : ""}</> },
+  ];
+  const canRelease = canEdit && !hold.releasedAt && !hold.sourceOpen;
+  return (
+    <>
+      <Sheet title={hold.scopeValue ?? HOLD_SCOPE_LABELS[hold.scope]} subtitle={`Placed by ${placedBy} on ${dateTime(hold.placedAt, zone)}`} onClose={onClose} className="lg:w-[480px]" bodyClassName="flex flex-col"
+        footer={<>
+          {canRelease && <Button type="button" variant="outline" className="text-[var(--error-ink)]" disabled={busy} onClick={() => { setWhy(""); setReleasing(true); }}>Release now</Button>}
+          <span className="flex-1" />
+          <Button type="button" variant="outline" onClick={onClose}>Close</Button>
+        </>}>
+        <SheetPart>
+          <Facts items={[
+            { label: "Status", value: <span className="inline-flex items-center gap-2">{hold.releasedAt ? <StatusChip tone="neutral">Released</StatusChip> : <StatusChip tone="warning">In force</StatusChip>} {days} day{days === 1 ? "" : "s"}</span> },
+            { label: "Covers", value: covers },
+            { label: "Why", value: `${HOLD_REASON_LABELS[hold.reason]}${hold.automatic ? ", placed automatically" : ""}` },
+            { label: "Note", value: hold.note ?? "—" },
+            ...(hold.releasedAt ? [{ label: "Released", value: `${dateTime(hold.releasedAt, zone)}${hold.releaseNote ? `: ${hold.releaseNote}` : ""}` }] : []),
+          ]} />
+          {hold.sourceOpen && <p className="m-0 text-xs text-[var(--muted)]">Released by itself once its {hold.reason === "complaint" ? "complaint" : "dispute"} is closed; it can&apos;t be released by hand before then.</p>}
+          {error && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">That didn&apos;t save: {error}</p>}
+        </SheetPart>
+        <SheetPart title="What it stops"><AffectsList items={[{ label: "Scheduled purge skips these records", where: "Records › Runs" }, { label: "Deletion requests for it wait", where: "Deletions" }]} /></SheetPart>
+        <SheetPart title="History"><HistoryList items={history} /></SheetPart>
+      </Sheet>
+      <ConfirmDialog open={releasing} onOpenChange={setReleasing} busy={busy}
+        title="Release this hold?" description="From now on the records it covered can be deleted on schedule."
+        confirmLabel="Release hold" cancelLabel="Keep hold" confirmDisabled={!why.trim()}
+        fields={<label className="flex flex-col gap-1.5 text-label text-[var(--body)]">Why it is released<textarea className={cn(textareaControl, "mt-0")} value={why} onChange={(e) => setWhy(e.target.value)} /></label>}
+        onConfirm={async () => { const failed = await send("/api/app/compliance/retention/holds", { id: hold.id, note: why.trim() }, "Hold released", { method: "PATCH" }); setReleasing(false); if (failed) setError(failed); else onClose(); }} />
+    </>
+  );
+}
+
+/** A purge run: what it would delete (a dry run) or deleted (a live one), by record. */
+export function RunSheet({ data, id, onClose }: { data: Bundle; id: string; onClose: () => void }) {
+  const run = data.runs.find((r) => r.id === id);
+  if (!run) return null;
+  const zone = viewerTimeZone();
+  const label = (key: string) => RECORD_TYPES.find((t) => t.key === key)?.label ?? key;
+  const live = run.mode === "live";
+  const counted = (r: Bundle["runs"][number]["results"][number]) => (live ? r.rows_purged : Math.max(0, r.rows_matched - r.rows_held));
+  const gone = run.results.reduce((a, r) => a + counted(r), 0);
+  const held = run.results.reduce((a, r) => a + r.rows_held, 0);
+  const byType = new Map<string, number>();
+  for (const r of run.results) byType.set(r.record_type, (byType.get(r.record_type) ?? 0) + counted(r));
+  const short = (at: number) => new Date(at).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const third = live ? { k: "Finished", v: run.finishedAt ? short(Date.parse(run.finishedAt)) : "Running" } : { k: "Live run on", v: run.finishedAt ? short(Date.parse(run.finishedAt) + data.settings.purge.windowDays * 86_400_000) : "—" };
+  const by = run.triggeredBy === "schedule" ? "the schedule" : run.triggeredBy === "manual" ? "a person" : run.triggeredBy;
+  return (
+    <Sheet title={`${live ? "Live run" : "Dry run"} · ${dateTime(run.startedAt, zone)}`} subtitle={`${live ? `Deleted ${gone.toLocaleString("en-US")} records` : "Deleted nothing"} · started by ${by}`} onClose={onClose} className="lg:w-[480px]" bodyClassName="flex flex-col"
+      footer={<><span className="flex-1" /><Button type="button" variant="outline" onClick={onClose}>Close</Button></>}>
+      <SheetPart>
+        <div className="grid grid-cols-3 gap-2">
+          {[{ k: live ? "Deleted" : "Would delete", v: gone.toLocaleString("en-US") }, { k: "Kept by a hold", v: held.toLocaleString("en-US") }, third].map((t) => (
+            <div key={t.k} className="rounded-xl px-3 py-2.5 shadow-[inset_0_0_0_1px_var(--border)]"><span className="block text-xs text-[var(--muted)]">{t.k}</span><b className="text-base tabular-nums text-[var(--ink)]">{t.v}</b></div>
+          ))}
+        </div>
+      </SheetPart>
+      <SheetPart title="By record"><AffectsList items={[...byType].map(([k, n]) => ({ label: label(k), where: n.toLocaleString("en-US") }))} /></SheetPart>
+      <SheetPart title="Notes">
+        <p className="m-0 text-sm text-[var(--body)]">{run.unruled.length ? `No rule, so nothing deleted: ${run.unruled.map(label).join(", ")}.` : "Every record type had a rule."} {run.finishedAt ? `Finished ${dateTime(run.finishedAt, zone)}.` : "Still running."}</p>
+        {run.summaryDelivered !== null && <p className="m-0 text-xs text-[var(--muted)]">Summary sent to {run.summaryDelivered} {run.summaryDelivered === 1 ? "person" : "people"}{run.acknowledgedAt ? ` · read ${dateTime(run.acknowledgedAt, zone)}` : ""}.</p>}
+        {run.liveSkippedReason && <p className="m-0 text-xs text-[var(--muted)]">The live run was skipped: {run.liveSkippedReason}</p>}
+      </SheetPart>
+    </Sheet>
   );
 }

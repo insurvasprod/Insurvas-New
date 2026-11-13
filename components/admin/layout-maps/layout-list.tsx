@@ -92,7 +92,7 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
 
   return (
     <div className="flex flex-col gap-6">
-      <AdminPageHeader title="Layout maps" subtitle="How each carrier's files are read, column by column." actions={<Button asChild disabled={Boolean(notice)}><Link href="/admin/layout-maps/new">New layout</Link></Button>} />
+      <AdminPageHeader title="Layout maps" subtitle="How each carrier's files are read, column by column." tabs={<ViewTabs label="Layout map views" value={view} onChange={setView} tabs={[{ key: "layouts", label: "Layouts", count: layouts.filter((layout) => layout.live || layout.draft).length }, { key: "carriers", label: "Carriers", count: carriers.length }]} />} actions={<Button asChild disabled={Boolean(notice)}><Link href="/admin/layout-maps/new">New layout</Link></Button>} />
 
       <StatStrip label="Layout map totals">
         <StatTile label="Live layouts" value={figures.live.toLocaleString("en-US")} footnote={`${layouts.length.toLocaleString("en-US")} in all`} />
@@ -103,8 +103,6 @@ export function LayoutList({ maps, assignments, carriers, notice }: { maps: Layo
       </StatStrip>
 
       {notice && <div role="status" className="rounded-lg border border-border border-l-[3px] border-l-[var(--warning)] bg-[var(--warning-surface)] px-4 py-3 text-sm text-[var(--warning-ink)]">{notice}</div>}
-
-      <ViewTabs label="Layout map views" value={view} onChange={setView} tabs={[{ key: "layouts", label: "Layouts", count: layouts.filter((layout) => layout.live || layout.draft).length }, { key: "carriers", label: "Carriers", count: carriers.length }]} />
 
       {view === "layouts" ? (
         <TableCard

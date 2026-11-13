@@ -1,8 +1,8 @@
 "use client";
 
+import { usePagePathname } from "@/components/ui/page-pathname";
 import { createElement, useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { IntentLink } from "@/components/ui/nav-pending";
 import {
   ArrowLeftRight,
@@ -101,6 +101,7 @@ import { complianceStepOf } from "@/lib/compliance/steps";
 import { reportsViewOf } from "@/lib/reports/views";
 import { bookAreaOf, dataInAreaOf, dataInStepOf } from "@/lib/dataIn/steps";
 import { accountingStepOf } from "@/lib/accounting/steps";
+import { SetupCount } from "@/components/app/setup/setup-status";
 import { commissionsStepOf } from "@/lib/commissions/steps";
 import { agencyStepOf } from "@/lib/agency/steps";
 import { retentionStepOf } from "@/lib/retention/steps";
@@ -169,7 +170,7 @@ function NavItemLink({
   onNavigate?: () => void;
   nested?: boolean;
 }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const active = isActivePath(pathname, item.path);
   const Icon = iconFor(item.icon);
   const label = item.navLabel ?? item.label;
@@ -192,6 +193,8 @@ function NavItemLink({
             "aria-hidden": true,
           })}
           <span className="portal-agent-nav-label">{titleCaseNode(label)}</span>
+          {/* Hidden with the label when the rail is collapsed (the flyout still shows it). */}
+          {item.key === "home.setup" && <span className="portal-agent-nav-label ml-auto"><SetupCount /></span>}
         </span>
         {!item.built && (
           <span
@@ -285,7 +288,7 @@ const FLYOUT_CLOSE_MS = 180;
  * clips it.
  */
 function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: string; icon: typeof BriefcaseBusiness; items: MenuItem[]; children: ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const currentKey = currentFlyoutPage(pathname, items);
   const [open, setOpen] = useState(false);
   const closing = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -349,6 +352,8 @@ function CollapsedFlyout({ label, icon: GroupIcon, items, children }: { label: s
                     <Icon className="size-[15px]" strokeWidth={1.9} />
                   </span>
                   <span className="truncate">{titleCaseNode(itemLabel)}</span>
+                  {/* Guided setup: Ready to sell's steps left, beside Get set up (owner R3·3b). */}
+                  {item.key === "home.setup" && <SetupCount />}
                 </Link>
               </li>
             );
@@ -408,7 +413,7 @@ function NavList({
   isCollapsed?: boolean;
   onExpand?: (groupLabel: string) => void;
 }) {
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const tree = buildSidebarTree(menu, moduleAccess);
   const isActive = (item: MenuItem) => isActivePath(pathname, item.path);
   const activeGroupLabel = tree.groups.find((group) => group.items.some(isActive))?.label;
@@ -425,7 +430,7 @@ function NavList({
   return (
     <nav className={`portal-agent-nav ${isCollapsed ? "is-collapsed" : ""}`} aria-label="Agent workspace navigation">
       <ul className="portal-agent-nav-home">
-        {tree.home.map((item) => (
+        {tree.home.filter((item) => item.key !== "home.docs").map((item) => (
           <NavItemLink key={item.key} item={item} onNavigate={onNavigate} />
         ))}
       </ul>
@@ -465,11 +470,19 @@ function NavList({
         />
       ))}
 
-      {tree.settings.map((item) => (
-        <ul key={item.key} className="portal-agent-nav-settings">
-          <NavItemLink item={item} onNavigate={onNavigate} />
-        </ul>
-      ))}
+      {/* The rail's foot (owner 2026-11-13): Docs, then Settings under it, pinned to the bottom. */}
+      <div className="portal-agent-nav-foot">
+        {tree.home.filter((item) => item.key === "home.docs").map((item) => (
+          <ul key={item.key} className="portal-agent-nav-settings">
+            <NavItemLink item={item} onNavigate={onNavigate} />
+          </ul>
+        ))}
+        {tree.settings.map((item) => (
+          <ul key={item.key} className="portal-agent-nav-settings">
+            <NavItemLink item={item} onNavigate={onNavigate} />
+          </ul>
+        ))}
+      </div>
     </nav>
   );
 }

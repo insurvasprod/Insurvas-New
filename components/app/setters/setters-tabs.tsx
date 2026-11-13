@@ -2,7 +2,6 @@
 
 import { useState, type ReactNode } from "react";
 
-import { AppointmentCalendar } from "@/components/app/appointment-calendar";
 import { CalendarAvailabilitySettings } from "@/components/app/calendar-availability-settings";
 import { PageHeader } from "@/components/ui/page-header";
 import { UnderlineTabs } from "@/components/ui/view-tabs";
@@ -10,15 +9,14 @@ import type { SettersTab } from "@/lib/setters/tab";
 
 const TABS = [
   { key: "overview", label: "Overview" },
-  { key: "calendar", label: "Calendar" },
   { key: "setup", label: "Setup" },
 ] as const;
 
 /**
- * Appointments & setters in three tabs (owner 2026-11-05): how the setters are doing (Overview), the
- * diary itself (Calendar) and the hours, blocks and booking rules it is built from (Setup). Only the
- * tab on screen is mounted, so the calendar and the editor load when they are opened. The choice is
- * kept in the address (?tab=) so a link or a reload lands on the same tab.
+ * Appointments & setters in two tabs: how the setters are doing (Overview) and the hours, blocks and
+ * booking rules the diary is built from (Setup). The diary itself is the Calendar page (owner
+ * 2026-11-09: the Calendar tab is removed). Only the tab on screen is mounted. The choice is kept in
+ * the address (?tab=) so a link or a reload lands on the same tab.
  */
 export function SettersTabs({ initial, overview }: { initial: SettersTab; overview: ReactNode }) {
   const [tab, setTab] = useState<SettersTab>(initial);
@@ -32,12 +30,11 @@ export function SettersTabs({ initial, overview }: { initial: SettersTab; overvi
   };
   return (
     <div className="m-stagger flex flex-col gap-6">
-      <PageHeader title="Appointments & setters" hideTitle />
-      <UnderlineTabs label="Appointments and setters" tabs={TABS} value={tab} onChange={choose} controls="setters-panel" idPrefix="setters" />
+      {/* The sub-page bar this page drew first is now everyone's (UI-CONSISTENCY §8b): PageHeader's own tabs row. */}
+      <PageHeader title="Appointments & setters" tabs={<UnderlineTabs label="Appointments and setters" tabs={TABS} value={tab} onChange={choose} controls="setters-panel" idPrefix="setters" />} />
 
       <div id="setters-panel" role="tabpanel" aria-labelledby={`setters-tab-${tab}`} className="flex flex-col gap-6">
         {tab === "overview" && overview}
-        {tab === "calendar" && <AppointmentCalendar embedded />}
         {tab === "setup" && <CalendarAvailabilitySettings />}
       </div>
     </div>

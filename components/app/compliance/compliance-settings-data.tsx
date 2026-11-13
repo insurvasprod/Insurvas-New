@@ -22,6 +22,12 @@ export type Bundle = {
   runs: Run[];
   changes: { section: string; setting: string; from: unknown; to: unknown; by: string | null; at: string }[];
   team: { id: string; role: string; name: string }[];
+  /** LA-6.1: the nightly index checks, newest first (round 7). */
+  indexChecks?: { ranAt: string; missing: number; stale: number; unkeyed: number }[];
+  /** Insurvas's values, for each row's Yours or Insurvas and a sheet's Use Insurvas value (round 8). */
+  defaults?: ComplianceSettings;
+  /** Open regulator complaints by regulator ("TX", "FTC"); null when they could not be counted (round 8). */
+  openByRegulator?: Record<string, number> | null;
 };
 
 export const STATES = "AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK OR PA RI SC SD TN TX UT VT VA WA WV WI WY".split(" ");
@@ -64,7 +70,39 @@ export function useComplianceBundle() {
     }
   }, [reload]);
 
-  return { data, error, busy, reload, write };
+  /**
+   * A sheet's save (round 8): the same writes, but a failure comes back as words for the sheet to show beside the
+   * field (the typed value kept), and a settings save offers Undo in its toast, which sends the old values back.
+   */
+  const send = useCallback(async (url: string, payload: unknown, done: string, opts: { method?: string; undo?: unknown } = {}): Promise<string | null> => {
+    setBusy(true);
+    try {
+      const res = await fetch(url, { method: opts.method ?? "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(body?.error ?? "That didn't save");
+      if (url === "/api/app/compliance/settings" && body?.settings) setData(body);
+      else reload();
+      const undo = opts.undo;
+      notify.done(done, undo ? {
+        action: {
+          label: "Undo",
+          onClick: () => void fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(undo) }).then(async (r) => {
+            const back = await r.json().catch(() => null);
+            if (!r.ok) throw new Error(back?.error ?? "That didn't save");
+            if (back?.settings) setData(back); else reload();
+            notify.done("Put back as it was.");
+          }).catch((e: unknown) => notify.fail(e instanceof Error ? e.message : "That didn't save")),
+        },
+      } : undefined);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : "That didn't save";
+    } finally {
+      setBusy(false);
+    }
+  }, [reload]);
+
+  return { data, error, busy, reload, write, send };
 }
 
 /** People who can receive an email, as a short list of checkboxes. Owners when nobody is chosen. */

@@ -1,0 +1,732 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Money and Compliance Settings</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Board-only extras, built from kit tokens only. */
+.lnk{color:var(--accent-ink);font-weight:500;text-decoration:none}
+.sp{flex:1}
+.body.col{flex-direction:column}
+/* setting rows: one line each */
+table.set td:first-child{color:var(--ink);font-weight:500}
+table.set td.used{color:var(--muted)}
+table.set td.go{color:var(--muted);text-align:right;width:28px}
+table.set td.who{color:var(--body)}
+.av.xs{width:20px;height:20px;font-size:12px;vertical-align:middle;margin-right:6px}
+.lock{display:inline-block;width:10px;height:8px;border:1.5px solid currentColor;border-radius:2px;position:relative;margin-right:2px;vertical-align:-1px}
+.lock::before{content:"";position:absolute;left:1px;top:-6px;width:5px;height:5px;border:1.5px solid currentColor;border-bottom:0;border-radius:4px 4px 0 0}
+.grp-h td{background:var(--band);color:var(--muted);font-size:12px;font-weight:600;padding:6px 14px}
+/* sheet parts */
+.sheet-sub{font-size:12px;color:var(--muted)}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:8px 14px;font-size:14px;margin:0}
+.kv dt{font-size:12px;color:var(--muted);margin:0;padding-top:2px}
+.kv dd{margin:0;color:var(--ink);min-width:0}
+.affects{list-style:none;margin:0;padding:0}
+.affects li{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.affects li:last-child{border-bottom:0}
+.affects li .end{margin-left:auto;font-size:12px;color:var(--muted)}
+.hist{list-style:none;margin:0;padding:0}
+.hist li{display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.hist li:last-child{border-bottom:0}
+.hist li small{display:block;font-size:12px;color:var(--muted)}
+.hist li .end{margin-left:auto;font-size:12px}
+.why{background:var(--band);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--body)}
+.why b{display:block;color:var(--ink);margin-bottom:2px}
+.prev{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;box-shadow:inset 0 0 0 1px var(--tile-edge);font-size:14px;color:var(--body)}
+.prev b{color:var(--ink)}
+/* weights */
+.wt{display:grid;grid-template-columns:200px 1fr 64px 70px;gap:12px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule);font-size:14px}
+.wt:last-of-type{border-bottom:0}
+.wt .nm{color:var(--ink)}
+.wt .nm small{display:block;font-size:12px;color:var(--muted)}
+.track{height:6px;border-radius:999px;background:var(--band);position:relative;box-shadow:inset 0 0 0 1px var(--tile-edge)}
+.track i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;background:var(--primary)}
+.track b{position:absolute;top:50%;width:14px;height:14px;border-radius:50%;background:var(--card);border:2px solid var(--primary);transform:translate(-50%,-50%)}
+.track s{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--border-strong);opacity:.5;text-decoration:none}
+.wt .num{height:30px;border:1px solid var(--border-strong);border-radius:8px;display:flex;align-items:center;justify-content:flex-end;padding:0 10px;color:var(--ink);font-variant-numeric:tabular-nums}
+.wt .num.ch{border-color:var(--ring)}
+.wt .was{font-size:12px;color:var(--muted)}
+.total{display:flex;align-items:center;gap:10px;padding:10px 0 0;font-size:14px}
+.bands{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.bands .tile b{font-variant-numeric:tabular-nums}
+.rise{color:var(--hl-ink);font-weight:600;font-size:12px}
+.fall{color:var(--muted);font-size:12px}
+.movebar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--band);margin:8px 0 4px}
+.movebar i{display:block;height:100%}
+/* popover menu */
+.pop{position:absolute;z-index:7}
+.menu div small{font-size:12px;color:var(--muted)}
+.toastwrap{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);z-index:8}
+/* "what changes" list */
+.changes{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px 18px}
+.changes ol{margin:0;padding-left:20px}
+.changes li{padding:4px 0}
+.ask{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.ask > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px 16px}
+.ask > div.ok{border:2px solid var(--primary)}
+.ask b{display:block;font-size:16px;margin-bottom:4px}
+.pattern{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.pattern > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.pattern b{display:block;margin-bottom:2px}
+@media (max-width:1100px){.ask{grid-template-columns:1fr}.wt{grid-template-columns:1fr 64px}.wt .track,.wt .was{display:none}}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Money &amp; compliance · Accounting, Retention, Compliance</h1>
+  <p class="lead">These three pages hold the rules behind the money and the regulator: when money counts, how a policy at risk climbs the save ladder, how long a complaint has before a regulator expects an answer. Today they look like three different products. Accounting and Retention open a pop-up per row; Compliance is a long form with one save bar for everything. This board puts all three on one pattern: a one-line setting row that opens a right sheet to change that one setting, with what it affects and its history inside.</p>
+  <div class="notes">
+    <div><b>1 · Two save models side by side</b>Accounting and Retention save one setting per dialog; Compliance saves the whole page from one bar at the foot. Three pages in one rail group, two ways to keep a change.</div>
+    <div><b>2 · Dialogs hide the consequence</b>The Accounting dialog shows the value and a Save button. Who uses it, who changed it last and what it was before live elsewhere (More › History), so a change is a guess.</div>
+    <div><b>3 · Sub-pages swap the whole screen</b>Retention weights, Compliance deadlines, holds and purge runs each replace the page with a back arrow. You lose the list you came from.</div>
+    <div><b>4 · Locked rows don't say why</b>"Only the owner changes these" and "Insurvas never sends money" read as broken buttons. Nobody says it is a safety rule, or who to ask.</div>
+    <div><b>5 · Compliance is one long form</b>Response deadlines, record ages, holds and gate checks run as stacked FormSections; the save bar covers twelve unrelated settings, so one typo blocks the rest.</div>
+    <div><b>6 · No sign of "yours" vs "Insurvas"</b>Retention has Reset to Insurvas values, but nothing on the row shows which values you changed. You have to open each one to know.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">One recommended design · L / D theme</span>
+  </div>
+
+  <div class="sec"><h2>The one pattern</h2><span>Same on all three pages</span></div>
+  <div class="pattern">
+    <div><b>A setting is one line</b>Setting · what it is now in plain words · what uses it · who changed it last · one chip: Yours, Insurvas or Locked.</div>
+    <div><b>Click opens a right sheet</b>Change that one setting, see what it affects, a preview where it helps, and its history. Save keeps that setting only.</div>
+    <div><b>Tabs in the header</b>Title, tabs and History on one line. The URL keeps ?tab=, as today.</div>
+    <div><b>Status line, no notices</b>"Saved · changed by Dana Ruiz on Nov 9". Errors show in the sheet, next to the field.</div>
+    <div><b>Records are sheets too</b>Weights, a regulator deadline, a hold and a purge run open from the right; the list stays behind them.</div>
+  </div>
+
+  <!-- ═════════════ ACCOUNTING ═════════════ -->
+  <div class="sec"><h2>1 · Accounting · Books tab</h2><span>/app/accounting-settings?tab=books · rows replace the per-row dialogs</span></div>
+  <div class="app" data-on="Accounting">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Accounting</h3><nav class="tabs"><a class="on">Books</a><a>Bank</a><a>Bills &amp; expenses</a><a>Partner payouts</a><a>Producer pay</a><a>Tax</a></nav><div class="acts"><span class="btn o">History</span></div></div>
+      <div class="status"><span class="dot"></span>Saved · Cost per policy changed by Demo Agent on Nov 9 · changes count from now on, recorded figures stay as they are</div>
+      <div class="body">
+        <div class="card flex1"><div class="scroll">
+          <table class="set"><thead><tr><th>Setting</th><th>Now</th><th>Used by</th><th>Changed</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr class="grp-h"><td colspan="6">When money counts</td></tr>
+            <tr class="h"><td>Count money when</td><td>The carrier pays us</td><td class="used">P&amp;L, Producer statements</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Oct 28</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Your financial year starts</td><td>January 1</td><td class="used">Year-to-date figures, Tax</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr class="grp-h"><td colspan="6">Persistency</td></tr>
+            <tr><td>Count a policy as persisting at</td><td>Month 13</td><td class="used">Persistency, Scorecards</td><td class="who"><span class="av xs">DA</span>Demo Agent · Sep 30</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Show counts instead of a rate below</td><td>10 policies</td><td class="used">Persistency tiles</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr class="grp-h"><td colspan="6">Profit</td></tr>
+            <tr><td>Cost per policy on the P&amp;L</td><td>Lead cost and overhead</td><td class="used">P&amp;L, Profit per policy</td><td class="who"><span class="av xs">DA</span>Demo Agent · Nov 9</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Overhead split</td><td>By policies written</td><td class="used">P&amp;L, Agency dashboard</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Aug 14</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr class="grp-h"><td colspan="6">Safety</td></tr>
+            <tr><td>Recorded figures never change</td><td>A change counts from now on</td><td class="used">Every money page</td><td class="who muted">Insurvas rule</td><td><span class="chip n"><span class="lock"></span> Locked</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div><div class="card-f small muted">7 settings · 4 yours, 2 Insurvas, 1 locked<span class="sp"></span>Click a row to change it</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>2 · Accounting · a setting sheet</h2><span>Bills &amp; expenses › Flag a bill that differs · edit, preview, history in one place</span></div>
+  <div class="app" data-on="Accounting">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Accounting</h3><nav class="tabs"><a>Books</a><a>Bank</a><a class="on">Bills &amp; expenses</a><a>Partner payouts</a><a>Producer pay</a><a>Tax</a></nav><div class="acts"><span class="btn o">History</span></div></div>
+      <div class="status warn"><span class="dot"></span>1 setting being changed · nothing saved yet</div>
+      <div class="body">
+        <div class="card flex1"><div class="scroll">
+          <table class="set"><thead><tr><th>Setting</th><th>Now</th><th>Used by</th><th>Changed</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr class="s"><td>Flag a bill that differs from your count by more than</td><td>$25.00</td><td class="used">Vendor bills</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Oct 2</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Monthly bills wait for your OK</td><td>Always, before they book</td><td class="used">Vendor bills, Expenses</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Billed more than you got</td><td>Flag it for review</td><td class="used">Vendor bills</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Expense groups on the P&amp;L</td><td>Acquisition, Overhead, Net profit only</td><td class="used">P&amp;L</td><td class="who"><span class="av xs">DA</span>Demo Agent · Jul 21</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div></div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><div><b>Flag a bill that differs from your count</b><div class="sheet-sub">Accounting › Bills &amp; expenses</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="fsec"><h4>Flag it when the gap is more than</h4><p>A lead vendor's bill is compared with the leads you counted. Bigger gaps wait for a person.</p>
+          <div class="row"><div class="input focus" style="width:160px">$ 15.00</div><span class="small muted">was $25.00 · Insurvas value $25.00</span></div>
+          <div class="prev" style="margin-top:12px"><span class="ic">≈</span><div>Last month this would have flagged <b>5 of 41 bills</b> (now 3). <span class="small muted">Bayline Leads and Crestview Data join the list.</span></div></div>
+        </div>
+        <div class="fsec"><h4>What it affects</h4>
+          <ul class="affects"><li>Vendor bills · Needs you count<span class="end">Accounting › Vendor bills</span></li><li>Monthly bills waiting for your OK<span class="end">Accounting › To do</span></li><li>Recorded bills keep their status<span class="end">Nothing changes backwards</span></li></ul>
+        </div>
+        <div class="fsec"><h4>History</h4>
+          <ul class="hist">
+            <li><span class="av">DR</span><div>$40.00 → $25.00<small>Dana Ruiz · Oct 2, 2026 at 4:12 PM</small></div><a class="end lnk">Put back</a></li>
+            <li><span class="av">DA</span><div>$50.00 → $40.00<small>Demo Agent · Jun 18, 2026</small></div></li>
+            <li><span class="av">IN</span><div>Set to $50.00 when Accounting was switched on<small>Insurvas · Mar 4, 2026</small></div></li>
+          </ul>
+          <a class="lnk small">See every Accounting change ›</a>
+        </div>
+      </div>
+      <div class="sheet-f"><span class="btn g" style="margin-right:auto">Use Insurvas value</span><span class="btn o">Cancel</span><span class="btn p">Save this setting</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>3 · Accounting · a locked row, explained</h2><span>Partner payouts › Insurvas never sends money · the sheet says why instead of a dead button</span></div>
+  <div class="app" data-on="Accounting">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Accounting</h3><nav class="tabs"><a>Books</a><a>Bank</a><a>Bills &amp; expenses</a><a class="on">Partner payouts</a><a>Producer pay</a><a>Tax</a></nav><div class="acts"><span class="btn o">History</span></div></div>
+      <div class="status"><span class="dot"></span>Saved · Statement footer changed by Dana Ruiz on Nov 4</div>
+      <div class="body">
+        <div class="card flex1"><div class="scroll">
+          <table class="set"><thead><tr><th>Setting</th><th>Now</th><th>Used by</th><th>Changed</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr><td>When a payout run is ready</td><td>Wait for my review</td><td class="used">Partner payouts</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>The next draft run</td><td>December 1</td><td class="used">Partner payouts</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Nov 1</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Statement footer</td><td>"Questions? Call Dana on (214) 555-0187"</td><td class="used">Every partner statement</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Nov 4</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Ignore partner disputes under</td><td>Every dispute is reviewed</td><td class="used">Disputes on a run</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr class="s"><td>Insurvas sends money</td><td>Never · runs are calculated and recorded</td><td class="used">Partner payouts</td><td class="who muted">Insurvas rule</td><td><span class="chip n"><span class="lock"></span> Locked</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div></div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><div><b>Insurvas sends money</b><div class="sheet-sub">Accounting › Partner payouts · locked</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="why"><b>Why this is locked</b>Insurvas works out each partner's payout and keeps the record. Your bank or payroll sends the money. That keeps money movement under your own bank's approvals, and it can't be switched on here.</div>
+        <div class="fsec" style="margin-top:14px"><h4>What it means day to day</h4>
+          <ul class="affects"><li>A payout run is worked out and recorded<span class="end">Partner payouts</span></li><li>You mark a run as paid once your bank sends it<span class="end">Run › Mark paid</span></li><li>Partners see the statement, not a transfer<span class="end">Partner portal</span></li></ul>
+        </div>
+        <dl class="kv fsec"><dt>Set by</dt><dd>Insurvas, for every agency</dd><dt>Who to ask</dt><dd>Insurvas support, from Help › Contact us</dd></dl>
+      </div>
+      <div class="sheet-f"><span class="btn o">Close</span></div>
+    </aside>
+  </div>
+
+  <!-- ═════════════ RETENTION ═════════════ -->
+  <div class="sec"><h2>4 · Retention · Ladder tab</h2><span>/app/retention-settings?tab=ladder · More menu holds History and Reset this tab</span></div>
+  <div class="app" data-on="Retention">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Retention</h3><nav class="tabs"><a class="on">Ladder</a><a>Who works it</a><a>Requests</a><a>Win-back</a><a>Radar</a></nav><div class="acts"><span class="btn o">History</span><span class="btn o">⋯</span></div></div>
+      <div class="status"><span class="dot"></span>Saved · 3 of 8 values are yours · last change by Dana Ruiz on Nov 6</div>
+      <div class="body">
+        <div class="card flex1"><div class="scroll">
+          <table class="set"><thead><tr><th>Setting</th><th>Now</th><th>Used by</th><th>Changed</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr class="grp-h"><td colspan="6">Urgency</td></tr>
+            <tr><td>Turn a case amber · red · pinned</td><td>14 · 7 · 3 days before the carrier's deadline</td><td class="used">Save queue colours</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Nov 6</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Reinstatement countdown</td><td>Starts 21 days before the carrier closes it</td><td class="used">Reinstatements</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr class="grp-h"><td colspan="6">Calling</td></tr>
+            <tr><td>Wait before calling</td><td>2 days after a missed draft</td><td class="used">Save queue</td><td class="who"><span class="av xs">DO</span>Devin Okafor · Oct 15</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>After a client says no, ask again in</td><td>30 days</td><td class="used">Save queue, Win-back</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Talk track</td><td>"Your coverage is at risk" · 4 steps</td><td class="used">Save call screen</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr class="grp-h"><td colspan="6">Scoring</td></tr>
+            <tr><td>Risk bands</td><td>Medium from 40 · High from 60 · Critical from 80</td><td class="used">Radar, Save queue</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr class="h"><td>Scoring weights</td><td>7 signals · draft date leads at 35</td><td class="used">Every risk score</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Nov 6</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Holdout</td><td>Off</td><td class="used">Results</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div></div>
+      </div>
+    </div>
+    <div class="pop" style="top:118px;right:24px"><div class="menu"><div class="h">History of this tab <small>›</small></div><div>See results <small>›</small></div><hr><div>Reset Ladder to Insurvas values</div></div></div>
+  </div>
+
+  <div class="sec"><h2>5 · Retention · scoring weights as a wide sheet with a live preview</h2><span>Replaces the /weights page · preview runs as you drag, Save makes a new version</span></div>
+  <div class="app tall" data-on="Retention">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Retention</h3><nav class="tabs"><a class="on">Ladder</a><a>Who works it</a><a>Requests</a><a>Win-back</a><a>Radar</a></nav><div class="acts"><span class="btn o">History</span><span class="btn o">⋯</span></div></div>
+      <div class="status warn"><span class="dot"></span>Scoring weights being changed · nothing saved yet</div>
+      <div class="body"><div class="card flex1"><div class="scroll"><table class="set"><thead><tr><th>Setting</th><th>Now</th><th>Used by</th></tr></thead><tbody>
+        <tr><td>Turn a case amber · red · pinned</td><td>14 · 7 · 3 days</td><td class="used">Save queue colours</td></tr>
+        <tr><td>Risk bands</td><td>40 · 60 · 80</td><td class="used">Radar</td></tr>
+        <tr class="s"><td>Scoring weights</td><td>7 signals</td><td class="used">Every risk score</td></tr>
+      </tbody></table></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><div><b>Scoring weights</b><div class="sheet-sub">Retention › Ladder · version 3 in use since Nov 6 · Dana Ruiz</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="fsec"><h4>How much each signal counts</h4><p>Points out of 100. The grey mark on each line is the Insurvas weight.</p>
+          <div class="wt"><span class="nm">Draft date vs income<small>money arrives after the draft</small></span><span class="track"><i style="width:35%"></i><s style="left:30%"></s><b style="left:35%"></b></span><span class="num">35</span><span class="was">was 35</span></div>
+          <div class="wt"><span class="nm">How they pay<small>card, bank draft, direct express</small></span><span class="track"><i style="width:15%"></i><s style="left:20%"></s><b style="left:15%"></b></span><span class="num">15</span><span class="was">was 15</span></div>
+          <div class="wt"><span class="nm">Months since issue<small>early months lapse most</small></span><span class="track"><i style="width:25%"></i><s style="left:20%"></s><b style="left:25%"></b></span><span class="num ch">25</span><span class="was">was 20</span></div>
+          <div class="wt"><span class="nm">Bounced and retried payments</span><span class="track"><i style="width:10%"></i><s style="left:15%"></s><b style="left:10%"></b></span><span class="num ch">10</span><span class="was">was 15</span></div>
+          <div class="wt"><span class="nm">Premium vs income</span><span class="track"><i style="width:10%"></i><s style="left:10%"></s><b style="left:10%"></b></span><span class="num">10</span><span class="was">was 10</span></div>
+          <div class="wt"><span class="nm">Lead source survival</span><span class="track"><i style="width:3%"></i><s style="left:3%"></s><b style="left:3%"></b></span><span class="num">3</span><span class="was">was 3</span></div>
+          <div class="wt"><span class="nm">Carrier grace and redrafts</span><span class="track"><i style="width:2%"></i><s style="left:2%"></s><b style="left:2%"></b></span><span class="num">2</span><span class="was">was 2</span></div>
+          <div class="total"><span class="chip ok">Adds up to 100</span><span class="small muted">2 weights changed from version 3</span></div>
+        </div>
+        <div class="fsec"><h4>What this does to your book</h4><p>Live preview over 1,486 in-force policies. Nothing changes until you save.</p>
+          <div class="bands">
+            <div class="tile"><small>Low</small><b>904</b> <span class="fall">−41</span></div>
+            <div class="tile"><small>Medium</small><b>338</b> <span class="fall">−6</span></div>
+            <div class="tile"><small>High</small><b>181</b> <span class="rise">+29</span></div>
+            <div class="tile"><small>Critical</small><b>63</b> <span class="rise">+18</span></div>
+          </div>
+          <div class="prev" style="margin-top:10px"><div><b>94 policies change band.</b> Most are in their first six months with Americo and Mutual of Omaha. <a class="lnk">See the 94 ›</a></div></div>
+        </div>
+        <div class="fsec"><h4>History</h4>
+          <ul class="hist">
+            <li><span class="av">DR</span><div>Version 3 · draft date 30 → 35, how they pay 20 → 15<small>Dana Ruiz · Nov 6, 2026 · 61 policies moved</small></div><a class="end lnk">Use again</a></li>
+            <li><span class="av">DA</span><div>Version 2 · months since issue 15 → 20<small>Demo Agent · Sep 12, 2026</small></div></li>
+            <li><span class="av">IN</span><div>Version 1 · Insurvas weights<small>Mar 4, 2026</small></div></li>
+          </ul>
+        </div>
+      </div>
+      <div class="sheet-f"><span class="btn g" style="margin-right:auto">Use Insurvas weights</span><span class="btn o">Cancel</span><span class="btn p">Save as version 4</span></div>
+    </aside>
+  </div>
+
+  <!-- ═════════════ COMPLIANCE ═════════════ -->
+  <div class="sec"><h2>6 · Compliance · Complaints tab</h2><span>/app/compliance/settings?tab=complaints · the page save bar goes; deadlines become a table inside the tab</span></div>
+  <div class="app tall" data-on="Compliance">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Compliance</h3><nav class="tabs"><a>Start here</a><a class="on">Complaints <span class="c">8</span></a><a>Records</a><a>Holds &amp; deletion <span class="c">2</span></a><a>Gate &amp; reports</a></nav><div class="acts"><span class="btn o">History</span></div></div>
+      <div class="status"><span class="dot"></span>Saved · Texas deadline changed by Dana Ruiz on Nov 3 · 8 regulators have a response deadline</div>
+      <div class="body col">
+        <div class="card"><div class="card-h"><b>Rules</b></div>
+          <table class="set"><thead><tr><th>Setting</th><th>Now</th><th>Used by</th><th>Changed</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr><td>When a complaint gets urgent</td><td>Turn a regulator complaint red 3 days before its deadline</td><td class="used">Complaints, Compliance dashboard</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>If a transfer has no consent on file</td><td>Block the transfer</td><td class="used">Transfers from partners</td><td class="who"><span class="av xs">DA</span>Demo Agent · Oct 20</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div>
+        <div class="card flex1"><div class="card-h"><b>Response deadlines</b><span class="small muted">How long each regulator gives you to answer a complaint</span><span class="r"><span class="btn p sm">Add a regulator</span></span></div>
+          <div class="scroll"><table class="set"><thead><tr><th>Regulator</th><th>Answer within</th><th>Open complaints</th><th>Changed</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr class="h"><td>Texas Department of Insurance</td><td>15 business days</td><td>2</td><td class="who"><span class="av xs">DR</span>Dana Ruiz · Nov 3</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Florida Office of Insurance Regulation</td><td>20 days</td><td>1</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Georgia Insurance Commissioner</td><td>10 business days</td><td>0</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Louisiana Department of Insurance</td><td>15 days</td><td>0</td><td class="who"><span class="av xs">DA</span>Demo Agent · Sep 8</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Oklahoma Insurance Department</td><td>20 days</td><td>1</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Arizona Department of Insurance</td><td>21 days</td><td>0</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Tennessee Commerce &amp; Insurance</td><td>14 days</td><td>0</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Federal Trade Commission</td><td>30 days</td><td>4</td><td class="who muted">Never changed</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+          </tbody></table></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>7 · Compliance · a regulator deadline sheet</h2><span>Replaces /deadlines/[regulator] and /deadlines/new (same sheet, empty)</span></div>
+  <div class="app" data-on="Compliance">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Compliance</h3><nav class="tabs"><a>Start here</a><a class="on">Complaints <span class="c">8</span></a><a>Records</a><a>Holds &amp; deletion <span class="c">2</span></a><a>Gate &amp; reports</a></nav><div class="acts"><span class="btn o">History</span></div></div>
+      <div class="status warn"><span class="dot"></span>Texas deadline being changed · nothing saved yet</div>
+      <div class="body"><div class="card flex1"><div class="scroll"><table class="set"><thead><tr><th>Regulator</th><th>Answer within</th><th>Open complaints</th></tr></thead><tbody>
+        <tr class="s"><td>Texas Department of Insurance</td><td>15 business days</td><td>2</td></tr>
+        <tr><td>Florida Office of Insurance Regulation</td><td>20 days</td><td>1</td></tr>
+        <tr><td>Georgia Insurance Commissioner</td><td>10 business days</td><td>0</td></tr>
+        <tr><td>Federal Trade Commission</td><td>30 days</td><td>4</td></tr>
+      </tbody></table></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><div><b>Texas Department of Insurance</b><div class="sheet-sub">Compliance › Complaints › Response deadlines</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="fsec"><h4>Answer within</h4><p>Counted from the day the complaint reaches you.</p>
+          <div class="row"><div class="input focus" style="width:100px">10</div><span class="seg"><span>Days</span><span class="on">Business days</span></span></div>
+          <div class="help">was 15 business days · the regulator's own rule is 15</div>
+          <div class="err">Shorter than Texas requires. That's allowed; complaints will turn red sooner.</div>
+        </div>
+        <div class="fsec"><h4>What it affects</h4>
+          <ul class="affects"><li>2 open Texas complaints get a new due date<span class="end">Nov 24 → Nov 17, Nov 28 → Nov 21</span></li><li>Complaints · Due soon list<span class="end">Compliance</span></li><li>Evidence report · answered on time<span class="end">Gate &amp; reports</span></li></ul>
+        </div>
+        <div class="fsec"><h4>History</h4>
+          <ul class="hist">
+            <li><span class="av">DR</span><div>20 days → 15 business days<small>Dana Ruiz · Nov 3, 2026</small></div><a class="end lnk">Put back</a></li>
+            <li><span class="av">IN</span><div>Added with Texas as a licensed state<small>Insurvas · Mar 4, 2026</small></div></li>
+          </ul>
+        </div>
+      </div>
+      <div class="sheet-f"><span class="btn danger" style="margin-right:auto">Remove regulator</span><span class="btn o">Cancel</span><span class="btn p">Save this deadline</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>8 · Compliance · Holds &amp; deletion with a hold open</h2><span>Replaces /holds/[id] and /holds/new · the hold list stays behind the sheet</span></div>
+  <div class="app" data-on="Compliance">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Compliance</h3><nav class="tabs"><a>Start here</a><a>Complaints <span class="c">8</span></a><a>Records</a><a class="on">Holds &amp; deletion <span class="c">2</span></a><a>Gate &amp; reports</a></nav><div class="acts"><span class="btn o">History</span><span class="btn p">New hold</span></div></div>
+      <div class="status"><span class="dot"></span>2 holds in force · records under a hold are skipped by every purge</div>
+      <div class="body col">
+        <div class="card"><div class="card-h"><b>Legal holds</b></div>
+          <table class="set"><thead><tr><th>Hold</th><th>Covers</th><th>Since</th><th>Placed by</th><th>Status</th><th></th></tr></thead><tbody>
+            <tr class="s"><td>Martin complaint · TDI 26-4418</td><td>Gloria Martin · calls, recordings, policy file</td><td>Oct 29</td><td class="who"><span class="av xs">DR</span>Dana Ruiz</td><td><span class="chip warn">In force</span></td><td class="go">›</td></tr>
+            <tr><td>Carrier audit · Americo Q3</td><td>212 policies written Jul–Sep</td><td>Oct 7</td><td class="who"><span class="av xs">DA</span>Demo Agent</td><td><span class="chip warn">In force</span></td><td class="go">›</td></tr>
+            <tr><td>Chargeback dispute · Reyes</td><td>Luis Reyes · policy file</td><td>Aug 2</td><td class="who"><span class="av xs">DR</span>Dana Ruiz</td><td><span class="chip n">Released Sep 30</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div>
+        <div class="card flex1"><div class="card-h"><b>Deletion requests</b></div>
+          <table class="set"><thead><tr><th>Setting</th><th>Now</th><th>Used by</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr><td>Wait after identity is verified</td><td>10 days</td><td class="used">Deletions</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Ways to verify who is asking</td><td>Date of birth and last 4 of SSN, or a call back</td><td class="used">Deletions</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+            <tr><td>Who may verify and perform a deletion</td><td>Owner and compliance lead</td><td class="used">Deletions</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><span class="ic">H</span><div><b>Martin complaint · TDI 26-4418</b><div class="sheet-sub">Placed by Dana Ruiz on Oct 29, 2026</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <dl class="kv"><dt>Status</dt><dd><span class="chip warn">In force</span> · 14 days</dd><dt>Client</dt><dd><a class="lnk">Gloria Martin</a> · policy AM-0119987</dd><dt>Covers</dt><dd>6 calls, 6 recordings, consent records, policy file</dd><dt>Linked to</dt><dd><a class="lnk">Complaint · Texas DOI, due Nov 24</a></dd></dl>
+        <div class="fsec" style="margin-top:14px"><h4>Release</h4><p>When should this hold end?</p>
+          <div class="choice-l"><label class="row" style="padding:6px 0"><span class="radio on"></span>Automatically when the complaint is closed</label><label class="row" style="padding:6px 0"><span class="radio"></span>Only when someone releases it</label></div>
+        </div>
+        <div class="fsec"><h4>What it stops</h4>
+          <ul class="affects"><li>Scheduled purge skips these records<span class="end">Next run Dec 1</span></li><li>Deletion requests for Gloria Martin wait<span class="end">0 waiting</span></li></ul>
+        </div>
+        <div class="fsec"><h4>History</h4>
+          <ul class="hist"><li><span class="av">DR</span><div>Placed the hold<small>Dana Ruiz · Oct 29, 2026 at 10:40 AM</small></div></li><li><span class="av">DR</span><div>Added the policy file<small>Dana Ruiz · Oct 30, 2026</small></div></li></ul>
+        </div>
+      </div>
+      <div class="sheet-f"><span class="btn danger" style="margin-right:auto">Release now</span><span class="btn o">Close</span><span class="btn p">Save</span></div>
+    </aside>
+  </div>
+
+  <div class="sec"><h2>9 · Compliance · Records tab with a purge run open</h2><span>Replaces /runs/[id] and /retention/[recordType] · a dry run shows what a live run would delete</span></div>
+  <div class="app" data-on="Compliance">
+    <div class="main">
+      <div class="crumb">Settings › Money &amp; compliance</div>
+      <div class="head"><h3>Compliance</h3><nav class="tabs"><a>Start here</a><a>Complaints <span class="c">8</span></a><a class="on">Records</a><a>Holds &amp; deletion <span class="c">2</span></a><a>Gate &amp; reports</a></nav><div class="acts"><span class="btn o">History</span><span class="btn o">Start a dry run</span></div></div>
+      <div class="status"><span class="dot"></span>Scheduled purge on · next dry run Dec 1 · a live run waits 7 days after it</div>
+      <div class="body col">
+        <div class="card"><div class="card-h"><b>How long records are kept</b></div>
+          <table class="set"><thead><tr><th>Record</th><th>Kept for</th><th>Used by</th><th>Value</th><th></th></tr></thead><tbody>
+            <tr><td>Call recordings</td><td>5 years after the call</td><td class="used">Purge, Evidence report</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Consent records</td><td>5 years after the last contact</td><td class="used">Purge, Transfer gate</td><td><span class="chip n">Insurvas</span></td><td class="go">›</td></tr>
+            <tr><td>Leads never sold</td><td>2 years</td><td class="used">Purge</td><td><span class="chip act">Yours</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div>
+        <div class="card flex1"><div class="card-h"><b>Runs</b></div>
+          <table class="set"><thead><tr><th>Run</th><th>Kind</th><th>Would delete</th><th>Started by</th><th>Result</th><th></th></tr></thead><tbody>
+            <tr class="s"><td>Nov 1, 2026</td><td>Dry run</td><td>1,204 records</td><td class="who"><span class="av xs">DA</span>Demo Agent</td><td><span class="chip ok">Done</span></td><td class="go">›</td></tr>
+            <tr><td>Oct 1, 2026</td><td>Live run</td><td>986 records</td><td class="who muted">Schedule</td><td><span class="chip ok">Done</span></td><td class="go">›</td></tr>
+          </tbody></table>
+        </div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><div><b>Dry run · Nov 1, 2026</b><div class="sheet-sub">Deleted nothing · started by Demo Agent</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="bands" style="grid-template-columns:repeat(3,1fr)"><div class="tile"><small>Would delete</small><b>1,204</b></div><div class="tile"><small>Kept by a hold</small><b>212</b></div><div class="tile"><small>Live run on</small><b>Nov 8</b></div></div>
+        <div class="fsec" style="margin-top:12px"><h4>By record</h4>
+          <ul class="affects"><li>Leads never sold<span class="end">1,088</span></li><li>Call recordings<span class="end">97</span></li><li>Consent records<span class="end">19</span></li></ul>
+        </div>
+        <div class="fsec"><h4>Summary sent to</h4><div class="small">Demo Agent, Dana Ruiz · Nov 1 at 6:02 AM</div></div>
+      </div>
+      <div class="sheet-f"><span class="btn o" style="margin-right:auto">Download the list</span><span class="btn o">Close</span></div>
+    </aside>
+  </div>
+
+  <!-- ═════════════ STATES ═════════════ -->
+  <div class="sec"><h2>States</h2><span>Same on all three pages</span></div>
+  <div class="states">
+    <div class="card"><div class="card-h"><b>Status line</b></div><div class="card-b">
+      <div class="status"><span class="dot"></span>Saved · changed by Dana Ruiz on Nov 9</div>
+      <div class="status warn"><span class="dot"></span>Scoring weights being changed · nothing saved yet</div>
+      <div class="status bad"><span class="dot"></span>Couldn't load these settings. <a class="lnk">Try again</a></div>
+      <div class="status warn"><span class="dot"></span>Read-only: your plan's billing is paused. Values show, nothing saves.</div>
+    </div></div>
+    <div class="card"><div class="card-h"><b>Saving inside the sheet</b></div><div class="card-b">
+      <label class="l">Flag it when the gap is more than</label><div class="input bad" style="width:180px">$ 1,500.00</div><div class="err">That didn't save: the most allowed is $500.00. Your value is kept here.</div>
+      <div class="row" style="margin-top:14px"><span class="btn o sm">Cancel</span><span class="btn p sm d">Saving…</span></div>
+    </div></div>
+    <div class="card"><div class="card-h"><b>Saved, with Undo</b></div><div class="card-b">
+      <div class="toast"><i></i>Saved · Flag bills over $15.00 <a style="color:inherit;font-weight:600;margin-left:6px">Undo</a></div>
+      <p class="small muted" style="margin:12px 0 0">The sheet closes, the row updates, the status line names you. Undo puts the last value back for 10 seconds.</p>
+    </div></div>
+    <div class="card"><div class="card-h"><b>Not the owner (Devin Okafor, producer)</b></div>
+      <table class="set"><tbody>
+        <tr><td>Count money when</td><td>The carrier pays us</td><td><span class="chip n"><span class="lock"></span> Owner</span></td></tr>
+        <tr><td>Your financial year starts</td><td>January 1</td><td><span class="chip n"><span class="lock"></span> Owner</span></td></tr>
+      </tbody></table>
+      <div class="card-b small muted">Rows still open; the sheet shows the value and history with "Only the owner, Demo Agent, changes this."</div>
+    </div>
+    <div class="card"><div class="card-h"><b>Loading</b></div><div class="card-b"><div class="skel" style="width:45%"></div><div class="skel"></div><div class="skel" style="width:80%"></div><div class="skel" style="width:60%"></div><p class="small muted" style="margin:10px 0 0">Title, tabs and status line stay; only the card shows bars.</p></div></div>
+    <div class="card"><div class="empty"><span class="ic">+</span><b>No response deadlines yet</b><p>Add each licensed state's response days, and the FTC's.</p><span class="btn p">Add a regulator</span></div></div>
+  </div>
+
+  <div class="sec"><h2>What changes vs today</h2></div>
+  <div class="changes"><ol>
+    <li><b>One save model for all three.</b> Every setting saves on its own from its sheet. Compliance loses its page save bar; Accounting and Retention lose the centre pop-ups.</li>
+    <li><b>Rows say more.</b> Now in plain words, what uses it, who changed it last (gold avatar), and one chip: Yours, Insurvas or Locked.</li>
+    <li><b>History moves into the sheet.</b> The last few changes with Put back; "See every change" opens Settings history filtered to that section. The More › History menu becomes a History button.</li>
+    <li><b>Locked rows explain themselves.</b> The sheet says why, what it means day to day and who to ask. Non-owners see the value and history, not a dead button.</li>
+    <li><b>Sub-pages become sheets.</b> Retention /weights → wide sheet with live band preview and versions. Compliance deadlines/new and /[regulator], retention/[recordType], holds/new and /[id], runs/[id] → right sheets over their tab.</li>
+    <li><b>Compliance regrouped into tables.</b> Response deadlines, record ages, holds, runs and deletion rules are each a card with one-line rows, not stacked form sections.</li>
+    <li><b>Tab counts.</b> Complaints and Holds &amp; deletion keep their counts in the header tab.</li>
+    <li>No database change. Each sheet calls the same one-setting save the dialogs use today; Compliance needs a per-field save in place of its whole-form PATCH.</li>
+  </ol></div>
+  <div class="ask">
+    <div class="ok"><b>Looks good</b>Build this for all three pages in one pass: shared setting-row table, setting sheet and locked sheet, then the four record sheets.</div>
+    <div><b>Change this</b>Tell me what to move: e.g. keep weights as its own page, drop the Value chip, or keep the Compliance save bar for the Start here tab only.</div>
+  </div>
+</div>
+<script>
+/* Board-only: draw the shared settings frame (top bar, icon rail, settings rail) into every .app; data-on picks the active rail item. */
+(function () {
+  var items = [["Your account", ["My profile", "Plan &amp; billing"]],
+    ["Agency", ["Business identity", "Team &amp; access <small>17/25</small>", "Products", "Carriers"]],
+    ["Selling", ["Sales process", "Application forms", "AI assistant"]],
+    ["Leads &amp; calling", ["Lead posting", "Dialing cadence", "Calling windows", "Inbound settings", "Calendar &amp; availability", "Pipelines &amp; outcomes"]],
+    ["Integrations", ["API keys &amp; webhooks", "Browser extension"]],
+    ["Money &amp; compliance", ["Accounting", "Retention", "Compliance"]],
+    ["Records", ["Settings history"]]];
+  document.querySelectorAll(".app").forEach(function (app) {
+    if (app.querySelector(".top")) return;
+    var on = app.getAttribute("data-on") || "";
+    var rail = '<div class="find">Search settings · /</div>';
+    items.forEach(function (g) {
+      rail += "<h5>" + g[0] + "</h5>";
+      g[1].forEach(function (n) { var plain = n.replace(/ <small>.*<\/small>/, "").replace("&amp;", "&"); rail += "<a" + (plain === on ? ' class="on"' : "") + ">" + n + "</a>"; });
+    });
+    app.insertAdjacentHTML("afterbegin",
+      '<div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>' +
+      '<div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>' +
+      '<nav class="srail">' + rail + '</nav>');
+  });
+  function railToActive() { document.querySelectorAll(".srail").forEach(function (nav) { var a = nav.querySelector("a.on"); if (a) nav.scrollTop = a.offsetTop - nav.offsetTop - 160; }); }
+  railToActive(); window.addEventListener("resize", railToActive);
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

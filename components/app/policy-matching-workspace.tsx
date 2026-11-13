@@ -21,7 +21,10 @@ import { notify } from "@/lib/notify";
 export type PolicyMatchingTab = "review" | "links" | "agents";
 const METHOD_LABEL: Record<string, string> = { submission_record: "Submission record", policy_number_exact: "Issued policy number", human: "A person", ai_review: "AI review", import: "Import", no_match: "New client from the file", identity_exact: "Same name and date of birth" };
 const TYPE_LABEL: Record<string, string> = { deal_flow: "Deal", application: "Application", contact: "Client", provisional: "No client found" };
-const OUTCOME_CLASS: Record<FieldOutcome, string> = { match: "text-[var(--success-ink)]", partial: "text-[var(--warning-ink)]", mismatch: "text-[var(--error-ink)]", missing: "text-muted-foreground" };
+// Owner 2026-11-11 (one text colour in a table): a field's outcome is its mark, not a green, amber or red value.
+const OUTCOME_MARK: Record<FieldOutcome, string> = { match: " ✓", partial: " ~", mismatch: " ✕", missing: "" };
+/** A row's action: a short verb and ›, plain, the same weight on every row (owner 2026-11-11). */
+const ROW_ACTION = "whitespace-nowrap text-sm text-foreground disabled:cursor-not-allowed disabled:opacity-50 hover:underline disabled:no-underline";
 const OUTCOME_WORD: Record<FieldOutcome, string> = { match: "same", partial: "partly", mismatch: "different", missing: "—" };
 const dollars = (cents: number | null | undefined) => (cents === null || cents === undefined ? "—" : `$${(cents / 100).toFixed(2)}`);
 const nameOf = (p: { firstName?: string | null; lastName?: string | null }) => [p.firstName, p.lastName].filter(Boolean).join(" ") || "—";
@@ -117,19 +120,19 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             : visibleReviews.length === 0 ? <NoMatches noun="policies" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-                <thead><tr><th>Policy</th><th>Carrier</th><th>Insured (carrier)</th><th>File date</th><th className="w-[140px]">Best candidate</th><th className="w-[90px] text-right">Score</th><th className="w-[90px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+                {/* Owner 2026-11-11: six columns, one line, one colour; the row opens the review (the Review button was a seventh column). */}
+                <thead><tr><th>Policy</th><th>Carrier</th><th>Insured (carrier)</th><th>File date</th><th>Best candidate</th><th className="text-right">Score</th></tr></thead>
                 <tbody>
                   {shownReviews.rows.map((review) => {
                     const best = review.shortlist[0];
                     return (
-                      <tr key={review.id}>
-                        <td className="tabular-nums text-foreground">{review.policyNumber}</td>
-                        <td>{review.carrierName}</td>
-                        <td>{nameOf(review.carrierRow ?? {})}</td>
-                        <td className="tabular-nums">{review.carrierRow?.fileDate ? fileDay(review.carrierRow.fileDate) : "—"}</td>
-                        <td>{best ? nameOf(best) : <span className="text-muted-foreground">No candidate</span>}</td>
-                        <td className={`text-right tabular-nums ${best?.likely ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{best ? best.score : "—"}</td>
-                        <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => setOpenId(review.id)}>{readOnly ? "Open" : "Review"}</Button></td>
+                      <tr key={review.id} className="cursor-pointer" onClick={() => setOpenId(review.id)}>
+                        <td className="whitespace-nowrap font-medium tabular-nums text-foreground"><button type="button" className="hover:underline" title={readOnly ? "Open" : "Review"} onClick={(event) => { event.stopPropagation(); setOpenId(review.id); }}>{review.policyNumber}</button></td>
+                        <td className="whitespace-nowrap">{review.carrierName}</td>
+                        <td className="whitespace-nowrap">{nameOf(review.carrierRow ?? {})}</td>
+                        <td className="whitespace-nowrap tabular-nums text-muted-foreground">{review.carrierRow?.fileDate ? fileDay(review.carrierRow.fileDate) : "—"}</td>
+                        <td className="whitespace-nowrap">{best ? nameOf(best) : "No candidate"}</td>
+                        <td className="whitespace-nowrap text-right tabular-nums">{best ? `${best.score}${best.likely ? " · likely" : ""}` : <span className="text-muted-foreground">—</span>}</td>
                       </tr>
                     );
                   })}
@@ -145,16 +148,16 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             : visibleLinks.length === 0 ? <NoMatches noun="links" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[900px] text-left text-sm">
-                <thead><tr><th>Policy</th><th>Carrier</th><th>Linked to</th><th>How</th><th className="w-[120px]">When</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Policy</th><th>Carrier</th><th>Linked to</th><th>How</th><th>When</th><th>{readOnly ? <span className="sr-only">Actions</span> : "Next step"}</th></tr></thead>
                 <tbody>
                   {shownLinks.rows.map((link) => (
                     <tr key={link.id}>
-                      <td className="tabular-nums text-foreground">{link.policyNumber}</td>
-                      <td>{link.carrierName}</td>
-                      <td>{link.clientName ?? TYPE_LABEL[link.type] ?? link.type}</td>
-                      <td>{METHOD_LABEL[link.method] ?? link.method}{link.confidence !== null ? ` · ${link.confidence}%` : ""}</td>
-                      <td className="tabular-nums">{fileDay(link.createdAt.slice(0, 10))}</td>
-                      <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void reopen(link)}>Reopen</Button>}</td>
+                      <td className="whitespace-nowrap font-medium tabular-nums text-foreground">{link.policyNumber}</td>
+                      <td className="whitespace-nowrap">{link.carrierName}</td>
+                      <td className="whitespace-nowrap">{link.clientName ?? TYPE_LABEL[link.type] ?? link.type}</td>
+                      <td className="whitespace-nowrap">{METHOD_LABEL[link.method] ?? link.method}{link.confidence !== null ? ` · ${link.confidence}%` : ""}</td>
+                      <td className="whitespace-nowrap tabular-nums text-muted-foreground">{fileDay(link.createdAt.slice(0, 10))}</td>
+                      <td>{!readOnly && <button type="button" className={ROW_ACTION} title="Remove the link and send the policy back to review" disabled={busy !== null} onClick={() => void reopen(link)}>Reopen ›</button>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -169,31 +172,32 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
             : visibleAgents.length === 0 ? <NoMatches noun="agent codes" onClear={() => search("")} />
             : (
               <table className="portal-lead-table w-full min-w-[820px] text-left text-sm">
-                <thead><tr><th>Carrier&apos;s agent code</th><th>Carrier</th><th className="w-[90px] text-right">Policies</th><th className="w-[260px]">Agent</th><th className="w-[100px] text-right"><span className="sr-only">Actions</span></th></tr></thead>
+                <thead><tr><th>Carrier&apos;s agent code</th><th>Carrier</th><th className="text-right">Policies</th><th className="w-[260px]">Agent</th><th>{readOnly ? <span className="sr-only">Actions</span> : "Next step"}</th></tr></thead>
                 <tbody>
                   {shownAgents.rows.map((agent) => {
                     if (agent.kind === "mapped") return (
                       <tr key={agent.id}>
-                        <td className="font-mono text-xs text-foreground">{agent.agentIdentifier}</td>
-                        <td>{agent.carrierName}</td>
-                        <td className="text-right tabular-nums">{agent.policies ? agent.policies.toLocaleString("en-US") : <span className="text-muted-foreground" title="No file has carried this code yet">0</span>}</td>
-                        <td>{agent.userName}<span className="block text-xs text-muted-foreground">Mapped</span></td>
-                        <td className="text-right">{!readOnly && <Button type="button" variant="outline" size="sm" disabled={busy !== null} onClick={() => void unmap(agent)}>Unmap</Button>}</td>
+                        <td className="whitespace-nowrap font-mono font-medium text-foreground">{agent.agentIdentifier}</td>
+                        <td className="whitespace-nowrap">{agent.carrierName}</td>
+                        <td className="whitespace-nowrap text-right tabular-nums" title={agent.policies ? undefined : "No file has carried this code yet"}>{agent.policies.toLocaleString("en-US")}</td>
+                        {/* The "Mapped" sub-line went: a mapped code shows its person, an unmapped one the picker. */}
+                        <td className="whitespace-nowrap" title="Mapped">{agent.userName}</td>
+                        <td>{!readOnly && <button type="button" className={ROW_ACTION} title="Stop crediting this person for the code" disabled={busy !== null} onClick={() => void unmap(agent)}>Unmap ›</button>}</td>
                       </tr>
                     );
                     const key = `${agent.carrierId}|${agent.agentIdentifier}`;
                     return (
                       <tr key={key}>
-                        <td className="font-mono text-xs text-foreground">{agent.agentIdentifier}</td>
-                        <td>{agent.carrierName}</td>
-                        <td className="text-right tabular-nums">{agent.policies.toLocaleString("en-US")}</td>
+                        <td className="whitespace-nowrap font-mono font-medium text-foreground">{agent.agentIdentifier}</td>
+                        <td className="whitespace-nowrap">{agent.carrierName}</td>
+                        <td className="whitespace-nowrap text-right tabular-nums">{agent.policies.toLocaleString("en-US")}</td>
                         <td>
                           <select aria-label={`Agent for ${agent.agentIdentifier}`} className={`${toolbarControl} w-full`} disabled={readOnly} value={assign[key] ?? ""} onChange={(e) => setAssign((current) => ({ ...current, [key]: e.target.value }))}>
                             <option value="">Not mapped</option>
                             {members.map((member) => <option key={member.userId} value={member.userId}>{member.name}</option>)}
                           </select>
                         </td>
-                        <td className="text-right">{!readOnly && <Button type="button" size="sm" disabled={!assign[key] || busy !== null} onClick={() => void post(`map-${key}`, { action: "map_agent", carrier_id: agent.carrierId, agent_identifier: agent.agentIdentifier, user_id: assign[key] }, "Agent code mapped.")}>Map</Button>}</td>
+                        <td>{!readOnly && <button type="button" className={ROW_ACTION} title={assign[key] ? "Credit this code's policies to the person picked" : "Pick the agent first"} disabled={!assign[key] || busy !== null} onClick={() => void post(`map-${key}`, { action: "map_agent", carrier_id: agent.carrierId, agent_identifier: agent.agentIdentifier, user_id: assign[key] }, "Agent code mapped.")}>Map ›</button>}</td>
                       </tr>
                     );
                   })}
@@ -248,15 +252,15 @@ export function PolicyMatchingWorkspace({ reviews, links, unmapped, mapped, memb
               </DialogHeader>
               <div className="overflow-x-auto">
                 <table className="portal-lead-table w-full min-w-[760px] text-left text-sm">
-                  <thead><tr><th>Field</th><th>Carrier file</th>{open.shortlist.map((c, i) => <th key={c.id}>{i + 1}. {c.type === "deal_flow" ? "Deal" : "Application"} · {c.date}</th>)}</tr></thead>
+                  <thead><tr><th>Field</th><th>Carrier file</th>{open.shortlist.map((c, i) => <th key={c.id} className="whitespace-nowrap">{i + 1}. {c.type === "deal_flow" ? "Deal" : "Application"} · {c.date}</th>)}</tr></thead>
                   <tbody>
-                    <tr><td>Name</td><td>{nameOf(open.carrierRow ?? {})}</td>{open.shortlist.map((c) => <td key={c.id}><span className={OUTCOME_CLASS[c.fields.surname]}>{nameOf(c)}</span></td>)}</tr>
-                    <tr><td>Date of birth</td><td>{open.carrierRow?.dob ?? "—"}</td>{open.shortlist.map((c) => <td key={c.id} className={OUTCOME_CLASS[c.fields.dob]}>{c.dob ?? "—"}</td>)}</tr>
-                    <tr><td>Phone</td><td>{open.carrierRow?.phone ?? "—"}</td>{open.shortlist.map((c) => <td key={c.id} className={OUTCOME_CLASS[c.fields.phone]}>{c.phone ?? "—"}</td>)}</tr>
-                    <tr><td>Monthly premium</td><td>{dollars(open.carrierRow?.premiumCents)}</td>{open.shortlist.map((c) => <td key={c.id} className={OUTCOME_CLASS[c.fields.premium]}>{dollars(c.premiumCents)}</td>)}</tr>
-                    <tr><td>Face amount</td><td>{dollars(open.carrierRow?.faceCents)}</td>{open.shortlist.map((c) => <td key={c.id} className={OUTCOME_CLASS[c.fields.face]}>{dollars(c.faceCents)}</td>)}</tr>
-                    <tr><td>Fields</td><td /> {open.shortlist.map((c) => <td key={c.id} className="text-xs">{MATCH_FIELDS.map((f) => `${MATCH_FIELD_LABELS[f]} ${OUTCOME_WORD[c.fields[f]]}`).join(" · ")}</td>)}</tr>
-                    <tr><td className="font-semibold">Score</td><td />{open.shortlist.map((c) => <td key={c.id} className="font-semibold tabular-nums">{c.score}{c.likely ? " · likely" : ""}</td>)}</tr>
+                    {/* Owner 2026-11-11: one colour, one line; each value carries its outcome mark, and the old "Fields" line is the score's tooltip. */}
+                    <tr><td className="whitespace-nowrap font-medium text-foreground">Name</td><td className="whitespace-nowrap">{nameOf(open.carrierRow ?? {})}</td>{open.shortlist.map((c) => <td key={c.id} className="whitespace-nowrap">{nameOf(c)}{OUTCOME_MARK[c.fields.surname]}</td>)}</tr>
+                    <tr><td className="whitespace-nowrap font-medium text-foreground">Date of birth</td><td className="whitespace-nowrap">{open.carrierRow?.dob ?? "—"}</td>{open.shortlist.map((c) => <td key={c.id} className="whitespace-nowrap">{c.dob ?? "—"}{OUTCOME_MARK[c.fields.dob]}</td>)}</tr>
+                    <tr><td className="whitespace-nowrap font-medium text-foreground">Phone</td><td className="whitespace-nowrap">{open.carrierRow?.phone ?? "—"}</td>{open.shortlist.map((c) => <td key={c.id} className="whitespace-nowrap">{c.phone ?? "—"}{OUTCOME_MARK[c.fields.phone]}</td>)}</tr>
+                    <tr><td className="whitespace-nowrap font-medium text-foreground">Monthly premium</td><td className="whitespace-nowrap tabular-nums">{dollars(open.carrierRow?.premiumCents)}</td>{open.shortlist.map((c) => <td key={c.id} className="whitespace-nowrap tabular-nums">{dollars(c.premiumCents)}{OUTCOME_MARK[c.fields.premium]}</td>)}</tr>
+                    <tr><td className="whitespace-nowrap font-medium text-foreground">Face amount</td><td className="whitespace-nowrap tabular-nums">{dollars(open.carrierRow?.faceCents)}</td>{open.shortlist.map((c) => <td key={c.id} className="whitespace-nowrap tabular-nums">{dollars(c.faceCents)}{OUTCOME_MARK[c.fields.face]}</td>)}</tr>
+                    <tr><td className="whitespace-nowrap font-medium text-foreground">Score</td><td />{open.shortlist.map((c) => <td key={c.id} className="whitespace-nowrap tabular-nums" title={MATCH_FIELDS.map((f) => `${MATCH_FIELD_LABELS[f]} ${OUTCOME_WORD[c.fields[f]]}`).join(" · ")}>{c.score}{c.likely ? " · likely" : ""}</td>)}</tr>
                     {!readOnly && <tr><td /><td />{open.shortlist.map((c, i) => <td key={c.id}><Button type="button" size="sm" disabled={busy !== null} onClick={() => void post(`pick-${c.id}`, { action: "resolve", review_id: open.id, candidate: i }, "Policy linked.")}>This client</Button></td>)}</tr>}
                   </tbody>
                 </table>

@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lead Posting Board</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* Board-only extras, built from kit tokens only. */
+.m{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.copy .v{font-size:12px}
+.body.col{flex-direction:column}
+.body.col > .card.flex1{flex:1}
+.gap{display:flex;flex-direction:column;gap:12px;min-height:0}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.lnk{color:var(--accent-ink);font-weight:500;text-decoration:none}
+.r-end{text-align:right}
+td.r-end,th.r-end{text-align:right}
+.sp{flex:1}
+/* sheet section tabs */
+.sheet .tabs{flex:none;padding:0 18px;gap:20px}
+.sheet-sub{font-size:12px;color:var(--muted);padding:0 18px 10px}
+.sheet-h + .sheet-sub{margin-top:-6px}
+.sh-top{border-bottom:1px solid var(--rule)}
+.sh-top .sheet-h{border-bottom:0}
+/* key / value list */
+.kv{display:grid;grid-template-columns:150px 1fr;gap:10px 16px;align-items:center;font-size:14px}
+.kv dt{font-size:12px;color:var(--muted);margin:0}
+.kv dd{margin:0;color:var(--ink);min-width:0}
+/* wizard dialog */
+.dialog.wz{width:720px;padding:0;display:flex;flex-direction:column;max-height:660px}
+.dialog.wz.xl{width:900px}
+.wz-h{padding:18px 22px 14px;border-bottom:1px solid var(--rule)}
+.wz-h h4{margin:0 0 2px;font-size:16px}
+.wz-h p{margin:0 0 14px;font-size:12px;color:var(--muted)}
+.wz-b{padding:18px 22px;overflow:auto;flex:1;min-height:0}
+.wz-f{display:flex;gap:8px;align-items:center;padding:12px 22px;border-top:1px solid var(--rule)}
+.wz-f .small{color:var(--muted)}
+/* choice rows */
+.choice{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:12px;margin-bottom:8px;background:var(--card)}
+.choice.on{border-color:var(--primary);box-shadow:inset 0 0 0 1px var(--primary);background:var(--primary-soft)}
+.choice.off{background:var(--band);color:var(--muted)}
+.choice b{display:block;font-size:14px;color:var(--ink)}
+.choice small{display:block;font-size:12px;color:var(--muted)}
+.choice .end{margin-left:auto}
+/* the key shown once */
+.keybox{border:1px dashed var(--border-strong);border-radius:12px;padding:16px;background:var(--code);text-align:center}
+.keybox .m{font-size:16px;color:var(--ink);letter-spacing:.02em}
+/* vendor instructions page preview */
+.doc{border:1px solid var(--card-border);border-radius:12px;background:var(--canvas);padding:16px 18px;font-size:12px;color:var(--body)}
+.doc h6{font-size:14px;margin:0 0 2px;color:var(--ink)}
+.doc .hd{display:flex;align-items:center;gap:8px;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--rule)}
+.doc .hd .logo{width:18px;height:18px;border-radius:5px;background:var(--primary)}
+.doc dl{display:grid;grid-template-columns:110px 1fr;gap:6px 10px;margin:8px 0 12px}
+.doc dt{color:var(--muted)}
+.doc dd{margin:0}
+.doc .code{margin-top:6px}
+.doc table{font-size:12px}
+.doc thead th{padding:6px 10px}
+.doc tbody td{padding:6px 10px}
+/* checklist (B) */
+.chk{list-style:none;margin:0;padding:0}
+.chk li{display:flex;align-items:center;gap:10px;padding:7px 0;font-size:14px;color:var(--body)}
+.chk li i{width:18px;height:18px;border-radius:50%;flex:none;border:1.5px solid var(--border-strong);display:grid;place-items:center;font-style:normal;font-size:12px;line-height:1}
+.chk li.done i{background:var(--primary);border-color:var(--primary);color:var(--on-primary)}
+.chk li.now{color:var(--ink);font-weight:600}
+.chk li.now i{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+.chk li .end{margin-left:auto;font-size:12px;color:var(--muted);font-weight:400}
+.chk.big li{padding:12px 14px;border-bottom:1px solid var(--rule)}
+.chk.big li.now{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.prog{height:6px;border-radius:999px;background:var(--band);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--primary);border-radius:inherit}
+.vgrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.vcard{background:var(--card);border:1px solid var(--card-border);border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.vcard .t{display:flex;align-items:center;gap:8px}
+.vcard .t b{font-size:16px}
+.vcard .t .chip{margin-left:auto}
+.vcard .meta{font-size:12px;color:var(--muted)}
+.vcard .nums{display:flex;gap:18px;font-size:12px;color:var(--muted)}
+.vcard .nums b{display:block;font-size:16px;color:var(--ink)}
+.vcard .ft{display:flex;align-items:center;gap:8px;border-top:1px solid var(--rule);padding-top:10px;margin-top:auto}
+.vcard.add{border-style:dashed;align-items:center;justify-content:center;text-align:center;color:var(--muted)}
+/* mapper (C) */
+.mp{display:grid;grid-template-columns:minmax(0,1fr) 56px minmax(0,1.2fr) 92px;align-items:center;padding:6px 16px}
+.mp.hd{font-size:12px;color:var(--muted);font-weight:600;background:var(--band);border-bottom:1px solid var(--rule);padding:8px 16px}
+.pill{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--card);min-width:0}
+.pill .m{color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill small{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:50%}
+.pill.q{border-style:dashed}
+.pill.miss{border-color:var(--warn);background:var(--warn-s)}
+.pill.miss .m,.pill.miss small{color:var(--warn)}
+.ln{height:2px;background:var(--primary);margin:0 6px;position:relative}
+.ln::after{content:"";position:absolute;right:-2px;top:-3px;width:8px;height:8px;border-radius:50%;background:var(--primary)}
+.ln.no{background:transparent;border-top:2px dashed var(--warn);height:0}
+.ln.no::after{background:var(--warn);top:-5px}
+.mp .end{text-align:right}
+.grp-h{font-size:12px;font-weight:600;color:var(--muted);padding:12px 16px 4px}
+/* console (C) */
+.con{background:var(--code);border-top:1px solid var(--rule);font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--body);padding:10px 14px;white-space:pre;overflow:auto}
+.con-h{display:flex;align-items:center;gap:8px;padding:8px 14px;font-size:12px;color:var(--muted);font-weight:600}
+.con-h .chip{margin-left:auto}
+/* result cards */
+.res{border:1px solid var(--card-border);border-radius:12px;padding:14px 16px;background:var(--card)}
+.res .t{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.res .t b{font-size:14px}
+.res .t .end{margin-left:auto;font-size:12px;color:var(--muted)}
+.res p{margin:0 0 10px;font-size:14px;color:var(--body)}
+.res .fix{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:var(--band)}
+.res .fix span{font-size:12px;color:var(--body);flex:1}
+/* live waiting dot */
+.pulse{width:10px;height:10px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 6px var(--primary-soft);flex:none}
+/* reasons list */
+.reason{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--rule)}
+.reason b{font-size:14px;color:var(--ink);display:block}
+.reason small{font-size:12px;color:var(--muted)}
+.reason .n{font-size:16px;font-weight:600;min-width:28px;text-align:right;color:var(--ink)}
+.reason .end{margin-left:auto}
+/* neutral sparkline (charts carry no status colour) */
+.spark{display:inline-flex;align-items:flex-end;gap:2px;height:18px;width:84px;vertical-align:middle}
+.spark i{flex:1;background:var(--border-strong);opacity:.55;border-radius:1px}
+/* two dialogs side by side in one frame */
+.dialog.left{left:34%}
+.dialog.right{left:74%}
+.dialog .row.end{justify-content:flex-end;margin-top:14px}
+.seg.sm span{font-size:12px;padding:4px 10px}
+.input.sm{height:30px;font-size:12px}
+.hr{border-top:1px solid var(--rule);margin:14px 0}
+.sheet tbody td,.card tbody td{max-width:220px;overflow:hidden;text-overflow:ellipsis}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Lead posting</h1>
+  <p class="lead">Lead posting lets a lead vendor send leads straight into a campaign over the internet, the moment a person fills in their form. The agency owner has to connect each vendor, hand them an address and a key, agree which of the vendor's fields mean which of ours, and watch that leads keep arriving. Today the page can do all of that, but only someone technical could find their way: it is one long scroll of cards, the vendor gets nothing to read, and the only test is pasting raw lead data into a box.</p>
+  <div class="notes">
+    <div><b>1 · Too many cards, no centre</b>Posting address, figure strip, key list, picked key with four tabs, then separate rejections and live-posts cards. The page scrolls; the owner cannot see "is every vendor fine?" in one look.</div>
+    <div><b>2 · The vendor gets nothing</b>After the key is shown once, the owner must explain the address, the headers, the required fields and the replies by hand. There is no instructions page, PDF or email.</div>
+    <div><b>3 · Raw internals on show</b>The legacy address with the workspace id in monospace, key prefixes, and a box for pasting raw lead data. Plain-English owners stall here.</div>
+    <div><b>4 · Testing is a dry run only</b>"Check a sample post" reads pasted text; nothing travels the real path. The vendor cannot send a test that is kept apart from real leads and billing.</div>
+    <div><b>5 · Field map stops at our basic fields</b>Their extra answers (coverage wanted, tobacco) cannot reach the product's own intake questions, and an unmatched field is only discovered when posts start failing.</div>
+    <div><b>6 · No health per vendor, no reply to the vendor</b>Accepted share, speed and spend are spread across tabs; the vendor is never told afterwards whether a lead was accepted, contacted or sold.</div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · Vendor list + sheet</button><button data-opt-btn="B">B · Setup checklist</button><button data-opt-btn="C">C · Integration studio</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION A ═══════════════════════════════ -->
+  <div class="opt A">
+
+    <div class="sec"><h2>A1 · Main page: every vendor on one table</h2><span>one figure strip, one table, one gold button; problems ride the status line</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Activity</a><a>Rejections <span class="c">15</span></a><a>Vendor guide</a></nav><div class="acts"><span class="btn o">Copy posting address</span><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status warn"><span class="dot"></span>4 vendors posting · last lead 2 min ago · QuoteWizard refused 9 of its last 31 posts — <a class="lnk">fix its field map</a></div>
+        <div class="body col">
+          <div class="card"><div class="strip">
+            <div><small>Posts today</small><b>143</b></div>
+            <div><small>Accepted</small><b>128 <span class="small muted">90%</span></b></div>
+            <div><small>Refused</small><b>15</b></div>
+            <div><small>Lead spend today</small><b>$2,482</b></div>
+            <div><small>First dial, median</small><b>38 s</b></div>
+          </div></div>
+          <div class="card flex1">
+            <div class="card-h"><b>Vendors</b><div class="r"><span class="seg sm"><span class="on">All 6</span><span>Live 2</span><span>Needs you 1</span><span>Testing 1</span><span>Off 2</span></span><span class="input sm ph" style="width:200px">Find a vendor</span></div></div>
+            <div class="scroll"><table>
+              <thead><tr><th>Vendor</th><th>Campaign</th><th>Status</th><th class="r-end">Today</th><th class="r-end">Accepted, 7 days</th><th class="r-end">Per lead</th><th>Last post</th><th></th></tr></thead>
+              <tbody>
+                <tr><td><b>SmartFinancial</b></td><td>Final Expense · TX</td><td><span class="chip ok">Live</span></td><td class="r-end">64</td><td class="r-end">96%</td><td class="r-end">$22.00</td><td>2 min ago</td><td class="muted">›</td></tr>
+                <tr><td><b>MediaAlpha</b></td><td>Medicare Supplement · FL</td><td><span class="chip ok">Live</span></td><td class="r-end">48</td><td class="r-end">93%</td><td class="r-end">$18.00</td><td>6 min ago</td><td class="muted">›</td></tr>
+                <tr class="h"><td><b>QuoteWizard</b></td><td>Term Life · National</td><td><span class="chip warn">Needs you · 2 fields</span></td><td class="r-end">31</td><td class="r-end">71%</td><td class="r-end">$15.00</td><td>11 min ago</td><td class="muted">›</td></tr>
+                <tr><td><b>EverQuote</b></td><td>Final Expense · GA</td><td><span class="chip info">Testing</span></td><td class="r-end">0</td><td class="r-end">—</td><td class="r-end">$20.00</td><td>Test, 1 h ago</td><td class="muted">›</td></tr>
+                <tr><td><b>Digital Media Solutions</b></td><td>IUL · CA</td><td><span class="chip">Paused</span></td><td class="r-end">0</td><td class="r-end">88%</td><td class="r-end">$25.00</td><td>3 days ago</td><td class="muted">›</td></tr>
+                <tr><td><b>Datalot</b></td><td>Final Expense · OH</td><td><span class="chip bad">Key revoked</span></td><td class="r-end">0</td><td class="r-end">84%</td><td class="r-end">$16.00</td><td>12 Oct</td><td class="muted">›</td></tr>
+              </tbody>
+            </table></div>
+            <div class="card-f small muted">Click a vendor to open its sheet · Today counts reset at midnight, agency time</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A2 · Vendor sheet › Setup</h2><span>right sheet over the table; four sections: Setup · Field map · Test · Activity</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Activity</a><a>Rejections <span class="c">15</span></a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status"><span class="dot"></span>4 vendors posting · last lead 2 min ago</div>
+        <div class="body col"><div class="card flex1"><div class="card-h"><b>Vendors</b></div><div class="scroll"><table>
+          <thead><tr><th>Vendor</th><th>Campaign</th><th>Status</th><th class="r-end">Today</th></tr></thead>
+          <tbody><tr class="s"><td><b>SmartFinancial</b></td><td>Final Expense · TX</td><td><span class="chip ok">Live</span></td><td class="r-end">64</td></tr>
+          <tr><td><b>MediaAlpha</b></td><td>Medicare Supplement · FL</td><td><span class="chip ok">Live</span></td><td class="r-end">48</td></tr>
+          <tr><td><b>QuoteWizard</b></td><td>Term Life · National</td><td><span class="chip warn">Needs you · 2 fields</span></td><td class="r-end">31</td></tr>
+          <tr><td><b>EverQuote</b></td><td>Final Expense · GA</td><td><span class="chip info">Testing</span></td><td class="r-end">0</td></tr></tbody></table></div></div></div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sh-top">
+          <div class="sheet-h"><b>SmartFinancial</b><span class="chip ok">Live</span><span class="x">✕</span></div>
+          <div class="sheet-sub">Final Expense · TX · connected 14 Sep by <span class="av" style="width:20px;height:20px;vertical-align:middle">DA</span> Dana Avery · 1,812 leads accepted</div>
+          <nav class="tabs"><a class="on">Setup</a><a>Field map</a><a>Test</a><a>Activity</a></nav>
+        </div>
+        <div class="sheet-b">
+          <div class="fsec"><h4>Campaign and price</h4><p>Where accepted leads land and what each one costs.</p>
+            <div class="fgrid">
+              <div><label class="l">Campaign</label><div class="input">Final Expense · TX<span class="end">▾</span></div><div class="help">Product form: Final Expense intake</div></div>
+              <div><label class="l">Price per accepted lead</label><div class="input">$22.00</div><div class="help">Refused and test posts are never charged</div></div>
+              <div><label class="l">Daily cap <span class="tag-mig">needs a migration</span></label><div class="input">200 leads</div><div class="help">Posts past the cap are refused politely</div></div>
+              <div><label class="l">Accept posts <span class="tag-mig">needs a migration</span></label><div class="input">Mon–Sat · 8 am – 8 pm CT<span class="end">▾</span></div></div>
+            </div>
+          </div>
+          <div class="fsec"><h4>Posting key</h4><p>The vendor sends this with every lead. The full key was shown once, when it was made.</p>
+            <dl class="kv">
+              <dt>Key</dt><dd><span class="m">ins_live_••••4f2a</span> <span class="small muted">· made 14 Sep · used 2 min ago</span></dd>
+              <dt>Posting address</dt><dd><div class="copy"><span class="v">https://app.insurvas.com/api/post/ellery-fields</span><span class="btn sm o">Copy</span></div></dd>
+            </dl>
+            <div class="row" style="margin-top:12px"><span class="btn sm o">Rotate key</span><span class="btn sm danger">Revoke</span></div>
+          </div>
+          <div class="fsec"><h4>Instructions for SmartFinancial</h4><p>A page written for their developer: address, key, fields, replies and a sample.</p>
+            <dl class="kv"><dt>Sent</dt><dd>14 Sep to <b>integrations@smartfinancial.com</b> · opened twice <span class="tag-mig">needs a migration</span></dd></dl>
+            <div class="row" style="margin-top:12px"><span class="btn sm o">Copy link</span><span class="btn sm o">Download PDF</span><span class="btn sm o">Email again</span></div>
+          </div>
+          <div class="fsec"><h4>Tell SmartFinancial what happened <span class="tag-mig">needs a migration</span></h4><p>We call their address when a lead is accepted, refused, contacted or sold, so they can stop billing bad leads.</p>
+            <div class="fgrid">
+              <div class="full"><label class="l">Their status address</label><div class="input">https://partners.smartfinancial.com/insurvas/status</div></div>
+              <div class="full row"><span class="tog on">Accepted</span><span class="tog on">Refused</span><span class="tog on">Contacted</span><span class="tog">Sold</span><span class="small muted">· last call 2 min ago, answered</span></div>
+            </div>
+          </div>
+          <div class="fsec"><h4>Notes</h4><div class="input textarea">Account rep: Priya Shah. Billing disputes within 7 days.</div></div>
+        </div>
+        <div class="sheet-f"><span class="btn g">Close</span><span class="btn p">Save changes</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A3 · Connect a vendor · step 1 of 4</h2><span>vendor and campaign; campaigns without an intake form are shown but can't be picked</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Activity</a><a>Rejections</a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status"><span class="dot"></span>4 vendors posting</div>
+        <div class="body col"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog wz">
+        <div class="wz-h"><h4>Connect a vendor</h4><p>About three minutes. Nothing is live until the first test passes.</p>
+          <div class="steps"><span class="on"><i>1</i>Vendor &amp; campaign</span><em></em><span><i>2</i>Key</span><em></em><span><i>3</i>Send instructions</span><em></em><span><i>4</i>Test post</span></div></div>
+        <div class="wz-b">
+          <div class="fgrid">
+            <div><label class="l">Vendor</label><div class="input">QuoteWizard<span class="end">from Lead sources ▾</span></div><div class="help">Pick a lead source or type a new name</div></div>
+            <div><label class="l">Price per accepted lead</label><div class="input">$15.00</div></div>
+          </div>
+          <label class="l" style="margin-top:16px">Which campaign do their leads go to?</label>
+          <div class="choice on"><span class="radio on"></span><div><b>Term Life · National</b><small>Term life intake form · active · 12 callers</small></div><span class="end small muted">Scrubbed today</span></div>
+          <div class="choice"><span class="radio"></span><div><b>Final Expense · TX</b><small>Final Expense intake form · active · 8 callers</small></div><span class="end small muted">Scrubbed today</span></div>
+          <div class="choice"><span class="radio"></span><div><b>Medicare Supplement · FL</b><small>Med Supp intake form · active · 5 callers</small></div><span class="end small muted">Scrubbed today</span></div>
+          <div class="choice off"><span class="radio"></span><div><b>IUL · CA</b><small>This product has no intake form, so posts would be refused</small></div><span class="end"><a class="lnk small">Add an intake form</a></span></div>
+        </div>
+        <div class="wz-f"><span class="btn g">Cancel</span><span class="sp"></span><span class="small">Next makes their key</span><span class="btn p">Next: make the key</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A4 · Step 2 of 4 · the key, shown once</h2><span>copy, then confirm; the address is short and readable</span></div>
+    <div class="app">
+      <div class="main"><div class="crumb">Settings › Leads &amp; calling</div><div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors</a><a>Activity</a></nav></div><div class="status"><span class="dot"></span>4 vendors posting</div><div class="body col"><div class="card flex1"></div></div></div>
+      <div class="scrim"></div>
+      <div class="dialog wz">
+        <div class="wz-h"><h4>QuoteWizard's key</h4><p>Term Life · National · $15.00 per accepted lead</p>
+          <div class="steps"><span class="done"><i>✓</i>Vendor &amp; campaign</span><em></em><span class="on"><i>2</i>Key</span><em></em><span><i>3</i>Send instructions</span><em></em><span><i>4</i>Test post</span></div></div>
+        <div class="wz-b">
+          <div class="keybox"><div class="small muted" style="margin-bottom:6px">Posting key</div><div class="m">ins_live_9fK2mWq8T3vLx7Rb2c9e</div><div class="row" style="justify-content:center;margin-top:12px"><span class="btn p">Copy key</span></div></div>
+          <p class="help" style="text-align:center;margin-top:8px">This is the only time the full key is shown. We keep a fingerprint, never the key. If it is lost, rotate it.</p>
+          <div class="hr"></div>
+          <label class="l">Posting address</label>
+          <div class="copy"><span class="v">https://app.insurvas.com/api/post/ellery-fields</span><span class="btn sm o">Copy</span></div>
+          <div class="help">The same address for every vendor; the key tells us who is posting.</div>
+          <div class="row" style="margin-top:16px"><span class="check on"></span><span>I've copied the key somewhere safe</span></div>
+        </div>
+        <div class="wz-f"><span class="btn g">Back</span><span class="sp"></span><span class="btn p">Next: send instructions</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A5 · Step 3 of 4 · send instructions</h2><span>an instructions page is written for the vendor's developer; copy, PDF or email it</span></div>
+    <div class="app tall">
+      <div class="main"><div class="crumb">Settings › Leads &amp; calling</div><div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors</a><a>Activity</a></nav></div><div class="status"><span class="dot"></span>4 vendors posting</div><div class="body col"><div class="card flex1"></div></div></div>
+      <div class="scrim"></div>
+      <div class="dialog wz xl" style="max-height:800px">
+        <div class="wz-h"><h4>Send QuoteWizard their instructions</h4><p>Everything their developer needs, on one page. You can resend it later from the vendor's sheet.</p>
+          <div class="steps"><span class="done"><i>✓</i>Vendor &amp; campaign</span><em></em><span class="done"><i>✓</i>Key</span><em></em><span class="on"><i>3</i>Send instructions</span><em></em><span><i>4</i>Test post</span></div></div>
+        <div class="wz-b" style="display:grid;grid-template-columns:280px 1fr;gap:20px">
+          <div>
+            <label class="l">Email to</label><div class="input">dev@quotewizard.com</div>
+            <label class="l" style="margin-top:12px">Copy to</label><div class="input ph">Your rep or another address</div>
+            <div class="row" style="margin-top:14px;justify-content:space-between"><span>Include the key</span><span class="switch"></span></div>
+            <div class="help">Off: the guide says "use the key we sent separately". On: a link that shows the key once and expires in 72 hours. <span class="tag-mig">needs a migration</span></div>
+            <div class="hr"></div>
+            <div class="gap"><span class="btn p" style="justify-content:center">Email to vendor</span><span class="btn o" style="justify-content:center">Download PDF</span><span class="btn o" style="justify-content:center">Copy link to this page</span></div>
+            <div class="help" style="margin-top:10px">We'll show here when they open it. <span class="tag-mig">needs a migration</span></div>
+          </div>
+          <div class="doc">
+            <div class="hd"><span class="logo"></span><div><h6>Posting leads to Ellery &amp; Fields</h6><span class="muted">For QuoteWizard · Term Life · National</span></div></div>
+            <dl><dt>Address</dt><dd class="m">POST https://app.insurvas.com/api/post/ellery-fields</dd>
+            <dt>Headers</dt><dd class="m">Authorization: Bearer &lt;your key&gt;<br>Content-Type: application/json<br>Idempotency-Key: your lead id (optional)</dd>
+            <dt>Replies</dt><dd>accepted (true / false), reason_code, message, lead_id</dd></dl>
+            <table><thead><tr><th>Field</th><th>Needed</th><th>Rule</th></tr></thead><tbody>
+              <tr><td class="m">phone</td><td>Yes</td><td>10-digit US number</td></tr>
+              <tr><td class="m">state</td><td>Yes</td><td>Two letters; we must hold a licence there</td></tr>
+              <tr><td class="m">first_name, last_name</td><td>Yes</td><td>Or full_name</td></tr>
+              <tr><td class="m">consent_text</td><td>Yes</td><td>The words the person agreed to, unedited</td></tr>
+              <tr><td class="m">consent_ip</td><td>Yes</td><td>IPv4 or IPv6</td></tr>
+              <tr><td class="m">date_of_birth</td><td>No</td><td>MM/DD/YYYY or YYYY-MM-DD</td></tr>
+              <tr><td class="m">trusted_form_cert_url</td><td>No</td><td>Filed as the consent certificate</td></tr>
+            </tbody></table>
+            <div class="code">curl -X POST https://app.insurvas.com/api/post/ellery-fields \
+  -H "Authorization: Bearer $INSURVAS_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"first_name":"Martha","last_name":"Reyes","phone":"5125550142",
+       "state":"TX","consent_text":"By clicking…","consent_ip":"73.12.4.9"}'</div>
+          </div>
+        </div>
+        <div class="wz-f"><span class="btn g">Back</span><span class="sp"></span><span class="small">You can skip and send later</span><span class="btn o">Skip</span><span class="btn p">Next: test post</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A6 · Step 4 of 4 · send a test post</h2><span>test posts travel the real path but never make a lead or a charge</span></div>
+    <div class="app tall">
+      <div class="main"><div class="crumb">Settings › Leads &amp; calling</div><div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors</a><a>Activity</a></nav></div><div class="status"><span class="dot"></span>4 vendors posting</div><div class="body col"><div class="card flex1"></div></div></div>
+      <div class="scrim"></div>
+      <div class="dialog wz" style="max-height:760px">
+        <div class="wz-h"><h4>Send a test post</h4><p>Test mode is on for QuoteWizard until you go live. <span class="tag-mig">needs a migration</span></p>
+          <div class="steps"><span class="done"><i>✓</i>Vendor &amp; campaign</span><em></em><span class="done"><i>✓</i>Key</span><em></em><span class="done"><i>✓</i>Send instructions</span><em></em><span class="on"><i>4</i>Test post</span></div></div>
+        <div class="wz-b">
+          <div class="split">
+            <div class="choice on" style="margin:0"><span class="radio on"></span><div><b>Send one from here</b><small>A made-up lead through their field map</small></div></div>
+            <div class="choice" style="margin:0"><span class="radio"></span><div><b>Wait for QuoteWizard</b><small>We listen for their first test</small></div></div>
+          </div>
+          <label class="l" style="margin-top:16px">Test lead</label>
+          <div class="input">Martha Reyes · (512) 555-0142 · TX · born 03/14/1956<span class="end">Edit</span></div>
+          <div class="hr"></div>
+          <div class="res">
+            <div class="t"><span class="chip ok">Accepted</span><b>The test went through</b><span class="end">0.4 s · just now</span></div>
+            <p>A real post like this would make the lead Martha Reyes in Term Life · National, stage New, and queue a first dial. Nothing was created or charged.</p>
+            <div class="row small muted">Checked: key · campaign open · TX licence · phone · consent · not on DNC · not a duplicate</div>
+          </div>
+          <div class="row" style="margin-top:12px"><span class="pulse"></span><span class="small muted">Still listening for QuoteWizard's own test post…</span></div>
+        </div>
+        <div class="wz-f"><span class="btn g">Back</span><span class="sp"></span><span class="btn o">Finish, stay in test mode</span><span class="btn p">Go live</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A7 · Vendor sheet › Field map</h2><span>their field → our field or a product-form question; a pasted sample guesses the map</span></div>
+    <div class="app tall">
+      <div class="main"><div class="crumb">Settings › Leads &amp; calling</div><div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Activity</a><a>Rejections</a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div><div class="status warn"><span class="dot"></span>QuoteWizard refused 9 of its last 31 posts</div><div class="body col"><div class="card flex1"></div></div></div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sh-top">
+          <div class="sheet-h"><b>QuoteWizard</b><span class="chip warn">Needs you · 2 fields</span><span class="x">✕</span></div>
+          <div class="sheet-sub">Term Life · National · Term life intake form</div>
+          <nav class="tabs"><a>Setup</a><a class="on">Field map</a><a>Test</a><a>Activity</a></nav>
+        </div>
+        <div class="sheet-b" style="padding:0;display:flex;flex-direction:column">
+          <div class="row" style="padding:14px 18px"><span class="small"><b>12 of 14</b> of their fields are matched · 2 are not read yet</span><span class="sp"></span><span class="btn sm o">Paste a sample lead</span><span class="btn sm g">Reset to suggested</span></div>
+          <div class="scroll"><table>
+            <thead><tr><th>Their field</th><th>Example from their last post</th><th>Goes to</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="m">fname</td><td>Martha</td><td>First name</td><td></td></tr>
+              <tr><td class="m">lname</td><td>Reyes</td><td>Last name</td><td></td></tr>
+              <tr class="h"><td class="m">ph_home</td><td>(512) 555-0142</td><td class="muted">Choose a field ▾</td><td><span class="chip warn">Not read</span></td></tr>
+              <tr><td class="m">email_addr</td><td>m.reyes@gmail.com</td><td>Email</td><td></td></tr>
+              <tr><td class="m">st</td><td>TX</td><td>State</td><td></td></tr>
+              <tr><td class="m">zip5</td><td>78704</td><td>ZIP</td><td></td></tr>
+              <tr><td class="m">dob</td><td>03/14/1956</td><td>Date of birth</td><td></td></tr>
+              <tr><td class="m">tcpa_text</td><td>By clicking Get quotes I agree…</td><td>Consent words</td><td></td></tr>
+              <tr><td class="m">client_ip</td><td>73.12.4.9</td><td>Consent IP</td><td></td></tr>
+              <tr><td class="m">trusted_form</td><td>cert.trustedform.com/7a1…</td><td>Consent certificate</td><td></td></tr>
+              <tr><td class="m">coverage_amt</td><td>250000</td><td>Form › Coverage wanted</td><td><span class="chip info">Form question</span></td></tr>
+              <tr><td class="m">tobacco</td><td>N</td><td>Form › Uses tobacco?</td><td><span class="chip info">Form question</span></td></tr>
+              <tr class="h"><td class="m">sub_id</td><td>QW-FB-0412</td><td class="muted">Choose a field ▾</td><td><span class="chip warn">Not read</span></td></tr>
+              <tr><td class="m">jornaya</td><td>LL-4F2A-91C0</td><td>Jornaya lead id</td><td></td></tr>
+            </tbody>
+          </table></div>
+          <div style="padding:12px 18px;border-top:1px solid var(--rule)" class="small muted">"Form ›" answers fill the Term life intake form's own questions <span class="tag-mig">needs a migration</span> · <b>sub_id</b> could be kept as a note on the lead or ignored</div>
+        </div>
+        <div class="savebar"><span>2 unsaved changes</span><span class="sp"></span><span class="btn sm g">Discard</span><span class="btn sm p">Save field map</span></div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A8 · Vendor sheet › Test · accepted and refused</h2><span>a refused test names the cause and offers one fix that re-sends</span></div>
+    <div class="app tall">
+      <div class="main"><div class="crumb">Settings › Leads &amp; calling</div><div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Activity</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div><div class="status"><span class="dot"></span>4 vendors posting</div><div class="body col"><div class="card flex1"></div></div></div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sh-top">
+          <div class="sheet-h"><b>QuoteWizard</b><span class="chip warn">Needs you · 2 fields</span><span class="x">✕</span></div>
+          <div class="sheet-sub">Term Life · National</div>
+          <nav class="tabs"><a>Setup</a><a>Field map</a><a class="on">Test</a><a>Activity</a></nav>
+        </div>
+        <div class="sheet-b">
+          <div class="row"><span class="seg sm"><span class="on">Test mode</span><span>Real post</span></span><span class="tag-mig">needs a migration</span><span class="sp"></span><span class="btn sm o">Edit test lead</span><span class="btn sm p">Send a test post</span></div>
+          <div class="help" style="margin-bottom:14px">Test posts run every check a real post runs, then stop before a lead or a charge is made.</div>
+          <div class="gap">
+            <div class="res">
+              <div class="t"><span class="chip bad">Refused · invalid phone</span><b>Their test, 11:42 am</b><span class="end">0.2 s</span></div>
+              <p>QuoteWizard sends the phone number as <span class="m">ph_home</span>, and that field isn't read, so the lead arrived with no phone.</p>
+              <div class="fix"><span>Read <b>ph_home</b> as the phone, then send this same test again.</span><span class="btn sm p">Fix and resend</span></div>
+            </div>
+            <div class="res">
+              <div class="t"><span class="chip ok">Accepted</span><b>Our test, 11:44 am</b><span class="end">0.4 s</span></div>
+              <p>Would make Martha Reyes in Term Life · National at stage New and queue a first dial. Not created, not charged.</p>
+              <div class="row small muted">Checked: key · campaign open · TX licence · phone · consent · DNC · duplicate</div>
+            </div>
+            <div class="res">
+              <div class="t"><span class="chip warn">Refused · state not licensed</span><b>Their test, 10:15 am</b><span class="end">0.3 s</span></div>
+              <p>The test lead was in NV. Ellery &amp; Fields holds no current Nevada licence, so it can't legally be dialled.</p>
+              <div class="fix"><span>Add a Nevada licence, or ask QuoteWizard to filter NV out.</span><span class="btn sm o">Add a licence</span></div>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="sec"><h2>A9 · Rejections tab</h2><span>one-line log + the reasons that repeat, each with its fix</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a>Vendors <span class="c">6</span></a><a>Activity</a><a class="on">Rejections <span class="c">15</span></a><a>Vendor guide</a></nav><div class="acts"><span class="btn o">Export CSV</span><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status warn"><span class="dot"></span>15 refused today · 9 have the same cause, QuoteWizard's phone field</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><b>Refused posts</b><div class="r"><span class="seg sm"><span class="on">Today</span><span>7 days</span><span>30 days</span></span><span class="input sm">All vendors ▾</span></div></div>
+            <div class="scroll"><table>
+              <thead><tr><th>Time</th><th>Vendor</th><th>Lead</th><th>Why</th><th class="r-end">Charged</th></tr></thead>
+              <tbody>
+                <tr><td>11:42 am</td><td>QuoteWizard</td><td>Martha R. · TX</td><td><span class="chip bad">Invalid phone</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>11:31 am</td><td>QuoteWizard</td><td>Earl D. · OH</td><td><span class="chip bad">Invalid phone</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>11:08 am</td><td>MediaAlpha</td><td>Joan P. · NV</td><td><span class="chip warn">State not licensed</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>10:57 am</td><td>SmartFinancial</td><td>Ray K. · TX</td><td><span class="chip">Already in the system</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>10:40 am</td><td>QuoteWizard</td><td>Lena W. · GA</td><td><span class="chip bad">Invalid phone</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>10:22 am</td><td>MediaAlpha</td><td>Tom B. · FL</td><td><span class="chip bad">On Do Not Call</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>9:58 am</td><td>QuoteWizard</td><td>Ana S. · TX</td><td><span class="chip bad">Invalid phone</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>9:41 am</td><td>SmartFinancial</td><td>Gus H. · TX</td><td><span class="chip warn">No consent words</span></td><td class="r-end">$0.00</td></tr>
+                <tr><td>9:12 am</td><td>MediaAlpha</td><td>Dee M. · NV</td><td><span class="chip warn">State not licensed</span></td><td class="r-end">$0.00</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="card" style="width:380px">
+            <div class="card-h"><b>What keeps happening</b><div class="r small muted">today</div></div>
+            <div class="scroll">
+              <div class="reason"><span class="n">9</span><div><b>Invalid phone</b><small>QuoteWizard · their ph_home isn't read</small></div><span class="end btn sm p">Fix field map</span></div>
+              <div class="reason"><span class="n">3</span><div><b>State not licensed</b><small>MediaAlpha · all from NV</small></div><span class="end btn sm o">Add a licence</span></div>
+              <div class="reason"><span class="n">1</span><div><b>No consent words</b><small>SmartFinancial · tcpa field empty</small></div><span class="end btn sm o">Tell vendor</span></div>
+              <div class="reason"><span class="n">1</span><div><b>On Do Not Call</b><small>Working as meant</small></div><span class="end small muted">Nothing to fix</span></div>
+              <div class="reason"><span class="n">1</span><div><b>Already in the system</b><small>Duplicate within 30 days</small></div><span class="end small muted">Nothing to fix</span></div>
+            </div>
+            <div class="card-f small muted">"Tell vendor" emails them the refused posts and the rule they broke</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A10 · Rotate and revoke</h2><span>rotate can keep the old key for a short grace window; revoke asks for the vendor's name</span></div>
+    <div class="app">
+      <div class="main"><div class="crumb">Settings › Leads &amp; calling</div><div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Activity</a></nav></div><div class="status"><span class="dot"></span>4 vendors posting</div><div class="body col"><div class="card flex1"></div></div></div>
+      <div class="scrim"></div>
+      <div class="dialog left">
+        <h4>Rotate QuoteWizard's key?</h4>
+        <p>A new key is made and shown once. Send it to QuoteWizard; we can email them updated instructions.</p>
+        <div class="choice on"><span class="radio on"></span><div><b>Old key stops now</b><small>Use this if the key may have leaked</small></div></div>
+        <div class="choice"><span class="radio"></span><div><b>Old key works for 24 more hours</b><small>Gives them time to switch <span class="tag-mig">needs a migration</span></small></div></div>
+        <div class="row" style="margin-top:8px"><span class="check on"></span><span class="small">Email QuoteWizard the new instructions</span></div>
+        <div class="row end"><span class="btn g">Cancel</span><span class="btn p">Rotate key</span></div>
+      </div>
+      <div class="dialog right">
+        <h4>Revoke Datalot's key?</h4>
+        <p>Every post with this key is refused from now on. Their leads and history stay. You can connect them again later with a new key.</p>
+        <label class="l">Type <b>Datalot</b> to confirm</label>
+        <div class="input focus">Datalot</div>
+        <div class="row end"><span class="btn g">Cancel</span><span class="btn danger">Revoke key</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>A11 · Empty, loading, error</h2><span>the table's card carries every state; the page never shows a notice card</span></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Vendors</b></div><div class="empty"><div class="ic">↗</div><b>No vendors yet</b><p>Connect a vendor and their leads arrive in your campaign the moment someone fills in their form.</p><span class="btn hl">+ Connect a vendor</span><div class="help" style="margin-top:8px"><a class="lnk">Read the vendor guide</a></div></div></div>
+      <div class="card"><div class="card-h"><b>Vendors</b></div><div class="card-b"><div class="skel" style="width:60%"></div><div class="skel"></div><div class="skel" style="width:85%"></div><div class="skel"></div><div class="skel" style="width:70%"></div><div class="skel" style="width:90%"></div></div></div>
+      <div class="card"><div class="card-h"><b>Vendors</b></div><div class="empty"><b>Couldn't load your vendors</b><p>Posts are still being accepted; only this page failed to load.</p><span class="btn o">Try again</span></div><div class="status bad" style="padding:0 16px"><span class="dot"></span>Status line reads: "Vendors didn't load · try again"</div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION B ═══════════════════════════════ -->
+  <div class="opt B">
+
+    <div class="sec"><h2>B1 · Main page: vendor cards with a setup checklist</h2><span>each card shows how far setup got and the one next step</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Health</a><a>Activity</a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status warn"><span class="dot"></span>2 vendors still setting up · QuoteWizard needs 2 fields matched</div>
+        <div class="body col">
+          <div class="card"><div class="strip">
+            <div><small>Live vendors</small><b>3 <span class="small muted">of 6</span></b></div>
+            <div><small>Posts today</small><b>143</b></div>
+            <div><small>Accepted</small><b>90%</b></div>
+            <div><small>Lead spend today</small><b>$2,482</b></div>
+            <div><small>First dial, median</small><b>38 s</b></div>
+          </div></div>
+          <div class="card flex1"><div class="scroll"><div class="card-b"><div class="vgrid">
+            <div class="vcard">
+              <div class="t"><b>QuoteWizard</b><span class="chip warn">3 of 5 done</span></div>
+              <div class="meta">Term Life · National · $15.00 per lead</div>
+              <div class="prog"><i style="width:60%"></i></div>
+              <ul class="chk"><li class="done"><i>✓</i>Key made</li><li class="done"><i>✓</i>Instructions sent<span class="end">opened</span></li><li class="now"><i></i>Field map<span class="end">12 / 14</span></li><li><i></i>First test passed</li><li class="done"><i>✓</i>First live lead</li></ul>
+              <div class="ft"><span class="small muted">31 today · 71% accepted</span><span class="sp"></span><span class="btn sm p">Match 2 fields</span></div>
+            </div>
+            <div class="vcard">
+              <div class="t"><b>EverQuote</b><span class="chip info">4 of 5 done</span></div>
+              <div class="meta">Final Expense · GA · $20.00 per lead</div>
+              <div class="prog"><i style="width:80%"></i></div>
+              <ul class="chk"><li class="done"><i>✓</i>Key made</li><li class="done"><i>✓</i>Instructions sent</li><li class="done"><i>✓</i>Field map<span class="end">14 / 14</span></li><li class="done"><i>✓</i>First test passed</li><li class="now"><i></i>First live lead</li></ul>
+              <div class="ft"><span class="small muted">6 tests, 6 passed</span><span class="sp"></span><span class="btn sm p">Go live</span></div>
+            </div>
+            <div class="vcard">
+              <div class="t"><b>SmartFinancial</b><span class="chip ok">Live</span></div>
+              <div class="meta">Final Expense · TX · $22.00 per lead</div>
+              <div class="prog"><i style="width:100%"></i></div>
+              <ul class="chk"><li class="done"><i>✓</i>Key made</li><li class="done"><i>✓</i>Instructions sent</li><li class="done"><i>✓</i>Field map<span class="end">13 / 13</span></li><li class="done"><i>✓</i>First test passed</li><li class="done"><i>✓</i>First live lead<span class="end">14 Sep</span></li></ul>
+              <div class="ft"><span class="small muted">64 today · 96% accepted</span><span class="sp"></span><span class="btn sm o">Open</span></div>
+            </div>
+            <div class="vcard">
+              <div class="t"><b>MediaAlpha</b><span class="chip ok">Live</span></div>
+              <div class="meta">Medicare Supplement · FL · $18.00 per lead</div>
+              <div class="prog"><i style="width:100%"></i></div>
+              <div class="nums"><div><b>48</b>today</div><div><b>93%</b>accepted</div><div><b>6 min</b>last post</div></div>
+              <div class="ft"><span class="small muted">3 refused for NV today</span><span class="sp"></span><span class="btn sm o">Open</span></div>
+            </div>
+            <div class="vcard">
+              <div class="t"><b>Digital Media Solutions</b><span class="chip">Paused</span></div>
+              <div class="meta">IUL · CA · $25.00 per lead</div>
+              <div class="prog"><i style="width:100%"></i></div>
+              <div class="nums"><div><b>0</b>today</div><div><b>88%</b>accepted</div><div><b>3 days</b>last post</div></div>
+              <div class="ft"><span class="small muted">Paused by you on 9 Nov</span><span class="sp"></span><span class="btn sm o">Resume</span></div>
+            </div>
+            <div class="vcard add"><div class="ic">+</div><b style="color:var(--ink)">Connect another vendor</b><span class="small">Five steps, about three minutes</span></div>
+          </div></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B2 · Connect a vendor (short) → lands on the checklist</h2><span>the dialog only asks who and where; everything else is a checklist step</span></div>
+    <div class="app">
+      <div class="main"><div class="crumb">Settings › Leads &amp; calling</div><div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Vendors <span class="c">6</span></a><a>Health</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div><div class="status"><span class="dot"></span>3 vendors live</div><div class="body col"><div class="card flex1"></div></div></div>
+      <div class="scrim"></div>
+      <div class="dialog" style="width:520px">
+        <h4>Connect a vendor</h4>
+        <p>Name them and pick the campaign. A checklist then walks you through the key, their instructions, the field map and a test.</p>
+        <div class="fgrid">
+          <div class="full"><label class="l">Vendor</label><div class="input">QuoteWizard<span class="end">from Lead sources ▾</span></div></div>
+          <div><label class="l">Campaign</label><div class="input">Term Life · National<span class="end">▾</span></div><div class="help">Term life intake form</div></div>
+          <div><label class="l">Price per accepted lead</label><div class="input">$15.00</div></div>
+          <div class="full"><label class="l">Their developer's email</label><div class="input">dev@quotewizard.com</div><div class="help">Used for instructions and refused-post reports</div></div>
+        </div>
+        <div class="row end" style="justify-content:flex-end;margin-top:16px"><span class="btn g">Cancel</span><span class="btn p">Make key and open checklist</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B3 · Vendor page › checklist with "Send instructions" open</h2><span>left: five steps; right: the open step</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling › Lead posting</div>
+        <div class="head"><h3>QuoteWizard</h3><nav class="tabs"><a class="on">Setup <span class="c">3 / 5</span></a><a>Health</a><a>Activity</a><a>Key</a></nav><div class="acts"><span class="btn o">Pause</span></div></div>
+        <div class="status"><span class="dot"></span>Term Life · National · $15.00 per lead · key <span class="m">ins_live_••••2c9e</span></div>
+        <div class="body">
+          <div class="card" style="width:300px">
+            <div class="card-h"><b>Setup</b><div class="r small muted">3 of 5</div></div>
+            <div style="padding:12px 16px 0"><div class="prog"><i style="width:60%"></i></div></div>
+            <ul class="chk big" style="margin-top:8px">
+              <li class="done"><i>✓</i>Key made<span class="end">copied</span></li>
+              <li class="now"><i></i>Send instructions</li>
+              <li><i></i>Field map<span class="end">12 / 14</span></li>
+              <li><i></i>First test passed</li>
+              <li><i></i>First live lead</li>
+            </ul>
+          </div>
+          <div class="card flex1">
+            <div class="card-h"><b>2 · Send QuoteWizard their instructions</b><div class="r"><span class="btn sm o">Copy link</span><span class="btn sm o">Download PDF</span><span class="btn sm p">Email to vendor</span></div></div>
+            <div class="scroll"><div class="card-b">
+              <div class="fgrid" style="margin-bottom:14px"><div><label class="l">To</label><div class="input">dev@quotewizard.com</div></div><div><label class="l">Key</label><div class="input dis">Sent separately<span class="end">▾</span></div></div></div>
+              <div class="doc">
+                <div class="hd"><span class="logo"></span><div><h6>Posting leads to Ellery &amp; Fields</h6><span class="muted">For QuoteWizard · Term Life · National</span></div></div>
+                <dl><dt>Address</dt><dd class="m">POST https://app.insurvas.com/api/post/ellery-fields</dd><dt>Headers</dt><dd class="m">Authorization: Bearer &lt;your key&gt; · Content-Type: application/json</dd><dt>Avoid doubles</dt><dd>Send your lead id as Idempotency-Key; a repeat gets the first reply back</dd><dt>Replies</dt><dd>accepted, reason_code, message, lead_id</dd></dl>
+                <table><thead><tr><th>Field</th><th>Needed</th><th>Rule</th></tr></thead><tbody>
+                  <tr><td class="m">phone</td><td>Yes</td><td>10-digit US number</td></tr><tr><td class="m">state</td><td>Yes</td><td>Two letters</td></tr><tr><td class="m">first_name / last_name</td><td>Yes</td><td>Or full_name</td></tr><tr><td class="m">consent_text</td><td>Yes</td><td>Unedited</td></tr><tr><td class="m">consent_ip</td><td>Yes</td><td>IPv4 or IPv6</td></tr><tr><td class="m">coverage_amt</td><td>No</td><td>Fills "Coverage wanted"</td></tr>
+                </tbody></table>
+                <div class="code">curl -X POST https://app.insurvas.com/api/post/ellery-fields \
+  -H "Authorization: Bearer $INSURVAS_KEY" -H "Content-Type: application/json" \
+  -d '{"first_name":"Martha","phone":"5125550142","state":"TX", …}'</div>
+              </div>
+            </div></div>
+            <div class="card-f"><span class="small muted">Already sent another way?</span><a class="lnk small">Mark as sent</a><span class="sp"></span><span class="btn sm g">Skip for now</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B4 · Checklist step 3 · field map</h2><span>unmatched fields first; a sample from their last post fills the examples</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling › Lead posting</div>
+        <div class="head"><h3>QuoteWizard</h3><nav class="tabs"><a class="on">Setup <span class="c">3 / 5</span></a><a>Health</a><a>Activity</a><a>Key</a></nav><div class="acts"><span class="btn o">Pause</span></div></div>
+        <div class="status warn"><span class="dot"></span>2 of their fields aren't read · 9 posts refused for it today</div>
+        <div class="body">
+          <div class="card" style="width:300px">
+            <div class="card-h"><b>Setup</b><div class="r small muted">3 of 5</div></div>
+            <div style="padding:12px 16px 0"><div class="prog"><i style="width:60%"></i></div></div>
+            <ul class="chk big" style="margin-top:8px"><li class="done"><i>✓</i>Key made</li><li class="done"><i>✓</i>Instructions sent<span class="end">opened</span></li><li class="now"><i></i>Field map<span class="end">12 / 14</span></li><li><i></i>First test passed</li><li class="done"><i>✓</i>First live lead</li></ul>
+          </div>
+          <div class="card flex1">
+            <div class="card-h"><b>3 · Match their fields to yours</b><div class="r"><span class="btn sm o">Paste a sample lead</span></div></div>
+            <div class="scroll"><table>
+              <thead><tr><th>Their field</th><th>Example</th><th>Goes to</th><th></th></tr></thead>
+              <tbody>
+                <tr class="h"><td class="m">ph_home</td><td>(512) 555-0142</td><td><span class="input sm" style="width:200px">Phone ▾</span></td><td><span class="chip act">Suggested</span></td></tr>
+                <tr class="h"><td class="m">sub_id</td><td>QW-FB-0412</td><td><span class="input sm ph" style="width:200px">Keep as a note ▾</span></td><td><span class="chip warn">Choose</span></td></tr>
+                <tr><td class="m">fname</td><td>Martha</td><td>First name</td><td></td></tr>
+                <tr><td class="m">lname</td><td>Reyes</td><td>Last name</td><td></td></tr>
+                <tr><td class="m">st</td><td>TX</td><td>State</td><td></td></tr>
+                <tr><td class="m">zip5</td><td>78704</td><td>ZIP</td><td></td></tr>
+                <tr><td class="m">dob</td><td>03/14/1956</td><td>Date of birth</td><td></td></tr>
+                <tr><td class="m">tcpa_text</td><td>By clicking Get quotes…</td><td>Consent words</td><td></td></tr>
+                <tr><td class="m">client_ip</td><td>73.12.4.9</td><td>Consent IP</td><td></td></tr>
+                <tr><td class="m">coverage_amt</td><td>250000</td><td>Form › Coverage wanted</td><td><span class="chip info">Form question</span></td></tr>
+                <tr><td class="m">tobacco</td><td>N</td><td>Form › Uses tobacco?</td><td><span class="chip info">Form question</span></td></tr>
+              </tbody>
+            </table></div>
+            <div class="savebar"><span>2 changes · form questions <span class="tag-mig">needs a migration</span></span><span class="sp"></span><span class="btn sm g">Discard</span><span class="btn sm p">Save and test</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B5 · Checklist step 4 · first test</h2><span>refused test with the one-click fix, then the passing re-run</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling › Lead posting</div>
+        <div class="head"><h3>QuoteWizard</h3><nav class="tabs"><a class="on">Setup <span class="c">4 / 5</span></a><a>Health</a><a>Activity</a><a>Key</a></nav><div class="acts"><span class="btn o">Pause</span></div></div>
+        <div class="status"><span class="dot"></span>Test mode · nothing is created or charged <span class="tag-mig">needs a migration</span></div>
+        <div class="body">
+          <div class="card" style="width:300px">
+            <div class="card-h"><b>Setup</b><div class="r small muted">4 of 5</div></div>
+            <div style="padding:12px 16px 0"><div class="prog"><i style="width:80%"></i></div></div>
+            <ul class="chk big" style="margin-top:8px"><li class="done"><i>✓</i>Key made</li><li class="done"><i>✓</i>Instructions sent</li><li class="done"><i>✓</i>Field map<span class="end">14 / 14</span></li><li class="now"><i></i>First test passed</li><li class="done"><i>✓</i>First live lead</li></ul>
+          </div>
+          <div class="card flex1">
+            <div class="card-h"><b>4 · Send a test post</b><div class="r"><span class="btn sm o">Edit test lead</span><span class="btn sm p">Send a test post</span></div></div>
+            <div class="scroll"><div class="card-b gap">
+              <div class="res"><div class="t"><span class="chip ok">Accepted</span><b>Test 2 · 11:44 am</b><span class="end">0.4 s</span></div><p>Would make Martha Reyes in Term Life · National, stage New, first dial queued.</p><div class="row small muted">Checked: key · campaign open · TX licence · phone · consent · DNC · duplicate</div></div>
+              <div class="res"><div class="t"><span class="chip bad">Refused · invalid phone</span><b>Test 1 · 11:42 am</b><span class="end">0.2 s</span></div><p>Their phone arrives as <span class="m">ph_home</span>, which wasn't read.</p><div class="fix"><span>Fixed: <b>ph_home</b> is now read as the phone.</span><span class="chip ok">Fixed</span></div></div>
+              <div class="row"><span class="pulse"></span><span class="small muted">Listening for QuoteWizard's own test post…</span></div>
+            </div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B6 · Health tab</h2><span>per-vendor health table + what keeps getting refused</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a>Vendors <span class="c">6</span></a><a class="on">Health</a><a>Activity</a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status warn"><span class="dot"></span>QuoteWizard's accepted share fell from 94% to 71% this week</div>
+        <div class="body col">
+          <div class="card flex1">
+            <div class="card-h"><b>Vendor health</b><div class="r"><span class="seg sm"><span>Today</span><span class="on">7 days</span><span>30 days</span></span></div></div>
+            <div class="scroll"><table>
+              <thead><tr><th>Vendor</th><th>Health</th><th class="r-end">Posts</th><th class="r-end">Accepted</th><th>Last 7 days</th><th class="r-end">Spend</th><th class="r-end">First dial</th><th>Top refusal</th></tr></thead>
+              <tbody>
+                <tr><td>SmartFinancial</td><td><span class="chip ok">Healthy</span></td><td class="r-end">431</td><td class="r-end">96%</td><td><span class="spark"><i style="height:60%"></i><i style="height:72%"></i><i style="height:66%"></i><i style="height:80%"></i><i style="height:74%"></i><i style="height:90%"></i><i style="height:84%"></i></span></td><td class="r-end">$9,108</td><td class="r-end">31 s</td><td>Already in the system</td></tr>
+                <tr><td>MediaAlpha</td><td><span class="chip ok">Healthy</span></td><td class="r-end">322</td><td class="r-end">93%</td><td><span class="spark"><i style="height:50%"></i><i style="height:58%"></i><i style="height:70%"></i><i style="height:62%"></i><i style="height:66%"></i><i style="height:72%"></i><i style="height:68%"></i></span></td><td class="r-end">$5,382</td><td class="r-end">44 s</td><td>State not licensed</td></tr>
+                <tr class="h"><td>QuoteWizard</td><td><span class="chip warn">Falling</span></td><td class="r-end">208</td><td class="r-end">71%</td><td><span class="spark"><i style="height:80%"></i><i style="height:84%"></i><i style="height:78%"></i><i style="height:50%"></i><i style="height:44%"></i><i style="height:40%"></i><i style="height:46%"></i></span></td><td class="r-end">$2,220</td><td class="r-end">52 s</td><td>Invalid phone</td></tr>
+                <tr><td>EverQuote</td><td><span class="chip info">Testing</span></td><td class="r-end">6</td><td class="r-end">100%</td><td><span class="spark"><i style="height:10%"></i><i style="height:10%"></i><i style="height:10%"></i><i style="height:10%"></i><i style="height:10%"></i><i style="height:30%"></i><i style="height:20%"></i></span></td><td class="r-end">$0.00</td><td class="r-end">—</td><td>—</td></tr>
+                <tr><td>Digital Media Solutions</td><td><span class="chip">Paused</span></td><td class="r-end">94</td><td class="r-end">88%</td><td><span class="spark"><i style="height:50%"></i><i style="height:48%"></i><i style="height:52%"></i><i style="height:40%"></i><i style="height:4%"></i><i style="height:4%"></i><i style="height:4%"></i></span></td><td class="r-end">$2,075</td><td class="r-end">58 s</td><td>No consent words</td></tr>
+                <tr><td>Datalot</td><td><span class="chip bad">Revoked</span></td><td class="r-end">0</td><td class="r-end">—</td><td><span class="spark"><i style="height:4%"></i><i style="height:4%"></i><i style="height:4%"></i><i style="height:4%"></i><i style="height:4%"></i><i style="height:4%"></i><i style="height:4%"></i></span></td><td class="r-end">$0.00</td><td class="r-end">—</td><td>—</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="card" style="flex:none">
+            <div class="card-h"><b>What keeps getting refused · 7 days</b></div>
+            <div class="split" style="gap:0">
+              <div class="reason"><span class="n">58</span><div><b>Invalid phone</b><small>QuoteWizard · ph_home not read</small></div><span class="end btn sm p">Fix field map</span></div>
+              <div class="reason"><span class="n">19</span><div><b>State not licensed</b><small>MediaAlpha · NV and NM</small></div><span class="end btn sm o">Add a licence</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B7 · Vendor page › Key tab · rotate and revoke in one place</h2><span>both actions live on the key tab; revoke asks for the name inline</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling › Lead posting</div>
+        <div class="head"><h3>QuoteWizard</h3><nav class="tabs"><a>Setup <span class="c">5 / 5</span></a><a>Health</a><a>Activity</a><a class="on">Key</a></nav><div class="acts"><span class="btn o">Pause</span></div></div>
+        <div class="status"><span class="dot"></span>Key used 11 min ago</div>
+        <div class="body">
+          <div class="card flex1"><div class="scroll"><div class="card-b">
+            <div class="fsec"><h4>Current key</h4><p>Made 2 Nov by Dana Avery · last used 11 min ago from 3 addresses</p><div class="copy" style="max-width:420px"><span class="v">ins_live_••••2c9e</span><span class="small muted" style="padding-right:8px">full key never shown again</span></div></div>
+            <div class="fsec"><h4>Rotate</h4><p>Makes a new key, shown once. Choose when the old one stops.</p>
+              <div class="row"><span class="seg"><span class="on">Stop old key now</span><span>Keep it 24 hours</span></span><span class="tag-mig">needs a migration</span><span class="sp"></span><span class="btn o">Rotate key</span></div></div>
+            <div class="fsec"><h4>Revoke</h4><p>Every post with this key is refused from now on. Leads and history stay.</p>
+              <div class="row"><span class="input" style="width:260px">Type QuoteWizard to confirm</span><span class="btn danger d">Revoke key</span></div></div>
+          </div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>B8 · Empty, loading, error</h2><span>the empty state is the checklist itself, so a new owner sees the whole path</span></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Vendors</b></div><div class="card-b"><b style="font-size:16px">Connect your first vendor</b><ul class="chk" style="margin:10px 0"><li class="now"><i></i>Name the vendor and campaign</li><li><i></i>Make their key</li><li><i></i>Send instructions</li><li><i></i>Match fields, test, go live</li></ul><span class="btn hl">+ Connect a vendor</span></div></div>
+      <div class="card"><div class="card-h"><b>Vendors</b></div><div class="card-b vgrid" style="grid-template-columns:1fr 1fr"><div><div class="skel" style="width:60%"></div><div class="skel" style="height:6px"></div><div class="skel"></div><div class="skel" style="width:80%"></div></div><div><div class="skel" style="width:50%"></div><div class="skel" style="height:6px"></div><div class="skel"></div><div class="skel" style="width:70%"></div></div></div></div>
+      <div class="card"><div class="card-h"><b>Vendors</b></div><div class="empty"><b>Couldn't load your vendors</b><p>Posts are still being accepted.</p><span class="btn o">Try again</span></div></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════ OPTION C ═══════════════════════════════ -->
+  <div class="opt C">
+
+    <div class="sec"><h2>C1 · Integration studio: vendors · visual field map · live console</h2><span>three panes; each scrolls inside itself</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Studio</a><a>Traffic <span class="c">143</span></a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status warn"><span class="dot"></span>QuoteWizard · 2 fields not matched · 9 refused today</div>
+        <div class="body">
+          <div class="card" style="width:240px">
+            <div class="card-h"><b>Vendors</b><div class="r small muted">6</div></div>
+            <div class="scroll">
+              <div class="li"><div><b>SmartFinancial</b><small>Final Expense · TX</small></div><span class="end chip ok">Live</span></div>
+              <div class="li"><div><b>MediaAlpha</b><small>Med Supp · FL</small></div><span class="end chip ok">Live</span></div>
+              <div class="li on"><div><b>QuoteWizard</b><small>Term Life · National</small></div><span class="end chip warn">2</span></div>
+              <div class="li"><div><b>EverQuote</b><small>Final Expense · GA</small></div><span class="end chip info">Test</span></div>
+              <div class="li"><div><b>Digital Media Sol.</b><small>IUL · CA</small></div><span class="end chip">Paused</span></div>
+              <div class="li"><div><b>Datalot</b><small>Final Expense · OH</small></div><span class="end chip bad">Off</span></div>
+            </div>
+          </div>
+          <div class="card flex1">
+            <div class="card-h"><b>QuoteWizard · field map</b><div class="r"><span class="small muted">12 of 14 matched</span><span class="btn sm o">Paste a sample lead</span></div></div>
+            <div class="mp hd"><span>Their field · example</span><span></span><span>Our field or form question</span><span class="end">Rule</span></div>
+            <div class="scroll" style="padding:4px 0 8px">
+              <div class="grp-h">Contact</div>
+              <div class="mp"><div class="pill"><span class="m">fname</span><small>Martha</small></div><div class="ln"></div><div class="pill"><span>First name</span></div><span class="end small muted">name needed</span></div>
+              <div class="mp"><div class="pill"><span class="m">lname</span><small>Reyes</small></div><div class="ln"></div><div class="pill"><span>Last name</span></div><span class="end small muted">name needed</span></div>
+              <div class="mp"><div class="pill miss"><span class="m">ph_home</span><small>(512) 555-0142</small></div><div class="ln no"></div><div class="pill q"><span class="muted">Phone? suggested</span><small class="lnk">Accept</small></div><span class="end small muted">required</span></div>
+              <div class="mp"><div class="pill"><span class="m">st</span><small>TX</small></div><div class="ln"></div><div class="pill"><span>State</span></div><span class="end small muted">licensed</span></div>
+              <div class="mp"><div class="pill"><span class="m">dob</span><small>03/14/1956</small></div><div class="ln"></div><div class="pill"><span>Date of birth</span></div><span class="end small muted">US date</span></div>
+              <div class="grp-h">Consent</div>
+              <div class="mp"><div class="pill"><span class="m">tcpa_text</span><small>By clicking…</small></div><div class="ln"></div><div class="pill"><span>Consent words</span></div><span class="end small muted">required</span></div>
+              <div class="mp"><div class="pill"><span class="m">client_ip</span><small>73.12.4.9</small></div><div class="ln"></div><div class="pill"><span>Consent IP</span></div><span class="end small muted">required</span></div>
+              <div class="mp"><div class="pill"><span class="m">trusted_form</span><small>cert.trusted…</small></div><div class="ln"></div><div class="pill"><span>Consent certificate</span></div><span class="end small muted">kept</span></div>
+              <div class="grp-h">Term life intake form <span class="tag-mig">needs a migration</span></div>
+              <div class="mp"><div class="pill"><span class="m">coverage_amt</span><small>250000</small></div><div class="ln"></div><div class="pill"><span>Coverage wanted</span><small>$250,000</small></div><span class="end small muted">number</span></div>
+              <div class="mp"><div class="pill"><span class="m">tobacco</span><small>N</small></div><div class="ln"></div><div class="pill"><span>Uses tobacco?</span><small>No</small></div><span class="end small muted">yes / no</span></div>
+              <div class="grp-h">Not read</div>
+              <div class="mp"><div class="pill miss"><span class="m">sub_id</span><small>QW-FB-0412</small></div><div class="ln no"></div><div class="pill q"><span class="muted">Keep as a note, or ignore</span></div><span class="end small muted">optional</span></div>
+            </div>
+            <div class="savebar"><span>1 change</span><span class="sp"></span><span class="btn sm g">Discard</span><span class="btn sm p">Save and re-test</span></div>
+          </div>
+          <div class="card" style="width:330px">
+            <div class="card-h"><b>Console</b><div class="r"><span class="seg sm"><span class="on">Test</span><span>Live</span></span></div></div>
+            <div class="scroll">
+              <div class="con-h">Last request · 11:42 am<span class="chip bad">Refused</span></div>
+              <div class="con">POST /api/post/ellery-fields
+Authorization: Bearer ins_live_••••2c9e
+{
+  "fname": "Martha",
+  "ph_home": "(512) 555-0142",
+  "st": "TX",
+  "tcpa_text": "By clicking…",
+  "client_ip": "73.12.4.9"
+}</div>
+              <div class="con-h">Reply · 422 · 0.2 s</div>
+              <div class="con">{
+  "accepted": false,
+  "reason_code": "invalid_phone",
+  "message": "No usable ten-digit
+    US phone number was supplied."
+}</div>
+              <div style="padding:12px 14px"><div class="res"><p style="font-size:12px">ph_home isn't read. Read it as the phone and replay this request.</p><span class="btn sm p">Fix and replay</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C2 · Connect a vendor · steps 1–2 in the studio</h2><span>a draft vendor appears in the list; the centre pane becomes the stepper</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Studio</a><a>Traffic</a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status"><span class="dot"></span>Setting up a new vendor · nothing is live yet</div>
+        <div class="body">
+          <div class="card" style="width:240px"><div class="card-h"><b>Vendors</b></div><div class="scroll">
+            <div class="li on"><div><b>New vendor</b><small>draft</small></div><span class="end chip info">Setup</span></div>
+            <div class="li"><div><b>SmartFinancial</b><small>Final Expense · TX</small></div><span class="end chip ok">Live</span></div>
+            <div class="li"><div><b>MediaAlpha</b><small>Med Supp · FL</small></div><span class="end chip ok">Live</span></div>
+            <div class="li"><div><b>QuoteWizard</b><small>Term Life · National</small></div><span class="end chip warn">2</span></div>
+          </div></div>
+          <div class="card flex1">
+            <div class="card-h"><div class="steps" style="flex:1"><span class="done"><i>✓</i>Vendor &amp; campaign</span><em></em><span class="on"><i>2</i>Key</span><em></em><span><i>3</i>Instructions</span><em></em><span><i>4</i>Test</span></div></div>
+            <div class="scroll"><div class="card-b">
+              <div class="choice" style="background:var(--band)"><span class="ic">✓</span><div><b>EverQuote → Final Expense · GA</b><small>$20.00 per accepted lead · Final Expense intake form</small></div><span class="end lnk small">Change</span></div>
+              <div class="hr"></div>
+              <h4 style="font-size:16px;margin:0 0 4px">EverQuote's key</h4>
+              <p class="help" style="margin:0 0 12px">Shown once. We keep a fingerprint, never the key.</p>
+              <div class="keybox"><div class="m">ins_live_Ab7qR2xN5wE9tK3mC81d</div><div class="row" style="justify-content:center;margin-top:12px"><span class="btn p">Copy key</span><span class="btn o">Copy address and key</span></div></div>
+              <div class="fgrid" style="margin-top:16px">
+                <div class="full"><label class="l">Posting address</label><div class="copy"><span class="v">https://app.insurvas.com/api/post/ellery-fields</span><span class="btn sm o">Copy</span></div></div>
+                <div><label class="l">Only accept from these addresses <span class="tag-mig">needs a migration</span></label><div class="input ph">Any address</div></div>
+                <div><label class="l">Daily cap <span class="tag-mig">needs a migration</span></label><div class="input">300 leads</div></div>
+              </div>
+            </div></div>
+            <div class="card-f"><span class="btn g">Back</span><span class="sp"></span><span class="row small"><span class="check on"></span>I've copied the key</span><span class="btn p">Next: instructions</span></div>
+          </div>
+          <div class="card" style="width:330px"><div class="card-h"><b>Console</b></div><div class="empty"><div class="pulse" style="margin:0 auto 12px"></div><b>Waiting for EverQuote</b><p>Their first post appears here the moment it arrives.</p></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C3 · Steps 3–4 · instructions with code samples, then live test</h2><span>instructions as tabs a developer expects; the console catches their test</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Studio</a><a>Traffic</a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status"><span class="dot"></span>EverQuote · test mode <span class="tag-mig">needs a migration</span></div>
+        <div class="body">
+          <div class="card" style="width:240px"><div class="card-h"><b>Vendors</b></div><div class="scroll">
+            <div class="li on"><div><b>EverQuote</b><small>Final Expense · GA</small></div><span class="end chip info">Setup</span></div>
+            <div class="li"><div><b>SmartFinancial</b><small>Final Expense · TX</small></div><span class="end chip ok">Live</span></div>
+            <div class="li"><div><b>MediaAlpha</b><small>Med Supp · FL</small></div><span class="end chip ok">Live</span></div>
+          </div></div>
+          <div class="card flex1">
+            <div class="card-h"><div class="steps" style="flex:1"><span class="done"><i>✓</i>Vendor &amp; campaign</span><em></em><span class="done"><i>✓</i>Key</span><em></em><span class="on"><i>3</i>Instructions</span><em></em><span><i>4</i>Test</span></div></div>
+            <div class="row" style="padding:12px 16px;border-bottom:1px solid var(--rule)"><span class="seg sm"><span class="on">Overview</span><span>Fields</span><span>curl</span><span>JavaScript</span><span>PHP</span><span>Replies</span></span><span class="sp"></span><span class="btn sm o">Copy link</span><span class="btn sm o">Download PDF</span><span class="btn sm p">Email to vendor</span></div>
+            <div class="scroll"><div class="card-b">
+              <div class="doc">
+                <div class="hd"><span class="logo"></span><div><h6>Posting leads to Ellery &amp; Fields</h6><span class="muted">For EverQuote · Final Expense · GA</span></div></div>
+                <dl><dt>Address</dt><dd class="m">POST https://app.insurvas.com/api/post/ellery-fields</dd><dt>Key</dt><dd>Sent to you separately · send it as <span class="m">Authorization: Bearer</span></dd><dt>Test first</dt><dd>Add <span class="m">"test": true</span> until we switch you live <span class="tag-mig">needs a migration</span></dd><dt>Status calls</dt><dd>Give us an address and we tell you accepted / refused / contacted / sold <span class="tag-mig">needs a migration</span></dd></dl>
+                <div class="code">fetch("https://app.insurvas.com/api/post/ellery-fields", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json",
+             "Idempotency-Key": lead.id },
+  body: JSON.stringify({ first_name, last_name, phone, state, consent_text, consent_ip, test: true })
+})</div>
+              </div>
+            </div></div>
+            <div class="card-f"><span class="btn g">Back</span><span class="sp"></span><span class="btn o">Send a test from here</span><span class="btn p">Next: test</span></div>
+          </div>
+          <div class="card" style="width:330px">
+            <div class="card-h"><b>Console</b><div class="r"><span class="seg sm"><span class="on">Test</span><span>Live</span></span></div></div>
+            <div class="scroll">
+              <div class="con-h">EverQuote's test · 2:05 pm<span class="chip ok">Accepted</span></div>
+              <div class="con">{
+  "first_name": "Walter",
+  "last_name": "Briggs",
+  "phone": "4045550187",
+  "state": "GA",
+  "test": true, …
+}</div>
+              <div class="con-h">Reply · 200 · 0.4 s</div>
+              <div class="con">{
+  "accepted": true,
+  "reason_code": null,
+  "message": "Test only: nothing created",
+  "lead_id": null
+}</div>
+              <div style="padding:12px 14px"><span class="btn p" style="width:100%;justify-content:center">Go live</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C4 · Field mapper › paste a sample lead</h2><span>paste once; every field is auto-matched and the leftovers are pinned on top</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Studio</a><a>Traffic</a><a>Vendor guide</a></nav><div class="acts"><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status"><span class="dot"></span>QuoteWizard · Term Life · National</div>
+        <div class="body col"><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog wz">
+        <div class="wz-h"><h4>Match fields from a sample lead</h4><p>Paste one lead exactly as QuoteWizard sends it, or use their last post.</p>
+          <div class="seg sm"><span class="on">Use their last post · 11:42 am</span><span>Paste one</span></div></div>
+        <div class="wz-b split">
+          <div class="code" style="height:280px">{
+  "fname": "Martha",
+  "lname": "Reyes",
+  "ph_home": "(512) 555-0142",
+  "email_addr": "m.reyes@gmail.com",
+  "st": "TX",
+  "zip5": "78704",
+  "dob": "03/14/1956",
+  "coverage_amt": 250000,
+  "tobacco": "N",
+  "tcpa_text": "By clicking…",
+  "client_ip": "73.12.4.9",
+  "sub_id": "QW-FB-0412"
+}</div>
+          <div>
+            <div class="tile" style="margin-bottom:10px"><small>Matched for you</small><b>12 of 14 fields</b></div>
+            <div class="li" style="padding:8px 0"><span class="m">ph_home</span><span class="end">→ Phone</span></div>
+            <div class="li" style="padding:8px 0"><span class="m">coverage_amt</span><span class="end">→ Form › Coverage wanted</span></div>
+            <div class="li" style="padding:8px 0"><span class="m">tobacco</span><span class="end">→ Form › Uses tobacco?</span></div>
+            <div class="li" style="padding:8px 0"><span class="m">sub_id</span><span class="end muted">not matched</span></div>
+            <div class="help">Nothing is saved until you press Save on the map.</div>
+          </div>
+        </div>
+        <div class="wz-f"><span class="btn g">Cancel</span><span class="sp"></span><span class="btn p">Apply to the map</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C5 · Traffic tab · every post, with request and reply</h2><span>one-line log; picking a row opens the request/reply pair and its fix</span></div>
+    <div class="app tall">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a>Studio</a><a class="on">Traffic <span class="c">143</span></a><a>Vendor guide</a></nav><div class="acts"><span class="btn o">Export CSV</span><span class="btn hl">+ Connect a vendor</span></div></div>
+        <div class="status warn"><span class="dot"></span>15 refused today · top cause: invalid phone (QuoteWizard)</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><b>Posts</b><div class="r"><span class="seg sm"><span class="on">All</span><span>Accepted</span><span>Refused 15</span><span>Tests</span></span><span class="input sm">All vendors ▾</span></div></div>
+            <div class="scroll"><table>
+              <thead><tr><th>Time</th><th>Vendor</th><th>Lead</th><th>Result</th><th class="r-end">Took</th><th class="r-end">Charged</th></tr></thead>
+              <tbody>
+                <tr><td>11:46 am</td><td>SmartFinancial</td><td>Carl N. · TX</td><td><span class="chip ok">Accepted</span></td><td class="r-end">0.3 s</td><td class="r-end">$22.00</td></tr>
+                <tr><td>11:45 am</td><td>MediaAlpha</td><td>Rita O. · FL</td><td><span class="chip ok">Accepted</span></td><td class="r-end">0.4 s</td><td class="r-end">$18.00</td></tr>
+                <tr class="s"><td>11:42 am</td><td>QuoteWizard</td><td>Martha R. · TX</td><td><span class="chip bad">Invalid phone</span></td><td class="r-end">0.2 s</td><td class="r-end">$0.00</td></tr>
+                <tr><td>11:40 am</td><td>SmartFinancial</td><td>Jo L. · TX</td><td><span class="chip ok">Accepted</span></td><td class="r-end">0.3 s</td><td class="r-end">$22.00</td></tr>
+                <tr><td>11:38 am</td><td>EverQuote</td><td>Test lead</td><td><span class="chip info">Test passed</span></td><td class="r-end">0.4 s</td><td class="r-end">$0.00</td></tr>
+                <tr><td>11:31 am</td><td>QuoteWizard</td><td>Earl D. · OH</td><td><span class="chip bad">Invalid phone</span></td><td class="r-end">0.2 s</td><td class="r-end">$0.00</td></tr>
+                <tr><td>11:08 am</td><td>MediaAlpha</td><td>Joan P. · NV</td><td><span class="chip warn">State not licensed</span></td><td class="r-end">0.3 s</td><td class="r-end">$0.00</td></tr>
+                <tr><td>10:57 am</td><td>SmartFinancial</td><td>Ray K. · TX</td><td><span class="chip">Already in the system</span></td><td class="r-end">0.2 s</td><td class="r-end">$0.00</td></tr>
+              </tbody>
+            </table></div>
+          </div>
+          <div class="card" style="width:360px">
+            <div class="card-h"><b>Martha R. · 11:42 am</b><div class="r"><span class="chip bad">Refused</span></div></div>
+            <div class="scroll">
+              <div class="con-h">Request from QuoteWizard</div>
+              <div class="con">{ "fname": "Martha", "ph_home": "(512) 555-0142",
+  "st": "TX", … }</div>
+              <div class="con-h">Our reply · 422</div>
+              <div class="con">{ "accepted": false, "reason_code": "invalid_phone" }</div>
+              <div class="con-h">Status call to QuoteWizard <span class="tag-mig">needs a migration</span></div>
+              <div class="con">refused · delivered 11:42 am · 200</div>
+              <div style="padding:12px 14px"><div class="res"><p style="font-size:12px">8 more from QuoteWizard today failed the same way.</p><div class="row"><span class="btn sm p">Fix and replay all 9</span><span class="btn sm o">Tell vendor</span></div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C6 · Rotate and revoke from the vendor's menu</h2><span>the vendor row's "…" menu, then one dialog that shows recent use before you act</span></div>
+    <div class="app">
+      <div class="main">
+        <div class="crumb">Settings › Leads &amp; calling</div>
+        <div class="head"><h3>Lead posting</h3><nav class="tabs"><a class="on">Studio</a><a>Traffic</a><a>Vendor guide</a></nav></div>
+        <div class="status"><span class="dot"></span>Datalot · key used from 2 addresses in the last hour</div>
+        <div class="body"><div class="card" style="width:240px"><div class="card-h"><b>Vendors</b></div><div class="scroll"><div class="li on"><div><b>Datalot</b><small>Final Expense · OH</small></div><span class="end muted">…</span></div><div class="li"><div><b>SmartFinancial</b><small>Final Expense · TX</small></div></div></div></div>
+        <div style="padding-top:60px"><div class="menu"><div>Pause posting</div><div class="h">Rotate key</div><div>Resend instructions</div><hr><div style="color:var(--bad)">Revoke key</div></div></div><div class="card flex1"></div></div>
+      </div>
+      <div class="scrim"></div>
+      <div class="dialog" style="width:500px">
+        <h4>Revoke Datalot's key?</h4>
+        <p>Posts with <span class="m">ins_live_••••81d0</span> are refused from now on. Their 1,204 leads and history stay.</p>
+        <div class="tile" style="margin-bottom:12px"><small>Last hour</small><b>0 posts</b> <span class="small muted">· last post 12 Oct, 4:18 pm</span></div>
+        <label class="l">Type <b>Datalot</b> to confirm</label>
+        <div class="input">Datal</div>
+        <div class="err">Keep typing: the name must match.</div>
+        <div class="row" style="justify-content:flex-end;margin-top:14px"><span class="btn g">Cancel</span><span class="btn o">Rotate instead</span><span class="btn danger d">Revoke key</span></div>
+      </div>
+    </div>
+
+    <div class="sec"><h2>C7 · Empty, loading, error</h2><span>the empty studio offers a sample vendor to try the mapper with</span></div>
+    <div class="states">
+      <div class="card"><div class="card-h"><b>Studio</b></div><div class="empty"><div class="ic">⇄</div><b>No vendors connected</b><p>Connect one, or open a sample vendor to see how mapping and testing work.</p><div class="row" style="justify-content:center"><span class="btn hl">+ Connect a vendor</span><span class="btn o">Try a sample</span></div></div></div>
+      <div class="card"><div class="card-h"><b>Studio</b></div><div class="card-b" style="display:grid;grid-template-columns:1fr 2fr;gap:12px"><div><div class="skel"></div><div class="skel"></div><div class="skel" style="width:70%"></div></div><div><div class="skel"></div><div class="skel" style="width:80%"></div><div class="skel"></div><div class="skel" style="width:60%"></div></div></div></div>
+      <div class="card"><div class="card-h"><b>Console</b></div><div class="empty"><b>The console lost its connection</b><p>Posts are still being taken; new ones will show when it reconnects.</p><span class="btn o">Reconnect</span></div></div>
+    </div>
+  </div>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose</span></div>
+  <div class="pick">
+    <div class="rec"><b>A · Vendor list + vendor sheet (recommended)</b>The page is one calm table; everything about one vendor lives in its sheet, and a 4-step wizard gets a vendor from nothing to tested.
+      <ul><li>Vendor table with status, today, accepted share, price, last post</li><li>Wizard: campaign → key once → instructions page (copy, PDF, email) → real test post</li><li>Field map reaches the product form's questions; pasted sample guesses it</li><li>Refused tests and repeat refusals each carry a one-click fix</li><li>Status calls back to the vendor, daily cap, posting hours, test mode, 24 h rotation grace</li></ul></div>
+    <div><b>B · Setup checklist per vendor</b>Vendor cards show a five-step checklist and the next step; each vendor has its own page with Setup, Health, Activity and Key tabs.
+      <ul><li>Progress per vendor at a glance (key, instructions, map, test, first lead)</li><li>Health tab with 7-day trend, spend and first-dial speed per vendor</li><li>Same instructions page, field map and test as A</li><li>More clicks for owners with many live vendors</li></ul></div>
+    <div><b>C · Two-pane integration studio</b>A workbench: vendor list, a visual mapper with connecting lines, and a live request/reply console.
+      <ul><li>Every post visible as request and reply; fix and replay in place</li><li>Code samples in curl / JavaScript / PHP for the vendor</li><li>Strongest for technical owners; dense for everyone else</li><li>Shows raw lead data on screen, which today's critique asks to hide</li></ul></div>
+  </div>
+</div>
+<script>
+/* Board-only: draw the shared settings frame (top bar, icon rail, settings rail) into every .app. */
+(function () {
+  var rail = '<div class="find">Search settings · /</div>' +
+    '<h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a>' +
+    '<h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers</a>' +
+    '<h5>Selling</h5><a>Sales process</a><a>Application forms</a><a>AI assistant</a>' +
+    '<h5>Leads &amp; calling</h5><a class="on">Lead posting <span class="cnt">2</span></a><a>Dialing cadence</a><a>Calling windows</a><a>Inbound settings</a><a>Calendar &amp; availability</a><a>Pipelines &amp; outcomes</a>' +
+    '<h5>Integrations</h5><a>API keys &amp; webhooks</a><a>Browser extension</a>' +
+    '<h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a>' +
+    '<h5>Records</h5><a>Settings history</a>';
+  document.querySelectorAll(".app").forEach(function (app) {
+    if (app.querySelector(".top")) return;
+    app.insertAdjacentHTML("afterbegin",
+      '<div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>' +
+      '<div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>' +
+      '<nav class="srail">' + rail + '</nav>');
+  });
+})();
+</script>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

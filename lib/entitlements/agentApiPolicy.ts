@@ -84,6 +84,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/calendar-connections/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/calendar-connections/callback/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant"] },
   { sourceFile: "app/api/app/cadence/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter", "assistant"] },
+  { sourceFile: "app/api/app/cadence/history/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "setter", "assistant"] },
   { sourceFile: "app/api/app/suppression/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer", "assistant", "setter"] },
   // LA-2.3-3: DNC exemptions. Read like the list; record and revoke are owner-only inside the route.
   { sourceFile: "app/api/app/suppression/exemptions/route.ts", featureKey: "tcpa_checker", allowedRoles: ["owner", "producer", "assistant", "setter"] },
@@ -92,6 +93,11 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/lead-post-keys/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/lead-post-keys/[id]/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/lead-post-keys/activity/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/lead-post-keys/[id]/sample/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/lead-post-keys/[id]/test/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/lead-post-keys/board/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/lead-post-keys/guide/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/lead-post-keys/rejections/route.ts", featureKey: "lead_import", allowedRoles: ["owner"] },
   // Reading the diary. A setter books into it, so a setter can see it — booking into a calendar you
   // cannot see is how two setters put two people in the same hour.
   { sourceFile: "app/api/app/calendar/route.ts", featureKey: "outbound_dialing", allowedRoles: ["owner", "producer", "assistant", "setter"] },
@@ -192,6 +198,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/true-cpa/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/true-cpa/leads/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/true-cpa/compare/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
+  { sourceFile: "app/api/app/true-cpa/series/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/vendor-returns/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/vendor-returns/candidates/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
   { sourceFile: "app/api/app/vendor-returns/cost-per-policy/route.ts", featureKey: "true_cpa", allowedRoles: ["owner", "producer", "bookkeeper"] },
@@ -250,6 +257,8 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/retention/ladder-rules/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner"] },
   // Retention ladder (owner 2026-11-05): a person's steps on a case (call, fix, assign, close); the files do the rest.
   { sourceFile: "app/api/app/retention/cases/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer", "retention"] },
+  // Round 7 (2026-11-10): the Retention rail's counts — past-due cases, requests to act on, clients to call. No money.
+  { sourceFile: "app/api/app/retention/steps/route.ts", featureKey: "chargeback_radar", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.4 · New request (2026-11-05): find the policy to open a request on, by name, phone or number. Read only.
   { sourceFile: "app/api/app/retention/servicing/policies/route.ts", featureKey: "payment_repair", allowedRoles: ["owner", "producer", "retention"] },
   // LA-5.5 · the paper-bill campaign: log a call; owners save the talk track.
@@ -390,6 +399,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/extension/grant/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/extension/grants/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/extension/grants/revoke/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/extension/people/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/extension/fields/route.ts", featureKey: null },
   { sourceFile: "app/api/app/extension/fields/[key]/route.ts", featureKey: null },
   { sourceFile: "app/api/app/extension/map-miss/route.ts", featureKey: null },
@@ -408,6 +418,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/profile/languages/route.ts", featureKey: null },
   // Settings › Products (2026-10-27): owner-only switch, and the sold list every picker reads.
   { sourceFile: "app/api/app/settings/products/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/products/readiness/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/products/sold/route.ts", featureKey: null, allowedRoles: ["owner", "producer", "assistant"] },
   // The same person's own profile picture, the same rule: requireTenant() and the session's user only.
   { sourceFile: "app/api/app/profile/avatar/route.ts", featureKey: null },
@@ -481,6 +492,14 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/templates/default/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/templates/preview/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/templates/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/[id]/draft/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/[id]/results/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/[id]/share/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/[id]/test/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/[id]/versions/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/[id]/webhook/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/forms/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/templates/variants/[id]/route.ts", featureKey: "book_of_business", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/invite/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/licensed-states/route.ts", featureKey: null, allowedRoles: ["owner"] },
@@ -488,6 +507,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // LA-8.6: deactivate (open work handed over first), reactivate, and the member's own time zone.
   { sourceFile: "app/api/app/team/[userId]/deactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/reactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/team/[userId]/hand-over/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/timezone/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/access/route.ts", featureKey: "custom_team_access", allowedRoles: ["owner"] },

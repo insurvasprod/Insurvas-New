@@ -81,9 +81,9 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
               <tbody>
                 {shown.map((line) => (
                   <tr key={`${line.page}-${line.number}`}>
-                    <td className="text-right tabular-nums">{line.page}</td>
+                    <td className="text-right font-medium tabular-nums text-foreground">{line.page}</td>
                     <td className="text-right tabular-nums">{line.number}</td>
-                    <td className="whitespace-pre font-mono text-xs">{line.text}</td>
+                    <td className="whitespace-pre font-mono">{line.text}</td>
                   </tr>
                 ))}
               </tbody>
@@ -127,7 +127,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
             <thead>
               <tr>
                 <th className="sticky left-0 z-[2] w-[136px] bg-[var(--surface-alt)] text-right">Line</th>
-                {Array.from({ length: width }, (_, index) => <th key={index} className="min-w-[96px] max-w-[220px]">{columnLetter(index)}</th>)}
+                {Array.from({ length: width }, (_, index) => <th key={index} className="min-w-[96px]">{columnLetter(index)}</th>)}
               </tr>
             </thead>
             <tbody>
@@ -136,7 +136,7 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
                 const isHeader = mark?.line === line;
                 return (
                   <tr key={line} className="group">
-                    <td className="sticky left-0 z-[1] bg-[var(--surface)] text-right tabular-nums group-hover:bg-[var(--surface-alt)]">
+                    <td className="sticky left-0 z-[1] whitespace-nowrap bg-[var(--surface)] text-right font-medium tabular-nums text-foreground group-hover:bg-[var(--surface-alt)]">
                       <span className="inline-flex items-center justify-end gap-1.5">
                         {isHeader && <StatusChip tone={mark.read ? "info" : "neutral"} dot={false}>{mark.read ? "Header" : "Likely header"}</StatusChip>}
                         {line}
@@ -144,7 +144,8 @@ export default async function WholeCarrierFilePage({ params, searchParams }: { p
                     </td>
                     {Array.from({ length: width }, (_, index) => {
                       const value = cells[index] ?? "";
-                      return <td key={index} className={`max-w-[220px] truncate font-mono text-xs ${isHeader ? "font-semibold text-foreground" : ""}`} title={value}>{value}</td>;
+                      // A raw-file table keeps every column; each line is one line, plain (owner 2026-11-11): the header line says so in its chip.
+                      return <td key={index} className="whitespace-nowrap">{value}</td>;
                     })}
                   </tr>
                 );

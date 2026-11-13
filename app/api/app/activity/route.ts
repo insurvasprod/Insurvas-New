@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 
-import { ActivityForbiddenError, activityCsv, getActivityReport, markActivityClick, markActivityDisposition } from "@/lib/activityLog/service";
+import { ActivityForbiddenError, activityCsv, getActivityReport, getActivityWeeks, markActivityClick, markActivityDisposition } from "@/lib/activityLog/service";
 import { parseFlagFilter } from "@/lib/activityLog/types";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 import { scopeFor } from "@/lib/agency/visibility";
@@ -20,6 +20,12 @@ export async function GET(request: NextRequest) {
   const auth = await requireFeatureRole("outbound_dialing", ROLES, { prefetchScope: true });
   if (auth instanceof NextResponse) return auth;
   try {
+    // Reports round 7 (2·A): ?series=weeks is the window by week, for the line charts and the cards' sparklines;
+    // the same filters, role and scope as the report.
+    if (request.nextUrl.searchParams.get("series") === "weeks") {
+      const f = filters(request);
+      return NextResponse.json(await getActivityWeeks(auth.context.tenantId, auth.context.userId, auth.context.role, f, await scopeFor(auth.context)), { headers: { "Cache-Control": "no-store" } });
+    }
     // AG-0.5: a narrowed agency session sees the activity of the agents in its scope only (scope from the session).
     const report = await getActivityReport(auth.context.tenantId, auth.context.userId, auth.context.role, filters(request), await scopeFor(auth.context));
     if (request.nextUrl.searchParams.get("format") === "csv") return new NextResponse(activityCsv(report.rows), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=lead-activity.csv", "Cache-Control": "no-store" } });

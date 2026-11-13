@@ -98,27 +98,28 @@ export function CarrierFileAttribute({ fileId, suggestions, carriers, initial, r
       {suggestions.length === 0 ? (
         <EmptyState title="No layout matches this file" hint="Choose the carrier, type and date below yourself." />
       ) : (
-        <table className="portal-lead-table w-full min-w-[720px] text-left text-sm">
+        <table className="portal-lead-table w-full text-left text-sm">
           <thead>
             <tr>
               <th>Looks like</th>
-              <th className="w-[140px]">Type</th>
-              <th className="w-[240px]">Match</th>
-              <th className="w-[96px] text-right"><span className="sr-only">Actions</span></th>
+              <th>Type</th>
+              <th>Columns</th>
+              <th>Match</th>
+              <th className="text-right"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
+            {/* One line per layout (owner 2026-11-11): the layout's name is the carrier's tooltip, how well it matches its own
+                column, and the required columns it misses are said in the one chip (the list is its tooltip). */}
             {suggestions.map((suggestion, index) => (
               <tr key={suggestion.layoutKey + suggestion.fileType}>
+                <td className="whitespace-nowrap font-medium text-foreground" title={suggestion.layoutName}>{who(suggestion)}</td>
+                <td className="whitespace-nowrap">{FILE_TYPE_LABELS[suggestion.fileType]}</td>
+                <td className="whitespace-nowrap tabular-nums">{howWell(suggestion)}</td>
                 <td>
-                  <span className="block font-semibold text-foreground">{who(suggestion)}</span>
-                  <span className="block max-w-[360px] truncate text-xs text-muted-foreground" title={suggestion.layoutName}>{suggestion.layoutName}</span>
-                </td>
-                <td>{FILE_TYPE_LABELS[suggestion.fileType]}</td>
-                <td>
-                  <StatusChip tone={index === 0 && suggestion.fit >= 80 && !suggestion.missingRequired.length ? "good" : suggestion.missingRequired.length ? "warning" : "neutral"}>{suggestion.fit}%</StatusChip>
-                  <span className="block text-xs text-muted-foreground">{howWell(suggestion)}</span>
-                  {suggestion.missingRequired.length > 0 && <span className="block truncate text-xs text-[var(--warning-ink)]" title={suggestion.missingRequired.join(", ")}>Missing: {suggestion.missingRequired.join(", ")}</span>}
+                  <StatusChip tone={index === 0 && suggestion.fit >= 80 && !suggestion.missingRequired.length ? "good" : suggestion.missingRequired.length ? "warning" : "neutral"} title={suggestion.missingRequired.length ? `Missing: ${suggestion.missingRequired.join(", ")}` : undefined}>
+                    {suggestion.fit}%{suggestion.missingRequired.length ? ` · ${suggestion.missingRequired.length} missing` : ""}
+                  </StatusChip>
                 </td>
                 <td className="text-right"><Button type="button" variant="outline" size="sm" onClick={() => use(suggestion)}>Use this</Button></td>
               </tr>

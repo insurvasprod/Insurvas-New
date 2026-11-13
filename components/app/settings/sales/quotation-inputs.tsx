@@ -18,8 +18,8 @@ import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
 import { Field, control } from "@/components/app/settings/primitives";
 import { RatingInputs, type RatingTemplate } from "@/components/app/applications/quotes/rating-inputs";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/field";
 import { ToggleChip } from "@/components/ui/toggle-chip";
+import { ThreeWay } from "@/components/app/settings/sales-process/parts";
 import { TIER_LABEL } from "@/lib/applications/constants";
 import { US_STATES } from "@/lib/appointments/constants";
 import { quotationFieldsOf } from "@/lib/quotes/quotationTemplate";
@@ -84,21 +84,32 @@ export function QuoteInputsEditor({ draft, onChange, readOnly }: { draft: QuoteD
       f.on && f.help.trim() ? `Note: “${f.help.trim()}”` : null,
     ].filter(Boolean).join(" · ");
     return (
-      <li key={f.key} className="rounded-[12px] border border-[var(--border)] px-3 py-2.5">
-        <div className="flex flex-wrap items-center gap-3">
-          <Switch checked={f.on} disabled={readOnly || always} onChange={(next) => toggle(f, next)} label={`Ask ${f.label}`} />
-          <span className="min-w-0 flex-1 basis-48">
-            <span className={cn("block text-sm leading-[1.5] font-semibold tracking-[-0.02em]", f.on ? "text-[var(--ink)]" : "text-[var(--body)]")}>{f.label}</span>
-            {facts && <span className={cn("block", sub)}>{facts}</span>}
-          </span>
+      // Round 8 (sales-process board, Quote inputs): one row a field, the board's three-way choice on it.
+      <li key={f.key} className={cn("border-b border-[var(--border)] px-1 py-2 last:border-b-0", !f.on && "opacity-80")}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           {f.on && (
-            <span className="flex items-center gap-1.5">
-              <ToggleChip selected={always || f.required} disabled={readOnly || always} onClick={() => set(f.key, { required: !f.required })}>Required</ToggleChip>
-              <Button type="button" variant="ghost" size="icon" className="size-8" disabled={readOnly || index === 0} onClick={() => move(f.key, -1)} aria-label={`Move ${f.label} up`}><ArrowUp aria-hidden="true" /></Button>
-              <Button type="button" variant="ghost" size="icon" className="size-8" disabled={readOnly || index === asked.length - 1} onClick={() => move(f.key, 1)} aria-label={`Move ${f.label} down`}><ArrowDown aria-hidden="true" /></Button>
-              <Button type="button" variant="outline" size="sm" aria-expanded={open} onClick={() => setOpenKey(open ? null : f.key)}>{open ? "Done" : readOnly ? "Details" : "Edit"}</Button>
+            <span className="flex shrink-0 flex-col">
+              <Button type="button" variant="ghost" size="icon-xs" disabled={readOnly || index === 0} onClick={() => move(f.key, -1)} aria-label={`Move ${f.label} up`}><ArrowUp aria-hidden="true" /></Button>
+              <Button type="button" variant="ghost" size="icon-xs" disabled={readOnly || index === asked.length - 1} onClick={() => move(f.key, 1)} aria-label={`Move ${f.label} down`}><ArrowDown aria-hidden="true" /></Button>
             </span>
           )}
+          <span className="min-w-0 flex-1 basis-40">
+            <span className={cn("block truncate text-sm leading-[1.5] font-semibold tracking-[-0.02em]", f.on ? "text-[var(--ink)]" : "text-[var(--body)]")}>{f.label}</span>
+            {facts && <span className={cn("block truncate", sub)} title={facts}>{facts}</span>}
+          </span>
+          <ThreeWay
+            label={`How ${f.label} is asked`}
+            disabled={readOnly}
+            value={!f.on ? "off" : always || f.required ? "required" : "optional"}
+            onChange={(state) => {
+              if (always && state !== "required") return;
+              if (state === "off") toggle(f, false);
+              else if (!f.on) { toggle({ ...f, required: state === "required" }, true); }
+              else set(f.key, { required: state === "required" });
+            }}
+            options={always ? [{ key: "required", label: "Always asked" }] : [{ key: "off", label: "Not asked" }, { key: "optional", label: "Optional" }, { key: "required", label: "Required" }]}
+          />
+          {f.on && <Button type="button" variant="ghost" size="sm" aria-expanded={open} onClick={() => setOpenKey(open ? null : f.key)}>{open ? "Done" : readOnly ? "Details" : "Edit"}</Button>}
         </div>
         {open && (
           <div className="m-stagger">
@@ -111,9 +122,8 @@ export function QuoteInputsEditor({ draft, onChange, readOnly }: { draft: QuoteD
 
   return (
     <div className="flex flex-col gap-5">
-      <section aria-labelledby="qt-asked" className="flex flex-col gap-2">
-        <h4 id="qt-asked" className="m-0 text-label text-[var(--ink)]">Asked on the Quote step, in this order</h4>
-        <ol className="m-0 flex list-none flex-col gap-2 p-0">{asked.map(row)}</ol>
+      <section aria-label="Asked on the Quote step, in this order" className="flex flex-col gap-2">
+        <ol className="m-0 flex list-none flex-col p-0">{asked.map(row)}</ol>
         {!readOnly && (
           <div className="flex flex-wrap items-end gap-2 rounded-[12px] border border-dashed border-[var(--border-strong)] px-3 py-2.5">
             <Field label="Add your own input" htmlFor="qt-new-label" className="min-w-0 flex-1 basis-56">
@@ -130,10 +140,10 @@ export function QuoteInputsEditor({ draft, onChange, readOnly }: { draft: QuoteD
       </section>
 
       {notAsked.length > 0 && (
-        <section aria-labelledby="qt-not-asked" className="flex flex-col gap-2">
-          <h4 id="qt-not-asked" className="m-0 text-label text-[var(--ink)]">Not asked</h4>
-          <p className={cn("m-0", sub)}>Switch one on and it joins the end of the list above. Inputs that are off are not asked and not stored.</p>
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">{notAsked.map((f) => row(f, -1))}</ul>
+        <section aria-labelledby="qt-not-asked" className="flex flex-col gap-1">
+          <h4 id="qt-not-asked" className="m-0 text-xs font-semibold text-[var(--muted)]">Not asked</h4>
+          <p className={cn("m-0", sub)}>Make one Optional or Required and it joins the end of the list above. Inputs not asked are not stored.</p>
+          <ul className="m-0 flex list-none flex-col p-0">{notAsked.map((f) => row(f, -1))}</ul>
         </section>
       )}
     </div>

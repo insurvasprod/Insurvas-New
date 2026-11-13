@@ -9,8 +9,9 @@ import { InfoTip } from "@/components/ui/info-tip";
 import { EmptyState } from "@/components/ui/page-states";
 import { StatStrip, StatTile } from "@/components/ui/stat";
 import { TableCard } from "@/components/ui/table-card";
-import { ViewTabs } from "@/components/ui/view-tabs";
-import { ReportsSlot, useUrlTab } from "@/components/app/reports/reports-slot";
+import { useUrlTab } from "@/components/app/reports/reports-slot";
+import { FallbackPeopleChart, FallbackReasonChart } from "@/components/app/retention/retention-charts";
+import { showHref, type ShowMode } from "@/lib/reports/show";
 import { reportPeriod } from "@/lib/reports/periodText";
 import { MIN_SAVE_SAMPLE, rateText, SAVE_REASON_LABELS, SAVED_AFTER_DAYS, SCORECARD_PERIOD_LABELS, SCORECARD_PERIODS, type ReasonLine, type ScorecardPeriod } from "@/lib/retention/scorecard";
 import type { Scorecard } from "@/lib/retention/scorecardStore";
@@ -26,8 +27,16 @@ const pct = (r: number | null) => (r === null ? "—" : `${Math.round(r * 100)}%
  * Foundation pass (2026-11-03, docs/reports/FOUNDATION-PASS.md): the person's reasons and the owner's
  * list of people were two tables stacked under the strip; they are the view's tabs on the title line
  * (`?tab=reasons|people`), and a person in the list opens their reasons.
+ *
+ * Round 7 (owner pick 0·A/5·A, 2026-11-10): on the Retention rail, in the same frame as the ladder's scorecard;
+ * the page draws Everyone · a person's save rate on the title line as link tabs, and this board follows `?tab=`.
+ *
+ * Table · Chart (owner 2026-11-12: the switch on every Reports sub-page; the page puts it on the title line, opening on
+ * the chart as the ladder's scorecard does): `show` swaps each tab's table for its chart (retention-charts.tsx), the
+ * strips staying. Everyone is a bar a person, cases worked with the saved inside; a person's reasons are a bar a
+ * reason. Counts only: the save rate stays in the by-reason table.
  */
-export function RetentionScorecardBoard({ data, period, selected, isOwner, viewerId }: { data: Scorecard; period: ScorecardPeriod; selected: string | null; isOwner: boolean; viewerId: string }) {
+export function RetentionScorecardBoard({ data, period, selected, isOwner, viewerId, show = "chart" }: { data: Scorecard; period: ScorecardPeriod; selected: string | null; isOwner: boolean; viewerId: string; show?: ShowMode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [refreshing, startRefresh] = useTransition();
@@ -37,18 +46,23 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
     if (p !== "180") params.set("period", p);
     const r = next.rep === undefined ? selected : next.rep;
     if (r) params.set("rep", r);
+    if (show !== "chart") params.set("show", show);
     router.push(params.size ? `${pathname}?${params}` : pathname);
   };
   const card = data.cards.find((c) => c.userId === (selected ?? (isOwner ? data.cards[0]?.userId : viewerId))) ?? null;
   const team = isOwner && data.cards.length > 1;
   // ScA (owner pick 2026-11-05): an owner with a team lands on everyone, one row per person, and a name opens
   // that person's reasons; anyone else lands on their own reasons.
-  const { tab, setTab } = useUrlTab(["people", "reasons"] as const, team ? (selected ? "reasons" : "people") : "reasons");
+  const { tab } = useUrlTab(["people", "reasons"] as const, team ? (selected ? "reasons" : "people") : "reasons");
   const shown = team ? tab : "reasons";
   const sum = (pick: (c: Scorecard["cards"][number]) => number) => data.cards.reduce((total, c) => total + pick(c), 0);
   const teamReached = sum((c) => c.reached);
   const teamAttempts = sum((c) => c.attempts);
   const repHref = (rep: string) => { const params = new URLSearchParams(); if (period !== "180") params.set("period", period); params.set("rep", rep); params.set("tab", "reasons"); return `${pathname}?${params}`; };
+  // The chart's rows open the table under them (`?show=table`), every other param kept.
+  const tableOf = (href: string) => showHref(href, "table");
+  const here = () => { const params = new URLSearchParams(); if (period !== "180") params.set("period", period); if (selected) params.set("rep", selected); params.set("tab", shown); return `${pathname}?${params}`; };
+  const periodLabel = reportPeriod(data.from, data.to);
   const span = <>{reportPeriod(data.from, data.to)}{data.holdoutExcluded ? ` · ${data.holdoutExcluded.toLocaleString("en-US")} held-out ${data.holdoutExcluded === 1 ? "policy" : "policies"} left out` : ""}</>;
   const toolbar = (
     <DataToolbar actions={<RefreshButton onClick={() => startRefresh(() => router.refresh())} refreshing={refreshing} />}>
@@ -73,7 +87,6 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
 
   return (
     <>
-      {team && <ReportsSlot slot="lead"><ViewTabs label="Retention scorecard views" value={shown} onChange={setTab} tabs={[{ key: "people", label: "Everyone", count: data.cards.length }, { key: "reasons", label: card ? `${card.name}'s save rate` : "Save rate by reason" }]} /></ReportsSlot>}
       {shown === "people" && (
         <StatStrip label="The team's retention">
           <StatTile label="Policies worked" value={sum((c) => c.policiesWorked).toLocaleString("en-US")} footnote={`${teamAttempts.toLocaleString("en-US")} calls`} />
@@ -93,6 +106,16 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
         </StatStrip>
       )}
 
+      {show === "chart" && shown === "reasons" && card && (
+        <FallbackReasonChart toolbar={toolbar} name={card.name} lines={card.byReason} blended={card.blended} labels={SAVE_REASON_LABELS} periodLabel={periodLabel} tableHref={tableOf(repHref(card.userId))} />
+      )}
+
+      {show === "chart" && shown === "people" && (
+        <FallbackPeopleChart toolbar={toolbar} cards={data.cards} periodLabel={periodLabel} personHref={(userId) => tableOf(repHref(userId))} tableHref={tableOf(here())} />
+      )}
+
+      {/* The table view: the markup LA-5.8 pins (lib/retention/*.test.mjs), as it was. */}
+      {show === "table" && <>
       {shown === "reasons" && (
         <TableCard toolbar={toolbar} footer={<span>{span}</span>}>
           {card ? <ReasonTable lines={card.byReason} blended={card.blended} /> : null}
@@ -119,21 +142,22 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
               {/* Counts, never a blended save rate: that lives only in a person's by-reason table (LA-5.8). */}
               {data.cards.map((c) => (
                 <tr key={c.userId}>
-                  <td><Link href={repHref(c.userId)} className="font-semibold text-foreground underline-offset-2 hover:underline">{c.name}</Link></td>
-                  <td className="text-right tabular-nums">{c.policiesWorked.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{pct(c.contactRate)}</td>
-                  <td className="text-right tabular-nums">{c.blended.saved.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{c.blended.lost.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{c.blended.unreachable.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{c.blended.pending.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{c.conversions.toLocaleString("en-US")}</td>
-                  <td className="text-right tabular-nums">{money(c.premiumProtectedCents)}</td>
+                  <td className="whitespace-nowrap font-medium text-foreground"><Link href={repHref(c.userId)} className="underline-offset-2 hover:underline">{c.name}</Link></td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{c.policiesWorked.toLocaleString("en-US")}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{pct(c.contactRate)}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{c.blended.saved.toLocaleString("en-US")}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{c.blended.lost.toLocaleString("en-US")}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{c.blended.unreachable.toLocaleString("en-US")}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{c.blended.pending.toLocaleString("en-US")}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{c.conversions.toLocaleString("en-US")}</td>
+                  <td className="whitespace-nowrap text-right tabular-nums">{money(c.premiumProtectedCents)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </TableCard>
       )}
+      </>}
     </>
   );
 }
@@ -141,14 +165,14 @@ export function RetentionScorecardBoard({ data, period, selected, isOwner, viewe
 function ReasonTable({ lines, blended }: { lines: ReasonLine[]; blended: ReasonLine }) {
   if (!lines.length) return <EmptyState title="No cases in this period" hint="A case is one policy worked for one reason." />;
   const row = (l: ReasonLine, label: string, total = false) => (
-    <tr key={label} className={total ? "font-semibold" : undefined}>
-      <td className="text-foreground">{label}</td>
-      <td className="text-right tabular-nums">{l.cases.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.unreachable.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.saved.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.lost.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{l.pending.toLocaleString("en-US")}</td>
-      <td className="text-right tabular-nums">{rateText(l)}</td>
+    <tr key={label} data-total={total || undefined}>
+      <td className="whitespace-nowrap font-medium text-foreground">{label}</td>
+      <td className="whitespace-nowrap text-right tabular-nums">{l.cases.toLocaleString("en-US")}</td>
+      <td className="whitespace-nowrap text-right tabular-nums">{l.unreachable.toLocaleString("en-US")}</td>
+      <td className="whitespace-nowrap text-right tabular-nums">{l.saved.toLocaleString("en-US")}</td>
+      <td className="whitespace-nowrap text-right tabular-nums">{l.lost.toLocaleString("en-US")}</td>
+      <td className="whitespace-nowrap text-right tabular-nums">{l.pending.toLocaleString("en-US")}</td>
+      <td className="whitespace-nowrap text-right tabular-nums">{rateText(l)}</td>
     </tr>
   );
   return (

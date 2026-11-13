@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { NoteField } from "@/components/ui/note-field";
 import { useState, type ReactNode } from "react";
 import { Check } from "lucide-react";
@@ -50,34 +49,119 @@ const phoneText = (raw: string) => {
 const nameOf = (row: CaseRow) => (row.clientName ? personName(row.clientName) : row.policyNumber);
 
 /**
- * The header's primary (this step's next action) and More: assign (owner), close without a save, the policy. On
- * the What to do tab the primary is left out: it only linked to the tab you are on, beside the tab's own button
- * (walk 2026-11-05: "Take the payment" over "Payment taken").
+ * The title line's primary and ⋯ (round 7, owner pick 1·A, 2026-11-10; mockup boards 1·1 and 1·4). The primary is the
+ * case's one everyday act, the same on every tab: "Log the call" (a dialog), or for a lost case "Close to win-back"
+ * (a confirm). ⋯: Add a note, Assign (owner), Close without a save, Open the policy. After a close the page moves
+ * to the next case in the list it came from (`nextHref`), and the toast names it.
  */
-export function CaseActions({ row, isOwner, owners, readOnly, onDoTab = false }: { row: CaseRow; isOwner: boolean; owners: Array<{ id: string; name: string }>; readOnly: boolean; onDoTab?: boolean }) {
+export function CaseActions({ row, isOwner, owners, readOnly, unreachableAfter, nextHref = null, nextName = null }: {
+  row: CaseRow; isOwner: boolean; owners: Array<{ id: string; name: string }>; readOnly: boolean; unreachableAfter: number;
+  nextHref?: string | null; nextName?: string | null;
+}) {
   const [closing, setClosing] = useState(false);
   const [assigning, setAssigning] = useState(false);
   const [losing, setLosing] = useState(false);
+  const [calling, setCalling] = useState(false);
+  const [noting, setNoting] = useState(false);
   const router = useRouter();
-  const base = `/app/retention/${row.id}`;
   const policy = { label: "Open the policy", href: `/app/policies/carrier/${row.carrierId}/${encodeURIComponent(row.policyNumber)}` };
   if (readOnly || !isOpen(row)) return <MoreMenu items={[policy]} />;
+  const onward = (said: string) => {
+    notify.done(nextName ? `${said} Next: ${nextName}.` : said);
+    router.push(nextHref ?? "/app/retention");
+  };
   return (
     <>
       {row.step === "lost"
         // Closing a lost case is final: a confirm that names the client, never one click (critique A2).
         ? <Button type="button" onClick={() => setLosing(true)}>Close to win-back</Button>
-        : onDoTab ? null : <Button asChild><Link href={`${base}?tab=do`}>{row.status === "waiting_on_carrier" ? "What's left" : row.nextAction}</Link></Button>}
-      {losing && <LostDialog row={row} onClose={() => setLosing(false)} onDone={() => { setLosing(false); router.push("/app/retention"); }} />}
+        : <Button type="button" onClick={() => setCalling(true)}>Log the call</Button>}
+      {losing && <LostDialog row={row} onClose={() => setLosing(false)} onDone={() => { setLosing(false); onward("Closed. The client goes to win-back after the cooling-off."); }} />}
       <MoreMenu items={[
+        { label: "Add a note", onSelect: () => setNoting(true) },
         isOwner && { label: "Assign", onSelect: () => setAssigning(true) },
-        { label: "Log a call", href: `${base}?tab=calls` },
         { label: "Close without a save", onSelect: () => setClosing(true) },
         policy,
       ]} />
-      {closing && <CloseDialog row={row} onClose={() => setClosing(false)} onDone={() => { setClosing(false); router.push("/app/retention"); }} />}
+      <LogCallDialog row={row} unreachableAfter={unreachableAfter} open={calling} onOpenChange={setCalling} />
+      <NoteDialog row={row} open={noting} onOpenChange={setNoting} />
+      {closing && <CloseDialog row={row} onClose={() => setClosing(false)} onDone={() => { setClosing(false); onward("Closed without a save."); }} />}
       {assigning && <AssignDialog row={row} owners={owners} onClose={() => setAssigning(false)} onDone={() => { setAssigning(false); router.refresh(); }} />}
     </>
+  );
+}
+
+/** Log a call (round 7: a dialog from the title line, the call step and the Calls tab; was a form on the tab). */
+export function LogCallDialog({ row, unreachableAfter, open, onOpenChange }: { row: CaseRow; unreachableAfter: number; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const router = useRouter();
+  const [outcome, setOutcome] = useState<ContactOutcome | "">("");
+  const [did, setDid] = useState<ActionTaken>("none");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const choices = actionsFor(outcome, []);
+  const close = (next: boolean) => { onOpenChange(next); if (!next) { setOutcome(""); setDid("none"); setNote(""); setError(null); } };
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>Log a call with {nameOf(row)}</DialogTitle>
+          {/* The number to dial, copyable: never a raw tel: link (the dialer's gates). */}
+          <DialogDescription>{row.phone ? <span className="select-all font-semibold tabular-nums text-foreground">{phoneText(row.phone)}</span> : "No phone on file: find a number on the application, or ask the carrier."}</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <Field label="What happened" htmlFor="cc-outcome" required>
+            <select id="cc-outcome" className={control} value={outcome} onChange={(e) => { const next = e.target.value as ContactOutcome | ""; setOutcome(next); setDid(defaultActionFor(next, [])); }}>
+              <option value="">Choose…</option>
+              {CONTACT_OUTCOMES.map((o) => <option key={o} value={o}>{CONTACT_OUTCOME_LABELS[o]}</option>)}
+            </select>
+          </Field>
+          {outcome && !isUnreached(outcome) && (
+            <Field label="What you did" htmlFor="cc-did"><select id="cc-did" className={control} value={did} onChange={(e) => setDid(e.target.value as ActionTaken)}>{choices.map((a) => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}</select></Field>
+          )}
+          <Field label="Note" htmlFor="cc-note"><NoteField id="cc-note" maxLength={2000} value={note} onChange={setNote} /></Field>
+          <p className="m-0 text-xs text-muted-foreground">{row.contactAttempts ? `${row.contactAttempts} ${row.contactAttempts === 1 ? "try" : "tries"} without reaching them · unreachable after ${unreachableAfter}` : `Unreachable after ${unreachableAfter} tries without reaching them`}</p>
+          {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => close(false)}>Cancel</Button>
+          <Button type="button" disabled={!outcome || busy} onClick={async () => {
+            if (!outcome) return;
+            setBusy(true); setError(null);
+            try {
+              await act({ action: "call", id: row.id, outcome, did: isUnreached(outcome) ? "none" : did, note: note.trim() || null });
+              notify.done(isUnreached(outcome) && row.contactAttempts + 1 >= unreachableAfter ? `Logged. ${unreachableAfter} tries without reaching them: marked unreachable.` : "Logged.");
+              close(false); router.refresh();
+            } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
+          }}>{busy ? "Saving…" : "Log the call"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/** Add a note (round 7: a dialog from ⋯ and the foot of What to do; was a box on the page). Dictation stays inside. */
+export function NoteDialog({ row, open, onOpenChange }: { row: CaseRow; open: boolean; onOpenChange: (open: boolean) => void }) {
+  const router = useRouter();
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const close = (next: boolean) => { onOpenChange(next); if (!next) { setNote(""); setError(null); } };
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent size="md">
+        <DialogHeader><DialogTitle>Note on {nameOf(row)}</DialogTitle></DialogHeader>
+        <NoteField id="do-note" aria-label="Note" maxLength={2000} rows={4} placeholder="What happened, what was promised…" value={note} onChange={setNote} />
+        {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => close(false)}>Cancel</Button>
+          <Button type="button" disabled={busy || !note.trim()} onClick={async () => {
+            setBusy(true); setError(null);
+            try { await act({ action: "note", id: row.id, note: note.trim() }); notify.done("Note saved."); close(false); router.refresh(); } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
+          }}>{busy ? "Saving…" : "Save the note"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -214,7 +298,7 @@ const PAID_HOW = ["Card over the phone", "Bank draft run again", "Carrier's paym
  * not on a second page with its own tracker (critique D1): its next step, what the carrier needs, and the
  * reinstate-or-sell-new comparison beside the files' facts.
  */
-export function WhatToDo({ row, reinstatement, readOnly }: { row: CaseRow; reinstatement: ReinstatementRow | null; readOnly: boolean }) {
+export function WhatToDo({ row, reinstatement, readOnly, unreachableAfter, ifNothing }: { row: CaseRow; reinstatement: ReinstatementRow | null; readOnly: boolean; unreachableAfter: number; ifNothing: string }) {
   const router = useRouter();
   const fixes = SERVICING[row.reason] ?? [];
   const [form, setForm] = useState<RequestType | null>(null);
@@ -222,7 +306,10 @@ export function WhatToDo({ row, reinstatement, readOnly }: { row: CaseRow; reins
   const [error, setError] = useState<string | null>(null);
   const [checked, setChecked] = useState<string[]>([]);
   const [picked, setPicked] = useState<string | null>(null);
+  // Round 7: the note is written in its dialog; this one only rides along with a fix (none is typed here now).
   const [note, setNote] = useState("");
+  const [calling, setCalling] = useState(false);
+  const [noting, setNoting] = useState(false);
   // "Payment taken" captures what was taken, so the next person knows before the file catches up (critique C3).
   const [paying, setPaying] = useState(false);
   const [amount, setAmount] = useState("");
@@ -238,15 +325,6 @@ export function WhatToDo({ row, reinstatement, readOnly }: { row: CaseRow; reins
       await act({ action: "fix", id: row.id, kind, note: [paid, note.trim()].filter(Boolean).join(" · ") || null, ...(cents !== null ? { amount_cents: cents } : {}), ...(items ? { items } : {}) });
       notify.done(kind === "checklist" ? "Saved." : "Noted. It stays here until a carrier file shows it.");
       setNote(""); setPaying(false); setAmount("");
-      router.refresh();
-    } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
-  };
-  const saveNote = async () => {
-    setBusy(true); setError(null);
-    try {
-      await act({ action: "note", id: row.id, note: note.trim() });
-      notify.done("Note saved.");
-      setNote("");
       router.refresh();
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   };
@@ -266,7 +344,6 @@ export function WhatToDo({ row, reinstatement, readOnly }: { row: CaseRow; reins
   const meaning = row.evidence.status ? STATUS_MEANING[String(row.evidence.status)] : null;
   const called = Boolean(row.lastContactAt || row.lastCall || row.contactAttempts > 0);
   const fixed = row.status === "waiting_on_carrier" || Boolean(row.servicingRequestId);
-  const base = `/app/retention/${row.id}`;
   const script = SCRIPT[row.reason];
 
   // The pieces a step can hold: the call, the fixes, the payment fields, the wait for the file.
@@ -275,27 +352,37 @@ export function WhatToDo({ row, reinstatement, readOnly }: { row: CaseRow; reins
       {/* With no phone on file, "call the client" is a dead end: say where to find a number (critique C2). */}
       {!row.phone && <p className="m-0 text-sm text-[var(--warning-ink)]">No phone on file: find a number on the application, or ask the carrier.</p>}
       {script && <p className="m-0 rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm text-foreground"><span className="text-xs font-semibold text-muted-foreground">Say </span>&ldquo;{script}&rdquo;</p>}
-      {open && <div><Button asChild size="sm" variant="outline"><Link href={`${base}?tab=calls`}>Log the call</Link></Button></div>}
+      {open && <div><Button type="button" size="sm" onClick={() => setCalling(true)}>Log the call</Button></div>}
     </>
   );
-  const payingFields = open && paying && (
-    // What was taken, in place (critique C3): the amount, how and when; the next carrier file proves it.
-    <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-3" role="group" aria-label="The payment taken">
-      <Field label="Amount ($)" htmlFor="paid-amount" error={amountOk ? undefined : "An amount like 63.48"}><input id="paid-amount" inputMode="decimal" autoComplete="off" className={control} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
-      <Field label="How" htmlFor="paid-how"><select id="paid-how" className={control} value={paidHow} onChange={(e) => setPaidHow(e.target.value)}>{PAID_HOW.map((h) => <option key={h}>{h}</option>)}</select></Field>
-      <Field label="When" htmlFor="paid-on"><input id="paid-on" type="date" className={control} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} /></Field>
-      <div className="flex flex-wrap justify-end gap-2 sm:col-span-3">
-        <Button type="button" variant="outline" onClick={() => setPaying(false)}>Cancel</Button>
-        <Button type="button" disabled={busy || !amountOk || !paidOn} onClick={() => void record("payment_taken")}>{busy ? "Saving…" : "Record the payment"}</Button>
-      </div>
-    </div>
+  // What was taken (critique C3): the amount, how and when, in its dialog (round 7, board 1·3); the file proves it.
+  const payingDialog = open && (
+    <Dialog open={paying} onOpenChange={(next) => { setPaying(next); if (!next) { setAmount(""); setError(null); } }}>
+      <DialogContent size="md">
+        <DialogHeader>
+          <DialogTitle>Payment taken</DialogTitle>
+          <DialogDescription>It stays here until a carrier file shows it.</DialogDescription>
+        </DialogHeader>
+        <div className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Amount ($)" htmlFor="paid-amount" error={amountOk ? undefined : "An amount like 63.48"}><input id="paid-amount" inputMode="decimal" autoComplete="off" className={control} value={amount} onChange={(e) => setAmount(e.target.value)} /></Field>
+            <Field label="When" htmlFor="paid-on"><input id="paid-on" type="date" className={control} value={paidOn} onChange={(e) => setPaidOn(e.target.value)} /></Field>
+          </div>
+          <Field label="How" htmlFor="paid-how"><select id="paid-how" className={control} value={paidHow} onChange={(e) => setPaidHow(e.target.value)}>{PAID_HOW.map((h) => <option key={h}>{h}</option>)}</select></Field>
+          {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => setPaying(false)}>Cancel</Button>
+          <Button type="button" disabled={busy || !amountOk || !paidOn} onClick={() => void record("payment_taken")}>{busy ? "Saving…" : "Record the payment"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
   const fixBody = (
     <>
-      {payingFields}
-      {open && !paying && (
+      {open && (
         <div className="flex flex-wrap items-center gap-2">
-          {(row.step === "payment_problem" || row.step === "pending_lapse") && <Button type="button" size="sm" disabled={busy} onClick={() => setPaying(true)}>Payment taken</Button>}
+          {(row.step === "payment_problem" || row.step === "pending_lapse") && <Button type="button" size="sm" disabled={busy} onClick={() => setPaying(true)}>Record the payment</Button>}
           {fixes.map((f) => <Button key={f.type} type="button" size="sm" variant={row.step === "paperwork" ? "default" : "outline"} disabled={busy} onClick={() => setForm(f.type)}>{f.label}</Button>)}
           {row.step === "paperwork" && !fixes.length && <Button type="button" size="sm" disabled={busy} onClick={() => void record("sent_to_carrier")}>Sent to the carrier</Button>}
         </div>
@@ -387,15 +474,15 @@ export function WhatToDo({ row, reinstatement, readOnly }: { row: CaseRow; reins
         </ol>
         {checklist && open && <div><Button type="button" size="sm" variant="outline" disabled={busy || !checked.length} onClick={() => void record("checklist", checked)}>Save the checklist</Button></div>}
         {/* On a page a Callout goes to the bell: an error the user must fix stays beside the buttons (§11). */}
-        {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
-        {open && (
-          <div className="grid gap-2 border-t border-border pt-4">
-            <label htmlFor="do-note" className="text-sm font-semibold text-foreground">Note</label>
-            {/* Dictation is inside the box (owner 2026-11-06); each phrase is added to what is there. */}
-            <NoteField id="do-note" maxLength={2000} rows={3} placeholder="What happened, what was promised…" value={note} onChange={setNote} />
-            <div className="flex justify-end"><Button type="button" size="sm" variant="outline" disabled={busy || !note.trim()} onClick={() => void saveNote()}>{busy ? "Saving…" : "Save the note"}</Button></div>
-          </div>
-        )}
+        {error && !paying && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
+        {/* What happens if nothing is done (it was the progress card's line), and the note: a dialog since round 7. */}
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+          <p className="m-0 min-w-0 flex-1 text-sm text-muted-foreground">{ifNothing}</p>
+          {open && <Button type="button" size="sm" variant="outline" onClick={() => setNoting(true)}>Add a note</Button>}
+        </div>
+        {payingDialog}
+        <LogCallDialog row={row} unreachableAfter={unreachableAfter} open={calling} onOpenChange={setCalling} />
+        <NoteDialog row={row} open={noting} onOpenChange={setNoting} />
       </section>
       <section className={`${cardSurface} flex flex-col gap-2 p-5`} aria-label="From the files">
         <h2 className="m-0 text-sm font-semibold text-foreground">From the files</h2>
@@ -413,55 +500,10 @@ export function WhatToDo({ row, reinstatement, readOnly }: { row: CaseRow; reins
   );
 }
 
-/** Calls: log one (what you did follows what happened), then every call on this policy, newest first. */
-export function CaseCalls({ row, calls, unreachableAfter, readOnly }: { row: CaseRow; calls: CaseCall[]; unreachableAfter: number; readOnly: boolean }) {
-  const router = useRouter();
-  const [outcome, setOutcome] = useState<ContactOutcome | "">("");
-  const [did, setDid] = useState<ActionTaken>("none");
-  const [note, setNote] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const choices = actionsFor(outcome, []);
-  const canLog = isOpen(row) && !readOnly;
+/** Calls: every call on this policy, newest first. Logging one is the title line's "Log the call" (a dialog, round 7). */
+export function CaseCalls({ calls }: { calls: CaseCall[] }) {
   return (
     <>
-      {canLog && (
-        <form className={`${cardSurface} flex flex-col gap-4 p-5`} onSubmit={async (e) => {
-          e.preventDefault();
-          if (!outcome || busy) return;
-          setBusy(true); setError(null);
-          try {
-            await act({ action: "call", id: row.id, outcome, did: isUnreached(outcome) ? "none" : did, note: note.trim() || null });
-            notify.done(isUnreached(outcome) && row.contactAttempts + 1 >= unreachableAfter ? `Logged. ${unreachableAfter} tries without reaching them: marked unreachable.` : "Logged.");
-            setOutcome(""); setDid("none"); setNote(""); router.refresh();
-          } catch (err) { setError(errorText(err)); } finally { setBusy(false); }
-        }}>
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="m-0 text-base font-semibold text-foreground">Log this call</h2>
-            {/* The number to dial, beside the form (critique C6), copyable: never a raw tel: link (the dialer's gates). */}
-            {row.phone
-              ? <span className="select-all text-sm font-semibold tabular-nums text-foreground">{phoneText(row.phone)}</span>
-              : <span className="text-sm text-[var(--warning-ink)]">No phone on file: find one on the application or ask the carrier</span>}
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <Field label="What happened" htmlFor="cc-outcome" required>
-              <select id="cc-outcome" className={control} value={outcome} onChange={(e) => { const next = e.target.value as ContactOutcome | ""; setOutcome(next); setDid(defaultActionFor(next, [])); }}>
-                <option value="">Choose…</option>
-                {CONTACT_OUTCOMES.map((o) => <option key={o} value={o}>{CONTACT_OUTCOME_LABELS[o]}</option>)}
-              </select>
-            </Field>
-            {outcome && !isUnreached(outcome) && (
-              <Field label="What you did" htmlFor="cc-did"><select id="cc-did" className={control} value={did} onChange={(e) => setDid(e.target.value as ActionTaken)}>{choices.map((a) => <option key={a} value={a}>{ACTION_LABELS[a]}</option>)}</select></Field>
-            )}
-          </div>
-          <Field label="Note" htmlFor="cc-note"><NoteField id="cc-note"  maxLength={2000} value={note} onChange={setNote} /></Field>
-          {error && <p role="alert" className="m-0 text-sm text-[var(--error-ink)]">{error}</p>}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">{row.contactAttempts ? `${row.contactAttempts} ${row.contactAttempts === 1 ? "try" : "tries"} without reaching them · unreachable after ${unreachableAfter}` : `Unreachable after ${unreachableAfter} tries without reaching them`}</span>
-            <Button type="submit" disabled={!outcome || busy}>{busy ? "Saving…" : "Log the call"}</Button>
-          </div>
-        </form>
-      )}
       <TableCard className="lg:flex-1" footer={calls.length ? <span>{calls.length === 1 ? "1 call" : `${calls.length} calls`} on this policy, newest first</span> : undefined}>
         {calls.length === 0 ? <EmptyState title="No calls yet" hint="Each call on this policy shows here, including those logged on Lapse risk before." /> : (
           <table className="portal-lead-table w-full text-left text-sm">
@@ -469,11 +511,12 @@ export function CaseCalls({ row, calls, unreachableAfter, readOnly }: { row: Cas
             <tbody>
               {calls.map((c, i) => (
                 <tr key={`${c.at}-${i}`}>
-                  <td className="tabular-nums">{fileDay(c.at.slice(0, 10))}</td>
-                  <td>{CONTACT_OUTCOME_LABELS[c.outcome as ContactOutcome] ?? c.outcome.replace(/_/g, " ")}{c.source === "lapse_risk" ? <span className="block text-xs text-muted-foreground">logged on Lapse risk</span> : null}</td>
-                  <td>{c.did ? ACTION_LABELS[c.did as ActionTaken] ?? c.did : "—"}</td>
-                  <td><span className="line-clamp-2 whitespace-normal text-muted-foreground" title={c.note ?? undefined}>{c.note ?? "—"}</span></td>
-                  <td className="truncate">{c.by ?? "—"}</td>
+                  <td className="whitespace-nowrap font-medium tabular-nums text-foreground">{fileDay(c.at.slice(0, 10))}</td>
+                  {/* One line per row (owner 2026-11-11): where it was logged is the cell's tooltip. */}
+                  <td className="whitespace-nowrap" title={c.source === "lapse_risk" ? "Logged on Lapse risk" : undefined}>{CONTACT_OUTCOME_LABELS[c.outcome as ContactOutcome] ?? c.outcome.replace(/_/g, " ")}</td>
+                  <td className="whitespace-nowrap">{c.did ? ACTION_LABELS[c.did as ActionTaken] ?? c.did : <span className="text-muted-foreground">—</span>}</td>
+                  <td className="max-w-[360px] truncate" title={c.note ?? undefined}>{c.note ?? <span className="text-muted-foreground">—</span>}</td>
+                  <td className="whitespace-nowrap">{c.by ?? <span className="text-muted-foreground">—</span>}</td>
                 </tr>
               ))}
             </tbody>

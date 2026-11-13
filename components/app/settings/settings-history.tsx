@@ -1,233 +1,351 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
-import { ChevronRight, Download, RefreshCw } from "lucide-react";
+import { Fragment, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ChevronLeft, ChevronRight, Download } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DataToolbar, toolbarControl } from "@/components/ui/data-toolbar";
-import { EmptyState, NoMatches, SectionLoading } from "@/components/ui/page-states";
-import { PagedBody, PagedTableCard } from "@/components/ui/paged";
-import { StatusChip } from "@/components/ui/status-chip";
+import { ToolbarSearch } from "@/components/ui/data-toolbar";
+import { EmptyState, ErrorState, SectionLoading } from "@/components/ui/page-states";
+import { SelectMenu } from "@/components/ui/select-menu";
+import { Sheet } from "@/components/ui/sheet";
 import { TableCard } from "@/components/ui/table-card";
-import { Callout, SettingsSectionHeader, SettingsStack, st } from "@/components/app/settings/primitives";
+import { ToggleChip } from "@/components/ui/toggle-chip";
+import { InlineAction, StatusLine, type LineTone } from "@/components/app/settings/business/indexed-form";
+import { SettingsSectionHeader, SettingsStack, st } from "@/components/app/settings/primitives";
+import { ChangeDetail, byLine } from "@/components/app/settings/history/change-detail";
+import { DateRangeFilter, presetRange, rangeLabel, rangePhrase, type DateRange, type RangeKey } from "@/components/app/settings/history/date-range";
+import {
+  Avatar, ChangeWords, KindChip, agoWords, clock, dayHeading, dayKey, registryLabel, shortDate, whenWords,
+} from "@/components/app/settings/history/parts";
 import { cn } from "@/lib/utils";
-import { dateTime, viewerTimeZone } from "@/lib/format/dates";
+import { notify } from "@/lib/notify";
+import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
+import { viewerTimeZone } from "@/lib/format/dates";
 import { sectionHref } from "@/lib/settings/registry";
 import { SETTINGS_SECTIONS } from "@/lib/settings/sections";
+import { AUDITED_SECTIONS, type SettingsAuditEntry } from "@/lib/settingsAudit/constants";
 import {
-  AUDITED_SECTIONS, CHANGE_TYPE_LABEL, SETTINGS_CHANGE_TYPES, actorLine, changeLine, sectionLabel,
-  type SettingsAuditEntry, type SettingsChangeType,
-} from "@/lib/settingsAudit/constants";
+  CHANGE_KINDS, KIND_LABEL, KIND_TYPE, areaLabel, changeSentence, describeChange, homeOf, plainHistoryCsv,
+  saveKey, sectionFilterLabel, whoName, type ChangeKind, type IdNames,
+} from "@/lib/settingsAudit/describe";
 
 /**
- * LA-8.8 · Settings › Settings history. Who changed what, from what, to what, when — newest first,
- * filtered by section, person, change type and dates, exported as the same filtered set. Each row
- * opens the setting where it lives now. Read only: there is nothing here to edit or delete.
+ * LA-8.8 · Settings › Settings history, round 8 (owner pick 2026-11-12, one design). Every change
+ * anyone makes in Settings, one line a change: When · Who · Section · What changed in plain words
+ * ("Price band max $14.50 → $15.00") · Kind, grouped under a day line. Filters are chips (search,
+ * dates with presets, section, person, kind); on filters turn green and carry an ×. A row opens a
+ * right sheet with Before and After, what the setting does, what was saved with it and its earlier
+ * changes; "Open this setting" goes to its section. Read only: nothing here edits or deletes.
  *
- * `mine` draws a person's own entries (their profile), without the person filter.
+ * `mine` draws a person's own entries (My profile › History): no person filter, no Who column, and a
+ * change opens in place, since that list already sits in a sheet.
  */
 
-type Filters = { section: string; actor: string; type: "" | SettingsChangeType; from: string; to: string };
+type Filters = { range: DateRange; section: string; actor: string; kind: "" | ChangeKind };
 
-/** Where a section's settings live now; null for a hub with no screen (retention, LA-5.11). */
+/** Where a section's settings live now; null for a section with no screen of its own. */
 function hrefFor(sectionKey: string): string | null {
-  const section = SETTINGS_SECTIONS.find((s) => s.id === sectionKey);
+  const home = homeOf(sectionKey);
+  const section = SETTINGS_SECTIONS.find((s) => s.id === home);
   return section ? sectionHref(section) : null;
 }
 
-function query(filters: Filters, mine: boolean, format?: "csv") {
+/** The history's answer, as the app's cache keeps it under its URL (`query`). */
+type HistoryBody = { entries: SettingsAuditEntry[]; actors?: Array<{ id: string; name: string }>; names?: IdNames };
+
+function query(filters: Filters, mine: boolean) {
   const params = new URLSearchParams();
   if (filters.section) params.set("section", filters.section);
   if (filters.actor && !mine) params.set("actor", filters.actor);
-  if (filters.type) params.set("type", filters.type);
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
+  if (filters.kind) params.set("type", KIND_TYPE[filters.kind]);
+  if (filters.range.from) params.set("from", filters.range.from);
+  if (filters.range.to) params.set("to", filters.range.to);
   if (mine) params.set("mine", "1");
-  if (format) params.set("format", format);
   return `/api/app/settings-audit?${params.toString()}`;
 }
 
-/**
- * Entries by the same person, in the same section, in the same minute are one save (owner 2026-11-03):
- * a pipeline save that edits fourteen call outcomes is one row, opened to see each. Anything alone stays a row.
- */
-type HistoryItem = { kind: "one"; entry: SettingsAuditEntry } | { kind: "save"; id: string; entries: SettingsAuditEntry[] };
-function groupBySave(entries: SettingsAuditEntry[]): HistoryItem[] {
-  const order: Array<{ id: string; entries: SettingsAuditEntry[] }> = [];
-  const byKey = new Map<string, { id: string; entries: SettingsAuditEntry[] }>();
-  for (const entry of entries) {
-    const minute = Math.floor(new Date(entry.occurredAt).getTime() / 60_000);
-    const key = `${actorLine(entry)}|${entry.sectionKey}|${minute}`;
-    const hit = byKey.get(key);
-    if (hit) { hit.entries.push(entry); continue; }
-    const group = { id: key, entries: [entry] };
-    byKey.set(key, group);
-    order.push(group);
-  }
-  return order.map((group): HistoryItem => (group.entries.length > 1 ? { kind: "save", id: group.id, entries: group.entries } : { kind: "one", entry: group.entries[0] }));
-}
+/** The server's row cap (lib/settingsAudit/service.ts): at it, the count says "1,000+". */
+const ROW_CAP = 1000;
+const PAGE = 50;
+
+const todayKey = () => {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+};
 
 export function SettingsHistory({ mine = false }: { mine?: boolean }) {
-  // A "History" link from a section's "last changed" line opens this filtered to that section. The
-  // panel mounts in the browser (its tab is chosen from the hash), so the URL is there to read.
-  const [filters, setFilters] = useState<Filters>(() => {
+  const defaultKey: RangeKey = mine ? "90d" : "30d";
+  const today = useMemo(() => todayKey(), []);
+  // A "See every change" / History link (?history=<section>) opens this filtered to that section.
+  // The panel mounts in the browser (its tab is chosen from the hash), so the URL is there to read.
+  const initial = useMemo<Filters>(() => {
     const asked = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("history");
-    return { section: asked && /^[a-z][a-z0-9_-]{1,63}$/.test(asked) ? asked : "", actor: "", type: "", from: "", to: "" };
-  });
-  const [entries, setEntries] = useState<SettingsAuditEntry[] | null>(null);
-  const [actors, setActors] = useState<Array<{ id: string; name: string }>>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+    return { range: presetRange(mine ? "90d" : "30d", todayKey()), section: asked && /^[a-z][a-z0-9_-]{1,63}$/.test(asked) ? asked : "", actor: "", kind: "" };
+  }, [mine]);
+  const [filters, setFilters] = useState<Filters>(initial);
+  const [search, setSearch] = useState("");
+  const [body, setBody] = useState<HistoryBody | null>(() => seed<HistoryBody>(query(initial, mine))?.data ?? null);
+  const [actors, setActors] = useState<Array<{ id: string; name: string }>>(() => seed<HistoryBody>(query(initial, mine))?.data?.actors ?? []);
+  const [error, setError] = useState<{ pending: boolean } | null>(null);
+  const [shown, setShown] = useState(PAGE);
+  const [openId, setOpenId] = useState<string | null>(null);
   const zone = useMemo(() => viewerTimeZone(), []);
-  const [openSaves, setOpenSaves] = useState<ReadonlySet<string>>(new Set());
-  const items = useMemo(() => groupBySave(entries ?? []), [entries]);
 
+  // Through the app's cache (lib/client/resource-cache.ts): a repeat visit draws the last answer at once.
   const load = useCallback(
-    () =>
-      fetch(query(filters, mine), { cache: "no-store" })
-        .then(async (response) => {
-          const body = await response.json().catch(() => null);
-          if (!response.ok) throw new Error(body?.error ?? "Could not read the settings history");
-          return body;
-        })
-        .then((body) => {
-          setEntries(body.entries);
-          if (body.actors?.length) setActors(body.actors);
+    (fresh = false) =>
+      (fresh ? loadResource<HistoryBody>(query(filters, mine)) : readResource<HistoryBody>(query(filters, mine)))
+        .then((next) => {
+          setBody(next);
+          if (next.actors?.length) setActors(next.actors);
           setError(null);
         })
         .catch((e: unknown) => {
-          setError(e instanceof Error ? e.message : "Could not read the settings history");
+          const code = (e as { body?: { code?: string } } | null)?.body?.code;
+          setError({ pending: code === "schema_pending" });
         }),
     [filters, mine],
   );
-  useEffect(() => { void load(); }, [load]);
-  async function reload() {
-    setRefreshing(true);
-    try { await load(); } finally { setRefreshing(false); }
+  useEffect(() => {
+    const kept = peek<HistoryBody>(query(filters, mine))?.data;
+    if (kept) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- the kept answer, read from storage after hydration
+      setBody(kept);
+      if (kept.actors?.length) setActors((current) => (current.length ? current : kept.actors ?? []));
+    }
+    void load();
+  }, [filters, mine, load]);
+
+  const set = (patch: Partial<Filters>) => { setFilters((current) => ({ ...current, ...patch })); setShown(PAGE); setOpenId(null); };
+  const clearAll = () => { setFilters({ range: presetRange(defaultKey as Exclude<RangeKey, "custom">, today), section: "", actor: "", kind: "" }); setSearch(""); setShown(PAGE); };
+
+  const names = useMemo(() => body?.names ?? {}, [body]);
+  const entries = useMemo(() => body?.entries ?? [], [body]);
+  // Search reads the words on screen, not the stored keys.
+  const visible = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    if (!needle) return entries;
+    return entries.filter((entry) => `${changeSentence(describeChange(entry, names))} ${areaLabel(entry.sectionKey, registryLabel)} ${whoName(entry)}`.toLowerCase().includes(needle));
+  }, [entries, names, search]);
+  const page = visible.slice(0, shown);
+  const open = openId ? entries.find((entry) => entry.id === openId) ?? null : null;
+  const together = useMemo(() => (open ? entries.filter((entry) => entry.id !== open.id && saveKey(entry) === saveKey(open)) : []), [entries, open]);
+
+  const narrowed = Boolean(filters.section || filters.actor || filters.kind || search.trim());
+  const filtered = narrowed || filters.range.key !== defaultKey;
+  const capped = entries.length >= ROW_CAP;
+  const count = (n: number) => `${n.toLocaleString("en-US")}${capped && !search.trim() ? "+" : ""} ${n === 1 ? "change" : "changes"}`;
+  const personName = actors.find((a) => a.id === filters.actor)?.name ?? null;
+  const sectionName = filters.section ? sectionFilterLabel(filters.section, registryLabel) : null;
+
+  // Every audited section, plus any other a row came from, as the Section filter's choices.
+  const sectionKeys = useMemo(() => [...new Set([...AUDITED_SECTIONS.map((s) => s.key), ...entries.map((e) => e.sectionKey), ...(filters.section ? [filters.section] : [])])], [entries, filters.section]);
+  const sectionOptions = useMemo(
+    () => [{ value: "", label: "Every section" }, ...sectionKeys.map((key) => ({ value: key, label: sectionFilterLabel(key, registryLabel) })).sort((a, b) => a.label.localeCompare(b.label))],
+    [sectionKeys],
+  );
+
+  function exportCsv() {
+    const file = `settings-history-${today}.csv`;
+    const blob = new Blob([plainHistoryCsv(visible, names, registryLabel)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify.done(`Exported ${count(visible.length).replace("+", "")} · ${file}`);
   }
 
-  const set = (patch: Partial<Filters>) => setFilters((current) => ({ ...current, ...patch }));
-  const filtered = Boolean(filters.section || filters.actor || filters.type || filters.from || filters.to);
-  const header = mine ? null : <SettingsSectionHeader />;
-
-  if (error && !entries) {
-    return <SettingsStack>{header}<Callout tone="error" title={error} /></SettingsStack>;
+  /* ── the status line ── */
+  let tone: LineTone = "good";
+  let line: ReactNode;
+  const what = [sectionName, personName ? `by ${personName}` : null].filter(Boolean).join(" ");
+  if (error && !body) {
+    tone = error.pending ? "warning" : "danger";
+    line = error.pending
+      ? <>The settings history needs a database update · changes are still saved</>
+      : <>Couldn&rsquo;t load the history. <InlineAction onClick={() => void load(true)}>Try again</InlineAction></>;
+  } else if (!body) {
+    tone = "neutral";
+    line = <>Reading the settings history</>;
+  } else if (mine) {
+    tone = visible.length ? "good" : "neutral";
+    line = <>Your own changes · {visible.length.toLocaleString("en-US")} {rangePhrase(filters.range) || "in all"} · the owner sees everyone&rsquo;s in Settings history</>;
+  } else if (narrowed) {
+    tone = visible.length ? "good" : "neutral";
+    line = <>{count(visible.length)} {visible.length === 1 ? "matches" : "match"}{what ? ` · ${what}` : ""}, {rangeLabel(filters.range).replace(/^Last/, "last")}</>;
+  } else {
+    const newest = entries[0];
+    tone = entries.length ? "good" : "neutral";
+    line = <>{count(entries.length)} {rangePhrase(filters.range)}{newest ? ` · newest ${agoWords(newest.occurredAt)} by ${whoName(newest)}` : ""}</>;
   }
-  if (!entries) {
-    return <SettingsStack>{header}<TableCard><SectionLoading label="Loading the settings history" /></TableCard></SettingsStack>;
-  }
+  if (error && body) { tone = "danger"; line = <>Couldn&rsquo;t refresh the history. <InlineAction onClick={() => void load(true)}>Try again</InlineAction></>; }
 
-  return (
-    <SettingsStack className="min-h-0 flex-1">
-      {header}
-      <PagedTableCard
-        // An empty list centres its one message in the card instead of leaving a blank block under it.
-        bodyClassName={entries.length === 0 && !filtered ? "flex flex-col" : undefined}
-        total={items.length}
-        noun={items.length === entries.length ? "changes" : "changes and saves"}
-        // No title: in My profile the History tab and its switch already name this list, and on the
-        // Settings history page the section header does.
-        // Nothing to filter, export or refresh until there is a change to look at.
-        toolbar={entries.length === 0 && !filtered ? undefined : (
-          <DataToolbar
-            actions={
-              <>
-                <Button type="button" variant="outline" size="icon" disabled={entries.length === 0} aria-label="Export CSV" title="Export CSV" onClick={() => { window.location.href = query(filters, mine, "csv"); }}>
-                  <Download aria-hidden="true" />
-                </Button>
-                <Button type="button" variant="outline" size="icon" aria-label="Refresh" title="Refresh" disabled={refreshing} onClick={() => void reload()}>
-                  <RefreshCw aria-hidden="true" className={cn(refreshing && "animate-spin")} />
-                </Button>
-              </>
-            }
-          >
-            <select aria-label="Section" className={toolbarControl} value={filters.section} onChange={(e) => set({ section: e.target.value })}>
-              <option value="">All sections</option>
-              {AUDITED_SECTIONS.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
-            </select>
-            {!mine && (
-              <select aria-label="Changed by" className={toolbarControl} value={filters.actor} onChange={(e) => set({ actor: e.target.value })}>
-                <option value="">Anyone</option>
-                {actors.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </select>
-            )}
-            <select aria-label="Change" className={toolbarControl} value={filters.type} onChange={(e) => set({ type: e.target.value as Filters["type"] })}>
-              <option value="">Any change</option>
-              {SETTINGS_CHANGE_TYPES.map((t) => <option key={t} value={t}>{CHANGE_TYPE_LABEL[t]}</option>)}
-            </select>
-            <input type="date" aria-label="From" className={toolbarControl} value={filters.from} max={filters.to || undefined} onChange={(e) => set({ from: e.target.value })} />
-            <input type="date" aria-label="To" className={toolbarControl} value={filters.to} min={filters.from || undefined} onChange={(e) => set({ to: e.target.value })} />
-          </DataToolbar>
-        )}
-      >
-        {entries.length === 0 ? (
-          filtered
-            ? <NoMatches noun="changes" onClear={() => setFilters({ section: "", actor: "", type: "", from: "", to: "" })} />
-            : <div className="flex flex-1 items-center justify-center"><EmptyState title={mine ? "You have not changed any settings" : "No settings have been changed yet"} hint="Changes appear here as they happen." /></div>
-        ) : (
-          <table className={st.table}>
-            <thead>
-              <tr className={st.headRow}>
-                <th scope="col" className={cn(st.th, "w-[170px]")}>When</th>
-                <th scope="col" className={cn(st.th, "w-[220px]")}>Who</th>
-                <th scope="col" className={st.th}>Setting</th>
-                <th scope="col" className={st.th}>Change</th>
-                <th scope="col" className={st.th}><span className="sr-only">Open</span></th>
+  const exportButton = (
+    <Button type="button" variant="outline" disabled={!body || visible.length === 0} onClick={exportCsv}>
+      <Download aria-hidden="true" />{filtered && body ? `Export ${count(visible.length).replace("+", "")}` : "Export CSV"}
+    </Button>
+  );
+  const header = mine ? null : <SettingsSectionHeader actions={exportButton} />;
+
+  /* ── the filter row ── */
+  const chip = (label: string, onRemove: () => void) => <ToggleChip selected onRemove={onRemove}>{label}</ToggleChip>;
+  const toolbar = (
+    <>
+      {!mine && <ToolbarSearch value={search} onChange={(value) => { setSearch(value); setShown(PAGE); }} placeholder="Find a setting…" label="Find a setting" className="sm:w-56" />}
+      <DateRangeFilter value={filters.range} today={today} defaultKey={defaultKey} onChange={(range) => set({ range })} />
+      {filters.section
+        ? chip(sectionName ?? "Section", () => set({ section: "" }))
+        : <SelectMenu label="Section" value="" defaultValue="" options={sectionOptions.map((o) => (o.value === "" ? { ...o, triggerLabel: "Section" } : o))} onChange={(section) => set({ section })} searchPlaceholder="Find a section" panelAlign="start" />}
+      {!mine && (filters.actor
+        ? chip(personName ?? "Person", () => set({ actor: "" }))
+        : <SelectMenu label="Person" value="" defaultValue="" options={[{ value: "", label: "Anyone", triggerLabel: "Person" }, ...actors.map((a) => ({ value: a.id, label: a.name }))]} onChange={(actor) => set({ actor })} searchPlaceholder="Find a person" panelAlign="start" />)}
+      {filters.kind
+        ? chip(KIND_LABEL[filters.kind], () => set({ kind: "" }))
+        : <SelectMenu<"" | ChangeKind> label="Kind" value="" defaultValue="" options={[{ value: "", label: "Any kind", triggerLabel: "Kind" }, ...CHANGE_KINDS.map((k) => ({ value: k, label: KIND_LABEL[k] }))]} onChange={(kind) => set({ kind })} panelAlign="start" />}
+      {filtered && <InlineAction onClick={clearAll}>Clear all</InlineAction>}
+      <span className="ml-auto flex items-center gap-3 text-xs text-[var(--muted)]">
+        {body ? count(visible.length) : null}
+        {mine && exportButton}
+      </span>
+    </>
+  );
+
+  /* ── the list ── */
+  let content: ReactNode;
+  if (error && !body) {
+    content = error.pending
+      ? <EmptyState title="Not available yet" hint="The settings history turns on with a database update. Every change is still saved." />
+      : <ErrorState title="Couldn't load the history" detail="Filters stay as you set them." action={<Button type="button" variant="outline" onClick={() => void load(true)}>Try again</Button>} />;
+  } else if (!body) {
+    content = <SectionLoading label="Loading the settings history" rows={8} columns={mine ? 4 : 5} />;
+  } else if (visible.length === 0) {
+    content = filtered
+      ? <EmptyState title="No changes match" hint={`Nothing${sectionName ? ` in ${sectionName}` : ""}${personName ? ` by ${personName}` : ""}${search.trim() ? ` for “${search.trim()}”` : ""}${filters.range.key === "all" ? "" : ` ${rangePhrase(filters.range)}`}.`} action={<Button type="button" variant="outline" onClick={clearAll}>Clear filters</Button>} />
+      : <EmptyState title={mine ? "You haven't changed any settings yet" : "No changes yet"} hint="Changes appear here as they happen, with who made them." />;
+  } else if (mine && open) {
+    content = (
+      <div className="flex flex-col gap-3 p-4">
+        <div className="flex items-center gap-2">
+          <Button type="button" variant="ghost" size="sm" onClick={() => setOpenId(null)}><ChevronLeft aria-hidden="true" />All your changes</Button>
+          <span className="min-w-0 truncate text-sm font-semibold text-[var(--ink)]">{describeChange(open, names).label}</span>
+        </div>
+        <ChangeDetail entry={open} names={names} together={together} zone={zone} mine />
+        <OpenSetting entry={open} />
+      </div>
+    );
+  } else {
+    const columns = mine ? 5 : 6;
+    content = (
+      // One line a change: "What changed" takes the room the fixed columns leave (data-even off: the
+      // even spread would squeeze the sentence to an equal share).
+      <table className={st.table} data-even="off">
+        <thead>
+          <tr className={st.headRow}>
+            <th scope="col" className={cn(st.th, mine ? "w-[120px]" : "w-[96px]")}>When</th>
+            {!mine && <th scope="col" className={cn(st.th, "w-[180px]")}>Who</th>}
+            <th scope="col" className={cn(st.th, "w-[170px]")}>Section</th>
+            <th scope="col" className={st.th}>What changed</th>
+            <th scope="col" className={cn(st.th, "w-[110px]")}>Kind</th>
+            <th scope="col" className={cn(st.th, "w-[48px]")}><span className="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          {page.map((entry, at) => {
+            const change = describeChange(entry, names);
+            const who = whoName(entry);
+            const day = dayKey(entry.occurredAt, zone);
+            const dayRow = !mine && (at === 0 || dayKey(page[at - 1].occurredAt, zone) !== day) ? (
+              <tr>
+                <td colSpan={columns} className="border-t border-[var(--border)] bg-[var(--surface-alt)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)]">{dayHeading(day, zone)}</td>
               </tr>
-            </thead>
-            <PagedBody>
-              {items.map((item) => {
-                const entryRow = (entry: SettingsAuditEntry, nested: boolean) => {
-                  const href = hrefFor(entry.sectionKey);
-                  return (
-                    <tr key={entry.id} className={cn(nested && "bg-[var(--surface-alt)]/50")}>
-                      <td className={cn(st.td, "whitespace-nowrap")}>{nested ? "" : dateTime(entry.occurredAt, zone)}</td>
-                      <td className={st.td}>{nested ? "" : actorLine(entry)}{!nested && entry.source === "migration" && <span className={st.sub}>recorded before this log</span>}</td>
-                      <td className={cn(st.td, nested && "pl-8")}>
-                        {!nested && <span className="text-[var(--muted)]">{sectionLabel(entry.sectionKey)} → </span>}{entry.settingLabel}
-                        {entry.reason && <span className={st.sub}>{entry.reason}</span>}
-                      </td>
-                      <td className={cn(st.td, "break-words")}>
-                        <StatusChip tone="neutral" dot={false}>{CHANGE_TYPE_LABEL[entry.changeType]}</StatusChip> <span className="font-mono text-xs">{changeLine(entry)}</span>
-                      </td>
-                      <td className={cn(st.td, "whitespace-nowrap text-right")}>
-                        {href && <Button asChild variant="outline" size="sm"><a href={href}>Open</a></Button>}
-                      </td>
-                    </tr>
-                  );
-                };
-                if (item.kind === "one") return entryRow(item.entry, false);
-                const first = item.entries[0];
-                const open = openSaves.has(item.id);
-                const types = new Set(item.entries.map((entry) => entry.changeType));
-                const summary = types.size === 1 ? `${item.entries.length} ${CHANGE_TYPE_LABEL[first.changeType].toLowerCase()}` : `${item.entries.length} changes`;
-                return (
-                  <Fragment key={item.id}>
-                    <tr>
-                      <td className={cn(st.td, "whitespace-nowrap")}>{dateTime(first.occurredAt, zone)}</td>
-                      <td className={st.td}>{actorLine(first)}</td>
-                      <td className={st.td}>
-                        <button
-                          type="button"
-                          aria-expanded={open}
-                          onClick={() => setOpenSaves((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next; })}
-                          className="flex items-center gap-1.5 text-left font-semibold text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]"
-                        >
-                          <ChevronRight aria-hidden="true" className={cn("size-4 shrink-0 text-[var(--muted)] transition-transform duration-150", open && "rotate-90")} />
-                          <span><span className="font-normal text-[var(--muted)]">{sectionLabel(first.sectionKey)} → </span>{item.entries.length} changes in one save</span>
-                        </button>
-                      </td>
-                      <td className={st.td}><StatusChip tone="neutral" dot={false}>{summary}</StatusChip></td>
-                      <td className={st.td} />
-                    </tr>
-                    {open && item.entries.map((entry) => entryRow(entry, true))}
-                  </Fragment>
-                );
-              })}
-            </PagedBody>
-          </table>
-        )}
-      </PagedTableCard>
+            ) : null;
+            const selected = openId === entry.id;
+            return (
+              <Fragment key={entry.id}>
+                {dayRow}
+                <tr
+                  onClick={() => setOpenId(entry.id)}
+                  aria-selected={selected || undefined}
+                  className={cn("cursor-pointer transition-colors", selected ? "bg-[var(--primary-soft)]" : "hover:bg-[var(--hover-wash)]")}
+                >
+                  <td className={cn(st.td, "whitespace-nowrap text-[var(--muted)] tabular-nums")}>
+                    {mine ? (dayKey(entry.occurredAt, zone) === dayKey(new Date(), zone) ? `Today ${clock(entry.occurredAt, zone)}` : shortDate(entry.occurredAt, zone)) : clock(entry.occurredAt, zone)}
+                  </td>
+                  {!mine && (
+                    <td className={cn(st.td, "whitespace-nowrap text-[var(--ink)]")}>
+                      <span className="flex min-w-0 items-center gap-2"><Avatar name={who} /><span className="truncate">{who}</span></span>
+                    </td>
+                  )}
+                  <td className={cn(st.td, "whitespace-nowrap text-[var(--muted)]")}><span className="block max-w-[170px] truncate">{areaLabel(entry.sectionKey, registryLabel)}</span></td>
+                  <td className={cn(st.td, "max-w-0 w-full")}>
+                    <span className="block truncate" title={changeSentence(change)}><ChangeWords change={change} /></span>
+                  </td>
+                  <td className={st.td}><KindChip kind={change.kind} /></td>
+                  <td className={cn(st.td, "text-right")}>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Open: ${changeSentence(change)}, ${whenWords(entry.occurredAt, zone)}`}
+                      onClick={(event) => { event.stopPropagation(); setOpenId(entry.id); }}
+                    >
+                      <ChevronRight aria-hidden="true" className="text-[var(--muted)]" />
+                    </Button>
+                  </td>
+                </tr>
+              </Fragment>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  }
+
+  const listing = Boolean(body && visible.length && !(mine && open));
+  return (
+    <SettingsStack className="gap-3 lg:min-h-0 lg:flex-1">
+      {header}
+      <StatusLine tone={tone}>{line}</StatusLine>
+      <TableCard
+        className="min-h-[320px] lg:min-h-0 lg:flex-1"
+        bodyClassName="min-h-0 overflow-y-auto overscroll-contain"
+        toolbar={mine && open ? undefined : toolbar}
+        footer={listing ? (
+          <>
+            <span>Showing {Math.min(shown, visible.length).toLocaleString("en-US")} of {count(visible.length).replace(/ changes?$/, "")}</span>
+            {visible.length > shown && <Button type="button" variant="outline" size="sm" onClick={() => setShown((n) => n + PAGE)}>Load {Math.min(PAGE, visible.length - shown)} more</Button>}
+          </>
+        ) : undefined}
+      >
+        {content}
+      </TableCard>
+
+      {!mine && open && (
+        <Sheet
+          title={<span className="flex min-w-0 items-center gap-2.5"><Avatar name={whoName(open)} size="md" /><span className="truncate">{describeChange(open, names).label}</span></span>}
+          subtitle={`${byLine(describeChange(open, names), whoName(open))} · ${whenWords(open.occurredAt, zone)}`}
+          onClose={() => setOpenId(null)}
+          footer={
+            <>
+              <Button type="button" variant="outline" className="ml-auto" onClick={() => setOpenId(null)}>Close</Button>
+              <OpenSetting entry={open} button />
+            </>
+          }
+        >
+          <ChangeDetail entry={open} names={names} together={together} zone={zone} mine={false} />
+        </Sheet>
+      )}
     </SettingsStack>
   );
 }
+
+/** "Open this setting" — its section in Settings; plain words when it no longer has a page. */
+function OpenSetting({ entry, button = false }: { entry: SettingsAuditEntry; button?: boolean }) {
+  const href = hrefFor(entry.sectionKey);
+  if (!href) return <p className="m-0 text-xs text-[var(--muted)]">This setting no longer has a page in Settings.</p>;
+  if (button) return <Button asChild><a href={href}>Open this setting</a></Button>;
+  return <Button asChild variant="outline" className="self-start"><a href={href}>Open this setting</a></Button>;
+}
+

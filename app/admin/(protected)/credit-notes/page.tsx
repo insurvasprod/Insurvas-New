@@ -40,11 +40,11 @@ export default async function CreditNotesPage() {
   return (
     <div className="m-stagger flex w-full min-w-0 flex-col gap-6">
       <PageHeader
+        tabs={<BillingTabs />}
         title="Refunds & credits"
         description={`Refunds above ${formatCentsAsCurrency(thresholdCents)} need a second admin.`}
         actions={<RaiseCreditNotePicker invoices={paid} />}
       />
-      <BillingTabs />
 
       <StatStrip label="Credit note totals">
         <StatTile label="Credit notes" value={notes.length.toLocaleString("en-US")} footnote="all time" />

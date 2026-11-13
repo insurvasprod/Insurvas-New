@@ -91,7 +91,7 @@ export async function BookView(props: DashViewProps) {
         <ul className="m-0 flex min-h-0 flex-1 list-none flex-col flex-wrap content-start gap-2 overflow-hidden p-0 [&>li]:w-full">
           {data.files.map((file) => (
             <li key={file.id}>
-              <Link href={file.href} className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-[var(--surface-alt)] px-3 py-2.5 text-foreground no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-alt))]">
+              <Link href={file.href} className="flex min-w-0 flex-col gap-1.5 rounded-xl bg-[var(--surface-tile)] shadow-[inset_0_0_0_1px_var(--tile-edge)] px-3 py-2.5 text-foreground no-underline transition-colors hover:bg-[color-mix(in_srgb,var(--primary)_8%,var(--surface-tile))]">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-semibold">{file.carrierName ?? "Carrier not known"} · {fileTypeWord(file.fileType)}</span>
                   {file.where && <DashChip tone={file.where.tone as DashTone}>{file.where.label}</DashChip>}

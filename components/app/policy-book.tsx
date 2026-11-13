@@ -5,7 +5,6 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Download } from "lucide-react";
 
-import { MoneyBar } from "@/components/app/book/policy/money-bar";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -34,17 +33,19 @@ export const policyHref = (row: { carrierId: string; policyNumber: string }) => 
 export type PolicyListRow = BookRow & { money: ListMoney | null };
 type Saved = { id: string; name: string; query: string };
 
-/** The columns that sort (board 6's seven; Commission and Next date read across, so they don't). */
+/**
+ * The columns (owner 2026-11-11: one line per row, at most six columns, colour only in the Health chip). The product
+ * is the Carrier cell's tooltip, the one next date is the Health chip's, and the writing agent is the Policy cell's;
+ * the Agent filter still narrows by agent. Commission reads across, so it doesn't sort.
+ */
 const COLUMNS: Array<{ label: string; sort?: SortKey; className?: string; title?: string }> = [
   { label: "Policy", sort: "policy" },
   // Owner 2026-11-10: the client is its own column, not a line under the policy number, and carries no Provisional mark.
   { label: "Client" },
-  { label: "Carrier · product", sort: "carrier" },
-  { label: "Health", sort: "dpd", title: "Paid to, payments behind, or the policy's status; sorted by days behind" },
+  { label: "Carrier", sort: "carrier" },
+  { label: "Health", sort: "dpd", title: "Paid to, payments behind, or the policy's status; sorted by days behind. Hover a chip for the next date." },
   { label: "Premium", sort: "premium", className: "text-right", title: "Premium as the carrier bills it; sorted by its yearly amount" },
-  { label: "Commission", title: "First year: earned (green), advance not yet earned (amber), short (red), still to come" },
-  { label: "Next date", title: "The one date that matters now: next draft, grace end, first draft or anniversary" },
-  { label: "Agent", sort: "agent" },
+  { label: "Commission", title: "First year: earned, advance not yet earned, short, still to come" },
 ];
 
 /**
@@ -154,8 +155,8 @@ export function PolicyBook({ rows, strip, initialQuery, saved, savedAvailable, s
         <StatTile label="In force" value={strip ? strip.inForce.count.toLocaleString("en-US") : "—"} footnote={strip ? `${whole(strip.inForce.monthlyCents)} / month premium` : undefined} href="/app/policies?show=inforce" />
         <StatTile label="Commission this year" value={strip?.expectedThisYear ? whole(strip.expectedThisYear.cents) : "—"} footnote={!strip?.expectedThisYear ? "expected commission can't be read" : strip.expectedThisYear.unpriced ? `expected from the rate card · ${strip.expectedThisYear.unpriced.toLocaleString("en-US")} with no rate` : "expected from the rate card"} href="/app/policies?show=expected" />
         <StatTile label="Received so far" value={strip?.receivedThisYear !== null && strip?.receivedThisYear !== undefined ? whole(strip.receivedThisYear) : "—"} footnote={strip ? `on the statements, ${strip.year}` : undefined} href="/app/policies?show=received" />
-        <StatTile label="Advance at risk" value={atRisk && atRisk.cents !== null ? whole(atRisk.cents) : "—"} valueTone={atRisk?.cents ? "warning" : undefined} footnote={!atRisk ? "the ledger can't be read" : atRisk.cents === null ? (atRisk.unknown ? `${atRisk.unknown.toLocaleString("en-US")} advances with no months to spread them` : "no advance on file") : `on ${atRisk.policies.toLocaleString("en-US")} ${atRisk.policies === 1 ? "policy" : "policies"}${atRisk.unknown ? ` · ${atRisk.unknown.toLocaleString("en-US")} unknown` : ""}`} href="/app/policies?show=risk" />
-        <StatTile label="Short or late" value={strip?.short ? whole(strip.short.cents) : "—"} valueTone={strip?.short?.cents ? "danger" : undefined} footnote={!strip?.short ? "pay issues can't be read" : `${strip.short.policies.toLocaleString("en-US")} ${strip.short.policies === 1 ? "policy" : "policies"} · in Pay issues`} href="/app/policies?show=short" />
+        <StatTile label="Advance at risk" value={atRisk && atRisk.cents !== null ? whole(atRisk.cents) : "—"} footnote={!atRisk ? "the ledger can't be read" : atRisk.cents === null ? (atRisk.unknown ? `${atRisk.unknown.toLocaleString("en-US")} advances with no months to spread them` : "no advance on file") : <span title={atRisk.unknown ? `${atRisk.unknown.toLocaleString("en-US")} more with no months to spread them` : undefined}><StatusChip tone="warning">{atRisk.policies.toLocaleString("en-US")} {atRisk.policies === 1 ? "policy" : "policies"}</StatusChip></span>} href="/app/policies?show=risk" />
+        <StatTile label="Short or late" value={strip?.short ? whole(strip.short.cents) : "—"} footnote={!strip?.short ? "pay issues can't be read" : strip.short.cents ? <StatusChip tone="danger">{strip.short.policies.toLocaleString("en-US")} {strip.short.policies === 1 ? "policy" : "policies"}</StatusChip> : `${strip.short.policies.toLocaleString("en-US")} ${strip.short.policies === 1 ? "policy" : "policies"} · in Pay issues`} href="/app/policies?show=short" />
       </StatStrip>
 
       <TableCard
@@ -253,7 +254,6 @@ export function PolicyBook({ rows, strip, initialQuery, saved, savedAvailable, s
                     ) : column.label}
                   </th>
                 ))}
-                <th className="w-8"><span className="sr-only">Open</span></th>
               </tr>
             </thead>
             {/* Keyed by the chip, the sort and the filters (not the typed search, which would flicker per key): a new set
@@ -263,29 +263,18 @@ export function PolicyBook({ rows, strip, initialQuery, saved, savedAvailable, s
                 const href = row.href ?? policyHref(row);
                 const m = row.money;
                 return (
-                  <tr key={`${row.source ?? "carrier"}|${row.carrierId}|${row.policyNumber}`} className="group cursor-pointer" onClick={(event) => { if ((event.target as HTMLElement).closest("a, button")) return; router.push(href); }}>
-                    <td className="max-w-[160px]">
-                      <span className="block truncate font-mono text-sm font-semibold text-foreground">{row.policyNumber}</span>
+                  <tr key={`${row.source ?? "carrier"}|${row.carrierId}|${row.policyNumber}`} className="cursor-pointer" onClick={(event) => { if ((event.target as HTMLElement).closest("a, button")) return; router.push(href); }}>
+                    <td className="whitespace-nowrap font-medium text-foreground" title={row.agentName ? `Agent: ${row.agentName}` : row.source === "hand" ? "Entered by hand: no writing agent on file" : "No agent code mapped"}>
+                      <Link href={row.href ?? policyHref(row)} className="font-mono hover:underline">{row.policyNumber}</Link>
                     </td>
-                    <td className="max-w-[180px]">
-                      <span className={row.clientName ? "block truncate text-foreground" : "block truncate text-muted-foreground"} title={row.clientName ?? undefined}>{row.clientName ?? "No client linked"}</span>
+                    <td className="whitespace-nowrap">{row.clientName ?? <span className="text-muted-foreground">—</span>}</td>
+                    <td className="whitespace-nowrap" title={row.product ?? (row.source === "hand" ? "Entered by hand" : undefined)}>{row.carrierName}</td>
+                    <td className="whitespace-nowrap">{m ? <span title={[m.next ? `${m.next.label} ${shortDay(m.next.date)}` : null, row.statusRaw ? `The carrier's word: ${row.statusRaw}` : null].filter(Boolean).join(" · ") || undefined}><StatusChip tone={m.health.tone}>{m.health.label}</StatusChip></span> : <span className="text-muted-foreground">—</span>}</td>
+                    <td className="whitespace-nowrap text-right tabular-nums">{row.premiumCents === null ? <span className="text-muted-foreground">—</span> : `${money2(row.premiumCents)}${row.premiumMode ? MODE_SHORT[row.premiumMode] ?? "" : ""}`}</td>
+                    <td className="whitespace-nowrap tabular-nums">
+                      {m?.sentence ? m.sentence : <span className="text-muted-foreground">—</span>}
+                      {m?.addRate && (canAddRate ? <> · <Link href="/app/rate-card" className="hover:underline">Add the rate ›</Link></> : " · no rate on the Rate card")}
                     </td>
-                    <td className="max-w-[170px]">
-                      <span className="block truncate text-foreground" title={row.carrierName}>{row.carrierName}</span>
-                      <span className="block truncate text-xs text-muted-foreground" title={row.product ?? undefined}>{row.product ?? (row.source === "hand" ? "Entered by hand" : "—")}</span>
-                    </td>
-                    <td>{m ? <span title={row.statusRaw ? `The carrier's word: ${row.statusRaw}` : undefined}><StatusChip tone={m.health.tone}>{m.health.label}</StatusChip></span> : <span className="text-muted-foreground">—</span>}</td>
-                    <td className="text-right tabular-nums">{row.premiumCents === null ? "—" : <>{money2(row.premiumCents)}<span className="text-xs text-muted-foreground">{row.premiumMode ? MODE_SHORT[row.premiumMode] ?? "" : ""}</span></>}</td>
-                    <td className="min-w-[200px] max-w-[300px]">
-                      {m?.bar && <MoneyBar parts={m.bar} label={m.sentence} />}
-                      <span className={`mt-1 block truncate text-xs ${m?.bar ? "text-[var(--body)]" : "text-muted-foreground"}`} title={m?.sentence}>
-                        {m?.sentence ?? "—"}
-                        {m?.addRate && (canAddRate ? <> · <Link href="/app/rate-card" className="font-semibold text-[var(--accent-ink)] hover:underline">Add the rate</Link></> : " · no rate on the Rate card")}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap tabular-nums">{m?.next ? <><span className="text-muted-foreground">{m.next.label} </span><span className="text-foreground">{shortDay(m.next.date)}</span></> : <span className="text-muted-foreground">—</span>}</td>
-                    <td className="max-w-[150px]" title={row.agentName ?? (row.source === "hand" ? "Entered by hand: no writing agent on file" : "No agent code mapped")}><span className="block truncate">{row.agentName ?? <span className="text-muted-foreground">{row.source === "hand" ? "—" : "Not mapped"}</span>}</span></td>
-                    <td className="w-8 text-right"><Link href={row.href ?? policyHref(row)} aria-label={`Open policy ${row.policyNumber}`} className="text-muted-foreground group-hover:text-foreground">›</Link></td>
                   </tr>
                 );
               })}

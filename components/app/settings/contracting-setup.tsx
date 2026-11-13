@@ -314,7 +314,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
           </div>
           {/* The list takes all the room down to the footer; on a full page its rows share it, so the
               last row meets the footer with no blank band (owner, 29 Oct). */}
-          <ul ref={listRef} className="-mt-4 m-0 flex flex-1 list-none flex-col p-0">
+          <ul ref={listRef} data-guide="carriers-setup-list" className="-mt-4 m-0 flex flex-1 list-none flex-col p-0">
             {library.length === 0 && <li className="py-3 text-sm text-[var(--muted)]">No carrier matches. <a className="font-medium text-[var(--accent-ink)] hover:underline" href="mailto:support@insurvas.com?subject=Please%20add%20a%20carrier%20to%20the%20library">Ask Insurvas to add it</a></li>}
             {library.slice((shownPage - 1) * perPage, shownPage * perPage).map((carrier) => (
               <CarrierRow
@@ -339,7 +339,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
             </div>
             <span className="flex items-center gap-3">
               {status}
-              <Button type="button" disabled={mine.length === 0} onClick={() => setStep(2)}>Next: Set Up States →</Button>
+              <Button type="button" data-guide="carriers-setup-next" disabled={mine.length === 0} onClick={() => setStep(2)}>Next: Set Up States →</Button>
             </span>
           </footer>
         </section>
@@ -371,6 +371,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
                     (owner, 29 Oct: shorter and wider with the menu open, same design). */}
                 <ul
                   ref={statesRef}
+                  data-guide="states-setup-list"
                   aria-label="States"
                   style={stateGrid ? { gridTemplateColumns: `repeat(${stateGrid.cols}, minmax(0, 1fr))`, gridAutoRows: `${stateGrid.row}px` } : undefined}
                   className="m-0 grid list-none content-start auto-rows-[44px] gap-1 p-0 grid-cols-[repeat(auto-fill,minmax(96px,1fr))]"
@@ -449,7 +450,7 @@ export function ContractingSetup({ vault, setVault, salesAvailable, send, reload
             <Button type="button" variant="outline" onClick={() => setStep(1)}>← Back</Button>
             <span className="flex flex-wrap items-center gap-3">
               {status}
-              <Button type="button" disabled={chosenStates === 0 || saving} onClick={() => { writeStep(1); onFinish(); }}>Finish set-up</Button>
+              <Button type="button" data-guide="states-setup-finish" disabled={chosenStates === 0 || saving} onClick={() => { writeStep(1); onFinish(); }}>Finish set-up</Button>
             </span>
           </footer>
         </section>

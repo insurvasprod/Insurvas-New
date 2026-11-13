@@ -716,6 +716,9 @@ export type MappedAgent = { id: string; carrierId: string; carrierName: string; 
 export async function loadMatching(tenantId: string) {
   const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
   const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  // The carriers a code can be added for: the ones the upload form offers (LA-0.4, Settings › Carriers). Read
+  // beside the rest (perf pass 2026-11-09); it needs nothing of them.
+  const codeCarriersRead = fileCarrierChoices(tenantId).catch(() => []);
   const [reviews, links, current, maps, members, ladder, ai, carriers] = await Promise.all([
     // The whole review queue and every unmapped code, page by page: one request stops at 1,000.
     allRows(() => db().from("policy_match_review").select("id, carrier_id, policy_number, carrier_row, shortlist, created_at").eq("tenant_id", tenantId).eq("status", "open").order("created_at").order("id"), 10_000),
@@ -735,16 +738,20 @@ export async function loadMatching(tenantId: string) {
     }
   }
   const carrierName = new Map<string, string>((carriers.data ?? []).map((row: Loose) => [row.id, row.name]));
-  // The carriers a code can be added for: the ones the upload form offers (LA-0.4, Settings › Carriers).
-  const codeCarriers = await fileCarrierChoices(tenantId).catch(() => []);
   const contactIds = [...new Set((links.data ?? []).map((row: Loose) => row.contact_id).filter(Boolean))];
   const userIds = [...new Set([...(members.data ?? []).map((row: Loose) => row.user_id), ...(maps.data ?? []).map((row: Loose) => row.user_id)])];
-  const [contacts, users] = await Promise.all([
+  // A correction of an AI link by a person is a later human link superseding it.
+  const aiRows = (ai.data ?? []) as Loose[];
+  const supersededBy = aiRows.map((row) => row.superseded_by_id).filter(Boolean);
+  // The names, the provisional flags and the corrections need only the reads above: one round trip, not three.
+  const [codeCarriers, contacts, users, flagged, { data: corrections }] = await Promise.all([
+    codeCarriersRead,
     contactIds.length ? db().from("contacts").select("id, first_name, last_name").eq("tenant_id", tenantId).in("id", contactIds) : { data: [] },
     userIds.length ? db().from("users").select("id, name, email").in("id", userIds) : { data: [] },
+    // LA-4.9: a client built from a carrier's file is marked until confirmed (no flag before 20261008180000).
+    contactIds.length ? db().from("contacts").select("id").eq("tenant_id", tenantId).eq("provisional", true).in("id", contactIds) : { data: [], error: null },
+    supersededBy.length ? db().from("policy_match").select("id, method").in("id", supersededBy) : { data: [] },
   ]);
-  // LA-4.9: a client built from a carrier's file is marked until confirmed (no flag before 20261008180000).
-  const flagged = contactIds.length ? await db().from("contacts").select("id").eq("tenant_id", tenantId).eq("provisional", true).in("id", contactIds) : { data: [], error: null };
   const provisional = new Set<string>(flagged.error ? [] : (flagged.data ?? []).map((row: Loose) => row.id));
   const contactName = new Map<string, string>((contacts.data ?? []).map((row: Loose) => [row.id, `${row.first_name} ${row.last_name}${provisional.has(row.id) ? " (provisional)" : ""}`]));
   const userName = new Map<string, string>((users.data ?? []).map((row: Loose) => [row.id, row.name || row.email || row.id]));
@@ -759,10 +766,6 @@ export async function loadMatching(tenantId: string) {
     entry.policies++;
     unmapped.set(key, entry);
   }
-  // A correction of an AI link by a person is a later human link superseding it.
-  const aiRows = (ai.data ?? []) as Loose[];
-  const supersededBy = aiRows.map((row) => row.superseded_by_id).filter(Boolean);
-  const { data: corrections } = supersededBy.length ? await db().from("policy_match").select("id, method").in("id", supersededBy) : { data: [] };
   const humanCorrection = new Set((corrections ?? []).filter((row: Loose) => row.method === "human").map((row: Loose) => row.id));
 
   return {

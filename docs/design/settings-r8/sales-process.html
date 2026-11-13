@@ -1,0 +1,949 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sales Process</title>
+<!--kit-css-->
+<style>
+/*
+ * Settings round 8 — shared mockup kit. Every board links this file so all boards share one look.
+ * Tokens = the live app: light "C · White + olive lines" + gold third colour; dark = the live dark theme.
+ * Text 12 / 14 / 16 only; page title 24. Theme: <body class="light|dark">. Option: <body data-opt="A|B|C">.
+ */
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--board);color:var(--ink)}
+body.light{--board:#e9ecea;--board-ink:#0d4037;--board-line:#cdd6d1;--board-card:#fff;
+  --canvas:#fbfcfb;--card:#fff;--card-border:#cbd8d2;--band:#e9f2ee;--tile:#fff;--tile-edge:#d9e5df;--hover:#f1f7f4;--rule:#dbe6e1;
+  --border:#cbd8d2;--border-strong:#6d7f77;--ink:#0d4037;--body:#26332e;--muted:#4d5f58;
+  --primary:#07d6a0;--primary-hover:#08bf8b;--on-primary:#0d4037;--primary-soft:#dcfaf0;--accent-ink:#00735a;--ring:#008769;
+  --ok:#0c6633;--ok-s:#e0f3e7;--warn:#9a3d00;--warn-s:#fde8dc;--bad:#ab1f1f;--bad-s:#fdeaea;--info:#1d4f9a;--info-s:#e3edfa;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#8a5a00;--hl-soft:#fdf2d9;--hl-mark:#c98a12;
+  --backdrop:rgba(13,40,34,.38);--shadow:0 1px 0 rgba(13,64,55,.04);--overlay:0 2px 6px rgba(13,64,55,.08),0 28px 60px -12px rgba(13,64,55,.28);--code:#f4f8f6}
+body.dark{--board:#050b09;--board-ink:#f2f7f5;--board-line:#1d2b26;--board-card:#0d1714;
+  --canvas:#08110f;--card:#0d1714;--card-border:rgba(255,255,255,.09);--band:rgba(255,255,255,.04);--tile:rgba(255,255,255,.035);--tile-edge:rgba(255,255,255,.06);--hover:rgba(255,255,255,.04);--rule:#1b2a25;
+  --border:#22342e;--border-strong:#5f7a71;--ink:#f2f7f5;--body:#c9d6d1;--muted:#93a69f;
+  --primary:#07d6a0;--primary-hover:#2fe0b0;--on-primary:#0d4037;--primary-soft:#0f3a30;--accent-ink:#4fe3bb;--ring:#07d6a0;
+  --ok:#45c07d;--ok-s:#11291d;--warn:#f08a4b;--warn-s:#2e180c;--bad:#f0837c;--bad-s:#2d1412;--info:#7fb0ff;--info-s:#10203a;
+  --hl:#f2b33d;--on-hl:#0d4037;--hl-ink:#f5c562;--hl-soft:#2b2210;--hl-mark:#f2b33d;
+  --backdrop:rgba(0,0,0,.6);--shadow:none;--overlay:0 24px 64px rgba(0,0,0,.7);--code:#0a1412}
+body{--nav:#0d4037;--nav-ink:#eaf6f2;--nav-muted:#9fc4b8;--nav-line:#1d5649}
+
+/* ── Board chrome ───────────────────────────────────────────── */
+.board{max-width:1520px;margin:0 auto;padding:24px 16px 120px;color:var(--board-ink)}
+.board > h1{font-size:24px;margin:0;letter-spacing:-.02em}
+.lead{max-width:1100px;margin:8px 0 0;color:var(--board-ink);opacity:.85}
+.bar{position:sticky;top:0;z-index:80;display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px 0;margin:16px 0;background:var(--board);border-bottom:1px solid var(--board-line)}
+.bar .grp{display:flex;gap:6px;align-items:center;margin-right:10px}
+.bar .grp > span{font-size:12px;font-weight:600;opacity:.75;margin-right:2px}
+.bar button{font:600 14px Inter,system-ui,sans-serif;border:1px solid var(--board-line);background:var(--board-card);color:var(--board-ink);border-radius:8px;padding:7px 12px;cursor:pointer}
+.bar button[aria-pressed=true]{background:#0d4037;color:#fff;border-color:#0d4037}
+.bar .hint{font-size:12px;opacity:.7;margin-left:auto}
+.notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin:14px 0}
+.notes > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.notes b{display:block;margin-bottom:3px}
+.sec{display:flex;align-items:baseline;gap:12px;margin:30px 0 10px}
+.sec h2{font-size:16px;margin:0}
+.sec span{font-size:12px;opacity:.75}
+.opt{display:none}
+body[data-opt=A] .opt.A, body[data-opt=B] .opt.B, body[data-opt=C] .opt.C{display:block}
+.pick{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;margin-top:12px}
+.pick > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:14px;font-size:14px}
+.pick > div.rec{border:2px solid #07d6a0}
+.pick b{font-size:16px;display:block;margin-bottom:4px}
+.pick ul{margin:6px 0 0;padding-left:18px}
+.tag-mig{display:inline-block;font-size:12px;font-weight:600;padding:1px 7px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink);margin-left:6px;vertical-align:middle}
+
+/* ── App shell ──────────────────────────────────────────────── */
+.app{display:grid;grid-template-columns:56px 232px 1fr;grid-template-rows:52px 1fr;height:760px;background:var(--canvas);border-radius:14px;overflow:hidden;border:1px solid var(--board-line);margin-bottom:20px;color:var(--ink);position:relative}
+.app.tall{height:880px}
+.app.norail{grid-template-columns:56px 1fr}
+.top{grid-column:1/-1;background:var(--nav);display:flex;align-items:center;gap:12px;padding:0 16px}
+.top .logo{width:22px;height:22px;border-radius:6px;background:var(--primary)}
+.top .search{flex:0 0 280px;height:32px;border-radius:8px;background:rgba(234,246,242,.08);color:var(--nav-muted);display:flex;align-items:center;padding:0 12px;font-size:12px}
+.top .sp{flex:1}
+.top .me{width:30px;height:30px;border-radius:50%;background:var(--hl);color:var(--on-hl);display:grid;place-items:center;font-size:12px;font-weight:700}
+.icons{background:var(--nav);display:flex;flex-direction:column;align-items:center;gap:10px;padding:14px 0}
+.icons i{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--nav-muted);opacity:.85}
+.icons i.on{border-color:var(--primary);background:rgba(7,214,160,.16)}
+/* settings rail */
+.srail{border-right:1px solid var(--border);background:var(--card);padding:12px 10px;overflow:auto}
+.srail .find{height:32px;border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;font-size:12px;color:var(--muted);margin-bottom:10px}
+.srail h5{font-size:12px;font-weight:600;color:var(--muted);margin:12px 6px 4px}
+.srail a{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 8px;border-radius:8px;font-size:14px;color:var(--body);text-decoration:none}
+.srail a.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.srail a small{font-size:12px;color:var(--muted)}
+.srail a .cnt{font-size:12px;font-weight:700;padding:0 6px;border-radius:6px;background:var(--hl-soft);color:var(--hl-ink)}
+/* main */
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;padding:16px 24px 20px}
+.crumb{font-size:12px;color:var(--muted)}
+.head{display:flex;align-items:flex-end;gap:20px;flex-wrap:wrap;margin:2px 0 4px}
+.head h3{font-size:24px;font-weight:600;letter-spacing:-.025em;margin:0}
+.tabs{display:flex;gap:18px;border-bottom:1px solid var(--border);flex:1;min-width:200px}
+.tabs a{font-size:14px;color:var(--muted);padding:6px 0 8px;border-bottom:2px solid transparent;text-decoration:none;white-space:nowrap}
+.tabs a.on{color:var(--ink);border-color:var(--primary);font-weight:500}
+.tabs a .c{font-size:12px;margin-left:4px;padding:0 5px;border-radius:5px;background:var(--band);color:var(--muted)}
+.head .acts{display:flex;gap:8px;margin-left:auto;padding-bottom:6px}
+.status{font-size:12px;color:var(--muted);margin:2px 0 12px;display:flex;align-items:center;gap:6px}
+.status .dot{width:6px;height:6px;border-radius:50%;background:var(--ok)}
+.status.bad .dot{background:var(--bad)}
+.status.warn .dot{background:var(--warn)}
+.body{flex:1;min-height:0;display:flex;gap:12px}
+/* cards */
+.card{background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--shadow);min-width:0;display:flex;flex-direction:column;min-height:0}
+.card.flex1{flex:1}
+.card-h{display:flex;align-items:center;gap:8px;padding:12px 16px;border-bottom:1px solid var(--rule);background:var(--band);border-radius:16px 16px 0 0}
+.card-h b{font-size:14px;font-weight:600}
+.card-h .r{margin-left:auto;display:flex;gap:6px;align-items:center}
+.card-b{padding:14px 16px}
+.scroll{overflow:auto;min-height:0;flex:1}
+.card-f{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule)}
+.card-f .sp{flex:1}
+.savebar{display:flex;align-items:center;gap:8px;padding:10px 16px;border-top:1px solid var(--rule);background:var(--hl-soft);border-radius:0 0 16px 16px;font-size:14px;color:var(--hl-ink);font-weight:500}
+.savebar .sp{flex:1}
+/* form */
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:12px 18px}
+.fgrid .full{grid-column:1/-1}
+label.l{display:block;font-size:12px;font-weight:600;color:var(--ink);margin-bottom:5px}
+.help{font-size:12px;color:var(--muted);margin-top:4px}
+.err{font-size:12px;color:var(--bad);margin-top:4px}
+.input{height:36px;border-radius:8px;border:1px solid var(--border-strong);background:var(--card);color:var(--ink);padding:0 12px;font-size:14px;display:flex;align-items:center;gap:8px;min-width:0}
+.input.ph{color:var(--muted)}
+.input.focus{outline:2px solid var(--ring);outline-offset:2px}
+.input.bad{border-color:var(--bad)}
+.input.dis{background:var(--band);color:var(--muted);border-color:var(--border)}
+.input .end{margin-left:auto;color:var(--muted);font-size:12px}
+.textarea{min-height:72px;align-items:flex-start;padding:8px 12px;height:auto}
+.fsec{padding:16px 0;border-top:1px solid var(--rule)}
+.fsec:first-child{border-top:0;padding-top:4px}
+.fsec > h4{font-size:16px;margin:0 0 2px}
+.fsec > p{font-size:12px;color:var(--muted);margin:0 0 12px}
+/* controls */
+.btn{font:500 14px Inter,system-ui,sans-serif;height:36px;padding:0 14px;border-radius:8px;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;cursor:default}
+.btn.sm{height:30px;padding:0 10px;font-size:12px}
+.btn.p{background:var(--primary);color:var(--on-primary)}
+.btn.o{background:var(--card);border-color:var(--border);color:var(--ink)}
+.btn.g{background:transparent;color:var(--body)}
+.btn.hl{background:var(--hl);color:var(--on-hl);font-weight:600}
+.btn.danger{background:var(--bad-s);color:var(--bad)}
+.btn.d{opacity:.5}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.chip{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:6px;font-size:12px;font-weight:500;background:var(--card);color:var(--body);border:1px solid var(--tile-edge);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.n::before{display:none}
+.chip.ok{background:var(--ok-s);color:var(--ok);border-color:transparent}
+.chip.warn{background:var(--warn-s);color:var(--warn);border-color:transparent}
+.chip.bad{background:var(--bad-s);color:var(--bad);border-color:transparent}
+.chip.info{background:var(--info-s);color:var(--info);border-color:transparent}
+.chip.act{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent}
+.chip.hl{background:var(--hl-soft);color:var(--hl-ink);border-color:transparent;font-weight:600}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.seg span{padding:6px 12px;font-size:14px;color:var(--body);border-left:1px solid var(--border)}
+.seg span:first-child{border-left:0}
+.seg span.on{background:var(--primary-soft);color:var(--accent-ink);font-weight:600}
+.tog{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);font-size:14px;color:var(--body)}
+.tog.on{background:var(--primary-soft);border-color:transparent;color:var(--accent-ink);font-weight:500}
+.switch{width:36px;height:20px;border-radius:999px;background:var(--border-strong);position:relative;display:inline-block;vertical-align:middle;flex:none}
+.switch::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(13,64,55,.25)}
+.switch.on{background:var(--primary)}
+.switch.on::after{left:18px}
+.check{width:16px;height:16px;border-radius:4px;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.check.on{background:var(--primary);border-color:var(--primary)}
+.radio{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:inline-block;vertical-align:middle;flex:none}
+.radio.on{border:5px solid var(--primary)}
+.av{width:28px;height:28px;border-radius:50%;display:inline-grid;place-items:center;font-size:12px;font-weight:700;background:var(--hl-soft);color:var(--hl-ink);flex:none}
+.ic{width:32px;height:32px;border-radius:9px;display:inline-grid;place-items:center;background:var(--primary-soft);color:var(--accent-ink);font-weight:700;flex:none}
+.muted{color:var(--muted)}
+small{font-size:12px}
+.small{font-size:12px}
+.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:var(--code);border:1px solid var(--tile-edge);border-radius:10px;padding:10px 12px;color:var(--body);white-space:pre;overflow:auto}
+.copy{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:8px;padding:0 4px 0 12px;height:36px;background:var(--card)}
+.copy .v{flex:1;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:12px;padding:10px 12px}
+.tile small{display:block;font-size:12px;color:var(--muted)}
+.tile b{font-size:16px}
+.list a,.li{display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--rule);color:var(--body);text-decoration:none}
+.li.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.li b{font-size:14px;color:var(--ink);display:block}
+.li small{font-size:12px;color:var(--muted)}
+.li .end{margin-left:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+thead th{background:var(--band);color:var(--muted);font-weight:500;font-size:12px;text-align:left;padding:8px 14px;border-bottom:1px solid var(--border);white-space:nowrap}
+tbody td{padding:9px 14px;border-bottom:1px solid var(--rule);color:var(--body);white-space:nowrap}
+tbody tr.h td{background:var(--hover)}
+tbody tr.s td{background:var(--primary-soft)}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.strip > div{padding:10px 16px;border-left:1px solid var(--rule)}
+.strip > div:first-child{border-left:0}
+.strip small{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.strip b{display:block;font-size:24px;font-weight:600;letter-spacing:-.02em}
+.steps{display:flex;gap:8px;align-items:center}
+.steps span{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.steps span i{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.steps span.on{color:var(--ink);font-weight:600}
+.steps span.on i{background:var(--primary);color:var(--on-primary)}
+.steps span.done i{background:var(--primary-soft);color:var(--accent-ink)}
+.steps em{flex:1;height:1px;background:var(--border);min-width:16px}
+/* overlays */
+.scrim{position:absolute;inset:52px 0 0 0;background:var(--backdrop);z-index:5}
+.sheet{position:absolute;top:52px;right:0;bottom:0;width:480px;background:var(--card);border-left:1px solid var(--border);box-shadow:var(--overlay);z-index:6;display:flex;flex-direction:column}
+.sheet.wide{width:640px}
+.sheet-h{display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.sheet-h b{font-size:16px}
+.sheet-h .x{margin-left:auto;color:var(--muted);font-size:16px}
+.sheet-b{padding:16px 18px;overflow:auto;flex:1}
+.sheet-f{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--rule)}
+.dialog{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:440px;background:var(--card);border:1px solid var(--card-border);border-radius:16px;box-shadow:var(--overlay);z-index:6;padding:18px}
+.dialog h4{margin:0 0 6px;font-size:16px}
+.dialog p{margin:0 0 12px;font-size:14px;color:var(--body)}
+.menu{background:var(--card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--overlay);padding:4px;width:220px}
+.menu div{padding:8px 10px;border-radius:6px;font-size:14px;color:var(--body);display:flex;justify-content:space-between}
+.menu div.h{background:var(--hover);color:var(--ink)}
+.menu hr{border:0;border-top:1px solid var(--rule);margin:4px 0}
+.toast{display:inline-flex;align-items:center;gap:10px;background:#0d4037;color:#f2f7f5;border-radius:999px;padding:10px 16px;font-size:14px}
+body.dark .toast{background:#f2f7f5;color:#0d4037}
+.toast i{width:8px;height:8px;border-radius:50%;background:#07d6a0}
+.skel{height:12px;border-radius:6px;background:linear-gradient(90deg,var(--band),var(--hover),var(--band));margin:8px 0}
+.empty{text-align:center;padding:28px 16px}
+.empty .ic{margin:0 auto 10px}
+.empty b{display:block;font-size:16px}
+.empty p{font-size:14px;color:var(--muted);margin:4px 0 12px}
+/* state strip under a board section: loading / empty / error side by side */
+.states{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+.states > .card{min-height:180px}
+@media (max-width:1100px){.app{grid-template-columns:56px 1fr}.srail{display:none}.states{grid-template-columns:1fr}.fgrid{grid-template-columns:1fr}}
+
+</style>
+<!--/kit-css-->
+<style>
+/* board-only extras, kit tokens only */
+.diffwrap{background:var(--board-card);border:1px solid var(--board-line);border-radius:14px;padding:16px;margin:14px 0}
+.diffwrap > h2{font-size:16px;margin:0 0 2px}
+.diffwrap > p{font-size:14px;margin:0 0 12px;opacity:.85}
+.diff{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.diff > div{border:1px solid var(--board-line);border-radius:12px;padding:12px;font-size:14px;display:flex;flex-direction:column;gap:4px}
+.diff .stp{font-size:12px;font-weight:600;color:var(--accent-ink)}
+.diff b{font-size:16px}
+.diff .was{font-size:12px;opacity:.7}
+.diff .q{font-size:14px}
+.diff .eg{font-size:12px;opacity:.8;margin-top:auto;padding-top:6px;border-top:1px dashed var(--board-line)}
+.daystrip{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:12px;font-size:12px}
+.daystrip span{padding:3px 8px;border-radius:6px;border:1px solid var(--board-line)}
+.daystrip span.set{background:var(--primary-soft);color:var(--accent-ink);border-color:transparent;font-weight:600}
+.daystrip em{font-style:normal;opacity:.5}
+.menucmp{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0 0 20px}
+.menucmp > div{background:var(--board-card);border:1px solid var(--board-line);border-radius:12px;padding:12px 14px;font-size:14px}
+.menucmp ol,.menucmp ul{margin:6px 0 0;padding-left:18px}
+/* journey strip inside the app */
+.jstrip{display:flex;align-items:center;gap:4px;padding:12px 14px;border-bottom:1px solid var(--rule);overflow:hidden}
+.jstrip span{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted);white-space:nowrap}
+.jstrip span i{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--band);color:var(--muted)}
+.jstrip span.set i{background:var(--primary-soft);color:var(--accent-ink)}
+.jstrip span.on{color:var(--ink);font-weight:600}
+.jstrip span.on i{background:var(--primary);color:var(--on-primary)}
+.jstrip em{flex:1;height:1px;background:var(--border);min-width:3px}
+/* step map tiles */
+.mgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.mt{background:var(--tile);box-shadow:inset 0 0 0 1px var(--tile-edge);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px;min-height:150px}
+.mt.on{box-shadow:inset 0 0 0 2px var(--primary)}
+.mt.quiet{background:transparent;box-shadow:inset 0 0 0 1px var(--rule);min-height:0}
+.mt .t{display:flex;align-items:center;gap:8px}
+.mt .t b{font-size:16px;color:var(--ink)}
+.mt .t .ic{width:28px;height:28px;font-size:12px}
+.mt .used{font-size:12px;color:var(--accent-ink);font-weight:600}
+.mt p{margin:0;font-size:12px;color:var(--muted)}
+.mt .facts{font-size:14px;color:var(--body)}
+.mt .facts .n{font-weight:600;color:var(--hl-ink)}
+.mt .go{margin-top:auto;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--accent-ink);font-weight:600}
+.lane{font-size:12px;font-weight:600;color:var(--muted);margin:14px 0 8px;display:flex;align-items:center;gap:8px}
+.lane:first-child{margin-top:0}
+.lane::after{content:"";flex:1;height:1px;background:var(--rule)}
+.subt{font-size:12px;color:var(--muted);margin:-2px 0 6px}
+.subt b{color:var(--accent-ink);font-weight:600}
+/* lists, rows */
+.sel{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.sel.on{background:var(--primary-soft);box-shadow:inset 2px 0 0 var(--primary)}
+.sel b{font-weight:600;color:var(--ink)}
+.sel .end{margin-left:auto;font-size:12px;color:var(--muted)}
+.qrow{display:grid;grid-template-columns:18px 28px 1fr auto;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.qrow .h{color:var(--muted);font-size:12px;letter-spacing:1px}
+.qrow .num{font-size:12px;color:var(--muted)}
+.qrow.on{background:var(--hover)}
+.qrow small{display:block;font-size:12px;color:var(--muted)}
+.frow{display:grid;grid-template-columns:18px 1fr auto 150px;gap:12px;align-items:center;padding:8px 14px;border-bottom:1px solid var(--rule);font-size:14px;color:var(--body)}
+.frow .h{color:var(--muted);font-size:12px;letter-spacing:1px}
+.frow .af{font-size:12px;color:var(--muted)}
+.frow.grp{grid-template-columns:1fr auto;background:var(--band);font-size:12px;font-weight:600;color:var(--muted)}
+.seg.sm span{padding:3px 10px;font-size:12px}
+.rule{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px;border:1px solid var(--rule);border-radius:12px;background:var(--band);margin-bottom:8px;font-size:14px}
+.rule .input{height:32px}
+.rule .w{font-size:12px;font-weight:600;color:var(--muted);width:44px}
+.preview{background:var(--band);border-radius:12px;padding:12px;font-size:14px}
+.preview .qq{padding:8px 0;border-bottom:1px solid var(--rule);display:flex;justify-content:space-between;gap:8px}
+.preview .qq:last-child{border-bottom:0}
+.result{border-radius:12px;padding:10px 12px;box-shadow:inset 0 0 0 1px var(--tile-edge);background:var(--card);font-size:14px;margin-top:10px}
+.result .ln{display:flex;justify-content:space-between;align-items:center;padding:4px 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.kv{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--rule);font-size:14px}
+.kv:last-child{border-bottom:0}
+.kv small{display:block;font-size:12px;color:var(--muted)}
+.band{position:relative;height:28px;border-radius:8px;background:var(--band);margin:8px 0 4px}
+.band .in{position:absolute;top:0;bottom:0;left:22%;right:30%;background:var(--primary-soft);border-left:2px solid var(--primary);border-right:2px solid var(--primary)}
+.band .pin{position:absolute;top:-4px;bottom:-4px;left:41%;width:2px;background:var(--hl-mark)}
+.bandlbl{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+.sstate{display:grid;grid-template-columns:180px 1fr;gap:0;min-height:0;border:1px solid var(--rule);border-radius:12px;overflow:hidden}
+.sstate .sl{border-right:1px solid var(--rule);overflow:auto}
+.sstate .sr{padding:12px 14px;overflow:auto}
+.script{background:var(--band);border-radius:10px;padding:12px;font-size:14px;line-height:1.6}
+.script mark{background:var(--hl-soft);color:var(--hl-ink);border-radius:4px;padding:0 3px}
+.flow{display:grid;grid-template-columns:1fr 32px 1fr auto;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--rule);font-size:14px}
+.flow .arrow{color:var(--muted);text-align:center}
+.flow .ev{display:flex;align-items:center;gap:8px}
+.flow .ev b,.flow .to b{color:var(--ink)}
+.flow .to small,.flow .ev small{display:block;font-size:12px;color:var(--muted)}
+.flow.on{background:var(--hover)}
+.fig{font-weight:600;color:var(--hl-ink)}
+.sheetsec{padding:14px 0;border-top:1px solid var(--rule)}
+.sheetsec:first-child{border-top:0;padding-top:0}
+.sheetsec h4{font-size:14px;margin:0 0 2px}
+.sheetsec > p{font-size:12px;color:var(--muted);margin:0 0 10px}
+.anchors{display:flex;gap:6px;padding:8px 18px;border-bottom:1px solid var(--rule)}
+.anchors span{font-size:12px;color:var(--muted);padding:3px 8px;border-radius:6px}
+.anchors span.on{background:var(--band);color:var(--ink);font-weight:600}
+.ver{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:14px}
+.ver:last-child{border-bottom:0}
+.ver .end{margin-left:auto}
+.cap{font-size:12px;opacity:.8;margin:-12px 0 20px}
+</style>
+</head>
+<body class="light" data-opt="A">
+<div class="board">
+  <h1>Settings › Sales process</h1>
+  <p class="lead">These settings shape the agent's call, from the lead form to the moment the case is sent. Today they are six menu items with near-identical names: Underwriting templates, Quotation templates, Application field sets, Quote &amp; QA rules, Disclosures, Application stages. The owner cannot tell which one changes which part of the call. This board renames each one after the step it controls, puts them in the order the agent meets them, and redraws each editor.</p>
+  <div class="notes">
+    <div><b>1 · Names say "template", not what they do</b>"Underwriting template", "Quotation template" and "Field set" all mean "a list per carrier and product". Nothing says one is health questions, one is quote inputs and one is the carrier's paper form.</div>
+    <div><b>2 · No order</b>The menu is alphabetical. The call runs Interview → Quote → Application → Disclosures → Review. The settings should follow that order.</div>
+    <div><b>3 · Same carrier × product grid three times</b>Health questions, quote inputs and application fields each start with their own carrier picker. Each looks different, so the owner re-learns the screen every time.</div>
+    <div><b>4 · "Quote &amp; QA rules" mixes two moments</b>The price check runs on the Quote step. Appointment, draft date, requirement ageing and welcome pack run at Review and after submit. One page, two moments, no labels.</div>
+    <div><b>5 · Disclosures has tabs inside tabs</b>Five page tabs, then three more inside a document. Records should open as a right sheet with sections, never a second row of tabs.</div>
+    <div><b>6 · Nothing says what needs you</b>Unpublished drafts, carriers with no health questions and documents needing legal review are spread over six pages. Nothing adds them up in one place.</div>
+  </div>
+
+  <div class="diffwrap">
+    <h2>What is the difference? In plain words</h2>
+    <p>Each one controls one step of the agent's call. In the order the agent meets them:</p>
+    <div class="diff">
+      <div><span class="stp">Step 1 · Lead form</span><b>Application forms</b><span class="was">same name today · own board</span><span class="q">What we capture about a new lead before the call.</span><span class="eg">Name, phone, state, date of birth, which product they asked about.</span></div>
+      <div><span class="stp">Step 3 · Interview</span><b>Health questions</b><span class="was">was: Underwriting templates</span><span class="q">The health questions the agent asks. A "knockout" answer rules a carrier out before quoting.</span><span class="eg">"Oxygen use in the last 2 years?" Yes rules out Mutual of Omaha Final Expense.</span></div>
+      <div><span class="stp">Step 4 · Quote</span><b>Quote inputs</b><span class="was">was: Quotation templates</span><span class="q">What the agent must type to get a price for each carrier × product. No prices here.</span><span class="eg">Face amount $5k–$40k, Level or Graded, age last birthday, quote valid 30 days.</span></div>
+      <div><span class="stp">Step 5 · Application</span><b>Carrier application</b><span class="was">was: Application field sets</span><span class="q">The carrier's own application form: each field Not asked, Optional or Required. A case missing a Required field cannot be sent.</span><span class="eg">Transamerica Term needs driver's licence number and birth state.</span></div>
+      <div><span class="stp">Steps 4 + 9 · Quote, Review</span><b>Quote &amp; case checks</b><span class="was">was: Quote &amp; QA rules</span><span class="q">One agency-wide set of checks on the result, not per carrier.</span><span class="eg">Warn if the price per $1,000 looks wrong; block a carrier not appointed in the client's state.</span></div>
+      <div><span class="stp">Step 8 · Disclosures</span><b>Disclosures</b><span class="was">same name today</span><span class="q">What the client must hear and agree to, when it applies, and the script read on the call in each state.</span><span class="eg">Replacement notice when the client already has a policy; Florida call wording.</span></div>
+      <div><span class="stp">After submit</span><b>Stage moves</b><span class="was">was: Application stages</span><span class="q">When an application is quoted, sent, issued or lost, which stage of the lead pipeline its card moves to.</span><span class="eg">Issued → Sales pipeline › Issued.</span></div>
+    </div>
+    <div class="daystrip"><span class="set">1 Lead form</span><em>→</em><span>2 Verify</span><em>→</em><span class="set">3 Interview</span><em>→</em><span class="set">4 Quote</span><em>→</em><span class="set">5 Application</span><em>→</em><span>6 Beneficiaries</span><em>→</em><span>7 Payment</span><em>→</em><span class="set">8 Disclosures</span><em>→</em><span class="set">9 Review</span><em>→</em><span>10 Submit</span><em>→</em><span class="set">Card moves</span><span style="margin-left:8px;border:0;opacity:.7">Green = a step with settings on this page</span></div>
+  </div>
+
+  <div class="bar" role="toolbar">
+    <div class="grp"><span>Option</span><button data-opt-btn="A">A · One page, step map</button><button data-opt-btn="B">B · Renamed items</button><button data-opt-btn="C">C · Carrier setup</button></div>
+    <div class="grp"><span>Theme</span><button data-theme-btn="light">Light</button><button data-theme-btn="dark">Dark</button></div>
+    <span class="hint">Keys 1–3 option · L / D theme</span>
+  </div>
+
+  <!-- ═══════════════════ OPTION A ═══════════════════ -->
+  <div class="opt A">
+    <div class="sec"><h2>A · One "Sales process" page, opening on a step map</h2><span>One menu item. Its first tab is the call in order; each step is a header tab with a clear name.</span></div>
+    <div class="menucmp">
+      <div><b>Menu today (Selling)</b><ul><li>Underwriting templates</li><li>Quotation templates</li><li>Application field sets</li><li>Quote &amp; QA rules</li><li>Disclosures</li><li>Application stages</li><li>Application forms</li></ul></div>
+      <div><b>Menu with A</b><ul><li><b>Sales process</b>, header tabs: Overview · Health questions · Quote inputs · Carrier application · Quote &amp; case checks · Disclosures · Stage moves</li><li>Application forms (own page, shown as step 1 on the map)</li><li>AI assistant</li></ul></div>
+    </div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail">
+        <div class="find">Search settings · /</div>
+        <h5>Your account</h5><a>My profile</a><a>Plan &amp; billing</a>
+        <h5>Agency</h5><a>Business identity</a><a>Team &amp; access <small>17/25</small></a><a>Products</a><a>Carriers</a>
+        <h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a><a>AI assistant</a>
+        <h5>Leads &amp; calling</h5><a>Lead posting</a><a>Dialing cadence</a><a>Pipelines &amp; outcomes</a>
+        <h5>Money &amp; compliance</h5><a>Accounting</a><a>Retention</a><a>Compliance</a>
+      </nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling</div>
+        <div class="head"><h3>Sales process</h3><nav class="tabs"><a class="on">Overview</a><a>Health questions</a><a>Quote inputs</a><a>Carrier application</a><a>Quote &amp; case checks</a><a>Disclosures</a><a>Stage moves</a></nav><div class="acts"><span class="btn hl">Try a case</span></div></div>
+        <div class="status"><span class="dot"></span>All steps live · last change by Dana Alvarez, 2 days ago (Health questions, Aetna/CVS Medicare Supplement)</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="card-h"><b>The call, step by step</b><span class="small muted">Click a step to change it</span><div class="r"><span class="chip n">5 carriers · 3 products</span></div></div>
+            <div class="jstrip"><span class="set"><i>1</i>Lead form</span><em></em><span><i>2</i>Verify</span><em></em><span class="set"><i>3</i>Interview</span><em></em><span class="set"><i>4</i>Quote</span><em></em><span class="set"><i>5</i>Application</span><em></em><span><i>6</i>Beneficiaries</span><em></em><span><i>7</i>Payment</span><em></em><span class="set"><i>8</i>Disclosures</span><em></em><span class="set"><i>9</i>Review</span><em></em><span><i>10</i>Submit</span><em></em><span class="set"><i>→</i>Card moves</span></div>
+            <div class="scroll"><div class="card-b">
+              <div class="lane">Before and during the interview</div>
+              <div class="mgrid">
+                <div class="mt"><div class="t"><span class="ic">1</span><b>Lead form</b></div><span class="used">Step 1 · before the call</span><p>What we capture about a new lead.</p><div class="facts">2 forms · 14 fields</div><div class="go"><span>Opens Application forms</span><span>›</span></div></div>
+                <div class="mt quiet"><div class="t"><span class="ic">2</span><b>Verify</b></div><p>Nothing to set up. The agent confirms name, date of birth and state.</p></div>
+                <div class="mt on"><div class="t"><span class="ic">3</span><b>Health questions</b></div><span class="used">Step 3 · Interview</span><p>Questions the agent asks; knockout answers rule a carrier out.</p><div class="facts">6 carrier × product sets · 41 questions<br><span class="n">2 drafts</span> not live yet</div><div class="go"><span>Open Health questions</span><span>›</span></div></div>
+                <div class="mt"><div class="t"><span class="ic">4</span><b>Quote inputs</b></div><span class="used">Step 4 · Quote</span><p>What the agent types to get a price, per carrier × product.</p><div class="facts">11 of 12 pairs set · age last birthday<br><span class="n">1 pair</span> on the Insurvas default</div><div class="go"><span>Open Quote inputs</span><span>›</span></div></div>
+              </div>
+              <div class="lane">Filling in the carrier's application</div>
+              <div class="mgrid">
+                <div class="mt"><div class="t"><span class="ic">5</span><b>Carrier application</b></div><span class="used">Step 5 · Application</span><p>Each carrier form: fields Not asked, Optional or Required.</p><div class="facts">12 forms · 38 fields on average<br><span class="n">3 fields</span> autofill can't place</div><div class="go"><span>Open Carrier application</span><span>›</span></div></div>
+                <div class="mt quiet"><div class="t"><span class="ic">6</span><b>Beneficiaries</b></div><p>Nothing to set up. Who gets paid, shares add to 100%.</p></div>
+                <div class="mt quiet"><div class="t"><span class="ic">7</span><b>Payment</b></div><p>Nothing to set up here. The draft date check lives in Quote &amp; case checks.</p></div>
+                <div class="mt"><div class="t"><span class="ic">8</span><b>Disclosures</b></div><span class="used">Step 8 · Disclosures</span><p>What the client hears and agrees to, and when.</p><div class="facts">9 documents · 50 state scripts<br><span class="n">1 document</span> needs legal review</div><div class="go"><span>Open Disclosures</span><span>›</span></div></div>
+              </div>
+              <div class="lane">Checks and what happens after</div>
+              <div class="mgrid">
+                <div class="mt"><div class="t"><span class="ic">✓</span><b>Quote &amp; case checks</b></div><span class="used">Steps 4 + 9 · Quote, Review</span><p>One set of agency-wide checks on the result.</p><div class="facts">Price band $3.50–$12.00 per $1,000<br>Not appointed: block · buffer 3 days</div><div class="go"><span>Open checks</span><span>›</span></div></div>
+                <div class="mt quiet"><div class="t"><span class="ic">10</span><b>Submit</b></div><p>Nothing to set up. Refused while Required fields are empty.</p></div>
+                <div class="mt"><div class="t"><span class="ic">→</span><b>Stage moves</b></div><span class="used">After submit</span><p>Where the lead card goes when the application changes.</p><div class="facts">4 of 4 events mapped · 2 pipelines<br><span class="n">212</span> cards moved this month</div><div class="go"><span>Open Stage moves</span><span>›</span></div></div>
+                <div></div>
+              </div>
+            </div></div>
+          </div>
+          <div class="card" style="width:300px">
+            <div class="card-h"><b>Needs you</b><div class="r"><span class="chip hl n">5</span></div></div>
+            <div class="scroll">
+              <div class="sel"><div><b>Aetna/CVS · Medicare Supplement</b><div class="small muted">Health questions draft · 2 days old</div></div><span class="end">›</span></div>
+              <div class="sel"><div><b>Corebridge · Final Expense</b><div class="small muted">Health questions draft · 9 days old</div></div><span class="end">›</span></div>
+              <div class="sel"><div><b>Transamerica · Term life</b><div class="small muted">Quote inputs on the Insurvas default</div></div><span class="end">›</span></div>
+              <div class="sel"><div><b>American Amicable · Final Expense</b><div class="small muted">3 application fields autofill can't place</div></div><span class="end">›</span></div>
+              <div class="sel"><div><b>Replacement notice v4</b><div class="small muted">Disclosure draft needs legal review</div></div><span class="end">›</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="cap">Every other tab of this page is drawn below in "Page redesigns" with these names. Gold is used only for counts that need you; Try a case is the one gold button on the page.</p>
+  </div>
+
+  <!-- ═══════════════════ OPTION B ═══════════════════ -->
+  <div class="opt B">
+    <div class="sec"><h2>B · Keep separate items, rename them, show the step</h2><span>Six menu items in call order, each with "Used on step X" and a mini journey strip at the top of the page.</span></div>
+    <div class="app">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail">
+        <div class="find">Search settings · /</div>
+        <h5>Agency</h5><a>Products</a><a>Carriers</a>
+        <h5>Selling · in call order</h5>
+        <a>Application forms <small>Step 1</small></a>
+        <a class="on">Health questions <span class="cnt">2</span></a>
+        <a>Quote inputs <small>Step 4</small></a>
+        <a>Carrier application <small>Step 5</small></a>
+        <a>Quote &amp; case checks <small>4 + 9</small></a>
+        <a>Disclosures <small>Step 8</small></a>
+        <a>Stage moves <small>After</small></a>
+        <a>AI assistant</a>
+        <h5>Leads &amp; calling</h5><a>Lead posting</a><a>Pipelines &amp; outcomes</a>
+      </nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling</div>
+        <div class="head"><h3>Health questions</h3><nav class="tabs"><a class="on">Question sets <span class="c">6</span></a><a>Question bank <span class="c">41</span></a></nav><div class="acts"><span class="btn o">Try it</span><span class="btn p">New question set</span></div></div>
+        <div class="subt">Used on <b>step 3 · Interview</b>. The agent asks these before quoting; a knockout answer rules a carrier out.</div>
+        <div class="status"><span class="dot"></span>4 live · 2 drafts · last change by Dana Alvarez, 2 days ago</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="jstrip"><span class="set"><i>1</i>Lead form</span><em></em><span><i>2</i>Verify</span><em></em><span class="on"><i>3</i>Interview</span><em></em><span class="set"><i>4</i>Quote</span><em></em><span class="set"><i>5</i>Application</span><em></em><span><i>6</i>Beneficiaries</span><em></em><span><i>7</i>Payment</span><em></em><span class="set"><i>8</i>Disclosures</span><em></em><span class="set"><i>9</i>Review</span><em></em><span><i>10</i>Submit</span></div>
+            <div class="scroll">
+              <table><thead><tr><th>Carrier · product</th><th>Questions</th><th>Knockouts</th><th>Version</th><th>Changed</th><th>Status</th></tr></thead><tbody>
+                <tr><td>Mutual of Omaha · Final Expense</td><td>9</td><td>4</td><td>v3</td><td>Oct 28 · Dana Alvarez</td><td><span class="chip ok">Live</span></td></tr>
+                <tr class="h"><td>Aetna/CVS · Medicare Supplement</td><td>7</td><td>3</td><td>v2 draft</td><td>2 days ago · Dana Alvarez</td><td><span class="chip hl">Draft</span></td></tr>
+                <tr><td>American Amicable · Final Expense</td><td>8</td><td>4</td><td>v5</td><td>Oct 14 · Marcus Lee</td><td><span class="chip ok">Live</span></td></tr>
+                <tr><td>Corebridge · Final Expense</td><td>6</td><td>2</td><td>v1 draft</td><td>9 days ago · Marcus Lee</td><td><span class="chip hl">Draft</span></td></tr>
+                <tr><td>Transamerica · Term life</td><td>6</td><td>2</td><td>v2</td><td>Sep 30 · Dana Alvarez</td><td><span class="chip ok">Live</span></td></tr>
+                <tr><td>Mutual of Omaha · Medicare Supplement</td><td>5</td><td>1</td><td>v1</td><td>Sep 12 · Insurvas</td><td><span class="chip ok">Live</span></td></tr>
+              </tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="cap">Every page in the group gets the same subtitle and strip, with its own step lit: Quote inputs lights 4, Carrier application lights 5, Quote &amp; case checks lights 4 and 9, Disclosures lights 8, Stage moves lights the arrow after 10. The editors are the same as in "Page redesigns" below.</p>
+  </div>
+
+  <!-- ═══════════════════ OPTION C ═══════════════════ -->
+  <div class="opt C">
+    <div class="sec"><h2>C · "Carrier setup": one record per carrier × product</h2><span>Health questions, quote inputs and application fields bundled per carrier × product. Checks, disclosures and stage moves stay agency-wide on their own pages.</span></div>
+    <div class="app tall">
+      <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+      <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+      <nav class="srail">
+        <div class="find">Search settings · /</div>
+        <h5>Agency</h5><a>Products</a><a>Carriers</a>
+        <h5>Selling</h5>
+        <a>Application forms</a>
+        <a class="on">Carrier setup <span class="cnt">4</span></a>
+        <a>Quote &amp; case checks</a>
+        <a>Disclosures <span class="cnt">1</span></a>
+        <a>Stage moves</a>
+        <a>AI assistant</a>
+        <h5>Leads &amp; calling</h5><a>Lead posting</a><a>Pipelines &amp; outcomes</a>
+      </nav>
+      <div class="main">
+        <div class="crumb">Settings › Selling</div>
+        <div class="head"><h3>Carrier setup</h3><nav class="tabs"><a class="on">All <span class="c">12</span></a><a>Final Expense <span class="c">5</span></a><a>Term life <span class="c">4</span></a><a>Medicare Supplement <span class="c">3</span></a></nav><div class="acts"><span class="btn o">Copy a setup</span><span class="btn p">Add carrier × product</span></div></div>
+        <div class="status"><span class="dot"></span>8 ready · 4 need you · from your Carriers and Products</div>
+        <div class="body">
+          <div class="card flex1">
+            <div class="scroll">
+              <table><thead><tr><th>Carrier · product</th><th>Health questions (step 3)</th><th>Quote inputs (step 4)</th><th>Application fields (step 5)</th><th>Status</th></tr></thead><tbody>
+                <tr class="s"><td>Mutual of Omaha · Final Expense</td><td>9 questions · 4 knockouts</td><td>5 inputs · 30 days</td><td>36 fields · 22 required</td><td><span class="chip ok">Ready</span></td></tr>
+                <tr><td>Mutual of Omaha · Medicare Supplement</td><td>5 questions · 1 knockout</td><td>4 inputs · 60 days</td><td>31 fields · 18 required</td><td><span class="chip ok">Ready</span></td></tr>
+                <tr><td>Aetna/CVS · Medicare Supplement</td><td>7 questions · draft v2</td><td>4 inputs · 60 days</td><td>33 fields · 20 required</td><td><span class="chip hl">1 draft</span></td></tr>
+                <tr><td>American Amicable · Final Expense</td><td>8 questions · 4 knockouts</td><td>5 inputs · 30 days</td><td>34 fields · 3 unplaced</td><td><span class="chip warn">Autofill gaps</span></td></tr>
+                <tr><td>American Amicable · Term life</td><td>6 questions · 2 knockouts</td><td>6 inputs · 30 days</td><td>40 fields · 26 required</td><td><span class="chip ok">Ready</span></td></tr>
+                <tr><td>Corebridge · Final Expense</td><td>6 questions · draft v1</td><td>5 inputs · 30 days</td><td>35 fields · 21 required</td><td><span class="chip hl">1 draft</span></td></tr>
+                <tr><td>Corebridge · Term life</td><td>6 questions · 2 knockouts</td><td>6 inputs · 45 days</td><td>42 fields · 27 required</td><td><span class="chip ok">Ready</span></td></tr>
+                <tr><td>Transamerica · Final Expense</td><td>7 questions · 3 knockouts</td><td>5 inputs · 30 days</td><td>34 fields · 20 required</td><td><span class="chip ok">Ready</span></td></tr>
+                <tr><td>Transamerica · Term life</td><td>6 questions · 2 knockouts</td><td>Insurvas default</td><td>44 fields · 28 required</td><td><span class="chip warn">On default</span></td></tr>
+              </tbody></table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <aside class="sheet wide">
+        <div class="sheet-h"><span class="ic">MO</span><div><b>Mutual of Omaha · Final Expense</b><div class="small muted">Living Promise · sold in 49 states</div></div><span class="x">✕</span></div>
+        <div class="anchors"><span class="on">Health questions</span><span>Quote inputs</span><span>Application fields</span><span>History</span></div>
+        <div class="sheet-b">
+          <div class="sheetsec"><h4>Health questions · step 3</h4><p>9 questions · v3 live since Oct 28</p>
+            <div class="kv"><div>Oxygen, dialysis or nursing home now?<small>Yes → rules this carrier out</small></div><span class="chip bad">Knockout</span></div>
+            <div class="kv"><div>Heart attack or stroke in the last 2 years?<small>Yes → Graded plan only</small></div><span class="chip warn">Graded</span></div>
+            <div class="row" style="margin-top:8px"><span class="btn o sm">Edit questions</span><span class="btn g sm">Try it</span></div></div>
+          <div class="sheetsec"><h4>Quote inputs · step 4</h4><p>What the agent types to get a price</p>
+            <div class="kv"><div>Face amount<small>$2,000 to $40,000 in $1,000 steps</small></div><span class="small muted">Required</span></div>
+            <div class="kv"><div>Plan<small>Level · Graded</small></div><span class="small muted">Required</span></div>
+            <div class="kv"><div>Age basis · quote valid for<small>Age last birthday · 30 days</small></div><span class="small muted">Set</span></div>
+            <div class="row" style="margin-top:8px"><span class="btn o sm">Edit quote inputs</span></div></div>
+          <div class="sheetsec"><h4>Application fields · step 5</h4><p>36 fields · 22 required · all placed on the carrier PDF</p>
+            <div class="row" style="margin-top:4px"><span class="btn o sm">Edit application fields</span></div></div>
+        </div>
+        <div class="sheet-f"><span class="btn g">Copy to another carrier</span><span class="btn p">Done</span></div>
+      </aside>
+    </div>
+    <p class="cap">Strong when the owner thinks "set up a new carrier". Weak for "change one question for every carrier" and for agency-wide steps, which must live elsewhere, so the call order is lost again.</p>
+  </div>
+
+  <!-- ═══════════════════ PAGE REDESIGNS (all options) ═══════════════════ -->
+  <div class="sec"><h2>Page redesigns · the same in every option</h2><span>Drawn with A's names and header tabs. In B each is its own page with the same body; in C the first three open from the carrier setup sheet.</span></div>
+
+  <!-- R1 Health questions -->
+  <div class="sec"><h2>1 · Health questions (was Underwriting templates)</h2><span>Sets list · questions in order · Try it beside the editor</span></div>
+  <div class="app tall">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Products</a><a>Carriers</a><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a><a>AI assistant</a><h5>Leads &amp; calling</h5><a>Pipelines &amp; outcomes</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a class="on">Health questions</a><a>Quote inputs</a><a>Carrier application</a><a>Quote &amp; case checks</a><a>Disclosures</a><a>Stage moves</a></nav><div class="acts"><span class="btn o">Question bank</span><span class="btn p">Publish v2</span></div></div>
+      <div class="status warn"><span class="dot"></span>Aetna/CVS · Medicare Supplement · v2 draft, not live · agents still see v1 · edited by Dana Alvarez 2 days ago</div>
+      <div class="body">
+        <div class="card" style="width:260px">
+          <div class="card-h"><b>Question sets</b><div class="r"><span class="btn g sm">+ New</span></div></div>
+          <div class="scroll">
+            <div class="sel"><div><b>Mutual of Omaha</b><div class="small muted">Final Expense · v3</div></div><span class="end">9</span></div>
+            <div class="sel"><div><b>Mutual of Omaha</b><div class="small muted">Medicare Supplement · v1</div></div><span class="end">5</span></div>
+            <div class="sel on"><div><b>Aetna/CVS</b><div class="small muted">Medicare Supplement · v2 draft</div></div><span class="end">7</span></div>
+            <div class="sel"><div><b>American Amicable</b><div class="small muted">Final Expense · v5</div></div><span class="end">8</span></div>
+            <div class="sel"><div><b>Corebridge</b><div class="small muted">Final Expense · v1 draft</div></div><span class="end">6</span></div>
+            <div class="sel"><div><b>Transamerica</b><div class="small muted">Term life · v2</div></div><span class="end">6</span></div>
+          </div>
+        </div>
+        <div class="card flex1">
+          <div class="card-h"><b>Asked on the Interview, in this order</b><div class="r"><span class="btn o sm">+ From bank</span><span class="btn o sm">+ New question</span></div></div>
+          <div class="scroll">
+            <div class="qrow"><span class="h">⋮⋮</span><span class="num">1</span><div>Are you in a hospital, nursing home or receiving hospice care?<small>Yes / No · from the bank</small></div><span class="chip bad">Knockout</span></div>
+            <div class="qrow on"><span class="h">⋮⋮</span><span class="num">2</span><div>Kidney dialysis or end-stage renal disease?<small>Yes / No · edited in this draft</small></div><span class="chip bad">Knockout</span></div>
+            <div class="qrow"><span class="h">⋮⋮</span><span class="num">3</span><div>Insulin use before age 50?<small>Yes / No</small></div><span class="chip warn">Rate up</span></div>
+            <div class="qrow"><span class="h">⋮⋮</span><span class="num">4</span><div>Cancer treatment in the last 2 years?<small>Yes / No</small></div><span class="chip bad">Knockout</span></div>
+            <div class="qrow"><span class="h">⋮⋮</span><span class="num">5</span><div>Tobacco or nicotine in the last 12 months?<small>Yes / No · sets the tobacco rate on Quote</small></div><span class="chip info">Sets rate</span></div>
+            <div class="qrow"><span class="h">⋮⋮</span><span class="num">6</span><div>Height and weight<small>Build chart · out of range → rules out</small></div><span class="chip bad">Knockout</span></div>
+            <div class="qrow"><span class="h">⋮⋮</span><span class="num">7</span><div>Medications taken now<small>List · Medicare Supplement only</small></div><span class="chip n">Info only</span></div>
+          </div>
+          <div class="savebar"><span>Draft v2 · 2 changes from v1</span><span class="sp"></span><span class="btn g sm">See changes</span><span class="btn o sm">Discard draft</span></div>
+        </div>
+        <div class="card" style="width:320px">
+          <div class="card-h"><b>Try it</b><span class="small muted">as the agent sees it</span><div class="r"><span class="btn g sm">Reset</span></div></div>
+          <div class="scroll"><div class="card-b">
+            <div class="preview">
+              <div class="qq"><span>1 · Hospital or hospice now?</span><span class="seg sm"><span>Yes</span><span class="on">No</span></span></div>
+              <div class="qq"><span>2 · Dialysis?</span><span class="seg sm"><span>Yes</span><span class="on">No</span></span></div>
+              <div class="qq"><span>3 · Insulin before 50?</span><span class="seg sm"><span class="on">Yes</span><span>No</span></span></div>
+              <div class="qq"><span>4 · Cancer in 2 years?</span><span class="seg sm"><span>Yes</span><span class="on">No</span></span></div>
+              <div class="qq"><span>6 · Height / weight</span><span class="small">5 ft 9 · 214 lb</span></div>
+            </div>
+            <div class="result">
+              <div class="small muted" style="margin-bottom:4px">With these answers</div>
+              <div class="ln"><span>Aetna/CVS · Med Supp</span><span class="chip warn">Rate up</span></div>
+              <div class="ln"><span>Mutual of Omaha · Med Supp</span><span class="chip ok">Can quote</span></div>
+              <div class="small muted" style="margin-top:6px">Rate up because of question 3. Nothing is saved.</div>
+            </div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a class="on">Health questions</a><a>Quote inputs</a><a>Carrier application</a><a>Quote &amp; case checks</a><a>Disclosures</a><a>Stage moves</a></nav></div>
+      <div class="status warn"><span class="dot"></span>Aetna/CVS · Medicare Supplement · v2 draft</div>
+      <div class="body"><div class="card flex1"><div class="card-h"><b>Asked on the Interview, in this order</b></div><div class="scroll"><div class="qrow"><span class="h">⋮⋮</span><span class="num">1</span><div>Are you in a hospital, nursing home or receiving hospice care?</div><span class="chip bad">Knockout</span></div><div class="qrow on"><span class="h">⋮⋮</span><span class="num">2</span><div>Kidney dialysis or end-stage renal disease?</div><span class="chip bad">Knockout</span></div></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><div><b>Question 2 · Kidney dialysis</b><div class="small muted">Aetna/CVS · Medicare Supplement · draft v2</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="sheetsec"><h4>What the agent reads</h4><p>Word it the way the agent says it out loud.</p>
+          <div class="input textarea">Are you currently receiving kidney dialysis, or have you been told you have end-stage renal disease?</div>
+          <div class="fgrid" style="margin-top:12px"><div><label class="l">Answer</label><div class="input">Yes / No<span class="end">▾</span></div></div><div><label class="l">Note under it</label><div class="input ph">e.g. Includes home dialysis</div></div></div></div>
+        <div class="sheetsec"><h4>Knockout rules</h4><p>What each answer does to this carrier. Checked top to bottom, the first match wins.</p>
+          <div class="rule"><span class="w">When</span><div class="input">Answer</div><div class="input">is</div><div class="input">Yes<span class="end">▾</span></div><span class="w">then</span><div class="input" style="min-width:170px">Rule out this carrier<span class="end">▾</span></div><span class="small muted" style="margin-left:auto">✕</span></div>
+          <div class="rule"><span class="w">When</span><div class="input">Answer</div><div class="input">is</div><div class="input">No<span class="end">▾</span></div><span class="w">then</span><div class="input" style="min-width:170px">Keep going<span class="end">▾</span></div><span class="small muted" style="margin-left:auto">✕</span></div>
+          <div class="row"><span class="btn g sm">+ Add a rule</span><span class="small muted">Outcomes: Keep going · Rate up · Graded plan only · Postpone · Rule out this carrier</span></div>
+          <div class="fgrid" style="margin-top:12px"><div><label class="l">Reason shown to the agent</label><div class="input">Dialysis · Aetna/CVS declines</div></div><div><label class="l">Reason code on a decline</label><div class="input">Medication disclosed<span class="end">▾</span></div><div class="help">Feeds the decline report</div></div></div></div>
+        <div class="sheetsec"><h4>Used in</h4><p>This question comes from the bank. Changing the wording here changes it only for this set.</p>
+          <div class="row"><span class="chip n">Aetna/CVS · Med Supp</span><span class="chip n">Mutual of Omaha · Med Supp</span><span class="chip n">Corebridge · Final Expense</span></div></div>
+      </div>
+      <div class="sheet-f"><span class="btn danger" style="margin-right:auto">Remove question</span><span class="btn o">Cancel</span><span class="btn p">Save to draft</span></div>
+    </aside>
+  </div>
+
+  <!-- R2 Quote inputs -->
+  <div class="sec"><h2>2 · Quote inputs (was Quotation templates)</h2><span>Carrier × product grid → one right sheet per pair. No prices or rate tables live here.</span></div>
+  <div class="app tall">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Products</a><a>Carriers</a><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a><a>AI assistant</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a>Health questions</a><a class="on">Quote inputs</a><a>Carrier application</a><a>Quote &amp; case checks</a><a>Disclosures</a><a>Stage moves</a></nav><div class="acts"><span class="btn o">Your default</span></div></div>
+      <div class="status"><span class="dot"></span>11 of 12 pairs set · 1 uses the Insurvas default · last change by Marcus Lee, Oct 30</div>
+      <div class="body">
+        <div class="card flex1">
+          <div class="card-h"><b>What the agent types on the Quote step</b><span class="small muted">Click a cell to edit that carrier × product</span></div>
+          <div class="scroll">
+            <table><thead><tr><th>Carrier</th><th>Final Expense</th><th>Term life</th><th>Medicare Supplement</th><th>Status</th></tr></thead><tbody>
+              <tr class="s"><td>Mutual of Omaha</td><td>5 inputs · 30 days</td><td>6 inputs · 45 days</td><td>4 inputs · 60 days</td><td><span class="chip ok">Set</span></td></tr>
+              <tr><td>Aetna/CVS</td><td>5 inputs · 30 days</td><td class="muted">Not sold</td><td>4 inputs · 60 days</td><td><span class="chip ok">Set</span></td></tr>
+              <tr><td>American Amicable</td><td>5 inputs · 30 days</td><td>6 inputs · 30 days</td><td class="muted">Not sold</td><td><span class="chip ok">Set</span></td></tr>
+              <tr><td>Corebridge</td><td>5 inputs · 30 days</td><td>6 inputs · 45 days</td><td class="muted">Not sold</td><td><span class="chip ok">Set</span></td></tr>
+              <tr><td>Transamerica</td><td>5 inputs · 30 days</td><td>Insurvas default</td><td class="muted">Not sold</td><td><span class="chip warn">1 on default</span></td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><span class="ic">MO</span><div><b>Mutual of Omaha · Final Expense</b><div class="small muted">Quote inputs · v4 live · Living Promise</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="sheetsec"><h4>Asked on the Quote step, in this order</h4><p>Drag to reorder. Required inputs must be filled before a price shows.</p>
+          <div class="frow"><span class="h">⋮⋮</span><div>Face amount<div class="small muted">$2,000 to $40,000 · $1,000 steps</div></div><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">Edit range</span></div>
+          <div class="frow"><span class="h">⋮⋮</span><div>Plan<div class="small muted">Level · Graded</div></div><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">2 choices</span></div>
+          <div class="frow"><span class="h">⋮⋮</span><div>Tobacco<div class="small muted">Filled from the Interview</div></div><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">Auto</span></div>
+          <div class="frow"><span class="h">⋮⋮</span><div>Riders<div class="small muted">Accidental death · Child rider</div></div><span class="seg sm"><span>Not asked</span><span class="on">Optional</span><span>Required</span></span><span class="af">2 riders</span></div>
+          <div class="frow"><span class="h">⋮⋮</span><div>Payment mode<div class="small muted">Monthly bank draft · Direct bill</div></div><span class="seg sm"><span class="on">Not asked</span><span>Optional</span><span>Required</span></span><span class="af">—</span></div>
+          <div class="row" style="margin-top:8px"><span class="btn g sm">+ Add your own input</span></div></div>
+        <div class="sheetsec"><h4>Age and how long a quote stands</h4><p>How the carrier counts age, and when the agent must quote again.</p>
+          <div class="fgrid"><div><label class="l">Age basis</label><span class="seg"><span class="on">Age last birthday</span><span>Age nearest</span></span></div><div><label class="l">A quote stays valid for</label><div class="input">30<span class="end">days</span></div></div></div></div>
+        <div class="sheetsec"><h4>What the agent sees</h4><p>Preview of the Quote step with these inputs.</p>
+          <div class="preview"><div class="qq"><span>Face amount *</span><span>$10,000</span></div><div class="qq"><span>Plan *</span><span>Level</span></div><div class="qq"><span>Tobacco *</span><span class="muted">No · from Interview</span></div><div class="qq"><span>Riders</span><span class="muted">None</span></div></div></div>
+      </div>
+      <div class="sheet-f"><span class="btn g" style="margin-right:auto">Copy to another carrier</span><span class="btn o">Versions</span><span class="btn p">Publish v5</span></div>
+    </aside>
+  </div>
+
+  <!-- R3 Carrier application -->
+  <div class="sec"><h2>3 · Carrier application (was Application field sets)</h2><span>Carrier list left, the form's fields right, one three-way choice per field, drag order, autofill coverage on every row.</span></div>
+  <div class="app tall">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Products</a><a>Carriers</a><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a><a>AI assistant</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a>Health questions</a><a>Quote inputs</a><a class="on">Carrier application</a><a>Quote &amp; case checks</a><a>Disclosures</a><a>Stage moves</a></nav><div class="acts"><span class="btn p">Publish v3</span></div></div>
+      <div class="status warn"><span class="dot"></span>American Amicable · Final Expense · 3 fields autofill can't place on the carrier PDF</div>
+      <div class="body">
+        <div class="card" style="width:270px">
+          <div class="card-h"><div class="input ph" style="flex:1;height:32px">Search carriers</div></div>
+          <div class="scroll">
+            <div class="sel"><div><b>Mutual of Omaha</b><div class="small muted">Final Expense · 22 required</div></div></div>
+            <div class="sel"><div><b>Mutual of Omaha</b><div class="small muted">Medicare Supplement · 18 required</div></div></div>
+            <div class="sel"><div><b>Aetna/CVS</b><div class="small muted">Medicare Supplement · 20 required</div></div></div>
+            <div class="sel on"><div><b>American Amicable</b><div class="small muted">Final Expense · 3 unplaced</div></div><span class="end"><span class="chip hl n">3</span></span></div>
+            <div class="sel"><div><b>Corebridge</b><div class="small muted">Term life · 27 required</div></div></div>
+            <div class="sel"><div><b>Transamerica</b><div class="small muted">Term life · 28 required</div></div></div>
+          </div>
+        </div>
+        <div class="card flex1">
+          <div class="card-h"><b>Fields on the carrier's application</b><div class="r"><span class="btn g sm">Use for other carriers</span><span class="seg sm"><span class="on">All 34</span><span>Required 20</span><span>Changed 4</span></span><div class="input ph" style="height:30px;width:160px">Find a field</div></div></div>
+          <div class="scroll">
+            <div class="frow grp"><span>Proposed insured</span><span>Autofill</span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>First name</span><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">Page 1 · box 1a</span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Date of birth</span><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">Page 1 · box 2</span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Social Security number · masked</span><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">Page 1 · box 4</span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Birth state</span><span class="seg sm"><span>Not asked</span><span class="on">Optional</span><span>Required</span></span><span class="af" style="color:var(--hl-ink)">Can't place</span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Driver's licence number</span><span class="seg sm"><span class="on">Not asked</span><span>Optional</span><span>Required</span></span><span class="af">—</span></div>
+            <div class="frow grp"><span>Policy owner</span><span></span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Owner is the insured</span><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">Page 2 · box 9</span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Relationship to insured</span><span class="seg sm"><span>Not asked</span><span class="on">Optional</span><span>Required</span></span><span class="af" style="color:var(--hl-ink)">Can't place</span></div>
+            <div class="frow grp"><span>Coverage</span><span></span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Face amount · from Quote</span><span class="seg sm"><span>Not asked</span><span>Optional</span><span class="on">Required</span></span><span class="af">Page 3 · box 14</span></div>
+            <div class="frow"><span class="h">⋮⋮</span><span>Effective date</span><span class="seg sm"><span>Not asked</span><span class="on">Optional</span><span>Required</span></span><span class="af" style="color:var(--hl-ink)">Can't place</span></div>
+          </div>
+          <div class="savebar"><span>4 changes from the platform set · Review refuses a case missing any of 20 Required fields</span><span class="sp"></span><span class="btn g sm">Reset to default</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a>Health questions</a><a>Quote inputs</a><a class="on">Carrier application</a><a>Quote &amp; case checks</a><a>Disclosures</a><a>Stage moves</a></nav></div>
+      <div class="status warn"><span class="dot"></span>American Amicable · Final Expense · 3 fields autofill can't place</div>
+      <div class="body"><div class="card flex1"><div class="card-h"><b>Fields on the carrier's application</b></div><div class="scroll"><div class="frow"><span class="h">⋮⋮</span><span>Birth state</span><span class="seg sm"><span>Not asked</span><span class="on">Optional</span><span>Required</span></span><span class="af">Can't place</span></div></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><div><b>Birth state</b><div class="small muted">American Amicable · Final Expense</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="sheetsec"><h4>On the Application step</h4><p>How the agent sees this field.</p>
+          <span class="seg"><span>Not asked</span><span class="on">Optional</span><span>Required</span></span>
+          <div class="fgrid" style="margin-top:12px"><div class="full"><label class="l">Label the agent sees</label><div class="input">Birth state</div></div><div class="full"><label class="l">Help under it</label><div class="input ph">e.g. State or country of birth</div></div></div></div>
+        <div class="sheetsec"><h4>Where it goes on the carrier PDF</h4><p>Autofill writes the answer here when the case is sent.</p>
+          <div class="fgrid"><div><label class="l">Page</label><div class="input">1<span class="end">▾</span></div></div><div><label class="l">Box</label><div class="input ph">Pick a box…<span class="end">▾</span></div><div class="err">Not placed. The agent will write it by hand.</div></div></div></div>
+        <div class="sheetsec"><h4>Versions</h4><p>v3 draft is yours. v2 is live.</p>
+          <div class="ver"><span class="chip hl">Draft</span>v3 · 4 changes · Dana Alvarez<span class="end btn g sm">Compare</span></div>
+          <div class="ver"><span class="chip ok">Live</span>v2 · Oct 9 · Marcus Lee<span class="end btn g sm">Open</span></div></div>
+      </div>
+      <div class="sheet-f"><span class="btn o">Cancel</span><span class="btn p">Save to draft</span></div>
+    </aside>
+  </div>
+
+  <!-- R4 Quote & case checks -->
+  <div class="sec"><h2>4 · Quote &amp; case checks (was Quote &amp; QA rules)</h2><span>One agency-wide page, split by when each check runs: on the Quote step, at Review, after submit.</span></div>
+  <div class="app tall">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Products</a><a>Carriers</a><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a><a>AI assistant</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a>Health questions</a><a>Quote inputs</a><a>Carrier application</a><a class="on">Quote &amp; case checks</a><a>Disclosures</a><a>Stage moves</a></nav><div class="acts"><span class="btn o">Try a quote</span><span class="btn p">Save</span></div></div>
+      <div class="status"><span class="dot"></span>Saved · these apply to every carrier and product · changed by Dana Alvarez, Oct 21</div>
+      <div class="body">
+        <div class="card flex1">
+          <div class="card-h"><b>On the Quote step</b><span class="small muted">step 4</span></div>
+          <div class="scroll"><div class="card-b">
+            <div class="sheetsec"><h4>Monthly price per $1,000 of cover</h4><p>Outside the band, the agent sees a warning before choosing the quote.</p>
+              <div class="fgrid"><div><label class="l">Lowest per $1,000</label><div class="input">$3.50</div></div><div><label class="l">Highest per $1,000</label><div class="input">$12.00</div></div></div>
+              <div class="band"><div class="in"></div><div class="pin"></div></div><div class="bandlbl"><span>$0</span><span>Last quote: $5.82 · inside</span><span>$20</span></div></div>
+            <div class="sheetsec"><h4>Products with their own band</h4><p>These replace the band above for that product.</p>
+              <table><thead><tr><th>Product</th><th>Band per $1,000</th><th>Outside last 30 days</th></tr></thead><tbody>
+                <tr><td>Final Expense</td><td>$4.00 – $14.50</td><td class="fig">6</td></tr>
+                <tr><td>Medicare Supplement</td><td>Not checked</td><td>—</td></tr>
+                <tr class="h"><td>Term life</td><td>$0.08 – $0.60</td><td class="fig">2</td></tr>
+              </tbody></table>
+              <div class="row" style="margin-top:8px"><span class="btn g sm">+ Add a product band</span></div></div>
+          </div></div>
+        </div>
+        <div class="card flex1">
+          <div class="card-h"><b>At Review and after submit</b><span class="small muted">steps 9 · 10 · after</span></div>
+          <div class="scroll"><div class="card-b">
+            <div class="kv"><div>When the carrier is not appointed in the client's state<small>Checked at Review against Contracting</small></div><span class="seg sm"><span class="on">Block</span><span>Warn</span><span>Allow</span></span></div>
+            <div class="kv"><div>Draft-date buffer after the deposit<small>First draft at least this many days after submit</small></div><div class="input" style="width:110px">3<span class="end">days</span></div></div>
+            <div class="kv"><div>Flag open requirements after<small>A carrier requirement older than this shows on Needs you</small></div><div class="input" style="width:110px">7<span class="end">days</span></div></div>
+            <div class="kv"><div>Welcome pack<small>Sent to the client when the policy is issued</small></div><span class="seg sm"><span class="on">Send</span><span>Hold for review</span></span></div>
+            <div class="kv"><div>Missing Required fields from the carrier application<small>Always blocks Submit. Set the fields in Carrier application.</small></div><span class="small muted">Always on</span></div>
+          </div></div>
+        </div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <div class="dialog">
+      <h4>Try a quote</h4>
+      <p>Type a face amount and a premium. Nothing is saved.</p>
+      <div class="fgrid"><div><label class="l">Product type</label><div class="input">Term life<span class="end">▾</span></div></div><div><label class="l">Face amount</label><div class="input">$250,000</div></div><div><label class="l">Monthly premium</label><div class="input">$38.90</div></div><div><label class="l">Per $1,000 a month</label><div class="input dis">$0.16</div></div></div>
+      <div class="result"><div class="ln"><span>Term life band $0.08 – $0.60 a month</span><span class="chip ok">Inside the band</span></div></div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px"><span class="btn o">Close</span></div>
+    </div>
+  </div>
+
+  <!-- R5 Disclosures -->
+  <div class="sec"><h2>5 · Disclosures</h2><span>One list of documents. A document opens as a right sheet with sections (Wording · When required · Call scripts · Versions), never a second row of tabs.</span></div>
+  <div class="app tall">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Agency</h5><a>Products</a><a>Carriers</a><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a><a>AI assistant</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a>Health questions</a><a>Quote inputs</a><a>Carrier application</a><a>Quote &amp; case checks</a><a class="on">Disclosures</a><a>Stage moves</a></nav><div class="acts"><span class="btn o">Try a case</span><span class="btn p">Add a document</span></div></div>
+      <div class="status warn"><span class="dot"></span>9 documents · 8 live · 1 draft needs legal review</div>
+      <div class="body">
+        <div class="card flex1">
+          <div class="scroll">
+            <table><thead><tr><th>Document</th><th>Required when</th><th>Acknowledged on</th><th>Call scripts</th><th>Version</th><th>Status</th></tr></thead><tbody>
+              <tr><td>Recorded call consent</td><td>Every call</td><td>Verify</td><td>50 states</td><td>v6</td><td><span class="chip ok">Live</span></td></tr>
+              <tr class="s"><td>Replacement notice</td><td>Client has a policy to replace</td><td>Disclosures</td><td>50 states</td><td>v4 draft</td><td><span class="chip hl">Needs legal review</span></td></tr>
+              <tr><td>HIPAA authorisation</td><td>Every application</td><td>Disclosures</td><td>1 · all states</td><td>v3</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Graded benefit explanation</td><td>Plan is Graded</td><td>Quote</td><td>1 · all states</td><td>v2</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Medicare Supplement outline of coverage</td><td>Product is Medicare Supplement</td><td>Disclosures</td><td>12 states</td><td>v5</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Bank draft authorisation</td><td>Payment is bank draft</td><td>Payment</td><td>1 · all states</td><td>v2</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Florida senior consumer notice</td><td>State is FL and age 65+</td><td>Disclosures</td><td>FL</td><td>v1</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Free-look period</td><td>Every application</td><td>Review</td><td>50 states</td><td>v3</td><td><span class="chip ok">Live</span></td></tr>
+              <tr><td>Agent licence statement</td><td>Every call</td><td>Verify</td><td>1 · all states</td><td>v2</td><td><span class="chip ok">Live</span></td></tr>
+            </tbody></table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><div><b>Replacement notice</b><div class="small muted">v4 draft · v3 live · used on 41 cases last month</div></div><span class="x">✕</span></div>
+      <div class="anchors"><span>Wording</span><span class="on">When required</span><span>Call scripts</span><span>Versions</span></div>
+      <div class="sheet-b">
+        <div class="sheetsec"><h4>Wording</h4><p>The text the client receives and agrees to.</p>
+          <div class="input textarea">Replacing an existing policy may not be in your best interest. You may lose benefits, pay a higher premium, or face a new contestability period…</div></div>
+        <div class="sheetsec"><h4>When required</h4><p>Required when <b>all</b> of these are true. No rule means never required.</p>
+          <div class="rule"><span class="w">When</span><div class="input">Client has a policy<span class="end">▾</span></div><div class="input">is</div><div class="input">Yes<span class="end">▾</span></div><span class="small muted" style="margin-left:auto">✕</span></div>
+          <div class="rule"><span class="w">and</span><div class="input">Product<span class="end">▾</span></div><div class="input">is one of</div><div class="input">Final Expense, Term life<span class="end">▾</span></div><span class="small muted" style="margin-left:auto">✕</span></div>
+          <div class="row"><span class="btn g sm">+ Add a condition</span><span class="small muted">Matches 41 of 312 cases last month</span></div>
+          <div class="fgrid" style="margin-top:12px"><div><label class="l">Acknowledged on</label><div class="input">Disclosures step<span class="end">▾</span></div></div><div><label class="l">How the client agrees</label><div class="input">Says yes on the recorded call<span class="end">▾</span></div></div></div></div>
+        <div class="sheetsec"><h4>Call scripts</h4><p>What the agent reads aloud. 50 states · 3 differ from the standard script.</p>
+          <div class="row"><span class="chip n">Standard · 47 states</span><span class="chip n">Florida</span><span class="chip n">New York</span><span class="chip n">California</span><span class="btn g sm">Open scripts</span></div></div>
+        <div class="sheetsec"><h4>Versions</h4>
+          <div class="ver"><span class="chip hl">Draft</span>v4 · wording changed · Dana Alvarez · 2 days ago<span class="end btn g sm">Compare to v3</span></div>
+          <div class="ver"><span class="chip ok">Live</span>v3 · since Aug 2 · 1,204 acknowledgements<span class="end btn g sm">Retire</span></div>
+          <div class="ver"><span class="chip n">Retired</span>v2 · Mar 11 – Aug 2<span class="end btn g sm">Open</span></div></div>
+      </div>
+      <div class="sheet-f"><span class="btn danger" style="margin-right:auto">Delete draft</span><span class="btn o">Save draft</span><span class="btn p">Mark reviewed &amp; publish</span></div>
+    </aside>
+  </div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a>Health questions</a><a>Quote inputs</a><a>Carrier application</a><a>Quote &amp; case checks</a><a class="on">Disclosures</a><a>Stage moves</a></nav></div>
+      <div class="status warn"><span class="dot"></span>9 documents · 1 draft needs legal review</div>
+      <div class="body"><div class="card flex1"><div class="scroll"><table><thead><tr><th>Document</th><th>Required when</th><th>Status</th></tr></thead><tbody><tr class="s"><td>Replacement notice</td><td>Client has a policy to replace</td><td><span class="chip hl">Needs legal review</span></td></tr><tr><td>Recorded call consent</td><td>Every call</td><td><span class="chip ok">Live</span></td></tr></tbody></table></div></div></div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet wide">
+      <div class="sheet-h"><span class="btn g sm">‹ Replacement notice</span><div><b>Read on the call · by state</b></div><span class="x">✕</span></div>
+      <div class="sheet-b" style="display:flex;flex-direction:column">
+        <div class="sstate" style="flex:1">
+          <div class="sl">
+            <div class="sel"><div><b>Standard</b><div class="small muted">47 states</div></div></div>
+            <div class="sel on"><div><b>Florida</b><div class="small muted">Own wording</div></div></div>
+            <div class="sel"><div><b>New York</b><div class="small muted">Own wording</div></div></div>
+            <div class="sel"><div><b>California</b><div class="small muted">Own wording</div></div></div>
+            <div class="sel"><div class="small muted">+ Give a state its own wording</div></div>
+          </div>
+          <div class="sr">
+            <label class="l">What the agent reads in Florida</label>
+            <div class="script">"Before we continue, Florida requires me to tell you: replacing your current policy with <mark>[carrier]</mark> may not be in your best interest. You have the right to a <mark>30-day</mark> free look. Do you understand and wish to continue?"</div>
+            <div class="help">Words in gold fill in from the case. The client must answer yes on the recording.</div>
+            <div class="fgrid" style="margin-top:12px"><div><label class="l">Agent must hear</label><div class="input">"Yes" or "I understand"<span class="end">▾</span></div></div><div><label class="l">If the client says no</label><div class="input">Stop the application<span class="end">▾</span></div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="sheet-f"><span class="btn g" style="margin-right:auto">Use the standard script for Florida</span><span class="btn o">Cancel</span><span class="btn p">Save to draft</span></div>
+    </aside>
+  </div>
+
+  <!-- R6 Stage moves -->
+  <div class="sec"><h2>6 · Stage moves (was Application stages)</h2><span>A map of application events to lead-pipeline stages, with recent moves beside it instead of a Map / Activity tab pair.</span></div>
+  <div class="app">
+    <div class="top"><span class="logo"></span><span class="search">Search or jump to…</span><span class="sp"></span><span class="me">DA</span></div>
+    <div class="icons"><i></i><i></i><i></i><i></i><i></i><i class="on"></i></div>
+    <nav class="srail"><div class="find">Search settings · /</div><h5>Selling</h5><a class="on">Sales process <span class="cnt">5</span></a><a>Application forms</a><h5>Leads &amp; calling</h5><a>Pipelines &amp; outcomes</a></nav>
+    <div class="main">
+      <div class="crumb">Settings › Selling › Sales process</div>
+      <div class="head"><h3>Sales process</h3><nav class="tabs"><a>Overview</a><a>Health questions</a><a>Quote inputs</a><a>Carrier application</a><a>Quote &amp; case checks</a><a>Disclosures</a><a class="on">Stage moves</a></nav><div class="acts"><span class="btn o">Open Pipelines &amp; outcomes</span></div></div>
+      <div class="status"><span class="dot"></span>4 of 4 events mapped in 2 pipelines · 212 cards moved this month</div>
+      <div class="body">
+        <div class="card flex1">
+          <div class="card-h"><b>When the application…</b><div class="r"><span class="seg sm"><span class="on">Final Expense pipeline</span><span>Medicare pipeline</span></span></div></div>
+          <div class="scroll">
+            <div class="flow"><div class="ev"><span class="ic">Q</span><div><b>Is quoted</b><small>Agent saves a quote on step 4</small></div></div><span class="arrow">→</span><div class="to"><b>Quoted</b><small>Final Expense pipeline</small></div><span class="small muted">Edit</span></div>
+            <div class="flow on"><div class="ev"><span class="ic">S</span><div><b>Is sent to the carrier</b><small>Submit on step 10</small></div></div><span class="arrow">→</span><div class="to"><b>Submitted</b><small>Final Expense pipeline</small></div><span class="small muted">Edit</span></div>
+            <div class="flow"><div class="ev"><span class="ic">I</span><div><b>Is issued</b><small>Carrier issues the policy</small></div></div><span class="arrow">→</span><div class="to"><b>Issued</b><small>Final Expense pipeline</small></div><span class="small muted">Edit</span></div>
+            <div class="flow"><div class="ev"><span class="ic">L</span><div><b>Is lost</b><small>Declined, postponed or withdrawn</small></div></div><span class="arrow">→</span><div class="to"><b>Not taken</b><small>Final Expense pipeline · reason kept</small></div><span class="small muted">Edit</span></div>
+          </div>
+        </div>
+        <div class="card" style="width:340px">
+          <div class="card-h"><b>Recent moves</b><div class="r"><span class="small muted">last 7 days</span></div></div>
+          <div class="scroll">
+            <div class="sel"><span class="av">RG</span><div><b>Ruth Gaines</b><div class="small muted">Submitted → Issued · Mutual of Omaha</div></div><span class="end">2h</span></div>
+            <div class="sel"><span class="av">TB</span><div><b>Tomás Burke</b><div class="small muted">Quoted → Submitted · Corebridge</div></div><span class="end">5h</span></div>
+            <div class="sel"><span class="av">LH</span><div><b>Loretta Hines</b><div class="small muted">Submitted → Not taken · declined</div></div><span class="end">1d</span></div>
+            <div class="sel"><span class="av">WP</span><div><b>Walter Price</b><div class="small muted">New → Quoted · Transamerica</div></div><span class="end">1d</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="scrim"></div>
+    <aside class="sheet">
+      <div class="sheet-h"><div><b>When the application is sent</b><div class="small muted">Submit on step 10</div></div><span class="x">✕</span></div>
+      <div class="sheet-b">
+        <div class="sheetsec"><h4>Move the lead card to</h4><p>One stage per pipeline. Leave empty to not move the card.</p>
+          <div class="fgrid"><div class="full"><label class="l">Final Expense pipeline</label><div class="input">Submitted<span class="end">▾</span></div></div><div class="full"><label class="l">Medicare pipeline</label><div class="input">Application sent<span class="end">▾</span></div></div></div></div>
+        <div class="sheetsec"><h4>If the card is already further along</h4>
+          <div class="kv"><div>Never move a card backwards<small>e.g. a resubmit after Issued keeps it on Issued</small></div><span class="switch on"></span></div></div>
+      </div>
+      <div class="sheet-f"><span class="btn o">Cancel</span><span class="btn p">Save</span></div>
+    </aside>
+  </div>
+
+  <!-- States -->
+  <div class="sec"><h2>States</h2><span>Shared by every tab: nothing set up yet, loading, could not load</span></div>
+  <div class="states">
+    <div class="card"><div class="card-h"><b>Health questions</b></div><div class="empty"><span class="ic">?</span><b>No health questions yet</b><p>Start from the Insurvas set for Final Expense, or build your own.</p><div class="row" style="justify-content:center"><span class="btn o">Build my own</span><span class="btn p">Copy Insurvas set</span></div></div></div>
+    <div class="card"><div class="card-h"><b>Quote inputs</b></div><div class="card-b"><div class="skel" style="width:60%"></div><div class="skel"></div><div class="skel" style="width:80%"></div><div class="skel"></div><div class="skel" style="width:45%"></div></div></div>
+    <div class="card"><div class="card-h"><b>Carrier application</b></div><div class="empty"><span class="ic" style="background:var(--bad-s);color:var(--bad)">!</span><b>Could not load the field sets</b><p>Nothing was changed. Try again, or check your connection.</p><span class="btn o">Try again</span></div></div>
+  </div>
+
+  <div class="sec"><h2>Pick one</h2><span>Nothing is built until you choose. The page redesigns above go with any option.</span></div>
+  <div class="pick">
+    <div class="rec"><b>A · One page, step map (recommended)</b>One "Sales process" item. The first tab shows the call in order and what is set up at each step; each step is a header tab with a plain name.<ul><li>Six menu items become one</li><li>Names say what they do: Health questions, Quote inputs, Carrier application</li><li>One "Needs you" list for drafts, defaults and autofill gaps</li><li>Disclosures loses its inner tabs: a document opens as a sheet</li></ul></div>
+    <div><b>B · Renamed items</b>Keep six menu items, rename them, sort them in call order, add "Used on step X" and a mini journey strip.<ul><li>Smallest change, same routes</li><li>Still six places to look for what needs you</li><li>The rail gets longer, not clearer</li></ul></div>
+    <div><b>C · Carrier setup</b>One record per carrier × product holding its health questions, quote inputs and application fields.<ul><li>Best for "set up a new carrier"</li><li>Harder to change one question for every carrier</li><li>Checks, disclosures and stage moves still live elsewhere, so the call order is lost</li></ul></div>
+  </div>
+</div>
+<!--kit-js-->
+<script>
+/* Settings round 8 board kit: option (A/B/C) and theme switching. Keys 1–3 pick an option, L / D the theme.
+   Buttons: <button data-opt="A">, <button data-theme="light">. The body carries class light|dark and data-opt. */
+(function () {
+  var body = document.body;
+  if (!body.dataset.opt) body.dataset.opt = "A";
+  if (!/\b(light|dark)\b/.test(body.className)) body.classList.add("light");
+  function sync() {
+    document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.optBtn === body.dataset.opt)); });
+    document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.setAttribute("aria-pressed", String(body.classList.contains(b.dataset.themeBtn))); });
+  }
+  function opt(v) { body.dataset.opt = v; sync(); }
+  function theme(v) { body.classList.remove("light", "dark"); body.classList.add(v); sync(); }
+  document.querySelectorAll("[data-opt-btn]").forEach(function (b) { b.addEventListener("click", function () { opt(b.dataset.optBtn); }); });
+  document.querySelectorAll("[data-theme-btn]").forEach(function (b) { b.addEventListener("click", function () { theme(b.dataset.themeBtn); }); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "1") opt("A"); if (e.key === "2") opt("B"); if (e.key === "3") opt("C");
+    if (e.key === "l" || e.key === "L") theme("light"); if (e.key === "d" || e.key === "D") theme("dark");
+  });
+  sync();
+})();
+
+</script>
+<!--/kit-js-->
+</body>
+</html>

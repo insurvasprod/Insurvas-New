@@ -8,6 +8,7 @@ import { PartnerQualityLeads } from "@/components/app/partner-quality-leads";
 import { defaultPartnerQualityPeriod, validPartnerQualityPeriod } from "@/lib/partnerQuality/metrics";
 import { PARTNER_QUALITY_METRICS, type PartnerQualityMetric } from "@/lib/partnerQuality/types";
 import { ReportsPage } from "@/components/app/reports/reports-page";
+import { showOf } from "@/lib/reports/show";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function single(value: string | string[] | undefined) { return Array.isArray(value) ? value[0] : value; }
@@ -27,9 +28,14 @@ export default async function PartnerQualityLeadsPage({ params, searchParams }: 
   const period = validPartnerQualityPeriod(single(query.from), single(query.to)) ?? defaultPartnerQualityPeriod();
   const member = single(query.member);
   const label = (single(query.label) ?? "").slice(0, 160).trim() || "Leads behind this figure";
+  // The Table · Chart switch (owner 2026-11-12: every Reports sub-page), opening on the rows. Every other param stays.
+  const show = showOf(query, "table");
+  const kept = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) for (const one of Array.isArray(value) ? value : value == null ? [] : [value]) kept.append(key, one);
+  const base = `/app/partner-quality/${partnerId}/leads?${kept}`;
   return (
-    <ReportsPage view="partner" title={label}>
-      <PartnerQualityLeads partnerId={partnerId} metric={metric as PartnerQualityMetric} period={period} label={label} disposition={single(query.disposition)?.slice(0, 80) || null} member={member && UUID.test(member) ? member : null} />
+    <ReportsPage view="partner" title={label} show="table">
+      <PartnerQualityLeads show={show} base={base} partnerId={partnerId} metric={metric as PartnerQualityMetric} period={period} label={label} disposition={single(query.disposition)?.slice(0, 80) || null} member={member && UUID.test(member) ? member : null} />
     </ReportsPage>
   );
 }

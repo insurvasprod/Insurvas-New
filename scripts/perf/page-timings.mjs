@@ -52,7 +52,9 @@ const allPages = readdirSync(shellDir, { withFileTypes: true })
 const pages = opt("pages", null)?.split(",") ?? allPages;
 
 // Background polls every page carries; they never count as "the page is waiting".
-const POLLS = [/\/api\/app\/notifications/, /\/api\/app\/announcements/, /\/api\/app\/agent-alerts/, /\/api\/app\/presence/, /\/api\/app\/heartbeat/];
+// 2026-11-09: also the shell's own widgets, which load beside every page and never hold its content back — the
+// live-transfer card (inbound/waiting, read once per document then every 30s) and the top bar's workspace list.
+const POLLS = [/\/api\/app\/notifications/, /\/api\/app\/announcements/, /\/api\/app\/agent-alerts/, /\/api\/app\/presence/, /\/api\/app\/heartbeat/, /\/api\/app\/inbound\/waiting/, /\/api\/app\/auth\/workspaces/];
 
 const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } });
 async function mint(email) {

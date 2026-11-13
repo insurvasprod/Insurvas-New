@@ -33,12 +33,16 @@ export function percent(bp: number): string {
   return rest ? `${whole}.${rest}%` : `${whole}%`;
 }
 
-/** What a producer may read about themselves: share amounts, dates, policy numbers and the reason for each — no commission figure. */
+/**
+ * What a producer may read about themselves: share amounts, dates, policy numbers and the reason for each — no commission figure.
+ * The entry's type and its policy's carrier ride along (round 7, 4·4): the type sorts Shares from Chargebacks, the carrier
+ * builds the link to the producer's own policy page. Neither carries a percentage or an amount of the agency's.
+ */
 export function producerView(input: { balanceCents: number; entries: ProducerEntry[]; runs: ProducerRun[] }) {
   return {
     balanceCents: input.balanceCents,
     owesAgency: input.balanceCents < 0,
-    entries: input.entries.map((e) => ({ id: e.id, label: PRODUCER_ENTRY_LABELS[e.entryType] ?? e.entryType, policyNumber: e.policyNumber, amountCents: e.amountCents, occurredOn: e.occurredOn, reason: e.reason })),
+    entries: input.entries.map((e) => ({ id: e.id, entryType: e.entryType, label: PRODUCER_ENTRY_LABELS[e.entryType] ?? e.entryType, policyNumber: e.policyNumber, carrierId: e.carrierId, amountCents: e.amountCents, occurredOn: e.occurredOn, reason: e.reason })),
     runs: input.runs.filter((r) => r.status === "published" || r.status === "paid").map((r) => ({
       id: r.id, periodStart: r.periodStart, periodEnd: r.periodEnd, status: r.status, earnedCents: r.earnedCents, clawedBackCents: r.clawedBackCents,
       withheldCents: r.withheldCents, netCents: r.netCents, balanceAfterCents: r.balanceAfterCents, paidOn: r.paidOn,

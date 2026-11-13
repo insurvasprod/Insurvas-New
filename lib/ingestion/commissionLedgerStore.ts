@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { isSchemaGap } from "@/lib/supabase/schemaGap";
 
@@ -275,14 +276,38 @@ export async function bookAdvanceAtRisk(tenantId: string): Promise<{ cents: numb
 }
 
 /**
+ * Every row of an ordered read: the first page, then three at a time (perf pass 2026-11-09). The same rows in the
+ * same order as one page after another; stops at the first short page, and at the first error with the rows before it.
+ */
+async function threeAtATime(build: () => Loose, max: number): Promise<{ rows: Loose[]; error: unknown }> {
+  const rows: Loose[] = [];
+  const first = await build().range(0, 999);
+  if (first.error) return { rows, error: first.error };
+  rows.push(...(first.data ?? []));
+  if (!first.data || first.data.length < 1000) return { rows, error: null };
+  for (let from = 1000; from < max; from += 3000) {
+    const starts = [from, from + 1000, from + 2000].filter((at) => at < max);
+    const batch = await Promise.all(starts.map((at) => build().range(at, at + 999)));
+    for (const { data, error } of batch) {
+      if (error) return { rows, error };
+      rows.push(...(data ?? []));
+      if (!data || data.length < 1000) return { rows, error: null };
+    }
+  }
+  return { rows, error: null };
+}
+
+/**
  * The unearned advance per policy that has one (LA-4.12: computed from the ledger, never stored —
  * policy_current's money columns stay empty), with the facts a rollup groups by. Null when the ledger
  * can't be read; a policy with no advance on file is left out; atRiskCents null is Unknown.
  */
-export async function advanceAtRiskByPolicy(tenantId: string): Promise<Array<{ carrierId: string; policyNumber: string; agentUserId: string | null; inClawbackWindow: boolean | null; atRiskCents: number | null }> | null> {
+// Read once per request (React cache): the agency dashboard asks for it once per month it shows (perf pass 2026-11-09).
+export const advanceAtRiskByPolicy = cache(async (tenantId: string): Promise<Array<{ carrierId: string; policyNumber: string; agentUserId: string | null; inClawbackWindow: boolean | null; atRiskCents: number | null }> | null> => {
   const [policies, lines, flagged, ruleFor] = await Promise.all([
-    (async () => { const rows: Loose[] = []; for (let from = 0; from < 50_000; from += 1000) { const { data } = await db().from("policy_current").select("carrier_id, policy_number, months_paid, product_code, as_of, agent_user_id, in_clawback_window").eq("tenant_id", tenantId).order("carrier_id").order("policy_number").range(from, from + 999); rows.push(...(data ?? [])); if (!data || data.length < 1000) break; } return rows; })(),
-    (async () => { const rows: Loose[] = []; for (let from = 0; from < 100_000; from += 1000) { const { data, error } = await db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id").eq("tenant_id", tenantId).order("id").range(from, from + 999); if (error) return null; rows.push(...(data ?? [])); if (!data || data.length < 1000) break; } return rows; })(),
+    // A failed policy page keeps the rows read before it, as before; a failed ledger page is no answer (null).
+    threeAtATime(() => db().from("policy_current").select("carrier_id, policy_number, months_paid, product_code, as_of, agent_user_id, in_clawback_window").eq("tenant_id", tenantId).order("carrier_id").order("policy_number"), 50_000).then((read) => read.rows),
+    threeAtATime(() => db().from("commission_entry").select("carrier_id, policy_number, entry_type, corrects_type, amount_cents, months_advanced, file_id").eq("tenant_id", tenantId).order("id"), 100_000).then((read) => (read.error ? null : read.rows)),
     flaggedFiles(tenantId),
     advanceRuleResolver(tenantId),
   ]);
@@ -305,4 +330,4 @@ export async function advanceAtRiskByPolicy(tenantId: string): Promise<Array<{ c
     out.push({ carrierId: p.carrier_id, policyNumber: p.policy_number, agentUserId: p.agent_user_id ?? null, inClawbackWindow: p.in_clawback_window ?? null, atRiskCents: atRisk });
   }
   return out;
-}
+});

@@ -1,7 +1,7 @@
 "use client";
 
+import { usePagePathname } from "@/components/ui/page-pathname";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { usePathname } from "next/navigation";
 
 import type { MenuItem, MenuSection } from "@/lib/menu/definition";
 import { LEADS_IN_STEPS, leadsInStepLabel, leadsInStepOf } from "@/lib/leadSources/steps";
@@ -9,7 +9,7 @@ import { COMPLIANCE_STEPS, complianceStepLabel, complianceStepOf } from "@/lib/c
 import { REPORTS_VIEWS, reportsViewLabel, reportsViewOf } from "@/lib/reports/views";
 import { AREA_LABELS, DATA_IN_STEPS, areaOfStep, areaSteps, bookAreaOf, dataInStepLabel } from "@/lib/dataIn/steps";
 import { accountingStepHref, accountingStepLabel, accountingStepOf } from "@/lib/accounting/steps";
-import { commissionsStepLabel, commissionsStepOf } from "@/lib/commissions/steps";
+import { commissionsStepHref, commissionsStepLabel, commissionsStepOf } from "@/lib/commissions/steps";
 import { agencyStepHref, agencyStepLabel, agencyStepOf } from "@/lib/agency/steps";
 import { Breadcrumbs, type Crumb } from "@/components/ui/breadcrumbs";
 
@@ -74,7 +74,7 @@ function useLeadsCrumbs(pathname: string, on: boolean) {
  */
 export function PageTrail({ title }: { title: string }) {
   const menu = useContext(MenuContext);
-  const pathname = usePathname();
+  const pathname = usePagePathname();
   const leadsStep = leadsInStepOf(pathname);
   const leadsCrumbs = useLeadsCrumbs(pathname, Boolean(leadsStep));
   if (!menu) return null;
@@ -131,9 +131,15 @@ export function PageTrail({ title }: { title: string }) {
     const agency = agencyStep === "overview" ? [] : [{ label: "Agency", href: agencyStepHref("overview") }];
     return <Breadcrumbs crumbs={[{ label: "Home" }, ...agency, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
   }
-  // A Commissions step (2026-11-02): Commissions › the step (My pay on its own address).
+  // A Commissions step (round 7, 2026-11-10): Commissions › the step (My pay on its own address), and › the record it
+  // has open (a statement, a pay issue, a letter, a credit item, a producer statement, a partner invoice).
   const commissionsStep = commissionsStepOf(pathname);
-  if (commissionsStep) return <Breadcrumbs crumbs={[{ label: "Commissions" }, { label: commissionsStepLabel(commissionsStep, pathname), href: pathname }]} />;
+  if (commissionsStep) {
+    const label = commissionsStepLabel(commissionsStep, pathname);
+    const stepHref = commissionsStepHref(commissionsStep, pathname);
+    const below = pathname !== stepHref && title.trim() && title !== label;
+    return <Breadcrumbs crumbs={[{ label: "Commissions" }, { label, href: stepHref }, ...(below ? [{ label: title }] : [])]} />;
+  }
   if (!item) return null;
   const page = item.navLabel ?? item.label;
   const group = item.section === page ? null : item.section;

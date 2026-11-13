@@ -52,17 +52,17 @@ export function LeadSignatureReadiness({ leadId, readOnly }: { leadId: string; r
   const locked = readOnly || !state || state.schemaPending;
 
   return (
-    <section aria-labelledby="signature-readiness-title" className="mt-6 border-t border-border pt-5">
+    <section aria-labelledby="signature-readiness-title">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h2 id="signature-readiness-title" className="text-lg font-semibold leading-[1.28] tracking-[-0.015em]">Can they finish on this call?</h2>
+        <h2 id="signature-readiness-title" className="m-0 text-card-title font-semibold text-foreground">Can they finish on this call?</h2>
         <span className="text-sm font-semibold tabular-nums text-muted-foreground">{guidance.yes} of {SIGNATURE_KEYS.length}</span>
       </div>
       {state?.schemaPending && <p role="status" className="mt-2 text-sm text-[var(--warning-ink)]">Answers cannot be saved until a pending database update is applied.</p>}
-      <div className="mt-3 grid gap-2 sm:grid-cols-2">
+      <div className="mt-2 flex flex-col">
         {SIGNATURE_KEYS.map((key) => {
           const value = answers[key];
           return (
-            <div key={key} role="group" aria-label={SIGNATURE_LABELS[key]} className="flex items-center justify-between gap-3 rounded-lg border border-border px-3 py-2">
+            <div key={key} role="group" aria-label={SIGNATURE_LABELS[key]} className="flex items-center justify-between gap-3 border-b border-border py-2 last:border-b-0">
               <span className={cn("text-sm", value === false ? "font-semibold text-[var(--error-ink)]" : value === true ? "text-foreground" : "text-muted-foreground")}>{SIGNATURE_LABELS[key]}</span>
               <span className="flex shrink-0 gap-1">
                 {([[true, "Yes"], [false, "No"], [null, "Not asked"]] as Array<[boolean | null, string]>).map(([option, label]) => (

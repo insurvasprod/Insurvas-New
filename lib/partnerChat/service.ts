@@ -319,14 +319,14 @@ async function enrichCards<T extends MessageRow>(supabase: ReturnType<typeof get
 type PreloadedChat = { messages: Array<MessageRow & Record<string, unknown>>; readAt: string | null };
 const PREPARE_CHUNK = 150;
 /** The list's lookups, done once for every channel (2026-10-28): enriched rows, shared notes, attachments. */
-type PreparedChat = { enriched: Array<MessageRow & Record<string, unknown>>; visibleNoteIds: Set<string>; attachments: Map<string, PartnerMessageAttachment[]> };
+type PreparedChat = { enriched: Array<MessageRow & Record<string, unknown>>; visibleNoteIds: Set<string>; attachments: Map<string, PartnerMessageAttachment[]>; visibleItems: Set<string> | null };
 
 /**
  * The per-channel reads chatForLoadedChannel would make (card facts, shared-note visibility, attachments
  * and their signed links), as three reads for the whole list instead of three per channel. On the demo
  * agency's 33 channels that was ~100 round trips and most of the 2–4 s the list took.
  */
-async function prepareChats(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, channels: ChatChannel[], latest: Map<string, PreloadedChat>): Promise<Map<string, PreparedChat>> {
+async function prepareChats(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, channels: ChatChannel[], latest: Map<string, PreloadedChat>, scope: ProducerScope = null, userId: string | null = null): Promise<Map<string, PreparedChat>> {
   const own = channels.map((channel) => {
     const stored = [...(latest.get(channel.id)?.messages ?? [])].reverse();
     return { channel, rows: channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored };
@@ -335,11 +335,16 @@ async function prepareChats(supabase: ReturnType<typeof getSupabaseServiceClient
   const partnerRows = own.filter((item) => item.channel.channel_type === "partner").flatMap((item) => item.rows);
   // The ids ride in the request URL, so they go in slices of PREPARE_CHUNK rows, the slices in parallel.
   const chunks = <T,>(list: T[]) => Array.from({ length: Math.ceil(list.length / PREPARE_CHUNK) }, (_, i) => list.slice(i * PREPARE_CHUNK, (i + 1) * PREPARE_CHUNK));
-  const [enrichedParts, noteParts, attachmentParts] = await Promise.all([
+  // AG-0.5: which of the list's transfers a narrow session may see, read once for every channel (it was
+  // one lead_queue read per channel, after the others). The same rule per id; null scope reads nothing.
+  const workItemIds = [...new Set(all.map((row) => row.work_item_id).filter((id): id is string => Boolean(id)))];
+  const [enrichedParts, noteParts, attachmentParts, itemParts] = await Promise.all([
     Promise.all(chunks(all).map((part) => enrichCards(supabase, tenantId, part))),
     Promise.all(chunks(partnerRows).map((part) => visibleToPartner(supabase, tenantId, part))),
     Promise.all(chunks(all).map((part) => attachmentViews(supabase, part.map((row) => row.id)))),
+    scope === null ? Promise.resolve(null) : Promise.all(chunks(workItemIds).map((part) => visibleWorkItemIds(tenantId, scope, part, userId))),
   ]);
+  const visibleItems = itemParts === null ? null : new Set(itemParts.flatMap((part) => [...part]));
   const enriched = enrichedParts.flat();
   const visibleNoteIds = new Set(noteParts.flatMap((part) => [...part]));
   const attachments = new Map(attachmentParts.flatMap((part) => [...part]));
@@ -347,7 +352,7 @@ async function prepareChats(supabase: ReturnType<typeof getSupabaseServiceClient
   const prepared = new Map<string, PreparedChat>();
   let at = 0;
   for (const item of own) {
-    prepared.set(item.channel.id, { enriched: enriched.slice(at, at + item.rows.length), visibleNoteIds, attachments });
+    prepared.set(item.channel.id, { enriched: enriched.slice(at, at + item.rows.length), visibleNoteIds, attachments, visibleItems });
     at += item.rows.length;
   }
   return prepared;
@@ -370,7 +375,7 @@ async function chatForLoadedChannel(supabase: ReturnType<typeof getSupabaseServi
   // routed them to the owners stay stored, but the channel no longer shows them to anyone.
   const stored = [...(messages.data ?? [])].reverse();
   const enriched = prepared ? prepared.enriched : await enrichCards(supabase, tenantId, channel.channel_type === "partner" ? stored.filter((row) => row.card_type !== "nobody_claimed") : stored);
-  const visibleItems = scope === null ? null : await visibleWorkItemIds(tenantId, scope, enriched.map((row) => row.work_item_id).filter((id): id is string => Boolean(id)), userId);
+  const visibleItems = scope === null ? null : prepared?.visibleItems ?? await visibleWorkItemIds(tenantId, scope, enriched.map((row) => row.work_item_id).filter((id): id is string => Boolean(id)), userId);
   const rows = visibleItems === null ? enriched : enriched.filter((row) => !row.work_item_id || visibleItems.has(row.work_item_id));
   // Attachments are fetched alongside the note filter; hidden notes' entries are simply never attached below.
   const [visibleNoteIds, attachments] = prepared
@@ -569,6 +574,16 @@ export async function setAgentChannelArchived(input: { tenantId: string; channel
  * tenant_users membership — exactly what isChannelMember accepts for a partner channel.
  */
 async function agentVisibleChannels(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, userId: string) {
+  const { channels, candidates } = await agentChannelCandidates(supabase, tenantId, userId);
+  const seats = await membersOf(supabase, tenantId, candidates);
+  return { visible: agentVisibleAmong(channels, candidates, seats, userId), seats };
+}
+
+/**
+ * Every partner channel, and the direct and group channels this user has a membership row in — a superset
+ * of what they can open (a removed member keeps the row). `possibleIds` are those channels' ids.
+ */
+async function agentChannelCandidates(supabase: ReturnType<typeof getSupabaseServiceClient>, tenantId: string, userId: string) {
   // The channel list and this user's memberships are independent, so they go out together.
   const [channels, memberships] = await Promise.all([
     supabase.from("partner_channels").select("id, tenant_id, partner_id, channel_type, name, status, created_by, created_at, archived_at, direct_key").eq("tenant_id", tenantId).order("created_at", { ascending: false }),
@@ -576,30 +591,39 @@ async function agentVisibleChannels(supabase: ReturnType<typeof getSupabaseServi
   ]);
   if (channels.error || memberships.error) throw new Error("Could not load partner channels");
   const rowIds = new Set((memberships.data ?? []).map((row) => row.channel_id));
-  const candidates = (channels.data ?? []).filter((channel) => channel.channel_type !== "partner" && rowIds.has(channel.id)) as ChatChannel[];
-  const seats = await membersOf(supabase, tenantId, candidates);
+  const all = (channels.data ?? []) as ChatChannel[];
+  const candidates = all.filter((channel) => channel.channel_type !== "partner" && rowIds.has(channel.id));
+  const possibleIds = all.filter((channel) => channel.channel_type === "partner" || rowIds.has(channel.id)).map((channel) => channel.id);
+  return { channels: all, candidates, possibleIds };
+}
+
+/** The channels this user can open: every partner channel, and the candidates where they hold a current seat. */
+function agentVisibleAmong(channels: ChatChannel[], candidates: ChatChannel[], seats: Map<string, ChannelMember[]>, userId: string) {
   const memberIds = new Set(candidates.filter((channel) => seats.get(channel.id)?.some((member) => member.userId === userId)).map((channel) => channel.id));
-  const visible = (channels.data ?? []).filter((channel) => channel.channel_type === "partner" || memberIds.has(channel.id)) as ChatChannel[];
-  return { visible, seats };
+  return channels.filter((channel) => channel.channel_type === "partner" || memberIds.has(channel.id));
 }
 
 export async function getAgentChatChannels(tenantId: string, userId: string, scope: ProducerScope = null) {
   const supabase = getSupabaseServiceClient();
   // Each visible channel then reuses the row already loaded instead of re-reading it.
-  const { visible, seats } = await agentVisibleChannels(supabase, tenantId, userId);
+  const { channels, candidates, possibleIds } = await agentChannelCandidates(supabase, tenantId, userId);
+  // The seats decide which candidates are visible; the messages, read marks and states are read beside
+  // them for every channel that could be (a superset), and only the visible channels' entries are used.
+  const [seats, latest, othersRead, states] = await Promise.all([
+    membersOf(supabase, tenantId, candidates),
+    latestMessagesByChannel(supabase, tenantId, userId, possibleIds),
+    othersReadAtByChannel(supabase, tenantId, userId, possibleIds),
+    conversationStates(supabase, tenantId, userId, possibleIds),
+  ]);
+  const visible = agentVisibleAmong(channels, candidates, seats, userId);
   // Access is already proven for every channel in `visible`, so the per-channel check (two serial
   // queries for a partner channel) is skipped: the caller reached here through requireFeatureRole,
   // which resolved their tenant_users membership for this tenant — exactly what isChannelMember
   // accepts for a partner channel — and an internal channel is in `visible` only because
   // `memberIds` holds this user's partner_channel_members row for it.
-  const [latest, othersRead, states] = await Promise.all([
-    latestMessagesByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id)),
-    othersReadAtByChannel(supabase, tenantId, userId, visible.map((channel) => channel.id)),
-    conversationStates(supabase, tenantId, userId, visible.map((channel) => channel.id)),
-  ]);
   // With every channel's messages in hand, the remaining lookups run once for the list; if that fails,
   // each channel falls back to its own reads, as before.
-  const prepared = latest ? await prepareChats(supabase, tenantId, visible, latest).catch(() => null) : null;
+  const prepared = latest ? await prepareChats(supabase, tenantId, visible, latest, scope, userId).catch(() => null) : null;
   const results = await Promise.all(visible.map(async (channel) => {
     try {
       const chat = await chatForLoadedChannel(supabase, channel, userId, true, true, scope, latest?.get(channel.id), prepared?.get(channel.id));
