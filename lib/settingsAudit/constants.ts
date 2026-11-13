@@ -30,7 +30,7 @@ export const AUDITED_SECTIONS: ReadonlyArray<{ key: string; label: string; modul
   { key: "business-identity", label: "Business identity", module: "LA-8.3" },
   { key: "team-access", label: "Team & access", module: "LA-8.6" },
   { key: "billing", label: "Plan & billing", module: "LA-8.5" },
-  { key: "integrations", label: "API keys & webhooks", module: "LA-8.7" },
+  { key: "integrations", label: "Integrations", module: "LA-8.7" },
   { key: "calling-windows", label: "Calling windows", module: "LA-2.4" },
   { key: "pipelines", label: "Pipelines", module: "LA-1.20" },
   { key: "dispositions", label: "Dispositions", module: "LA-2.9" },

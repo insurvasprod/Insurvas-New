@@ -1,19 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type MouseEvent, type ReactNode } from "react";
+import { createContext, useContext, useState, type MouseEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SettingSheet, type Affect, type HistoryItem } from "@/components/app/settings/money/setting-kit";
 import { control, Field } from "@/components/ui/field";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings › Retention, round 7 (owner pick 7·A, 2026-11-10; docs/la4/mockups-r7/retention.html §7): every setting
- * is one row of a table, and the row opens a dialog that edits that one setting. These are the parts the five tabs
- * and the weights page share: the row, a group line inside the table, the md dialog with "Back to Insurvas's", the
- * number input, and the two saves (the settings hub and the ladder rules).
+ * Settings › Retention, round 7 (owner pick 7·A, 2026-11-10) and round 8 (docs/design/settings-r8/
+ * money-compliance-settings.html §4–5, owner "Build all four" 2026-11-12): every setting is one row of a table, and
+ * the row opens a right sheet that edits that one setting. These are the parts the tabs share: the Ladder tab's row,
+ * a group line inside the table, the setting sheet with "Use Insurvas value", the number input, and the two saves
+ * (the settings hub and the ladder rules).
  */
 
 /** Clicks on the row's own links and buttons keep their click; anywhere else opens the row. */
@@ -71,12 +71,23 @@ export function CountLink({ href, value, label }: { href: string; value: number;
 }
 
 /**
- * One setting's dialog (board 7·2, Dialog md 440): its fields, an error line the owner can fix, "Back to Insurvas's"
- * when the value is the agency's own, Cancel and Save. Read-only: the value as text and only Close.
+ * What the board knows about the setting a sheet is open on, handed to it without threading props through every
+ * dialog: where it sits, what it affects, its own history (Put back on the newest change), and the link to every
+ * Retention change. Round 8 (docs/design/settings-r8/money-compliance-settings.html §4–5).
  */
-export function SettingDialog({ title, said, canEdit, kept = false, readValue, error, busy, saveDisabled, onSave, onBack, onClose, children }: {
+export type SheetContext = { where?: string; affects?: readonly Affect[]; history?: readonly HistoryItem[]; historyHref?: string; readOnlyWhy?: string };
+const SheetInfo = createContext<SheetContext>({});
+export const SheetInfoProvider = SheetInfo.Provider;
+
+/**
+ * One setting's sheet (round 8: a right sheet in place of round 7's md dialog; the props are round 7's, so every
+ * Retention dialog and the Ladder tab's open the same way): its fields, an error the owner can fix beside them, Use
+ * Insurvas value when the value is the agency's own, Cancel and Save this setting; then What it affects and its
+ * History. Read-only: the value, why it can't change here, and only Close.
+ */
+export function SettingDialog({ title, said, canEdit, kept = false, readValue, error, busy, saveDisabled, onSave, onBack, onClose, wide, children }: {
   title: string;
-  /** Insurvas keeps the value (read-only for everyone), so Close carries no read-only hint. */
+  /** Insurvas keeps the value (read-only for everyone): the sheet says so instead of "only the owner". */
   kept?: boolean;
   /** What the setting changes, and whose the value is. */
   said?: ReactNode;
@@ -90,35 +101,18 @@ export function SettingDialog({ title, said, canEdit, kept = false, readValue, e
   /** Shown when the value is the agency's own. */
   onBack?: (() => void) | null;
   onClose: () => void;
+  wide?: boolean;
   children?: ReactNode;
 }) {
+  const info = useContext(SheetInfo);
   return (
-    <Dialog open onOpenChange={(open) => { if (!open && !busy) onClose(); }}>
-      <DialogContent size="md">
-        <DialogHeader>
-          <DialogTitle className="pr-8">{title}</DialogTitle>
-          {said ? <DialogDescription>{said}</DialogDescription> : <DialogDescription className="sr-only">{title}</DialogDescription>}
-        </DialogHeader>
-        {canEdit ? (
-          <div className="flex flex-col gap-4">{children}</div>
-        ) : (
-          <div className="text-sm text-[var(--ink)]">{readValue}</div>
-        )}
-        {canEdit && error && <p role="alert" className="m-0 text-xs text-[var(--error-ink)]">{error}</p>}
-        <DialogFooter className="border-t border-border pt-4 sm:items-center">
-          {canEdit ? (
-            <>
-              {onBack && <Button type="button" variant="ghost" disabled={busy} onClick={onBack}>Back to Insurvas&apos;s</Button>}
-              <span className="hidden flex-1 sm:block" />
-              <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-              <Button type="button" disabled={busy || saveDisabled} onClick={onSave}>{busy ? "Saving…" : "Save"}</Button>
-            </>
-          ) : (
-            <Button type="button" variant="outline" onClick={onClose} title={kept ? undefined : "Paused while the account is read-only."}>Close</Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+    <SettingSheet title={title} where={`Retention › ${info.where ?? "Settings"}`} wide={wide} canEdit={canEdit}
+      readOnlyWhy={kept ? "Insurvas keeps this for every agency." : info.readOnlyWhy ?? "Your plan's billing is paused, so nothing saves."}
+      said={said} readValue={readValue} error={error} busy={busy} saveDisabled={saveDisabled} onSave={onSave}
+      onUseInsurvas={onBack ?? null} affects={info.affects} history={kept ? undefined : info.history} historyHref={info.historyHref}
+      onClose={onClose}>
+      {children}
+    </SettingSheet>
   );
 }
 

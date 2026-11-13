@@ -50,11 +50,19 @@ function Button({
   variant = "default",
   size = "default",
   asChild = false,
+  pending = false,
+  disabled,
   children,
   ...props
 }: React.ComponentProps<"button"> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /**
+     * The request this button sent is on its way (§18 "pending button", 2026-11-13): it cannot be
+     * pressed again, keeps its full colour instead of the disabled fade, and the pending hairline runs
+     * along its foot until the answer comes. Say what is happening in the label ("Signing in…").
+     */
+    pending?: boolean
   }) {
   const Comp = asChild ? Slot.Root : "button"
 
@@ -63,7 +71,10 @@ function Button({
       data-slot="button"
       data-variant={variant}
       data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
+      data-pending={pending ? "" : undefined}
+      aria-busy={pending || undefined}
+      disabled={disabled || pending}
+      className={cn(buttonVariants({ variant, size, className }), pending && "disabled:opacity-100")}
       {...props}
     >
       {asChild ? titleCaseChild(children) : titleCaseNode(children)}

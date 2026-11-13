@@ -8,6 +8,7 @@ import { listReconciliations } from "@/lib/compliance/recordIndex";
 import {
   copyPlatformRule,
   deleteTenantRule,
+  DEFAULTS,
   loadComplianceSettings,
   PLATFORM_CAPS,
   recentChanges,
@@ -39,7 +40,7 @@ const fail = (error: unknown) => {
 
 async function bundle(tenantId: string) {
   const db = getSupabaseServiceClient();
-  const [settings, deadlines, rules, holds, runs, changes, team, indexChecks] = await Promise.all([
+  const [settings, deadlines, rules, holds, runs, changes, team, indexChecks, openByRegulator] = await Promise.all([
     loadComplianceSettings(tenantId),
     deadlineSetup(tenantId),
     listRules(tenantId).catch(() => []),
@@ -49,10 +50,26 @@ async function bundle(tenantId: string) {
     db.from("tenant_users").select("user_id, role, users!inner(name, email)").eq("tenant_id", tenantId).not("accepted_at", "is", null),
     // LA-6.1 (round 7): the nightly index checks, newest first; a non-zero missing count is a bug.
     listReconciliations(tenantId, 14).catch(() => []),
+    // Round 8 (money-compliance-settings board §6): each regulator's open complaints, beside its deadline. A count
+    // that cannot be read leaves the column on "—".
+    openComplaintsByRegulator(tenantId).catch(() => null),
   ]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const people = ((team.data ?? []) as any[]).map((m) => ({ id: m.user_id as string, role: m.role as string, name: (m.users?.name as string | null) ?? (m.users?.email as string) ?? "Unnamed" }));
-  return { settings, caps: PLATFORM_CAPS, deadlines, rules, holds, runs, changes, team: people, indexChecks };
+  return { settings, defaults: DEFAULTS, caps: PLATFORM_CAPS, deadlines, rules, holds, runs, changes, team: people, indexChecks, openByRegulator };
+}
+
+/** Open regulator complaints (a state DOI's or the FTC's, not yet resolved), counted by regulator: "TX", "FTC". */
+async function openComplaintsByRegulator(tenantId: string): Promise<Record<string, number>> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (getSupabaseServiceClient() as any).from("complaint").select("channel, regulator_state").eq("tenant_id", tenantId).in("channel", ["doi", "ftc"]).neq("status", "resolved").limit(5000);
+  if (error) throw new Error(error.message);
+  const out: Record<string, number> = {};
+  for (const row of (data ?? []) as { channel: string; regulator_state: string | null }[]) {
+    const key = row.channel === "ftc" ? "FTC" : row.regulator_state;
+    if (key) out[key] = (out[key] ?? 0) + 1;
+  }
+  return out;
 }
 
 export async function GET() {

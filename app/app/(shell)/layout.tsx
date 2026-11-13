@@ -30,7 +30,7 @@ import { WarmPage } from "@/components/app/warm-page";
 import { ResourceScope } from "@/components/app/resource-scope";
 import { overdueComplaintAlert } from "@/components/app/overdue-complaint-banner";
 import { overdueRegulatorComplaintCount } from "@/lib/compliance/complaintBanner";
-import { readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
+import { DOCS_MENU_ITEM, readSetupStamps, SETUP_MENU_ITEM, setupStillOpen } from "@/lib/dashboard/setupViewer";
 import { SetupGuideBar } from "@/components/app/setup/setup-guide-bar";
 import { LiveTransferCard } from "@/components/app/inbound/live-transfer-card";
 import { Suspense } from "react";
@@ -140,9 +140,9 @@ export default async function AgentShellLayout({ children, sheet }: { children: 
     solo,
   });
   // 2026-10-21 walkthrough: "Get set up" sits under Home until this person's setup is finished.
-  if (setupStillOpen(setupStamps, context, available)) {
+  {
     const home = menu.find((section) => section.id === "home");
-    if (home) home.items = [...home.items, SETUP_MENU_ITEM];
+    if (home) home.items = [...home.items, ...(setupStillOpen(setupStamps, context, available) ? [SETUP_MENU_ITEM] : []), DOCS_MENU_ITEM];
   }
   const planName = entitlement.plan_code ? planDisplayName(entitlement.plan_code, entitlement.plan_name) : null;
   const identity = await readTopBarIdentity(context);

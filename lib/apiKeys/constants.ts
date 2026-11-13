@@ -6,29 +6,61 @@
  * everybody picks — and the table's check constraint refuses anything not in this list.
  */
 
+/**
+ * In the agency's words (Settings › Integrations, round 8): what each scope lets an app do, and what
+ * it shows. `group` sorts them under "Read" and "Change" on the key's sheet and in the new-key steps.
+ */
 export const API_SCOPES = [
-  { key: "leads:write", label: "Post leads", description: "Post a lead in, through a vendor's lead posting." },
-  { key: "leads:read", label: "Read leads", description: "Read lead records: name, phone, email, state and stage." },
-  { key: "policies:read", label: "Read policies", description: "Read the book of business: policy number, carrier, status and premium." },
-  { key: "commissions:read", label: "Read commissions", description: "Read commission entries from carrier statements." },
-  { key: "webhooks:manage", label: "Manage webhooks", description: "Create, list and delete webhook subscriptions." },
+  { key: "policies:read", group: "read", label: "Read policies", description: "Policy number, carrier, product, status and premium." },
+  { key: "leads:read", group: "read", label: "Read leads", description: "Name, phone, email, state and stage." },
+  { key: "commissions:read", group: "read", label: "Read commissions", description: "Commission lines from carrier statements, with amounts." },
+  { key: "leads:write", group: "change", label: "Create leads", description: "Add a lead to a campaign. Lead vendors should use Lead posting instead." },
+  { key: "webhooks:manage", group: "change", label: "Manage webhooks", description: "Let the app add and remove its own webhooks." },
 ] as const;
 
 export type ApiScope = (typeof API_SCOPES)[number]["key"];
 export const API_SCOPE_KEYS: readonly ApiScope[] = API_SCOPES.map((scope) => scope.key);
 
+/**
+ * The events a webhook can listen for. The form events are queued by the Application forms builder
+ * (migration 20261112200000): a webhook here hears every form's submissions; a form's own webhook,
+ * set on the form, hears only that form.
+ */
 export const WEBHOOK_EVENTS = [
-  { key: "policy.issued", label: "Policy issued", description: "A policy went active from submitted or approved." },
-  { key: "policy.lapsed", label: "Policy lapsed", description: "A carrier file reported a policy as lapsed." },
-  { key: "commission.discrepancy_found", label: "Commission discrepancy found", description: "Statement checking found a new discrepancy." },
+  { key: "policy.issued", group: "policy", label: "Policy issued", description: "A policy went active. Carries the policy number, carrier, product and premium." },
+  { key: "policy.lapsed", group: "policy", label: "Policy lapsed", description: "A carrier file reported a policy as lapsed." },
+  { key: "commission.discrepancy_found", group: "commission", label: "Commission doesn't match", description: "Statement checking found a new discrepancy." },
+  { key: "form.submitted", group: "form", label: "Application form sent", description: "Someone sent one of your application forms. Carries the answers, never an SSN or bank details." },
+  { key: "form.test", group: "form", label: "Application form test", description: "A test run of one of your application forms." },
 ] as const;
 
 export type WebhookEventType = (typeof WEBHOOK_EVENTS)[number]["key"];
 export const WEBHOOK_EVENT_KEYS: readonly WebhookEventType[] = WEBHOOK_EVENTS.map((event) => event.key);
 
-/** Rotation keeps the old key working this long, so nothing breaks mid-deploy. */
-export const ROTATION_OVERLAP_HOURS = [1, 24, 72] as const;
+/** Any event's plain name, including the test delivery that "Send test" queues. */
+export function webhookEventLabel(event: string): string {
+  if (event === "webhook.test") return "Test delivery";
+  return WEBHOOK_EVENTS.find((item) => item.key === event)?.label ?? event;
+}
+
+/**
+ * Rotation keeps the old key working this long, so nothing breaks mid-deploy. 0 is "stops now", for
+ * a key that may have leaked.
+ */
+export const ROTATION_OVERLAP_HOURS = [0, 1, 24, 72] as const;
 export const DEFAULT_ROTATION_OVERLAP_HOURS = 24;
+
+/**
+ * "Start from": the apps an agency usually connects, and what each usually needs. Picking one names
+ * the key after it and ticks these on the next step; the person can change both.
+ */
+export const KEY_PRESETS = [
+  { key: "zapier", label: "Zapier", scopes: ["policies:read"] },
+  { key: "make", label: "Make", scopes: ["policies:read"] },
+  { key: "sheets", label: "Google Sheets", scopes: ["policies:read"] },
+  { key: "warehouse", label: "Data warehouse", scopes: ["policies:read", "commissions:read"] },
+  { key: "other", label: "Other", scopes: [] },
+] as const satisfies ReadonlyArray<{ key: string; label: string; scopes: readonly ApiScope[] }>;
 
 /** Optional expiry, encouraged for anything temporary. */
 export const KEY_EXPIRY_DAYS = [30, 90, 365] as const;

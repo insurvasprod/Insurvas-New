@@ -156,6 +156,44 @@ export async function rotateApiKey(input: { tenantId: string; userId: string; ke
   return { ...minted, oldExpiresAt };
 }
 
+/**
+ * The key's sheet (Settings › Integrations, round 8): rename it, narrow what it can do, and set or
+ * move its end. Never widen: a key that may do more is a new key, so whoever holds this one cannot
+ * gain reach without someone making and handing over another. A key that is rotating out keeps the
+ * end its rotation set; a revoked or ended key is history and does not change.
+ */
+export async function updateApiKey(input: { tenantId: string; keyId: string; label?: string; scopes?: ApiScope[]; expiresAt?: string | null }): Promise<{ before: ApiKeyView; record: ApiKeyView }> {
+  const old = await liveKey(input.tenantId, input.keyId);
+  const patch: Record<string, unknown> = {};
+  if (input.label !== undefined) {
+    const label = input.label.trim();
+    if (!label || label.length > 80) throw new Error("Name the key after what uses it, in up to 80 characters.");
+    if (label !== old.label) patch.label = label;
+  }
+  if (input.scopes !== undefined) {
+    const next = [...new Set(input.scopes)];
+    if (!next.length) throw new Error("A key must be able to do at least one thing. To stop it altogether, revoke it.");
+    if (next.some((scope) => !old.scopes.includes(scope))) throw new Error("A key can only be narrowed. To let an app do more, make a new key.");
+    if (next.length !== old.scopes.length) patch.scopes = next;
+  }
+  if (input.expiresAt !== undefined && input.expiresAt !== old.expires_at) {
+    const successor = await db().from("api_key").select("id").eq("tenant_id", input.tenantId).eq("rotated_from", old.id).is("revoked_at", null).limit(1);
+    if (successor.error) throw new Error(`Could not check that key: ${successor.error.message}`);
+    if (successor.data?.length) throw new Error("This key is rotating out; its end was set by the rotation. Change the new key instead.");
+    if (input.expiresAt !== null && !(Date.parse(input.expiresAt) > Date.now())) throw new Error("Pick an end date in the future. To stop the key now, revoke it.");
+    patch.expires_at = input.expiresAt;
+  }
+  const names = await namesFor([old.created_by]);
+  if (!Object.keys(patch).length) return { before: view(old, names), record: view(old, names) };
+  const result = await db().from("api_key").update(patch).eq("tenant_id", input.tenantId).eq("id", old.id).is("revoked_at", null).select(COLUMNS).maybeSingle();
+  if (result.error) {
+    if (isMissing(result.error)) throw new ApiKeySchemaPendingError();
+    throw new Error(`Could not save the key: ${result.error.message}`);
+  }
+  if (!result.data) throw new Error("That key was revoked while you were changing it.");
+  return { before: view(old, names), record: view(result.data as Row, names) };
+}
+
 /** Effective on the next request: every request reads this row. */
 export async function revokeApiKey(input: { tenantId: string; userId: string; keyId: string }): Promise<ApiKeyView> {
   const result = await db().from("api_key").update({ revoked_at: new Date().toISOString(), revoked_by: input.userId })

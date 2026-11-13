@@ -32,6 +32,8 @@ export type CalendarConnectionView = {
   accountEmail: string | null;
   lastSyncedAt: string | null;
   lastError: string | null;
+  /** Google only: the agent let Insurvas add its meetings to this calendar (calendar.events). */
+  writesEvents: boolean;
 };
 
 export type CalendarProviderView = {

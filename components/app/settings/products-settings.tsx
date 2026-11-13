@@ -1,74 +1,115 @@
 "use client";
 
 /**
- * Settings › Products (option A, owner pick 2026-10-27; Notion LA-1.3 + SA-4.5). Every product in the
- * Insurvas catalogue with a switch, grouped by line. What the plan does not include is shown locked.
- * A sold product says which partners may send it and whether its form is set up. Turning one on saves
- * at once with Undo; turning one off says what stops and what keeps working first (foundation v3 §11).
- * Every product picker in the app reads this same answer (lib/products/agencyProducts.ts).
+ * Settings › Products, round 8 (board settings-r8/products-and-ai P1–P4, owner 2026-11-12; first built as
+ * option A 2026-10-27, Notion LA-1.3 + SA-4.5). Two header tabs: In your plan and Not in your plan.
+ *
+ *   In your plan    one line per product, grouped by line (Life / Health / Retirement): the Sell switch (saves
+ *                   at once with Undo; turning one off asks first, today's wording), the partners who may send
+ *                   it, "What it needs" in call order as neutral text (a missing step on a product you sell is
+ *                   a green "+" link to the Settings page that sets it up), and one Ready chip — the only
+ *                   colour on the row. A row opens the product's sheet.
+ *   Not in your plan  the products the plan doesn't include and the plan that adds each, linking to Billing.
+ *
+ * A status line under the title says where the page stands; no notice cards. Every product picker in the app
+ * reads the same answer (lib/products/agencyProducts.ts). Readiness comes from GET /api/app/products/readiness
+ * after the list, so the switches never wait for it.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Lock } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 
-import { Callout, SettingsCard, SettingsSectionHeader, SettingsStack } from "@/components/app/settings/primitives";
+import { SettingsSectionHeader } from "@/components/app/settings/primitives";
+import { StatusLine } from "@/components/app/settings/sales-process/parts";
 import { Button } from "@/components/ui/button";
+import { ToolbarSearch } from "@/components/ui/data-toolbar";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/field";
-import { SectionLoading } from "@/components/ui/page-states";
+import { EmptyState, ErrorState, NoMatches, SectionLoading } from "@/components/ui/page-states";
 import { StatusChip } from "@/components/ui/status-chip";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TableCard } from "@/components/ui/table-card";
+import { Segmented, ViewTabs } from "@/components/ui/view-tabs";
 import { notify } from "@/lib/notify";
+import { matchesFilter, needsFor, readinessOf, type Need, type ProductFilter, type Readiness, type ReadinessPayload } from "@/lib/products/readiness";
+import { parseSettingsHash } from "@/lib/settings/registry";
 import { cn } from "@/lib/utils";
 
-type Row = {
-  code: string;
-  name: string;
-  category: string;
-  inPlan: boolean;
-  enabled: boolean;
-  sold: boolean;
-  partners: string[];
-  formReady: boolean;
-  carriers: number;
-};
+import { NotInPlan } from "@/components/app/settings/products/not-in-plan";
+import { CATEGORY_ORDER, lineOf, linkClass, NeedsLine, partnersShort, partnersText, type ProductRow as Row } from "./products/parts";
+import { ProductSheet } from "@/components/app/settings/products/product-sheet";
 
-const CATEGORY_LABEL: Record<string, string> = { life: "Life", health: "Health", retirement: "Retirement" };
-const CATEGORY_ORDER = ["life", "health", "retirement"];
+type Tab = "in-plan" | "not-in-plan";
+const SECTION = "products";
 
-function partnersText(partners: string[]) {
-  if (partners.length === 0) return "No partner may send it yet";
-  if (partners.length <= 2) return `${partners.join(" and ")} may send it`;
-  return `${partners.slice(0, 2).join(", ")} and ${partners.length - 2} more may send it`;
-}
+type Shown = Row & { needs: Need[] | null; ready: Readiness | null };
 
 export function ProductsSettings() {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmOff, setConfirmOff] = useState<Row | null>(null);
+  const [facts, setFacts] = useState<ReadinessPayload | null>(null);
+  const [factsFailed, setFactsFailed] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("in-plan");
+  const [filter, setFilter] = useState<ProductFilter>("all");
+  const [query, setQuery] = useState("");
+  const [openCode, setOpenCode] = useState<string | null>(null);
 
-  useEffect(() => {
-    let live = true;
-    void fetch("/api/app/settings/products", { cache: "no-store" }).then(async (response) => {
-      const body = (await response.json().catch(() => null)) as { products?: Row[]; error?: string } | null;
-      if (!live) return;
-      if (!response.ok || !body?.products) { setError(body?.error ?? "Your products could not be loaded."); return; }
-      setRows(body.products);
-    });
-    return () => { live = false; };
+  const load = useCallback(async () => {
+    setError(null);
+    setRows(null);
+    const response = await fetch("/api/app/settings/products", { cache: "no-store" }).catch(() => null);
+    const body = (await response?.json().catch(() => null)) as { products?: Row[]; error?: string } | null;
+    if (!response?.ok || !body?.products) { setError(body?.error ?? "Your products could not be loaded."); return; }
+    setRows(body.products);
   }, []);
 
+  const loadFacts = useCallback(async () => {
+    setFactsFailed(false);
+    const response = await fetch("/api/app/products/readiness", { cache: "no-store" }).catch(() => null);
+    const body = (await response?.json().catch(() => null)) as ReadinessPayload | null;
+    if (!response?.ok || !body?.products) { setFactsFailed(true); return; }
+    setFacts(body);
+  }, []);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => { void load(); void loadFacts(); }, 0);
+    return () => window.clearTimeout(t);
+  }, [load, loadFacts]);
+
+  // The address names the tab (#products/not-in-plan), so a reload or a shared link comes back to it.
+  useEffect(() => {
+    const fromHash = () => {
+      const { tab: section, anchor } = parseSettingsHash(window.location.hash);
+      if (section === SECTION) setTab(anchor === "not-in-plan" ? "not-in-plan" : "in-plan");
+    };
+    fromHash();
+    window.addEventListener("hashchange", fromHash);
+    return () => window.removeEventListener("hashchange", fromHash);
+  }, []);
+
+  const openTab = (next: Tab) => {
+    setTab(next);
+    window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}#${SECTION}${next === "not-in-plan" ? "/not-in-plan" : ""}`);
+  };
+
   async function save(row: Row, sold: boolean, undoable = true) {
-    // The switch moves at once (2026-10-29: every switch waited a second for the server); a save that
-    // fails puts it back and says so.
+    // The switch moves at once (2026-10-29); a save that fails puts it back and the status line says so.
     const before = rows;
+    setSaveError(null);
     setRows((current) => current?.map((item) => (item.code === row.code ? { ...item, enabled: sold, sold } : item)) ?? current);
     setBusy(row.code);
     const response = await fetch("/api/app/settings/products", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_code: row.code, sold }) }).catch(() => null);
     const body = (await response?.json().catch(() => null)) as { products?: Row[]; error?: string } | null;
     setBusy(null);
-    if (!response?.ok || !body?.products) { setRows(before); notify.block(body?.error ?? "That change could not be saved. Try again."); return; }
+    if (!response?.ok || !body?.products) {
+      setRows(before);
+      setSaveError(`Couldn't save · ${row.name} is still ${sold ? "off" : "on"}${body?.error ? ` · ${body.error}` : ""}`);
+      return;
+    }
     setRows(body.products);
     notify.done(sold ? `You sell ${row.name}` : `You no longer sell ${row.name}`, {
       detail: sold ? "Leads, partners, forms and quotes now offer it." : "Nothing new can use it; what already exists keeps working.",
@@ -76,63 +117,179 @@ export function ProductsSettings() {
     });
   }
 
-  if (error) return <SettingsStack><SettingsSectionHeader /><Callout tone="error" title={error} /></SettingsStack>;
-  if (!rows) return <SettingsStack><SettingsSectionHeader /><SettingsCard><SectionLoading rows={6} columns={3} label="Loading your products" /></SettingsCard></SettingsStack>;
+  const toggle = (row: Row, next: boolean) => {
+    if (busy === row.code) return;
+    if (next) void save(row, true);
+    else setConfirmOff(row);
+  };
 
-  const sold = rows.filter((row) => row.sold).length;
-  const inPlan = rows.filter((row) => row.inPlan).length;
-  const groups = [...new Set([...CATEGORY_ORDER, ...rows.map((row) => row.category)])]
-    .map((category) => ({ category, rows: rows.filter((row) => row.category === category) }))
+  const shown = useMemo<Shown[]>(() => {
+    if (!rows) return [];
+    const byCode = new Map((facts?.products ?? []).map((f) => [f.code, f]));
+    return rows.map((row) => {
+      const needs = facts ? needsFor(row.category, byCode.get(row.code)) : null;
+      return { ...row, needs, ready: needs ? readinessOf(row.sold, needs) : null };
+    });
+  }, [rows, facts]);
+
+  const live = shown.filter((row) => row.inPlan);
+  const locked = shown.filter((row) => !row.inPlan);
+  const sold = live.filter((row) => row.sold).length;
+  const notReady = live.filter((row) => row.sold && row.ready && row.ready.missing.length);
+  const visible = live.filter((row) => matchesFilter(row, filter, query));
+  const groups = [...new Set([...CATEGORY_ORDER, ...visible.map((row) => row.category)])]
+    .map((category) => ({ category, rows: visible.filter((row) => row.category === category) }))
     .filter((group) => group.rows.length > 0);
+  const open = shown.find((row) => row.code === openCode) ?? null;
 
-  const live = groups.flatMap((group) => group.rows).filter((row) => row.inPlan);
-  const locked = groups.flatMap((group) => group.rows).filter((row) => !row.inPlan);
+  const header = (
+    <SettingsSectionHeader
+      tabs={(
+        <ViewTabs
+          label="Products"
+          tabs={[
+            { key: "in-plan" as Tab, label: "In your plan", count: rows ? live.length : null },
+            ...(locked.length ? [{ key: "not-in-plan" as Tab, label: "Not in your plan", count: locked.length }] : []),
+          ]}
+          value={tab}
+          onChange={openTab}
+          controls="products-panel"
+        />
+      )}
+      actions={<Button asChild variant="outline"><Link href="/app/settings#billing">See plans</Link></Button>}
+    />
+  );
+
+  const status = (() => {
+    if (!rows) return null;
+    if (saveError) return <StatusLine tone="bad">{saveError}</StatusLine>;
+    if (tab === "not-in-plan") return <StatusLine tone="muted">{facts?.planName ? `Your plan: ${facts.planName} · ${live.length} products` : `${live.length} products in your plan`}</StatusLine>;
+    if (factsFailed) {
+      return (
+        <StatusLine tone="warn" action={<button type="button" onClick={() => void loadFacts()} className={cn("text-sm", linkClass)}>Try again</button>}>
+          You sell {sold} of {live.length} · couldn&apos;t check what each one needs
+        </StatusLine>
+      );
+    }
+    if (sold === 0) return <StatusLine tone="muted">You don&apos;t sell anything yet · turn on the products you sell; partners can&apos;t send leads, and forms and quotes have nothing to offer, until you do</StatusLine>;
+    if (!notReady.length) return <StatusLine tone="ok">You sell {sold} of {live.length}{facts ? " · every one is ready to quote" : ""}</StatusLine>;
+    return (
+      <StatusLine tone="warn">
+        You sell {sold} of {live.length} · {notReady.length} {notReady.length === 1 ? "isn't" : "aren't"} ready to quote yet —{" "}
+        {notReady.slice(0, 2).map((row, index) => (
+          <span key={row.code}>
+            {index > 0 && ", "}
+            <button type="button" onClick={() => setOpenCode(row.code)} className={linkClass}>{row.name} needs {row.ready!.missing.map((need) => need.missingWords).join(" and ")}</button>
+          </span>
+        ))}
+        {notReady.length > 2 && ` and ${notReady.length - 2} more`}
+      </StatusLine>
+    );
+  })();
+
+  const counts = {
+    all: live.length,
+    sold,
+    setup: notReady.length,
+    off: live.length - sold,
+  };
 
   return (
-    <SettingsStack className="flex-1 gap-3">
-      <SettingsSectionHeader actions={<StatusChip tone={sold ? "good" : "neutral"} dot={false}>{sold} sold · {inPlan} in your plan</StatusChip>} />
-      {sold === 0 && <p className="m-0 text-sm text-[var(--muted)]">Choose the products you sell. Partners cannot send leads, and forms and quotes have nothing to offer, until you do.</p>}
-      <div id="products-list" className="m-glass flex min-w-0 flex-1 flex-col rounded-[12px] border border-[var(--border)]">
-        {live.map((row, index) => (
-          <div key={row.code} className={cn("flex min-h-14 flex-wrap items-center gap-x-4 gap-y-2 border-[var(--border)] px-4 py-3", index > 0 && "border-t")}>
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold text-[var(--ink)]">{row.name}</div>
-              <div className="text-xs text-[var(--muted)]">{CATEGORY_LABEL[row.category] ?? row.category} · {row.sold ? partnersText(row.partners) : "not sold"}</div>
-            </div>
-            {row.sold && (
-              <span className="flex flex-wrap items-center gap-2">
-                {row.carriers > 0 && <span className="text-xs text-[var(--muted)]">{row.carriers} {row.carriers === 1 ? "carrier offers" : "carriers offer"} it</span>}
-                {row.formReady
-                  ? <StatusChip tone="good" dot>Form ready</StatusChip>
-                  : <Link href="/app/settings#form-templates" className="text-xs font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">Set up its form</Link>}
-              </span>
+    <div className="flex min-h-0 flex-1 flex-col gap-3 lg:h-full">
+      {header}
+      {status}
+      <div id="products-panel" role="tabpanel" aria-label={tab === "in-plan" ? "In your plan" : "Not in your plan"} className="flex min-h-0 flex-1 flex-col">
+        {error ? (
+          <TableCard title="Products">
+            <ErrorState title="Couldn't load your products" detail="What you sell hasn't changed; only this page failed." action={<Button type="button" variant="outline" onClick={() => void load()}>Try again</Button>} />
+          </TableCard>
+        ) : !rows ? (
+          <TableCard title="Products"><SectionLoading rows={6} columns={5} label="Loading your products" /></TableCard>
+        ) : tab === "not-in-plan" ? (
+          <NotInPlan rows={locked} addedBy={facts?.addedBy ?? null} />
+        ) : (
+          <TableCard
+            className="min-h-0 flex-1"
+            bodyClassName="flex min-h-0 flex-col"
+            toolbar={(
+              <>
+                <Segmented<ProductFilter>
+                  label="Show"
+                  value={filter}
+                  onChange={setFilter}
+                  options={[
+                    { key: "all", label: "All", count: counts.all },
+                    { key: "sold", label: "Sold", count: counts.sold },
+                    ...(facts ? [{ key: "setup" as ProductFilter, label: "Needs setup", count: counts.setup }] : []),
+                    { key: "off", label: "Not sold", count: counts.off },
+                  ]}
+                />
+                <ToolbarSearch value={query} onChange={setQuery} placeholder="Find a product" className="sm:ml-auto sm:w-56" />
+              </>
             )}
-            <Switch
-              checked={row.enabled}
-              label={`Sell ${row.name}`}
-              onChange={(next) => { if (busy === row.code) return; if (next) void save(row, true); else setConfirmOff(row); }}
-            />
-          </div>
-        ))}
-        {locked.length > 0 && (
-          <>
-            <div className="border-t border-[var(--border)] px-4 pt-3 pb-1 text-xs font-semibold text-[var(--muted)]">Not in your plan</div>
-            {locked.map((row) => (
-              <div key={row.code} className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-medium text-[var(--muted)]">{row.name}</div>
-                  <div className="text-xs text-[var(--muted)]">{CATEGORY_LABEL[row.category] ?? row.category}</div>
-                </div>
-                <Link href="/app/settings#billing" className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-ink)] underline-offset-2 hover:underline">
-                  <Lock aria-hidden className="size-3.5" />See plans
-                </Link>
-              </div>
-            ))}
-          </>
+            footer={<span>A switch saves at once and offers Undo · turning one off asks first · &ldquo;+&rdquo; links open the page that fixes it</span>}
+          >
+            <div id="products-list" className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              {live.length === 0 ? (
+                <EmptyState title="Your plan has no products yet" hint="See plans to find the plan that adds the products you sell." />
+              ) : visible.length === 0 ? (
+                <NoMatches noun="products" by={query ? "search" : "filters"} onClear={() => { setFilter("all"); setQuery(""); }} />
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-14">Sell</TableHead>
+                      <TableHead>Product</TableHead>
+                      <TableHead>Partners who may send it</TableHead>
+                      <TableHead>What it needs</TableHead>
+                      <TableHead>Ready</TableHead>
+                      <TableHead className="w-8" aria-label="Open" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {groups.map((group) => [
+                      <TableRow key={`g-${group.category}`} className="hover:bg-transparent">
+                        <TableCell colSpan={6} className="bg-[var(--surface-alt)] py-1.5 text-xs font-semibold text-[var(--muted)]">{lineOf(group.category)}</TableCell>
+                      </TableRow>,
+                      ...group.rows.map((row) => (
+                        <TableRow key={row.code} onClick={() => setOpenCode(row.code)} className="cursor-pointer">
+                          <TableCell onClick={(event) => event.stopPropagation()}>
+                            <Switch checked={row.enabled} label={`Sell ${row.name}`} onChange={(next) => toggle(row, next)} />
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            <button type="button" onClick={(event) => { event.stopPropagation(); setOpenCode(row.code); }} className="text-sm font-semibold text-[var(--ink)] hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--ring-color)]">
+                              {row.name}
+                            </button>
+                          </TableCell>
+                          <TableCell className="max-w-56 truncate whitespace-nowrap text-[var(--body)]">{partnersShort(row)}</TableCell>
+                          <TableCell><NeedsLine needs={row.needs} sold={row.sold} /></TableCell>
+                          <TableCell className="whitespace-nowrap">
+                            {row.ready ? <StatusChip tone={row.ready.tone} dot={false}>{row.ready.label}</StatusChip> : <StatusChip tone="neutral" dot={false}>{row.sold ? "Sold" : "Not sold"}</StatusChip>}
+                          </TableCell>
+                          <TableCell className="text-[var(--muted)]"><ChevronRight aria-hidden className="size-4" /></TableCell>
+                        </TableRow>
+                      )),
+                    ])}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          </TableCard>
         )}
       </div>
 
-      <Dialog open={confirmOff !== null} onOpenChange={(open) => { if (!open) setConfirmOff(null); }}>
+      {open && (
+        <ProductSheet
+          row={open}
+          needs={open.needs}
+          ready={open.ready}
+          busy={busy === open.code}
+          onToggle={(next) => toggle(open, next)}
+          onClose={() => setOpenCode(null)}
+        />
+      )}
+
+      <Dialog open={confirmOff !== null} onOpenChange={(next) => { if (!next) setConfirmOff(null); }}>
         <DialogContent className="sm:max-w-[400px]">
           {confirmOff && (
             <>
@@ -153,6 +310,6 @@ export function ProductsSettings() {
           )}
         </DialogContent>
       </Dialog>
-    </SettingsStack>
+    </div>
   );
 }

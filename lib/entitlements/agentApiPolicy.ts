@@ -399,6 +399,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/extension/grant/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/extension/grants/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner", "producer"] },
   { sourceFile: "app/api/app/extension/grants/revoke/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner", "producer"] },
+  { sourceFile: "app/api/app/extension/people/route.ts", featureKey: "carrier_extension", allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/extension/fields/route.ts", featureKey: null },
   { sourceFile: "app/api/app/extension/fields/[key]/route.ts", featureKey: null },
   { sourceFile: "app/api/app/extension/map-miss/route.ts", featureKey: null },
@@ -417,6 +418,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   { sourceFile: "app/api/app/profile/languages/route.ts", featureKey: null },
   // Settings › Products (2026-10-27): owner-only switch, and the sold list every picker reads.
   { sourceFile: "app/api/app/settings/products/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/products/readiness/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/products/sold/route.ts", featureKey: null, allowedRoles: ["owner", "producer", "assistant"] },
   // The same person's own profile picture, the same rule: requireTenant() and the session's user only.
   { sourceFile: "app/api/app/profile/avatar/route.ts", featureKey: null },
@@ -505,6 +507,7 @@ export const AGENT_API_POLICIES: AgentApiPolicy[] = [
   // LA-8.6: deactivate (open work handed over first), reactivate, and the member's own time zone.
   { sourceFile: "app/api/app/team/[userId]/deactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/reactivate/route.ts", featureKey: null, allowedRoles: ["owner"] },
+  { sourceFile: "app/api/app/team/[userId]/hand-over/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/timezone/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/route.ts", featureKey: null, allowedRoles: ["owner"] },
   { sourceFile: "app/api/app/team/[userId]/access/route.ts", featureKey: "custom_team_access", allowedRoles: ["owner"] },

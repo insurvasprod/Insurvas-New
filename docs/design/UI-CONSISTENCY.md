@@ -126,6 +126,16 @@ someone is a rail badge or a bell item. `NextStepLine` renders nothing; `NextUp`
 (right-aligned, for pages where it is the only way to do the thing) and turns a "cannot run" sentence
 into the one-line alert above. The `next-step-strip` ratchet stops new ones.
 
+**Guided setup is the one exception (owner 2026-11-12/13, Get set up round 3).** Two things may say what
+to do next, and only these:
+- **Get set up's Next step panel** (`components/app/setup/setup-path.tsx`). Get set up *is* the "what to do next"
+  page, so its one panel names the next step with Start.
+- **The setup guide** (`components/app/setup/setup-guide-bar.tsx`). It appears only on a page opened from Get set
+  up, Docs or Resume (`?guide=`). Its setup bar sits above the page, with one spotlight on one control and a coach
+  beside it naming that control. The person started it and can always leave: Pause on a required step, Skip or
+  Stop guide on an optional one. It draws nothing on a page opened normally, apart from a one-line "Setup paused ·
+  Resume" on the paused step's own page.
+
 ## 4. Figures: one compact strip — `StatStrip` + `StatTile` from `components/ui/stat.tsx`
 ```tsx
 <StatStrip label="Partner totals">
@@ -707,7 +717,8 @@ its own timing. See them all side by side on `/app/motion-lab`.
 | controls | `Switch`, `CheckBox`, `<details>` | the thumb slides, the tick pops in, a fold opens by height |
 | pending | `IntentLink` (tabs, rails, the sidebar) | the clicked item looks chosen at once; a 2px hairline runs along the top while the page is on its way |
 | shell-enter | the first screen after signing in (`ShellEntrance`) | sidebar slides in, top bar drops in, the page rises; about 0.8s, once per sign-in |
-| shell-leave | signing out (`TopBarSignOut`) | the workspace dims and settles back while the sign-in page comes |
+| shell-leave | signing out (`TopBarSignOut`) | the workspace dims and settles back while the sign-in page loads as a fresh document; the dim never reaches the sign-in page |
+| pending button | `pending` on `Button` (Sign in and its code and link steps) | the press settles back from .98 once; the button keeps its colour, says what it is doing ("Signing in…") and runs the pending hairline along its foot until the answer or the next page is here; it cannot be pressed twice |
 | rows-filter | a list's chip, sort or filter changes (`m-rows-settle`, keyed body) | the new rows settle in together from .72; the typed search does not replay it |
 | step-direction | one-at-a-time steps inside a page (`useStepDirection`, `data-enter`): inbound call, application, Settings sections, calendar weeks, the next lead or question | later slides in from the right, earlier from the left |
 | board card | kanban cards (`m-drop-in`) | settle into their column; the card being dragged fades back in place |

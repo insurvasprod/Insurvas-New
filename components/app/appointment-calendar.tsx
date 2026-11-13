@@ -21,6 +21,7 @@ import { RebookButton } from "@/components/app/appointment-rebook";
 import { MiniMonth, type YearMonth } from "@/components/app/calendar/mini-month";
 import { faceLabel } from "@/lib/appointments/appointmentFacts";
 import { clockLabel, intervalsFor, openSlots, wallClock, zonedInstant, type BlockRepeat, type PickerContext } from "@/lib/appointments/calendarMath";
+import { lengthLabel, lengthOptions } from "@/lib/appointments/meetingLength";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
 import { load as loadResource, peek, readResource, seed } from "@/lib/client/resource-cache";
 import { cn } from "@/lib/utils";
@@ -550,8 +551,15 @@ export function AppointmentCalendar({ highlightId, embedded = false }: { highlig
   if (!error && (context == null || !loadedOnce)) return <PageLoading />;
 
   const refresh = () => {
-    void loadContext(true).catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load availability"));
-    void load(true);
+    // Read the linked Google calendar first (busy time, and meetings made longer or shorter there),
+    // then reload. A setter, or nobody linked, gets a refusal or nothing to do: the reload still runs.
+    const linked = selected
+      ? fetch("/api/app/calendar-connections", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "refresh", userId: selected }) }).catch(() => null)
+      : Promise.resolve(null);
+    void linked.then(() => {
+      void loadContext(true).catch((cause) => setError(cause instanceof Error ? cause.message : "Could not load availability"));
+      void load(true);
+    });
   };
 
   // LA-2.11-5: confirm before the slot, showed / no-show after it. Showed and no-show are the agent's
@@ -1001,6 +1009,10 @@ function BookingDialog({ context, initial, agents, nowAt, callbacks, onClose, on
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // This meeting's length (owner, 2026-11-13); null = the agent's default from Booking rules.
+  const [minutes, setMinutes] = useState<number | null>(null);
+  const defaultLength = context.policy.find((row) => row.userId === agent)?.appointmentMinutes ?? 30;
+  const length = minutes ?? defaultLength;
 
   const zone = context.availability.find((row) => row.userId === agent)?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   const slots = useMemo(() => {
@@ -1036,7 +1048,7 @@ function BookingDialog({ context, initial, agents, nowAt, callbacks, onClose, on
     const response = await fetch("/api/app/appointments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ lead_id: lead.id, agent_user_id: agent, starts_at_utc: slot, notes: notes.trim() || null }),
+      body: JSON.stringify({ lead_id: lead.id, agent_user_id: agent, starts_at_utc: slot, notes: notes.trim() || null, duration_minutes: length }),
     }).catch(() => null);
     setBusy(false);
     if (!response) { setError("Check your connection and try again."); return; }
@@ -1093,6 +1105,12 @@ function BookingDialog({ context, initial, agents, nowAt, callbacks, onClose, on
             <select value={slot} onChange={(event) => setSlot(event.target.value)} className={field}>
               <option value="">{slots.length ? "Choose a slot" : "No open slots in the next three weeks"}</option>
               {slots.map((iso) => <option key={iso} value={iso}>{label(iso)}</option>)}
+            </select>
+          </label>
+          <label className={labelClass}>
+            Length
+            <select value={length} onChange={(event) => setMinutes(Number(event.target.value))} className={field}>
+              {lengthOptions(defaultLength, length).map((value) => <option key={value} value={value}>{lengthLabel(value)}{value === defaultLength ? " (usual)" : ""}</option>)}
             </select>
           </label>
           <label className={labelClass}>
@@ -1184,6 +1202,11 @@ function CalendarItemDetails({ opened, context, zone, nowAt, callbacks, steps, c
     if (!item || !changed) return;
     if (await send("/api/app/appointments", "PATCH", { appointment_id: item.appointmentId, starts_at_utc: slot }, "That time could not be booked. Your choice is still here.")) onChanged();
   }
+  // This meeting's length, on its own (owner, 2026-11-13). Saved as soon as it is chosen.
+  async function changeLength(next: number) {
+    if (!item || next === item.durationMinutes) return;
+    if (await send("/api/app/appointments", "PATCH", { action: "length", appointment_id: item.appointmentId, duration_minutes: next }, "That length could not be saved.")) onChanged();
+  }
   async function cancel() {
     if (!item) return;
     if (!(await confirmAction({ title: `Cancel ${item.customerName}'s appointment?`, description: "The slot opens again. The lead stays as it is.", confirmLabel: "Cancel appointment", cancelLabel: "Keep it", destructive: true }))) return;
@@ -1210,6 +1233,20 @@ function CalendarItemDetails({ opened, context, zone, nowAt, callbacks, steps, c
         </div>
         {facts.length > 0 && <p className="m-0 text-sm text-[var(--body)]">{facts.join(" · ")}</p>}
         {(item?.notes || callback?.note) && <p className="m-0 rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--body)]">{item?.notes ?? callback?.note}</p>}
+        {item && movable && (item.status === "booked" || item.status === "confirmed") && (
+          <label className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--body)]">
+            Length
+            <select
+              aria-label="Meeting length"
+              value={item.durationMinutes || 30}
+              disabled={busy}
+              onChange={(event) => void changeLength(Number(event.target.value))}
+              className={`${inputControl} w-[150px]`}
+            >
+              {lengthOptions(item.durationMinutes || 30).map((value) => <option key={value} value={value}>{lengthLabel(value)}</option>)}
+            </select>
+          </label>
+        )}
         {item && movable && moving && (
           <label className="block text-xs font-semibold text-[var(--body)]">
             Move to

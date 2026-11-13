@@ -11,13 +11,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 
-import { FormSection } from "@/components/app/settings/patterns";
 import { Field, control } from "@/components/app/settings/primitives";
 import { Button } from "@/components/ui/button";
 import { confirmAction } from "@/components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { EmptyState, SectionLoading } from "@/components/ui/page-states";
 import { Pager, paginate } from "@/components/ui/pager";
+import { Sheet } from "@/components/ui/sheet";
 import { StatusChip } from "@/components/ui/status-chip";
 import { TableCard } from "@/components/ui/table-card";
 import { useFittingPageSize } from "@/components/ui/use-fitting-page-size";
@@ -56,15 +56,13 @@ function LoadFailed({ what, onRetry }: { what: string; onRetry: () => void }) {
   );
 }
 
-/** One way in: what it is, its value, and the button that changes it. */
+/** One way in, on one line (settings round 8, board A): what it is, its value, and the button that opens its own confirm. */
 function SignInRow({ id, label, value, action }: { id: string; label: string; value: ReactNode; action: ReactNode }) {
   return (
-    <div id={id} className="flex scroll-mt-24 flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4 first:border-t-0 first:pt-0">
-      <div className="min-w-0">
-        <p className="m-0 text-label text-[var(--body)]">{label}</p>
-        <div className="mt-0.5 text-sm text-[var(--muted)]">{value}</div>
-      </div>
-      {action}
+    <div id={id} className="flex min-h-[52px] scroll-mt-24 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--border)] py-2.5 text-sm">
+      <b className="font-medium text-[var(--ink)]">{label}</b>
+      <div className="min-w-0 text-xs text-[var(--muted)]">{value}</div>
+      <span className="ml-auto flex items-center gap-2">{action}</span>
     </div>
   );
 }
@@ -103,8 +101,17 @@ function FormDialog({ open, onOpenChange, title, description, submitLabel, busy,
   );
 }
 
-export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: string; timeZone: string | null; promptTwoFactor: boolean }) {
+/** What My profile's index and status line say about this section. */
+export type SecurityStatus = { twoFactorOn: boolean | null; twoFactorRequired: boolean };
+
+export function SecuritySettings({ email, timeZone, promptTwoFactor, onStatus }: {
+  email: string;
+  timeZone: string | null;
+  promptTwoFactor: boolean;
+  onStatus?: (status: SecurityStatus) => void;
+}) {
   const router = useRouter();
+  const [devicesOpen, setDevicesOpen] = useState(false);
   const when = whenIn(timeZone);
 
   // ── dialogs ────────────────────────────────────────────────────────────────────────────────────
@@ -152,6 +159,11 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
     });
     return () => { live = false; };
   }, [reloads]);
+  const status = useRef(onStatus);
+  useEffect(() => { status.current = onStatus; });
+  useEffect(() => {
+    status.current?.({ twoFactorOn: twoFactor ? twoFactor.enabled : null, twoFactorRequired: Boolean(twoFactor?.required) });
+  }, [twoFactor]);
   const retry = () => {
     setLoadFailed({ twoFactor: false, sessions: false });
     setSessions(undefined);
@@ -248,41 +260,49 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
 
   const others = sessions ? sessions.filter((s) => !s.current) : [];
 
+  async function signOutOthers() {
+    if (!(await confirmAction({ title: "Sign out every other session?", description: others.map((s) => s.device).join(", ") || undefined, confirmLabel: "Sign out others", cancelLabel: "Keep them", destructive: true }))) return;
+    await endSession(null);
+  }
+
+  const here = sessions?.find((s) => s.current) ?? null;
+  const deviceLine = sessions === undefined ? "Checking…"
+    : loadFailed.sessions ? "Could not load your sessions"
+    : sessions === null ? "Not available yet"
+    : `${sessions.length} ${sessions.length === 1 ? "device" : "devices"}${here?.location ? ` · this one in ${here.location}` : ""}`;
+
   return (
-    <div id="security" className="flex min-w-0 flex-1 scroll-mt-24 flex-col gap-4">
-        <div id="security-heading" className="m-glass flex min-w-0 flex-col gap-4 rounded-[12px] border border-[var(--border)] p-4">
+    <div id="security" className="flex min-w-0 scroll-mt-24 flex-col">
           <SignInRow
             id="security-email"
             label="Email"
             value={<>
-              <span className="text-[var(--ink)]">{email}</span>
+              <span>{email}</span>
               {emailSent ? <span className="mt-1 block text-[var(--body)]">Check {emailSent} for a link. Until it is used, you keep signing in with {email}.</span> : null}
             </>}
-            action={<Button type="button" variant="secondary" size="sm" onClick={() => { open("email"); setEmailSent(null); }}>Change email</Button>}
+            action={<Button type="button" variant="outline" size="sm" onClick={() => { open("email"); setEmailSent(null); }}>Change email</Button>}
           />
           <SignInRow
             id="security-password"
             label="Password"
-            value={`At least ${PASSWORD_MIN} characters. Changing it signs out every other session.`}
-            action={<Button type="button" variant="secondary" size="sm" onClick={() => open("password")}>Change password</Button>}
+            value={`At least ${PASSWORD_MIN} characters; changing it signs out every other session`}
+            action={<Button type="button" variant="outline" size="sm" onClick={() => open("password")}>Change password</Button>}
           />
 
-          <div id="security-two-factor" className="flex flex-col gap-3 border-t border-[var(--border)] pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0">
-                <p className="m-0 text-label text-[var(--body)]">Two-step verification</p>
-                <p className="m-0 mt-0.5 text-sm text-[var(--muted)]">A code from an authenticator app each time you sign in.</p>
-                {twoFactor && !twoFactor.enabled && twoFactor.required ? (
-                  <p className="m-0 mt-0.5 text-sm text-[var(--muted)]">{promptTwoFactor ? "Set this up now. " : ""}Required for your role: Social Security and bank numbers stay hidden until it is on.</p>
-                ) : null}
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
+          <div id="security-two-factor" className="flex scroll-mt-24 flex-col gap-3 border-b border-[var(--border)] py-2.5">
+            <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
+              <b className="font-medium text-[var(--ink)]">Two-step verification</b>
+              <small className="text-xs text-[var(--muted)]">
+                a code from an app each time you sign in
+                {twoFactor && !twoFactor.enabled && twoFactor.required ? ` · ${promptTwoFactor ? "set this up now: " : ""}required for your role, so Social Security and bank numbers stay hidden until it is on` : ""}
+              </small>
+              <span className="ml-auto flex flex-wrap items-center gap-2">
                 {twoFactor ? (twoFactor.enabled
                   ? <StatusChip tone="good">On since {when(twoFactor.enabledAt ?? "")}</StatusChip>
-                  : <StatusChip tone="neutral">Off</StatusChip>) : null}
-                {twoFactor && !twoFactor.enabled && !codes && !enrolment ? <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={startEnrolment}>Turn on</Button> : null}
-                {twoFactor?.enabled && !codes && !enrolment ? <Button type="button" variant="secondary" size="sm" disabled={busy} onClick={() => open("disable")}>Turn off</Button> : null}
-              </div>
+                  : <StatusChip tone="warning">Off</StatusChip>) : null}
+                {twoFactor && !twoFactor.enabled && !codes && !enrolment ? <Button type="button" size="sm" disabled={busy} onClick={startEnrolment}>Turn on</Button> : null}
+                {twoFactor?.enabled && !codes && !enrolment ? <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => open("disable")}>Turn off</Button> : null}
+              </span>
             </div>
             {!twoFactor && twoFactorUnavailable ? (
               <p className="m-0 text-sm text-[var(--muted)]">{TWO_STEP_UNAVAILABLE}</p>
@@ -335,46 +355,48 @@ export function SecuritySettings({ email, timeZone, promptTwoFactor }: { email: 
               </>
             )}
           </div>
-        </div>
 
-        <FormSection
-          id="security-sessions"
-          className="flex-1 [&>div:last-child]:flex-1"
+          <SignInRow
+            id="security-sessions"
+            label="Where you're signed in"
+            value={deviceLine}
+            action={loadFailed.sessions
+              ? <Button type="button" variant="outline" size="sm" onClick={retry}>Retry</Button>
+              : <Button type="button" variant="outline" size="sm" disabled={!sessions} onClick={() => setDevicesOpen(true)}>See devices</Button>}
+          />
+
+          {/* The two things that cut access, apart from the rest. */}
+          <div className="mt-3 rounded-[12px] border border-[var(--border)] px-3.5 [&>div:last-child]:border-b-0">
+            <SignInRow
+              id="security-sign-out-others"
+              label="Sign out of every other device"
+              value="you stay signed in here"
+              action={<Button type="button" variant="outline" size="sm" disabled={busy || !others.length} onClick={() => void signOutOthers()}>Sign out others</Button>}
+            />
+          </div>
+
+      {devicesOpen && sessions ? (
+        <Sheet
           title="Where you're signed in"
-          info="Ending a session signs that device out on its next click."
-          aside={others.length ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={busy}
-              onClick={async () => {
-                if (!(await confirmAction({ title: "Sign out every other session?", description: others.map((s) => s.device).join(", ") || undefined, confirmLabel: "Sign out others", cancelLabel: "Keep them", destructive: true }))) return;
-                await endSession(null);
-              }}
-            >Sign out other sessions</Button>
-          ) : null}
+          subtitle="Ending a session signs that device out on its next click."
+          onClose={() => setDevicesOpen(false)}
+          footer={others.length ? <div className="flex justify-end"><Button type="button" variant="outline" disabled={busy} onClick={() => void signOutOthers()}>Sign out others</Button></div> : undefined}
         >
-          {sessions === undefined ? <SectionLoading rows={3} columns={3} label="Loading your sessions" /> : loadFailed.sessions ? (
-            <LoadFailed what="your sessions" onRetry={retry} />
-          ) : sessions === null ? (
-            <p className="m-0 text-sm text-[var(--muted)]">The session list is not available yet. Contact support.</p>
-          ) : (
-            <ul className="m-0 flex list-none flex-col p-0 text-sm">
-              {sessions.map((s) => (
-                <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] py-3 first:border-t-0 first:pt-0 last:pb-0">
-                  <div className="min-w-0">
-                    <div className="text-label text-[var(--ink)]">{s.device}</div>
-                    <div className="mt-0.5 text-xs text-[var(--muted)] tabular-nums">
-                      {[s.location ?? "Location unknown", s.ip, s.current ? `signed in ${when(s.createdAt)}` : `last used ${when(s.lastSeenAt)}`].filter(Boolean).join(" · ")}
-                    </div>
+          <ul className="m-0 flex list-none flex-col p-0 text-sm">
+            {sessions.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] py-3 first:border-t-0 first:pt-0 last:pb-0">
+                <div className="min-w-0">
+                  <div className="text-label text-[var(--ink)]">{s.device}</div>
+                  <div className="mt-0.5 text-xs text-[var(--muted)] tabular-nums">
+                    {[s.location ?? "Location unknown", s.ip, s.current ? `signed in ${when(s.createdAt)}` : `last used ${when(s.lastSeenAt)}`].filter(Boolean).join(" · ")}
                   </div>
-                  {s.current ? <StatusChip tone="good">This device</StatusChip> : <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void endSession(s.id)}>End</Button>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </FormSection>
+                </div>
+                {s.current ? <StatusChip tone="good">This device</StatusChip> : <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void endSession(s.id)}>End</Button>}
+              </li>
+            ))}
+          </ul>
+        </Sheet>
+      ) : null}
 
 
       <FormDialog

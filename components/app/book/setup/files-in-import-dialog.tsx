@@ -200,7 +200,7 @@ export function FilesInImportDialog({ carrier, initialFile, readOnly, onClose }:
                 ? <Button type="button" variant="ghost" className="sm:mr-auto" disabled={busy} onClick={() => void skip("unskip")}>Undo skip</Button>
                 : <Button type="button" variant="ghost" className="sm:mr-auto" disabled={busy} onClick={() => void skip("skip")}>Skip for now</Button>)}
               <Button type="button" variant="outline" disabled={busy} onClick={onClose}>Cancel</Button>
-              <Button type="button" disabled={busy || !file} onClick={() => void upload()}>{busy ? "Uploading…" : inAlready ? "Replace" : "Upload"}</Button>
+              <Button type="button" data-guide="book-upload" disabled={busy || !file} onClick={() => void upload()}>{busy ? "Uploading…" : inAlready ? "Replace" : "Upload"}</Button>
             </>
           )}
         </DialogFooter>

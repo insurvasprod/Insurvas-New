@@ -1,6 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { after, NextResponse, type NextRequest } from "next/server";
 
 import { audit } from "@/lib/audit/log";
+import { mirrorAgentUpcoming } from "@/lib/appointments/calendarMirror";
 import { CalendarWrongWorkspaceError, completeCalendarConnection } from "@/lib/appointments/linkedCalendars";
 import { requireFeatureRole } from "@/lib/tenantAuth/requireFeatureRole";
 
@@ -34,7 +35,9 @@ export async function GET(request: NextRequest) {
       metadata: { userId: done.userId },
       request,
     });
-    return back("connected");
+    // The meetings already booked go onto the newly linked calendar (a Google link that allowed it).
+    after(() => mirrorAgentUpcoming(done.tenantId, done.userId).catch((error) => console.error("[calendar-mirror] upcoming", error instanceof Error ? error.message : error)));
+    return back(done.readOnly ? "connected_read_only" : "connected");
   } catch (error) {
     if (error instanceof CalendarWrongWorkspaceError) return back("wrong_workspace");
     console.error("Calendar connection could not be completed", error instanceof Error ? error.message : error);

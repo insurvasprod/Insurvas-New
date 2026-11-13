@@ -41,6 +41,24 @@ export const salesSettingsSchema = z.object({
   ),
   /** LA-3.3 — blocked on decision 4; stored so the switch has a home once a provider is chosen. */
   aiAssistantEnabled: z.boolean(),
+  /**
+   * Settings › AI assistant, round 8 (owner pick A, 2026-11-12): the agency's place on the early list and the
+   * data controls it wants once a provider is signed. Stored only; nothing reads it to call any provider.
+   * null until an owner joins or saves the controls.
+   */
+  aiEarlyList: z.object({
+    joined: z.boolean(),
+    joinedAt: z.string().max(40).nullable(),
+    /** Who joined, so the day it's ready we know whom to tell. */
+    joinedBy: z.object({ name: z.string().max(200), email: z.string().max(320) }).nullable(),
+    features: z.array(z.enum(["underwriting", "summaries", "next_step", "quote_explainer", "compliance"])).max(5),
+    whenReady: z.enum(["email", "admins"]),
+    controls: z.object({
+      sendDoses: z.boolean(),
+      keepFor: z.enum(["30_days", "1_year", "like_the_lead"]),
+      who: z.enum(["admins", "everyone"]),
+    }).strict(),
+  }).strict().nullable(),
 }).strict();
 
 export type SalesSettings = z.infer<typeof salesSettingsSchema>;
@@ -53,6 +71,7 @@ export const DEFAULT_SALES_SETTINGS: SalesSettings = {
   welcomePackAutoSend: true,
   welcomePack: DEFAULT_WELCOME_PACK,
   aiAssistantEnabled: false,
+  aiEarlyList: null,
 };
 
 /** Stored JSON → full settings: unknown keys dropped, missing or invalid keys take their default. */

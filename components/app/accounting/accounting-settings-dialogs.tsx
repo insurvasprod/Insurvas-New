@@ -3,21 +3,23 @@
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 
-import { AccountingDialog } from "@/components/app/accounting/accounting-settings-rows";
+import { SettingSheet, plainValue, type Affect, type HistoryItem } from "@/components/app/settings/money/setting-kit";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { control, Field, textareaControl } from "@/components/ui/field";
 import { Segmented } from "@/components/ui/view-tabs";
 import { ACQUISITION_CONSEQUENCE, EXPENSE_CATEGORIES, EXPENSE_CATEGORY_LABELS } from "@/lib/accounting/expensesCore";
 import { percent } from "@/lib/accounting/producersCore";
-import type { AccountingSettings } from "@/lib/accounting/settingsCore";
+import { ACCOUNTING_DEFAULTS, type AccountingSettings } from "@/lib/accounting/settingsCore";
 import { formatCentsAsCurrency, parseDollarsToCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings › Accounting, round 7 (board 7·2): one dialog per setting row. Each holds the explanation that used to
- * hide behind the (i), its control, an error line the owner can fix, and Cancel / Save. "Pay partners" (cadence and
- * draft days), "Below zero" (the share with its choice) and "Default split" (the % and Of) are one dialog each. The
- * nine expense categories are one lg dialog. Widening who sees tax IDs to bookkeepers asks first.
+ * Settings › Accounting, round 8 (docs/design/settings-r8/money-compliance-settings.html §2): one right sheet per
+ * setting row (round 7's dialog content moved in whole). Each holds what the setting does, its control, an error line
+ * the owner can fix, then What it affects and the setting's own History; the footer is Use Insurvas value · Cancel ·
+ * Save this setting. "Pay partners" (cadence and draft days), "Below zero" (the share with its choice) and "Default
+ * split" (the % and Of) are one sheet each; the nine expense categories are one wide sheet. Widening who sees tax IDs
+ * to bookkeepers asks first.
  */
 export type Which =
   | "basis" | "fy" | "persist" | "sample"
@@ -33,6 +35,37 @@ export const CADENCE_WORDS = { monthly: "Monthly", semi_monthly: "Twice a month"
 export const NEGATIVE_WORDS = { carry_forward: "Carry it", cap: "Take a share each month", write_off: "Let it go" } as const;
 export const SPLIT_OF_WORDS = { advance: "of the advance", earned: "of earned commission", both: "of both" } as const;
 export const dollars = (cents: number) => formatCentsAsCurrency(cents);
+
+/** The settings each sheet edits: its history, its "Yours or Insurvas", and what Use Insurvas value puts back. */
+export const KEYS: Record<Which, (keyof AccountingSettings)[]> = {
+  basis: ["defaultBasis"], fy: ["fyStartMonth"], persist: ["persistencyMonth"], sample: ["sampleThreshold"],
+  bankWindow: ["bankWindowDays"], bankTol: ["bankAmountToleranceCents"],
+  invoiceTol: ["invoiceToleranceCents"], categories: ["acquisitionDefaults"],
+  autoPublish: ["payoutAutoPublish"], cadence: ["payoutCadence", "payoutDraftDays"], footer: ["payoutStatementFooter"], disputeTol: ["payoutDisputeToleranceCents"],
+  seeBalance: ["producersSeeBalance"], negative: ["producerNegativePolicy", "producerRecoveryCapBp"], split: ["producerDefaultSplitBp", "producerDefaultBasis"], shareFees: ["producerShareFees"],
+  threshold: ["tax1099ThresholdCents"], taxIds: ["taxIdViewerRoles"],
+};
+
+/** One stored value in the words its row uses, for a history line. */
+export function valueWords(key: keyof AccountingSettings, value: unknown): string {
+  if (value === null || value === undefined) return "none";
+  switch (key) {
+    case "defaultBasis": return BASIS_WORDS[value as AccountingSettings["defaultBasis"]] ?? String(value);
+    case "fyStartMonth": return MONTHS[Number(value) - 1] ?? String(value);
+    case "persistencyMonth": return `month ${value}`;
+    case "sampleThreshold": return `${value} policies`;
+    case "bankWindowDays": case "payoutDraftDays": return `${value} days`;
+    case "payoutCadence": return CADENCE_WORDS[value as AccountingSettings["payoutCadence"]] ?? String(value);
+    case "payoutAutoPublish": return value ? "publish to the partner" : "wait for my review";
+    case "producerNegativePolicy": return NEGATIVE_WORDS[value as AccountingSettings["producerNegativePolicy"]] ?? String(value);
+    case "producerDefaultBasis": return SPLIT_OF_WORDS[value as AccountingSettings["producerDefaultBasis"]] ?? String(value);
+    case "producersSeeBalance": case "producerShareFees": return value ? "yes" : "no";
+    case "taxIdViewerRoles": return Array.isArray(value) && value.includes("bookkeeper") ? "owner and bookkeepers" : "owner only";
+    case "acquisitionDefaults": return `${EXPENSE_CATEGORIES.filter((c) => (value as Record<string, boolean>)[c]).length} acquisition categories`;
+    case "producerDefaultSplitBp": case "producerRecoveryCapBp": return typeof value === "number" ? percent(value) : "none";
+    default: return typeof value === "number" && /Cents$/.test(key) ? dollars(value) : plainValue(key, value);
+  }
+}
 const plain = (cents: number) => formatCentsAsCurrency(cents).replace(/[$,]/g, "");
 const pctText = (bp: number) => percent(bp).replace("%", "");
 
@@ -61,13 +94,21 @@ function Amount({ id, label, value, onChange, before, after, error, hint, numeri
   );
 }
 
-export function AccountingSettingDialog({ which, settings, canEdit, busy, onSave, onClose }: {
+export function AccountingSettingSheet({ which, where, settings, canEdit, readOnlyWhy, busy, error, affects, history, historyHref, onSave, onClose }: {
   which: Which;
+  /** The tab it sits on: "Bills & expenses". */
+  where: string;
   settings: AccountingSettings;
   canEdit: boolean;
+  readOnlyWhy?: string;
   busy: boolean;
-  /** True when it saved; the dialog then closes. */
-  onSave: (patch: Partial<AccountingSettings>) => Promise<boolean>;
+  /** The last save's error, shown in the sheet beside the control. */
+  error?: string | null;
+  affects?: readonly Affect[];
+  history: readonly HistoryItem[];
+  historyHref?: string;
+  /** True when it saved; the sheet then closes. */
+  onSave: (patch: Partial<AccountingSettings>, what: string) => Promise<boolean>;
   onClose: () => void;
 }) {
   const s = settings;
@@ -80,7 +121,6 @@ export function AccountingSettingDialog({ which, settings, canEdit, busy, onSave
   }));
   const typed = (k: keyof typeof text) => (v: string) => setText((cur) => ({ ...cur, [k]: v }));
   const [confirming, setConfirming] = useState(false);
-  const submit = async (patch: Partial<AccountingSettings>) => { if (await onSave(patch)) onClose(); };
 
   const yesNo = (key: "producersSeeBalance" | "producerShareFees", label: string) => (
     <Segmented label={label} value={d[key] ? "yes" : "no"} onChange={(v) => set(key, v === "yes")} options={[{ key: "yes", label: "Yes" }, { key: "no", label: "No" }]} />
@@ -247,14 +287,27 @@ export function AccountingSettingDialog({ which, settings, canEdit, busy, onSave
     }
   })();
 
+  const submit = async (patch: Partial<AccountingSettings>) => { if (await onSave(patch, spec.title)) onClose(); };
+  const keys = KEYS[which];
+  const yours = keys.some((k) => JSON.stringify(s[k]) !== JSON.stringify(ACCOUNTING_DEFAULTS[k]));
+  const insurvas = keys.map((k) => valueWords(k, ACCOUNTING_DEFAULTS[k])).join(" · ");
+  const draftPatch = spec.problem ? {} : spec.patch();
+  const unchanged = keys.every((k) => JSON.stringify(k in draftPatch ? draftPatch[k] : s[k]) === JSON.stringify(s[k]));
+
   // Widening who sees tax IDs asks first (edit map 7: Confirm).
   const widens = which === "taxIds" && d.taxIdViewerRoles.includes("bookkeeper") && !s.taxIdViewerRoles.includes("bookkeeper");
   return (
     <>
-      <AccountingDialog title={spec.title} said={spec.said} size={spec.size} canEdit={canEdit} readValue={spec.read} busy={busy} saveDisabled={Boolean(spec.problem)}
-        onSave={() => { if (spec.problem) return; if (widens) { setConfirming(true); return; } void submit(spec.patch()); }} onClose={onClose}>
+      <SettingSheet title={spec.title} where={`Accounting › ${where}`} wide={spec.size === "lg"} canEdit={canEdit} readOnlyWhy={readOnlyWhy}
+        said={<>{spec.said} <span className="text-[var(--muted)]">{yours ? `Insurvas value: ${insurvas}.` : "This is Insurvas's value."}</span></>}
+        readValue={spec.read} busy={busy} error={error} saveDisabled={Boolean(spec.problem) || unchanged}
+        onSave={() => { if (spec.problem) return; if (widens) { setConfirming(true); return; } void submit(spec.patch()); }}
+        onUseInsurvas={yours ? () => void submit(Object.fromEntries(keys.map((k) => [k, ACCOUNTING_DEFAULTS[k]])) as Partial<AccountingSettings>) : null}
+        affects={affects} history={history} historyHref={historyHref}
+        historyEmpty={yours ? "No change recorded for this setting yet." : undefined}
+        onClose={onClose}>
         {spec.body}
-      </AccountingDialog>
+      </SettingSheet>
       <ConfirmDialog open={confirming} onOpenChange={(open) => { setConfirming(open); if (!open) set("taxIdViewerRoles", ["owner"]); }} busy={busy} destructive={false}
         title="Let bookkeepers see tax IDs?" description="Bookkeepers can then reveal any payee's full tax ID. Every reveal is recorded with who and when."
         confirmLabel="Let them see" cancelLabel="Owner only"

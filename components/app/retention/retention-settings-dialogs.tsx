@@ -19,8 +19,8 @@ import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
 
 /**
- * Settings › Retention, round 7 (owner pick 7·A, 2026-11-10; docs/la4/mockups-r7/retention.html 7·2): one md dialog
- * per setting row. Each sends the agency's whole settings with its one change merged in (the hub's save takes the
+ * Settings › Retention, round 7 (owner pick 7·A, 2026-11-10; docs/la4/mockups-r7/retention.html 7·2) and round 8
+ * (a right sheet per row, docs/design/settings-r8/money-compliance-settings.html §4): one sheet per setting row. Each sends the agency's whole settings with its one change merged in (the hub's save takes the
  * whole draft, as the long form did), so nothing else moves. Two changes still ask first: a shorter wait for clients
  * who could not afford it (today's typed confirm), and switching the holdout on (its explanation acknowledged).
  */
@@ -38,14 +38,26 @@ const withDefaults = (settings: RetentionSettings, keys: readonly (keyof Retenti
   return next as RetentionSettings;
 };
 
-/** Save the merged settings, toast what changed, and let the page read them again. */
-function useSettingsSave(onSaved: (next: RetentionSettings) => void, onClose: () => void) {
+/**
+ * Save the merged settings, toast what changed with Undo (round 8: "Undo puts the last value back"), and let the page
+ * read them again. Undo sends `before` back the same way; a change that needs a typed confirm says why it can't.
+ */
+function useSettingsSave(onSaved: (next: RetentionSettings) => void, onClose: () => void, before: RetentionSettings) {
   const router = useRouter();
   const save = useDialogSave();
   const send = (next: RetentionSettings, opts: { confirmation?: string | null; acknowledged?: boolean; back?: boolean } = {}) => save.run(async () => {
     const json = await postSettings({ action: "save_settings", settings: next, confirmation: opts.confirmation ?? null, holdout_acknowledged: opts.acknowledged ?? false });
     const n = json.changes?.length ?? 0;
-    notify.done(opts.back ? (n ? `${plural(n, "value")} back to Insurvas's` : "Already on Insurvas's values") : n ? `Saved ${plural(n, "change")}` : "Nothing changed");
+    const undo = n ? {
+      action: {
+        label: "Undo",
+        onClick: () => void postSettings({ action: "save_settings", settings: before, confirmation: null, holdout_acknowledged: false }).then(
+          () => { onSaved(before); router.refresh(); notify.done("Put back as it was."); },
+          (err: unknown) => notify.fail(err instanceof Error ? err.message : "That didn't save"),
+        ),
+      },
+    } : undefined;
+    notify.done(opts.back ? (n ? `${plural(n, "value")} back to Insurvas's` : "Already on Insurvas's values") : n ? `Saved ${plural(n, "change")}` : "Nothing changed", undo);
     onSaved(next);
     router.refresh();
     onClose();
@@ -93,7 +105,7 @@ export function SettingsDialog({ title, said, settings, specs = [], keys = [], e
   const all = [...specs.map((s) => s.key), ...keys];
   const [drafts, setDrafts] = useState<Record<string, string>>(() => Object.fromEntries(specs.map((s) => [s.key, shown(settings, s)])));
   const [draft, setDraft] = useState<RetentionSettings>(settings);
-  const { busy, error, setError, send } = useSettingsSave(onSaved, onClose);
+  const { busy, error, setError, send } = useSettingsSave(onSaved, onClose, settings);
   const set = <K extends keyof RetentionSettings>(k: K, v: RetentionSettings[K]) => { setDraft((cur) => ({ ...cur, [k]: v })); setError(null); };
   const yours = isYours(settings, all);
   const insurvas = specs.length ? specs.map((s) => count(PLATFORM_DEFAULT_SETTINGS[s.key] / (s.scale ?? 1))).join(" · ") : null;
@@ -259,7 +271,7 @@ export function WinbackDialog({ reason, settings, canEdit, onSaved, onClose }: {
   const [draftText, setDraftText] = useState(String(saved));
   const [asking, setAsking] = useState<{ days: number; back: boolean } | null>(null);
   const [confirmation, setConfirmation] = useState("");
-  const { busy, error, setError, send } = useSettingsSave(onSaved, onClose);
+  const { busy, error, setError, send } = useSettingsSave(onSaved, onClose, settings);
   const withDays = (days: number): RetentionSettings => ({ ...settings, winbackDays: { ...settings.winbackDays, [reason]: days } });
   const go = (days: number, back = false) => {
     if (reason === "affordability" && days < saved) { setAsking({ days, back }); return; }
@@ -304,7 +316,7 @@ export function HoldoutDialog({ settings: saved, canEdit, onSaved, onClose }: { 
   const [draft, setDraft] = useState<RetentionSettings>(saved);
   const [drafts, setDrafts] = useState<Record<string, string>>(() => Object.fromEntries(HOLDOUT_SPECS.map((s) => [s.key, shown(saved, s)])));
   const [acknowledged, setAcknowledged] = useState(false);
-  const { busy, error, setError, send } = useSettingsSave(onSaved, onClose);
+  const { busy, error, setError, send } = useSettingsSave(onSaved, onClose, saved);
   const dis = !canEdit;
   const yours = isYours(saved, HOLDOUT_KEYS);
   const save = () => {

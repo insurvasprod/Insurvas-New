@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docs and Get set up R4</title>
+<style>
+/* Foundation v3 dark tokens. Text sizes: 12 / 14 / 16 only; buttons 14. */
+:root{--canvas:#101715;--surface:#18211E;--raised:#202B26;--hi:#26332E;--text:#F2F6F4;--muted:#9FB0A7;--faint:#6F8079;--border:#2A3631;--input:#55665F;--primary:#35D6AA;--pfg:#0B2119;--psoft:#173A30;--gold:#E8B547;--goldbg:#3A2E10;--good:#6BE3C1;--goodbg:#173A30;--info:#A4C0F8;--infobg:#172A4A;--warn:#F3A266;--warnbg:#3A230C;--r:16px;--rc:8px}
+*{box-sizing:border-box}
+html,body{margin:0;background:#080d0b;color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,"Segoe UI",sans-serif}
+h1,h2,h3{margin:0;font-size:16px;font-weight:700}h3{font-size:14px}p{margin:0}
+.wrap{max-width:1600px;margin:0 auto;padding:24px 16px 96px}
+.lead{color:var(--muted);max-width:1100px;margin:8px 0 0}
+.toc{position:sticky;top:0;z-index:5;display:flex;flex-wrap:wrap;gap:8px;padding:12px 0;margin:12px 0 8px;background:#080d0b;border-bottom:1px solid var(--border)}
+.toc a{border:1px solid var(--border);border-radius:var(--rc);padding:6px 12px;color:var(--muted);font-weight:600;text-decoration:none}
+.toc a.big{color:var(--text);border-color:#1f5a49;background:var(--psoft)}
+.screen{margin:56px 0 0;padding-top:8px;border-top:2px solid var(--border)}
+.screen>h2{margin:16px 0 4px}.sub{color:var(--muted)}
+.board{margin:32px 0}
+.cap{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin:0 0 10px}
+.cap b{font-size:12px;letter-spacing:.06em;color:var(--primary)}.cap span{color:var(--muted)}
+.rec{display:inline-flex;font-size:12px;font-weight:700;color:var(--pfg);background:var(--primary);border-radius:6px;padding:2px 8px}
+.alt{display:inline-flex;font-size:12px;font-weight:600;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 8px}
+.notes{max-width:1250px;color:var(--muted);margin:10px 4px 0;padding-left:18px}.notes li{margin:3px 0}.notes b{color:var(--text)}
+.crit{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:16px 20px;color:var(--muted)}.crit b{color:var(--text)}.crit ol{margin:0;padding-left:18px}.crit li{margin:4px 0}
+/* app frame */
+.frame{background:var(--canvas);border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.app{display:grid;grid-template-columns:56px minmax(0,1fr);min-height:820px}
+.rail{border-right:1px solid var(--border);background:#0a110f;display:flex;flex-direction:column;align-items:center;padding:12px 0;gap:10px}
+.rail i{display:block;width:30px;height:30px;border-radius:8px;background:var(--raised)}.rail i.on{background:var(--psoft);box-shadow:inset 0 0 0 1px #1f5a49}.rail .sp{flex:1}
+.rail i.doc{background:var(--psoft);position:relative}
+.top{height:52px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;padding:0 20px}
+.top .q{width:280px;height:34px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+.top .sp{flex:1}.top .av{width:34px;height:34px;border-radius:50%;background:var(--goldbg)}
+.main{padding:16px 24px 24px;display:flex;flex-direction:column;gap:16px;min-width:0}
+.trail{font-size:12px;color:var(--muted)}.trail b{color:var(--text);font-weight:600}
+.tl{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.tl h1{display:flex;align-items:center;gap:8px}.ib{display:inline-grid;place-items:center;width:16px;height:16px;border:1px solid var(--muted);border-radius:50%;font-size:12px;font-style:normal;color:var(--muted)}
+.sp{flex:1}
+.btn{display:inline-flex;align-items:center;gap:6px;height:36px;padding:0 14px;border-radius:var(--rc);border:1px solid var(--border);background:var(--surface);color:var(--text);font-weight:600;white-space:nowrap}
+.btn.p{background:var(--primary);color:var(--pfg);border-color:var(--primary)}.btn.g{background:none;border-color:transparent;color:var(--muted)}
+.btn.gold{background:var(--gold);color:#1d1503;border-color:var(--gold)}.btn.sm{height:30px;padding:0 10px}.btn.lg{height:44px;padding:0 20px;font-size:16px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;border-radius:6px;padding:2px 8px;white-space:nowrap}
+.chip:before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.ok{color:var(--good);background:var(--goodbg)}.chip.w{color:var(--warn);background:var(--warnbg)}.chip.n{color:var(--muted);border:1px solid var(--border)}.chip.n:before{display:none}.chip.i{color:var(--info);background:var(--infobg)}
+.m{color:var(--muted)}.s12{font-size:12px}.mono{font-family:ui-monospace,Consolas,monospace;font-size:12px}
+.card{background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.015));border:1px solid rgba(255,255,255,.09);border-radius:var(--r);min-width:0}
+/* search centred on the title line */
+.srch{display:flex;align-items:center;gap:10px;height:40px;border:1px solid var(--input);border-radius:12px;background:var(--surface);padding:0 10px 0 14px;color:var(--faint)}
+.srch .k{margin-left:auto;font:600 12px Inter;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+.tl.c{display:grid;grid-template-columns:1fr minmax(360px,560px) 1fr;align-items:center}
+.tl.c .r{justify-self:end;display:flex;gap:8px}
+/* settings-style menu card */
+.snav{width:260px;flex:none;display:flex;flex-direction:column;padding:10px;gap:2px;align-self:stretch}
+.snav .f{height:32px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;display:flex;align-items:center;padding:0 10px;color:var(--faint);font-size:12px}
+.snav h4{margin:10px 8px 2px;font-size:14px;font-weight:700}
+.snav a{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;font-size:12px;color:var(--muted);text-decoration:none}
+.snav a.on{background:var(--hi);color:var(--text);font-weight:600}.snav a .n{margin-left:auto;color:var(--faint);font-size:12px}
+.snav a .tk{margin-left:auto;color:var(--good)}.snav a.now{color:var(--text)}
+.snav .foot{margin-top:auto;padding:10px 8px 4px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+.snav .pg{height:4px;border-radius:4px;background:var(--border);margin-top:6px}.snav .pg i{display:block;height:100%;border-radius:4px;background:var(--primary)}
+.split{display:flex;gap:16px;min-height:0;flex:1}
+.pane{flex:1;min-width:0;display:flex;flex-direction:column}
+/* video */
+.vid{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;border:1px dashed var(--input);background:repeating-linear-gradient(135deg,rgba(255,255,255,.02) 0 12px,rgba(255,255,255,.035) 12px 24px);display:grid;place-items:center;text-align:center;color:var(--muted);font-size:12px}
+.vid b{display:block;color:var(--text);font-size:14px;margin-top:6px}
+.vid .pl{width:56px;height:56px;border-radius:50%;border:1px solid var(--input);display:grid;place-items:center;margin:0 auto;font-size:16px}
+.vid.post{border-style:solid;border-color:var(--border);background:radial-gradient(120% 90% at 20% 10%,#1f4a3d 0,#101d19 55%,#0a110f 100%)}
+.vid.post .pl{background:var(--primary);color:var(--pfg);border:0;width:64px;height:64px}
+.vid .bar{position:absolute;left:14px;right:14px;bottom:12px;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.vid .bar i{flex:1;height:4px;border-radius:4px;background:rgba(255,255,255,.18)}
+/* step-by-step */
+.steps{display:flex;flex-direction:column}
+.st{display:grid;grid-template-columns:40px minmax(0,1fr) auto;gap:14px;padding:14px 0;position:relative}
+.st:not(:last-child):before{content:"";position:absolute;left:19px;top:50px;bottom:-6px;width:2px;background:var(--border)}
+.st .no{width:40px;height:40px;border-radius:50%;border:2px solid var(--border);display:grid;place-items:center;font-weight:700;color:var(--muted);background:var(--canvas);z-index:1}
+.st.done .no{background:var(--goodbg);border-color:transparent;color:var(--good)}
+.st.done:not(:last-child):before{background:var(--primary)}
+.st.cur .no{border-color:var(--primary);color:var(--primary);box-shadow:0 0 0 4px rgba(53,214,170,.15)}
+.st .t{font-weight:700}.st .d{color:var(--muted);margin-top:2px}
+.st .facts{display:flex;gap:16px;margin-top:6px;font-size:12px;color:var(--faint);flex-wrap:wrap}.st .facts b{color:var(--muted);font-weight:600}
+.st .side{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+/* horizontal stepper */
+.hstep{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:0}
+.hstep div{position:relative;padding:0 8px 0 0}
+.hstep div:before{content:"";position:absolute;top:15px;left:34px;right:0;height:2px;background:var(--border)}
+.hstep div:last-child:before{display:none}
+.hstep div.done:before{background:var(--primary)}
+.hstep .no{position:relative;z-index:1;width:32px;height:32px;border-radius:50%;border:2px solid var(--border);display:grid;place-items:center;font-weight:700;color:var(--muted);background:var(--canvas)}
+.hstep .done .no{background:var(--goodbg);border-color:transparent;color:var(--good)}.hstep .cur .no{border-color:var(--primary);color:var(--primary)}
+.hstep b{display:block;margin-top:8px;font-size:14px}.hstep span{font-size:12px;color:var(--muted)}
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.tile{padding:16px;display:flex;flex-direction:column;gap:8px;min-height:150px}
+.tile .h{display:flex;align-items:center;gap:10px}.tile .h .no{width:28px;height:28px;border-radius:8px;background:var(--psoft);color:var(--primary);display:grid;place-items:center;font-weight:700;font-size:12px}
+.tile ul{margin:0;padding:0;list-style:none;display:grid;gap:3px;font-size:12px;color:var(--muted)}
+.tile li{display:flex;gap:6px}.tile li .tk{color:var(--good)}
+.mtr{height:6px;border-radius:6px;background:var(--border);overflow:hidden}.mtr i{display:block;height:100%;background:var(--primary)}
+.mtr.gold i{background:var(--gold)}
+.row{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--border)}
+.ring{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--border);flex:none;display:grid;place-items:center;font-size:12px}
+.ring.x{background:var(--good);border-color:transparent;color:var(--pfg)}.ring.c{border-color:var(--primary);background:var(--psoft)}.ring.p{border-color:var(--warn);color:var(--warn)}
+.pal{width:640px;background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:0 24px 60px rgba(0,0,0,.6);overflow:hidden}
+.pal .pi{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--border);font-size:16px}
+.pal h5{margin:8px 16px 4px;font-size:12px;color:var(--faint);font-weight:600}
+.pal .it{display:flex;gap:10px;padding:9px 16px;align-items:center}.pal .it.on{background:var(--raised)}.pal .it small{margin-left:auto;color:var(--muted);font-size:12px}
+.pal .pf{display:flex;gap:14px;padding:10px 16px;border-top:1px solid var(--border);font-size:12px;color:var(--muted)}
+.phone{width:375px;border:1px solid var(--border);border-radius:28px;background:var(--canvas);overflow:hidden;display:flex;flex-direction:column;min-height:720px;position:relative}
+.phone .pb{height:40px;display:flex;align-items:center;justify-content:space-between;padding:0 16px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)}
+.phone .pm{padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.sheet{position:absolute;left:0;right:0;bottom:0;top:110px;background:var(--surface);border-top:1px solid var(--border);border-radius:20px 20px 0 0;padding:8px 0}
+.grab{width:40px;height:4px;border-radius:4px;background:var(--input);margin:4px auto 10px}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}
+.kbd{font:600 12px Inter;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:1px 6px}
+.lbl{font-size:12px;color:var(--faint);margin:0 0 6px}
+.shot{border:1px solid var(--border);border-radius:10px;background:#0c1512;height:96px;position:relative;overflow:hidden}
+.shot i{position:absolute;border-radius:6px;background:var(--raised)}.shot i.lit{background:var(--primary);box-shadow:0 0 0 3px rgba(53,214,170,.3)}
+.facts2{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--border);border-radius:12px}
+.facts2 div{padding:12px 14px;border-right:1px solid var(--border)}.facts2 div:last-child{border-right:0}
+.facts2 small{display:block;font-size:12px;color:var(--muted)}.facts2 b{font-size:16px}
+</style>
+</head>
+<body><div class="wrap">
+<h1>Docs and Get set up · round 4 mockups</h1>
+<p class="lead">Owner 2026-11-13, looking at the built pages: redesign both, with every part of them. Docs' left menu should look like Settings' menu; the right side should fill the full height and the full width; "Your path to selling insurance" should read exactly step by step, in order; the search bar should sit more in the middle and be longer; show how a page looks after the video. Get set up: present it better to the client. Mockups only; nothing is built until you pick.</p>
+<nav class="toc">
+<a class="big" href="#d0">Docs · what changes</a><a href="#d1">D1 Home A · B · C</a><a href="#d2">D2 Step-by-step page</a><a href="#d3">D3 Setup page: video then clicks</a><a href="#d4">D4 Search</a><a href="#d5">D5 States and phone</a>
+<a class="big" href="#g0">Get set up · what changes</a><a href="#g1">G1 A · B · C</a><a href="#g2">G2 States</a><a href="#g3">G3 Producer and phone</a><a href="#rec">Recommendation</a>
+</nav>
+
+<!-- ═════════════ DOCS ═════════════ -->
+<section class="screen" id="d0">
+<h2>Docs · what the built page gets wrong</h2>
+<div class="crit"><ol>
+<li><b>The menu is a loose list,</b> unlike Settings, so Docs looks like a different product. Long titles cut off ("Your path to selling insuran…").</li>
+<li><b>Half the screen is empty.</b> The chapter list stops at 1070px and the page ends at a third of the height.</li>
+<li><b>The search box hides in the corner,</b> and is short. Search is the main way into a docs site.</li>
+<li><b>Ordered guidance is written as paragraphs.</b> "Your path to selling" is a sequence, so it should look like one: numbered steps you can tick, with time and cost for each.</li>
+<li><b>On a page, the video and the steps compete for scroll.</b> Nothing ties a step in the text to a moment in the video.</li>
+</ol></div>
+</section>
+
+<section class="board" id="d1"><div class="cap"><b>D1·A DOCS HOME · SETTINGS MENU + JOURNEY</b><span class="rec">Recommended</span><span>/app/docs · full width, full height</span></div>
+<div class="frame"><div class="app"><div class="rail"><i></i><i></i><i></i><i></i><i></i><span class="sp"></span><i class="doc on"></i><i></i></div><div>
+<div class="top"><span class="q"></span><span class="sp"></span><span class="btn p sm">+ New</span><span class="av"></span></div>
+<div class="main" style="min-height:768px">
+<div class="trail">Home › <b>Docs</b></div>
+<div class="tl c"><h1>Docs <i class="ib">i</i></h1><div class="srch">⌕ <span>Search Docs: licences, carriers, pipelines…</span><span class="k">⌘K</span></div><div class="r"><span class="btn">Get set up · 8 of 8</span></div></div>
+<div class="split">
+<div class="card snav">
+<div class="f">Filter chapters</div>
+<a class="on">Start here</a>
+<h4>Getting into insurance</h4><a>Your path to selling <span class="tk">✓</span></a><a>Pre-licensing and the exam</a><a>Non-resident licences</a><a>E&amp;O, AML and CE</a>
+<h4>Getting contracted</h4><a>Direct, IMO or FMO?</a><a>Getting appointed <span class="tk">✓</span></a><a>Contract levels</a><a>Writing numbers <span class="tk">✓</span></a>
+<h4>Set up Insurvas</h4><a>17 steps <span class="n">14 / 17</span></a>
+<h4>Selling within the rules</h4><a>3 pages</a>
+<h4>After the sale</h4><a>3 pages</a>
+<h4>Running an agency</h4><a>3 pages</a>
+<div class="foot">You've read 9 of 34 pages<div class="pg"><i style="width:26%"></i></div></div>
+</div>
+<div class="pane" style="gap:16px">
+<div class="card" style="padding:20px;display:flex;flex-direction:column;gap:16px">
+<div style="display:flex;align-items:center;gap:12px"><h2>Your journey</h2><span class="m s12">from no licence to your first commission check</span><span class="sp"></span><span class="btn sm">Keep reading: Contract levels ›</span></div>
+<div class="hstep">
+<div class="done"><span class="no">✓</span><b>Get licensed</b><span>4 pages · 16 min</span></div>
+<div class="cur"><span class="no">2</span><b>Get contracted</b><span>2 of 4 read</span></div>
+<div class="done"><span class="no">✓</span><b>Set up Insurvas</b><span>14 of 17 done</span></div>
+<div><span class="no">4</span><b>Sell within the rules</b><span>3 pages</span></div>
+<div><span class="no">5</span><b>After the sale</b><span>3 pages</span></div>
+<div><span class="no">6</span><b>Run an agency</b><span>3 pages</span></div>
+</div></div>
+<div class="tiles" style="flex:1">
+<div class="card tile"><div class="h"><span class="no">1</span><h3>Getting into insurance</h3><span class="sp"></span><span class="chip ok">Read</span></div><ul><li><span class="tk">✓</span>Your path to selling</li><li><span class="tk">✓</span>Pre-licensing and the exam</li><li><span class="tk">✓</span>Non-resident licences</li><li><span class="tk">✓</span>E&amp;O, AML and CE</li></ul><span class="sp"></span><div class="mtr"><i style="width:100%"></i></div></div>
+<div class="card tile" style="border-color:#1f5a49"><div class="h"><span class="no">2</span><h3>Getting contracted</h3><span class="sp"></span><span class="chip i">Reading</span></div><ul><li><span class="tk">✓</span>Direct, IMO or FMO?</li><li><span class="tk">✓</span>Getting appointed</li><li>· Contract levels and advances</li><li>· Writing numbers</li></ul><span class="sp"></span><div class="mtr"><i style="width:50%"></i></div></div>
+<div class="card tile"><div class="h"><span class="no">3</span><h3>Set up Insurvas to sell</h3><span class="sp"></span><span class="m s12">14 / 17 done</span></div><ul><li>Each Get set up step: video, every click, and Do it in Insurvas</li><li>Next: Add your publishers · 5 min</li></ul><span class="sp"></span><div class="mtr"><i style="width:82%"></i></div></div>
+<div class="card tile"><div class="h"><span class="no">4</span><h3>Selling within the rules</h3></div><ul><li>· Do-not-call and the TCPA</li><li>· Calling hours</li><li>· Disclosures and call recording</li></ul><span class="sp"></span><div class="mtr"><i style="width:0"></i></div></div>
+<div class="card tile"><div class="h"><span class="no">5</span><h3>After the sale</h3></div><ul><li>· From application to in force</li><li>· Commissions and statements</li><li>· Chargebacks and persistency</li></ul><span class="sp"></span><div class="mtr"><i style="width:0"></i></div></div>
+<div class="card tile"><div class="h"><span class="no">6</span><h3>Running an agency</h3></div><ul><li>· Hierarchy and overrides</li><li>· Onboarding producers</li><li>· Your team's setup</li></ul><span class="sp"></span><div class="mtr"><i style="width:0"></i></div></div>
+</div></div></div></div></div></div></div>
+<ul class="notes"><li><b>The menu is Settings' menu:</b> the same card, filter box, bold group headings, small items, active pill and counts on the right. Chapter 3 folds to one line with its count, because its 17 steps live in Get set up.</li><li><b>Search moves to the middle of the title line,</b> 560px wide, ⌘K from anywhere in Docs.</li><li><b>The right side fills the height:</b> the journey stepper on top, then six chapter tiles in a 3×2 grid that stretch to the bottom of the window. Each tile lists its pages, so the home doubles as the contents.</li></ul></section>
+
+<section class="board"><div class="cap"><b>D1·B DOCS HOME · ONE BIG CONTENTS</b><span class="alt">Alternative</span><span>the whole contents across the width, no tiles</span></div>
+<div class="frame"><div class="app" style="min-height:640px"><div class="rail"><i></i><i></i><i></i><span class="sp"></span><i class="doc on"></i><i></i></div><div class="main">
+<div class="trail">Home › <b>Docs</b></div>
+<div class="tl c"><h1>Docs <i class="ib">i</i></h1><div class="srch">⌕ <span>Search Docs</span><span class="k">⌘K</span></div><div class="r"><span class="btn">Get set up</span></div></div>
+<div class="split"><div class="card snav"><div class="f">Filter chapters</div><a class="on">Start here</a><h4>Getting into insurance</h4><a>4 pages</a><h4>Getting contracted</h4><a>4 pages</a><h4>Set up Insurvas</h4><a>17 steps</a><h4>Selling within the rules</h4><a>3 pages</a><h4>After the sale</h4><a>3 pages</a><h4>Running an agency</h4><a>3 pages</a></div>
+<div class="card pane" style="padding:20px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px 32px;align-content:start">
+<div><h3>1 · Getting into insurance</h3><p class="m s12" style="margin:4px 0 8px">16 min</p><div class="row" style="padding:8px 0"><span class="ring x">✓</span>Your path to selling</div><div class="row" style="padding:8px 0"><span class="ring x">✓</span>Pre-licensing and the exam</div><div class="row" style="padding:8px 0"><span class="ring"></span>Non-resident licences</div><div class="row" style="padding:8px 0"><span class="ring"></span>E&amp;O, AML and CE</div></div>
+<div><h3>2 · Getting contracted</h3><p class="m s12" style="margin:4px 0 8px">15 min</p><div class="row" style="padding:8px 0"><span class="ring x">✓</span>Direct, IMO or FMO?</div><div class="row" style="padding:8px 0"><span class="ring c"></span>Getting appointed</div><div class="row" style="padding:8px 0"><span class="ring"></span>Contract levels</div><div class="row" style="padding:8px 0"><span class="ring"></span>Writing numbers</div></div>
+<div><h3>3 · Set up Insurvas</h3><p class="m s12" style="margin:4px 0 8px">14 of 17 done in your agency</p><div class="row" style="padding:8px 0"><span class="ring x">✓</span>Add your carriers</div><div class="row" style="padding:8px 0"><span class="ring"></span>Add your publishers</div><div class="row" style="padding:8px 0"><span class="m">+ 15 more ›</span></div></div>
+<div><h3>4 · Selling within the rules</h3><div class="row" style="padding:8px 0"><span class="ring"></span>Do-not-call and the TCPA</div><div class="row" style="padding:8px 0"><span class="ring"></span>Calling hours</div><div class="row" style="padding:8px 0"><span class="ring"></span>Disclosures and recording</div></div>
+<div><h3>5 · After the sale</h3><div class="row" style="padding:8px 0"><span class="ring"></span>Application to in force</div><div class="row" style="padding:8px 0"><span class="ring"></span>Commissions and statements</div><div class="row" style="padding:8px 0"><span class="ring"></span>Chargebacks and persistency</div></div>
+<div><h3>6 · Running an agency</h3><div class="row" style="padding:8px 0"><span class="ring"></span>Hierarchy and overrides</div><div class="row" style="padding:8px 0"><span class="ring"></span>Onboarding producers</div><div class="row" style="padding:8px 0"><span class="ring"></span>Your team's setup</div></div>
+</div></div></div></div></div>
+<ul class="notes"><li>Calmer and denser than A: one card, three columns of plain lines. It has no "where am I in the journey" stepper.</li></ul></section>
+
+<section class="board"><div class="cap"><b>D1·C DOCS HOME · FEATURED VIDEO</b><span class="alt">Alternative</span><span>a "watch first" video leads, chapters below</span></div>
+<div class="frame"><div class="app" style="min-height:640px"><div class="rail"><i></i><i></i><i></i><span class="sp"></span><i class="doc on"></i><i></i></div><div class="main">
+<div class="tl c"><h1>Docs <i class="ib">i</i></h1><div class="srch">⌕ <span>Search Docs</span><span class="k">⌘K</span></div><div class="r"><span class="btn">Get set up</span></div></div>
+<div class="split"><div class="card snav"><div class="f">Filter chapters</div><a class="on">Start here</a><h4>Getting into insurance</h4><a>4 pages</a><h4>Getting contracted</h4><a>4 pages</a><h4>Set up Insurvas</h4><a>17 steps</a><h4>Selling within the rules</h4><a>3 pages</a><h4>After the sale</h4><a>3 pages</a><h4>Running an agency</h4><a>3 pages</a></div>
+<div class="pane" style="gap:16px"><div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:16px">
+<div class="vid post"><div><span class="pl">▶</span><b>Insurvas in 4 minutes</b>From your first lead to your first commission check</div><div class="bar"><span>0:00</span><i></i><span>4:12</span></div></div>
+<div class="card" style="padding:20px;display:flex;flex-direction:column;gap:10px"><h2>Start here</h2><p class="m">New to insurance? Chapter 1 explains getting licensed. Already licensed and contracted? Chapter 3 follows Get set up, every click.</p><span class="sp"></span><span class="btn p">Start chapter 1</span><span class="btn">Jump to Set up Insurvas</span></div></div>
+<div class="tiles"><div class="card tile"><h3>1 · Getting into insurance</h3><span class="m s12">4 pages · 16 min</span></div><div class="card tile"><h3>2 · Getting contracted</h3><span class="m s12">4 pages · 15 min</span></div><div class="card tile"><h3>3 · Set up Insurvas</h3><span class="m s12">17 steps</span></div></div>
+</div></div></div></div></div>
+<ul class="notes"><li>Best for a brand-new client on day one; weaker on repeat visits, when the big video is noise.</li></ul></section>
+
+<section class="board" id="d2"><div class="cap"><b>D2 · "YOUR PATH TO SELLING INSURANCE" · EXACTLY STEP BY STEP</b><span class="rec">Recommended</span><span>video on the left, the ordered steps on the right · fills the height, no long scroll</span></div>
+<div class="frame"><div class="app"><div class="rail"><i></i><i></i><i></i><span class="sp"></span><i class="doc on"></i><i></i></div><div class="main" style="min-height:820px">
+<div class="trail">Home › Docs › Getting into insurance › <b>Your path to selling</b></div>
+<div class="tl c"><h1>Your path to selling insurance <i class="ib">i</i></h1><div class="srch">⌕ <span>Search Docs</span><span class="k">⌘K</span></div><div class="r"><span class="btn sm">‹ Previous</span><span class="btn sm">Next: Pre-licensing ›</span></div></div>
+<div class="split">
+<div class="card snav"><div class="f">Filter chapters</div><a>Start here</a><h4>Getting into insurance</h4><a class="on">Your path to selling</a><a>Pre-licensing and the exam</a><a>Non-resident licences</a><a>E&amp;O, AML and CE</a><h4>Getting contracted</h4><a>Direct, IMO or FMO?</a><a>Getting appointed</a><a>Contract levels</a><a>Writing numbers</a><h4>Set up Insurvas</h4><a>17 steps <span class="n">14 / 17</span></a><h4>Selling within the rules</h4><a>3 pages</a><h4>After the sale</h4><a>3 pages</a><h4>Running an agency</h4><a>3 pages</a><div class="foot">4 min read · 3 min video</div></div>
+<div class="pane" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px">
+<div style="display:flex;flex-direction:column;gap:14px">
+<div class="vid post"><div><span class="pl">▶</span><b>From no licence to your first sale</b>3:05 · chapters follow the steps</div><div class="bar"><span>1:12</span><i></i><span>3:05</span></div></div>
+<div class="facts2"><div><small>Total time</small><b>4–8 weeks</b></div><div><small>Typical cost</small><b>$300–$700</b></div><div><small>Steps</small><b>6</b></div><div><small>Done</small><b>2 of 6</b></div></div>
+<div class="card" style="padding:14px 16px"><h3>Before you start</h3><p class="m s12" style="margin-top:4px">Pick your lines: life, health, or both. Every step below is per line. Most agents take both.</p></div>
+</div>
+<div class="card" style="padding:6px 20px 12px;display:flex;flex-direction:column">
+<div class="steps">
+<div class="st done"><span class="no">✓</span><div><div class="t">1 · Take a pre-licensing course</div><div class="d">An approved course for each line you want to sell.</div><div class="facts"><span><b>Time</b> 20–40 hours</span><span><b>Cost</b> $100–$250</span><span>Video 0:00</span></div></div><div class="side"><span class="chip ok">Done</span></div></div>
+<div class="st done"><span class="no">✓</span><div><div class="t">2 · Pass the state exam</div><div class="d">At a test centre or online, proctored. You get the result the same day.</div><div class="facts"><span><b>Time</b> 2 hours</span><span><b>Cost</b> $40–$150</span><span>Video 0:34</span></div></div><div class="side"><span class="chip ok">Done</span></div></div>
+<div class="st cur"><span class="no">3</span><div><div class="t">3 · Apply for your resident licence</div><div class="d">Through NIPR, with fingerprints and a background check.</div><div class="facts"><span><b>Time</b> 1–3 weeks</span><span><b>Cost</b> $50–$200</span><span>Video 1:12</span></div></div><div class="side"><span class="btn sm">Mark done</span><a class="s12">Read more ›</a></div></div>
+<div class="st"><span class="no">4</span><div><div class="t">4 · Get E&amp;O and AML training</div><div class="d">Most carriers ask for both before they contract you.</div><div class="facts"><span><b>Time</b> 1 day</span><span><b>Cost</b> $25–$60 a month</span><span>Video 1:50</span></div></div><div class="side"></div></div>
+<div class="st"><span class="no">5</span><div><div class="t">5 · Contract with carriers</div><div class="d">Usually through an IMO or FMO; then each carrier appoints you.</div><div class="facts"><span><b>Time</b> 1–3 weeks</span><span><b>Cost</b> free</span><span>Video 2:20</span></div></div><div class="side"></div></div>
+<div class="st"><span class="no">6</span><div><div class="t">6 · Set up Insurvas and start calling</div><div class="d">Get set up walks you through every click.</div><div class="facts"><span><b>Time</b> about 1 hour</span><span>Video 2:45</span></div></div><div class="side"><span class="btn sm p">Open Get set up</span></div></div>
+</div>
+<span class="sp"></span>
+<div style="display:flex;gap:10px;border-top:1px solid var(--border);padding-top:12px"><span class="m s12">Key terms: line of authority · NIPR · NPN</span><span class="sp"></span><span class="btn sm">Next: Pre-licensing and the exam ›</span></div>
+</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Exactly in order:</b> six numbered steps on a line; done ones turn green and the line fills to the step you are on. Each step has its time, its cost and the moment in the video, so clicking "Video 1:12" jumps the player there.</li><li><b>"Mark done"</b> is the reader's own tick (kept per person); it drives the journey stepper on the Docs home.</li><li><b>One screen, no long scroll:</b> video and summary facts on the left, the steps on the right, both stretching to the bottom. Previous / Next sit on the title line.</li><li>The same step layout is used by every "how to" page: getting appointed, onboarding producers, application to in force.</li></ul></section>
+
+<section class="board"><div class="cap"><b>D2·B THE SAME PAGE · VIDEO ON TOP, STEPS BELOW</b><span class="alt">Alternative</span><span>reads like an article; scrolls on smaller screens</span></div>
+<div class="frame"><div class="app" style="min-height:700px"><div class="rail"><i></i><i></i><span class="sp"></span><i class="doc on"></i><i></i></div><div class="main">
+<div class="tl c"><h1>Your path to selling insurance</h1><div class="srch">⌕ <span>Search Docs</span><span class="k">⌘K</span></div><div class="r"><span class="btn sm">Next ›</span></div></div>
+<div class="split"><div class="card snav"><a class="on">Your path to selling</a><a>Pre-licensing and the exam</a><a>Non-resident licences</a></div>
+<div class="pane" style="gap:14px"><div class="vid post" style="aspect-ratio:21/7"><div><span class="pl">▶</span><b>From no licence to your first sale</b></div></div>
+<div class="card" style="padding:14px 20px;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px">
+<div><span class="ring x">✓</span><b style="display:block;margin-top:6px">Course</b><span class="m s12">20–40 h</span></div><div><span class="ring x">✓</span><b style="display:block;margin-top:6px">Exam</b><span class="m s12">2 h</span></div><div><span class="ring c"></span><b style="display:block;margin-top:6px">Licence</b><span class="m s12">1–3 wk</span></div><div><span class="ring"></span><b style="display:block;margin-top:6px">E&amp;O + AML</b><span class="m s12">1 day</span></div><div><span class="ring"></span><b style="display:block;margin-top:6px">Contracting</b><span class="m s12">1–3 wk</span></div><div><span class="ring"></span><b style="display:block;margin-top:6px">Insurvas</b><span class="m s12">1 h</span></div>
+</div><p class="m">Below: each step in full, the same six in the same order.</p></div></div></div></div></div>
+</section>
+
+<section class="board" id="d3"><div class="cap"><b>D3 · A SETUP PAGE · AFTER THE VIDEO, EVERY CLICK</b><span class="rec">Recommended</span><span>/app/docs/carriers · chapter 3 · the clicks are the same moves the guide lights</span></div>
+<div class="frame"><div class="app"><div class="rail"><i></i><i></i><span class="sp"></span><i class="doc on"></i><i></i></div><div class="main" style="min-height:820px">
+<div class="trail">Home › Docs › Set up Insurvas › <b>Add your carriers</b></div>
+<div class="tl c"><h1>Add your carriers <i class="ib">i</i></h1><div class="srch">⌕ <span>Search Docs</span><span class="k">⌘K</span></div><div class="r"><span class="btn gold">Do it in Insurvas ›</span></div></div>
+<div class="split">
+<div class="card snav"><div class="f">Filter steps</div><a>Start here</a><h4>Set up Insurvas</h4><a class="on">Add your carriers</a><a>Add your states <span class="tk">✓</span></a><a>Add your publishers</a><a>Create a campaign <span class="tk">✓</span></a><a>Import your leads <span class="tk">✓</span></a><a>Invite your team <span class="tk">✓</span></a><a>Set your calling hours <span class="tk">✓</span></a><a>Assign leads <span class="tk">✓</span></a><a>First carrier statement <span class="tk">✓</span></a><h4>Optional settings</h4><a>Call results <span class="tk">✓</span></a><a>Disclosures</a><a>Phone number</a><a>Claim times</a><div class="foot">Ready to sell · 8 of 9<div class="pg"><i style="width:88%"></i></div></div></div>
+<div class="pane" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px">
+<div style="display:flex;flex-direction:column;gap:14px">
+<div class="vid"><div><span class="pl">▶</span><b>Video coming · Adding your carriers</b>A short screen recording will play here</div></div>
+<div class="card" style="padding:16px"><h3>Why it matters</h3><p class="m" style="margin-top:4px">Quotes only show carriers you can sell, and commission checks know who pays you. Every other step uses your carriers, so this comes first.</p></div>
+<div class="card" style="padding:16px;display:flex;align-items:center;gap:12px"><span class="chip w">Not done yet</span><span class="m">About 5 min · Required for Ready to sell</span><span class="sp"></span><span class="btn p">Do it in Insurvas ›</span></div>
+</div>
+<div class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+<h3>Each click <span class="m s12" style="font-weight:400">· the guide lights these one at a time</span></h3>
+<div class="st" style="padding:0"><span class="no">1</span><div><div class="t">Tick each carrier you're contracted with</div><div class="d">Every tick saves. Level, contracted from and writing number are optional.</div><div class="shot" style="margin-top:8px"><i style="left:10px;top:12px;width:60%;height:12px"></i><i class="lit" style="left:10px;top:34px;width:16px;height:16px"></i><i style="left:34px;top:36px;width:40%;height:10px"></i><i style="left:10px;top:60px;width:16px;height:16px"></i><i style="left:34px;top:62px;width:30%;height:10px"></i></div></div><span></span></div>
+<div class="st" style="padding:0"><span class="no">2</span><div><div class="t">Click Next: Set Up States</div><div class="d">Your carriers are saved. Next you pick the states you sell in.</div><div class="shot" style="margin-top:8px"><i style="left:10px;top:12px;width:70%;height:12px"></i><i class="lit" style="right:12px;bottom:12px;width:120px;height:26px"></i></div></div><span></span></div>
+<span class="sp"></span>
+<div style="display:flex;gap:10px;border-top:1px solid var(--border);padding-top:12px"><span class="btn sm">‹ Start here</span><span class="sp"></span><span class="btn sm">Next: Add your states ›</span></div>
+</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>After the video:</b> why it matters, then whether it's done in your agency, with the one button that starts the guide. On the right, each click as a numbered step with a small picture of the screen and the control lit, the same moves the guide shows.</li><li><b>The menu</b> switches to the chapter's steps (Settings' menu, filtered), with ticks for what your agency has done and the Ready to sell bar in its foot.</li><li><b>"Do it in Insurvas"</b> is the page's one gold button on the title line, and again under the video.</li><li>Done state: the chip turns "Done in your agency · Nov 12 by Ellery" and the button becomes "Open Carriers".</li></ul></section>
+
+<section class="board" id="d4"><div class="cap"><b>D4 · SEARCH IN THE MIDDLE · OPEN</b><span class="rec">Recommended</span><span>the same box, open: results grouped by Docs, Insurvas pages and terms</span></div>
+<div class="frame"><div class="app" style="min-height:560px"><div class="rail"><i></i><span class="sp"></span><i class="doc on"></i><i></i></div><div class="main">
+<div class="tl c"><h1>Docs</h1><div style="position:relative"><div class="srch" style="border-color:var(--primary)">⌕ <span style="color:var(--text)">appoint</span><span class="k">Esc</span></div>
+<div class="pal" style="position:absolute;left:50%;transform:translateX(-50%);top:48px;width:620px">
+<h5>Docs</h5><div class="it on"><b>Getting appointed with carriers</b><small>Getting contracted · 5 min · video</small></div><div class="it">Your path to selling · step 5<small>Getting into insurance</small></div><div class="it">Add your states<small>Set up Insurvas</small></div>
+<h5>In Insurvas</h5><div class="it">Settings › Carriers › States<small>Guide me · 4 moves</small></div><div class="it">Producers › Appointments<small>open the page</small></div>
+<h5>Key terms</h5><div class="it">Appointment<small>a carrier's filing that lets you sell its products in a state</small></div>
+<div class="pf"><span><span class="kbd">↑↓</span> move</span><span><span class="kbd">↵</span> open</span><span><span class="kbd">⌘↵</span> open with the guide</span></div></div></div><div class="r"><span class="btn">Get set up</span></div></div>
+</div></div></div>
+<ul class="notes"><li>The search box is centred on the title line and 560px wide; open, its results drop under it, not into a corner. A result can open straight into a step's guide (⌘↵).</li><li>It also finds a step inside a page ("Your path to selling · step 5") and jumps to it.</li></ul></section>
+
+<section class="board" id="d5"><div class="cap"><b>D5 · STATES AND PHONE</b><span>video states, a done step, no results, and Docs on a phone</span></div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+<div style="width:380px"><p class="lbl">Video added · playing, chapters under it</p><div class="vid post"><div><span class="pl">▶</span><b>Adding your carriers</b></div><div class="bar"><span>0:42</span><i></i><span>2:10</span></div></div><div class="card" style="margin-top:8px;padding:8px 12px;font-size:12px;color:var(--muted)">0:00 Start set-up · 0:42 Tick your carriers · 1:30 Next: states</div></div>
+<div style="width:380px"><p class="lbl">Step done in your agency</p><div class="card" style="padding:16px;display:flex;align-items:center;gap:10px"><span class="chip ok">Done in your agency</span><span class="m s12">Nov 12 by Ellery</span><span class="sp"></span><span class="btn sm">Open Carriers</span></div>
+<p class="lbl" style="margin-top:16px">Search with nothing found</p><div class="pal" style="width:380px"><div class="pi">⌕ dnc rulez</div><div style="padding:24px 16px;text-align:center" class="m">Nothing for "dnc rulez". Try "do-not-call" or "TCPA".<div style="margin-top:10px"><span class="btn sm">Ask a question</span></div></div></div></div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Docs</span></div><div class="pm"><div class="srch">⌕ <span>Search Docs</span></div><span class="btn sm" style="align-self:flex-start">☰ Chapters</span><h2>Your path to selling insurance</h2><div class="vid post"><div><span class="pl">▶</span></div></div><div class="steps"><div class="st done" style="grid-template-columns:40px 1fr"><span class="no">✓</span><div><div class="t">1 · Pre-licensing course</div><div class="facts"><span>20–40 h</span><span>$100–$250</span></div></div></div><div class="st cur" style="grid-template-columns:40px 1fr"><span class="no">2</span><div><div class="t">2 · Pass the state exam</div><div class="facts"><span>2 h</span><span>$40–$150</span></div></div></div></div></div></div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Chapters sheet</span></div><div class="pm"><h2>Docs</h2></div><div class="sheet"><div class="grab"></div><div class="snav" style="width:auto"><h4>Getting into insurance</h4><a class="on">Your path to selling</a><a>Pre-licensing and the exam</a><h4>Getting contracted</h4><a>Getting appointed</a><h4>Set up Insurvas</h4><a>17 steps <span class="n">14 / 17</span></a></div></div></div>
+</div></section>
+
+<!-- ═════════════ GET SET UP ═════════════ -->
+<section class="screen" id="g0">
+<h2>Get set up · what the built page gets wrong</h2>
+<div class="crit"><ol>
+<li><b>Once it's done it says nothing.</b> A finished agency sees a wall of green ticks and "All done" in the corner: no sense of progress, nothing to show a client.</li>
+<li><b>It uses a third of the screen.</b> Rows run the full width with the action 1,700px away from the label; the bottom half is empty.</li>
+<li><b>Every step looks the same.</b> A 5-minute required step and an optional review have the same weight; you can't see what a step is or how it's done without leaving the page.</li>
+<li><b>Docs is a row at the bottom,</b> though every step has its own Docs page and video.</li>
+</ol></div>
+</section>
+
+<section class="board" id="g1"><div class="cap"><b>G1·A GET SET UP · STEPS LEFT, THE STEP ON THE RIGHT</b><span class="rec">Recommended</span><span>the same shape as Docs and Settings · full width, full height</span></div>
+<div class="frame"><div class="app"><div class="rail"><i></i><i class="on"></i><i></i><i></i><span class="sp"></span><i class="doc"></i><i></i></div><div class="main" style="min-height:820px">
+<div class="trail">Home › <b>Get set up</b></div>
+<div class="tl"><h1>Get set up <i class="ib">i</i></h1><span class="sp"></span><span class="m s12">Ready to sell · 8 of 9</span><div class="mtr" style="width:200px"><i style="width:88%"></i></div><span class="btn">Docs</span></div>
+<div class="split">
+<div class="card snav" style="width:320px">
+<h4 style="display:flex">1 · Ready to sell <span class="sp"></span><span class="chip w">Required</span></h4>
+<a><span class="ring x">✓</span>Add your carriers<span class="n">done</span></a>
+<a><span class="ring x">✓</span>Add your states<span class="n">done</span></a>
+<a class="on"><span class="ring c"></span>Add your publishers<span class="n">5 min</span></a>
+<a><span class="ring x">✓</span>Create a campaign<span class="n">done</span></a>
+<a><span class="ring x">✓</span>Import your leads<span class="n">done</span></a>
+<a><span class="ring x">✓</span>Invite your team<span class="n">done</span></a>
+<a><span class="ring x">✓</span>Set your calling hours<span class="n">done</span></a>
+<a><span class="ring x">✓</span>Assign leads<span class="n">done</span></a>
+<a><span class="ring x">✓</span>First carrier statement<span class="n">done</span></a>
+<h4 style="display:flex">2 · Run it your way <span class="sp"></span><span class="chip n">Optional</span></h4>
+<a><span class="ring x">✓</span>Call results<span class="n">reviewed</span></a><a><span class="ring"></span>Disclosures<span class="n">15 min</span></a><a><span class="ring"></span>Phone number<span class="n">1 min</span></a><a><span class="ring"></span>Claim times<span class="n">2 min</span></a><a><span class="ring"></span>Retention rules<span class="n">3 min</span></a>
+<h4>3 · Learn</h4><a>Docs · 34 pages<span class="n">9 read</span></a>
+<div class="foot">Everything you skip runs on Insurvas defaults.</div>
+</div>
+<div class="pane" style="display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:16px">
+<div style="display:flex;flex-direction:column;gap:14px">
+<div class="card" style="padding:20px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;align-items:center;gap:10px"><span class="chip w">Required</span><span class="m s12">Step 3 of 9 · about 5 min</span></div>
+<h2 style="font-size:16px">Add your publishers</h2>
+<p class="m">Cost per sale and publisher scorecards are worked out per publisher. Add each company that sends you leads or transfers calls.</p>
+<div style="display:flex;gap:10px;margin-top:6px"><span class="btn gold lg">Start · Insurvas shows every click</span><span class="btn">Watch how · 2 min</span></div>
+</div>
+<div class="vid"><div><span class="pl">▶</span><b>Video coming · Adding your publishers</b>From the step's Docs page</div></div>
+</div>
+<div class="card" style="padding:16px 20px;display:flex;flex-direction:column;gap:12px">
+<h3>What you'll click</h3>
+<div class="st" style="padding:0"><span class="no">1</span><div><div class="t">Click Add publisher</div><div class="d">A publisher is a company that sends you leads or transfers calls.</div></div><span></span></div>
+<div class="st" style="padding:0"><span class="no">2</span><div><div class="t">Fill in the company, then click Add publisher</div><div class="d">Only the company name is needed now. Contact, country and pay can wait.</div></div><span></span></div>
+<span class="sp"></span>
+<div style="border-top:1px solid var(--border);padding-top:12px;display:flex;gap:10px;align-items:center"><span class="m s12">Next after this: Ready to sell is done, and phase 2 opens</span><span class="sp"></span><span class="btn sm">Read it in Docs ›</span></div>
+</div>
+</div></div></div></div></div>
+<ul class="notes"><li><b>Left: every step in Settings' menu card,</b> grouped by phase, each with its ring and its minutes (or "done"). The next step is chosen; click any other to see it.</li><li><b>Right: the chosen step, explained before you start:</b> why it matters, the one gold Start button, Watch how, its video, and the clicks the guide will show. Nobody starts a step blind.</li><li><b>Fills the screen</b> at every width from 1280px up; nothing hides in a fold.</li></ul></section>
+
+<section class="board"><div class="cap"><b>G1·B GET SET UP · PROGRESS FIRST</b><span class="alt">Alternative</span><span>a progress hero and three phase cards across the width</span></div>
+<div class="frame"><div class="app" style="min-height:700px"><div class="rail"><i></i><i class="on"></i><span class="sp"></span><i class="doc"></i><i></i></div><div class="main">
+<div class="tl"><h1>Get set up</h1><span class="sp"></span><span class="btn">Docs</span></div>
+<div class="card" style="padding:20px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:24px;align-items:center">
+<div style="width:96px;height:96px;border-radius:50%;background:conic-gradient(var(--primary) 0 88%,var(--border) 88% 100%);display:grid;place-items:center"><div style="width:76px;height:76px;border-radius:50%;background:var(--canvas);display:grid;place-items:center;font-weight:700;font-size:16px">8/9</div></div>
+<div><p class="m s12">Next · about 5 min</p><h2>Add your publishers</h2><p class="m">One step left before your agency is ready to sell.</p></div>
+<div style="display:flex;gap:10px"><span class="btn">Watch how</span><span class="btn gold lg">Start ›</span></div></div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;flex:1">
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:2px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><h3>1 · Ready to sell</h3><span class="chip w">Required</span><span class="sp"></span><span class="m s12">8 / 9</span></div><div class="row"><span class="ring x">✓</span>Add your carriers</div><div class="row"><span class="ring x">✓</span>Add your states</div><div class="row"><span class="ring c"></span><b>Add your publishers</b><span class="sp"></span><span class="m s12">5 min</span></div><div class="row"><span class="ring x">✓</span>Create a campaign</div><div class="row"><span class="m s12">+ 5 done</span></div></div>
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:2px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><h3>2 · Run it your way</h3><span class="chip n">Optional</span><span class="sp"></span><span class="m s12">1 / 8</span></div><div class="row"><span class="ring x">✓</span>Call results</div><div class="row"><span class="ring"></span>Disclosures<span class="sp"></span><span class="m s12">15 min</span></div><div class="row"><span class="ring"></span>Phone number<span class="sp"></span><span class="m s12">1 min</span></div><div class="row"><span class="m s12">+ 5 more</span></div></div>
+<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:8px"><h3>3 · Learn</h3><span class="chip n">Optional</span></div><div class="vid post" style="aspect-ratio:16/8"><div><span class="pl">▶</span><b>Insurvas in 4 minutes</b></div></div><span class="m s12">34 Docs pages · 9 read</span><span class="btn sm" style="align-self:flex-start">Open Docs</span></div>
+</div></div></div></div>
+<ul class="notes"><li>Most "client-presentable": the ring reads at a glance in a demo. Weaker for doing the work: a step's clicks are a page away.</li></ul></section>
+
+<section class="board"><div class="cap"><b>G1·C GET SET UP · ONE ROAD</b><span class="alt">Alternative</span><span>the phases as a road across the top, the current phase below as cards</span></div>
+<div class="frame"><div class="app" style="min-height:620px"><div class="rail"><i></i><i class="on"></i><span class="sp"></span><i class="doc"></i><i></i></div><div class="main">
+<div class="tl"><h1>Get set up</h1><span class="sp"></span><span class="btn">Docs</span></div>
+<div class="card" style="padding:20px"><div class="hstep" style="grid-template-columns:repeat(3,minmax(0,1fr))"><div class="cur"><span class="no">1</span><b>Ready to sell</b><span>8 of 9 · required</span></div><div><span class="no">2</span><b>Run it your way</b><span>1 of 8 · optional</span></div><div><span class="no">3</span><b>Learn</b><span>9 of 34 pages</span></div></div></div>
+<div class="tiles" style="grid-template-columns:repeat(3,minmax(0,1fr))">
+<div class="card tile" style="border-color:#1f5a49"><div class="h"><span class="ring c"></span><h3>Add your publishers</h3><span class="sp"></span><span class="m s12">5 min</span></div><p class="m s12">Cost per sale is worked out per publisher.</p><span class="sp"></span><div style="display:flex;gap:8px"><span class="btn gold sm">Start ›</span><span class="btn sm">Watch</span></div></div>
+<div class="card tile"><div class="h"><span class="ring x">✓</span><h3>Add your carriers</h3></div><p class="m s12">14 carriers · Nov 12</p></div>
+<div class="card tile"><div class="h"><span class="ring x">✓</span><h3>Add your states</h3></div><p class="m s12">51 states · Nov 12</p></div>
+<div class="card tile"><div class="h"><span class="ring x">✓</span><h3>Create a campaign</h3></div><p class="m s12">3 campaigns</p></div>
+<div class="card tile"><div class="h"><span class="ring x">✓</span><h3>Import your leads</h3></div><p class="m s12">15,649 leads</p></div>
+<div class="card tile"><div class="h"><span class="ring x">✓</span><h3>Invite your team</h3></div><p class="m s12">15 people</p></div>
+</div></div></div></div>
+<ul class="notes"><li>Each done card says what was set up (14 carriers, 15,649 leads), which reads well to a client. Nine cards of one phase is a lot of boxes; the owner disliked "too tabley", and this is "too boxy".</li></ul></section>
+
+<section class="board" id="g2"><div class="cap"><b>G2 · GET SET UP (A) · ITS STATES</b><span>all done · paused · a done step chosen · an optional step chosen</span></div>
+<div class="grid2">
+<div class="frame"><div class="main" style="min-height:420px">
+<p class="lbl">All done · the right side becomes a summary worth showing</p>
+<div class="tl"><h1>Get set up</h1><span class="sp"></span><span class="chip ok">Ready to sell</span></div>
+<div class="card" style="padding:20px;display:flex;flex-direction:column;gap:14px">
+<h2>Your agency is ready to sell</h2><p class="m">Finished Nov 12 · 9 steps · about 52 minutes in all</p>
+<div class="facts2"><div><small>Carriers</small><b>14</b></div><div><small>States</small><b>51</b></div><div><small>Leads in</small><b>15,649</b></div><div><small>Team</small><b>15</b></div></div>
+<div style="display:flex;gap:10px"><span class="btn gold">Next: Disclosures · optional</span><span class="btn">Open Docs</span><span class="btn g">Team setup ›</span></div>
+</div></div></div>
+<div class="frame"><div class="main" style="min-height:420px">
+<p class="lbl">Paused · the paused step is chosen and says where you stopped</p>
+<div class="card" style="padding:20px;display:flex;flex-direction:column;gap:10px">
+<div style="display:flex;gap:10px;align-items:center"><span class="chip w">Paused at move 2 of 2</span><span class="m s12">on another device · Nov 13</span></div>
+<h2>Add your publishers</h2><p class="m">You stopped at "Fill in the company, then click Add publisher".</p>
+<div style="display:flex;gap:10px"><span class="btn gold lg">Resume ›</span><span class="btn">Start over</span></div>
+</div>
+<p class="lbl" style="margin-top:14px">A done step chosen</p>
+<div class="card" style="padding:16px;display:flex;gap:10px;align-items:center"><span class="chip ok">Done</span><b>Add your carriers</b><span class="m s12">14 carriers · Nov 12 by Ellery</span><span class="sp"></span><span class="btn sm">Open Carriers</span><span class="btn sm g">Guide me again</span></div>
+<p class="lbl" style="margin-top:14px">An optional step chosen</p>
+<div class="card" style="padding:16px;display:flex;gap:10px;align-items:center"><span class="chip n">Optional</span><b>Disclosures</b><span class="m s12">works on Insurvas defaults</span><span class="sp"></span><span class="btn sm">Start</span><span class="btn sm g">Mark reviewed</span></div>
+</div></div>
+</div></section>
+
+<section class="board" id="g3"><div class="cap"><b>G3 · PRODUCER "GET STARTED" AND PHONE</b><span>a producer's own steps; on a phone the menu becomes the page and a step opens as a sheet</span></div>
+<div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+<div class="frame" style="flex:1;min-width:640px"><div class="main" style="min-height:520px">
+<div class="tl"><h1>Get started, Leah</h1><span class="sp"></span><span class="m s12">Ready to work · 2 of 4</span><div class="mtr" style="width:160px"><i style="width:50%"></i></div></div>
+<div class="split"><div class="card snav" style="width:300px"><h4 style="display:flex">Ready to work <span class="sp"></span><span class="chip w">Required</span></h4><a><span class="ring x">✓</span>Call your first lead<span class="n">done</span></a><a><span class="ring x">✓</span>Take your first caller<span class="n">done</span></a><a class="on"><span class="ring c"></span>Record a call outcome<span class="n">2 min</span></a><a><span class="ring"></span>Open the ledger<span class="n">3 min</span></a><h4>Learn</h4><a>Docs<span class="n">0 read</span></a></div>
+<div class="card pane" style="padding:20px;gap:10px"><span class="chip w" style="align-self:flex-start">Required</span><h2>Record a call outcome</h2><p class="m">After a call, pick what happened: it moves the lead and books any callback.</p><div style="display:flex;gap:10px"><span class="btn gold">Start ›</span><span class="btn">Watch how</span></div><div class="vid" style="margin-top:6px"><div><span class="pl">▶</span><b>Video coming</b></div></div></div></div></div></div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Get set up</span></div><div class="pm"><h2>Get set up</h2><div class="mtr"><i style="width:88%"></i></div><span class="m s12">Ready to sell · 8 of 9</span><div class="row"><span class="ring c"></span><b>Add your publishers</b><span class="sp"></span><span class="m s12">5 min</span></div><div class="row"><span class="ring x">✓</span>Add your carriers</div><div class="row"><span class="ring x">✓</span>Add your states</div><div class="row"><span class="m s12">Run it your way · 8 optional</span></div></div></div>
+<div class="phone"><div class="pb"><span>9:41</span><span>Step sheet</span></div><div class="pm"><h2>Get set up</h2></div><div class="sheet" style="top:120px;padding:8px 16px;display:flex;flex-direction:column;gap:10px"><div class="grab"></div><span class="chip w" style="align-self:flex-start">Required · 5 min</span><h2>Add your publishers</h2><p class="m">Cost per sale is worked out per publisher.</p><div class="vid"><div><span class="pl">▶</span></div></div><span class="btn gold lg" style="justify-content:center">Start ›</span></div></div>
+</div></section>
+
+<section class="screen" id="rec">
+<h2>Recommendation</h2>
+<div class="crit"><ol>
+<li><b>Docs: D1·A home, D2 step-by-step pages, D3 setup pages, D4 search.</b> Settings' menu on the left, search centred and long, every right side filling the height, ordered pages drawn as numbered steps with time, cost and the video moment.</li>
+<li><b>Get set up: G1·A.</b> The same shape as Docs: steps in the menu, the chosen step explained on the right with its video and clicks before you start, and a summary worth showing a client once you're done (G2).</li>
+<li><b>Shared parts to build once:</b> the Settings-style menu card (`snav`), the numbered step list with its line, the video slot, the facts strip and the centred search. Docs, Get set up and later Team setup use the same five.</li>
+<li><b>Not decided:</b> whether Docs keeps a per-reader "Mark done" on how-to steps (D2), and the video for each page, still to record.</li>
+</ol></div>
+</section>
+</div></body></html>

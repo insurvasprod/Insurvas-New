@@ -840,7 +840,7 @@ export function SalesDisclosures({ focus = null }: { focus?: string | null } = {
             action={<Button type="button" variant="outline" onClick={() => { setQuery(""); setFilter("all"); }}>Clear search</Button>}
           />
         ) : (
-          <table className={cn(st.table, "min-w-[760px]")}>
+          <table data-guide="disclosures-table" className={cn(st.table, "min-w-[760px]")}>
             <thead>
               <tr className={st.headRow}>
                 <th scope="col" className={cn(st.th, "min-w-[220px]")}>Document</th>
